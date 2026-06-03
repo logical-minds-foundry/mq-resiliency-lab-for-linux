@@ -71,6 +71,22 @@ the lowest-cost option that technically works.
   priority; correctness, recoverability, and failover behavior are. Exact
   uptime/RPO/RTO targets are **TBD** pending DTCC/the client requirements, and the
   final recommendation is explicitly deferred until those are known.
+- **Scale boundary condition (drives nearly every decision below).** This is a
+  **deliberately small, caged, bespoke service** — *not* a general-purpose MQ
+  platform. Scale is measured by **(a) number of queue managers, (b) number of
+  external sites/counterparties connected to, and (c) number of applications** —
+  and on all three axes it is **small** (a handful, not hundreds). Message and
+  queue *volume* within that footprint may be non-trivial, but the topology stays
+  small. We explicitly **cage the design to the required use cases** and do not
+  build for hypothetical future breadth or throughput. This constraint is the
+  single biggest simplifier: because scale is small, **"keep it simple" wins
+  ties** — the operational and supportability cost of a complex self-managed
+  stack is hard to justify when the thing it would buy you (horizontal scale,
+  performance headroom) is explicitly out of scope. If scale or performance *were*
+  in scope, the calculus would shift and a heavier Ubuntu investment could be
+  warranted — but it is **not** part of this client's expressed design. State this
+  boundary plainly in any recommendation; it is *why* simplicity is weighted as
+  heavily as it is.
 
 ## 2. The Central Thesis & Research Agenda
 
@@ -170,6 +186,83 @@ deliverable (decision-makers will ask "why not the cheap option?").
 A written tradeoff analysis (phase E) scoring each arm against the §3 + §4
 criteria, ending in a recommendation with explicit conditions ("choose X if
 the client values A over B").
+
+### 2.7 RDQM-on-RHEL vs native HA/DR on Ubuntu — objective tradeoffs (no decision yet)
+
+This subsection consolidates the head-to-head pros/cons as a neutral ledger to
+validate by experiment — **it is deliberately not a decision.** The gut
+expectation is that RDQM-on-RHEL will win (see below), but the entire point of
+the Ubuntu arm (phase D) is to test that honestly: if Ubuntu demonstrates the
+same functionality, we get a true apples-to-apples POC that *proves why* one is
+better rather than asserting it. We are perfectly willing to be surprised and
+find Ubuntu-native fully viable.
+
+**Frame everything against the §1 scale boundary condition.** Because the
+service is small and caged, the criteria that reward simplicity and
+supportability dominate; the criteria that would reward a heavier self-managed
+investment (scale, performance, platform independence) are out of scope. That
+asymmetry is what tilts the ledger.
+
+**Arguments *for* RDQM-on-RHEL:**
+
+- **Far smaller vendor-supportability gap (the heaviest factor).** The operator
+  can build, configure, monitor, operate, and scale MQ — but **cannot
+  self-service IBM's internals**: crash dumps, FFST/FDC records, and the strange
+  failure modes of a closed black box ultimately have to go back to IBM. That
+  support relationship is *non-trivial* and is the kind of thing that decides a
+  3 a.m. SEV-1. RDQM is supported end-to-end by IBM; a bespoke Ubuntu stack makes
+  us solve a long tail of problems IBM will disclaim, for a product whose internals
+  knowledge is rare. (Expanded in §3 "Vendor-supportability gap" and §6.1.)
+- **No external/shared storage — the biggest single simplification.** RDQM keeps
+  storage **local to each node** (DRBD block replication, shared-nothing). That
+  **removes an entire layer of infrastructure** — no SAN, no LUN, no iSCSI
+  target, no array-replication tier — and with it removes a critical stability
+  dependency ("we are only as stable as our storage"). The Ubuntu/Pacemaker arm
+  *reintroduces* exactly this shared-storage SPOF. (Expanded in §4.4 and Q4 in
+  §2.5.)
+- **Simplicity is the right default at this scale.** Given the small, caged
+  footprint (§1), the turnkey single-vendor box is proportionate to the problem;
+  a bespoke cluster is not.
+
+**Arguments *for* / mitigations *toward* Ubuntu-native (the case to test, not dismiss):**
+
+- **It is the client's chosen standard.** The client runs Ubuntu and has Ubuntu
+  operational muscle; staying on it avoids introducing a second OS.
+- **No new-OS integration risk.** The client's internal infrastructure services
+  (authentication/identity, configuration management, monitoring, patching,
+  logging) are very likely **designed and optimized for Ubuntu**. RHEL may
+  integrate poorly or require bespoke work against those services — a real,
+  **OS-specific** cost that is plausibly *why the client's own people steered
+  away from Red Hat.*
+- **Platform independence / no RHEL-x86-64 lock** — only matters if the out-of-scope
+  scale/portability concerns ever come into scope.
+
+**Arguments *against* RDQM-on-RHEL (the costs to weigh):**
+
+- **The client lacks RHEL experience and chose Ubuntu.** Introducing RHEL means a
+  second OS to learn, patch, secure, and integrate — against an Ubuntu-shaped
+  internal-services estate (see above). The *depth* of integration actually needed
+  for a small bespoke service is itself **a conversation to have with the client**
+  — it may be far less than a general-purpose platform would require.
+- **RHEL-x86-64 hard lock** (DRBD kmod) — the central §2.2 constraint; forces an
+  x86-64 footprint and couples patching to kernel versions (§3 Day-2).
+
+**Arguments *against* Ubuntu-native (the costs to weigh):**
+
+- **Wide vendor-supportability gap** (the inverse of RDQM's biggest pro) — we own
+  the cluster, storage, and fencing; IBM ships sample resource agents and
+  disclaims the rest.
+- **Reintroduces the shared-storage SPOF** and a multi-site replication tier we
+  must build and prove (§2.3 arm 1, Q4).
+- **Higher Day-2 burden** for a service whose small scale doesn't reward the
+  investment.
+
+**Net (still to be proven, not decided):** at this scale the ledger leans toward
+**RDQM-on-RHEL** — smaller support gap, no shared-storage layer, simplicity
+proportionate to a caged service — with the **client's Ubuntu standard and
+RHEL-integration cost** as the genuine counterweights. The Ubuntu arm is built
+specifically to convert this lean into evidence (phase D/E), and to surface any
+surprise that would change it.
 
 ## 3. Reliability & Redundancy Criteria (the yardstick)
 
