@@ -1,0 +1,17 @@
+[project]
+repository-type = "tooling"
+versioning-scheme = "semver"
+branching-model = "library-release"
+release-model = "tagged-release"
+primary-language = "python"
+
+[ci]
+versions = ["3.12", "3.13", "3.14"]
+integration-tests = false
+
+[publish]
+release = false
+docs = true
+
+[dependencies]
+vergil = "v2.0"
