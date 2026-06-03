@@ -1528,14 +1528,25 @@ bleeding edge. RDQM ships in MQ Advanced and remains, to our knowledge,
 contract start. The coincidence is just that 10.0 ships into the world the day
 after.) The version question is still a deliberate decision point:
 
-- **Build on 9.4, not 10.0.** A tier-one clearing connection should not be
-  founded on a release that shipped *days* earlier — that maximizes risk for
-  zero upside. 9.4 LTS has years of runway (C.3) and a deep field-proven track
-  record, so it is the right baseline to develop tooling against and the right
-  thing for the client to eventually run in production. Treat 10.0 as a
-  **planned, tested upgrade**, not a foundational bet.
-- But 10.0's existence changes the long-game, so part of arriving prepared is
-  bringing a written 9→10 gap analysis and upgrade plan.
+- **Build on 9.4, not 10.0 — and push back hard on any suggestion otherwise.**
+  You cannot found a project *from cold* on a release that just went GA. The
+  industry has no mileage on it, and IBM MQ is a **large, complex product whose
+  major-version upgrades have historically been painful** — this is not a small,
+  fast-moving open-source package where "latest" is usually the safe default. For
+  a tier-one institution running this infrastructure because it is **mandatory,
+  not because it wants the bleeding edge**, the only rational posture is
+  conservative: 10.0 on day 2 is **all risk and no reward**. There is nothing in
+  10.0 that buys an advantage over what 9.4 already delivers for this use case.
+- **9.4 is the deliberate, defensible baseline**, not a stopgap: it is deeply
+  field-proven and supported to **~2029** (C.3), giving years of unhurried runway.
+  The realistic 5-year plan is to *plan, implement, and migrate* off 9.4 well
+  inside that window — not to start on 10.0.
+- **10.0 is documented purely as a forward-looking item** (we show we're looking
+  ahead), explored only **if time allows**. It is almost certainly academic for
+  this engagement: a conservative clearing partner like DTCC is unlikely to jump
+  to 10.0 early, and so is the client. Part of arriving prepared is bringing the
+  written 9→10 gap analysis and upgrade plan (C.4) — as future planning, not a
+  near-term task.
 
 ### C.3 EOS boundary conditions (the upgrade window)
 
@@ -1550,8 +1561,9 @@ enough to be unhurried, before 9.4 support lapses.
 
 ### C.4 The gap-analysis task (with a specific question to answer)
 
-A documented **9.4 → 10.0 gap analysis** is an explicit deliverable. The
-headline question, directly relevant to the §2 thesis:
+A documented **9.4 → 10.0 gap analysis** is a **forward-looking** deliverable
+(future upgrade planning, pursued if time allows — not a near-term build task per
+C.2). The headline question, directly relevant to the §2 thesis:
 
 > **Did 10.0 broaden RDQM platform support beyond RHEL x86-64** (e.g. to Ubuntu
 > or other Linuxes), or relax the DRBD-kernel-module coupling?
