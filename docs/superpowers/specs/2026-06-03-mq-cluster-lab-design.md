@@ -321,7 +321,66 @@ essential part of the design:
 - What is the cross-site RTO and the cutover procedure (manual vs automated)?
 - Failback to primary after a DR event without data loss or split-brain.
 - What are DTCC's absolute requirements for resilience and message integrity?
-  (Unknown — a key thing to learn from the vendor/DTCC documentation.)
+  (The client's contractual specifics are TBD, but the public regulatory and
+  DTCC-disclosed floor is now documented — see §4.6.)
+
+### 4.6 Public & regulatory basis for the two-site DR requirement (researched)
+
+The requirement to run **two geographically separated data centers** — which
+is what *forces* a DR architecture rather than HA alone — is **not just client
+preference**. It traces to public regulatory mandates and DTCC's own disclosed
+posture. These are the citable floor; the client's actual contractual numbers
+(TBD) will sit on top and we iterate when we have them. *(Citations gathered
+from public sources 2026-06-03; verify currency against the version in force at
+onboarding.)*
+
+- **Interagency Paper on Sound Practices to Strengthen the Resilience of the
+  U.S. Financial System** (FRB / SEC / OCC, **April 2003**) — the post-9/11
+  origin of the mandate. Core clearing & settlement organizations target
+  recovery/resumption **within ~2 hours**; firms in "significant" market roles
+  should strive for a **4-hour** capability; backup sites must be
+  **out-of-region** — "as far away from the primary site as necessary to avoid
+  being subject to the same set of risks," not sharing the same labor
+  pool/infrastructure (i.e. beyond synchronous-replication range for the most
+  critical systems). *Confidence: HIGH.*
+  - <https://www.sec.gov/news/press/2003-45.htm> ·
+    <https://www.federalreserve.gov/boarddocs/srletters/2003/sr0309.htm> ·
+    <https://www.occ.treas.gov/news-issuances/bulletins/2003/bulletin-2003-14.html>
+- **SEC Regulation SCI** — 17 CFR §242.1001 & §242.1004 (adopted 2014). DTC,
+  NSCC, and FICC are registered clearing agencies = **"SCI entities"**, so this
+  binds DTCC directly: BC/DR must be **"sufficiently resilient and
+  geographically diverse"** with next-business-day / **two-hour** resumption of
+  critical systems. **§1004 cascades to members:** designated participants must
+  take part in BC/DR functional testing **at least annually** — the legal basis
+  for DTCC mandating member DR-test participation. *Confidence: HIGH.*
+  - <https://www.law.cornell.edu/cfr/text/17/242.1001> ·
+    <https://www.law.cornell.edu/cfr/text/17/242.1004>
+- **FINRA Rule 4370** — the broker-dealer's *own* business-continuity duty
+  (written BCP, data backup/recovery, mission-critical systems, annual review).
+  No prescribed distance/RTO — deliberately flexible. Relevant as the client's
+  obligation, not a gateway distance spec. *Confidence: HIGH.*
+  - <https://www.finra.org/rules-guidance/rulebooks/finra-rules/4370>
+- **DTCC's own disclosed posture** — NSCC/FICC PFMI Disclosure Frameworks
+  (CPMI-IOSCO Principle 17) and the public Quantitative Disclosures state a
+  ~**two-hour RTO** and geographically dispersed data centers, matching the
+  above. *Confidence: MEDIUM on exact wording (PDFs hard to quote cleanly —
+  verify directly).* DTCC's 2025 "Data Center Rotation Test Plan" shows
+  movement toward active-active operation.
+  - <https://www.dtcc.com/legal/policy-and-compliance> ·
+    <https://www.dtcc.com/operational-resilience>
+- **Historical confirmation** — Computerworld (June 2004) reported DTCC built
+  data centers **>1,000 miles apart** using EMC SRDF multihop mirroring,
+  achieving **~3-hour DR with 0–30 min data loss**, explicitly citing the 2003
+  Interagency Paper. Period-accurate; DTCC has since tightened toward the
+  ~2-hour / near-zero-loss posture above. *Confidence: HIGH (historical).*
+  - <https://www.computerworld.com/article/1702090/>
+
+**Design consequence:** DR is non-negotiable and the target is a **~2-hour
+RTO** with an **out-of-region** second site — which is precisely why
+cross-site replication is **asynchronous** (§4.2) and why the
+app/infrastructure reconciliation interface (§4.3) matters. Our async DR window
+(seconds-scale for RDQM DR) sits comfortably inside this envelope; the residual
+message-loss window is the thing the application must reconcile.
 
 ## 5. Lab Topology
 
@@ -388,8 +447,63 @@ health checks, backup; eventual `.deb` / `.rpm` packaging.)*
 
 ## 9. DTCC Simulation & Validation
 
-*(to expand: DTCC QM channels; requester/responder apps; fault-injection
-failover tests and DR cutover tests — prove message integrity, measure RTO/RPO.)*
+The `dtcc-sim` fixture mimics DTCC's server side so we can validate the message
+path and DR behavior end to end. The public record gives us enough to make the
+simulation **realistic in shape** (the exact per-service formats and endpoints
+are delivered per-client at onboarding and are not public — so we simulate the
+*pattern*, not a real DTCC interface). *(Grounded in public DTCC material
+researched 2026-06-03; see §9.3 references.)*
+
+### 9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)
+
+- **Distributed queuing**, not client/server: the firm's queue manager and the
+  DTCC queue manager exchange messages via **sender/receiver channels** with
+  **local queues, remote-queue definitions, and transmission queues** on each
+  side. The sim therefore runs its own QM with reciprocal channel definitions
+  back to the in-house QM.
+- **Application-level fixed-format header inside the message body** (distinct
+  from the MQMD): blank-padded, left-justified fields — e.g. Password, Sender
+  (the firm's DTCC account ID), Receiver (a fixed service mnemonic), and
+  business date — followed by service-specific **ACK / reject codes** (e.g.
+  header-validation failure, stale business date). The responder app validates
+  and ACKs this header so we exercise realistic reject/replay handling.
+- **Per-client password auth carried in the header**; **a single connection
+  ID** per client (multiple IDs cause duplicate delivery on the same channel);
+  legacy TCP/CTCI and MQ must **not** be active simultaneously for one account.
+- **DTCC-side resiliency feature worth modeling:** DTCC can deliver a client's
+  inbound messages into **multiple queues** to support the client's
+  resiliency/DR — a useful pattern to reflect in the DR tests (§3.1 step 7).
+
+### 9.2 Transport & security context (real-world, for fidelity notes)
+
+In production, MQ to DTCC runs over a **dedicated SMART circuit** (new-circuit
+lead times ~12–14 weeks — a *schedule* risk, not a lab one), and DTCC enforces
+**channel security/encryption standards (TLS)** per Important Notice GOV1683-24
+(mandatory since 2024-12-31; members register their MQ channel name;
+non-compliant connections are disconnected). The lab need not replicate SMART,
+but the tooling and standards **must** produce a TLS-secured channel
+configuration so what we build is onboarding-ready.
+
+### 9.3 Validation
+
+Fault-injection failover tests and DR cutover tests (per §3.1) run trades
+through `app-client → in-house QM → dtcc-sim → responder → back`, proving
+message integrity and measuring RTO/RPO across both HA failover and full-site
+DR cutover.
+
+**References (public; verify per-service at onboarding):**
+
+- FICC EPN MQ Implementation Guide (DTCC, "Public/White") —
+  <https://www.dtcc.com/-/media/Files/Downloads/Clearing-Services/FICC/MBSD/EPN-MQ-Implementation-Guide.pdf>
+- Important Notice GOV1683-24 (connectivity security standards, incl. MQ) —
+  <https://www.dtcc.com/-/media/Files/pdf/2024/4/19/GOV1683-24.pdf>
+- DTCC Settlement Service Guide (MQ used on the DTC settlement side) —
+  <https://www.dtcc.com/globals/pdfs/2018/february/27/service-guide-settlement>
+
+**Caveat:** message header layouts and ACK codes are **per-service** (FICC EPN
+/ MBSD vs DTC settlement vs NSCC/UTC). QM names, channel names, ports, and IP
+endpoints are **not public** and arrive per-client during onboarding — the sim
+must not hardcode any assumed real values.
 
 ## 10. Phasing
 
@@ -422,10 +536,38 @@ full 3+3 architecture up front).
 
 ## 11. Risks & Open Questions
 
-*(to expand: RHEL developer licensing; x86 emulation speed; RDQM under the
-developer license; SAN/shared-storage as the weak link; cross-site sync
-impossibility & residual DR message-loss risk; unknown DTCC/vendor resilience
-requirements; ARM caveats — no MQTT/AMQP.)*
+**Platform / lab:**
+
+- RHEL developer licensing and whether **RDQM** is usable under it.
+- x86-64 emulation speed on the M5 Max (RDQM forces RHEL-x86-64).
+- SAN / shared storage as the weak link in the Pacemaker arm (the SPOF RDQM
+  avoids).
+- ARM caveats — no MQTT/AMQP on the ARM64 MQ build.
+
+**DR / message integrity:**
+
+- Cross-site synchronous replication is impractical → residual DR message-loss
+  window; the app/DTCC reconciliation path (§4.3) must close it.
+- Target envelope is now grounded (§4.6): **~2-hour RTO, out-of-region** —
+  the client's exact contractual numbers remain TBD.
+
+**DTCC-specific (grounded in §9, but with real gaps):**
+
+- **Which DTCC service** the client clears/settles through (FICC EPN, DTC
+  settlement, NSCC/UTC, …) determines message header formats and ACK codes —
+  **unknown** until the client tells us. The sim models the *pattern*, not a
+  specific service's wire format.
+- **Channel security:** DTCC mandates TLS on the MQ channel (GOV1683-24) — the
+  tooling must emit an onboarding-ready, TLS-secured channel config.
+- **Schedule risk:** a new dedicated SMART circuit has a ~12–14 week lead time;
+  irrelevant to the lab but material to the client's go-live plan.
+- **Open gap — no public mandate for dual/diverse member MQ circuits.** That
+  specific requirement (if it exists) lives in DTCC's **gated, internally
+  classified DR Guide** and per-client onboarding packets, not public material.
+  We treat member-side dual-site connectivity as best practice and a **question
+  to confirm with the client/DTCC**, *not* a citable public requirement.
+- QM names, channel names, ports, and endpoints are delivered per-client at
+  onboarding — never hardcode assumed values.
 
 ---
 
