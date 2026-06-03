@@ -114,6 +114,14 @@ the lowest-cost option that technically works.
 
 - Portable HA **and DR** tooling/config/standards is the product; the lab is
   the harness.
+- **The queue-manager-facing tooling is built on `pymqrest`** — the author's own
+  typed Python wrapper over the IBM MQ admin REST API (the same code that helped
+  win this engagement). **Exercising and showcasing `pymqrest` on a real
+  HA/DR workload is an explicit secondary goal** of this project, alongside the
+  primary client deliverable. (Mechanics and the two-plane split in §8.)
+- **Enabling the MQ administrative REST API on every queue manager is a hard
+  requirement** — it is the boundary between the Ansible/bootstrap bring-up plane
+  and the `pymqrest` content plane (§8.1).
 - A complete solution has **two inseparable halves**: (a) intra-site HA — the
   queue manager survives node/component failure within a data center; and
   (b) cross-site DR — the service is recoverable when an entire data center
@@ -647,14 +655,25 @@ matching the "six Linux servers" hint: **three nodes per DC = 3+3**.
   injected latency, carrying the asynchronous DR replication.
 - **Networks (per the validated topology diagram):** DTCC-facing net; per-DC
   data/VIP net; per-DC private heartbeat/replication net; client/app net.
-- **Fixtures:** `dtcc-sim` QM (server side, sender/receiver channels back to
-  the in-house clearing QM); `app-client` (requester puts trades → in-house
-  QM; responder replies to DTCC traffic).
+- **Fixtures run as containers, not VMs.** VMs are reserved for the thing that
+  genuinely needs them — the HA cluster nodes (real kernel, DRBD, Pacemaker,
+  multi-NIC). The fixtures do not:
+  - `dtcc-sim` QM (server side, sender/receiver channels back to the in-house
+    clearing QM) runs as a **container** (`icr.io/ibm-messaging/mq`), lifted
+    almost directly from the `mq-rest-admin-dev-environment` prior art, on the
+    containerd/nerdctl runtime the §7.4 dev+lab VM already provides.
+  - `app-client` (requester puts trades → in-house QM; responder replies to DTCC
+    traffic) likewise runs as a **container**. Its message path uses a **native
+    MQI client** (e.g. `pymqi`) over a SVRCONN channel — *not* `pymqrest`, which
+    is admin-only (§8.1, §9).
+  - Both containers attach to the relevant libvirt networks (DTCC-facing,
+    client) alongside the cluster VMs.
 
 **Sizing:** this is a *functional* lab — failover correctness and behavior,
-not throughput. Each VM is small (~**1 GB RAM**); the full 3+3 plus fixtures
-fits comfortably on the M5 Max (128 GB). The Pacemaker/SAN (Ubuntu) arm adds a
-qdevice/witness and an iSCSI target VM in the same network shape.
+not throughput. Each cluster-node VM is small (~**1 GB RAM**); the full 3+3
+plus the containerized fixtures fits comfortably on the M5 Max (128 GB). The
+Pacemaker/SAN (Ubuntu) arm adds a qdevice/witness and an iSCSI target VM in the
+same network shape.
 
 See the validated topology diagram committed alongside this spec —
 [`diagrams/topology-rdqm-ha-dr.html`](diagrams/topology-rdqm-ha-dr.html) —
@@ -834,13 +853,19 @@ see §7.4.) Leaner guests matter doubly under emulation.
 
 ### 7.3 Configuration via Ansible
 
-Vagrant only stands up and networks the bare VMs. The **real MQ HA/DR install,
-configuration, and operational tooling — the actual product (§8) — is done in
-Ansible** (via Vagrant's Ansible provisioner) over SSH. This keeps the
-deliverable **independent of the harness**: the same playbooks that configure a
-Vagrant VM here run against real client hardware later, with no
-Vagrant/Lima/provider assumptions baked in. The harness is disposable (§0); the
-playbooks are not.
+Vagrant only stands up and networks the bare VMs. The **real MQ HA/DR work — the
+actual product (§8) — splits across two planes (§8.1)**: the **bring-up plane**
+(OS prep, MQ install, HA/DR, QM create + REST enablement) is **Ansible** over SSH
+via Vagrant's Ansible provisioner; the **content plane** (queue-manager objects,
+health, ops) is **`pymqrest`** against the now-running REST API. Both are
+**independent of the harness**: the same playbooks and the same Python tooling
+run against real client hardware later, with no Vagrant/Lima/provider assumptions
+baked in. The harness is disposable (§0); the playbooks and the tooling are not.
+
+The containerized fixtures (`dtcc-sim` QM and `app-client`, §5/§9) are *not*
+Vagrant VMs — they run on the containerd/nerdctl runtime the §7.4 dev+lab VM
+already carries (the `vergil-vm` precedent), attached to the same libvirt
+networks as the cluster VMs.
 
 ### 7.4 Development model — one large, persistent VM for dev and lab
 
@@ -897,12 +922,14 @@ Vergil's small ephemeral agent VMs."
 
 ### 7.5 Sizing budget
 
-The full 3+3 topology plus DTCC sim, client, and (for the Pacemaker arm) witness
-+ iSCSI target is ~8–10 VMs at ~1 GB each. Under the leading nested-libvirt model
-(§7.2) those live *inside* one Linux VM, so size that outer VM generously —
-~**32–48 GB** of the M5 Max's 128 GB leaves comfortable headroom. Native arm64
-guests run KVM-accelerated; x86-64 (required for RDQM) is TCG-emulated, accepted
-as slower since RDQM validation is functional, not performance.
+The full 3+3 topology is ~6 cluster-node **VMs** at ~1 GB each (plus, for the
+Pacemaker arm, a witness + iSCSI-target VM); the `dtcc-sim` QM and `app-client`
+are **containers**, not VMs, so they cost far less than a VM each. Under the
+leading nested-libvirt model (§7.2) the VMs live *inside* one Linux VM that also
+runs the fixture containers, so size that outer VM generously — ~**32–48 GB** of
+the M5 Max's 128 GB leaves comfortable headroom. Native arm64 guests run
+KVM-accelerated; x86-64 (required for RDQM) is TCG-emulated, accepted as slower
+since RDQM validation is functional, not performance.
 
 ## 8. The Tooling (the actual product)
 
@@ -918,10 +945,40 @@ cluster.** §8 describes that product.
   written down: idempotent, re-runnable, version-controlled, and **measurable
   against §3 and §4**. Every capability has a corresponding fault test that
   proves it.
-- **It is harness-independent.** The automation runs over SSH via **Ansible**
-  (§7.3), so the *same* content drives the lab VMs today and real (or cloud)
-  Linux hosts later, unchanged. The Vagrant/Lima harness is never a dependency
-  of the deliverable — it is scaffolding we throw away.
+- **It is harness-independent.** The host-level automation runs over SSH via
+  **Ansible** (§7.3); the queue-manager-level automation runs over the MQ admin
+  REST API via **`pymqrest`** (below). The *same* content drives the lab VMs
+  today and real (or cloud) Linux hosts later, unchanged. The Vagrant/Lima
+  harness is never a dependency of the deliverable — it is scaffolding we throw
+  away.
+- **It has two configuration planes, divided at one clean boundary — "is the
+  queue manager and its REST API up yet?"**
+  - **Bring-up plane (everything up to and including a running QM + REST API):**
+    **Ansible plus system bootstrap scripts / config snippets.** OS prep, MQ
+    install, HA cluster formation, DR pairing, queue-manager creation, and
+    enabling the embedded web server. The REST API does not exist yet, so this
+    plane *cannot* use it.
+  - **Content plane (everything after the QM + REST API are online):**
+    **`pymqrest`** — our own typed Python wrapper over the IBM MQ 9.4
+    administrative REST API. All queue-manager *content* — queues, channels,
+    listeners, auth records, topics, plus health, monitoring, and operational
+    queries — is managed through it.
+  - This boundary is not arbitrary: it falls exactly at the moment the REST API
+    becomes available, which is the first thing `pymqrest` requires.
+- **REST API enablement is a hard requirement on every queue manager.** No QM we
+  stand up is "done" until its administrative REST API is enabled and secured.
+  The lab can mirror the proven dev-environment posture (embedded web server,
+  basic/LTPA auth, self-signed TLS) while we design the production-grade
+  TLS/certificate posture as a standard.
+- **The QM-facing tooling is built on `pymqrest`, and exercising it is an
+  explicit secondary goal (§1).** `pymqrest` already provides idempotent
+  `ensure_*` methods (`CREATED`/`UPDATED`/`UNCHANGED`) — declarative,
+  drift-correcting config-as-code at the library level — and a set of example
+  tools (provisioning, health check, channel status, DLQ inspection, queue-depth
+  monitoring) that seed §8.6/§8.7 directly. **Note the scope line:** `pymqrest`
+  is the *administrative* REST API — it configures and observes queue managers;
+  it does **not** put or get application messages (the trade-message path uses a
+  native MQI client — see §9).
 - **It is caged to the scale boundary (§1).** A handful of queue managers, a
   handful of sites, a handful of apps. We do **not** build a general-purpose MQ
   platform, an operator, or a self-service portal. "Keep it simple" wins ties.
@@ -935,27 +992,45 @@ cluster.** §8 describes that product.
 
 The content is organized as composable layers, each independently runnable and
 testable. Higher layers assume the lower ones converged; none of them assume the
-harness.
+harness. The **plane** column shows the §8.1 boundary: layers up to and
+including QM + REST bring-up are the **Ansible/bootstrap** plane; everything
+above the line is the **`pymqrest`** plane.
 
-| Layer | Responsibility | Arm-specific? |
-|------|----------------|---------------|
-| L0 | Host/OS prep — packages, kernel module prerequisites, users, firewall, time sync | yes (RHEL vs Ubuntu) |
-| L1 | MQ install (pinned baseline) + base queue-manager config | mostly shared |
-| L2 | Intra-site **HA** bring-up | yes |
-| L3 | Cross-site **DR** setup + cutover/failback | yes |
-| L4 | Operational standards — runbooks, health checks, backup | shared |
-| L5 | Recovery & diagnostics capture | shared |
+| Layer | Responsibility | Plane | Arm-specific? |
+|------|----------------|-------|---------------|
+| L0 | Host/OS prep — packages, kernel module prerequisites, users, firewall, time sync | Ansible/bootstrap | yes (RHEL vs Ubuntu) |
+| L1 | MQ install (pinned baseline) + QM create + **enable & secure REST API** | Ansible/bootstrap | mostly shared |
+| L2 | Intra-site **HA** bring-up | Ansible/bootstrap | yes |
+| L3 | Cross-site **DR** setup + cutover/failback (node/OS mechanics) | Ansible/bootstrap | yes |
+| — | *— handoff: QM + REST API online —* | | |
+| L4 | QM **content** — queues, channels, listeners, auth, topics (declarative) | `pymqrest` | shared |
+| L5 | Operational standards, health checks, monitoring | `pymqrest` | shared |
+| L6 | Recovery & diagnostics capture | mixed (`runmqras` host-level + `pymqrest` queries) | shared |
 
-### 8.3 Queue-manager install & configuration
+### 8.3 Queue-manager install, REST enablement & content
+
+**Bring-up plane (Ansible/bootstrap):**
 
 - **Idempotent MQ install**, pinned to the **9.4 LTS** baseline (§C); re-running
   converges rather than duplicates.
-- **MQSC-as-code.** Queue-manager objects — queues, channels, listeners, auth
-  records, TLS config — live as **declarative definition data under version
-  control**, applied through MQSC. The queue manager's configuration is a
-  reviewable artifact, not a sequence of typed commands.
-- **Drift detection / convergence.** Re-applying the definitions reports and
-  corrects divergence, so "what the QM should be" is always the file in git.
+- **Queue-manager create**, then **enable and secure the administrative REST
+  API** (embedded web server / `mqweb`): the web server, the auth registry
+  (basic/LTPA in the lab, per the dev-environment precedent; cert/TLS posture as
+  a production standard), and the role bindings. This is the last bring-up step;
+  it is what makes the content plane possible.
+
+**Content plane (`pymqrest`):**
+
+- **Declarative, idempotent object config via `pymqrest.ensure_*`.** Queue
+  manager objects — queues, channels, listeners, auth records, topics — live as
+  **declarative definition data under version control** and are applied through
+  `pymqrest`'s `ensure_*` methods, which **DEFINE** when absent, **ALTER** only
+  the differing attributes, and **no-op** when already correct
+  (`CREATED`/`UPDATED`/`UNCHANGED`).
+- **Drift detection / convergence comes for free** from `ensure_*`: re-applying
+  the definitions reports and corrects divergence, so "what the QM should be" is
+  always the file in git. We do not reinvent this — the library already does it,
+  and exercising it that way is an explicit goal (§1).
 
 ### 8.4 HA setup automation (per arm)
 
@@ -993,6 +1068,9 @@ The standards are part of the product, not documentation bolted on afterward.
   one today) can execute them under pressure.
 - **Health checks** — queue-manager liveness, channel state, replication lag,
   quorum/cluster health — as scripts that exit non-zero and are alert-friendly.
+  The QM-facing ones build on `pymqrest`'s example tools (`health_check`,
+  `channel_status`, `queue_depth_monitor`, `dlq_inspector`); the
+  cluster/replication ones are host-level checks on the bring-up plane.
 - **Backup** — of the queue-manager definitions and the config-as-code, with a
   documented restore path that is itself a tested recovery procedure.
 - **Change procedure** — how a config change flows from edit → review → apply →
@@ -1001,8 +1079,12 @@ The standards are part of the product, not documentation bolted on afterward.
 ### 8.7 Recovery & diagnostics
 
 - A wrapper around **`runmqras`** (and the FFST/FDC artifacts) that captures
-  "everything IBM will ask for" in one step — proven in **§3.1 step 8**.
-- This directly serves the **vendor-supportability criterion (§3):** when a
+  "everything IBM will ask for" in one step — proven in **§3.1 step 8**. This is
+  **host-level** (bring-up plane): `runmqras` runs on the node, not over REST.
+- `pymqrest` complements it with the **live queue-manager state** side of a
+  diagnostic snapshot (object definitions, channel/listener status, queue
+  depths) — the picture you want captured alongside the `runmqras` bundle.
+- Together they serve the **vendor-supportability criterion (§3):** when a
   SEV-1 hits a tier-one firm, the value is being able to hand IBM a complete
   diagnostic bundle immediately, regardless of which arm is deployed.
 
@@ -1021,8 +1103,9 @@ The standards are part of the product, not documentation bolted on afterward.
 ### 8.9 Design principles (the through-line)
 
 Idempotent · declarative config-as-code · harness-independent · caged to scope ·
-two-arm parity at the operator interface · every capability paired with a §3/§4
-fault test that proves it.
+two-arm parity at the operator interface · **two planes divided at
+REST-API-online (Ansible/bootstrap → `pymqrest`)** · every capability paired
+with a §3/§4 fault test that proves it.
 
 ## 9. DTCC Simulation & Validation
 
@@ -1032,6 +1115,17 @@ simulation **realistic in shape** (the exact per-service formats and endpoints
 are delivered per-client at onboarding and are not public — so we simulate the
 *pattern*, not a real DTCC interface). *(Grounded in public DTCC material
 researched 2026-06-03; see §9.3 references.)*
+
+**It runs as a container, lifted from prior art.** `dtcc-sim` is a real IBM MQ
+queue manager in a container (`icr.io/ibm-messaging/mq`), seeded with reciprocal
+channel/queue definitions, taken almost directly from the
+`mq-rest-admin-dev-environment` repo (docker-compose + MQSC seed + REST-enabled
+web server). It needs no VM — it runs on the containerd/nerdctl runtime inside
+the §7.4 dev+lab VM and attaches to the DTCC-facing libvirt network. **Two REST
+APIs, kept distinct:** the sim's *administrative* REST API (configured with
+`pymqrest`, like every QM here) is separate from the **messaging** path the
+`app-client` uses to actually put/get trade messages, which is a **native MQI
+client** (`pymqi`) over a SVRCONN/sender/receiver channel — not `pymqrest`.
 
 ### 9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)
 
@@ -1097,7 +1191,11 @@ full 3+3 architecture up front).
   on this M5/macOS, severable heartbeat/replication nets, and acceptable
   TCG-emulated x86 for the RDQM arm — with the cloud-x86 split as the fallback.
 - **B.** Single standalone QM (Ubuntu arm64) + DTCC sim + client — prove the
-  end-to-end message path before any clustering.
+  end-to-end message path before any clustering. The QM is brought up by
+  Ansible/bootstrap **with its REST API enabled**, then configured with
+  `pymqrest` (first real exercise of the content plane); `dtcc-sim` and
+  `app-client` run as containers (§5/§9), the client using a **native MQI**
+  connection for the trade path.
 - **C.** **RDQM arm, full HA+DR on RHEL x86-64** — the comparison baseline:
   3-node synchronous HA group at the primary site + async DR to a 3-node group
   at the recovery site (3+3), with `rdqmdr` cutover/failback and the §3.1 fault
@@ -1109,7 +1207,8 @@ full 3+3 architecture up front).
 - **E.** Comparison analysis & recommendation for the client — scores both arms on
   §3 + §4, **weighting the vendor-supportability gap heavily**, and states the
   conditions under which each wins (decision deferred to DTCC/the client requirements).
-- **F.** Packaging & operational standards — `.deb`/`.rpm`, runbooks, health
+- **F.** Packaging & operational standards — `.deb`/`.rpm` wrapping the Ansible
+  content **and the `pymqrest`-based Python tooling/CLI**, runbooks, health
   checks, and the **recovery & diagnostics tooling** (`runmqras`/FFST capture)
   proven in §3.1 step 8.
 - **G.** *(forward-looking, post-requirements)* Dual-path / multi-QM
@@ -1132,6 +1231,21 @@ full 3+3 architecture up front).
 - SAN / shared storage as the weak link in the Pacemaker arm (the SPOF RDQM
   avoids).
 - ARM caveats — no MQTT/AMQP on the ARM64 MQ build.
+
+**Tooling / dependencies:**
+
+- **`pymqrest` is now a core dependency of the deliverable** (the content plane,
+  §8.1). It is the author's own code, actively maintained, and the
+  IBM-MQ-9.4-targeted REST surface matches our baseline (§C) — but a version-10
+  REST-API change (§C) could need a `pymqrest` update. Tracked as a normal
+  dependency, not a blocker.
+- **Licensing — moving to MIT.** `pymqrest` and siblings are currently
+  GPL-3.0-or-later; the author intends to **relicense his MQ-REST-admin projects
+  to MIT** for corporate compatibility (he owns and maintains them, and is
+  indifferent to downstream reuse). MIT removes any copyleft concern about
+  shipping `pymqrest` inside the client deliverable. Low risk; if any consumer
+  ever objects he'll adjust. *(Action: confirm the relicense lands before the
+  Phase-F packaging step makes `pymqrest` a distributed dependency.)*
 
 **DR / message integrity:**
 
