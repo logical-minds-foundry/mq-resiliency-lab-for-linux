@@ -1033,6 +1033,13 @@ bonus, not the goal.
   the lab — see the security scope note in §1. We enable the embedded web server
   with whatever minimal auth is convenient (basic/LTPA, self-signed TLS, as in
   the dev-environment precedent); hardening it is not part of what we test.
+- **Content-plane credentials are runtime-injected and never committed.** The
+  `pymqrest` auth material (basic/LTPA/cert) reaching `mqweb` is supplied at run
+  time (environment or a secret store) and excluded by `.gitignore` — no
+  credentials, keystores, or LTPA tokens land in the repo. This is basic
+  **hygiene for a shared hand-off artifact**, independent of the security-hardening
+  scope that §1 puts out of bounds: relaxed lab auth is fine, committed secrets
+  are not.
 - **The QM-facing tooling is built on `pymqrest`, and exercising it is an
   explicit secondary goal (§1).** `pymqrest` already provides idempotent
   `ensure_*` methods (`CREATED`/`UPDATED`/`UNCHANGED`) — declarative,
