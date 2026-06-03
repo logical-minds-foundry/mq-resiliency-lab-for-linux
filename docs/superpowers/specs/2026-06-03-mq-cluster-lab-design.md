@@ -54,7 +54,7 @@
   - [7.1 Decision: Vagrant orchestrates the lab](#71-decision-vagrant-orchestrates-the-lab)
   - [7.2 The Apple-Silicon provider bind (open decision — Phase-A spike)](#72-the-apple-silicon-provider-bind-open-decision--phase-a-spike)
   - [7.3 Configuration via Ansible](#73-configuration-via-ansible)
-  - [7.4 Relationship to Vergil and the host](#74-relationship-to-vergil-and-the-host)
+  - [7.4 Development model — one large, persistent VM for dev and lab](#74-development-model--one-large-persistent-vm-for-dev-and-lab)
   - [7.5 Sizing budget](#75-sizing-budget)
 - [8. The Tooling (the actual product)](#8-the-tooling-the-actual-product)
 - [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
@@ -719,13 +719,15 @@ be reinventing a solved problem — the wrong kind of simplicity.
 This is a deliberate divergence from Vergil's Lima choice, and the reasoning is
 clean:
 
-- **Lima is optimal for a single, special-purpose VM** — exactly the Vergil
-  agent sandbox (one VM, one `/projects` mount, stripped down to contain Claude
-  Code). Lima keeps that job; nothing here changes it.
-- **The MQ lab is the opposite shape** — many peer nodes across simulated sites
-  with real, separately-addressable networks. That is Vagrant's home turf, not
-  Lima's.
-- The two **coexist on the host** (see §7.4).
+- **Lima still does the macOS→Linux step**, consistent with Vergil — but here it
+  builds **one large, persistent dev+lab VM** (§7.4) rather than Vergil's small,
+  ephemeral, single-purpose agent sandbox.
+- **Vagrant runs nested *inside* that Linux VM** (§7.2), where its multi-machine
+  DSL and libvirt networking are strongest. The MQ lab is many peer nodes across
+  simulated sites with real, separately-addressable networks — Vagrant's home
+  turf, not Lima's.
+- So Lima and Vagrant are **layered, not siblings**: Lima provides the Linux
+  host; Vagrant builds the lab within it (see §7.4).
 
 **Why the heartbeat/replication nets must be real, not faked:** the §3.1 fault
 suite deliberately **severs the heartbeat network** and **severs replication**
@@ -811,8 +813,9 @@ guest OSes hard: mask the default junk a full distro runs that a lab node never
 needs — USB/device discovery, `multipathd`, unused iSCSI initiator, ModemManager,
 telemetry/`apt-daily` timers (**RHEL especially ships a lot**). Direct precedent
 exists in `vergil-vm`'s service-minimization pass (it already masks `open-iscsi`,
-`multipathd`, `ModemManager`, et al.); we reuse that approach on both the outer
-Linux VM and the guest nodes. Leaner guests matter doubly under emulation.
+`multipathd`, `ModemManager`, et al.); we reuse that approach on the **lab guest
+nodes**. (The dev/host VM itself stays full-featured — it needs the toolchain;
+see §7.4.) Leaner guests matter doubly under emulation.
 
 ### 7.3 Configuration via Ansible
 
@@ -824,17 +827,58 @@ Vagrant VM here run against real client hardware later, with no
 Vagrant/Lima/provider assumptions baked in. The harness is disposable (§0); the
 playbooks are not.
 
-### 7.4 Relationship to Vergil and the host
+### 7.4 Development model — one large, persistent VM for dev and lab
 
-This repo is the deliberate **Vergil sandbox exception**: it runs **directly on
-the MacBook host**, *not* inside the Vergil agent VM, because it must itself
-create and manage VMs (you cannot usefully nest the lab VMs inside the
-single-purpose Vergil VM). So on the host, two virtualization tools coexist by
-design: **Lima** runs the Vergil agent VM (where Claude Code is sandboxed for
-*other* repos), and **Vagrant** runs the MQ lab VMs as host-level siblings. We
-still reuse Vergil's conventions where they transfer — Ubuntu LTS base,
+We do **not** run this repo bare on the Mac. Instead we build **one large,
+persistent Lima VM** that is *both* the Claude development sandbox *and* the
+`vagrant-libvirt` virtualization host — and we do **all development inside it**.
+This is the natural consequence of §7.2 already putting the lab inside a Linux
+VM: rather than edit code on macOS and reach into a separate VM, the agent, the
+editor, Vagrant, libvirt, and the lab guests all live in **the same Linux box**.
+
+**How it differs from a standard Vergil agent VM:**
+
+- **Big, not small.** Vergil's agent VMs are ~4 GB, deliberately constrained to
+  contain Claude Code for an ordinary repo. This one is ~32–48 GB (§7.5) because
+  it hosts the whole nested lab.
+- **Persistent, not ephemeral.** Vergil agent VMs are throwaway and rebuilt per
+  session; this one is long-lived — built once and kept. A rebuild costs us
+  nothing important because the **source of truth is host-mounted** (below) and
+  the lab is reproducible from its Vagrant/Ansible definitions.
+- **Fuller, not service-minimized.** The §7.2 minimization pass targets the
+  **lab guest nodes**, never this VM. The dev/host VM deliberately carries the
+  full toolchain — Vagrant, libvirt/KVM, `virsh`, qemu, Ansible, dev tooling —
+  because the agent needs freedom to drive the lab. (No tension: *lock down the
+  guests, equip the host.*)
+
+**Identity & sandboxing (Vergil-aligned).** Claude runs under the **same Vergil
+identity / scoped GitHub App** as elsewhere, so the **git/GitHub blast radius
+stays scoped** exactly as Vergil intends. What broadens is only *local execution*
+inside this VM — the agent can run whatever the lab needs (`vagrant`, `virsh`,
+provisioning, fault injection). That freedom is **contained within the VM**; the
+externally-visible identity and push scope are unchanged.
+
+**Storage — just the filesystem we have.** No special block device. The **repo
+and all code/scripts live on a host-filesystem mount** (the same pattern as the
+dev-projects mount), so work is persisted on the Mac and survives VM rebuilds.
+*(Phase-A detail: the libvirt guest disk images likely want to sit on the VM's
+own disk / libvirt storage pool rather than a host mount, so DRBD block
+replication isn't fighting a 9p/virtiofs layer — confirm in the spike.)*
+
+**The payoff — collapse the macOS/Linux boundary.** Once bootstrapped, **we are
+developing on Linux, with Linux tools, for a Linux target.** macOS shrinks to a
+thin bootstrap: a small set of **macOS-only scripts that build and configure
+this Lima VM** (create it, size it, enable nested-virt pass-through, wire the
+projects mount). *Everything else* — the harness, the playbooks, the MQ tooling,
+the tests — is written and run **assuming Linux**, with no macOS special-casing.
+That erases a whole class of host-portability friction and makes the codebase
+match its real deployment substrate from day one.
+
+We still reuse Vergil's conventions where they transfer — Ubuntu LTS base,
 provisioning patterns, and the `make docs` documentation-site layout — once this
-repo is Vergil-adopted.
+repo is Vergil-adopted. The "sandbox exception" is therefore narrow: not "runs
+on bare macOS," but "uses one bespoke, large, **persistent** VM instead of
+Vergil's small ephemeral agent VMs."
 
 ### 7.5 Sizing budget
 
