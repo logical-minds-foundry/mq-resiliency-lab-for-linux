@@ -61,6 +61,13 @@ the lowest-cost option that technically works.
   Deliverable #1 is one solid QM, we architect from day one for the complete
   HA-within-site + DR-across-site shape (three nodes per site, see §4 and
   Appendix A) so nothing has to be retrofitted later.
+- **Symmetric peer sites (recommended design constraint).** The two sites are
+  built as **identical peers** — full 3-node HA at *both* — not a rich primary
+  and a thin recovery node. The recovery site must be able to run the live
+  business, with the same HA guarantees, for **as long as the primary did**.
+  Roles ("which site is live") are swappable at any time with **no major
+  hardware, software, or configuration change**. This is a recommendation we
+  push unless the client deliberately lowers the bar. (Full rationale in §4.7.)
 - **Vendor-supportability gap is a first-class, heavily-weighted criterion.**
   MQ is a closed-source black box; for a tier-one firm we *must* be able to get
   IBM at the table for a SEV-1. Every architecture is judged partly on how far
@@ -327,6 +334,12 @@ results are comparable:
    diagnostic-gathering path (`runmqras`, FFST/FDC collection, cluster and
    replication state) and confirm we'd have a clean package to hand IBM for a
    SEV-1. This is itself a tested deliverable, not an afterthought.
+9. **Planned, reversible site role rotation** (§4.7) — a *controlled* (not
+   disaster) cutover of the live role A→B, run the business live from B,
+   validate full HA at B, then rotate back B→A. Confirms the DR runbook works
+   on demand, that the peer can genuinely run live, and that the swap requires
+   no hardware/software/config change. This is the "DR for a long stay" and
+   disruptive-upgrade-via-rotation case, distinct from step 7's disaster.
 
 Each scenario records: RTO, message loss (if any), whether intervention was
 required, any data-integrity anomaly, and whether usable IBM-grade diagnostics
@@ -478,6 +491,58 @@ cross-site replication is **asynchronous** (§4.2) and why the
 app/infrastructure reconciliation interface (§4.3) matters. Our async DR window
 (seconds-scale for RDQM DR) sits comfortably inside this envelope; the residual
 message-loss window is the thing the application must reconcile.
+
+### 4.7 Symmetric peer sites & periodic role rotation (recommended design constraint)
+
+This is *why* the lab is **fully symmetric 3+3** rather than a 3-node primary
+plus a single thin recovery node, and it is a constraint to recommend to the
+client unless they consciously choose to lower the bar.
+
+**The core principle: design DR for a long stay, not a brief excursion.** Build
+the recovery site on the assumption that once you fail over to it, **you may be
+running there for a long time** — weeks, not minutes. That means the secondary
+must carry **the same high-availability guarantees the primary had**: full
+intra-site HA (3-node group), same capacity, same operability. A thin
+single-node recovery target violates this — it can accept the business but
+cannot *safely run* it, because the moment you're in DR you've lost your HA.
+
+**Treat the sites as peers, not primary/secondary.** Architect for **Site A and
+Site B as identical equals** whose live/standby roles are **swappable at any
+time** with **no major hardware, software, or configuration change**. Even when
+operationally labelled primary/secondary, the design assumption is full symmetry
+and reversible role assignment for as long as required.
+
+**Why this is worth enforcing — three concrete payoffs:**
+
+- **Validated DR procedures.** A controlled, scheduled failover (an off-weekend,
+  reversible exercise) proves the DR runbook actually works *before* a real
+  disaster forces it — not a paper plan, a rehearsed one.
+- **Both sites stay genuinely live-capable.** Periodically running the business
+  *from* the secondary — for as long as you'd run from the primary — keeps it
+  from rotting into a never-exercised cold standby. The strongest form is
+  **scheduled role rotation**: run live in A until a planned cutover to B, then
+  run live in B for a comparable span, and back.
+- **A clean path for non-rolling, disruptive upgrades.** When a change is too
+  disruptive to apply live or reversibly against an active cluster (e.g. a major
+  OS/kernel/RDQM-kmod jump that can't be done in a rolling fashion), **rotate the
+  live role to the peer site, upgrade the now-idle site safely, then rotate
+  back.** Symmetric peers turn "scary irreversible upgrade" into a routine,
+  reversible site swap.
+
+**Relationship to RDQM mechanics.** RDQM's documented HA/DR combined model is
+**3+3** (a synchronous HA group at each site, async DR between them — §4.4), so
+symmetric peers are built from supported building blocks. Rotation is a *manual,
+controlled* `rdqmdr` cutover (async window applies, §4.2–4.3), not automatic
+WAN-spanning failover. **Note** the DR replication relationship still has a
+direction at any instant; "swappable roles" means we can re-establish it the
+other way (B→A) as a planned operation, not that both directions are live
+simultaneously — that fully mutual case is the active/active vision in
+Appendix A.
+
+**Lab consequence:** the 3+3 topology (§5) exists precisely so we can exercise
+this — scheduled cutover A→B, run live in B, validate, and cut back — as a
+first-class tested procedure in the §3.1 fault/operations suite (extends step 7,
+full-site DR, into a *planned, reversible* rotation, not only a disaster).
 
 ## 5. Lab Topology
 
