@@ -56,7 +56,7 @@
   - [7.3 Configuration via Ansible](#73-configuration-via-ansible)
   - [7.4 Development model — one large, persistent VM for dev and lab](#74-development-model--one-large-persistent-vm-for-dev-and-lab)
   - [7.5 Sizing budget](#75-sizing-budget)
-- [8. The Tooling (the actual product)](#8-the-tooling-the-actual-product)
+- [8. The Tooling (prototype that proves the design)](#8-the-tooling-prototype-that-proves-the-design)
   - [8.1 What the tooling is — and is not](#81-what-the-tooling-is--and-is-not)
   - [8.2 Layered structure](#82-layered-structure)
   - [8.3 Queue-manager install & configuration](#83-queue-manager-install--configuration)
@@ -64,7 +64,7 @@
   - [8.5 DR setup, cutover & failback](#85-dr-setup-cutover--failback)
   - [8.6 Operational standards](#86-operational-standards)
   - [8.7 Recovery & diagnostics](#87-recovery--diagnostics)
-  - [8.8 Packaging — the endgame (Phase F)](#88-packaging--the-endgame-phase-f)
+  - [8.8 Packaging — optional, only if it earns its keep (Phase F)](#88-packaging--optional-only-if-it-earns-its-keep-phase-f)
   - [8.9 Design principles (the through-line)](#89-design-principles-the-through-line)
 - [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
   - [9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)](#91-connectivity-model-to-mirror-from-the-public-ficc-epn-mq-guide)
@@ -91,13 +91,31 @@
 
 ## 0. Framing (non-negotiable)
 
-**The product is the scripting, configuration approach, and operational
-understanding for standing up and managing a *redundant* IBM MQ queue
-manager on Linux clusters — with both intra-site high availability *and*
-cross-site disaster recovery.** The virtualization lab is a disposable
-development/validation harness — it is *not* the deliverable. No one rebuilds
-this VM topology at the client; it exists so the tooling can be developed and proven
-locally, then carried into the client (and ideally published as a reusable package).
+**The primary deliverable is the *design* — and the evidence to back it.** The
+real value carried into the client is a validated HA/DR design for running a
+*redundant* IBM MQ queue manager on Linux clusters (intra-site high availability
+*and* cross-site disaster recovery), together with **demonstrated, evidence-based
+answers** to what the strategy should be and what the tradeoffs are. We arrive
+not with "here is an idea, might it work" but with proven concepts and
+demonstrated feasibility — so client-side work becomes *porting working code to
+their infrastructure*, not starting cold.
+
+**The tooling is a generically-written prototype, not the client's production
+code.** It exists to prove the concepts. It is **not expected to be reused
+as-is** — the client's environment is tightly coupled to their own internal
+infrastructure and tooling (they may not use Ansible; we don't assume they will,
+and we don't mind), so we expect to re-implement to fit it. If some piece turns
+out usable as-is, that is a bonus, not the plan.
+
+**The lab is durable, reusable R&D infrastructure — and *that* outlasts the
+engagement.** The virtualization lab is a disposable *per-run* harness, but the
+**model** is a long-lived, abstract test bed: any engineer can replicate the
+deployment architecture on their own laptop and experiment freely with **zero
+real-hardware constraints** (real hardware comes later; we will try to keep the
+tooling comparable). The model is meant to be extended — other miniature
+queue-manager networks and structures, and future concerns like monitoring and
+integration with the client's systems (deferred until that environment is
+known).
 
 **Deliverable #1 (the foundation):** demonstrate that we can stand up a
 *solid, redundant, basic* queue manager and document *exactly* how to set it
@@ -112,8 +130,10 @@ the lowest-cost option that technically works.
 
 ## 1. North Star & Solution Scope
 
-- Portable HA **and DR** tooling/config/standards is the product; the lab is
-  the harness.
+- **The validated HA/DR design — proven by prototype tooling — is the product
+  (§0).** The portable config/standards/patterns are part of that proof; the lab
+  is durable, reusable R&D infrastructure, not a throwaway. The prototype tooling
+  is not assumed to deploy as-is at the client.
 - **The queue-manager-facing tooling is built on `pymqrest`** — the author's own
   typed Python wrapper over the IBM MQ admin REST API (the same code that helped
   win this engagement). **Exercising and showcasing `pymqrest` on a real
@@ -122,6 +142,15 @@ the lowest-cost option that technically works.
 - **Enabling the MQ administrative REST API on every queue manager is a hard
   requirement** — it is the boundary between the Ansible/bootstrap bring-up plane
   and the `pymqrest` content plane (§8.1).
+- **Security configuration is explicitly out of scope (for now).** We are testing
+  **functionality and resiliency**, not the security of the configuration.
+  Channels and the REST API run with whatever minimal/relaxed security is most
+  convenient — deliberately, to cut setup complexity on a dimension we are not
+  evaluating. This is *not* a recommendation to run insecurely in production:
+  securing MQ for DTCC is a **separate, requirements-driven effort** that cannot
+  begin until we know *which* of MQ's many channel-security mechanisms DTCC (or
+  the client) mandates (TLS standards per GOV1683-24, security exits, etc. — see
+  §11). If security testing becomes a goal, it gets its own experiments.
 - A complete solution has **two inseparable halves**: (a) intra-site HA — the
   queue manager survives node/component failure within a data center; and
   (b) cross-site DR — the service is recoverable when an entire data center
@@ -857,10 +886,11 @@ Vagrant only stands up and networks the bare VMs. The **real MQ HA/DR work — t
 actual product (§8) — splits across two planes (§8.1)**: the **bring-up plane**
 (OS prep, MQ install, HA/DR, QM create + REST enablement) is **Ansible** over SSH
 via Vagrant's Ansible provisioner; the **content plane** (queue-manager objects,
-health, ops) is **`pymqrest`** against the now-running REST API. Both are
-**independent of the harness**: the same playbooks and the same Python tooling
-run against real client hardware later, with no Vagrant/Lima/provider assumptions
-baked in. The harness is disposable (§0); the playbooks and the tooling are not.
+health, ops) is **`pymqrest`** against the now-running REST API. Both are kept
+**independent of the harness** as a design discipline — no Vagrant/Lima/provider
+assumptions baked in — so the *lab* is reusable and the *patterns* are portable.
+That is not a promise the scripts deploy as-is at the client (§0/§8.1); the
+harness is disposable, but the proven design and the reusable lab are not.
 
 The containerized fixtures (`dtcc-sim` QM and `app-client`, §5/§9) are *not*
 Vagrant VMs — they run on the containerd/nerdctl runtime the §7.4 dev+lab VM
@@ -931,13 +961,16 @@ the M5 Max's 128 GB leaves comfortable headroom. Native arm64 guests run
 KVM-accelerated; x86-64 (required for RDQM) is TCG-emulated, accepted as slower
 since RDQM validation is functional, not performance.
 
-## 8. The Tooling (the actual product)
+## 8. The Tooling (prototype that proves the design)
 
-Everything above is context for *this* section. The lab, the harness, the
-research arms — they all exist to produce the thing the client is actually
-paying for: **portable automation, configuration, and operational standards for
-standing up, operating, and recovering an IBM MQ queue manager on a Linux
-cluster.** §8 describes that product.
+This section describes the **prototype tooling** we build to prove the design
+(§0). It is generically written and fully functional in the lab, but it is **not
+the client's production code** — we expect to re-implement against their internal
+infrastructure (§0, §11). What this tooling delivers is **proof**: that the
+HA/DR setup, configuration, failover, and DR procedures work, end to end, with
+real evidence. The automation, configuration approach, and operational standards
+below are the reusable *patterns*; whether any given script ships as-is is a
+bonus, not the goal.
 
 ### 8.1 What the tooling is — and is not
 
@@ -945,12 +978,14 @@ cluster.** §8 describes that product.
   written down: idempotent, re-runnable, version-controlled, and **measurable
   against §3 and §4**. Every capability has a corresponding fault test that
   proves it.
-- **It is harness-independent.** The host-level automation runs over SSH via
-  **Ansible** (§7.3); the queue-manager-level automation runs over the MQ admin
-  REST API via **`pymqrest`** (below). The *same* content drives the lab VMs
-  today and real (or cloud) Linux hosts later, unchanged. The Vagrant/Lima
-  harness is never a dependency of the deliverable — it is scaffolding we throw
-  away.
+- **It is harness-independent — as a design discipline, not a deployment
+  promise.** The host-level automation runs over SSH via **Ansible** (§7.3); the
+  queue-manager-level automation runs over the MQ admin REST API via
+  **`pymqrest`** (below). We keep Vagrant/Lima assumptions *out* of the
+  automation so the lab harness is never baked in — but the point of that
+  discipline is that the *lab* is reusable and the *patterns* are portable, **not**
+  a claim that these scripts deploy as-is at the client (§0). They are a
+  prototype; the client environment will likely demand re-implementation.
 - **It has two configuration planes, divided at one clean boundary — "is the
   queue manager and its REST API up yet?"**
   - **Bring-up plane (everything up to and including a running QM + REST API):**
@@ -965,11 +1000,11 @@ cluster.** §8 describes that product.
     queries — is managed through it.
   - This boundary is not arbitrary: it falls exactly at the moment the REST API
     becomes available, which is the first thing `pymqrest` requires.
-- **REST API enablement is a hard requirement on every queue manager.** No QM we
-  stand up is "done" until its administrative REST API is enabled and secured.
-  The lab can mirror the proven dev-environment posture (embedded web server,
-  basic/LTPA auth, self-signed TLS) while we design the production-grade
-  TLS/certificate posture as a standard.
+- **REST API enablement is a hard requirement on every queue manager** (the
+  content plane needs it). *Securing* that endpoint is deliberately relaxed in
+  the lab — see the security scope note in §1. We enable the embedded web server
+  with whatever minimal auth is convenient (basic/LTPA, self-signed TLS, as in
+  the dev-environment precedent); hardening it is not part of what we test.
 - **The QM-facing tooling is built on `pymqrest`, and exercising it is an
   explicit secondary goal (§1).** `pymqrest` already provides idempotent
   `ensure_*` methods (`CREATED`/`UPDATED`/`UNCHANGED`) — declarative,
@@ -1014,10 +1049,29 @@ above the line is the **`pymqrest`** plane.
 - **Idempotent MQ install**, pinned to the **9.4 LTS** baseline (§C); re-running
   converges rather than duplicates.
 - **Queue-manager create**, then **enable and secure the administrative REST
-  API** (embedded web server / `mqweb`): the web server, the auth registry
-  (basic/LTPA in the lab, per the dev-environment precedent; cert/TLS posture as
-  a production standard), and the role bindings. This is the last bring-up step;
-  it is what makes the content plane possible.
+  API** (embedded web server / `mqweb`): the web server, a minimal auth registry
+  (basic/LTPA, self-signed TLS — convenience, not a hardened posture; security is
+  out of scope per §1), and the role bindings. This is the last bring-up step; it
+  is what makes the content plane possible.
+
+**REST-API-over-HA architecture (decided — stateless `mqweb` per node + VIP
+routing).** The admin REST API does **not** need to fail over, because `mqweb`
+is stateless. We run an `mqweb` instance on **every** cluster node, each
+configured to administer the **local** queue manager. The REST endpoint is
+published to clients as the **floating VIP** (which already follows the QM from
+node to node). Because clients only ever use the VIP, they always reach the node
+where the QM is currently live — its local `mqweb` connects; the `mqweb`
+instances on the non-active nodes simply have no local QM to talk to until the
+QM lands on them. So `mqweb` is **not** a cluster-managed resource that migrates;
+it is an ordinary per-node service that is always running everywhere. *(This is
+the architecture the author has run in production for the analogous case; the
+exact RDQM mechanics are confirmed in the Phase-B/C lab, per trust-but-verify.)*
+
+A direct corollary, and part of the deliverable: the tooling must **install and
+package `mqweb` (and MQ, and the HA resource agents) as boot services** so that
+on reboot — and on failover — everything comes up correctly and in the right
+order without manual intervention. The `mqweb` setup/configuration is itself a
+build target, not an afterthought.
 
 **Content plane (`pymqrest`):**
 
@@ -1088,17 +1142,17 @@ The standards are part of the product, not documentation bolted on afterward.
   SEV-1 hits a tier-one firm, the value is being able to hand IBM a complete
   diagnostic bundle immediately, regardless of which arm is deployed.
 
-### 8.8 Packaging — the endgame (Phase F)
+### 8.8 Packaging — optional, only if it earns its keep (Phase F)
 
-- The deliverable is ultimately wrapped as an **installable artifact**
-  (`.deb` for Ubuntu, `.rpm` for RHEL) that lays down the playbooks, the operator
-  CLI, and the standards on an admin/control host — the original "automate
-  setting up the tooling" goal.
-- **Honest sequencing:** packaging is **Phase F**, after both arms are proven
-  (§10). Until then the tooling is a **versioned repository of Ansible content +
-  standards** that is already fully usable; packaging adds distribution and
-  versioned upgrade, not new capability. We do not build the package before the
-  thing it would package is proven.
+- **Demoted from "the endgame."** Per §0, this tooling is a prototype, not the
+  client's production code, so packaging it as a distributable `.deb`/`.rpm` is
+  **optional** — worth doing only if the lab becomes a long-lived enough internal
+  test bed (shared with other engineers) that easy install/upgrade pays off. It
+  is explicitly **not** a claim that the client installs this package.
+- If we do it, the artifact lays down the playbooks, the `pymqrest`-based CLI,
+  and the standards on a control host — the "automate setting up the tooling"
+  convenience. Until (or unless) then, the tooling is just a **versioned repo of
+  Ansible content + Python tooling + standards**, already fully usable in the lab.
 
 ### 8.9 Design principles (the through-line)
 
