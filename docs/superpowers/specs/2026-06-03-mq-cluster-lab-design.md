@@ -589,6 +589,31 @@ other way (B→A) as a planned operation, not that both directions are live
 simultaneously — that fully mutual case is the active/active vision in
 Appendix A.
 
+**Caveat — role rotation is DTCC-constrained, and that's a separate axis from
+3+3.** The clean "run live in A for six months, planned swap, run live in B"
+cadence is straightforward when **you own the whole stack end to end**. This is
+not that situation. Each data center will likely have its **own physical
+connectivity to DTCC** — historically leased lines, possibly secure
+internet/SMART circuits today; *how it's implemented now is unknown to us* and
+needs to be established. Because that connectivity terminates at DTCC, a site
+swap is **not unilaterally ours to schedule** — it may require coordination with
+DTCC and put us on **their** test calendar, not ours. DTCC may even mandate the
+operating posture outright: e.g. *stay primary at all times, use the secondary
+only on a genuine primary failure, and fail back as soon as the primary is
+healthy* — i.e. classic active/standby with no elective rotation. Which model we
+can actually run is **dictated by the DTCC relationship and contract**, and we
+adapt to it.
+
+**This does not weaken the 3+3 requirement — it's orthogonal.** Whether we may
+*electively* run live from the secondary is an **operational** question
+constrained by DTCC. Whether the secondary must be a **full 3-node HA peer** is
+a **design** question, and the answer is yes regardless: if you have failed over
+to the secondary, *something bad has happened at the primary, and you cannot
+assume it will be repaired quickly* — you must design for a long stay with full
+HA at the recovery site. DTCC constraints only tweak *how we operate* the two
+sites at a given moment; they do not change the fundamental requirement that
+**both sites are full-HA peers (3+3)**.
+
 **Lab consequence:** the 3+3 topology (§5) exists precisely so we can exercise
 this — scheduled cutover A→B, run live in B, validate, and cut back — as a
 first-class tested procedure in the §3.1 fault/operations suite (extends step 7,
