@@ -430,6 +430,41 @@ Consequence: faithfully testing **RDQM forces RHEL-x86-64**, which on this
 Mac means emulation or a cheap cloud x86 box. At this stage RDQM validation
 is *functional* (correct failover/DR cutover), not performance.
 
+### 6.1 Bare metal vs virtualization (confirmed: VMs are fine)
+
+A natural worry — RDQM ships a DRBD **kernel module**, so does it require bare
+metal? **No.** Confirmed against IBM material (researched 2026-06-03):
+
+- RDQM's only hard constraints are **RHEL + x86-64**. The kernel-module
+  requirement is about the kmod matching the **running RHEL kernel version**,
+  not about physical hardware — a VM runs the same kernel, so the module loads
+  and behaves identically. There is **no documented bare-metal requirement**.
+- IBM's stated position is **hypervisor-agnostic**: MQ "has not been
+  specifically tested in virtualization environments" and IBM doesn't certify
+  particular hypervisors, but MQ (and RDQM) is supported in a VM to the extent
+  the underlying RHEL release is supported. (IBM historically even shipped a
+  "WebSphere MQ Hypervisor Edition" for RHEL.)
+- **Supportability asterisk (feeds the §3 vendor-gap criterion):** IBM's defect
+  support won't help with problems "directly related to the virtualization
+  environment," and for a hard case may ask you to **reproduce on a tested,
+  non-virtualized configuration** before engaging. So virtualization is fully
+  supported for *running* RDQM; the small gap is at the *support boundary* for
+  a virtualization-layer-specific defect. Worth noting in the client's
+  production decision — not a lab blocker. *Confidence: HIGH that VMs are
+  permitted/workable; the support caveat is the nuance.*
+
+This positively confirms the whole lab premise: **everything here, including
+the RDQM arm, runs on VMs** — no bare-metal node is required.
+
+**References (re-verify; some IBM pages gated at research time):**
+
+- IBM MQ support position on virtualization & HA —
+  <https://www.ibm.com/support/pages/ibm-mqs-support-position-virtualization-low-level-hardware-file-systems-networks-and-high-availability>
+- RDQM kernel modules (kernel-version coupling) —
+  <https://www.ibm.com/support/pages/ibm-mq-replicated-data-queue-manager-kernel-modules>
+- System Requirements for IBM MQ 9.4 —
+  <https://www.ibm.com/support/pages/system-requirements-ibm-mq-94>
+
 ## 7. Virtualization & Provisioning Harness
 
 *(to expand: options + tradeoffs — Vagrant + provider, Lima/Multipass, Tart,
