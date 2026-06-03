@@ -663,8 +663,14 @@ active/active two-block composition (panel ②).
 
 ## 6. OS / Arch Build Matrix
 
-*(to expand: same skeleton, swappable OS image; where Ubuntu and RHEL diverge
-at the system level.)*
+The harness skeleton is identical across the matrix — same node count, same
+network shape (§5), same Ansible entry points (§7.3) — with only the **OS image
+swapped**. Where Ubuntu and RHEL diverge is confined to the **L0 host-prep layer
+(§8.2):** package source and install mechanics (`apt`/`.deb` vs `dnf`/`.rpm`),
+the **kernel-module coupling** (RDQM's DRBD module is RHEL-x86-64-only — the row
+that forces the emulation/cloud choice below), firewall tooling, and service
+management. Above L0 the content converges; that convergence is exactly what the
+two-arm comparison (§10-E) depends on.
 
 | OS    | arch   | HA/DR exercisable                                  | Host method on M5 Max |
 |-------|--------|----------------------------------------------------|-----------------------|
