@@ -25,6 +25,56 @@
 
 ---
 
+## Contents
+
+- [0. Framing (non-negotiable)](#0-framing-non-negotiable)
+- [1. North Star & Solution Scope](#1-north-star--solution-scope)
+- [2. The Central Thesis & Research Agenda](#2-the-central-thesis--research-agenda)
+  - [2.1 Thesis](#21-thesis)
+  - [2.2 Why this is the core risk](#22-why-this-is-the-core-risk)
+  - [2.3 Candidate architectures (the experimental arms)](#23-candidate-architectures-the-experimental-arms)
+  - [2.4 Rejected: multi-instance queue manager over NFS](#24-rejected-multi-instance-queue-manager-over-nfs)
+  - [2.5 Open questions to resolve by experiment](#25-open-questions-to-resolve-by-experiment)
+  - [2.6 Output of this thread](#26-output-of-this-thread)
+  - [2.7 RDQM-on-RHEL vs native HA/DR on Ubuntu — objective tradeoffs](#27-rdqm-on-rhel-vs-native-hadr-on-ubuntu--objective-tradeoffs-no-decision-yet)
+- [3. Reliability & Redundancy Criteria (the yardstick)](#3-reliability--redundancy-criteria-the-yardstick)
+  - [3.1 Test methodology](#31-test-methodology)
+- [4. Disaster Recovery & Business Continuity (first-class requirement)](#4-disaster-recovery--business-continuity-first-class-requirement)
+  - [4.1 Why DR is inseparable from the design](#41-why-dr-is-inseparable-from-the-design)
+  - [4.2 The synchronous-vs-asynchronous problem (the message-loss window)](#42-the-synchronous-vs-asynchronous-problem-the-message-loss-window)
+  - [4.3 The app/infrastructure interface (the promise that breaks)](#43-the-appinfrastructure-interface-the-promise-that-breaks)
+  - [4.4 Per-approach DR mechanisms (validated against IBM docs)](#44-per-approach-dr-mechanisms-validated-against-ibm-docs)
+  - [4.5 DR open questions](#45-dr-open-questions)
+  - [4.6 Public & regulatory basis for the two-site DR requirement (researched)](#46-public--regulatory-basis-for-the-two-site-dr-requirement-researched)
+  - [4.7 Symmetric peer sites & periodic role rotation (recommended design constraint)](#47-symmetric-peer-sites--periodic-role-rotation-recommended-design-constraint)
+- [5. Lab Topology](#5-lab-topology)
+- [6. OS / Arch Build Matrix](#6-os--arch-build-matrix)
+  - [6.1 Bare metal vs virtualization (confirmed: VMs are fine)](#61-bare-metal-vs-virtualization-confirmed-vms-are-fine)
+- [7. Virtualization & Provisioning Harness](#7-virtualization--provisioning-harness)
+- [8. The Tooling (the actual product)](#8-the-tooling-the-actual-product)
+- [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
+  - [9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)](#91-connectivity-model-to-mirror-from-the-public-ficc-epn-mq-guide)
+  - [9.2 Transport & security context (real-world, for fidelity notes)](#92-transport--security-context-real-world-for-fidelity-notes)
+  - [9.3 Validation](#93-validation)
+- [10. Phasing](#10-phasing)
+- [11. Risks & Open Questions](#11-risks--open-questions)
+- [Appendix A. Dual-Path, Multi-QM Active/Active (forward-looking)](#appendix-a-likely-final-recommendation-dual-path-multi-qm-activeactive-forward-looking)
+  - [A.1 The pattern: parallel A/B flows across two live data centers](#a1-the-pattern-parallel-ab-flows-across-two-live-data-centers)
+  - [A.2 Mapping to the "six Linux servers" hint (validated model)](#a2-mapping-to-the-six-linux-servers-hint-validated-model)
+  - [A.3 The big unknowns (gate this work)](#a3-the-big-unknowns-gate-this-work)
+- [Appendix B. Multi-Environment Replication & Change Propagation (forward-looking)](#appendix-b-multi-environment-replication--cross-environment-change-propagation-forward-looking)
+  - [B.1 Why the building block is more than an HA/DR choice](#b1-why-the-building-block-is-more-than-an-hadr-choice)
+  - [B.2 The dev → test → prod model](#b2-the-dev--test--prod-model)
+  - [B.3 What this implies for the design](#b3-what-this-implies-for-the-design)
+- [Appendix C. IBM MQ Version Strategy: 9.4 baseline, 9→10 gap analysis (forward-looking)](#appendix-c-ibm-mq-version-strategy-94-baseline-910-gap-analysis-long-term-upgrade-plan-forward-looking)
+  - [C.1 Baseline assumption](#c1-baseline-assumption)
+  - [C.2 The 10.0 timing wrinkle (important)](#c2-the-100-timing-wrinkle-important)
+  - [C.3 EOS boundary conditions (the upgrade window)](#c3-eos-boundary-conditions-the-upgrade-window)
+  - [C.4 The gap-analysis task (with a specific question to answer)](#c4-the-gap-analysis-task-with-a-specific-question-to-answer)
+  - [C.5 Strategy](#c5-strategy)
+
+---
+
 ## 0. Framing (non-negotiable)
 
 **The product is the scripting, configuration approach, and operational
