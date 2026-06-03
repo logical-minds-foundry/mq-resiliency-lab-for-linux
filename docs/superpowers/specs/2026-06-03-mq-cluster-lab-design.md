@@ -11,7 +11,10 @@
 > requirements differ from front-office systems and are **TBD** pending
 > client/DTCC input. This repo is a personal home-lab harness on an Apple M5
 > Max (128 GB, arm64) used to develop and validate portable MQ HA/DR tooling
-> before go-live (2026-06-15).
+> **before the contract engagement begins (2026-06-15)**. The aim is to arrive
+> with the knowledge, hands-on understanding, and ideally some working tooling
+> to hit the ground running on day one — *not* a production go-live. Any
+> production rollout happens later, on the client's own timeline.
 >
 > **Anonymization note:** this is deliberately generic, non-proprietary
 > industry work. A large enterprise needing to clear post-trade with DTCC over
@@ -91,7 +94,8 @@ The client wants to standardize on Ubuntu. IBM's flagship, turnkey HA/DR technol
 RPMs — confirmed across IBM's System Requirements, the Installing-RDQM docs,
 and the RDQM Kernel Modules support page. The gap between *what the client wants*
 (Ubuntu) and *what IBM blesses for turnkey HA/DR* (RHEL/RDQM) is the single
-biggest unknown to de-risk before go-live. Everything else is downstream.
+biggest unknown to de-risk before the engagement begins. Everything else is
+downstream.
 
 ### 2.3 Candidate architectures (the experimental arms)
 
@@ -560,7 +564,7 @@ full 3+3 architecture up front).
 - **Channel security:** DTCC mandates TLS on the MQ channel (GOV1683-24) — the
   tooling must emit an onboarding-ready, TLS-secured channel config.
 - **Schedule risk:** a new dedicated SMART circuit has a ~12–14 week lead time;
-  irrelevant to the lab but material to the client's go-live plan.
+  irrelevant to the lab but material to the client's production rollout plan.
 - **Open gap — no public mandate for dual/diverse member MQ circuits.** That
   specific requirement (if it exists) lives in DTCC's **gated, internally
   classified DR Guide** and per-client onboarding packets, not public material.
@@ -706,15 +710,19 @@ bleeding edge. RDQM ships in MQ Advanced and remains, to our knowledge,
 ### C.2 The 10.0 timing wrinkle (important)
 
 **IBM MQ 10.0 (LTS) was announced 2026-04-21 and goes GA 2026-06-16** (z/OS
-2026-06-19) — i.e. **the day after the assumed go-live (2026-06-15)**. This is a
-deliberate decision point, not an accident:
+2026-06-19) — fittingly, **the day after the contract engagement begins
+(2026-06-15)**. (Nothing of ours "goes live" on that date; it is simply the
+contract start. The coincidence is just that 10.0 ships into the world the day
+after.) The version question is still a deliberate decision point:
 
-- **Going live on 9.4, not 10.0, is the sane call.** Standing up a tier-one
-  clearing connection on a release that shipped *yesterday* maximizes risk for
+- **Build on 9.4, not 10.0.** A tier-one clearing connection should not be
+  founded on a release that shipped *days* earlier — that maximizes risk for
   zero upside. 9.4 LTS has years of runway (C.3) and a deep field-proven track
-  record. Treat 10.0 as a **planned, tested upgrade**, not a day-one bet.
-- But 10.0's existence changes the long-game, so we owe the client a written
-  9→10 gap analysis and upgrade plan up front.
+  record, so it is the right baseline to develop tooling against and the right
+  thing for the client to eventually run in production. Treat 10.0 as a
+  **planned, tested upgrade**, not a foundational bet.
+- But 10.0's existence changes the long-game, so part of arriving prepared is
+  bringing a written 9→10 gap analysis and upgrade plan.
 
 ### C.3 EOS boundary conditions (the upgrade window)
 
