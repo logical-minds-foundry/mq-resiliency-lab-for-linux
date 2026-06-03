@@ -321,12 +321,17 @@ asymmetry is what tilts the ledger.
   3 a.m. SEV-1. RDQM is supported end-to-end by IBM; a bespoke Ubuntu stack makes
   us solve a long tail of problems IBM will disclaim, for a product whose internals
   knowledge is rare. (Expanded in §3 "Vendor-supportability gap" and §6.1.)
-- **No external/shared storage — the biggest single simplification.** RDQM keeps
-  storage **local to each node** (DRBD block replication, shared-nothing). That
-  **removes an entire layer of infrastructure** — no SAN, no LUN, no iSCSI
-  target, no array-replication tier — and with it removes a critical stability
-  dependency ("we are only as stable as our storage"). The Ubuntu/Pacemaker arm
-  *reintroduces* exactly this shared-storage SPOF. (Expanded in §4.4 and Q4 in
+- **No external/shared storage — emerging as one of the single strongest
+  arguments.** RDQM keeps storage **local to each node** (DRBD block replication,
+  shared-nothing). That **removes an entire layer of infrastructure** — no SAN, no
+  LUN, no iSCSI target, no array-replication tier — and with it removes a critical
+  stability dependency ("we are only as stable as our storage"). The
+  Ubuntu/Pacemaker arm *reintroduces* exactly this shared-storage SPOF. This is
+  partly **scar tissue**: prior production pain with a NAS/NFS tier whose vendor
+  support was poor, which is precisely the failure class a shared-nothing design
+  eliminates. Combined with the **keep-the-whole-stack-as-simple-as-possible**
+  thesis (§1 scale boundary), the storage argument is shaping up to be one of the
+  headline reasons to favor RDQM — not a footnote. (Expanded in §4.4 and Q4 in
   §2.5.)
 - **Simplicity is the right default at this scale.** Given the small, caged
   footprint (§1), the turnkey single-vendor box is proportionate to the problem;
@@ -1262,6 +1267,29 @@ from the start** — we do not build HA and then bolt DR on; an arm is only
 "done" when it has a demonstrated cross-site DR story (per §1, design for the
 full 3+3 architecture up front).
 
+**Both arms are real builds, and RDQM goes first — by intent, not just order.**
+The goal is a genuine apples-to-apples POC of *both* HA/DR approaches (C and D).
+But there are only ~2 weeks to the 2026-06-15 contract start, so RDQM is the
+**priority arm**: if only one thing is running by then, it must be RDQM, because
+it is the approach we most expect the client will actually adopt. Concretely,
+**get RDQM to a working, demonstrable instance first, then start the Ubuntu
+arm** — one finished instance plus Ubuntu in progress beats two half-built arms.
+Exact sequencing past that point (how far to push RDQM hardening before pivoting,
+whether to interleave) will **adapt as we go**.
+
+**The complexity asymmetry between the arms is itself a finding, not an
+accident.** The two arms are deliberately *not* apples-to-apples in
+**complexity** (the Ubuntu arm carries an external cluster stack, shared storage,
+fencing, and a replication tier RDQM simply doesn't have) — yet they are meant to
+be apples-to-apples in **delivered functionality**. That gap is a headline
+comparison point: *"look at everything you have to stand up and keep running for
+the Ubuntu path — do you want that operational surface for a small, caged
+service?"* The honest counterweight (carried in §2.7 and weighed in E) is the
+**unknown of the client's existing RHEL-licensing posture and how well their
+Ubuntu-shaped internal stack would support/integrate either OS** — if RHEL is
+costly or poorly integrated there, it can neutralize part of the
+complexity/supportability advantage.
+
 - **A.** Virtualization harness (multi-site, multi-network, {os,arch}-parameterized)
   — **Vagrant**; start here. First task is the **provider spike** (§7.2): confirm
   the leading **nested `vagrant-libvirt`** model — Lima nested-virt pass-through
@@ -1273,17 +1301,23 @@ full 3+3 architecture up front).
   `pymqrest` (first real exercise of the content plane); `dtcc-sim` and
   `app-client` run as containers (§5/§9), the client using a **native MQI**
   connection for the trade path.
-- **C.** **RDQM arm, full HA+DR on RHEL x86-64** — the comparison baseline:
-  3-node synchronous HA group at the primary site + async DR to a 3-node group
-  at the recovery site (3+3), with `rdqmdr` cutover/failback and the §3.1 fault
-  suite incl. full-site-loss.
+- **C.** **RDQM arm, full HA+DR on RHEL x86-64 — the priority arm (drive to a
+  working instance first).** The comparison baseline: 3-node synchronous HA group
+  at the primary site + async DR to a 3-node group at the recovery site (3+3),
+  with `rdqmdr` cutover/failback and the §3.1 fault suite incl. full-site-loss.
+  This is the one that must be demonstrable before the Ubuntu arm starts (see the
+  priority note above).
 - **D.** **Ubuntu Pacemaker/SAN arm, full HA+DR** — external Pacemaker/Corosync
   + SAN/iSCSI + STONITH + qdevice for intra-site HA, plus cross-site DR (DRBD
   async + Booth), run through the *identical* §3.1 suite for an apples-to-apples
   comparison.
 - **E.** Comparison analysis & recommendation for the client — scores both arms on
-  §3 + §4, **weighting the vendor-supportability gap heavily**, and states the
-  conditions under which each wins (decision deferred to DTCC/the client requirements).
+  §3 + §4, **weighting the vendor-supportability gap and the operational-complexity
+  asymmetry heavily** (the Ubuntu arm's external cluster/shared-storage/fencing/
+  replication surface vs. RDQM's shared-nothing turnkey box, at equal delivered
+  functionality), and states the conditions under which each wins. The standing
+  counterweight is the **client's RHEL-licensing posture and Ubuntu-stack
+  integration cost** (§2.7). Decision deferred to DTCC/the client requirements.
 - **F.** Packaging & operational standards — `.deb`/`.rpm` wrapping the Ansible
   content **and the `pymqrest`-based Python tooling/CLI**, runbooks, health
   checks, and the **recovery & diagnostics tooling** (`runmqras`/FFST capture)
