@@ -4,7 +4,7 @@ Tooling, scripts, and operating standards for running IBM MQ (MQ Series)
 high-availability queue managers on Ubuntu Linux clusters.
 
 > Status: bootstrapping. Design in progress under
-> [`docs/superpowers/specs/`](docs/superpowers/specs/).
+> [`docs/specs/`](docs/specs/).
 
 ## What this is
 
