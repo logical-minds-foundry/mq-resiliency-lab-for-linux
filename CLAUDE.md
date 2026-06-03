@@ -23,6 +23,24 @@ This repo is developed inside a Vergil VM profile, **not** on macOS directly.
 The authoritative design is `docs/specs/2026-06-03-mq-cluster-lab-design.md`.
 Lab work proceeds per its §10 phases (A→G), each its own spec→plan→build.
 
+## Workflow (Vergil-managed)
+
+This repo is Vergil-managed (`vergil.toml`). The branching model is
+`library-release`: `develop` is the integration branch, `main` is the release
+branch, and **both are protected** — no direct commits.
+
+- **Use `vrg-git` / `vrg-gh`, never raw `git` / `gh`.** The wrappers enforce
+  subcommand allowlists, flag deny-lists, and credential selection. Raw `git`
+  and `gh` are denied by the permission model. If something isn't available
+  through a wrapper, ask the human to run it via `! <command>`.
+- **All work flows through a feature branch off `develop`**, named
+  `feature/<issue>-<slug>` (the `<issue>` is a GitHub issue number — open one
+  first). Open a PR into `develop`.
+- **Commit with `vrg-commit`** (conventional commits):
+  `vrg-commit --type <type> --scope <scope> --message <msg> [--body <body>]`.
+- **Validation is `vrg-container-run -- vrg-validate`** — the only validation
+  command. Don't run individual linters/formatters outside it.
+
 ## Conventions
 
 - Secrets never enter git: no MQ entitlement/license artifacts, no credentials,

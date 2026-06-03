@@ -6,6 +6,11 @@ high-availability queue managers on Ubuntu Linux clusters.
 > Status: bootstrapping. Design in progress under
 > [`docs/specs/`](docs/specs/).
 
+## Table of Contents
+
+- [What this is](#what-this-is)
+- [Development environment](#development-environment)
+
 ## What this is
 
 A reproducible home-lab environment plus prototype tooling to stand up,
