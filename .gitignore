@@ -1,0 +1,17 @@
+# Brainstorming visual-companion scratch
+.superpowers/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Local env / secrets — never commit IBM MQ entitlement or license artifacts
+*.env
+.env.local
+secrets/
+licenses/
+
+# Vagrant / VM provisioning state (refined once the fabric design lands)
+.vagrant/
+*.box
+*.log

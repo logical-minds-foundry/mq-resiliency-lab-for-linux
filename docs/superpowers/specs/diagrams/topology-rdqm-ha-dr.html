@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MQ Lab Topology — RDQM HA/DR building block + active/active vision</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#11151a; color:#e6e8eb; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         margin:0; padding:28px 32px; line-height:1.45; }
+  h2 { margin:0 0 4px 0; }
+  .subtitle { opacity:.8; margin:0 0 8px 0; font-size:14px; }
+  .wrap { display:flex; flex-direction:column; gap:22px; margin-top:10px; }
+  .panel { border:2px solid #888; border-radius:12px; padding:14px 16px; }
+  .panel h3 { margin:0 0 4px 0; font-size:16px; }
+  .panel .sub { font-size:12px; opacity:.75; margin:0 0 12px 0; }
+  .dcrow { display:flex; gap:14px; align-items:stretch; }
+  .dc { flex:1; border:2px solid #5a7fb0; border-radius:12px; padding:12px; background:rgba(74,144,217,0.05); }
+  .dc.b { border-color:#b08a5a; background:rgba(176,138,90,0.05); }
+  .dc h4 { margin:0 0 8px 0; font-size:14px; letter-spacing:.03em; }
+  .group { border:1px dashed #4ade80; border-radius:9px; padding:8px; margin:6px 0; background:rgba(74,222,128,0.06); }
+  .group.dr { border-color:#d98a4a; border-style:dotted; background:rgba(217,138,74,0.07); }
+  .group .glabel { font-size:11px; text-transform:uppercase; letter-spacing:.05em; opacity:.85; margin-bottom:6px; }
+  .nodes { display:flex; gap:8px; flex-wrap:wrap; }
+  .node { border:1px solid #aaa; border-radius:7px; padding:6px 9px; min-width:62px; text-align:center;
+          background:rgba(255,255,255,0.05); font-family:ui-monospace,monospace; font-size:12px; }
+  .node.active { border-color:#4ade80; box-shadow:0 0 0 1px #4ade80 inset; }
+  .wanlink { display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:130px; text-align:center; }
+  .wanlink .arrow { font-size:20px; }
+  .wanlink small { font-size:11px; opacity:.85; }
+  .net { font-family:ui-monospace,monospace; font-size:11px; padding:2px 7px; border-radius:5px; display:inline-block; margin:2px 4px 2px 0; }
+  .net-priv { background:#143b2e; border:1px solid #3fae7a; }
+  .net-wan  { background:#52331f; border:1px solid #d98a4a; }
+  .callout { border-left:4px solid #e05a5a; background:rgba(224,90,90,0.08); padding:10px 14px; border-radius:6px; font-size:13px; }
+  .callout b { color:#ff8a8a; }
+  .ok { border-left:4px solid #4ade80; background:rgba(74,222,128,0.07); padding:10px 14px; border-radius:6px; font-size:13px; }
+  .crosswire { font-size:12px; text-align:center; opacity:.9; margin-top:8px; }
+  .tag { font-size:10px; opacity:.7; }
+  code { background:rgba(255,255,255,0.08); padding:1px 4px; border-radius:4px; }
+</style>
+</head>
+<body>
+
+<h2>RDQM done right — building block + active/active vision</h2>
+<p class="subtitle">HA groups are 3-node, synchronous, single-site. Cross-site is always asynchronous DR with manual cutover. No node ever stretches across the WAN.</p>
+
+<div class="callout">
+  <b>Why no stretched groups?</b> An RDQM HA group replicates <b>synchronously</b> and is a single quorum domain. Putting any member in the other data center (the "2+1" idea, or "one node from each") ties every commit to inter-site latency and makes a DC-to-DC network partition <b>collapse the cluster</b> instead of giving clean DR. Cross-site resilience is a <b>separate, asynchronous DR relationship</b> — never a stretched sync group.
+</div>
+
+<div class="wrap">
+
+  <!-- Building block -->
+  <div class="panel">
+    <h3>① The building block — one queue manager, HA + DR (Deliverable #1)</h3>
+    <p class="sub">QM "TRADE.QM" — automatic HA inside DC-A, manual async DR to DC-B.</p>
+    <div class="dcrow">
+      <div class="dc a">
+        <h4>Data Center A — PRIMARY</h4>
+        <span class="net net-priv">priv: sync DRBD + Corosync</span>
+        <div class="group">
+          <div class="glabel">RDQM HA group (3 nodes, synchronous, automatic failover)</div>
+          <div class="nodes">
+            <div class="node active">a1 ▶</div>
+            <div class="node">a2</div>
+            <div class="node">a3 <span class="tag">quorum</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wanlink">
+        <span class="net net-wan">net-wan</span>
+        <div class="arrow">⇒</div>
+        <small><b>async</b> DR<br/>(manual <code>rdqmdr</code><br/>cutover)<br/>seconds-scale window</small>
+      </div>
+
+      <div class="dc b">
+        <h4>Data Center B — DR RECOVERY</h4>
+        <span class="net net-priv">priv: sync DRBD + Corosync</span>
+        <div class="group dr">
+          <div class="glabel">DR recovery — 3-node HA group (3+3) OR single node (1+1)</div>
+          <div class="nodes">
+            <div class="node">b1</div>
+            <div class="node">b2</div>
+            <div class="node">b3</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ok" style="margin-top:10px;">Inside a DC: <b>automatic</b> HA failover, RPO 0 (synchronous). Between DCs: <b>manual</b> DR cutover, small async window. <b>Decision point:</b> DC-B = single recovery node (simplest, 1+1) or full 3-node group (3+3, production-grade)?</div>
+  </div>
+
+  <!-- Active/active vision -->
+  <div class="panel" style="border-color:#c9b84a;">
+    <h3>② The active/active production vision — two building blocks, cross-wired (Appendix A)</h3>
+    <p class="sub">Both data centers live at once. Six nodes = 3 per DC. No stretched groups — each DC hosts one primary HA group AND the other QM's DR copy.</p>
+    <div class="dcrow">
+      <div class="dc a">
+        <h4>Data Center A (live)</h4>
+        <div class="group">
+          <div class="glabel">QM-A primary HA group (3 nodes, sync, auto)</div>
+          <div class="nodes"><div class="node active">a1 ▶</div><div class="node">a2</div><div class="node">a3</div></div>
+        </div>
+        <div class="group dr">
+          <div class="glabel">QM-B DR copy (async target)</div>
+          <div class="nodes"><div class="node">a1</div><div class="node">a2</div><div class="node">a3</div> <span class="tag">same 3 nodes, 2nd QM</span></div>
+        </div>
+      </div>
+
+      <div class="wanlink">
+        <span class="net net-wan">net-wan</span>
+        <div class="arrow">⇄</div>
+        <small><b>mutual async DR</b><br/>A→B and B→A<br/>(manual cutover each)</small>
+      </div>
+
+      <div class="dc b">
+        <h4>Data Center B (live)</h4>
+        <div class="group">
+          <div class="glabel">QM-B primary HA group (3 nodes, sync, auto)</div>
+          <div class="nodes"><div class="node active">b1 ▶</div><div class="node">b2</div><div class="node">b3</div></div>
+        </div>
+        <div class="group dr">
+          <div class="glabel">QM-A DR copy (async target)</div>
+          <div class="nodes"><div class="node">b1</div><div class="node">b2</div><div class="node">b3</div> <span class="tag">same 3 nodes, 2nd QM</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="crosswire">App dual-paths: trades flow through <b>QM-A (DC-A)</b> or <b>QM-B (DC-B)</b>. Lose DC-A → QM-A cuts over to its DR copy in DC-B, and QM-B is already live there. Only in-flight QM-A traffic is impacted.</div>
+    <div class="callout" style="margin-top:10px;border-color:#d9b14a;background:rgba(217,177,74,0.08);">
+      <b style="color:#f0d96a;">Hypothesis to validate in the lab:</b> the symmetric "each DC = one primary group + one DR copy" composition is built from documented RDQM pieces (3+3 DR/HA), but running it <i>mutually for two QMs</i> is our design — exactly the kind of thing we prove experimentally rather than trust the vendor on.
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
