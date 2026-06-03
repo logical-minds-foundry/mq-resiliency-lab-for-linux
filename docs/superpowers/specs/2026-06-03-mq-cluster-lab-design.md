@@ -728,8 +728,23 @@ two-arm comparison (§10-E) depends on.
 | RHEL  | x86-64 | Pacemaker/Corosync, **RDQM (HA + DR)**             | emulation or cloud    |
 
 Consequence: faithfully testing **RDQM forces RHEL-x86-64**, which on this
-Mac means emulation or a cheap cloud x86 box. At this stage RDQM validation
-is *functional* (correct failover/DR cutover), not performance.
+Mac means emulation or a cheap cloud x86 box.
+
+**Decision: stay local under emulation, by intent.** A real goal is that the
+whole lab runs on the laptop with **no connectivity** (developing and running
+integration tests offline — e.g. on the commute). So local TCG-emulated x86 is
+the *primary* path, not a stopgap, and the cloud-x86 split (§7.2) is **break-glass**:
+reached only if emulation proves genuinely infeasible, which we will discover
+fast (the setup either works step-by-step or hits an obvious wall).
+
+**What this scopes the evidence to.** RDQM validation here is **functional /
+logical correctness only** — does failover happen, does DR cutover/failback
+produce the right state — *not* timing or throughput. We explicitly **do not
+tune cluster timers to mask emulation jitter**: faking the timing would make the
+config unrepresentative, and real tuning belongs on real hardware later. Results
+are reported with that scope stated. If emulation jitter produces behavior we
+can't distinguish from a real fault (spurious fencing, split-brain), that itself
+is the signal to switch that arm to cloud-x86 — not to tune around it.
 
 ### 6.1 Bare metal vs virtualization (confirmed: VMs are fine)
 
@@ -756,6 +771,14 @@ metal? **No.** Confirmed against IBM material (researched 2026-06-03):
 
 This positively confirms the whole lab premise: **everything here, including
 the RDQM arm, runs on VMs** — no bare-metal node is required.
+
+**This extends to the real deployment, not just the lab.** The expectation is
+that the production build also runs on **VMs in the client's environment, not
+bare metal** — that is the design everyone wants, and it is consistent with
+IBM's hypervisor-agnostic position above (if RDQM truly required bare metal, IBM
+would struggle to sell it). The lab therefore validates a substrate shape we
+intend to carry forward, not a lab-only shortcut. *(The §3 support-boundary
+caveat still applies and belongs in the client's production decision.)*
 
 **References (re-verify; some IBM pages gated at research time):**
 
@@ -1274,7 +1297,10 @@ full 3+3 architecture up front).
 **Platform / lab:**
 
 - RHEL developer licensing and whether **RDQM** is usable under it.
-- x86-64 emulation speed on the M5 Max (RDQM forces RHEL-x86-64).
+- x86-64 emulation on the M5 Max (RDQM forces RHEL-x86-64). **Decided (§6):**
+  stay local under emulation by intent (offline-capable), scope RDQM evidence to
+  functional correctness, don't tune timers to mask jitter; cloud-x86 is
+  break-glass if emulation jitter becomes indistinguishable from real faults.
 - **Vagrant provider bind on Apple Silicon** (§7.2): the strong-networking
   providers (Parallels, VMware Fusion, VirtualBox) don't emulate x86-64, and the
   x86-capable host tool (`vagrant-qemu`) has limited multi-NIC support. Leading
