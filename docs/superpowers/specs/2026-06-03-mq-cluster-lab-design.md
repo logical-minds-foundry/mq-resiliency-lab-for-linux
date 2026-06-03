@@ -51,6 +51,11 @@
 - [6. OS / Arch Build Matrix](#6-os--arch-build-matrix)
   - [6.1 Bare metal vs virtualization (confirmed: VMs are fine)](#61-bare-metal-vs-virtualization-confirmed-vms-are-fine)
 - [7. Virtualization & Provisioning Harness](#7-virtualization--provisioning-harness)
+  - [7.1 Decision: Vagrant orchestrates the lab](#71-decision-vagrant-orchestrates-the-lab)
+  - [7.2 The Apple-Silicon provider bind (open decision — Phase-A spike)](#72-the-apple-silicon-provider-bind-open-decision--phase-a-spike)
+  - [7.3 Configuration via Ansible](#73-configuration-via-ansible)
+  - [7.4 Relationship to Vergil and the host](#74-relationship-to-vergil-and-the-host)
+  - [7.5 Sizing budget](#75-sizing-budget)
 - [8. The Tooling (the actual product)](#8-the-tooling-the-actual-product)
 - [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
   - [9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)](#91-connectivity-model-to-mirror-from-the-public-ficc-epn-mq-guide)
@@ -700,16 +705,100 @@ the RDQM arm, runs on VMs** — no bare-metal node is required.
 
 ## 7. Virtualization & Provisioning Harness
 
-*(to expand: options + tradeoffs — Vagrant + provider, Lima/Multipass, Tart,
-UTM — parameterized by {os, arch} and capable of multi-network, multi-site
-topologies; decision deferred until weighed. In-VM config via Ansible so the
-real tooling stays provider/host portable.)*
+### 7.1 Decision: Vagrant orchestrates the lab
 
-**Sizing budget:** the full 3+3 topology plus DTCC sim, client, and (for the
-Pacemaker arm) witness + iSCSI target is ~8–10 VMs at ~1 GB each — well within
-the M5 Max's 128 GB. Native arm64 VMs run fast; x86-64 (required for RDQM)
-comes via emulation or a cheap cloud box, accepted as slower since RDQM
-validation is functional, not performance.
+The harness is **Vagrant**. The lab's hard requirement is not VM *lifecycle* —
+it is **multi-node, multi-network topology**: isolated subnets for the
+client/app net, the DTCC-facing net, the per-DC data/VIP net, and crucially the
+**private heartbeat and replication networks** the HA stack depends on.
+Vagrant's multi-machine + network DSL models exactly this and is a mature,
+widely-used, open-source tool that has solved this problem for over a decade.
+Hand-rolling subnet wiring around a single-VM tool *to avoid a dependency* would
+be reinventing a solved problem — the wrong kind of simplicity.
+
+This is a deliberate divergence from Vergil's Lima choice, and the reasoning is
+clean:
+
+- **Lima is optimal for a single, special-purpose VM** — exactly the Vergil
+  agent sandbox (one VM, one `/projects` mount, stripped down to contain Claude
+  Code). Lima keeps that job; nothing here changes it.
+- **The MQ lab is the opposite shape** — many peer nodes across simulated sites
+  with real, separately-addressable networks. That is Vagrant's home turf, not
+  Lima's.
+- The two **coexist on the host** (see §7.4).
+
+**Why the heartbeat/replication nets must be real, not faked:** the §3.1 fault
+suite deliberately **severs the heartbeat network** and **severs replication**
+to confirm correct quorum/fencing behavior and no split-brain. You cannot
+credibly test "what happens when the heartbeat link dies" against one flat
+simulated network — you need genuinely separate, individually-severable
+interfaces. The fidelity of the entire HA/DR validation rests on getting the
+network definition right, which is *precisely* why Vagrant earns its place here.
+
+### 7.2 The Apple-Silicon provider bind (open decision — Phase-A spike)
+
+Vagrant delegates the actual VM to a **provider**, and on Apple Silicon the
+provider choice is genuinely constrained — load-bearing enough to be the first
+thing **Phase A settles experimentally**. The bind: *no single provider cleanly
+gives us both rich multi-NIC networking and x86-64 emulation*, and we need both
+(multi-NIC for the topology; x86-64 because RDQM forces RHEL-x86-64, §2.2/§6).
+*(Provider landscape researched 2026-06-03; re-verify — these plugins move fast.)*
+
+- **`vagrant-qemu`** (open source) — runs arm64 guests natively (fast, HVF)
+  *and* can emulate x86-64 (slow, TCG). The one tool that spans both arches.
+  **But** its **multiple-network-interface support is limited** — exactly our
+  core need — so the topology we care about most is where it is weakest.
+- **`vagrant-parallels`** — robust host-only/private-network support (good for
+  the topology), arm64-native; **but Parallels on Apple Silicon does not emulate
+  x86-64**, so it cannot run the RDQM arm. Commercial/paid.
+- **`vagrant-vmware-desktop` + VMware Fusion** — Fusion is now free; solid
+  networking; also **arm64-guest-only on Apple Silicon (no x86 emulation)**.
+  ARM64 Vagrant support has historically been rough — verify current state.
+- **`vagrant-libvirt`** — the strongest networking model by far, but it expects
+  a **Linux host** (i.e. a Linux VM layer on the Mac) — an extra layer that cuts
+  against minimizing complexity.
+
+**Leading hypothesis (to validate, not yet decided): a split harness.** Use a
+strong-networking, arm64-native provider (Parallels or VMware Fusion) for the
+bulk of the lab — the Ubuntu arm64 arm, the Pacemaker arm, and all the
+multi-net fault injection, which then run *fast* and *native* — and handle the
+**RDQM RHEL-x86-64 arm separately**, where x86 is unavoidable: either qemu
+emulation locally (slow, and wrestle its networking limits) or — cleaner —
+**offload it to a cheap x86 cloud box**, using cloud VPC subnets in place of the
+private nets. Offloading RDQM's x86 sidesteps both the emulation-speed penalty
+*and* the qemu multi-NIC gap in one move. Phase A's job is to prove which
+combination actually delivers severable heartbeat/replication nets at acceptable
+effort.
+
+### 7.3 Configuration via Ansible
+
+Vagrant only stands up and networks the bare VMs. The **real MQ HA/DR install,
+configuration, and operational tooling — the actual product (§8) — is done in
+Ansible** (via Vagrant's Ansible provisioner) over SSH. This keeps the
+deliverable **independent of the harness**: the same playbooks that configure a
+Vagrant VM here run against real client hardware later, with no
+Vagrant/Lima/provider assumptions baked in. The harness is disposable (§0); the
+playbooks are not.
+
+### 7.4 Relationship to Vergil and the host
+
+This repo is the deliberate **Vergil sandbox exception**: it runs **directly on
+the MacBook host**, *not* inside the Vergil agent VM, because it must itself
+create and manage VMs (you cannot usefully nest the lab VMs inside the
+single-purpose Vergil VM). So on the host, two virtualization tools coexist by
+design: **Lima** runs the Vergil agent VM (where Claude Code is sandboxed for
+*other* repos), and **Vagrant** runs the MQ lab VMs as host-level siblings. We
+still reuse Vergil's conventions where they transfer — Ubuntu LTS base,
+provisioning patterns, and the `make docs` documentation-site layout — once this
+repo is Vergil-adopted.
+
+### 7.5 Sizing budget
+
+The full 3+3 topology plus DTCC sim, client, and (for the Pacemaker arm) witness
++ iSCSI target is ~8–10 VMs at ~1 GB each — well within the M5 Max's 128 GB.
+Native arm64 VMs run fast; x86-64 (required for RDQM) comes via emulation or a
+cheap cloud box (§7.2), accepted as slower since RDQM validation is functional,
+not performance.
 
 ## 8. The Tooling (the actual product)
 
@@ -785,7 +874,9 @@ from the start** — we do not build HA and then bolt DR on; an arm is only
 full 3+3 architecture up front).
 
 - **A.** Virtualization harness (multi-site, multi-network, {os,arch}-parameterized)
-  — start here.
+  — **Vagrant**; start here. First task is the **provider spike** (§7.2): prove a
+  provider/combination that delivers severable heartbeat/replication nets *and*
+  covers x86-64 for the RDQM arm.
 - **B.** Single standalone QM (Ubuntu arm64) + DTCC sim + client — prove the
   end-to-end message path before any clustering.
 - **C.** **RDQM arm, full HA+DR on RHEL x86-64** — the comparison baseline:
@@ -812,6 +903,11 @@ full 3+3 architecture up front).
 
 - RHEL developer licensing and whether **RDQM** is usable under it.
 - x86-64 emulation speed on the M5 Max (RDQM forces RHEL-x86-64).
+- **Vagrant provider bind on Apple Silicon** (§7.2): the strong-networking
+  providers (Parallels, VMware Fusion) don't emulate x86-64, and the x86-capable
+  one (`vagrant-qemu`) has limited multi-NIC support. Resolved by the Phase-A
+  spike, likely a split harness (arm64-native for most arms + cloud/qemu x86 for
+  RDQM).
 - SAN / shared storage as the weak link in the Pacemaker arm (the SPOF RDQM
   avoids).
 - ARM caveats — no MQTT/AMQP on the ARM64 MQ build.
