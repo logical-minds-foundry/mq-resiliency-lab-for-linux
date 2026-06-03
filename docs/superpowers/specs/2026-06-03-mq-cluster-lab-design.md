@@ -57,6 +57,15 @@
   - [7.4 Development model — one large, persistent VM for dev and lab](#74-development-model--one-large-persistent-vm-for-dev-and-lab)
   - [7.5 Sizing budget](#75-sizing-budget)
 - [8. The Tooling (the actual product)](#8-the-tooling-the-actual-product)
+  - [8.1 What the tooling is — and is not](#81-what-the-tooling-is--and-is-not)
+  - [8.2 Layered structure](#82-layered-structure)
+  - [8.3 Queue-manager install & configuration](#83-queue-manager-install--configuration)
+  - [8.4 HA setup automation (per arm)](#84-ha-setup-automation-per-arm)
+  - [8.5 DR setup, cutover & failback](#85-dr-setup-cutover--failback)
+  - [8.6 Operational standards](#86-operational-standards)
+  - [8.7 Recovery & diagnostics](#87-recovery--diagnostics)
+  - [8.8 Packaging — the endgame (Phase F)](#88-packaging--the-endgame-phase-f)
+  - [8.9 Design principles (the through-line)](#89-design-principles-the-through-line)
 - [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
   - [9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)](#91-connectivity-model-to-mirror-from-the-public-ficc-epn-mq-guide)
   - [9.2 Transport & security context (real-world, for fidelity notes)](#92-transport--security-context-real-world-for-fidelity-notes)
@@ -891,9 +900,123 @@ as slower since RDQM validation is functional, not performance.
 
 ## 8. The Tooling (the actual product)
 
-*(to expand: QM install/config automation; HA-setup automation per approach;
-DR setup + cutover/failback automation; operational standards — runbooks,
-health checks, backup; eventual `.deb` / `.rpm` packaging.)*
+Everything above is context for *this* section. The lab, the harness, the
+research arms — they all exist to produce the thing the client is actually
+paying for: **portable automation, configuration, and operational standards for
+standing up, operating, and recovering an IBM MQ queue manager on a Linux
+cluster.** §8 describes that product.
+
+### 8.1 What the tooling is — and is not
+
+- **It is** the install → configure → operate → recover lifecycle, automated and
+  written down: idempotent, re-runnable, version-controlled, and **measurable
+  against §3 and §4**. Every capability has a corresponding fault test that
+  proves it.
+- **It is harness-independent.** The automation runs over SSH via **Ansible**
+  (§7.3), so the *same* content drives the lab VMs today and real (or cloud)
+  Linux hosts later, unchanged. The Vagrant/Lima harness is never a dependency
+  of the deliverable — it is scaffolding we throw away.
+- **It is caged to the scale boundary (§1).** A handful of queue managers, a
+  handful of sites, a handful of apps. We do **not** build a general-purpose MQ
+  platform, an operator, or a self-service portal. "Keep it simple" wins ties.
+- **It is two-armed at the interface, arm-specific underneath.** RDQM-on-RHEL
+  (§10-C) and Ubuntu Pacemaker/SAN (§10-D) expose the **same operator verbs**
+  (bring up HA, show status, fail over, set up DR, cut over, fail back) over
+  different mechanics, so the runbooks and the eventual recommendation compare
+  like with like.
+
+### 8.2 Layered structure
+
+The content is organized as composable layers, each independently runnable and
+testable. Higher layers assume the lower ones converged; none of them assume the
+harness.
+
+| Layer | Responsibility | Arm-specific? |
+|------|----------------|---------------|
+| L0 | Host/OS prep — packages, kernel module prerequisites, users, firewall, time sync | yes (RHEL vs Ubuntu) |
+| L1 | MQ install (pinned baseline) + base queue-manager config | mostly shared |
+| L2 | Intra-site **HA** bring-up | yes |
+| L3 | Cross-site **DR** setup + cutover/failback | yes |
+| L4 | Operational standards — runbooks, health checks, backup | shared |
+| L5 | Recovery & diagnostics capture | shared |
+
+### 8.3 Queue-manager install & configuration
+
+- **Idempotent MQ install**, pinned to the **9.4 LTS** baseline (§C); re-running
+  converges rather than duplicates.
+- **MQSC-as-code.** Queue-manager objects — queues, channels, listeners, auth
+  records, TLS config — live as **declarative definition data under version
+  control**, applied through MQSC. The queue manager's configuration is a
+  reviewable artifact, not a sequence of typed commands.
+- **Drift detection / convergence.** Re-applying the definitions reports and
+  corrects divergence, so "what the QM should be" is always the file in git.
+
+### 8.4 HA setup automation (per arm)
+
+- **RDQM/RHEL:** form the **3-node synchronous HA group** — DRBD config
+  generated and validated, Pacemaker resources, floating IP — from a single
+  declarative group definition.
+- **Ubuntu Pacemaker/SAN:** Corosync/Pacemaker, STONITH fencing, qdevice quorum,
+  and the iSCSI/SAN resource agents that the §2.3 arm depends on.
+- **Common verbs across both arms:** `form-group`, `add-node` / `evacuate-node`,
+  `status`, `failover`. The verb is stable; the implementation differs.
+
+### 8.5 DR setup, cutover & failback
+
+- **RDQM/RHEL:** create the DR-replicated pair (`crtmqm -rr`), drive
+  `rdqmdr` cutover and failback.
+- **Ubuntu:** DRBD async replication + Booth ticket arbitration for the
+  cross-site role.
+- **The §4.7 role rotation as a scripted, rehearsable operation.** The
+  symmetric-peer-site rotation is not an ad-hoc afternoon — it is a paved-path
+  procedure: **quiesce the live site → confirm the replication stream has fully
+  caught up (drive the async window to zero) → cut over → run the business from
+  the peer → rotate back when ready.** The "confirm caught up before you cut"
+  step is what turns an inherently async, lossy failover into a **planned,
+  zero-loss** transition; it is the difference between disaster cutover (step 7
+  of §3.1) and controlled rotation (step 9). The tooling makes both safe and
+  repeatable, and refuses to proceed with the clean path if replication has not
+  converged.
+
+### 8.6 Operational standards
+
+The standards are part of the product, not documentation bolted on afterward.
+
+- **Runbooks** — the paved-path procedures for every operator verb above, plus
+  the disaster and rotation flows, written so the *next* MQ admin (there is only
+  one today) can execute them under pressure.
+- **Health checks** — queue-manager liveness, channel state, replication lag,
+  quorum/cluster health — as scripts that exit non-zero and are alert-friendly.
+- **Backup** — of the queue-manager definitions and the config-as-code, with a
+  documented restore path that is itself a tested recovery procedure.
+- **Change procedure** — how a config change flows from edit → review → apply →
+  verify, consistent across both arms.
+
+### 8.7 Recovery & diagnostics
+
+- A wrapper around **`runmqras`** (and the FFST/FDC artifacts) that captures
+  "everything IBM will ask for" in one step — proven in **§3.1 step 8**.
+- This directly serves the **vendor-supportability criterion (§3):** when a
+  SEV-1 hits a tier-one firm, the value is being able to hand IBM a complete
+  diagnostic bundle immediately, regardless of which arm is deployed.
+
+### 8.8 Packaging — the endgame (Phase F)
+
+- The deliverable is ultimately wrapped as an **installable artifact**
+  (`.deb` for Ubuntu, `.rpm` for RHEL) that lays down the playbooks, the operator
+  CLI, and the standards on an admin/control host — the original "automate
+  setting up the tooling" goal.
+- **Honest sequencing:** packaging is **Phase F**, after both arms are proven
+  (§10). Until then the tooling is a **versioned repository of Ansible content +
+  standards** that is already fully usable; packaging adds distribution and
+  versioned upgrade, not new capability. We do not build the package before the
+  thing it would package is proven.
+
+### 8.9 Design principles (the through-line)
+
+Idempotent · declarative config-as-code · harness-independent · caged to scope ·
+two-arm parity at the operator interface · every capability paired with a §3/§4
+fault test that proves it.
 
 ## 9. DTCC Simulation & Validation
 
