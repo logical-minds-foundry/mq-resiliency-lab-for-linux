@@ -744,31 +744,75 @@ gives us both rich multi-NIC networking and x86-64 emulation*, and we need both
 (multi-NIC for the topology; x86-64 because RDQM forces RHEL-x86-64, §2.2/§6).
 *(Provider landscape researched 2026-06-03; re-verify — these plugins move fast.)*
 
+- **`vagrant-libvirt` inside a nested Linux VM** *(leading hypothesis — see
+  below)* — on Linux, libvirt is the **most mature** Vagrant provider with the
+  **strongest multi-network model by far**, and it defines proper multi-NIC
+  topologies for **x86-64 guests too**. Its only catch was "needs a Linux host"
+  — which on this machine we simply *give* it.
 - **`vagrant-qemu`** (open source) — runs arm64 guests natively (fast, HVF)
-  *and* can emulate x86-64 (slow, TCG). The one tool that spans both arches.
-  **But** its **multiple-network-interface support is limited** — exactly our
-  core need — so the topology we care about most is where it is weakest.
+  *and* can emulate x86-64 (slow, TCG). The one host-level tool that spans both
+  arches. **But** its **multiple-network-interface support is limited** — exactly
+  our core need — so the topology we care about most is where it is weakest.
 - **`vagrant-parallels`** — robust host-only/private-network support (good for
   the topology), arm64-native; **but Parallels on Apple Silicon does not emulate
   x86-64**, so it cannot run the RDQM arm. Commercial/paid.
 - **`vagrant-vmware-desktop` + VMware Fusion** — Fusion is now free; solid
   networking; also **arm64-guest-only on Apple Silicon (no x86 emulation)**.
   ARM64 Vagrant support has historically been rough — verify current state.
-- **`vagrant-libvirt`** — the strongest networking model by far, but it expects
-  a **Linux host** (i.e. a Linux VM layer on the Mac) — an extra layer that cuts
-  against minimizing complexity.
+- **VirtualBox** — on Apple Silicon (7.1+) it is host-capable but **arm64-guest
+  only, no x86 emulation** (Oracle pulled it for poor performance), and its
+  Apple-Silicon support is the **newest/roughest** of the set. No advantage over
+  Parallels/Fusion here; not a contender.
 
-**Leading hypothesis (to validate, not yet decided): a split harness.** Use a
-strong-networking, arm64-native provider (Parallels or VMware Fusion) for the
-bulk of the lab — the Ubuntu arm64 arm, the Pacemaker arm, and all the
-multi-net fault injection, which then run *fast* and *native* — and handle the
-**RDQM RHEL-x86-64 arm separately**, where x86 is unavoidable: either qemu
-emulation locally (slow, and wrestle its networking limits) or — cleaner —
-**offload it to a cheap x86 cloud box**, using cloud VPC subnets in place of the
-private nets. Offloading RDQM's x86 sidesteps both the emulation-speed penalty
-*and* the qemu multi-NIC gap in one move. Phase A's job is to prove which
-combination actually delivers severable heartbeat/replication nets at acceptable
-effort.
+**Leading hypothesis: one nested `vagrant-libvirt` harness.** Carve out a single
+well-resourced Linux VM (Lima/vz, ~32–48 GB given 128 GB to spend) and run the
+*entire* lab inside it under `vagrant-libvirt`. This is the **only** option that
+delivers **rich, severable multi-NIC networking *and* x86-64 in one coherent,
+mature provider**: arm64 arms are **KVM-accelerated via nested virtualization**,
+and the RDQM x86 arm is TCG-emulated **but still gets real, individually-severable
+heartbeat/replication NICs** — the exact combination nothing at the host level
+offers. Bonuses: the libvirt + Ansible harness **lifts cleanly onto any real
+Linux KVM host or cloud box later** (far more production-representative than a
+Mac-specific provider), and it **mirrors Vergil's own two-layer model**
+(agent-in-VM → containers; here Vagrant-in-Linux-VM → libvirt guests), so it is
+consistent with the ecosystem rather than a one-off.
+
+**Why nested virt makes this viable now (and its precise limit):** macOS 15
+(Sequoia)+ exposes **nested virtualization on M3-and-later** hosts via
+Virtualization.framework — **the M5 Max qualifies** — so a Linux VM can run KVM
+and hardware-accelerate **arm64** guests. The precise limit: nested virt only
+accelerates **same-architecture** (arm64-on-arm64). It does **not** speed up
+x86 — x86-64 guests are QEMU/TCG **software emulation** regardless of layering.
+That is fine (TCG runs inside a VM without issue); it just means the RDQM arm is
+CPU-slow. *(Researched 2026-06-03; confirm macOS 15+ and that Lima passes nested
+virt through — Phase-A spike.)*
+
+**Honest caveats (record these):**
+
+- **Nesting does not accelerate x86** — the RDQM arm is CPU-slow under TCG. Fine
+  for *functional* failover/DR validation, which is all we need (§3, perf is out
+  of scope).
+- **Absolute RTO wall-clock from the emulated x86 arm is not representative** —
+  failover *correctness* is valid, failover *timing* is not. Report emulated-arm
+  RTO qualitatively; trust arm64-native timings for real numbers. (Refines §3.)
+- **Two layers complicate network debugging** — when a net misbehaves, isolate
+  whether it is the host→Linux-VM boundary or the Linux-VM→guest boundary.
+- **Prerequisites** — macOS 15+ on M3+ (have it) and Lima nested-virt pass-through
+  (confirm in Phase A).
+
+**Fallback (if emulated x86 is too slow even for functional runs, or nested virt
+won't pass through): the split harness.** Run the arm64 arms on a strong-networking
+arm64-native provider locally, and put the **RDQM RHEL-x86-64 arm on a cheap x86
+cloud box**, using cloud VPC subnets in place of the private nets — which
+sidesteps both the local emulation-speed penalty and the host-qemu multi-NIC gap.
+
+**Service-surface minimization (worth a day — applies either way).** Strip the
+guest OSes hard: mask the default junk a full distro runs that a lab node never
+needs — USB/device discovery, `multipathd`, unused iSCSI initiator, ModemManager,
+telemetry/`apt-daily` timers (**RHEL especially ships a lot**). Direct precedent
+exists in `vergil-vm`'s service-minimization pass (it already masks `open-iscsi`,
+`multipathd`, `ModemManager`, et al.); we reuse that approach on both the outer
+Linux VM and the guest nodes. Leaner guests matter doubly under emulation.
 
 ### 7.3 Configuration via Ansible
 
@@ -795,10 +839,11 @@ repo is Vergil-adopted.
 ### 7.5 Sizing budget
 
 The full 3+3 topology plus DTCC sim, client, and (for the Pacemaker arm) witness
-+ iSCSI target is ~8–10 VMs at ~1 GB each — well within the M5 Max's 128 GB.
-Native arm64 VMs run fast; x86-64 (required for RDQM) comes via emulation or a
-cheap cloud box (§7.2), accepted as slower since RDQM validation is functional,
-not performance.
++ iSCSI target is ~8–10 VMs at ~1 GB each. Under the leading nested-libvirt model
+(§7.2) those live *inside* one Linux VM, so size that outer VM generously —
+~**32–48 GB** of the M5 Max's 128 GB leaves comfortable headroom. Native arm64
+guests run KVM-accelerated; x86-64 (required for RDQM) is TCG-emulated, accepted
+as slower since RDQM validation is functional, not performance.
 
 ## 8. The Tooling (the actual product)
 
@@ -874,9 +919,10 @@ from the start** — we do not build HA and then bolt DR on; an arm is only
 full 3+3 architecture up front).
 
 - **A.** Virtualization harness (multi-site, multi-network, {os,arch}-parameterized)
-  — **Vagrant**; start here. First task is the **provider spike** (§7.2): prove a
-  provider/combination that delivers severable heartbeat/replication nets *and*
-  covers x86-64 for the RDQM arm.
+  — **Vagrant**; start here. First task is the **provider spike** (§7.2): confirm
+  the leading **nested `vagrant-libvirt`** model — Lima nested-virt pass-through
+  on this M5/macOS, severable heartbeat/replication nets, and acceptable
+  TCG-emulated x86 for the RDQM arm — with the cloud-x86 split as the fallback.
 - **B.** Single standalone QM (Ubuntu arm64) + DTCC sim + client — prove the
   end-to-end message path before any clustering.
 - **C.** **RDQM arm, full HA+DR on RHEL x86-64** — the comparison baseline:
@@ -904,10 +950,12 @@ full 3+3 architecture up front).
 - RHEL developer licensing and whether **RDQM** is usable under it.
 - x86-64 emulation speed on the M5 Max (RDQM forces RHEL-x86-64).
 - **Vagrant provider bind on Apple Silicon** (§7.2): the strong-networking
-  providers (Parallels, VMware Fusion) don't emulate x86-64, and the x86-capable
-  one (`vagrant-qemu`) has limited multi-NIC support. Resolved by the Phase-A
-  spike, likely a split harness (arm64-native for most arms + cloud/qemu x86 for
-  RDQM).
+  providers (Parallels, VMware Fusion, VirtualBox) don't emulate x86-64, and the
+  x86-capable host tool (`vagrant-qemu`) has limited multi-NIC support. Leading
+  resolution is a **nested `vagrant-libvirt`** harness (arm64 KVM-accelerated via
+  M3+ nested virt; x86 TCG-emulated but properly networked); fallback is a
+  cloud-x86 split. Depends on macOS 15+ nested-virt pass-through via Lima —
+  confirm in the Phase-A spike.
 - SAN / shared storage as the weak link in the Pacemaker arm (the SPOF RDQM
   avoids).
 - ARM caveats — no MQTT/AMQP on the ARM64 MQ build.
