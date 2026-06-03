@@ -683,3 +683,88 @@ functionality. This gives us a faithful place to build and exercise the
   apply / promote / decommission, with diffing and verification between tiers.
 - This reinforces the §8 tooling direction: the install/config automation is
   the foundation the cross-environment promotion layer is built on top of.
+
+---
+
+## Appendix C. IBM MQ Version Strategy: 9.4 baseline, 9→10 gap analysis, long-term upgrade plan (forward-looking)
+
+> **Scope note.** A third-order, *strategic* concern — not part of Deliverable
+> #1, but it must be captured now because the version we build on has a finite
+> support life and DTCC will not retire a connection just because IBM end-of-lifes
+> a release. We design on a proven baseline and plan the upgrade around hard
+> vendor boundary conditions. *(Version/date facts researched 2026-06-03; treat
+> dates as approximate and re-verify at IBM's lifecycle pages before acting.)*
+
+### C.1 Baseline assumption
+
+The design targets **IBM MQ 9.4 LTS** (GA 2024-06-18; latest CD update in the
+9.4 stream as of research, ~9.4.5). Rationale: it is the **most proven, stable,
+widely-deployed** current LTS — the right thing to go live on, not the
+bleeding edge. RDQM ships in MQ Advanced and remains, to our knowledge,
+**RHEL-x86-64-only** in 9.4 (the central constraint behind §2).
+
+### C.2 The 10.0 timing wrinkle (important)
+
+**IBM MQ 10.0 (LTS) was announced 2026-04-21 and goes GA 2026-06-16** (z/OS
+2026-06-19) — i.e. **the day after the assumed go-live (2026-06-15)**. This is a
+deliberate decision point, not an accident:
+
+- **Going live on 9.4, not 10.0, is the sane call.** Standing up a tier-one
+  clearing connection on a release that shipped *yesterday* maximizes risk for
+  zero upside. 9.4 LTS has years of runway (C.3) and a deep field-proven track
+  record. Treat 10.0 as a **planned, tested upgrade**, not a day-one bet.
+- But 10.0's existence changes the long-game, so we owe the client a written
+  9→10 gap analysis and upgrade plan up front.
+
+### C.3 EOS boundary conditions (the upgrade window)
+
+- **MQ 9.3 LTS** — End of Service **2027-09-30**.
+- **MQ 9.4 LTS** — ~5-year support from 2024-06 GA → EOS **~2029-06**; optional
+  paid Extended Support up to ~4 more years (~2033).
+- **MQ 10.0 LTS** — fresh 5-year clock from 2026-06 GA.
+
+So a go-live on 9.4 gives a comfortable runway to **~2029** (longer with paid
+extended support). The 9→10 upgrade must land **inside** that window — early
+enough to be unhurried, before 9.4 support lapses.
+
+### C.4 The gap-analysis task (with a specific question to answer)
+
+A documented **9.4 → 10.0 gap analysis** is an explicit deliverable. The
+headline question, directly relevant to the §2 thesis:
+
+> **Did 10.0 broaden RDQM platform support beyond RHEL x86-64** (e.g. to Ubuntu
+> or other Linuxes), or relax the DRBD-kernel-module coupling?
+
+**Research so far (2026-06-03): no evidence it did — and the signal points the
+other way.** IBM's full 10.0 system-requirements page was not retrievable at
+research time (HTTP 403), but every available 10.0 summary leads with **Native
+HA and CRR (Cross-Region Replication) for cloud-native, zero-downtime**
+deployments as the modern HA/DR direction — *not* a broadening of bare-metal
+RDQM. This is consistent with the structural incentive: **IBM owns both Red Hat
+and MQ**, so keeping turnkey RDQM RHEL-only nudges customers toward RHEL. Our
+working assumption: **RDQM stays RHEL-x86-64 in 10.0; the cloud-native HA story
+advances via Native HA/CRR (containers/Kubernetes), which remains out of scope
+for the bare-VM premise (§2.3).** *Confidence: MEDIUM — confirm against the
+official 10.0 System Requirements and the RDQM kernel-modules page before
+relying on it.* If a future version ever did extend RDQM to Ubuntu, it would
+**resolve the core tension in §2** — so re-ask this question at every major
+version.
+
+### C.5 Strategy
+
+- Build and go live on **9.4 LTS**.
+- Deliver the **9→10 gap analysis** early: what 10.0 buys us, especially any
+  **HA/DR** or **vendor-supportability** gains (§3), and whether Native HA/CRR
+  changes the recommendation if the client ever accepts containers.
+- Produce a **documented, tested 9.4→10.0 upgrade runbook** as part of the
+  operational standards (§8), scheduled to complete inside the C.3 window and
+  ahead of any DTCC- or IBM-driven requirement to move.
+- Re-verify all dates and the RDQM-platform question against IBM's lifecycle
+  and System Requirements pages — vendor claims get the same trust-but-verify
+  treatment as everything else.
+
+**References (re-verify; some IBM pages were gated at research time):**
+
+- Introducing IBM MQ v10.0 — <https://www.ibm.com/new/announcements/introducing-ibm-mq-v10-0>
+- IBM MQ lifecycle / EOS dates — <https://www.ibm.com/support/pages/lifecycle/details/?q45=mQ>
+- RDQM kernel modules (platform coupling) — <https://www.ibm.com/support/pages/ibm-mq-replicated-data-queue-manager-kernel-modules>
