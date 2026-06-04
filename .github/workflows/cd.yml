@@ -10,6 +10,6 @@ permissions:
 
 jobs:
   docs:
-    uses: vergil-project/vergil-actions/.github/workflows/cd-docs.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/cd-docs.yml@v2.1
     permissions:
       contents: write

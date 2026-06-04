@@ -14,4 +14,24 @@ release = false
 docs = true
 
 [dependencies]
-vergil = "v2.0"
+vergil = "v2.1"
+
+[vm.vergil-user]
+cpus   = 12
+memory = "64GiB"
+disk   = "300GiB"
+packages = [
+  "vagrant",                         # from the HashiCorp apt repo below
+  "qemu-system-x86", "qemu-system-arm", "qemu-utils",
+  "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
+  "dnsmasq-base", "genisoimage",
+  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant-libvirt build deps
+]
+vagrant_plugins = ["vagrant-libvirt"]
+
+[[vm.vergil-user.apt_repos]]
+name = "hashicorp"
+key_url = "https://apt.releases.hashicorp.com/gpg"
+uri = "https://apt.releases.hashicorp.com"
+suite = "noble"
+components = "main"
