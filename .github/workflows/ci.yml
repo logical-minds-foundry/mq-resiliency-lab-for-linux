@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   audit:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-audit.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/ci-audit.yml@v2.1
     with:
       language: python
       versions: '["3.12", "3.13", "3.14"]'
@@ -28,7 +28,7 @@ jobs:
       container-suffix: python
 
   quality:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-quality.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/ci-quality.yml@v2.1
     with:
       language: python
       versions: '["3.12", "3.13", "3.14"]'
@@ -36,7 +36,7 @@ jobs:
       container-suffix: python
 
   security:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-security.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/ci-security.yml@v2.1
     permissions:
       contents: read
       security-events: write
@@ -48,7 +48,7 @@ jobs:
       container-suffix: python
 
   test:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-test.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/ci-test.yml@v2.1
     with:
       language: python
       versions: '["3.12", "3.13", "3.14"]'
@@ -56,7 +56,7 @@ jobs:
       container-suffix: python
 
   version:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-version-bump.yml@v2.0
+    uses: vergil-project/vergil-actions/.github/workflows/ci-version-bump.yml@v2.1
     with:
       language: python
       run-release: ${{ inputs.run-release != 'false' }}

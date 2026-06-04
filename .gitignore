@@ -22,5 +22,5 @@ licenses/
 build/*
 !build/.gitkeep
 
-# Vergil per-repo spec is committed, but never commit resolved secrets.
-.vergil/*.local.toml
+# Vergil global scratch — nothing source-controlled lives here.
+.vergil/
