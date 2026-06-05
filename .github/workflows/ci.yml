@@ -19,21 +19,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  audit:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-audit.yml@v2.1
-    with:
-      language: python
-      versions: '["3.12", "3.13", "3.14"]'
-      container-tag: '3.14'
-      container-suffix: python
-
   quality:
     uses: vergil-project/vergil-actions/.github/workflows/ci-quality.yml@v2.1
     with:
-      language: python
-      versions: '["3.12", "3.13", "3.14"]'
-      container-tag: '3.14'
-      container-suffix: python
+      language: none
+      versions: '["latest"]'
+      container-tag: 'latest'
+      container-suffix: base
 
   security:
     uses: vergil-project/vergil-actions/.github/workflows/ci-security.yml@v2.1
@@ -41,24 +33,17 @@ jobs:
       contents: read
       security-events: write
     with:
-      language: python
+      language: none
       run-standards: ${{ inputs.run-release != 'false' }}
       run-security: ${{ inputs.run-security != 'false' }}
-      container-tag: '3.14'
-      container-suffix: python
-
-  test:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-test.yml@v2.1
-    with:
-      language: python
-      versions: '["3.12", "3.13", "3.14"]'
-      container-tag: '3.14'
-      container-suffix: python
+      run-codeql: false
+      container-tag: 'latest'
+      container-suffix: base
 
   version:
     uses: vergil-project/vergil-actions/.github/workflows/ci-version-bump.yml@v2.1
     with:
-      language: python
+      language: none
       run-release: ${{ inputs.run-release != 'false' }}
-      container-tag: '3.14'
-      container-suffix: python
+      container-tag: 'latest'
+      container-suffix: base

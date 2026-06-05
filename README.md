@@ -26,10 +26,11 @@ experimenting with no real-hardware constraints.
 ## Development environment
 
 This repo is developed inside an ephemeral, reproducible Vergil VM, not on the
-host directly. Footprint and tooling are declared in
-[`.vergil/vm-spec.toml`](.vergil/vm-spec.toml); build and enter the box with
-`vrg-vm create --vm mq-lab` then
-`vrg-vm session logical-minds-foundry/mq-cluster-tooling --vm mq-lab`. See
-[`CLAUDE.md`](CLAUDE.md) for the workflow.
+host directly. Footprint and tooling are declared as the `[vm.vergil-user]`
+profile in [`vergil.toml`](vergil.toml); build and enter the box with
+`vrg-vm create logical-minds-foundry/mq-cluster-tooling --identity vergil-user`
+then
+`vrg-vm session logical-minds-foundry/mq-cluster-tooling --identity vergil-user`.
+See [`CLAUDE.md`](CLAUDE.md) for the workflow.
 
 More detail will be filled in as the design solidifies.
