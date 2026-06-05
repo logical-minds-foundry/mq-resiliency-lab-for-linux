@@ -20,18 +20,14 @@ vergil = "v2.1"
 cpus   = 12
 memory = "64GiB"
 disk   = "300GiB"
+# No apt "vagrant": there is no arm64 vagrant deb (HashiCorp ships amd64 only;
+# Ubuntu noble dropped it post-BUSL). vergil-vm gem-installs vagrant when
+# vagrant_plugins is declared (vergil-project/vergil-vm#130); the gem and the
+# vagrant-libvirt plugin compile against the build deps below.
 packages = [
-  "vagrant",                         # from the HashiCorp apt repo below
   "qemu-system-x86", "qemu-system-arm", "qemu-utils",
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
-  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant-libvirt build deps
+  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant gem + vagrant-libvirt build deps
 ]
 vagrant_plugins = ["vagrant-libvirt"]
-
-[[vm.vergil-user.apt_repos]]
-name = "hashicorp"
-key_url = "https://apt.releases.hashicorp.com/gpg"
-uri = "https://apt.releases.hashicorp.com"
-suite = "noble"
-components = "main"
