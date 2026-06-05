@@ -3,10 +3,11 @@ repository-type = "tooling"
 versioning-scheme = "semver"
 branching-model = "library-release"
 release-model = "tagged-release"
-primary-language = "python"
+# primary-language deliberately unset until Phase B introduces the Python
+# content plane (pymqrest tooling + pyproject scaffold) — see issue #9.
 
 [ci]
-versions = ["3.12", "3.13", "3.14"]
+versions = ["latest"]
 integration-tests = false
 
 [publish]
