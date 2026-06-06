@@ -66,6 +66,9 @@ network (`net-hb-a`, no `<forward>`, no DHCP):
    kernel withdraws the route, connectivity drops; `... up` restores
    cleanly. **Allow ~2 s settle before asserting** — immediately after
    setlink the guest may still answer (carrier/route propagation).
+   **Assert severance against a peer guest's IP on that net** — the host
+   gateway IP still answers via the management default route while the
+   NIC is down (weak host model), exactly like the isolation case below.
 2. **Per-network severance — the realistic silent partition.**
    `virsh net-destroy` kills connectivity but the guest link **stays UP**
    (no local link-down signal — the hard case for cluster heartbeats).
@@ -75,8 +78,14 @@ network (`net-hb-a`, no `<forward>`, no DHCP):
    sever-and-restore tests; use net-destroy only where the test plan
    accepts guest reloads on recovery.
 
-Isolated (forward-less) networks permit host↔guest ICMP, so
-gateway-ping connectivity matrices (plan Task 7) are valid.
+Isolated (forward-less) networks permit host↔guest ICMP, so gateway pings
+are valid **positive** checks for a net the guest is attached to.
+**Isolation (negative) checks must target other guests' IPs, not host
+gateway IPs:** the host answers pings to any of its bridge addresses via
+the guest's management-net default route (Linux weak host model), so a
+cross-site gateway ping succeeds even when the bridges are perfectly
+isolated. Found when the Task 7 smoke test's gateway-based negatives all
+"failed" against correct isolation.
 
 ## Required provider settings (the spike's hard-won configuration)
 
