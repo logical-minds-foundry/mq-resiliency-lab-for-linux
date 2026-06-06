@@ -1,0 +1,13 @@
+[Unit]
+Description=IBM MQ queue manager {{ qmgr_name }}
+After=network-online.target
+
+[Service]
+Type=forking
+User=mqm
+ExecStart=/opt/mqm/bin/strmqm {{ qmgr_name }}
+ExecStop=/opt/mqm/bin/endmqm -w {{ qmgr_name }}
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

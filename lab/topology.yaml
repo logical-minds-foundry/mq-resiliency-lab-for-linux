@@ -29,3 +29,15 @@ nodes:
   node-b3:
     nics: { net-data-b: 10.10.2.23, net-hb-b: 172.16.2.23,
             net-wan: 10.99.0.23, net-dtcc: 10.20.0.23 }
+
+  # --- Phase B: standalone QM + fixtures (spec 10-B; 5-amendment: VMs) ---
+  qm-main:
+    cpus: 2
+    memory: 2048
+    nics: { net-client: 10.30.0.10, net-dtcc: 10.20.0.10 }
+  dtcc-sim:
+    cpus: 2
+    memory: 2048
+    nics: { net-dtcc: 10.20.0.50 }
+  app-client:
+    nics: { net-client: 10.30.0.60 }

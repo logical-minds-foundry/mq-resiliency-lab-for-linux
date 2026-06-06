@@ -33,3 +33,10 @@ build/*
 # Vergil worktree convention — parallel-agent issue worktrees and host venv.
 .worktrees/
 .venv-host/
+
+# Test/coverage artifacts
+.coverage
+
+# Python bytecode
+__pycache__/
+*.pyc

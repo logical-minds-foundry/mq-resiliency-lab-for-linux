@@ -1,0 +1,47 @@
+# Declarative MQ objects for QMAIN (spec 9.1 distributed-queuing shape).
+# Applied via pymqrest ensure_* - keys are pymqrest snake_case request
+# parameters; values are raw MQSC where enumerated (SDR/RCVR/SVRCONN/XMITQ).
+qmgr: QMAIN
+objects:
+  - kind: qlocal
+    name: TRADE.REPLY
+    attrs: { default_persistence: "yes" }
+  - kind: qlocal
+    name: QDTCC
+    attrs:
+      usage: XMITQ
+      # Triggered xmitq: the channel initiator starts the SDR on message
+      # arrival - the channel survives QM restarts with no manual start
+      # (spec 8.3 unattended-recovery requirement).
+      trigger_control: "YES"
+      trigger_type: FIRST
+      initiation_queue_name: SYSTEM.CHANNEL.INITQ
+      trigger_data: QMAIN.QDTCC
+  - kind: qremote
+    name: DTCC.REQUEST
+    attrs:
+      default_persistence: "yes"
+      remote_queue_name: TRADE.REQUEST
+      remote_queue_manager_name: QDTCC
+      transmission_queue_name: QDTCC
+  - kind: channel
+    name: QMAIN.QDTCC
+    attrs:
+      channel_type: SDR
+      transport_type: TCP
+      # Fast reconnect after peer restart (default SHORTTMR 60s can exceed
+      # client ack waits - the post-reboot e2e race found in B-Task 8).
+      short_retry_interval: 10
+      connection_name: 10.20.0.50(1414)
+      transmission_queue_name: QDTCC
+  - kind: channel
+    name: QDTCC.QMAIN
+    attrs: { channel_type: RCVR, transport_type: TCP }
+  - kind: channel
+    name: APP.SVRCONN
+    attrs:
+      channel_type: SVRCONN
+      transport_type: TCP
+      # LAB ONLY: run the channel as mqm so clients clear OAM (spec 1
+      # puts security out of scope; never a production posture).
+      mca_user: mqm
