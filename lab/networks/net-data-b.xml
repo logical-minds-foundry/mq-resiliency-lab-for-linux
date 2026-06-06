@@ -1,0 +1,7 @@
+<!-- lab/networks/net-data-b.xml — DC-B data/VIP net.
+     Isolated: no <forward>, no DHCP. -->
+<network>
+  <name>net-data-b</name>
+  <bridge name="virbr-data-b"/>
+  <ip address="10.10.2.1" netmask="255.255.255.0"/>
+</network>

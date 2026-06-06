@@ -1,0 +1,7 @@
+<!-- lab/networks/net-dtcc.xml — DTCC-facing net (dtcc-sim + cluster nodes).
+     Isolated: no <forward>, no DHCP. -->
+<network>
+  <name>net-dtcc</name>
+  <bridge name="virbr-dtcc"/>
+  <ip address="10.20.0.1" netmask="255.255.255.0"/>
+</network>
