@@ -30,9 +30,7 @@ def apply_spec(spec_path: str, base_url: str) -> int:
     session = MQRESTSession(
         rest_base_url=f"{base_url}/ibmmq/rest/v2",
         qmgr_name=spec["qmgr"],
-        credentials=BasicAuth(
-            os.environ["MQWEB_ADMIN_USER"], os.environ["MQWEB_ADMIN_PASSWORD"]
-        ),
+        credentials=BasicAuth(os.environ["MQWEB_ADMIN_USER"], os.environ["MQWEB_ADMIN_PASSWORD"]),
         verify_tls=False,  # lab self-signed; security out of scope (spec 1)
     )
     for obj in spec["objects"]:
