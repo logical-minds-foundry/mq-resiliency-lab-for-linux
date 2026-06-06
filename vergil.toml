@@ -21,6 +21,9 @@ vergil = "v2.1"
 cpus   = 12
 memory = "64GiB"
 disk   = "300GiB"
+# KVM-accelerate the nested arm64 lab guests (vergil-vm#131 per-profile knob;
+# default off). Requires macOS 15+ on M3+ at the Lima/vz layer.
+nested = true
 # No apt "vagrant": there is no arm64 vagrant deb (HashiCorp ships amd64 only;
 # Ubuntu noble dropped it post-BUSL). vergil-vm gem-installs vagrant when
 # vagrant_plugins is declared (vergil-project/vergil-vm#130); the gem and the
@@ -29,6 +32,7 @@ packages = [
   "qemu-system-x86", "qemu-system-arm", "qemu-utils",
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
+  "libarchive-tools",  # bsdtar — vagrant box unpacking
   "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant gem + vagrant-libvirt build deps
 ]
 vagrant_plugins = ["vagrant-libvirt"]
