@@ -1,0 +1,5 @@
+{% for node in rdqm_site_nodes %}
+Node:
+  Name={{ node.name }}
+  HA_Replication={{ node.hb }}
+{% endfor %}

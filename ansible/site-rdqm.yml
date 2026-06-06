@@ -1,0 +1,26 @@
+# The RDQM arm (Phase C). Run with --limit rdqm_a until site B exists.
+- hosts: rdqm_a:rdqm_b
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.dnf:
+        name: acl
+
+- hosts: rdqm_a:rdqm_b
+  roles: [rdqm-install]
+
+- hosts: rdqm_a
+  vars:
+    rdqm_site_nodes:
+      - { name: rdqm-a1, hb: 172.16.1.31, data: 10.10.1.31 }
+      - { name: rdqm-a2, hb: 172.16.1.32, data: 10.10.1.32 }
+      - { name: rdqm-a3, hb: 172.16.1.33, data: 10.10.1.33 }
+  roles: [rdqm-ha]
+
+- hosts: rdqm_b
+  vars:
+    rdqm_site_nodes:
+      - { name: rdqm-b1, hb: 172.16.2.41, data: 10.10.2.41 }
+      - { name: rdqm-b2, hb: 172.16.2.42, data: 10.10.2.42 }
+      - { name: rdqm-b3, hb: 172.16.2.43, data: 10.10.2.43 }
+  roles: [rdqm-ha]

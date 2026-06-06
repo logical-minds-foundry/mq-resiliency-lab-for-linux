@@ -1,0 +1,118 @@
+# RDQM install (RHEL 9): MQ + the bundled LINBIT/DRBD stack from the
+# no-charge Developers LinuxX64 tar, in ONE pre-QM pass (Phase B lesson:
+# MQ's preinst refuses changes once QM shared memory is live).
+# Base-OS dependencies come from the attached install DVD - a complete
+# BaseOS+AppStream repo - keeping guests offline and unregistered.
+- name: mount the install DVD (fstab + mount; ansible-core has no mount module)
+  ansible.builtin.shell: |
+    set -e
+    mkdir -p /media/rhel
+    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro 0 0' >> /etc/fstab
+    mountpoint -q /media/rhel || mount /media/rhel
+  become: true
+  changed_when: false
+
+- name: dnf repos from the DVD
+  ansible.builtin.copy:
+    dest: /etc/yum.repos.d/rhel-dvd.repo
+    content: |
+      [dvd-baseos]
+      name=RHEL 9.6 DVD BaseOS
+      baseurl=file:///media/rhel/BaseOS
+      enabled=1
+      gpgcheck=0
+      [dvd-appstream]
+      name=RHEL 9.6 DVD AppStream
+      baseurl=file:///media/rhel/AppStream
+      enabled=1
+      gpgcheck=0
+  become: true
+
+- name: copy MQ LinuxX64 tar to node
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    dest: /tmp/mqadv.tar.gz
+
+- name: unpack
+  ansible.builtin.unarchive:
+    src: /tmp/mqadv.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/MQServer
+
+- name: accept developer licence
+  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  args:
+    creates: /var/mqm
+  become: true
+
+- name: select the drbd kmod matching the running kernel (loud fail)
+  ansible.builtin.shell: |
+    set -e
+    KREL=$(uname -r)
+    BASE=${KREL%%.el9*}
+    GLOB="/tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/kmod-drbd-*${BASE//-/_}-*.rpm"
+    KMOD=$(ls $GLOB 2>/dev/null || true)
+    if [ -z "$KMOD" ]; then
+      echo "ERROR: no kmod-drbd for kernel $KREL; shipped kmods:" >&2
+      ls /tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/ >&2
+      exit 1
+    fi
+    echo "$KMOD"
+  register: kmod_pick
+  changed_when: false
+
+# Two steps, pre-QM (Phase B lesson), with RDQM LAST: its preinst
+# scriptlet requires the MQ server files already on disk and fails when
+# ordered inside the same rpm transaction.
+- name: install MQ + cluster prereqs (step 1 of 2)
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp/MQServer
+    dnf install -y \
+      MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
+      MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
+      MQSeriesSDK-*.rpm MQSeriesClient-*.rpm \
+      Advanced/RDQM/PreReqs/el9/pacemaker-2/*.rpm \
+      Advanced/RDQM/PreReqs/el9/drbd-utils-9/*.rpm \
+      {{ kmod_pick.stdout | trim }}
+  args:
+    creates: /opt/mqm/bin/crtmqm
+  become: true
+
+- name: install MQSeriesRDQM (step 2 of 2 - after the server files exist)
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp/MQServer
+    dnf install -y Advanced/RDQM/MQSeriesRDQM-*.rpm
+  args:
+    creates: /opt/mqm/bin/rdqmadm
+  become: true
+
+- name: set primary installation (loader path)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
+  become: true
+
+- name: drbd module loads against this kernel
+  ansible.builtin.command: modprobe drbd
+  become: true
+  changed_when: false
+
+- name: drbdpool volume group on the extra disk
+  ansible.builtin.shell: |
+    set -e
+    pvcreate /dev/vdb
+    vgcreate drbdpool /dev/vdb
+  args:
+    creates: /dev/drbdpool
+  become: true
+
+- name: mqm ulimits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-mqm.conf
+    content: |
+      mqm soft nofile 10240
+      mqm hard nofile 10240
+  become: true

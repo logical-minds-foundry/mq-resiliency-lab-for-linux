@@ -52,6 +52,12 @@ Vagrant.configure("2") do |config|
         if spec["extra_disk"]
           lv.storage :file, :size => "#{spec['extra_disk']}G"
         end
+        # Optional platform DVD (offline dnf repo for repo-less guests).
+        # bus sata: q35 machines have no IDE controller (plugin default).
+        if platform["dvd"]
+          lv.storage :file, :device => :cdrom, :path => platform["dvd"],
+                     :bus => "sata"
+        end
       end
       spec.fetch("nics", {}).each do |net, ip|
         node.vm.network :private_network,

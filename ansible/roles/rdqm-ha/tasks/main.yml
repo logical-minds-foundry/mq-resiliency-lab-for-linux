@@ -1,0 +1,28 @@
+# RDQM HA group formation: hosts entries, rdqm.ini, rdqmadm.
+# rdqm_site_nodes: [{name, hb, data}, ...] supplied per-site by site-rdqm.yml.
+- name: site hosts entries (no DNS in the lab)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ item.data }} {{ item.name }}"
+    regexp: "\\s{{ item.name }}$"
+  loop: "{{ rdqm_site_nodes }}"
+  become: true
+
+- name: rdqm.ini
+  ansible.builtin.template:
+    src: rdqm.ini.j2
+    dest: /var/mqm/rdqm.ini
+    owner: mqm
+    group: mqm
+  become: true
+
+- name: initialize the replicated data subsystem (idempotent)
+  ansible.builtin.shell: |
+    if /opt/mqm/bin/rdqmstatus -n >/dev/null 2>&1; then
+      echo already-configured
+    else
+      /opt/mqm/bin/rdqmadm -c
+    fi
+  register: rdqmadm_out
+  changed_when: "'already-configured' not in rdqmadm_out.stdout"
+  become: true

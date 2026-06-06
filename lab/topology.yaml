@@ -7,7 +7,12 @@
 boxes:
   ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
   alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
-  rhel96-x86_64:    { box: rhel/9.6-x86_64,           arch: x86_64 }
+  # dvd: attached as a cdrom; the install DVD doubles as a complete
+  # offline BaseOS+AppStream dnf repo for the unregistered guests.
+  rhel96-x86_64:
+    box: rhel/9.6-x86_64
+    arch: x86_64
+    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 
 defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
 
