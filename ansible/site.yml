@@ -21,3 +21,24 @@
 - hosts: dtcc-sim
   vars: { qmgr_name: QDTCC }
   roles: [mq-qmgr]
+
+# Trade-path clients: pymqi venv + the EPN scripts (responder runs on
+# dtcc-sim in bindings mode; requester on app-client in client mode).
+- hosts: dtcc-sim:app-client
+  tasks:
+    - name: pymqi venv
+      ansible.builtin.shell: |
+        set -e
+        python3 -m venv /home/vagrant/mqvenv
+        /home/vagrant/mqvenv/bin/pip install pymqi
+      args:
+        creates: /home/vagrant/mqvenv/bin/python
+
+    - name: deploy EPN codec + clients
+      ansible.builtin.copy:
+        src: "{{ item.src }}"
+        dest: "/home/vagrant/{{ item.dest }}"
+      loop:
+        - { src: "{{ playbook_dir }}/../src/mqlab/epn.py", dest: epn.py }
+        - { src: "{{ playbook_dir }}/../clients/epn_requester.py", dest: epn_requester.py }
+        - { src: "{{ playbook_dir }}/../clients/epn_responder.py", dest: epn_responder.py }

@@ -29,6 +29,12 @@
     creates: /opt/mqm/inc/cmqc.h
   become: true
 
+- name: set primary installation (loader path for libmqic_r etc.)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
+  become: true
+
 - name: pymqi venv
   ansible.builtin.shell: |
     set -e

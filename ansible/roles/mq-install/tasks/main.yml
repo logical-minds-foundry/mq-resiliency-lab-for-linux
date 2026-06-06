@@ -17,15 +17,26 @@
     creates: /var/mqm
   become: true
 
-- name: install server debs
+# Everything in ONE pass, BEFORE any QM exists: MQ's preinst refuses
+# additional debs once queue-manager shared resources are active, so the
+# sdk (pymqi bindings need cmqc.h) must land with the server set.
+- name: install server + sdk debs and python build deps
   ansible.builtin.shell: |
     set -e
+    apt-get update
+    apt-get install -y python3-venv python3-dev gcc
     cd /tmp/MQServer
     apt-get install -y ./ibmmq-runtime_*.deb ./ibmmq-server_*.deb \
       ./ibmmq-java_*.deb ./ibmmq-jre_*.deb ./ibmmq-gskit_*.deb \
-      ./ibmmq-web_*.deb
+      ./ibmmq-web_*.deb ./ibmmq-sdk_*.deb ./ibmmq-client_*.deb
   args:
-    creates: /opt/mqm/bin/crtmqm
+    creates: /opt/mqm/inc/cmqc.h
+  become: true
+
+- name: set primary installation (loader path for libmqic_r etc.)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
   become: true
 
 - name: mqm ulimits

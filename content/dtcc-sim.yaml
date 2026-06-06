@@ -22,3 +22,11 @@ objects:
   - kind: channel
     name: QMAIN.QDTCC
     attrs: { channel_type: RCVR, transport_type: TCP }
+  - kind: channel
+    name: SIM.SVRCONN
+    attrs:
+      channel_type: SVRCONN
+      transport_type: TCP
+      # LAB ONLY: run the channel as mqm so clients clear OAM (spec 1
+      # puts security out of scope; never a production posture).
+      mca_user: mqm

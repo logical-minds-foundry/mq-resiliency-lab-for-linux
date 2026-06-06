@@ -47,6 +47,16 @@
   changed_when: "'MQWB' not in setmqweb.stderr"
   failed_when: false
 
+- name: relax channel security (LAB ONLY - spec 1 puts security out of scope)
+  ansible.builtin.shell: |
+    printf "ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')\nREFRESH SECURITY TYPE(CONNAUTH)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  become: true
+  become_user: mqm
+  register: relax
+  changed_when: "'AMQ8005' in relax.stdout"
+  failed_when: relax.rc not in [0, 10]
+
 - name: define + start listener via MQSC (idempotent)
   ansible.builtin.shell: |
     echo "DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
