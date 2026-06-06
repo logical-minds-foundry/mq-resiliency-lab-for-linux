@@ -30,6 +30,7 @@ nested = true
 # vagrant-libvirt plugin compile against the build deps below.
 packages = [
   "qemu-system-x86", "qemu-system-arm", "qemu-utils",
+  "qemu-efi-aarch64", "ovmf",  # UEFI guest firmware (AAVMF/OVMF) — Recommends-only, so declare explicitly (#20)
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
   "libarchive-tools",  # bsdtar — vagrant box unpacking
