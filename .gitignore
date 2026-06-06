@@ -36,3 +36,7 @@ build/*
 
 # Test/coverage artifacts
 .coverage
+
+# Python bytecode
+__pycache__/
+*.pyc
