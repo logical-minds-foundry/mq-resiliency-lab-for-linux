@@ -1,0 +1,24 @@
+# Declarative MQ objects for QDTCC - the DTCC-side reciprocal of qm-main.
+qmgr: QDTCC
+objects:
+  - kind: qlocal
+    name: TRADE.REQUEST
+  - kind: qlocal
+    name: QMAIN
+    attrs: { usage: XMITQ }
+  - kind: qremote
+    name: FIRM.REPLY
+    attrs:
+      remote_queue_name: TRADE.REPLY
+      remote_queue_manager_name: QMAIN
+      transmission_queue_name: QMAIN
+  - kind: channel
+    name: QDTCC.QMAIN
+    attrs:
+      channel_type: SDR
+      transport_type: TCP
+      connection_name: 10.20.0.10(1414)
+      transmission_queue_name: QMAIN
+  - kind: channel
+    name: QMAIN.QDTCC
+    attrs: { channel_type: RCVR, transport_type: TCP }
