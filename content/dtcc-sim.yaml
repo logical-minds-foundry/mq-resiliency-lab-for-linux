@@ -3,12 +3,20 @@ qmgr: QDTCC
 objects:
   - kind: qlocal
     name: TRADE.REQUEST
+    attrs: { default_persistence: "yes" }
   - kind: qlocal
     name: QMAIN
-    attrs: { usage: XMITQ }
+    attrs:
+      usage: XMITQ
+      # Triggered xmitq - see qm-main.yaml QDTCC note (spec 8.3).
+      trigger_control: "YES"
+      trigger_type: FIRST
+      initiation_queue_name: SYSTEM.CHANNEL.INITQ
+      trigger_data: QDTCC.QMAIN
   - kind: qremote
     name: FIRM.REPLY
     attrs:
+      default_persistence: "yes"
       remote_queue_name: TRADE.REPLY
       remote_queue_manager_name: QMAIN
       transmission_queue_name: QMAIN
@@ -17,6 +25,9 @@ objects:
     attrs:
       channel_type: SDR
       transport_type: TCP
+      # Fast reconnect after peer restart (default SHORTTMR 60s can exceed
+      # client ack waits - the post-reboot e2e race found in B-Task 8).
+      short_retry_interval: 10
       connection_name: 10.20.0.10(1414)
       transmission_queue_name: QMAIN
   - kind: channel
