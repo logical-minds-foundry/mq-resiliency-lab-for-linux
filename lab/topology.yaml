@@ -1,0 +1,31 @@
+# lab/topology.yaml — single source of truth for the lab shape.
+# Phase A: 3+3 placeholder nodes, Ubuntu arm64 (KVM). The RDQM arm swaps
+# platform to a RHEL x86_64 entry per-node in Phase C without touching
+# the Vagrantfile. Arch-specific provider mechanics (UEFI, input, CPU
+# mode) live in the Vagrantfile keyed on `arch` — see the provider spike
+# report (docs/reports/2026-06-06-phase-a-provider-spike.md).
+boxes:
+  ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
+  alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
+
+defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
+
+nodes:
+  node-a1:
+    nics: { net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11,
+            net-wan: 10.99.0.11, net-dtcc: 10.20.0.11 }
+  node-a2:
+    nics: { net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12,
+            net-wan: 10.99.0.12, net-dtcc: 10.20.0.12 }
+  node-a3:
+    nics: { net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13,
+            net-wan: 10.99.0.13, net-dtcc: 10.20.0.13 }
+  node-b1:
+    nics: { net-data-b: 10.10.2.21, net-hb-b: 172.16.2.21,
+            net-wan: 10.99.0.21, net-dtcc: 10.20.0.21 }
+  node-b2:
+    nics: { net-data-b: 10.10.2.22, net-hb-b: 172.16.2.22,
+            net-wan: 10.99.0.22, net-dtcc: 10.20.0.22 }
+  node-b3:
+    nics: { net-data-b: 10.10.2.23, net-hb-b: 172.16.2.23,
+            net-wan: 10.99.0.23, net-dtcc: 10.20.0.23 }
