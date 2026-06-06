@@ -1,0 +1,58 @@
+# L1b: create the QM, listener via MQSC, enable mqweb REST, and install
+# boot services so reboot brings everything back (spec 8.3).
+- name: create queue manager
+  ansible.builtin.command: /opt/mqm/bin/crtmqm -u SYSTEM.DEAD.LETTER.QUEUE {{ qmgr_name }}
+  args:
+    creates: "/var/mqm/qmgrs/{{ qmgr_name }}"
+  become: true
+  become_user: mqm
+
+- name: qm systemd unit
+  ansible.builtin.template:
+    src: qm.service.j2
+    dest: "/etc/systemd/system/mq-{{ qmgr_name }}.service"
+  become: true
+
+- name: mqweb systemd unit
+  ansible.builtin.template:
+    src: mqweb.service.j2
+    dest: /etc/systemd/system/mqweb.service
+  become: true
+
+- name: mqweb basic registry (creds from env, never committed)
+  ansible.builtin.template:
+    src: mqwebuser.xml.j2
+    dest: /var/mqm/web/installations/Installation1/servers/mqweb/mqwebuser.xml
+    owner: mqm
+    group: mqm
+  become: true
+  no_log: true
+
+- name: enable + start services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - "mq-{{ qmgr_name }}.service"
+    - mqweb.service
+  become: true
+
+- name: bind mqweb to all interfaces
+  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
+  become: true
+  become_user: mqm
+  register: setmqweb
+  changed_when: "'MQWB' not in setmqweb.stderr"
+  failed_when: false
+
+- name: define + start listener via MQSC (idempotent)
+  ansible.builtin.shell: |
+    echo "DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
+    START LISTENER(L1414)" | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  become: true
+  become_user: mqm
+  register: lsr
+  changed_when: "'AMQ8626' not in lsr.stdout"
+  failed_when: lsr.rc not in [0, 10]

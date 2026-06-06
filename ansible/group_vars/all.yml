@@ -1,0 +1,4 @@
+# Web admin creds are runtime-injected - export MQWEB_ADMIN_USER /
+# MQWEB_ADMIN_PASSWORD before ansible-playbook. Never committed.
+mqweb_admin_user: "{{ lookup('env', 'MQWEB_ADMIN_USER') }}"
+mqweb_admin_password: "{{ lookup('env', 'MQWEB_ADMIN_PASSWORD') }}"

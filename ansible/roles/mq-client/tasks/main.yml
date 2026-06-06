@@ -1,0 +1,38 @@
+# Client node: MQ client/sdk debs + a pymqi venv for the requester.
+- name: copy MQ tar to node
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+    dest: /tmp/mqadv.tar.gz
+
+- name: unpack
+  ansible.builtin.unarchive:
+    src: /tmp/mqadv.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/MQServer
+
+- name: accept developer licence
+  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  args:
+    creates: /var/mqm
+  become: true
+
+- name: install client + sdk debs and build deps
+  ansible.builtin.shell: |
+    set -e
+    apt-get update
+    apt-get install -y python3-venv python3-dev gcc
+    cd /tmp/MQServer
+    apt-get install -y ./ibmmq-runtime_*.deb ./ibmmq-client_*.deb \
+      ./ibmmq-sdk_*.deb ./ibmmq-gskit_*.deb
+  args:
+    creates: /opt/mqm/inc/cmqc.h
+  become: true
+
+- name: pymqi venv
+  ansible.builtin.shell: |
+    set -e
+    python3 -m venv /home/vagrant/mqvenv
+    /home/vagrant/mqvenv/bin/pip install pymqi
+  args:
+    creates: /home/vagrant/mqvenv/bin/python

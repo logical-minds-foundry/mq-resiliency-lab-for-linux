@@ -1,0 +1,23 @@
+- hosts: all
+  become: true
+  tasks:
+    # setfacl is how Ansible hands temp files to an unprivileged become_user
+    # (vagrant -> mqm); without it the chmod-ACL fallback fails.
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+
+- hosts: qm_hosts
+  roles: [mq-install]
+
+- hosts: client_hosts
+  roles: [mq-client]
+
+- hosts: qm-main
+  vars: { qmgr_name: QMAIN }
+  roles: [mq-qmgr]
+
+- hosts: dtcc-sim
+  vars: { qmgr_name: QDTCC }
+  roles: [mq-qmgr]
