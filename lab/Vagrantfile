@@ -33,8 +33,12 @@ Vagrant.configure("2") do |config|
           lv.driver       = "qemu"
           lv.machine_arch = "x86_64"
           lv.machine_type = "q35"
-          lv.cpu_mode     = "custom"
-          lv.cpu_model    = "qemu64"
+          # cpu_mode maximum (= qemu -cpu max) is REQUIRED, not an
+          # optimization: EL9 needs x86-64-v2, and sub-v2 models like
+          # qemu64 boot the kernel but kill early userspace (glibc HWCAP)
+          # in an invisible loop. Diagnosed in #24: same alma9 image,
+          # qemu64 = 40min silent spin; maximum = DHCP lease in 47s.
+          lv.cpu_mode     = "maximum"
           node.vm.boot_timeout = 1800
         else
           raise "unknown arch for platform: #{platform}"
