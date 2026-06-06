@@ -7,16 +7,15 @@
 
 ## Verdict
 
-**The leading hypothesis substantially holds.** Nested `vagrant-libvirt` on
-this stack (M5 Max → macOS vz → Lima → KVM) delivers KVM-accelerated arm64
-guests and genuinely severable multi-NIC networking — fully proven. The
-third property, TCG-emulated x86-64, is proven at the **mechanics** level
-(domain defines, starts, and executes) but **not to SSH-ready**: stock
-distro boots exceed a hardcoded 10-minute IP-wait in the plugin (details
-below). This does **not** trip the spec §6 break-glass wire by itself — it
-is a tooling cap plus emulation speed, not jitter or incorrectness — but
-the remediation choice for the Phase C RDQM arm is surfaced as an open
-decision rather than papered over.
+**The leading hypothesis holds — all three properties, after the #24
+addendum.** Nested `vagrant-libvirt` on this stack (M5 Max → macOS vz →
+Lima → KVM) delivers KVM-accelerated arm64 guests, genuinely severable
+multi-NIC networking, and TCG-emulated x86-64 guests that reach DHCP in
+**under a minute**. The spike initially mis-read the x86 arm as
+"SSH-ready blocked by a plugin IP-wait cap"; the follow-up diagnostic
+(#24 addendum below) found the true cause — a sub-x86-64-v2 CPU model
+crash-looping EL9 userspace — and with `cpu_mode = "maximum"` the arm is
+fully proven. **The spec §6 cloud-x86 break-glass is not needed.**
 
 ## Evidence
 
@@ -55,6 +54,34 @@ decision rather than papered over.
      upstream knob — `boot_timeout` is the obvious carrier).
   3. Pre-baked lean x86 image (minimal services, fast DHCP) for lab use.
   4. Spec §6 break-glass: move the RDQM arm to a cheap cloud x86 box.
+
+#### ADDENDUM (#24, same day): root cause found — CPU model, not speed
+
+Option 1 (diagnose) was executed and **closed the question**. Raw-libvirt
+boots of the same `almalinux/9` image under TCG:
+
+| CPU config | Result |
+|---|---|
+| `custom`/`qemu64` (the spike's setting) | 40 min of 1:1 CPU spin, **no DHCP, empty serial** — then killed |
+| `mode='maximum'` (`qemu -cpu max`) | **DHCP lease at 47 s**; SSH-reachable; `uname -m`=`x86_64`, `systemd-detect-virt`=`qemu` |
+
+**Root cause:** EL9 requires the **x86-64-v2** microarchitecture level.
+`qemu64` is sub-v2: the kernel boots, then glibc's HWCAP check kills early
+userspace — an invisible crash-loop with no console output (the box's
+serial console is not configured) that *looks* identical to "TCG is slow."
+
+**Consequences:**
+
+- The Required-provider-settings x86 stanza is corrected to
+  `lv.cpu_mode = "maximum"` (no `cpu_model`); `custom`/`qemu64` is wrong
+  for any EL9+ guest and must not be copied forward.
+- The hardcoded 600 s IP-wait (above) still exists but **no longer bites**
+  — EL9 reaches DHCP in well under a minute.
+- **TCG x86 is viable and fast enough; the spec §6 cloud-x86 break-glass
+  is not needed.** Phase C proceeds locally as the spec intended.
+- `debian/bookworm64`'s earlier timeout is unexplained-but-moot (Debian's
+  baseline is x86-64-v1, so it was plausibly genuinely slow under
+  `qemu64`'s minimal feature set; untested under `maximum`).
 
 ### Severable networking (the §3.1 fault primitives)
 
@@ -108,8 +135,9 @@ lv.cpu_mode = "host-passthrough"                  # host-model unsupported on aa
 lv.driver       = "qemu"
 lv.machine_arch = "x86_64"        # plugin option is machine_arch, NOT arch
 lv.machine_type = "q35"
-lv.cpu_mode     = "custom"        # host-model is meaningless cross-arch
-lv.cpu_model    = "qemu64"
+lv.cpu_mode     = "maximum"       # qemu -cpu max. REQUIRED for EL9+ guests:
+                                  # sub-v2 models (qemu64) crash-loop early
+                                  # userspace invisibly. See #24 addendum.
 m.vm.boot_timeout = 1800
 ```
 
