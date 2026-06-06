@@ -1,0 +1,8 @@
+<!-- lab/networks/net-wan.xml — inter-site WAN carrying async DR replication.
+     Isolated: no <forward>, no DHCP. Latency injection (tc netem) is a
+     Phase C concern. -->
+<network>
+  <name>net-wan</name>
+  <bridge name="virbr-wan"/>
+  <ip address="10.99.0.1" netmask="255.255.255.0"/>
+</network>

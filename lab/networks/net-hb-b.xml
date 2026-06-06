@@ -1,0 +1,8 @@
+<!-- lab/networks/net-hb-b.xml — DC-B private heartbeat/replication net.
+     No <forward> element: isolated, host-only, no DHCP - exactly what a
+     severable cluster heartbeat needs. -->
+<network>
+  <name>net-hb-b</name>
+  <bridge name="virbr-hb-b"/>
+  <ip address="172.16.2.1" netmask="255.255.255.0"/>
+</network>

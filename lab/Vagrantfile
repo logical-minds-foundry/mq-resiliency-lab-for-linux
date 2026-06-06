@@ -1,0 +1,51 @@
+# lab/Vagrantfile — multi-machine lab, driven entirely by topology.yaml.
+#
+# Arch-specific provider settings were established by the Phase A provider
+# spike (docs/reports/2026-06-06-phase-a-provider-spike.md):
+#   aarch64 (KVM):  UEFI loader+nvram mandatory (pflash needs BOTH set),
+#                   virtio input (no PS/2/USB), cpu host-passthrough.
+#   x86_64  (TCG):  machine_arch (not arch), q35, cpu custom/qemu64,
+#                   long boot timeout.
+require "yaml"
+
+topology = YAML.load_file(File.join(__dir__, "topology.yaml"))
+boxes    = topology.fetch("boxes")
+defaults = topology.fetch("defaults")
+
+Vagrant.configure("2") do |config|
+  topology.fetch("nodes").each do |name, spec|
+    spec ||= {}
+    platform = boxes.fetch(spec.fetch("platform", defaults["platform"]))
+    config.vm.define name do |node|
+      node.vm.box      = platform.fetch("box")
+      node.vm.hostname = name
+      node.vm.provider :libvirt do |lv|
+        lv.cpus   = spec.fetch("cpus",   defaults["cpus"])
+        lv.memory = spec.fetch("memory", defaults["memory"])
+        case platform.fetch("arch")
+        when "aarch64"
+          lv.driver   = "kvm"
+          lv.loader   = "/usr/share/AAVMF/AAVMF_CODE.fd"
+          lv.nvram    = "/var/lib/libvirt/qemu/nvram/lab-#{name}_VARS.fd"
+          lv.input :type => "mouse", :bus => "virtio"
+          lv.cpu_mode = "host-passthrough"
+        when "x86_64"
+          lv.driver       = "qemu"
+          lv.machine_arch = "x86_64"
+          lv.machine_type = "q35"
+          lv.cpu_mode     = "custom"
+          lv.cpu_model    = "qemu64"
+          node.vm.boot_timeout = 1800
+        else
+          raise "unknown arch for platform: #{platform}"
+        end
+      end
+      spec.fetch("nics", {}).each do |net, ip|
+        node.vm.network :private_network,
+          :libvirt__network_name => net,
+          :ip => ip,
+          :libvirt__dhcp_enabled => false
+      end
+    end
+  end
+end

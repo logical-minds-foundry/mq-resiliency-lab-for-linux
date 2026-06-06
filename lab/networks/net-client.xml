@@ -1,0 +1,7 @@
+<!-- lab/networks/net-client.xml — client/app net (app-client fixture; Phase B).
+     Isolated: no <forward>, no DHCP. -->
+<network>
+  <name>net-client</name>
+  <bridge name="virbr-client"/>
+  <ip address="10.30.0.1" netmask="255.255.255.0"/>
+</network>
