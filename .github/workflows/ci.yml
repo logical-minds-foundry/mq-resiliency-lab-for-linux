@@ -40,10 +40,17 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      # Requested by ci-security.yml@v2.1.3: codeql-action/upload-sarif
+      # needs it on private repos. See vergil-project/vergil-actions#698.
+      actions: read
     with:
       language: python
       run-standards: ${{ inputs.run-release != 'false' }}
       run-security: ${{ inputs.run-security != 'false' }}
+      # Private repo without GHAS: keep scanners gating via exit codes,
+      # preserve SARIF as build artifacts, skip code-scanning upload and
+      # CodeQL. See vergil-project/vergil-actions#693.
+      upload-sarif: false
       container-tag: '3.12'
       container-suffix: python
 
