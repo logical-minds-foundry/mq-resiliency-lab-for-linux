@@ -85,3 +85,20 @@ nodes:
     memory: 2048
     extra_disk: 10
     nics: { net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43 }
+
+  # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
+  san-a:
+    extra_disk: 8
+    nics: { net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
+  pcmk-a1:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51 }
+  pcmk-a2:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52 }
+  pcmk-a3:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53 }

@@ -1,0 +1,7 @@
+<!-- lab/networks/net-san-b.xml — DC-B SAN/iSCSI net (Pacemaker arm).
+     Isolated: no <forward>, no DHCP. -->
+<network>
+  <name>net-san-b</name>
+  <bridge name="virbr-san-b"/>
+  <ip address="10.40.2.1" netmask="255.255.255.0"/>
+</network>
