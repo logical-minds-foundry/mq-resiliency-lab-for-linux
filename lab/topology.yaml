@@ -7,6 +7,12 @@
 boxes:
   ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
   alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
+  # dvd: attached as a cdrom; the install DVD doubles as a complete
+  # offline BaseOS+AppStream dnf repo for the unregistered guests.
+  rhel96-x86_64:
+    box: rhel/9.6-x86_64
+    arch: x86_64
+    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 
 defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
 
@@ -41,3 +47,41 @@ nodes:
     nics: { net-dtcc: 10.20.0.50 }
   app-client:
     nics: { net-client: 10.30.0.60 }
+
+  # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
+  rdqm-a1:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31 }
+  rdqm-a2:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32 }
+  rdqm-a3:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33 }
+  rdqm-b1:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
+  rdqm-b2:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
+  rdqm-b3:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43 }
