@@ -4,6 +4,13 @@
 > Environment: three RHEL 9.6 x86-64 guests under TCG on the dev VM
 > (functional validation only per spec §6; all timings qualitative).
 
+## Contents
+
+- [Build facts](#build-facts)
+- [§3.1 fault-suite results (HA group, site A)](#31-fault-suite-results-ha-group-site-a)
+- [The Q2 ledger (spec §2.5) — what RDQM gave turnkey](#the-q2-ledger-spec-25--what-rdqm-gave-turnkey)
+- [DR (3+3) results](#dr-33-results)
+
 ## Build facts
 
 - **No IBM entitlement needed (spec §11 answered):** the no-charge MQ

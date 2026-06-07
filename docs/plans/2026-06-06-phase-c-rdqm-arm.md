@@ -31,6 +31,20 @@ emulation jitter; spurious fencing = stop and surface (the §6 wire).
 
 ---
 
+## Contents
+
+- [Entry gate](#entry-gate)
+- [File structure](#file-structure)
+  - [Task 1: RHEL 9.6 box build (kickstart, fully offline)](#task-1-rhel-96-box-build-kickstart-fully-offline)
+  - [Task 2: Topology — six RDQM nodes + extra disk support](#task-2-topology--six-rdqm-nodes--extra-disk-support)
+  - [Task 3: `rdqm-install` role (rpms, kmod match, drbdpool)](#task-3-rdqm-install-role-rpms-kmod-match-drbdpool)
+  - [Task 4: HA group formation + floating IP](#task-4-ha-group-formation--floating-ip)
+  - [Task 5: §3.1 fault suite, steps 1/2/3/5 (the harness meets its purpose)](#task-5-31-fault-suite-steps-1235-the-harness-meets-its-purpose)
+  - [Task 6: Site B + the 3+3 DR pair](#task-6-site-b--the-33-dr-pair)
+  - [Task 7: Wrap — convergence, findings report, handoff](#task-7-wrap--convergence-findings-report-handoff)
+- [Deliberately deferred](#deliberately-deferred)
+- [Self-review notes](#self-review-notes)
+
 ## Entry gate
 
 ```bash

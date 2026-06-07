@@ -5,6 +5,17 @@
 > [`docs/plans/2026-06-06-phase-a-virtualization-harness.md`](../plans/2026-06-06-phase-a-virtualization-harness.md)
 > Tasks 1–4. Design context: spec §7.2 (the Apple-Silicon provider bind).
 
+## Contents
+
+- [Verdict](#verdict)
+- [Evidence](#evidence)
+  - [KVM-accelerated arm64 (the make-or-break property)](#kvm-accelerated-arm64-the-make-or-break-property)
+  - [TCG-emulated x86-64 — mechanics proven; SSH-ready blocked by a plugin cap](#tcg-emulated-x86-64--mechanics-proven-ssh-ready-blocked-by-a-plugin-cap)
+  - [Severable networking (the §3.1 fault primitives)](#severable-networking-the-31-fault-primitives)
+- [Required provider settings (the spike's hard-won configuration)](#required-provider-settings-the-spikes-hard-won-configuration)
+- [Environment prerequisites (each was a real blocker)](#environment-prerequisites-each-was-a-real-blocker)
+- [Plan errata (corrections the spike feeds back into Task 6+)](#plan-errata-corrections-the-spike-feeds-back-into-task-6)
+
 ## Verdict
 
 **The leading hypothesis holds — all three properties, after the #24

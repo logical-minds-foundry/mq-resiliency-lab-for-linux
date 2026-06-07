@@ -32,6 +32,22 @@ infrastructure.
 
 ---
 
+## Contents
+
+- [Entry gate](#entry-gate)
+- [File structure](#file-structure)
+  - [Task 1: Python toolchain enters the repo (closes #9's loose end)](#task-1-python-toolchain-enters-the-repo-closes-9s-loose-end)
+  - [Task 2: MQ acquisition (no IBM binaries in git)](#task-2-mq-acquisition-no-ibm-binaries-in-git)
+  - [Task 3: Phase B nodes in the topology](#task-3-phase-b-nodes-in-the-topology)
+  - [Task 4: Ansible plane — scaffolding + L1 install role](#task-4-ansible-plane--scaffolding--l1-install-role)
+  - [Task 5: QM creation + REST enablement + boot services](#task-5-qm-creation--rest-enablement--boot-services)
+  - [Task 6: Content plane — declarative objects via pymqrest](#task-6-content-plane--declarative-objects-via-pymqrest)
+  - [Task 7: The message path — requester + responder](#task-7-the-message-path--requester--responder)
+  - [Task 8: End-to-end test + reboot survival (the Phase B proof)](#task-8-end-to-end-test--reboot-survival-the-phase-b-proof)
+  - [Task 9: Convergence proof + handoff](#task-9-convergence-proof--handoff)
+- [Deliberately deferred](#deliberately-deferred)
+- [Self-review notes](#self-review-notes)
+
 ## Entry gate
 
 ```bash
