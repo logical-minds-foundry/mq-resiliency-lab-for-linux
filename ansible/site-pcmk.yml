@@ -39,3 +39,6 @@
 - hosts: pcmk_a
   vars: *pcmk_a_vars
   roles: [pcmk-stonith]
+
+- hosts: pcmk_a
+  roles: [mq-install]

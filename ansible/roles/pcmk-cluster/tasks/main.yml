@@ -3,7 +3,7 @@
 # severs). hacluster password is runtime-injected (PCMK_HACLUSTER_PASSWORD).
 - name: install cluster stack
   ansible.builtin.apt:
-    name: [pacemaker, corosync, pcs]
+    name: [pacemaker, corosync, pcs, resource-agents-base, resource-agents-extra]
     update_cache: true
   become: true
 
