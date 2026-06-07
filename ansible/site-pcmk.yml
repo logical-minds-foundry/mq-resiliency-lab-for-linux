@@ -1,0 +1,44 @@
+# The Pacemaker/SAN arm (Phase D). Site A; site B plays land with the DR
+# task. Run: uv run ansible-playbook site-pcmk.yml [--limit ...]
+- hosts: pcmk_a:san_hosts
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+
+- hosts: san-a
+  vars:
+    san_backing_dev: /dev/vdb
+    san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0
+    san_portal_ip: 10.40.1.5
+    san_initiator_iqns:
+      - iqn.2026-06.lab.mq:pcmk-a1
+      - iqn.2026-06.lab.mq:pcmk-a2
+      - iqn.2026-06.lab.mq:pcmk-a3
+  roles: [iscsi-target]
+
+- hosts: pcmk_a
+  vars:
+    san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0
+    san_portal_ip: 10.40.1.5
+  roles: [iscsi-initiator]
+
+- hosts: pcmk_a
+  vars: &pcmk_a_vars
+    pcmk_cluster_name: mqpcmk
+    pcmk_site_nodes:
+      - { name: pcmk-a1, hb: 172.16.1.51 }
+      - { name: pcmk-a2, hb: 172.16.1.52 }
+      - { name: pcmk-a3, hb: 172.16.1.53 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+
+- hosts: pcmk_a
+  vars: *pcmk_a_vars
+  roles: [pcmk-stonith]
+
+- hosts: pcmk_a
+  roles: [mq-install]

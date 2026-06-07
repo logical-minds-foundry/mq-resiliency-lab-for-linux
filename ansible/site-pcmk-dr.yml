@@ -1,0 +1,68 @@
+# Phase D DR build: the full 8-node cross-site topology with DRBD-async
+# under the SAN. DR-ready from the start (the Phase C lesson: don't bolt
+# DR on afterward). Run after both sites' nodes are booted.
+#   export PCMK_HACLUSTER_PASSWORD=...
+#   uv run ansible-playbook site-pcmk-dr.yml
+
+- hosts: pcmk_a:pcmk_b:san_hosts
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt: { name: acl, update_cache: false }
+
+# --- DRBD between the two SAN VMs (san-a primary, san-b secondary) ---
+- hosts: san-a
+  vars: { drbd_role: primary }
+  roles: [drbd-san]
+- hosts: san-b
+  vars: { drbd_role: secondary }
+  roles: [drbd-san]
+
+# --- LIO target at site A, backed by the DRBD device ---
+- hosts: san-a
+  vars:
+    san_backing_dev: /dev/drbd0
+    san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0
+    san_portal_ip: 10.40.1.5
+    san_initiator_iqns:
+      - iqn.2026-06.lab.mq:pcmk-a1
+      - iqn.2026-06.lab.mq:pcmk-a2
+      - iqn.2026-06.lab.mq:pcmk-a3
+  roles: [iscsi-target]
+
+# --- Site A: initiators, cluster, fencing, MQ ---
+- hosts: pcmk_a
+  vars: { san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0, san_portal_ip: 10.40.1.5 }
+  roles: [iscsi-initiator]
+- hosts: pcmk_a
+  vars: &a_vars
+    pcmk_cluster_name: mqpcmk-a
+    pcmk_site_nodes:
+      - { name: pcmk-a1, hb: 172.16.1.51 }
+      - { name: pcmk-a2, hb: 172.16.1.52 }
+      - { name: pcmk-a3, hb: 172.16.1.53 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+- hosts: pcmk_a
+  vars: *a_vars
+  roles: [pcmk-stonith]
+- hosts: pcmk_a
+  roles: [mq-install]
+
+# --- Site B: cluster, fencing, MQ (no QM yet; receives on cutover) ---
+- hosts: pcmk_b
+  vars: &b_vars
+    pcmk_cluster_name: mqpcmk-b
+    pcmk_site_nodes:
+      - { name: pcmk-b1, hb: 172.16.2.61 }
+      - { name: pcmk-b2, hb: 172.16.2.62 }
+      - { name: pcmk-b3, hb: 172.16.2.63 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+- hosts: pcmk_b
+  vars: *b_vars
+  roles: [pcmk-stonith]
+- hosts: pcmk_b
+  roles: [mq-install]

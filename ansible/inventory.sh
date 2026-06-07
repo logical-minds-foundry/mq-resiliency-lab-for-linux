@@ -8,13 +8,16 @@ cd "$(dirname "$0")/../lab"
 mapfile -t RUNNING < <(vagrant status --machine-readable 2>/dev/null \
   | awk -F, '$3=="state" && $4=="running"{print $2}' | sort -u)
 
-qm=(); cl=(); ra=(); rb=()
+qm=(); cl=(); ra=(); rb=(); pa=(); pb=(); sa=()
 for h in "${RUNNING[@]:-}"; do
   case "$h" in
     qm-main | dtcc-sim) qm+=("$h") ;;
     app-client) cl+=("$h") ;;
     rdqm-a*) ra+=("$h") ;;
     rdqm-b*) rb+=("$h") ;;
+    pcmk-a*) pa+=("$h") ;;
+    pcmk-b*) pb+=("$h") ;;
+    san-*) sa+=("$h") ;;
   esac
 done
 
@@ -23,6 +26,9 @@ done
   echo "[client_hosts]"; printf '%s\n' "${cl[@]:-}"
   echo "[rdqm_a]"; printf '%s\n' "${ra[@]:-}"
   echo "[rdqm_b]"; printf '%s\n' "${rb[@]:-}"
+  echo "[pcmk_a]"; printf '%s\n' "${pa[@]:-}"
+  echo "[pcmk_b]"; printf '%s\n' "${pb[@]:-}"
+  echo "[san_hosts]"; printf '%s\n' "${sa[@]:-}"
   echo "[all:vars]"
   echo "ansible_user=vagrant"
   echo "ansible_python_interpreter=/usr/bin/python3"

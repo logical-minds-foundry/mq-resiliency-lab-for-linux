@@ -1,0 +1,8 @@
+<!-- lab/networks/net-san-a.xml — DC-A SAN/iSCSI net (Pacemaker arm).
+     Isolated: no <forward>, no DHCP. Its own severable axis so the
+     fault suite can cut storage access independently (spec 3.1 step 4). -->
+<network>
+  <name>net-san-a</name>
+  <bridge name="virbr-san-a"/>
+  <ip address="10.40.1.1" netmask="255.255.255.0"/>
+</network>

@@ -1,0 +1,39 @@
+# open-iscsi initiator (pcmk nodes): stable IQN per node, discover and
+# log in to the site target, automatic reconnect at boot.
+- name: install open-iscsi
+  ansible.builtin.apt:
+    name: open-iscsi
+    update_cache: true
+  become: true
+
+# Stable IQN matching the target ACLs. MUST be set on BOTH sites' nodes
+# before DR cutover - the default Ubuntu IQN fails the ACL (login error
+# 24, authorization failure). Found the hard way during the A->B cutover.
+- name: stable initiator IQN
+  ansible.builtin.copy:
+    dest: /etc/iscsi/initiatorname.iscsi
+    content: "InitiatorName=iqn.2026-06.lab.mq:{{ inventory_hostname }}\n"
+  register: iqn_file
+  become: true
+
+- name: restart iscsid on IQN change
+  ansible.builtin.systemd:
+    name: iscsid
+    state: restarted
+  when: iqn_file.changed
+  become: true
+
+- name: discover + login (idempotent via session probe)
+  ansible.builtin.shell: |
+    set -e
+    if iscsiadm -m session 2>/dev/null | grep -q "{{ san_target_iqn }}"; then
+      echo already-logged-in
+      exit 0
+    fi
+    iscsiadm -m discovery -t sendtargets -p {{ san_portal_ip }}:3260
+    iscsiadm -m node -T {{ san_target_iqn }} -p {{ san_portal_ip }}:3260 --login
+    iscsiadm -m node -T {{ san_target_iqn }} -p {{ san_portal_ip }}:3260 \
+      --op update -n node.startup -v automatic
+  register: ilogin
+  changed_when: "'already-logged-in' not in ilogin.stdout"
+  become: true

@@ -1,0 +1,79 @@
+# Host-based DRBD async (protocol A) between the two SAN target VMs, over
+# net-wan. The LUN the cluster sees is then exported FROM the drbd device
+# instead of the raw disk, so the block storage itself replicates
+# cross-site - the hand-built equivalent of RDQM's built-in DR replication.
+# Runs on san-a (primary) and san-b (secondary). Vars per host:
+#   drbd_self_ip, drbd_peer_ip, drbd_role (primary|secondary)
+- name: install drbd userland + the in-tree kernel module
+  ansible.builtin.apt:
+    # Ubuntu ships the DRBD module in linux-modules-extra for the running
+    # kernel (no DKMS build needed); drbd-utils is the userland.
+    name:
+      - drbd-utils
+      - "linux-modules-extra-{{ ansible_kernel }}"
+    update_cache: true
+  become: true
+
+- name: load drbd module
+  community.general.modprobe:
+    name: drbd
+    state: present
+  become: true
+
+- name: drbd resource definition
+  ansible.builtin.copy:
+    dest: /etc/drbd.d/mqlun.res
+    content: |
+      resource mqlun {
+        protocol A;
+        net { ping-timeout 50; }
+        on san-a {
+          device    /dev/drbd0;
+          disk      /dev/vdb;
+          address   10.99.0.5:7790;
+          meta-disk internal;
+        }
+        on san-b {
+          device    /dev/drbd0;
+          disk      /dev/vdb;
+          address   10.99.0.6:7790;
+          meta-disk internal;
+        }
+      }
+  become: true
+
+- name: create metadata (idempotent - skip if already present)
+  ansible.builtin.shell: |
+    if drbdadm dump-md mqlun >/dev/null 2>&1; then
+      echo md-exists
+    else
+      drbdadm create-md --force mqlun
+    fi
+  register: drbd_md
+  changed_when: "'md-exists' not in drbd_md.stdout"
+  become: true
+
+- name: bring the resource up
+  ansible.builtin.shell: |
+    drbdadm up mqlun 2>&1 || true
+    drbdadm status mqlun
+  register: drbd_up
+  changed_when: false
+  become: true
+
+# One-time initial sync: the designated primary forces itself UpToDate and
+# lays down the filesystem on /dev/drbd0. The secondary syncs from it.
+- name: initial primary + filesystem (run once, primary only)
+  ansible.builtin.shell: |
+    set -e
+    if blkid /dev/drbd0 2>/dev/null | grep -q MQSHARED; then
+      echo already-initialized
+      exit 0
+    fi
+    drbdadm primary --force mqlun
+    mkfs.xfs -L MQSHARED /dev/drbd0
+    echo initialized
+  when: drbd_role == "primary"
+  register: drbd_init
+  changed_when: "'initialized' == drbd_init.stdout"
+  become: true
