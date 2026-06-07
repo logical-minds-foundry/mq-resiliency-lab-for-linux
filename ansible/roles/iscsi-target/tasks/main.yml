@@ -1,0 +1,37 @@
+# LIO iSCSI target (san-a/san-b): one block backstore on the extra disk,
+# one LUN, ACLs for the site's three initiators, portal on the SAN net.
+# This VM IS the "SAN array" of this arm - deliberately a single point
+# of failure (spec 2.5 Q4); we expose it, not engineer it away.
+- name: install targetcli
+  ansible.builtin.apt:
+    name: targetcli-fb
+    update_cache: true
+  become: true
+
+- name: configure target (idempotent via ls probe)
+  ansible.builtin.shell: |
+    set -e
+    if targetcli ls /backstores/block 2>/dev/null | grep -q mqlun; then
+      echo already-configured
+      exit 0
+    fi
+    targetcli /backstores/block create name=mqlun dev={{ san_backing_dev }}
+    targetcli /iscsi create {{ san_target_iqn }}
+    targetcli /iscsi/{{ san_target_iqn }}/tpg1/luns create /backstores/block/mqlun
+    {% for iqn in san_initiator_iqns %}
+    targetcli /iscsi/{{ san_target_iqn }}/tpg1/acls create {{ iqn }}
+    {% endfor %}
+    targetcli /iscsi/{{ san_target_iqn }}/tpg1/portals delete 0.0.0.0 3260 || true
+    targetcli /iscsi/{{ san_target_iqn }}/tpg1/portals create {{ san_portal_ip }} 3260
+    targetcli saveconfig
+  args:
+    executable: /bin/bash
+  register: tgt
+  changed_when: "'already-configured' not in tgt.stdout"
+  become: true
+
+- name: target service enabled (restores config at boot)
+  ansible.builtin.systemd:
+    name: rtslib-fb-targetctl
+    enabled: true
+  become: true
