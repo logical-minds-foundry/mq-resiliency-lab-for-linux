@@ -1,6 +1,6 @@
 # Phase C — RDQM Arm Findings
 
-> **Status:** in progress — HA (site A) complete; DR (3+3) pending.
+> **Status:** complete — HA (site A) and DR (3+3) both demonstrated.
 > Environment: three RHEL 9.6 x86-64 guests under TCG on the dev VM
 > (functional validation only per spec §6; all timings qualitative).
 
@@ -58,6 +58,34 @@ Operational notes for the ledger's Day-2 column:
 - vagrant-libvirt leaves custom extra-disk volumes behind on destroy —
   lab hygiene: sweep `vol-list` after destroying RDQM nodes.
 
-## DR (3+3) — pending
+## DR (3+3) results
 
-Site B build, HA/DR-combined QM, `rdqmdr` cutover/failback: next.
+Site B formed by the same roles (fresh nodes, zero failures). The HA-only
+QM was deleted and recreated as the documented HA/DR-combined shape:
+`crtmqm -sx[s] -rr p` at site A / `-rr s` at site B, DR replication on
+the net-wan addresses, port 7001, async (default). The tool prints the
+exact remote-side command — used verbatim.
+
+| Step | Observed |
+|---|---|
+| Replication | `DR status: Normal` immediately after both sides enabled |
+| Controlled cutover A→B (`rdqmdr -s` at A, `-p` at B) | QM running at site B **69 s** after the command; site-B floating IP added; **all 3 pre-cutover persistent messages retrieved via B's VIP — RPO 0** |
+| Business at B | message accepted through 10.10.2.100 |
+| Failback B→A | QM back at site A in **104 s**; the B-era message retrieved at A — **RPO 0 both directions** |
+
+This is spec 3.1 step 7 (controlled variant), the 8.5 paved path
+(confirm-replication-then-cut), and the 4.7 reversible rotation primitive
+in one sequence. Disaster-variant cutover (site A powered off mid-flight)
+is Phase E fault-suite material.
+
+Additional Day-2 facts for the ledger:
+
+- `mqm` must be in `haclient` or `endmqm`/`strmqm` under HA control
+  fail with AMQ7077E (now encoded in the install role).
+- RDQM verbs (`crtmqm -sx`, `dltmqm`, `rdqmdr`, `rdqmint`) run as
+  root; plain MQ verbs as mqm.
+- An HA-only RDQM cannot be converted in place - delete and recreate
+  with the `-rr` flags (queue manager contents are lost; do DR-combined
+  creation from the start in any real deployment).
+- The QM's objects and messages travel with DR replication - the
+  recovery site needs no content re-apply, only its floating IP.

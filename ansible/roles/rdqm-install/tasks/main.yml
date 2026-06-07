@@ -100,13 +100,27 @@
   become: true
   changed_when: false
 
+# Idempotence by vgs probe, NOT a /dev/drbdpool creates-guard: that path
+# only exists while the VG has LVs, so it vanishes when QMs are deleted
+# and the task re-fires onto an existing PV.
 - name: drbdpool volume group on the extra disk
   ansible.builtin.shell: |
     set -e
-    pvcreate /dev/vdb
-    vgcreate drbdpool /dev/vdb
-  args:
-    creates: /dev/drbdpool
+    if ! vgs drbdpool >/dev/null 2>&1; then
+      pvcreate /dev/vdb
+      vgcreate drbdpool /dev/vdb
+      echo VG-CREATED
+    fi
+  register: drbdpool_vg
+  changed_when: "'VG-CREATED' in drbdpool_vg.stdout"
+  become: true
+
+- name: mqm joins haclient (documented RDQM step - endmqm/strmqm under
+        Pacemaker HA control are refused with AMQ7077E otherwise)
+  ansible.builtin.user:
+    name: mqm
+    groups: haclient
+    append: true
   become: true
 
 - name: mqm ulimits
