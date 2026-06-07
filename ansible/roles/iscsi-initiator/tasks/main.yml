@@ -6,6 +6,9 @@
     update_cache: true
   become: true
 
+# Stable IQN matching the target ACLs. MUST be set on BOTH sites' nodes
+# before DR cutover - the default Ubuntu IQN fails the ACL (login error
+# 24, authorization failure). Found the hard way during the A->B cutover.
 - name: stable initiator IQN
   ansible.builtin.copy:
     dest: /etc/iscsi/initiatorname.iscsi

@@ -76,7 +76,57 @@ design never raises.
 | Planned move | `rdqmadm -s/-r` (preferred-location honored) | constraint dance + stickiness tuning (porcelain unreliable) |
 | Storage-failure detection | N/A by design | OCF_CHECK_LEVEL=20 + on-fail=fence, or 12-minute blindness |
 
-## DR (DRBD-async) — pending
+## Unplanned reproducibility test (crash recovery)
 
-`san-b` + site-B cluster, DRBD under LIO over `net-wan`, controlled
-cutover runbook: next.
+The dev laptop crashed between the HA suite and the DR build, destroying
+**every** libvirt domain, all nine lab networks, the storage pool, and
+the Vagrant box — the entire running lab, gone. Recovery was: recreate
+the pool, `net-up.sh`, `vagrant up` (box re-pulled). **Site A's four
+nodes were back from committed code in 86 seconds**; the playbooks then
+rebuild the cluster identically. Nothing was lost but running state —
+exactly the spec §0 "disposable per-run harness, durable model" claim,
+proven by accident. (This is also the strongest possible argument for
+the educational framing: a learner can wipe the whole thing and get it
+back from git.)
+
+## DR (DRBD-async) results
+
+Because the crash forced a fresh build, site A was rebuilt **DR-ready
+from the start** — DRBD under the LUN before the QM existed (the Phase C
+lesson applied: don't bolt DR on a live system). Architecture: host-based
+DRBD (protocol A, async) between `san-a` and `san-b` over `net-wan`; LIO
+exports `/dev/drbd0` (not the raw disk) so the block storage itself
+replicates cross-site; each site has its own 3-node Pacemaker cluster.
+
+**Controlled cutover A→B (RPO 0):** 3 persistent messages put at site A,
+DRBD driven to `UpToDate/UpToDate`, then the cutover runbook ran:
+quiesce A → demote DRBD A → promote DRBD B → re-export the LUN at B →
+B initiators log in → resource group created+started on cluster B in 13 s.
+**All 3 messages retrieved at site B via B's VIP — RPO 0.**
+
+**The step-count ledger (the sharpest single comparison):**
+
+| | RDQM (Phase C) | This arm |
+|---|---|---|
+| Cross-site cutover | `rdqmdr -m QM -s` (old primary) + `rdqmdr -m QM -p` (new primary) — **2 commands** | quiesce cluster → confirm DRBD caught up → `drbdadm secondary` + `targetctl clear` at A → `drbdadm primary` at B → rebuild the LIO target on B → initiator logins on 3 nodes → create/start the resource group — **~7 coordinated steps across 3 host classes**, scripted as `pcmk-dr-cutover.sh` |
+| Replication | continuous, built-in, automatic | DRBD configured, sync-rate-tuned by hand (dynamic controller throttled the initial 8 GB sync; `drbdsetup --c-plan-ahead=0` + a high static rate was needed) |
+| What travels on cutover | QM + messages, automatically | QM + messages (via block replication) — but the QM *definition* must be pre-seeded on the peer (`addmqinf` + systemd unit), and initiator IQNs/ACLs must pre-match |
+
+**Role gaps the DR build surfaced (each now a finding, several still
+TODO in the roles):** the iSCSI-target package and the stable-IQN
+initiator config must be present at *both* sites pre-cutover (the role
+only configured the live site); `linux-modules-extra-<kver>` carries
+DRBD on Ubuntu (no module ships by default — the mirror image of RDQM
+shipping prebuilt kmods); the fence key authorization and
+`LIBVIRT_DEFAULT_URI` are dev-VM state that the crash wiped and that a
+real deployment would bake into the hypervisor.
+
+## DR honesty note
+
+Two of the cutover's failures during the live run were *operator-state*
+gaps exposed by the crash (fence-key authorization, the libvirt URI),
+not design flaws — but their existence *is* a finding: this arm has a
+large surface of out-of-band state (ssh keys, IQNs, initiator configs,
+DRBD tunables) that must be correct across both sites before DR works,
+versus RDQM's self-contained `crtmqm -rr` / `rdqmdr`. The lab proved the
+mechanism works; it also measured how much there is to get right.
