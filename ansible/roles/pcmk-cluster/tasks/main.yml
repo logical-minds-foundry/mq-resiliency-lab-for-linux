@@ -1,0 +1,61 @@
+# Corosync/Pacemaker formation - the hand-built equivalent of rdqmadm -c.
+# Cluster comms ride the heartbeat net (the same axis the fault suite
+# severs). hacluster password is runtime-injected (PCMK_HACLUSTER_PASSWORD).
+- name: install cluster stack
+  ansible.builtin.apt:
+    name: [pacemaker, corosync, pcs]
+    update_cache: true
+  become: true
+
+- name: site hosts entries (hb addresses)
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ item.hb }} {{ item.name }}"
+    regexp: "\\s{{ item.name }}$"
+  loop: "{{ pcmk_site_nodes }}"
+  become: true
+
+- name: hacluster password
+  ansible.builtin.shell: |
+    echo "hacluster:{{ lookup('env', 'PCMK_HACLUSTER_PASSWORD') }}" | chpasswd
+  no_log: true
+  changed_when: false
+  become: true
+
+- name: pcsd enabled + started
+  ansible.builtin.systemd:
+    name: pcsd
+    enabled: true
+    state: started
+  become: true
+
+- name: auth + cluster setup (run once; idempotent via corosync.conf probe)
+  ansible.builtin.shell: |
+    set -e
+    if grep -q 'cluster_name: {{ pcmk_cluster_name }}' /etc/corosync/corosync.conf 2>/dev/null; then
+      echo already-formed
+      exit 0
+    fi
+    pcs host auth {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} -u hacluster -p "{{ lookup('env', 'PCMK_HACLUSTER_PASSWORD') }}"
+    pcs cluster setup {{ pcmk_cluster_name }} {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} --force
+    pcs cluster enable --all
+    pcs cluster start --all
+  run_once: true
+  register: pcsform
+  changed_when: "'already-formed' not in pcsform.stdout"
+  no_log: true
+  become: true
+
+- name: wait for all nodes online
+  ansible.builtin.shell: |
+    for i in $(seq 1 30); do
+      if pcs status 2>/dev/null | grep -q 'Online:.*{{ pcmk_site_nodes | map(attribute="name") | join(".*") }}'; then
+        echo all-online; exit 0
+      fi
+      sleep 5
+    done
+    pcs status 2>&1 | head -20
+    exit 1
+  run_once: true
+  changed_when: false
+  become: true

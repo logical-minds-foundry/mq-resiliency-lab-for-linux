@@ -24,3 +24,18 @@
     san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0
     san_portal_ip: 10.40.1.5
   roles: [iscsi-initiator]
+
+- hosts: pcmk_a
+  vars: &pcmk_a_vars
+    pcmk_cluster_name: mqpcmk
+    pcmk_site_nodes:
+      - { name: pcmk-a1, hb: 172.16.1.51 }
+      - { name: pcmk-a2, hb: 172.16.1.52 }
+      - { name: pcmk-a3, hb: 172.16.1.53 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+
+- hosts: pcmk_a
+  vars: *pcmk_a_vars
+  roles: [pcmk-stonith]
