@@ -31,15 +31,17 @@
 | `src/mqlab/dr/__init__.py` | package marker + public re-exports |
 | `src/mqlab/dr/model.py` | enums (`Bucket`, `MessageState`) + `MessageFacts` dataclass |
 | `src/mqlab/dr/ledger.py` | `Event`, `LedgerEntry`, append-only `Ledger` (JSONL persist) + fold helpers |
-| `src/mqlab/dr/exposure.py` | exposure gauge — exact app-layer unresolved count |
+| `src/mqlab/dr/exposure.py` | exposure gauge — unresolved count + `peak_exposure` replay |
 | `src/mqlab/dr/classifier.py` | `classify()` — the six-bucket precedence (the wall) |
 | `src/mqlab/dr/reconcile.py` | raw ledgers + snapshots → `list[MessageFacts]` |
-| `src/mqlab/dr/report.py` | census, loss window, self-correctness, `ScenarioReport`, cross-arm |
+| `src/mqlab/dr/floor.py` | provisional evidence floor + `meets_floor` checker |
+| `src/mqlab/dr/report.py` | census, loss window, self-correctness, `ScenarioReport` (incl. §7 fields), cross-arm |
 | `tests/test_dr_ledger.py` | ledger roundtrip + folds |
 | `tests/test_dr_exposure.py` | exposure counting |
 | `tests/test_dr_classifier.py` | one test per bucket + precedence |
 | `tests/test_dr_reconcile.py` | facts assembly from ledgers + snapshots |
-| `tests/test_dr_report.py` | census, window, self-correctness, report shapes |
+| `tests/test_dr_floor.py` | evidence-floor checker |
+| `tests/test_dr_report.py` | census, window, self-correctness, report shapes (incl. §7 fields) |
 | `tests/test_dr_end_to_end.py` | synthetic forced-DR + no-fault, full pipeline |
 
 ---
@@ -389,7 +391,7 @@ vrg-commit --type feat --scope dr --message "ledger: fold helpers for firm state
 ```python
 # tests/test_dr_exposure.py
 from mqlab.dr.ledger import Event, LedgerEntry, Ledger
-from mqlab.dr.exposure import unresolved_seqs, exposure
+from mqlab.dr.exposure import unresolved_seqs, exposure, peak_exposure
 
 
 def _firm():
@@ -412,6 +414,11 @@ def test_exposure_at_instant_uses_only_events_up_to_ts():
     # at ts=4: sent {1,2,3}, confirmed {1} -> unresolved {2,3}
     assert unresolved_seqs(_firm(), at_ts=4.0) == {2, 3}
     assert exposure(_firm(), at_ts=4.0) == 2
+
+
+def test_peak_exposure_is_max_concurrent_in_flight():
+    # replay of _firm(): SENT1->1, CONF1->0, SENT2->1, SENT3->2 (peak), CONF3->1
+    assert peak_exposure(_firm()) == 2
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -446,19 +453,38 @@ def unresolved_seqs(firm: Ledger, at_ts: float | None = None) -> set[int]:
 
 def exposure(firm: Ledger, at_ts: float | None = None) -> int:
     return len(unresolved_seqs(firm, at_ts=at_ts))
+
+
+def peak_exposure(firm: Ledger) -> int:
+    """Max concurrent in-flight (SENT but not yet CONFIRMED) over the whole run,
+    by replaying the timestamped ledger. At equal timestamps a SENT is counted
+    before a CONFIRMED (conservative — never under-reports the peak).
+    """
+    events: list[tuple[float, int]] = []
+    for e in firm.entries:
+        if e.event.value == "sent":
+            events.append((e.ts, +1))
+        elif e.event.value == "confirmed":
+            events.append((e.ts, -1))
+    events.sort(key=lambda x: (x[0], -x[1]))  # +1 before -1 at the same ts
+    inflight = peak = 0
+    for _, delta in events:
+        inflight += delta
+        peak = max(peak, inflight)
+    return peak
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `vrg-container-run -- python -m pytest tests/test_dr_exposure.py -v`
-Expected: PASS (2 passed)
+Expected: PASS (3 passed)
 
 - [ ] **Step 5: Validate and commit**
 
 ```bash
 vrg-container-run -- vrg-validate
 vrg-git add src/mqlab/dr/exposure.py tests/test_dr_exposure.py
-vrg-commit --type feat --scope dr --message "exposure: exact app-layer unresolved-count gauge"
+vrg-commit --type feat --scope dr --message "exposure: app-layer unresolved-count gauge + peak replay"
 ```
 
 ---
@@ -937,6 +963,36 @@ def test_cross_arm_pairs_same_scenario():
     assert comp["scenario_id"] == "DR-FORCE-2"
     assert comp["C"]["census"]["stranded"] == 1
     assert comp["D"]["census"]["stranded"] == 1
+
+
+def test_report_carries_section7_honesty_fields():
+    rep = build_report("DR-FORCE-1", "C", _mixed(), peak_exposure=4,
+                       exposure_at_fault=3, rto_seconds=69.0,
+                       intervention_required=True, integrity_anomaly=False,
+                       diagnostics_captured=True)
+    assert rep.exposure_at_fault == 3
+    assert rep.rto_seconds == 69.0
+    assert rep.intervention_required is True
+    assert rep.diagnostics_captured is True
+    d = rep.to_dict()
+    assert d["rto_seconds"] == 69.0
+    assert d["exposure_at_fault"] == 3
+    assert d["intervention_required"] is True
+    assert d["integrity_anomaly"] is False
+    assert d["diagnostics_captured"] is True
+    md = rep.to_markdown()
+    assert "RTO" in md and "diagnostics" in md.lower()
+
+
+def test_report_honesty_fields_default_sensibly():
+    rep = build_report("HA-1", "C",
+                       [_f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True)],
+                       peak_exposure=0)
+    assert rep.rto_seconds is None
+    assert rep.exposure_at_fault is None
+    assert rep.intervention_required is False
+    assert rep.integrity_anomaly is False
+    assert rep.diagnostics_captured is False
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -958,6 +1014,13 @@ class ScenarioReport:
     census: dict[Bucket, int]
     window: tuple[int, int, int] | None
     peak_exposure: int
+    # §7 fields — populated by the live runner (Plan 2); default-None/False so
+    # pure-core callers and tests need not supply them.
+    exposure_at_fault: int | None = None
+    rto_seconds: float | None = None
+    intervention_required: bool = False
+    integrity_anomaly: bool = False
+    diagnostics_captured: bool = False
 
     @property
     def rpo_zero(self) -> bool:
@@ -970,6 +1033,11 @@ class ScenarioReport:
             "census": {b.value: n for b, n in self.census.items()},
             "window": list(self.window) if self.window else None,
             "peak_exposure": self.peak_exposure,
+            "exposure_at_fault": self.exposure_at_fault,
+            "rto_seconds": self.rto_seconds,
+            "intervention_required": self.intervention_required,
+            "integrity_anomaly": self.integrity_anomaly,
+            "diagnostics_captured": self.diagnostics_captured,
             "rpo_zero": self.rpo_zero,
         }
 
@@ -978,7 +1046,11 @@ class ScenarioReport:
             f"### {self.scenario_id} — arm {self.arm}",
             "",
             f"- RPO 0: **{self.rpo_zero}**",
-            f"- Peak exposure: {self.peak_exposure}",
+            f"- RTO: {self.rto_seconds} s",
+            f"- Peak exposure: {self.peak_exposure}  (at fault: {self.exposure_at_fault})",
+            f"- Intervention required: {self.intervention_required}",
+            f"- Integrity anomaly: {self.integrity_anomaly}",
+            f"- Diagnostics captured: {self.diagnostics_captured}",
         ]
         if self.window:
             lo, hi, n = self.window
@@ -992,7 +1064,16 @@ class ScenarioReport:
 
 
 def build_report(
-    scenario_id: str, arm: str, facts: list[MessageFacts], peak_exposure: int
+    scenario_id: str,
+    arm: str,
+    facts: list[MessageFacts],
+    peak_exposure: int,
+    *,
+    exposure_at_fault: int | None = None,
+    rto_seconds: float | None = None,
+    intervention_required: bool = False,
+    integrity_anomaly: bool = False,
+    diagnostics_captured: bool = False,
 ) -> ScenarioReport:
     return ScenarioReport(
         scenario_id=scenario_id,
@@ -1000,6 +1081,11 @@ def build_report(
         census=census(facts),
         window=loss_window(facts),
         peak_exposure=peak_exposure,
+        exposure_at_fault=exposure_at_fault,
+        rto_seconds=rto_seconds,
+        intervention_required=intervention_required,
+        integrity_anomaly=integrity_anomaly,
+        diagnostics_captured=diagnostics_captured,
     )
 
 
@@ -1014,19 +1100,139 @@ def cross_arm(c: ScenarioReport, d: ScenarioReport) -> dict:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
-Expected: PASS (9 passed)
+Expected: PASS (11 passed)
 
 - [ ] **Step 5: Validate and commit**
 
 ```bash
 vrg-container-run -- vrg-validate
 vrg-git add src/mqlab/dr/report.py tests/test_dr_report.py
-vrg-commit --type feat --scope dr --message "report: ScenarioReport (dict/markdown) + cross-arm comparison"
+vrg-commit --type feat --scope dr --message "report: ScenarioReport (incl. §7 honesty fields) + cross-arm"
 ```
 
 ---
 
-## Task 10: End-to-end pipeline (synthetic scenarios)
+## Task 10: Evidence floor
+
+**Files:**
+- Create: `src/mqlab/dr/floor.py`
+- Test: `tests/test_dr_floor.py`
+
+"RPO 0 under load" is only falsifiable against a defined floor. This module
+encodes a provisional floor (TBD pending a lab-capacity check, spec §9) and a
+pure checker the runner uses to gate each run and to enforce that paired arms ran
+the identical `(rate, duration)`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_dr_floor.py
+from mqlab.dr.ledger import Event, LedgerEntry, Ledger
+from mqlab.dr.floor import FLOOR, FloorResult, meets_floor
+
+
+def _firm_with(n, rate):
+    # n SENT messages, one every 1/rate s, starting at t=0
+    lg = Ledger()
+    for i in range(1, n + 1):
+        lg.append(LedgerEntry(Event.SENT, i, f"u{i}", (i - 1) / rate))
+    return lg
+
+
+def test_meets_floor_true_when_rate_duration_volume_satisfied():
+    firm = _firm_with(n=7000, rate=20.0)   # 7000 msgs over ~350 s at 20/s
+    res = meets_floor(firm, FLOOR)
+    assert isinstance(res, FloorResult)
+    assert res.ok is True
+    assert res.total == 7000
+
+
+def test_meets_floor_false_when_too_few_messages():
+    firm = _firm_with(n=100, rate=20.0)
+    res = meets_floor(firm, FLOOR)
+    assert res.ok is False
+    assert "total" in res.reason
+
+
+def test_floor_defaults_are_the_provisional_values():
+    assert FLOOR.min_rate == 20.0
+    assert FLOOR.min_seconds == 300.0
+    assert FLOOR.min_total == 6000
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `vrg-container-run -- python -m pytest tests/test_dr_floor.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.floor'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+# src/mqlab/dr/floor.py
+"""The lab evidence floor (spec §2 goal 7).
+
+A run counts as "RPO 0 under load" only if it clears this floor, and paired arms
+must run the identical (rate, seconds) for the cross-arm comparison to be fair.
+Numbers are PROVISIONAL pending a lab-capacity check (spec §9 Q2).
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .ledger import Event, Ledger
+
+
+@dataclass(frozen=True)
+class Floor:
+    min_rate: float
+    min_seconds: float
+    min_total: int
+
+
+FLOOR = Floor(min_rate=20.0, min_seconds=300.0, min_total=6000)
+
+
+@dataclass(frozen=True)
+class FloorResult:
+    ok: bool
+    rate: float
+    seconds: float
+    total: int
+    reason: str
+
+
+def meets_floor(firm: Ledger, floor: Floor) -> FloorResult:
+    sent = sorted(e.ts for e in firm.entries if e.event is Event.SENT)
+    total = len(sent)
+    seconds = (sent[-1] - sent[0]) if total >= 2 else 0.0
+    rate = (total / seconds) if seconds > 0 else 0.0
+    problems = []
+    if total < floor.min_total:
+        problems.append(f"total {total} < {floor.min_total}")
+    if seconds < floor.min_seconds:
+        problems.append(f"seconds {seconds:.0f} < {floor.min_seconds:.0f}")
+    if rate < floor.min_rate:
+        problems.append(f"rate {rate:.1f} < {floor.min_rate:.1f}")
+    return FloorResult(ok=not problems, rate=rate, seconds=seconds, total=total,
+                       reason="; ".join(problems) or "ok")
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `vrg-container-run -- python -m pytest tests/test_dr_floor.py -v`
+Expected: PASS (3 passed)
+
+- [ ] **Step 5: Validate and commit**
+
+```bash
+vrg-container-run -- vrg-validate
+vrg-git add src/mqlab/dr/floor.py tests/test_dr_floor.py
+vrg-commit --type feat --scope dr --message "floor: provisional evidence floor + pure meets_floor checker"
+```
+
+---
+
+## Task 11: End-to-end pipeline (synthetic scenarios)
 
 **Files:**
 - Modify: `src/mqlab/dr/__init__.py` (public re-exports)
@@ -1097,7 +1303,8 @@ Expected: FAIL — `ImportError: cannot import name 'reconcile' from 'mqlab.dr'`
 # src/mqlab/dr/__init__.py  (replace the docstring-only file)
 """DR/HA validation framework — pure-Python core (ledger, classifier, reporting)."""
 from .classifier import classify, classify_all
-from .exposure import exposure, unresolved_seqs
+from .exposure import exposure, peak_exposure, unresolved_seqs
+from .floor import FLOOR, FloorResult, meets_floor
 from .ledger import Event, Ledger, LedgerEntry
 from .model import Bucket, MessageFacts, MessageState
 from .reconcile import reconcile
@@ -1115,7 +1322,8 @@ from .report import (
 __all__ = [
     "Bucket", "MessageState", "MessageFacts",
     "Event", "Ledger", "LedgerEntry",
-    "classify", "classify_all", "exposure", "unresolved_seqs", "reconcile",
+    "classify", "classify_all", "exposure", "peak_exposure", "unresolved_seqs",
+    "reconcile", "FLOOR", "FloorResult", "meets_floor",
     "census", "loss_window", "assert_self_correct", "self_correctness_violations",
     "SelfCorrectnessError", "ScenarioReport", "build_report", "cross_arm",
 ]
@@ -1141,5 +1349,5 @@ vrg-commit --type feat --scope dr --message "dr core: public API + end-to-end pi
 - `vrg-container-run -- vrg-validate` is green.
 - The classifier has an explicit test for every bucket and for the precedence edges.
 - The self-correctness check passes on a clean run and raises (naming the seq) on a dirty one.
-- `mqlab.dr` exposes the full public API Plan 2 will import: `Ledger`/`Event`/`LedgerEntry`, `reconcile`, `classify`, `exposure`, `build_report`, `assert_self_correct`, `cross_arm`.
+- `mqlab.dr` exposes the full public API Plan 2 will import: `Ledger`/`Event`/`LedgerEntry`, `reconcile`, `classify`, `exposure`, `peak_exposure`, `FLOOR`/`meets_floor`, `build_report` (with the §7 honesty fields), `assert_self_correct`, `cross_arm`.
 - No `pymqi`, no lab, no new dependencies — this entire layer is provable on a laptop, which is exactly the point (spec §1, "evidence not proof; the instrument is the product").

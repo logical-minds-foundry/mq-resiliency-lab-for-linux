@@ -180,11 +180,14 @@ changed to persistent + syncpoint as part of this work.
    full-site loss or a primary-isolation scenario never takes the oracle with it, and the
    analyzer can always reach it afterward.
 3. **MQ-side recorder** — diagnostic visibility, especially for **duplication** and
-   edge-case forensics. Flagged honestly as **possibly not production-scalable**
-   (per-message MQ logging is expensive); this is a lab-grade visibility tool first, and
-   its production viability is a separate question. The back-office settlement profile
-   (where correctness may outrank raw throughput, unlike HFT) may change that calculus —
-   unknown until client input.
+   edge-case forensics. **Not built as a dedicated continuous recorder.** Its two
+   motivating needs are met without one: **duplication** is detected by the god's-eye
+   ledger counting re-receives by identity (tier 2), and **forensics** by post-event queue
+   *browse snapshots* plus the under-fault `runmqras`/FFST capture (§7, §3.1 step 8). A
+   dedicated per-message MQ-side recorder was flagged as **possibly not
+   production-scalable** (per-message MQ logging is expensive); should the back-office
+   throughput profile justify one (correctness may outrank raw throughput, unlike HFT),
+   it is a later addition, not part of this build.
 
 ### 4.3 Scenario / fault engine
 

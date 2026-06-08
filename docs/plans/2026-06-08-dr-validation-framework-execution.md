@@ -38,6 +38,7 @@
 | `clients/dr_responder.py` | DTCC god's-eye responder (syncpoint, pymqi) |
 | `lab/scripts/quiesce-drain.sh` | controlled quiesce: `endmqm -c` after fail-if-quiescing drain |
 | `lab/scripts/drbd-degrade.sh` | throttle / break replication for DR-FORCE-3 |
+| `lab/scripts/capture-diag.sh` | under-fault `runmqras`/FFST + cluster/replication SEV-1 package |
 | `tests/test_dr_wire.py` | body roundtrip |
 | `tests/test_dr_snapshot.py` | seq extraction from browsed bodies |
 | `tests/test_dr_catalog.py` | catalog completeness vs spec §6 |
@@ -429,10 +430,14 @@ def _connect():
     return qmgr
 
 
-def producer(qmgr, rate, seconds, ledger, lock):
+def producer(qmgr, rate, seconds, expiry, ledger, lock):
     q = pymqi.Queue(qmgr, "DTCC.REQUEST")
     pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
-    md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT)
+    # MQ expiry is in tenths of a second; MQEI_UNLIMITED (-1) = no expiry, the
+    # core-flow default (spec §5). FB-REPLAY passes a short expiry to show the
+    # mitigation effect on the replay duplicates.
+    expiry_tenths = pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
+    md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
     interval = 1.0 / rate
     seq = 0
     deadline = time.monotonic() + seconds
@@ -480,6 +485,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rate", type=float, default=50.0)
     ap.add_argument("--seconds", type=float, default=600.0)
+    ap.add_argument("--expiry", type=float, default=None,
+                    help="per-message expiry in seconds (default: unlimited)")
     ap.add_argument("--ledger", required=True)
     args = ap.parse_args()
 
@@ -490,7 +497,7 @@ def main() -> int:
     ledger, lock = Ledger(), threading.Lock()
     t = threading.Thread(target=consumer, args=(qmgr, ledger, lock), daemon=True)
     t.start()
-    producer(qmgr, args.rate, args.seconds, ledger, lock)
+    producer(qmgr, args.rate, args.seconds, args.expiry, ledger, lock)
     time.sleep(3)  # let late replies land
     STOP.set()
     with lock:
@@ -996,11 +1003,207 @@ vrg-commit --type feat --scope dr --message "runner: HA suite + FB-REPLAY + outp
 
 ---
 
+## Task 11: §7 report completeness — fault-time, exposure peak/at-fault, diagnostics, floor, envelope
+
+This task closes the alignment gaps (review 2026-06-08): every drill records the
+**fault timestamp** (so RTO, exposure-at-fault, and `firm_confirmed` are correct —
+the earlier `cutover_ts=float("inf")` was a placeholder), captures diagnostics
+under fault, enforces the evidence floor, and emits the confidence-envelope
+inputs. A single `_finish` helper replaces the ad-hoc report-building tails in
+Tasks 7–10.
+
+**Files:**
+- Create: `lab/scripts/capture-diag.sh`
+- Modify: `src/mqlab/dr/runner.py` (add `_finish`; route every `run_*` through it)
+
+- [ ] **Step 1: Write the diagnostics-capture script**
+
+```bash
+# lab/scripts/capture-diag.sh — gather an IBM-grade SEV-1 package under fault.
+# Runs runmqras, collects FFST/FDC, and dumps cluster + replication state on the
+# affected node into the run dir. Exits non-zero if it cannot produce a package
+# (that failure is itself a finding — the report's diagnostics_captured goes False).
+set -euo pipefail
+NODE="${1:?node}"
+RUN="${2:?run dir}"
+OUT="$RUN/diag-$NODE"
+mkdir -p "$OUT"
+vagrant ssh "$NODE" -c 'sudo -u mqm runmqras -section defs,trace,cluster -workdirectory /tmp/ras' \
+  && vagrant ssh "$NODE" -c 'sudo tar czf - /tmp/ras /var/mqm/errors 2>/dev/null' > "$OUT/runmqras.tgz"
+vagrant ssh "$NODE" -c 'sudo drbdadm status 2>/dev/null || true' > "$OUT/drbd-status.txt"
+vagrant ssh "$NODE" -c 'sudo crm status 2>/dev/null || true'    > "$OUT/cluster-status.txt"
+test -s "$OUT/runmqras.tgz"   # fail loud if the SEV-1 package is empty
+echo "diag captured -> $OUT"
+```
+
+- [ ] **Step 2: Add the `_finish` helper and route every drill through it**
+
+```python
+# src/mqlab/dr/runner.py  (append; then replace each run_*'s report-building tail
+# with a call to _finish — worked example below)
+import time
+from .exposure import exposure, peak_exposure
+from .floor import FLOOR, meets_floor
+
+
+def _capture_diag(node: str, run: Path) -> bool:
+    rc = subprocess.run(["lab/scripts/capture-diag.sh", node, str(run)], check=False)
+    return rc.returncode == 0
+
+
+def _finish(scenario_id, arm, run, *, fault_ts, service_restored_ts,
+            secondary_present, primary_disk, diag_node,
+            intervention_required=False, integrity_anomaly=False):
+    run = Path(run)
+    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
+                                         run / "firm.jsonl"))
+    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
+                                         run / "dtcc.jsonl"))
+    floor = meets_floor(firm, FLOOR)
+    if not floor.ok:
+        raise RuntimeError(f"{scenario_id}/{arm}: run below evidence floor: {floor.reason}")
+    facts = reconcile(firm, dtcc, secondary_present=secondary_present,
+                      primary_disk_present=primary_disk, cutover_ts=fault_ts)
+    return build_report(
+        scenario_id, arm, facts,
+        peak_exposure=peak_exposure(firm),
+        exposure_at_fault=exposure(firm, at_ts=fault_ts),
+        rto_seconds=(service_restored_ts - fault_ts) if service_restored_ts else None,
+        intervention_required=intervention_required,
+        integrity_anomaly=integrity_anomaly,
+        diagnostics_captured=_capture_diag(diag_node, run),
+    )
+
+
+def run_dr_force(run_dir, arm, scenario_id, active_node, secondary_node, inject):
+    """Worked example of the routed pattern; run_ha / run_dr_ctrl / run_baseline
+    follow the same shape (record fault_ts, do the cutover, snapshot, _finish)."""
+    fault_ts = time.time()
+    inject()  # the unrecoverable fault, under live flow
+    if arm == "c":
+        subprocess.run(["vagrant", "ssh", secondary_node, "-c",
+                        "sudo rdqmdr -m QMAIN -p"], check=True)
+    else:
+        subprocess.run(["lab/scripts/pcmk-dr-cutover.sh", "--force"], check=True)
+    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
+    service_restored_ts = time.time()
+    primary_disk = browse_queue(active_node, "QMAIN", "DTCC.REQUEST")  # post-mortem
+    return _finish(scenario_id, arm, run_dir, fault_ts=fault_ts,
+                   service_restored_ts=service_restored_ts,
+                   secondary_present=secondary_present, primary_disk=primary_disk,
+                   diag_node=active_node, intervention_required=True)
+```
+
+Apply the same routing to `run_baseline` (no fault: `fault_ts=time.time()` after
+flow ends, `service_restored_ts=None`, `secondary_present=firm.sent_seqs()`,
+`primary_disk=set()`), `run_dr_ctrl`, `run_ha`. Delete the now-duplicated tails.
+
+- [ ] **Step 3: Add the confidence-envelope inputs writer**
+
+```python
+# src/mqlab/dr/runner.py  (append)
+
+def write_envelope_inputs(run_dir, reports):
+    """Machine-collected facts the human writes the confidence envelope ON TOP of
+    (data vs judgment): one row per (scenario, arm). The envelope PROSE stays
+    hand-authored in docs/reports/."""
+    rows = [{
+        "scenario_id": r.scenario_id, "arm": r.arm, "rpo_zero": r.rpo_zero,
+        "intervention_required": r.intervention_required,
+        "diagnostics_captured": r.diagnostics_captured,
+        "census": {b.value: n for b, n in r.census.items()},
+    } for r in reports]
+    out = Path(run_dir) / "envelope-inputs.json"
+    out.write_text(json.dumps(rows, indent=2))
+    return out
+```
+
+(For the cross-arm fairness check, before pairing assert the two arms' runs cleared
+the floor with matching `(rate, seconds)` — `meets_floor(firm_c).seconds` ≈
+`meets_floor(firm_d).seconds` within tolerance — and record any mismatch.)
+
+- [ ] **Step 4: Re-run one drill end-to-end and inspect the enriched report**
+
+Run a forced drill via the routed `run_dr_force`, then check the report shows the
+new fields populated:
+Expected observation: `to_markdown()` now prints `RTO: <seconds> s`, `Peak
+exposure: N (at fault: M)`, `Diagnostics captured: True`, and `Intervention
+required: True`; `build/dr-runs/<id>/diag-<node>/runmqras.tgz` exists and is
+non-empty; `envelope-inputs.json` is written.
+
+- [ ] **Step 5: Validate and commit**
+
+```bash
+vrg-container-run -- vrg-validate
+vrg-git add lab/scripts/capture-diag.sh src/mqlab/dr/runner.py
+vrg-commit --type feat --scope dr --message "runner: fault-time, peak/at-fault exposure, diagnostics, floor, envelope inputs"
+```
+
+---
+
+## Task 12: FB-REPLAY expiry-mitigation pair
+
+Demonstrate expiry as the DR-safety lever (spec §5/§6): the *same* failback
+replay, once with no expiry (duplicates replay) and once with a short expiry
+(stale messages expired → few/no duplicates).
+
+**Files:**
+- Modify: `src/mqlab/dr/runner.py` (`run_fb_replay` takes the flow's expiry; a
+  pair driver runs both)
+
+- [ ] **Step 1: Parameterize and pair the run**
+
+```python
+# src/mqlab/dr/runner.py  (append)
+
+def run_fb_replay_pair(run_dir, arm, recovered_node, secondary_node):
+    """Run the failback replay twice. Caller runs the flow before each leg:
+      - leg 'no-expiry': dr_flow.py with NO --expiry  -> duplicates replay
+      - leg 'expiry':    dr_flow.py with --expiry 10  -> stale msgs expired
+    Returns (no_expiry_report, expiry_report); the contrast IS the evidence.
+    """
+    fault_ts = time.time()
+    if arm == "c":
+        subprocess.run(["vagrant", "ssh", recovered_node, "-c",
+                        "sudo rdqmadm --start-standalone QMAIN"], check=False)
+    else:
+        subprocess.run(["vagrant", "ssh", recovered_node, "-c",
+                        "sudo -u mqm strmqm QMAIN"], check=False)
+    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
+    leg = _finish("FB-REPLAY", arm, run_dir, fault_ts=fault_ts,
+                  service_restored_ts=time.time(),
+                  secondary_present=secondary_present, primary_disk=set(),
+                  diag_node=recovered_node, intervention_required=True)
+    return leg
+```
+
+- [ ] **Step 2: Run both legs on arm C**
+
+Leg A — start flow with **no** `--expiry`, do the replay, capture the report:
+`run_fb_replay_pair('build/dr-runs/fb-noexp-c','c','node-a1','node-b1')`
+Leg B — start flow with `--expiry 10`, do the replay, capture the report.
+Expected observation: leg A shows a non-zero `duplicated` count; leg B shows a
+materially lower (ideally zero) `duplicated` count. Record both and the
+failback-discipline finding (normal DRBD resync would have discarded the stale
+data; the hazard is the operational error of running the QM standalone first).
+
+- [ ] **Step 3: Validate and commit**
+
+```bash
+vrg-container-run -- vrg-validate
+vrg-git add src/mqlab/dr/runner.py
+vrg-commit --type feat --scope dr --message "runner: FB-REPLAY expiry-mitigation before/after pair"
+```
+
+---
+
 ## Done criteria for this plan
 
 - The continuous generator + god's-eye responder run under load on both arms, persistent + syncpoint, emitting matching ledgers.
 - The **live self-correctness baseline** passes (`assert_self_correct` green on a no-fault run) — the instrument agrees with itself against real MQ traffic.
 - Every §6 scenario has been run on both arms and produced a `ScenarioReport`: HA-1..5 at RPO 0; DR-CTRL at RPO 0; DR-FORCE-1/2/3 with a non-empty, classified loss window; FB-REPLAY with a non-zero `duplicated` count.
 - The done-criterion is met: at least one forced-DR scenario **deterministically reproduces RPO ≠ 0** with the loss counted exactly and bounded by a sequence-span window.
-- `docs/reports/2026-06-08-dr-validation-findings.md` exists with the cross-arm comparison and the honest confidence envelope — the input Phase E needs.
+- Every run clears the **evidence floor** (`meets_floor`), paired arms ran identical `(rate, seconds)`, and each report carries the **§7 fields** — RTO, peak + at-fault exposure, intervention/anomaly flags, and `diagnostics_captured` (with a non-empty `runmqras` package per fault).
+- **FB-REPLAY** ran as a before/after pair showing expiry's mitigating effect on the replay duplicates.
+- `docs/reports/2026-06-08-dr-validation-findings.md` exists with the cross-arm comparison and the honest confidence envelope (written on top of the machine-collected `envelope-inputs.json`) — the input Phase E needs.
 - `vrg-container-run -- vrg-validate` is green (lints/types the new Python; the pure tests pass).
