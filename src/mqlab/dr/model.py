@@ -1,23 +1,24 @@
 """Core enums and the reconciled per-message fact record."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class Bucket(str, Enum):
-    CONFIRMED = "confirmed"          # reply received at/before cutover
-    CONTINUED = "continued"          # replicated + processed on the secondary
-    STRANDED = "stranded"            # sent, unreplicated, still on the dead primary
+class Bucket(StrEnum):
+    CONFIRMED = "confirmed"  # reply received at/before cutover
+    CONTINUED = "continued"  # replicated + processed on the secondary
+    STRANDED = "stranded"  # sent, unreplicated, still on the dead primary
     LOST_UNPROCESSED = "lost_unprocessed"  # sent, never reached DTCC, gone
-    AMBIGUOUS = "ambiguous"          # DTCC processed it, reply lost — resend = dup risk
-    DUPLICATED = "duplicated"        # DTCC received it more than once
+    AMBIGUOUS = "ambiguous"  # DTCC processed it, reply lost — resend = dup risk
+    DUPLICATED = "duplicated"  # DTCC received it more than once
 
 
-class MessageState(str, Enum):
+class MessageState(StrEnum):
     NEVER_SENT = "never_sent"
-    IN_PIPELINE = "in_pipeline"      # firm: local QM ACKed, no reply yet
-    CONFIRMED = "confirmed"          # firm: reply matched
+    IN_PIPELINE = "in_pipeline"  # firm: local QM ACKed, no reply yet
+    CONFIRMED = "confirmed"  # firm: reply matched
 
 
 @dataclass(frozen=True)
@@ -30,8 +31,8 @@ class MessageFacts:
 
     seq: int
     uuid: str
-    firm_confirmed: bool   # firm received its reply at/before cutover
-    dtcc_received: int     # god's-eye: number of times DTCC received this message
-    dtcc_replied: bool     # god's-eye: DTCC produced a reply
-    on_secondary: bool     # present/processable on the secondary after cutover
+    firm_confirmed: bool  # firm received its reply at/before cutover
+    dtcc_received: int  # god's-eye: number of times DTCC received this message
+    dtcc_replied: bool  # god's-eye: DTCC produced a reply
+    on_secondary: bool  # present/processable on the secondary after cutover
     on_primary_disk: bool  # physically present on the failed primary (post-mortem)
