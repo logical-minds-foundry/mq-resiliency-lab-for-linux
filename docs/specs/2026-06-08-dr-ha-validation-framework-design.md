@@ -88,6 +88,11 @@ reconciliation requires message-content and business semantics we do not yet hav
   semantics. This spec only ensures the seams exist for it.
 - **Gray-failure / degraded-but-not-failed** class (replication that slows rather than
   stops) — tracked in #43, a separate future iteration.
+- **The app↔infra coordination layer** — systematically studying how the *application's*
+  MQI connection and configuration choices (fail-if-quiescing, VIP-vs-node connection,
+  auto-reconnect, syncpoint discipline, expiry) change HA/DR behaviour. The app stays a
+  **dummy** here; this build sets sane defaults so the *infrastructure* story is clean.
+  The parameter study is a follow-on, tracked in #45.
 - **Security** and **performance benchmarking** beyond what loss measurement requires
   (per §0 of the lab design, security is out of scope; throughput tuning is not the
   point here).
@@ -110,7 +115,9 @@ This yields **two DR regimes**:
 - **Controlled (far-side fault, our side quiescable).** The fault is on the sender/peer
   side; our primary is healthy. Stop the app, let in-flight traffic drain, confirm
   replication has caught up, *then* cut over → RPO 0 is honest. We already do a version
-  of this; its new contribution is **documenting the envelope**, not new building.
+  of this; its new contribution is **documenting the envelope**, not new building. Note
+  the clean drain itself **depends on app cooperation** (fail-if-quiescing; see §9) — an
+  app↔infra contract studied as a follow-on (#45), not here.
 - **Forced (primary unrecoverable, cannot quiesce).** Corrupted network, dead storage,
   whole-site loss. Flow continues straight through the cutover; replication may already
   be broken. Loss is guaranteed → reconciliation is required. This is the new build.
@@ -302,6 +309,14 @@ own breakage rather than hiding it.)
    controlled drain may be feasible (making DR-CTRL's RPO 0 realistic); for a 24/7
    multi-tenant estate with many apps it is not. This is a **finding to produce**, not a
    design input — the framework must handle the flowing/forced case regardless.
+   Critically, the controlled quiesce depends on **app cooperation**: without
+   `MQGMO_/MQOO_FAIL_IF_QUIESCING`, a controlled `endmqm -c` will not return the app's
+   in-flight MQI calls, so the app keeps the connection busy and **blocks a clean
+   shutdown** — the wrong behaviour when a forced DR needs the primary stabilised fast.
+   Likewise the app must connect to the **VIP, not a node address** (a prior outage was
+   caused by a client pinned to a node IP, which HA failover then broke). The dummy app
+   here sets these correctly so the infra story is clean; the systematic study of varying
+   them is the #45 follow-on.
 2. **Flow-rate parameters are unknown** until client input (back-office settlement
    profile). The generator must be rate-parameterized; the *chosen* rates for the headline
    runs are TBD.
