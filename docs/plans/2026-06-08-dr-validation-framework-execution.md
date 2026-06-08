@@ -40,6 +40,15 @@
 - **Integration tasks (4–10)** cannot be asserted by `pytest` — their "test" is *running the drill against the live lab and inspecting the report/observation* described in the task. Each gives the exact commands and the expected observation. Still run `vrg-container-run -- vrg-validate` before committing (it lints/type-checks the new Python and runs the pure tests).
 - **Lab access pattern:** `vagrant ssh <node> -c '<cmd>'` from the lab dir; node python is `~/mqvenv/bin/python`; ledgers are written under `~/dr-ledgers/` on each node and collected to `build/dr-runs/<run-id>/` on the host.
 - **`pymqi` is lab-only.** Do not add it to `pyproject.toml`. The dev/CI suite never imports the live clients; it imports only the pure modules under `src/mqlab/dr/`.
+- **Repo lint/format/coverage conventions (these bite — apply up front):**
+  - Use `StrEnum` (`from enum import StrEnum`), never `class X(str, Enum)` — ruff UP042.
+  - After writing a task's files, run `vrg-container-run -- uv run ruff format src/ tests/`;
+    the repo's ruff format explodes magic trailing commas and wants a blank line after
+    module docstrings.
+  - **100% branch coverage is enforced** for the pure modules; add a test for any uncovered
+    branch (`raise`, `except`, empty-input, `else`).
+  - Inner loop is `vrg-container-run -- uv run pytest …` (the base container has no
+    `pytest`); never mask `vrg-validate`'s exit code through a pipe.
 
 ---
 
@@ -94,7 +103,7 @@ def test_body_is_bytes_and_self_delimited():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_wire.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_wire.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.wire'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -136,7 +145,7 @@ def parse_body(body: bytes) -> WireMessage:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_wire.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_wire.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -178,7 +187,7 @@ def test_empty_browse_is_empty_set():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_snapshot.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_snapshot.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.snapshot'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -209,7 +218,7 @@ def seqs_from_bodies(bodies: list[bytes]) -> set[int]:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_snapshot.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_snapshot.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -267,7 +276,7 @@ def test_every_scenario_names_its_fault_and_expected_buckets():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_catalog.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_catalog.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.catalog'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -283,12 +292,12 @@ fault and expected outcome.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from .model import Bucket
 
 
-class Kind(str, Enum):
+class Kind(StrEnum):
     HA = "ha"
     DR_CONTROLLED = "dr_controlled"
     DR_FORCED = "dr_forced"
@@ -333,7 +342,7 @@ CATALOG: tuple[Scenario, ...] = (
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_catalog.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_catalog.py -v`
 Expected: PASS (5 passed)
 
 - [ ] **Step 5: Validate and commit**
