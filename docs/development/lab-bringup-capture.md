@@ -1,0 +1,86 @@
+# Lab bring-up — captured run (DRAFT, feeds the site documentation)
+
+> Working capture written *as the bring-up is executed* (2026-06-08, issue #53).
+> Not the definitive doc — the site-docs session owns that. This exists to
+> (a) record exactly what was required and what was run, and (b) surface where
+> today's script-heavy flow should reduce to a few straightforward, reusable
+> commands.
+>
+> **Operational note:** the lab's large artifacts (MQ tars, RHEL ISO) live in the
+> *main worktree's* `build/` (a per-checkout, gitignored dir — NOT shared into
+> feature worktrees). So the bring-up commands below are run from the main
+> worktree; this capture doc is authored in the #53 worktree and merged via its PR.
+
+## 1. Required data artifacts (must exist in `build/` before any bring-up)
+
+Large/licensed binaries, **not** in git. The bring-up fails loudly without them.
+Capturing provenance is the priority of this draft.
+
+| Artifact | `build/` path | Size | Auto-fetch? | Source / archive |
+|---|---|---|---|---|
+| MQ 9.4.5 arm64 (Phase B/D) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz` | 467 MB | **Yes** | `scripts/fetch-mq.sh` → IBM public developer CDN, **no auth**. SHA256 recorded first fetch, verified after. |
+| MQ 9.4.5 x86-64 (Phase C/RDQM) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz` | 520 MB | **Yes** | `scripts/fetch-mq.sh` (same CDN, no auth). |
+| RHEL 9.6 DVD ISO (Phase C box build) | `rhel-9.6-x86_64-dvd.iso` | 12 GB | **NO** | **Not downloadable by script** (licensed media). Maintained on the operator's local machine and **hand-copied into `build/`**. ⚠️ **OPEN ACTION: document a canonical archive location** so any operator can retrieve it — today it exists only on the operator's laptop. |
+
+**Rule captured:** if an artifact *can* be fetched, a `scripts/` helper should
+fetch + checksum it into `build/`. If it *cannot* (licensing), the runbook must
+name (a) what it is, (b) the exact filename `build/` expects, and (c) where the
+canonical copy is archived for future retrieval.
+
+## 2. Prerequisites verified this run (2026-06-08)
+
+- `/dev/kvm` present (nested virt enabled).
+- `vagrant-libvirt` 0.12.2 installed.
+- libvirt `default` storage pool active + autostart.
+- Both MQ tars + the RHEL ISO present in `build/` (§1).
+- IBM CDN reachable.
+- ⚠️ Host `.venv` was stale (`uv run` warned: interpreter `.venv/bin/python3` →
+  non-existent). Fix: `uv sync` at repo root before running ansible.
+
+## 3. Bring-up log — minimal message path (Phase B: qm-main + dtcc-sim + app-client)
+
+Smallest functional system; prerequisite for the DR framework's first live
+milestone (Plan 2 Tasks 4–7).
+
+| # | Step | Command | Result |
+|---|---|---|---|
+| 0 | Fix host venv | `uv sync` (repo root) | ✅ host `.venv` was stale (interpreter gone); `uv sync` rebuilt it → `ansible-playbook core 2.21.0`. |
+| 1 | Networks | `lab/scripts/net-up.sh` | ✅ defined+started 10 libvirt nets (default + net-client/data-a/data-b/dtcc/hb-a/hb-b/san-a/san-b/wan); all active + autostart. |
+| 2 | Boot trio | `cd lab && vagrant up qm-main dtcc-sim app-client --provider=libvirt` | ✅ 3 running, ~2 min (KVM arm64, box `cloud-image/ubuntu-24.04` already present). Static IPs correct: qm-main 10.30.0.10+10.20.0.10, dtcc-sim 10.20.0.50, app-client 10.30.0.60. **node-a1 NOT required** (the old quickstart over-specified it). |
+| 3 | Inventory | `ansible/inventory.sh` | ✅ wrote `build/inventory.ini` (3 hosts: qm_hosts=qm-main,dtcc-sim; client_hosts=app-client). Harmless `[fog][WARNING] Unrecognized arguments: libvirt_ip_command` noise. `ansible.cfg` already points `inventory = ../build/inventory.ini`. |
+| 4 | Provision | `MQWEB_ADMIN_USER/PASSWORD` env + `cd ansible && uv run ansible-playbook site.yml` | ⏳ running (background). Creds generated and saved to `build/mqweb.env` (gitignored) for reuse by steps 5+. |
+| 5 | QM objects | `source build/mqweb.env && uv run python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443` (and `content/dtcc-sim.yaml https://10.20.0.50:9443`) | ✅ 6 objects CREATED each (QMAIN: TRADE.REPLY, QDTCC xmit, DTCC.REQUEST remote, QMAIN.QDTCC/QDTCC.QMAIN/APP.SVRCONN; QDTCC mirror + SIM.SVRCONN). `mqlab.apply` reads `MQWEB_ADMIN_USER/PASSWORD` from env. |
+| 6 | Start channels | `cd ansible && uv run ansible qm-main -b --become-user=mqm -m shell -a 'echo "START CHANNEL(QMAIN.QDTCC)" \| runmqsc QMAIN'` (+ QDTCC.QMAIN on dtcc-sim) | ✅ `AMQ8018I: Start IBM MQ channel accepted` both sides. |
+| 7 | E2E proof | `lab/scripts/e2e-test.sh 5` | ✅ **5/5 clean ACKs, exit 0.** Message path live: app-client → QMAIN → channel → QDTCC → responder → reply. |
+
+**Result: the Phase B message path is GREEN.** Total wall-clock from cold (all
+artifacts present): ~12 min, the bulk being MQ install in step 4. This is the
+substrate the DR framework's first live milestone (Plan 2 Tasks 4–7) builds on.
+
+## 4. Tooling-improvement notes (reduce scripts → a few reusable commands)
+
+Goal: replace the net-up → vagrant up → inventory → playbook → apply →
+start-channels → e2e chain with a single reusable verb (e.g.
+`make lab-up-messagepath` or an `mqlab lab up messagepath` CLI).
+
+- **One verb, not seven.** The message-path bring-up is 7 manual steps across
+  3 directories (repo root, `lab/`, `ansible/`) with env-var setup in the middle.
+  Collapse to a single reusable command, e.g. `make lab-up-messagepath` or
+  `mqlab lab up messagepath`, that runs: preflight (artifacts + `/dev/kvm` + pool)
+  → net-up → vagrant up → inventory → playbook → apply → start-channels → e2e,
+  and prints one PASS/FAIL.
+- **Preflight check is missing.** There's no single command that verifies the
+  required `build/` artifacts (§1), `/dev/kvm`, the libvirt pool, and the box
+  before booting. Add `scripts/lab-preflight.sh` (or a CLI subcommand) that fails
+  loud naming the missing artifact + where to get it (esp. the RHEL ISO).
+- **Stale host `.venv` is a recurring trap.** First action of any lab session
+  should be `uv sync`; fold it into the preflight/verb.
+- **Credential handling is ad-hoc.** MQWEB user/pass are generated inline and
+  must be threaded to both the playbook and `mqlab.apply`. Standardize on
+  `build/mqweb.env` (gitignored) written by the bring-up verb and sourced by every
+  downstream step.
+- **`inventory.sh` emits `[fog]` warning noise** (`Unrecognized arguments:
+  libvirt_ip_command`) — cosmetic, but worth silencing so real warnings stand out.
+- **Channel-start should be declarative.** Step 6 hand-runs `runmqsc START
+  CHANNEL` via ansible; this belongs in the `mqlab.apply` content spec (an
+  ensure-channel-started), removing a manual step.
