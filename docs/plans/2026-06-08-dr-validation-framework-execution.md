@@ -12,6 +12,24 @@
 
 **Spec:** `docs/specs/2026-06-08-dr-ha-validation-framework-design.md` (§4.1 flow generator, §4.3 scenario engine, §6 catalog, §7 reporting).
 
+## Contents
+
+- [Conventions](#conventions-read-once-applies-to-every-task)
+- [File structure](#file-structure-createdmodified-by-this-plan)
+- [Task 1: Self-identifying message body (pure)](#task-1-self-identifying-message-body-pure)
+- [Task 2: Snapshot — extract present sequences (pure)](#task-2-snapshot--extract-present-sequences-from-browsed-bodies-pure)
+- [Task 3: Scenario catalog as data (pure)](#task-3-scenario-catalog-as-data-pure)
+- [Task 4: Deploy the mqlab.dr package onto the lab nodes](#task-4-deploy-the-mqlabdr-package-onto-the-lab-nodes)
+- [Task 5: Firm-side continuous flow generator (pymqi)](#task-5-firm-side-continuous-flow-generator-pymqi)
+- [Task 6: DTCC god's-eye responder (pymqi)](#task-6-dtcc-gods-eye-responder-pymqi)
+- [Task 7: Ledger collection + the LIVE self-correctness baseline](#task-7-ledger-collection--the-live-self-correctness-baseline)
+- [Task 8: Live queue snapshots + controlled DR (DR-CTRL)](#task-8-live-queue-snapshots--controlled-dr-dr-ctrl)
+- [Task 9: Forced DR (DR-FORCE-1/2/3) — reproduce and classify the loss](#task-9-forced-dr-dr-force-123--reproduce-and-classify-the-loss)
+- [Task 10: HA suite, FB-REPLAY, reporting outputs, both arms](#task-10-ha-suite-fb-replay-reporting-outputs-both-arms)
+- [Task 11: §7 report completeness](#task-11-7-report-completeness--fault-time-exposure-peakat-fault-diagnostics-floor-envelope)
+- [Task 12: FB-REPLAY expiry-mitigation pair](#task-12-fb-replay-expiry-mitigation-pair)
+- [Done criteria for this plan](#done-criteria-for-this-plan)
+
 ---
 
 ## Conventions (read once, applies to every task)

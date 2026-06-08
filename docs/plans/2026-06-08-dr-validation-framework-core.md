@@ -10,6 +10,23 @@
 
 **Spec:** `docs/specs/2026-06-08-dr-ha-validation-framework-design.md` (§4.2 ledger, §4.4 exposure, §5 classification model, §7 reporting + self-correctness).
 
+## Contents
+
+- [Conventions](#conventions-read-once-applies-to-every-task)
+- [File structure](#file-structure-created-by-this-plan)
+- [Task 1: Package skeleton + core model](#task-1-package-skeleton--core-model)
+- [Task 2: Ledger — append-only JSONL roundtrip](#task-2-ledger--append-only-jsonl-roundtrip)
+- [Task 3: Ledger fold helpers (firm states + DTCC counts)](#task-3-ledger-fold-helpers-firm-states--dtcc-counts)
+- [Task 4: Exposure gauge](#task-4-exposure-gauge)
+- [Task 5: The classifier (the load-bearing wall)](#task-5-the-classifier-the-load-bearing-wall)
+- [Task 6: Reconcile ledgers + snapshots into facts](#task-6-reconcile-ledgers--snapshots-into-facts)
+- [Task 7: Census + clock-free loss window](#task-7-census--clock-free-loss-window)
+- [Task 8: Self-correctness baseline (fail loud)](#task-8-self-correctness-baseline-fail-loud)
+- [Task 9: ScenarioReport + cross-arm comparison](#task-9-scenarioreport--cross-arm-comparison)
+- [Task 10: Evidence floor](#task-10-evidence-floor)
+- [Task 11: End-to-end pipeline (synthetic scenarios)](#task-11-end-to-end-pipeline-synthetic-scenarios)
+- [Done criteria for this plan](#done-criteria-for-this-plan)
+
 ---
 
 ## Conventions (read once, applies to every task)
