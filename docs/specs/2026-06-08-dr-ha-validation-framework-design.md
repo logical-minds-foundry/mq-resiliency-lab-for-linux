@@ -1,7 +1,7 @@
 # DR/HA Continuous-Flow Validation & Loss-Quantification Framework — Design
 
 - **Date:** 2026-06-08
-- **Status:** Design (approved in brainstorming; pending spec review)
+- **Status:** Design — reviewed (pushback applied 2026-06-08)
 - **Issue:** #44
 - **Defers to:** Layer C reconciliation (future, gated on client protocol); gray-failure class (#43)
 - **Relationship:** refines and extends §3.1 (Test methodology) of
@@ -39,7 +39,7 @@ The Phase C and Phase D builds each demonstrated **RPO 0** — but only for the
 - Phase D (Pacemaker/SAN): *"3 persistent messages put at site A … all 3 retrieved at
   site B — RPO 0."*
 
-Both prove that **durable messages survive a failover**. That is real and necessary,
+Both demonstrate that **durable messages survive a failover**. That is real and necessary,
 but it is the static case: nothing was *in flight* when the fault landed. The current
 client harness cannot do better — `clients/epn_requester.py` puts N messages in a loop
 and *then* gets N replies; nothing flows concurrently, and nothing is mid-replication
@@ -53,14 +53,23 @@ app-level reconciliation path."* This spec closes that gap.
 **The stakes.** DR is the linchpin. A botched DR event in this domain does not cost a
 restart — it costs reconciliation. Real-world experience: a major outage can leave tens
 of thousands of trades to reconcile, consuming a large team for weeks at enormous cost,
-precisely because no one invested in the tooling described here. The deliverable is not
-"we proved DR works." It is **"we can detect a loss the instant it happens, quantify it
-exactly, and report it"** — the prerequisite skill for ever automating reconciliation.
+precisely because no one invested in the tooling described here. The deliverable is not a
+one-time "DR worked when we tried it." It is **"we can detect a loss the instant it
+happens, quantify it exactly, and report it"** — the prerequisite skill for ever
+automating reconciliation.
 
 This framework is **Layer B**: detect, quantify, report. It is built so **Layer C**
 (reconciliation) slots in once the client's message protocol and application behaviour
 are known (next-week-onward client input). Layer C is deliberately out of scope:
 reconciliation requires message-content and business semantics we do not yet have.
+
+**Evidence, not proof.** This lab runs on nested VMs on a laptop, so it *demonstrates*
+behaviour and *produces evidence* under a reproducible configuration — it does not *prove*
+anything. Proof requires real hardware and real data, and every real-world configuration
+must be re-validated on its own terms (where performance constraints may well differ).
+That makes the **tooling and methodology themselves a primary product**: a repeatable
+evidence-generating instrument we re-run against each real deployment, not a one-time
+result. (This reinforces lab-design §0: the lab is durable, reusable R&D infrastructure.)
 
 ## 2. Goals & non-goals
 
@@ -68,8 +77,8 @@ reconciliation requires message-content and business semantics we do not yet hav
 
 1. A **continuous, steady-state flow** through the full path (firm → QMAIN → DTCC sim →
    reply) that keeps running *through* every fault and DR event.
-2. **HA:** prove **RPO 0 under load** across *every* fault in the suite. When a fault
-   does **not** hold zero, that is not a failure of the exercise — it opens an
+2. **HA:** demonstrate **RPO 0 under load** across *every* fault in the suite. When a
+   fault does **not** hold zero, that is not a failure of the exercise — it opens an
    investigation into the constraint required to build for zero.
 3. **DR:** deterministically **reproduce RPO ≠ 0**, and **detect / quantify / report**
    the exposure — classified as lost vs duplicated vs stranded, with exact message
@@ -77,9 +86,14 @@ reconciliation requires message-content and business semantics we do not yet hav
 4. A **live exposure gauge**: at any instant, "if we failed right now, here is the
    exposure."
 5. A **confidence envelope**: the precise conditions under which an RPO-0 claim is
-   honest — and the conditions under which it provably is not.
+   honest — and the conditions under which it demonstrably is not.
 6. A **cross-arm comparison** (C vs D) on the *same* suite — the honest input Phase E
    currently lacks.
+7. A **defined lab evidence floor** — a parameterized, equal-on-both-arms load target
+   (≥ X msg/s for ≥ N minutes, ≥ M total messages) so "zero loss under load" is a
+   *falsifiable, comparable* claim, not an unstated volume. Provisional defaults are set
+   now (pending a quick lab-capacity check); the *client's* production rate is a separate,
+   deferred question (§9).
 
 **Non-goals**
 
@@ -93,6 +107,9 @@ reconciliation requires message-content and business semantics we do not yet hav
   auto-reconnect, syncpoint discipline, expiry) change HA/DR behaviour. The app stays a
   **dummy** here; this build sets sane defaults so the *infrastructure* story is clean.
   The parameter study is a follow-on, tracked in #45.
+- **Non-persistent or non-transactional message handling** — out of scope *by definition*.
+  The framework deals only in **persistent messages processed under syncpoint** (§4.1):
+  choosing anything weaker declares the message disposable.
 - **Security** and **performance benchmarking** beyond what loss measurement requires
   (per §0 of the lab design, security is out of scope; throughput tuning is not the
   point here).
@@ -130,25 +147,38 @@ scenario where RPO ≠ 0 and explained exactly why.
 ### 4.1 Flow generator
 
 Replaces the batch requester with a **sustained, concurrent** producer + responder
-driving a real request/reply round-trip at a configurable rate, with optional per-message
-**expiry**. Every message is **self-identifying**: a monotonic sequence number, a UUID,
-and `created` / `sent` / `reply` timestamps. Because the synthetic format is *ours*,
-detection needs nothing from DTCC's real protocol — that constraint only blocks Layer C,
-not Layer B.
+driving a real request/reply round-trip at a configurable rate. **Messages are persistent
+and processed under syncpoint** — the only case that matters, because that is how the real
+apps behave: a trade you care about must be persistent (a non-transactional put can be
+lost in flight to the QM) *and* committed transactionally. The core flow carries **no
+expiry** — these are trades that must not silently vanish; per-message expiry is exercised
+only as a deliberate knob in FB-REPLAY (§6) to demonstrate its mitigating effect.
+
+Every message is **self-identifying**: a monotonic sequence number, a UUID, and
+`created` / `sent` / `reply` timestamps. Because the synthetic format is *ours*, detection
+needs nothing from DTCC's real protocol — that constraint only blocks Layer C, not Layer B.
 
 The generator and responder both write the app-side ledger (§4.2) as a side effect of
-every put/get, so the ledger is a faithful record of what the *application* believes.
+every committed put/get, so the ledger is a faithful record of what the *application*
+believes. The current `epn_requester` / `epn_responder` are non-transactional and will be
+changed to persistent + syncpoint as part of this work.
 
 ### 4.2 Ledger oracle (three tiers)
 
 1. **App-side, both ends** — firm (requester) and DTCC sim (responder). **Authoritative
    and production-realistic.** Persisted append-only so it survives the fault for
-   analysis. Encodes the per-message tri-state: **never-sent** / **in-pipeline-unresolved**
+   analysis. The **firm-side** ledger lives *with the firm client*, which must itself
+   survive a single-site loss to keep the flow running — so it cannot sit only on the
+   primary site. Encodes the per-message tri-state: **never-sent** / **in-pipeline-unresolved**
    (local QM ACKed, no reply yet) / **confirmed** (reply received).
 2. **DTCC god's-eye** — a lab-only instrument recording what DTCC *actually* received and
-   replied to. We would never have this in production; in the lab it lets us **prove our
+   replied to. We would never have this in production; in the lab it lets us **show our
    app-side detection is correct** against absolute truth, and **size the Ambiguous
-   bucket** (§5).
+   bucket** (§5). **It must survive the faults under test:** the DTCC sim and its ledger
+   run on **independent, surviving infrastructure** — modelling DTCC as the third party it
+   is, reachable over (simulated) leased lines, part of *neither* of our sites — so a
+   full-site loss or a primary-isolation scenario never takes the oracle with it, and the
+   analyzer can always reach it afterward.
 3. **MQ-side recorder** — diagnostic visibility, especially for **duplication** and
    edge-case forensics. Flagged honestly as **possibly not production-scalable**
    (per-message MQ logging is expensive); this is a lab-grade visibility tool first, and
@@ -167,19 +197,30 @@ single faults.
 
 ### 4.4 Exposure gauge
 
-Derives, at any instant T, the current at-risk set:
+Reports, at any instant T, the **exact** at-risk count the *application* can stand behind:
 
 ```
-exposure(T) = count(in-pipeline / unresolved)
-            + count(sent-but-not-yet-replicated-to-secondary)
+exposure(T) = count(in-pipeline / unresolved)   [from the firm ledger]
 ```
 
-The second term requires the **replication position** (DRBD / the replication tier)
-versus what has been written locally. Sampled continuously during a run, this is the
-"if we die this instant, here is what evaporates" number. At steady state, a
-well-architected QM at low-to-medium rate never actually queues (per-message processing
-beats inter-arrival time), so exposure can sit near zero — and **the goal is to keep that
-number as small as possible**, because the less there is to reconcile, the better.
+These are messages the firm has sent and had ACKed by the local QM but **not yet had
+reply-confirmed** — the set whose fate a failure at T would leave in doubt. Sampled
+continuously, this is the honest "if we die this instant, here is what is unresolved"
+number. At steady state, a well-architected QM at low-to-medium rate never actually queues
+(per-message processing beats inter-arrival time), so this number sits near zero — and
+**the goal is to keep it as small as possible**, because the less there is to reconcile,
+the better.
+
+**What we deliberately do *not* claim.** We do **not** report a count of
+"sent-but-not-yet-replicated-to-the-secondary" messages. With block-level replication
+(DRBD on both arms) you can read sectors/bytes behind, but you **cannot deterministically
+attribute specific messages** to that gap — and this is a *fundamental* limit, not a
+tooling shortfall: it holds even in production with root on every node, because the
+replication is offloaded asynchronously *below* the queue manager, which never sees it. We
+surface that boundary as a **first-class finding** (§9): the application knows what it has
+not had confirmed; the infrastructure cannot tell you *which* messages sit in the
+replication gap. The replication tier's native lag (DRBD bytes/seconds behind) may be shown
+only as a coarse infrastructure-health signal, carrying **no** message-count claim.
 
 ### 4.5 Analyzer / reporter
 
@@ -203,7 +244,11 @@ durable *somewhere*), but no reply has returned — so the firm cannot know whet
 received it, processed it, or the reply died in transit. **That ambiguity is the entire
 DR problem**, and the ledger makes it explicit rather than invisible.
 
-**DTCC sim** independently records `RECEIVED` + `REPLIED` per message (god's-eye, lab-only).
+**DTCC sim** independently records `RECEIVED` + `REPLIED` into the god's-eye ledger,
+**keyed by message identity (UUID/seq) and counting every receive** — so a redelivered
+message is flagged as a duplicate rather than silently reprocessed. The oracle **detects
+and counts** duplicates; it does not *prevent* them (idempotency is the app's job —
+deferred to #45 / Layer C).
 
 **After a forced cutover, every message sorts into one bucket** by diffing the firm ledger
 × the DTCC god's-eye ledger × what is actually present on the secondary:
@@ -219,8 +264,8 @@ DR problem**, and the ledger makes it explicit rather than invisible.
 
 **The headline.** In production you have only the firm ledger, so **Stranded +
 Lost–unprocessed + Ambiguous all look identical — they are just "no reply."** The
-god's-eye DTCC ledger is what lets the *lab* prove the true split and **size the Ambiguous
-bucket** — the set that, in the real world, forces human reconciliation because you
+god's-eye DTCC ledger is what lets the *lab* establish the true split and **size the
+Ambiguous bucket** — the set that, in the real world, forces human reconciliation because you
 genuinely cannot tell "never arrived" from "arrived, processed, reply lost." Demonstrating
 that we can measure that boundary is the pitch.
 
@@ -228,16 +273,22 @@ that we can measure that boundary is the pitch.
 
 - **At cutover:** a message replicated to the secondary *and* processed on the primary
   before death, with the reply lost → reprocessed on the secondary → DTCC sees it twice.
-- **At failback:** the "comes back to haunt you" hazard. Messages stranded on a dead
-  primary, reconciled and resent during the DR event, are *still on the revived
-  primary's disk* when it is reintroduced days/weeks later. Depending on how replication
-  is re-established, **they can replay as duplicate trades.** Failback/reintroduction is
-  therefore a **first-class detection target**, not just failover.
+- **At failback (operational error, not normal resync):** the "comes back to haunt you"
+  hazard. Under DRBD, a recovered primary that rejoins is resynced *from* the new primary —
+  its divergent, un-replicated blocks are **discarded**, so normal resync is the *safe*
+  path. The hazard appears only when the recovered node's **queue manager is brought online
+  against its stale local storage** (standalone, before resync/discard): it drains its old
+  queues and replays already-reconciled trades as **duplicates**. The lesson lives in the
+  *failback procedure*, not the replication layer — never let the stale node mount and run
+  its QM before it is resynced or its divergent data discarded. Failback is therefore a
+  **first-class detection target**, and the deliverable is the failback-discipline finding.
 
-**Expiration as a DR-safety lever.** A request whose reply you stop waiting for after
-*t* seconds has no business carrying an expiry longer than *t*. Persistent, no-expiry
-messages are the ones that linger and haunt. The framework can set per-message expiry and
-**show its effect** on the failback-replay bucket.
+**Expiration as a DR-safety lever (a deliberate knob, not the default).** The core flow
+runs persistent with **no expiry** — these are trades that must not silently vanish, and
+no-expiry is also exactly what makes stranded messages linger (the FB-REPLAY hazard). As a
+*mitigation demonstration*, FB-REPLAY can set a per-message expiry — a request whose reply
+you stop waiting for after *t* seconds has no business outliving *t* — and **show its
+effect** on the failback-replay duplicates.
 
 ## 6. Scenario catalog
 
@@ -245,7 +296,7 @@ Every drill runs **under continuous flow**, identically on both arms (C and D). 
 "buckets" column is what each drill is engineered to light up; a drill that does *not*
 produce its target buckets is itself a finding.
 
-| ID | Injected under load | Expected RPO | Designed to light up | Proves |
+| ID | Injected under load | Expected RPO | Designed to light up | Evidence for |
 |---|---|---|---|---|
 | **HA-1** | `kill -9` the QM process | **0** | Continued only | local restart loses nothing under flow |
 | **HA-2** | power-off active node | **0** | Continued only | intra-site failover transparent under flow |
@@ -256,7 +307,7 @@ produce its target buckets is itself a finding.
 | **DR-FORCE-1** | primary unrecoverable, flow continues through cutover | **≠ 0** | Stranded, Ambiguous, maybe Duplicated | the baseline forced-DR loss, quantified |
 | **DR-FORCE-2** *(marquee)* | primary isolated from **both** DTCC and secondary, app keeps producing | **≠ 0** | large Stranded | the linchpin — un-replicated messages stranded, gap sized |
 | **DR-FORCE-3** | replication lagged/broken **then** failover (chained) | **≠ 0, scales with lag** | Stranded grows with window | loss window = replication lag; ties to the exposure gauge |
-| **FB-REPLAY** | reintroduce formerly-dead primary holding stranded persistent msgs | duplication risk | Duplicated | the "comes back to haunt you" replay; expiry shown as mitigation |
+| **FB-REPLAY** | bring the recovered primary's QM online against stale local storage *before* resync/discard | duplication risk | Duplicated | the failback **operational-error** replay; deliverable is the failback-discipline finding (normal DRBD resync discards the stranded data — the safe path); expiry shown as mitigation |
 
 Any HA row returning **≠ 0** does not fail the suite — it opens an investigation into the
 constraint needed to reach zero. That is the lab doing its job.
@@ -269,8 +320,10 @@ Each run emits a structured (machine-readable) report plus a human summary, carr
 - **Timeline:** when the fault landed, **RTO** (service restored), when flow resumed.
 - **Bucket census:** exact counts for Confirmed / Continued / Stranded / Lost–unprocessed /
   Ambiguous / Duplicated, with drill-down to individual seq/UUIDs.
-- **Loss window:** as both a *time span* and a *message-count span* (e.g. "messages
-  8,801–8,842, a 1.7 s window").
+- **Loss window:** the authoritative measure is the **sequence / message-count span**
+  (e.g. "messages 8,801–8,842 = 42 messages") — exact and clock-free. A wall-clock span is
+  reported as **approximate context only** (nested-VM clocks are jittery; nodes run
+  chrony/NTP to a common source for coarse trust), never as a precise metric.
 - **Exposure:** peak exposure during the run, and exposure at the instant of the fault.
 - **Honesty fields:** intervention required? data-integrity anomaly? diagnostics captured
   (ties to §3.1 step 8 — `runmqras` / FFST under fault)?
@@ -280,8 +333,8 @@ Each run emits a structured (machine-readable) report plus a human summary, carr
 Two roll-ups sit on top:
 
 1. **Confidence envelope** — a single document stating the conditions under which an
-   RPO-0 claim is honest, and the conditions under which it provably is not. This replaces
-   today's unqualified "RPO 0."
+   RPO-0 claim is honest, and the conditions under which it demonstrably is not. This
+   replaces today's unqualified "RPO 0."
 2. **Cross-arm comparison** — the same scenario's bucket census, C vs D side by side. The
    honest input Phase E was missing.
 
@@ -322,10 +375,14 @@ own breakage rather than hiding it.)
    runs are TBD.
 3. **MQ-side recording production-scalability** — lab-grade now; production viability
    depends on the real throughput envelope (§4.2 tier 3).
-4. **Reading the replication position per arm** for the exposure gauge — both arms use
-   DRBD-style block replication (RDQM internally; the Pacemaker arm via DRBD per the
-   Phase D build), so the "bytes/ops behind" signal should be obtainable on both; exact
-   mechanism to be confirmed in the plan.
+4. **The replication gap is not message-attributable — and that is a finding, not a gap
+   to close.** Both arms replicate at the block level (DRBD: RDQM internally; the Pacemaker
+   arm via DRBD per the Phase D build). You can read bytes/seconds behind, but you cannot
+   say *which* messages are un-replicated — even with production root access, because the
+   replication is offloaded below the queue manager. The exposure gauge therefore reports
+   only the exact app-layer unresolved count (§4.4); the un-attributable replication gap is
+   stated as an honest limit, never estimated. (This is *not* an open question to resolve
+   in the plan — it is a settled boundary the framework reports.)
 
 ## 10. Implementation surface
 
@@ -333,7 +390,8 @@ Prototype, generically written (per §0 of the lab design — proof of concept, 
 client's production code). Expected landing zones:
 
 - **`clients/`** — evolve `epn_requester.py` / `epn_responder.py` into the concurrent
-  flow generator + responder, each emitting its app-side ledger.
+  flow generator + responder (**persistent + syncpoint**, replacing today's
+  non-transactional puts/gets), each emitting its app-side ledger.
 - **`src/mqlab/`** — new analyzer/classifier module (ledger × god's-eye × queue/replication
   state → bucket census + report); exposure-gauge sampler.
 - **`lab/scripts/`** — scenario/fault-engine orchestration on top of the existing
@@ -341,19 +399,31 @@ client's production code). Expected landing zones:
 - **Reports** — written under `build/` for runs; representative results summarized into
   `docs/reports/` per the existing phase-report convention.
 
+**Where the work and risk concentrate.** The five components are *not* equal weight. The
+exposure gauge is now trivial (count unresolved ledger rows); the flow generator and
+scenario engine are moderate and reuse existing primitives. The **analyzer / classifier** —
+reconciling the ledgers × surviving queue × replication state into the six buckets — is the
+load-bearing wall and carries nearly all the correctness risk: if it is wrong, *every*
+report lies. The plan should build the **ledger + analyzer + the self-correctness baseline
+first** (§7: god's-eye must equal the app ledger on a no-fault run), get that green as the
+foundation, then layer scenarios on top.
+
 Exact module boundaries and interfaces are the job of the implementation plan
 (writing-plans), not this spec.
 
 ## 11. Success criteria
 
-1. A continuous flow runs through the full path and survives every HA fault with **RPO 0
-   under load** — or, where it does not, the framework reports the exact loss and the
-   investigation has a home.
+1. A continuous flow runs through the full path and **demonstrates RPO 0 under load** at
+   the defined evidence floor (§2 goal 7), across every HA fault — or, where it does not,
+   the framework reports the exact loss and the investigation has a home.
 2. At least one **forced-DR scenario deterministically reproduces RPO ≠ 0**, with the loss
-   classified into the §5 buckets, counted exactly, and bounded by a reported window.
-3. The **exposure gauge** reports a live at-risk number throughout a run.
-4. The **failback-replay** hazard is detected as a Duplicated bucket.
-5. The **confidence envelope** and **cross-arm comparison** documents exist and are
-   honest.
+   classified into the §5 buckets, counted exactly, and bounded by the sequence-span window.
+3. The **exposure gauge** reports the live app-layer unresolved count throughout a run, and
+   the report makes the infrastructure-attribution limit (§4.4) explicit.
+4. The **failback operational-error replay** (FB-REPLAY) is detected as a Duplicated bucket,
+   and the failback-discipline finding is documented.
+5. The **confidence envelope** and **cross-arm comparison** documents exist and are honest.
 6. The **self-correctness baseline** passes (god's-eye == app-ledger at zero fault).
 7. Both arms (C and D) have run the identical suite, unblocking Phase E.
+8. The evidence is reproducible from the committed **tooling and methodology** — the
+   instrument, not just the result, is a deliverable (§1).
