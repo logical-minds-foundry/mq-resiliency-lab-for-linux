@@ -35,9 +35,18 @@
 - **Git:** use `vrg-git` and `vrg-commit` (raw `git`/`gh` are blocked). Commit form:
   `vrg-commit --type <type> --scope dr --message "<msg>"`.
 - **Inner TDD loop (fast feedback):** run a targeted test in the container:
-  `vrg-container-run -- python -m pytest tests/<file>::<test> -v`
+  `vrg-container-run -- uv run pytest tests/<file>::<test> -v`
 - **The gate before every commit:** `vrg-container-run -- vrg-validate` (the *only* validation command; it runs ruff, mypy/ty, pytest, audit). A task is not done until this is green.
 - **No new dependencies.** Everything here is stdlib. Do not touch `pyproject.toml`.
+- **Repo lint/format/coverage conventions (these bite — apply up front):**
+  - Use `StrEnum` (`from enum import StrEnum`), never `class X(str, Enum)` — ruff UP042.
+  - After writing a task's files, run `vrg-container-run -- uv run ruff format src/ tests/`;
+    the repo's ruff format explodes magic trailing commas (any collection/call ending in a
+    trailing comma goes one-element-per-line) and wants a blank line after module docstrings.
+  - **100% branch coverage is enforced** (`--cov-fail-under=100`); add a test for any
+    uncovered branch (e.g. a blank-line `continue`, a `raise`, an `else`).
+  - Never mask `vrg-validate`'s exit code through a pipe (`… | tail`) — run it standalone
+    and check the result.
 
 ---
 
@@ -102,7 +111,7 @@ def test_message_facts_is_frozen_and_carries_identity():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_model.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_model.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -118,10 +127,10 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr'`
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class Bucket(str, Enum):
+class Bucket(StrEnum):
     CONFIRMED = "confirmed"          # reply received at/before cutover
     CONTINUED = "continued"          # replicated + processed on the secondary
     STRANDED = "stranded"            # sent, unreplicated, still on the dead primary
@@ -130,7 +139,7 @@ class Bucket(str, Enum):
     DUPLICATED = "duplicated"        # DTCC received it more than once
 
 
-class MessageState(str, Enum):
+class MessageState(StrEnum):
     NEVER_SENT = "never_sent"
     IN_PIPELINE = "in_pipeline"      # firm: local QM ACKed, no reply yet
     CONFIRMED = "confirmed"          # firm: reply matched
@@ -155,7 +164,7 @@ class MessageFacts:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_model.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_model.py -v`
 Expected: PASS (3 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -203,7 +212,7 @@ def test_read_jsonl_missing_file_is_empty(tmp_path):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_ledger.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_ledger.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.ledger'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -220,11 +229,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 
-class Event(str, Enum):
+class Event(StrEnum):
     SENT = "sent"
     CONFIRMED = "confirmed"
     RECEIVED = "received"
@@ -276,7 +285,7 @@ class Ledger:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_ledger.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_ledger.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -336,7 +345,7 @@ def test_sent_seqs_and_confirmed_seqs():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_ledger.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_ledger.py -v`
 Expected: FAIL — `AttributeError: 'Ledger' object has no attribute 'firm_states'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -384,7 +393,7 @@ from .model import MessageState
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_ledger.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_ledger.py -v`
 Expected: PASS (5 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -440,7 +449,7 @@ def test_peak_exposure_is_max_concurrent_in_flight():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_exposure.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_exposure.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.exposure'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -493,7 +502,7 @@ def peak_exposure(firm: Ledger) -> int:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_exposure.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_exposure.py -v`
 Expected: PASS (3 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -574,7 +583,7 @@ def test_precedence_ambiguous_beats_stranded():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_classifier.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_classifier.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.classifier'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -613,7 +622,7 @@ def classify_all(facts: list[MessageFacts]) -> list[tuple[MessageFacts, Bucket]]
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_classifier.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_classifier.py -v`
 Expected: PASS (9 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -680,7 +689,7 @@ def test_confirm_after_cutover_is_not_pre_cutover_confirmed():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_reconcile.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_reconcile.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.reconcile'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -734,7 +743,7 @@ def reconcile(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_reconcile.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_reconcile.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -802,7 +811,7 @@ def test_loss_window_none_when_clean():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.report'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -841,7 +850,7 @@ def loss_window(facts: list[MessageFacts]) -> tuple[int, int, int] | None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: PASS (3 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -894,7 +903,7 @@ def test_self_correct_raises_on_duplicate():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: FAIL — `ImportError: cannot import name 'assert_self_correct'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -924,7 +933,7 @@ def assert_self_correct(facts: list[MessageFacts]) -> None:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: PASS (6 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -1014,7 +1023,7 @@ def test_report_honesty_fields_default_sensibly():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: FAIL — `ImportError: cannot import name 'ScenarioReport'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1116,7 +1125,7 @@ def cross_arm(c: ScenarioReport, d: ScenarioReport) -> dict:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_report.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_report.py -v`
 Expected: PASS (11 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -1179,7 +1188,7 @@ def test_floor_defaults_are_the_provisional_values():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_floor.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_floor.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.floor'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1236,7 +1245,7 @@ def meets_floor(firm: Ledger, floor: Floor) -> FloorResult:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_floor.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_floor.py -v`
 Expected: PASS (3 passed)
 
 - [ ] **Step 5: Validate and commit**
@@ -1311,7 +1320,7 @@ def test_forced_dr_produces_classified_loss():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_end_to_end.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_end_to_end.py -v`
 Expected: FAIL — `ImportError: cannot import name 'reconcile' from 'mqlab.dr'`
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1348,7 +1357,7 @@ __all__ = [
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `vrg-container-run -- python -m pytest tests/test_dr_end_to_end.py -v`
+Run: `vrg-container-run -- uv run pytest tests/test_dr_end_to_end.py -v`
 Expected: PASS (2 passed)
 
 - [ ] **Step 5: Full validation + commit**
