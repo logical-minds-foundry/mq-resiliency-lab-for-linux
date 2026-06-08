@@ -42,6 +42,20 @@ MQ community can learn HA/DR with.
 
 ---
 
+## Contents
+
+- [Entry gate](#entry-gate)
+- [File structure](#file-structure)
+  - [Task 1: SAN network + topology nodes](#task-1-san-network--topology-nodes)
+  - [Task 2: iSCSI target + initiators (the shared storage RDQM doesn't have)](#task-2-iscsi-target--initiators-the-shared-storage-rdqm-doesnt-have)
+  - [Task 3: Cluster formation + STONITH (the part RDQM does with rdqmadm)](#task-3-cluster-formation--stonith-the-part-rdqm-does-with-rdqmadm)
+  - [Task 4: MQ on shared storage + the resource group](#task-4-mq-on-shared-storage--the-resource-group)
+  - [Task 5: The identical fault suite + the RDQM-impossible drill](#task-5-the-identical-fault-suite--the-rdqm-impossible-drill)
+  - [Task 6: Cross-site DR — DRBD async under the SAN (the §2.3 arm-1 DR)](#task-6-cross-site-dr--drbd-async-under-the-san-the-23-arm-1-dr)
+  - [Task 7: Findings, convergence, wrap](#task-7-findings-convergence-wrap)
+- [Deliberately deferred](#deliberately-deferred)
+- [Self-review notes](#self-review-notes)
+
 ## Entry gate
 
 ```bash

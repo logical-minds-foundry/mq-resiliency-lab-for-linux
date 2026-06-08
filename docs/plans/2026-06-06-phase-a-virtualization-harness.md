@@ -25,6 +25,21 @@ enters in Phase B (spec §7.3); this phase is bare harness only.
 
 ---
 
+## Contents
+
+- [Entry gate (verify before Task 1)](#entry-gate-verify-before-task-1)
+- [File structure](#file-structure)
+  - [Task 1: Spike — libvirt + KVM sanity](#task-1-spike--libvirt--kvm-sanity)
+  - [Task 2: Spike — arm64 guest boots KVM-accelerated](#task-2-spike--arm64-guest-boots-kvm-accelerated)
+  - [Task 3: Spike — x86-64 guest boots under TCG](#task-3-spike--x86-64-guest-boots-under-tcg)
+  - [Task 4: Spike — severable multi-NIC networking + report](#task-4-spike--severable-multi-nic-networking--report)
+  - [Task 5: Network fabric — the full topology net set](#task-5-network-fabric--the-full-topology-net-set)
+  - [Task 6: Topology config + parameterized Vagrantfile](#task-6-topology-config--parameterized-vagrantfile)
+  - [Task 7: Boot the 3+3 skeleton + smoke test](#task-7-boot-the-33-skeleton--smoke-test)
+  - [Task 8: Reproducibility proof + spike cleanup](#task-8-reproducibility-proof--spike-cleanup)
+- [Deliberately deferred (recorded so they are decisions, not omissions)](#deliberately-deferred-recorded-so-they-are-decisions-not-omissions)
+- [Self-review notes](#self-review-notes)
+
 ## Entry gate (verify before Task 1)
 
 All four were broken at least once during Phase 0/interim work — do not skip.

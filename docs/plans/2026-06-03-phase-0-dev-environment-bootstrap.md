@@ -10,6 +10,15 @@
 
 ---
 
+## Contents
+
+- [Why this is "Phase 0" and not part of the lab plans](#why-this-is-phase-0-and-not-part-of-the-lab-plans)
+- [The interface contract (both sides depend on this — settle it first)](#the-interface-contract-both-sides-depend-on-this--settle-it-first)
+- [Phase 0a — Vergil VM "profile" feature (design + handoff to the vergil-vm repo)](#phase-0a--vergil-vm-profile-feature-design--handoff-to-the-vergil-vm-repo)
+- [Phase 0b — Virgilize `mq-cluster-tooling` (this repo, fully specified)](#phase-0b--virgilize-mq-cluster-tooling-this-repo-fully-specified)
+- [Phase 0c — Build & verify the `mq-lab` VM (gated on 0a landing)](#phase-0c--build--verify-the-mq-lab-vm-gated-on-0a-landing)
+- [Self-review notes](#self-review-notes)
+
 ## Why this is "Phase 0" and not part of the lab plans
 
 The lab itself (spec §10 phases A→G) gets its own per-phase spec→plan→build cycles. Phase 0 is the prerequisite: it produces the *environment* the lab is built inside. From the `vrg-vm` CLI's perspective the deliverable is "`vrg-vm create --vm mq-lab` yields a reproducible box with libvirt/QEMU/Vagrant/containerd, into which `build/` is mounted." Nothing lab-specific is built here.

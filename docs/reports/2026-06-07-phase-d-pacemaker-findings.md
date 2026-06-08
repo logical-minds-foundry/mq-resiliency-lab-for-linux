@@ -5,6 +5,16 @@
 > target VM on a dedicated severable SAN network. All timings are real
 > (no emulation tax — this arm runs hardware-accelerated).
 
+## Contents
+
+- [Build facts](#build-facts)
+- [§3.1 fault-suite results (identical drills to the RDQM arm)](#31-fault-suite-results-identical-drills-to-the-rdqm-arm)
+- [The Q1/Q4 answers taking shape (spec §2.5)](#the-q1q4-answers-taking-shape-spec-25)
+- [Turnkey-vs-hand-built ledger (for Phase E)](#turnkey-vs-hand-built-ledger-for-phase-e)
+- [Unplanned reproducibility test (crash recovery)](#unplanned-reproducibility-test-crash-recovery)
+- [DR (DRBD-async) results](#dr-drbd-async-results)
+- [DR honesty note](#dr-honesty-note)
+
 ## Build facts
 
 - 3-node corosync/pacemaker (heartbeat-net rings), `pcs` tooling,
