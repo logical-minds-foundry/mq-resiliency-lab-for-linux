@@ -1,7 +1,14 @@
 import dataclasses
 
+import pytest
+
 from mqlab.dr.model import Bucket, MessageFacts
-from mqlab.dr.report import census, loss_window
+from mqlab.dr.report import (
+    SelfCorrectnessError,
+    assert_self_correct,
+    census,
+    loss_window,
+)
 
 
 def _f(seq, **kw) -> MessageFacts:
@@ -45,3 +52,27 @@ def test_loss_window_spans_non_safe_buckets_by_sequence():
 def test_loss_window_none_when_clean():
     clean = [_f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True)]
     assert loss_window(clean) is None
+
+
+def test_self_correct_passes_when_all_confirmed():
+    clean = [
+        _f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
+        _f(2, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
+    ]
+    assert_self_correct(clean)  # must not raise
+
+
+def test_self_correct_raises_on_any_non_confirmed():
+    dirty = [
+        _f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
+        _f(2, dtcc_received=1, dtcc_replied=True),  # Ambiguous in a no-fault run!
+    ]
+    with pytest.raises(SelfCorrectnessError) as exc:
+        assert_self_correct(dirty)
+    assert "2" in str(exc.value)  # names the offending seq
+
+
+def test_self_correct_raises_on_duplicate():
+    dirty = [_f(1, firm_confirmed=True, dtcc_received=2, dtcc_replied=True)]
+    with pytest.raises(SelfCorrectnessError):
+        assert_self_correct(dirty)
