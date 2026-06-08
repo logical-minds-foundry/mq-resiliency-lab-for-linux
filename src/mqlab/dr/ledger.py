@@ -12,6 +12,8 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from .model import MessageState
+
 
 class Event(StrEnum):
     SENT = "sent"
@@ -61,3 +63,34 @@ class Ledger:
                 )
             )
         return cls(entries)
+
+    def sent_seqs(self) -> set[int]:
+        return {e.seq for e in self.entries if e.event is Event.SENT}
+
+    def confirmed_seqs(self, at_ts: float | None = None) -> set[int]:
+        return {
+            e.seq
+            for e in self.entries
+            if e.event is Event.CONFIRMED and (at_ts is None or e.ts <= at_ts)
+        }
+
+    def uuid_of(self) -> dict[int, str]:
+        return {e.seq: e.uuid for e in self.entries}
+
+    def firm_states(self) -> dict[int, MessageState]:
+        sent = self.sent_seqs()
+        confirmed = self.confirmed_seqs()
+        states: dict[int, MessageState] = {}
+        for seq in sent:
+            states[seq] = MessageState.CONFIRMED if seq in confirmed else MessageState.IN_PIPELINE
+        return states
+
+    def dtcc_receive_counts(self) -> dict[int, int]:
+        counts: dict[int, int] = {}
+        for e in self.entries:
+            if e.event is Event.RECEIVED:
+                counts[e.seq] = counts.get(e.seq, 0) + 1
+        return counts
+
+    def dtcc_replied(self) -> set[int]:
+        return {e.seq for e in self.entries if e.event is Event.REPLIED}
