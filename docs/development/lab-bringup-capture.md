@@ -20,12 +20,39 @@ Capturing provenance is the priority of this draft.
 |---|---|---|---|---|
 | MQ 9.4.5 arm64 (Phase B/D) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz` | 467 MB | **Yes** | `scripts/fetch-mq.sh` → IBM public developer CDN, **no auth**. SHA256 recorded first fetch, verified after. |
 | MQ 9.4.5 x86-64 (Phase C/RDQM) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz` | 520 MB | **Yes** | `scripts/fetch-mq.sh` (same CDN, no auth). |
-| RHEL 9.6 DVD ISO (Phase C box build) | `rhel-9.6-x86_64-dvd.iso` | 12 GB | **NO** | **Not downloadable by script** (licensed media). Maintained on the operator's local machine and **hand-copied into `build/`**. ⚠️ **OPEN ACTION: document a canonical archive location** so any operator can retrieve it — today it exists only on the operator's laptop. |
+| RHEL 9.6 DVD ISO (Phase C box build) | operator-supplied (see §1.1) | 12 GB | **NO** | **Not downloadable by script** (licensed media). The **only** artifact an operator must acquire by hand; located via the artifact-resolution mechanism (§1.1). Implementation tracked in #54. |
 
 **Rule captured:** if an artifact *can* be fetched, a `scripts/` helper should
-fetch + checksum it into `build/`. If it *cannot* (licensing), the runbook must
-name (a) what it is, (b) the exact filename `build/` expects, and (c) where the
-canonical copy is archived for future retrieval.
+fetch + checksum it into `build/`. If it *cannot* (licensing), it is
+**operator-supplied** and located via the resolution mechanism below — the shared
+code knows *how to look*, the operator's local config says *where it is*.
+
+### 1.1 Locating operator-supplied artifacts (the RHEL ISO)
+
+A machine-specific path can't live in a committed file (`vergil.toml` is shared,
+so a per-machine path would leak into git and break other operators). Instead, a
+small resolver finds the artifact by a fixed precedence (highest first):
+
+1. **`MQLAB_RHEL_ISO` env var** — CI / one-off override.
+2. **`~/.config/mq-cluster-tooling/config.toml` → `[artifacts] rhel_9_6_iso`** —
+   the durable per-operator setting (XDG, same pattern as Vergil's identity
+   config). Example:
+
+   ```toml
+   # ~/.config/mq-cluster-tooling/config.toml
+   [artifacts]
+   rhel_9_6_iso = "~/dev/software/rhel-9.6-x86_64-dvd.iso"
+   ```
+
+3. **`build/rhel-9.6-x86_64-dvd.iso`** — zero-config drop-in fallback (the
+   "just copy it into `build/`" path that works today).
+4. **None found → fail loud**, naming the artifact, the places checked, and the
+   one-line config to set.
+
+So an operator drops the ISO wherever they keep large media, adds one line to
+their local config, and the shared tooling (box build + preflight) finds it — no
+repo edits, nothing committed, portable across machines. Resolver + wiring are
+tracked in **#54**.
 
 ## 2. Prerequisites verified this run (2026-06-08)
 
