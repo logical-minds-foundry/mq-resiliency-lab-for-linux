@@ -2,7 +2,7 @@
 
 Inputs the live harness (Plan 2) supplies; in Plan 1 they come from fixtures:
   - firm ledger (SENT / CONFIRMED)
-  - dtcc god's-eye ledger (RECEIVED counts / REPLIED)
+  - dtcc Watcher ledger (RECEIVED counts / REPLIED)
   - secondary_present: seqs present/processable on the secondary post-cutover
   - primary_disk_present: seqs physically on the failed primary (post-mortem)
   - cutover_ts: the instant of the fault; a reply CONFIRMED after this did not
