@@ -26,7 +26,22 @@
     content: |
       resource mqlun {
         protocol A;
-        net { ping-timeout 50; }
+        net {
+          ping-timeout 50;
+          # Protocol A over a low-latency virtual WAN needs generous buffers;
+          # the defaults throttle the one-time initial resync to ~250 KB/s (an
+          # 8 GB sync would take HOURS). These restore line rate (~50 MB/s, the
+          # 8 GB device syncs in ~3 min). Found the hard way in #67.
+          max-buffers 80k;
+          sndbuf-size 2M;
+          rcvbuf-size 2M;
+        }
+        disk {
+          # Static resync rate with the dynamic controller off, so the initial
+          # sync runs flat-out instead of being auto-throttled toward c-min-rate.
+          c-plan-ahead 0;
+          resync-rate 500M;
+        }
         on san-a {
           device    /dev/drbd0;
           disk      /dev/vdb;
