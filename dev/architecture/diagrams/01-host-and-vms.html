@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — Layer 1: host &amp; VMs</title>
+<link rel="stylesheet" href="_diagram.css"/>
+<style>
+  .ident { flex:1; border:2px solid #888; border-radius:12px; padding:10px 12px; background:rgba(255,255,255,0.02); }
+  .ident > h4 { margin:0 0 8px 0; font-size:14px; }
+  .vm { border:2px solid #5a7fb0; border-radius:10px; padding:10px; background:rgba(74,144,217,0.05); min-width:150px; }
+  .vm.lab { border-color:#b08a5a; background:rgba(176,138,90,0.06); flex:1; }
+  .vm h5 { margin:0 0 4px 0; font-size:13px; }
+  .vm .spec { font-family:ui-monospace,monospace; font-size:11px; opacity:.85; }
+  .vm .scope { font-size:11px; opacity:.6; margin-bottom:4px; }
+  .stopped { color:#d98a8a; }
+</style>
+</head><body>
+<h2>Layer 1 — the host and its VMs</h2>
+<p class="subtitle">An Apple-silicon Mac runs Vergil identities. Each identity has a <code>base</code> VM and may have a repo-scoped VM. The lab is the repo-scoped <code>vergil-user</code> VM.</p>
+<div class="wrap">
+  <div class="panel">
+    <h3>macOS host — Apple silicon (M-series)</h3>
+    <div class="row">
+
+      <div class="ident" style="flex:2.4;">
+        <h4>Identity: <code>vergil-user</code> <span class="tag">— where work happens</span></h4>
+        <div class="row">
+          <div class="vm" style="flex:0 1 190px;">
+            <h5>base VM</h5>
+            <div class="scope">scope: base</div>
+            <div class="spec">12 vCPU · 32 GiB · 50 GiB</div>
+          </div>
+          <div class="vm lab">
+            <h5>mq-cluster-tooling VM <span class="tag">★ the lab VM</span></h5>
+            <div class="scope">scope: logical-minds-foundry/mq-cluster-tooling</div>
+            <div class="spec">12 vCPU · 64 GiB · 300 GiB · nested virt</div>
+            <div class="group" style="margin-top:8px;">
+              <div class="glabel">drill down → Layer 2</div>
+              <div class="nodes"><div class="node">nested virt</div><div class="node">network fabric</div><div class="node">node fleet</div><div class="node">MQ services</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ident" style="flex:1;">
+        <h4>Identity: <code>vergil-audit</code> <span class="tag">— independent review</span></h4>
+        <div class="vm" style="flex:0 1 190px;">
+          <h5>base VM</h5>
+          <div class="scope">scope: base · <span class="stopped">stopped</span></div>
+          <div class="spec">12 vCPU · 32 GiB · 50 GiB</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="ok">The lab VM is the <b>repo-scoped <code>vergil-user</code> VM</b> — declared by the <code>[vm.vergil-user]</code> profile in <code>vergil.toml</code>. It is ephemeral and 100% reproducible; only the mounted <code>build/</code> directory carries working state.</div>
+</div>
+</body></html>

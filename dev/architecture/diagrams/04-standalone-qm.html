@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — standalone QM message path</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>Standalone QM — the message path</h2>
+<p class="subtitle">The simplest arm: one queue manager moving messages between an application client and a simulated upstream.</p>
+<div class="wrap">
+  <div class="panel">
+    <h3>Phase B — single queue manager, end to end</h3>
+    <div class="row">
+      <div class="box">
+        <h4>app-client</h4>
+        <div class="sub">application client</div>
+        <span class="net net-data">net-client · 10.30.0.60</span>
+      </div>
+      <div class="wanlink">
+        <span class="net net-data">net-client</span>
+        <div class="arrow">⇄</div>
+        <small>10.30.0.0/24</small>
+      </div>
+      <div class="box b">
+        <h4>qm-main</h4>
+        <div class="sub">the queue manager</div>
+        <span class="net net-data">net-client · 10.30.0.10</span>
+        <span class="net net-data">net-dtcc · 10.20.0.10</span>
+      </div>
+      <div class="wanlink">
+        <span class="net net-data">net-dtcc</span>
+        <div class="arrow">⇄</div>
+        <small>10.20.0.0/24</small>
+      </div>
+      <div class="box">
+        <h4>dtcc-sim</h4>
+        <div class="sub">simulated upstream</div>
+        <span class="net net-data">net-dtcc · 10.20.0.50</span>
+      </div>
+    </div>
+    <div class="ok" style="margin-top:10px;">Bring it up, send a message, reboot a guest: the message path <b>survives the reboot</b> (persistent messages, durable subscriptions). This is the foundation the HA/DR arms build on.</div>
+  </div>
+</div>
+</body></html>

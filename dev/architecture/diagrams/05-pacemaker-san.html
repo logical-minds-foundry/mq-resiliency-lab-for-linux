@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — Pacemaker/SAN arm</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>Pacemaker/SAN arm — shared-storage HA</h2>
+<p class="subtitle">Same single-site HA goal as RDQM, different mechanism: a Pacemaker cluster over shared SAN storage instead of block-level replication.</p>
+<div class="wrap">
+  <div class="panel">
+    <h3>Phase D — 3-node Pacemaker cluster on a shared SAN</h3>
+    <div class="row">
+      <div class="box">
+        <h4>Pacemaker cluster — Data Center A</h4>
+        <span class="net net-data">net-data-a · 10.10.1.51-53</span>
+        <span class="net net-priv">net-hb-a · 172.16.1.51-53</span>
+        <div class="group">
+          <div class="glabel">3 nodes — one active, automatic failover</div>
+          <div class="nodes">
+            <div class="node active">pcmk-a1 ▶</div>
+            <div class="node">pcmk-a2</div>
+            <div class="node">pcmk-a3</div>
+          </div>
+        </div>
+      </div>
+      <div class="wanlink">
+        <span class="net net-san">net-san-a</span>
+        <div class="arrow">⇕</div>
+        <small>shared block<br/>storage<br/>10.40.1.0/24</small>
+      </div>
+      <div class="box b">
+        <h4>SAN target</h4>
+        <span class="net net-san">net-san-a · 10.40.1.5</span>
+        <div class="group" style="border-style:solid;">
+          <div class="glabel">shared storage</div>
+          <div class="nodes"><div class="node">san-a</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="callout" style="border-color:#4ade80;background:rgba(74,222,128,0.07);">
+      <b style="color:#7ef0a8;">Contrast with RDQM:</b> RDQM each node owns a local replica kept in sync by DRBD (shared-nothing). Here the nodes share <b>one</b> SAN LUN and Pacemaker fences all but the active owner. Same fabric, two HA philosophies — that comparison is the point of running both.
+    </div>
+  </div>
+</div>
+</body></html>

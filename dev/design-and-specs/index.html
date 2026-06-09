@@ -11,26 +11,26 @@
       
       
       
+        <link rel="prev" href="../architecture/">
       
-        <link rel="next" href="changelog/">
       
       
         
       
       
-      <link rel="icon" href="assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>mq-cluster-tooling</title>
+        <title>Design & Specs - mq-cluster-tooling</title>
       
     
     
-      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#mq-cluster-tooling" class="md-skip">
+        <a href="#design-specs" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +92,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="." title="mq-cluster-tooling" class="md-header__button md-logo" aria-label="mq-cluster-tooling" data-md-component="logo">
+    <a href=".." title="mq-cluster-tooling" class="md-header__button md-logo" aria-label="mq-cluster-tooling" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Home
+              Design & Specs
             
           </span>
         </div>
@@ -223,11 +223,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="." class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -248,7 +246,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="changelog/" class="md-tabs__link">
+        <a href="../changelog/" class="md-tabs__link">
           
   
   
@@ -268,7 +266,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="getting-started/" class="md-tabs__link">
+      <a href="../getting-started/" class="md-tabs__link">
         
   
   
@@ -287,7 +285,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="architecture/" class="md-tabs__link">
+      <a href="../architecture/" class="md-tabs__link">
         
   
   
@@ -304,9 +302,11 @@
   
   
   
+    
   
-    <li class="md-tabs__item">
-      <a href="design-and-specs/" class="md-tabs__link">
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
         
   
   
@@ -341,7 +341,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="." title="mq-cluster-tooling" class="md-nav__button md-logo" aria-label="mq-cluster-tooling" data-md-component="logo">
+    <a href=".." title="mq-cluster-tooling" class="md-nav__button md-logo" aria-label="mq-cluster-tooling" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -368,37 +368,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Home
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="." class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -414,48 +387,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-you-can-do-here" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What you can do here
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Start here
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -525,7 +456,7 @@
   
   
     <li class="md-nav__item">
-      <a href="changelog/" class="md-nav__link">
+      <a href="../changelog/" class="md-nav__link">
         
   
   
@@ -576,7 +507,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="releases/" class="md-nav__link ">
+            <a href="../releases/" class="md-nav__link ">
               
   
   
@@ -630,7 +561,7 @@
   
   
     <li class="md-nav__item">
-      <a href="getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -657,7 +588,7 @@
   
   
     <li class="md-nav__item">
-      <a href="architecture/" class="md-nav__link">
+      <a href="../architecture/" class="md-nav__link">
         
   
   
@@ -681,10 +612,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="design-and-specs/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -700,6 +658,59 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#design-specs_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design specs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#findings-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Findings reports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related-tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related tooling
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -731,10 +742,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-you-can-do-here" class="md-nav__link">
+  <a href="#design-specs_1" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What you can do here
+        Design specs
       
     </span>
   </a>
@@ -742,10 +753,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#start-here" class="md-nav__link">
+  <a href="#findings-reports" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Start here
+        Findings reports
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related-tooling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related tooling
       
     </span>
   </a>
@@ -769,33 +791,35 @@
 
 
 
-<h1 id="mq-cluster-tooling">mq-cluster-tooling<a class="headerlink" href="#mq-cluster-tooling" title="Permanent link">&para;</a></h1>
-<p>A reproducible, <strong>nested-virtualization IBM MQ cluster lab</strong> for exercising
-high-availability (HA) and disaster-recovery (DR) topologies end to end —
-from the host machine down to running queue managers and a live message
-path.</p>
-<p>The whole lab is declared as code and rebuilt from scratch on demand: a
-<a href="https://github.com/vergil-project">Vergil</a> VM provides the host
-environment, a single <code>topology.yaml</code> describes the guest fleet and its
-networks, and Ansible plus a declarative content plane bring the MQ services
-up. Nothing is hand-built; everything is repeatable.</p>
-<h2 id="what-you-can-do-here">What you can do here<a class="headerlink" href="#what-you-can-do-here" title="Permanent link">&para;</a></h2>
+<h1 id="design-specs">Design &amp; Specs<a class="headerlink" href="#design-specs" title="Permanent link">&para;</a></h1>
+<p>The published site documents <em>what the lab is and how to run it</em>. The design
+specs and findings reports below are the <em>why</em> — the engineering record of
+how it was built. They live in-repo under <code>docs/specs/</code>, <code>docs/plans/</code>, and
+<code>docs/reports/</code>.</p>
+<h2 id="design-specs_1">Design specs<a class="headerlink" href="#design-specs_1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Stand up a standalone queue manager and prove a message path survives a
-  reboot.</li>
-<li>Form a 3-node <strong>RDQM</strong> HA group with synchronous replication and
-  automatic failover, then drive an asynchronous DR cutover to a second
-  site.</li>
-<li>Compare storage-replicated HA (RDQM) against shared-SAN HA (Pacemaker) on
-  the same network fabric.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/specs/2026-06-03-mq-cluster-lab-design.md">MQ cluster lab design</a></strong>
+  — the authoritative design; the lab is built out in its §10 phases (A→G).</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/specs/2026-06-08-dr-ha-validation-framework-design.md">DR/HA validation framework design</a></strong>
+  — how disaster-recovery and high-availability behavior is validated.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/specs/2026-06-08-docs-site-and-architecture-design.md">Docs site + architecture design</a></strong>
+  — the design behind this documentation site.</li>
 </ul>
-<h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
+<h2 id="findings-reports">Findings reports<a class="headerlink" href="#findings-reports" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong><a href="getting-started/">Getting Started</a></strong> — build the environment and
-  bring up your first running stack.</li>
-<li><strong><a href="architecture/">Architecture</a></strong> — the layered walkthrough of how
-  the whole lab fits together, with diagrams.</li>
-<li><strong><a href="design-and-specs/">Design &amp; Specs</a></strong> — how the lab was engineered.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/reports/2026-06-06-phase-a-provider-spike.md">Phase A provider spike</a></strong>
+  — the virtualization-provider findings (UEFI/arm64, CPU mode, the
+  weak-host-model test-design lesson).</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/reports/2026-06-06-phase-c-rdqm-findings.md">Phase C RDQM findings</a></strong>
+  — RDQM cluster formation and fault-drill results.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/docs/reports/2026-06-07-phase-d-pacemaker-findings.md">Phase D Pacemaker findings</a></strong>
+  — the Pacemaker/SAN arm findings.</li>
+</ul>
+<h2 id="related-tooling">Related tooling<a class="headerlink" href="#related-tooling" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Operations &amp; observability (#32)</strong> — health checks and a single
+  lab-status verb for the running stacks (planned; this page will link the
+  Operations section once it lands).</li>
 </ul>
 
 
@@ -852,12 +876,12 @@ up. Nothing is hand-built; everything is repeatable.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
     
     
-      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="js/resize-iframes.js"></script>
+        <script src="../js/resize-iframes.js"></script>
       
     
   </body>
