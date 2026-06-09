@@ -62,9 +62,24 @@ The lab's shape is a single source of truth:
 guest's NICs and platform. See the [Architecture](architecture/index.md)
 walkthrough for what each network is for.
 
-> **More verbs land as the slices ship.** Today `mqlab net` is live; guest
-> lifecycle (`mqlab vms`), arm setup, HA/DR operations, and the `status` /
-> `check` dashboard arrive in subsequent slices, each extending this walkthrough.
+Once the fabric is up, bring up the guest VMs with **`mqlab vm`** — the same
+selector paradigm, over `topology.yaml`:
+
+```bash
+mqlab vm status          # ground-truth guest state (via virsh)
+mqlab vm up rdqm         # boot + provision just the RDQM guests — watch Ansible run
+mqlab vm up all --step   # bring up every guest, pausing between each to poke around
+mqlab vm ssh rdqm-a1     # drop into a shell on one guest
+mqlab vm down all        # halt them ( `vm destroy all` removes them entirely )
+```
+
+`vm up` runs `vagrant up` per guest — booting **and** provisioning, so this is
+where you watch Ansible build each machine. Like `net`, the mutating verbs
+require a selector, so a bare `mqlab vm destroy` cannot wipe every guest.
+
+> **More verbs land as the slices ship.** `mqlab net` and `mqlab vm` are live;
+> arm setup, HA/DR operations, and the `status` / `check` dashboard arrive in
+> subsequent slices, each extending this walkthrough.
 
 ## 3. Stand up one stack end to end
 
