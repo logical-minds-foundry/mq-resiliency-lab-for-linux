@@ -50,6 +50,7 @@ def _serve(qmgr, args, ledger, deadline):
     )
     md_persist = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT)
 
+    last_flush = time.monotonic()
     while time.monotonic() < deadline:
         try:
             raw = qin.get(None, pymqi.MD(), gmo)
@@ -83,6 +84,12 @@ def _serve(qmgr, args, ledger, deadline):
         # would log a phantom receive on a failover rollback and inflate dups).
         ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
         ledger.append(LedgerEntry(Event.REPLIED, msg.seq, msg.uuid, time.time()))
+        # Periodically flush to disk so a client that later hangs on a dead VIP
+        # (MQCONNX blocks past the deadline when the site is gone) still leaves
+        # its god's-eye evidence behind.
+        if time.monotonic() - last_flush > 2.0:
+            ledger.write_jsonl(args.ledger)
+            last_flush = time.monotonic()
 
 
 def main():
