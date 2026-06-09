@@ -8,6 +8,10 @@ dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6"]
 
 [dependency-groups]
 dev = ["ruff", "mypy", "ty", "pytest", "pytest-cov", "pip-audit", "pip-licenses", "types-PyYAML"]
+# Docs toolchain. vrg-container-docs runs `uv sync --group docs && uv run
+# mkdocs ...`; the cd-docs/ci-docs pipelines build the same way. Kept out of
+# the default groups so routine `uv run`/vrg-validate stay lean.
+docs = ["mkdocs-material>=9", "mike>=2"]
 
 [build-system]
 requires = ["hatchling"]
