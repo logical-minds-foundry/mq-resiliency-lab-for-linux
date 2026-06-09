@@ -11,6 +11,13 @@
 > feature worktrees). So the bring-up commands below are run from the main
 > worktree; this capture doc is authored in the #53 worktree and merged via its PR.
 
+## Contents
+
+- [1. Required data artifacts](#1-required-data-artifacts-must-exist-in-build-before-any-bring-up)
+- [2. Prerequisites verified this run (2026-06-08)](#2-prerequisites-verified-this-run-2026-06-08)
+- [3. Bring-up log — minimal message path](#3-bring-up-log--minimal-message-path-phase-b-qm-main--dtcc-sim--app-client)
+- [4. Tooling-improvement notes](#4-tooling-improvement-notes-reduce-scripts--a-few-reusable-commands)
+
 ## 1. Required data artifacts (must exist in `build/` before any bring-up)
 
 Large/licensed binaries, **not** in git. The bring-up fails loudly without them.
