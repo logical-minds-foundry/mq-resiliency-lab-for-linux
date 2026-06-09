@@ -46,7 +46,9 @@ nodes:
     memory: 2048
     nics: { net-dtcc: 10.20.0.50 }
   app-client:
-    nics: { net-client: 10.30.0.60 }
+    # net-data-a gives the firm client a path to the HA arms' VIPs (10.10.1.x);
+    # net-client reaches the standalone message-path QM (10.30.0.10).
+    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
