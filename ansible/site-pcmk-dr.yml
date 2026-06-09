@@ -1,8 +1,14 @@
 # Phase D DR build: the full 8-node cross-site topology with DRBD-async
 # under the SAN. DR-ready from the start (the Phase C lesson: don't bolt
 # DR on afterward). Run after both sites' nodes are booted.
-#   export PCMK_HACLUSTER_PASSWORD=...
-#   uv run ansible-playbook site-pcmk-dr.yml
+#
+# Run via the wrapper, which auto-sources the persisted hacluster secret
+# (PCMK_HACLUSTER_PASSWORD) instead of requiring a human to inject it -- the
+# secret is auto-generated once and saved in build/secrets/, so it survives
+# rebuilds and is never lost:
+#   lab/scripts/dr-provision.sh
+# (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is
+# exported; the wrapper just removes that footgun.)
 
 - hosts: pcmk_a:pcmk_b:san_hosts
   become: true
@@ -18,6 +24,34 @@
   vars: { drbd_role: secondary }
   roles: [drbd-san]
 
+# Both peers are up now -> skip the 8 GB initial full sync: both backing disks
+# are blank, so the primary declares the bitmap clear (both UpToDate at zero)
+# instead of copying, then lays down the filesystem, which replicates as normal
+# protocol-A traffic. Turns an I/O-bound minutes-to-hours resync into seconds.
+- hosts: san-a
+  become: true
+  tasks:
+    - name: wait for the DRBD peer to connect
+      ansible.builtin.shell: |
+        for i in $(seq 1 60); do
+          drbdadm cstate mqlun 2>/dev/null | grep -q Connected && exit 0
+          sleep 2
+        done
+        echo "peer not connected:"; drbdadm cstate mqlun; exit 1
+      changed_when: false
+    - name: skip-initial-sync + promote + filesystem (run once)
+      ansible.builtin.shell: |
+        set -e
+        if blkid /dev/drbd0 2>/dev/null | grep -q MQSHARED; then
+          echo already-initialized; exit 0
+        fi
+        drbdadm new-current-uuid --clear-bitmap mqlun
+        drbdadm primary mqlun
+        mkfs.xfs -L MQSHARED /dev/drbd0
+        echo initialized
+      register: drbd_init
+      changed_when: "'initialized' == drbd_init.stdout"
+
 # --- LIO target at site A, backed by the DRBD device ---
 - hosts: san-a
   vars:
@@ -29,6 +63,20 @@
       - iqn.2026-06.lab.mq:pcmk-a2
       - iqn.2026-06.lab.mq:pcmk-a3
   roles: [iscsi-target]
+
+# --- DR-peer prep so the FORCED cutover to B needs no manual fixups (#67) ---
+# san-b gets the LIO package now; it exports the LUN only at cutover, once it is
+# force-promoted to primary (the drbd device is inaccessible on the secondary).
+- hosts: san-b
+  become: true
+  tasks:
+    - name: LIO target package on the DR-peer SAN
+      ansible.builtin.apt: { name: targetcli-fb, update_cache: true }
+# pcmk-b* get their stable initiator IQNs now (the cutover ACLs match on them);
+# they log in to san-b's target only at cutover -> iscsi-initiator with no
+# san_portal_ip sets the IQN and skips the login.
+- hosts: pcmk_b
+  roles: [iscsi-initiator]
 
 # --- Site A: initiators, cluster, fencing, MQ ---
 - hosts: pcmk_a

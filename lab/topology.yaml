@@ -46,9 +46,11 @@ nodes:
     memory: 2048
     nics: { net-dtcc: 10.20.0.50 }
   app-client:
-    # net-data-a gives the firm client a path to the HA arms' VIPs (10.10.1.x);
-    # net-client reaches the standalone message-path QM (10.30.0.10).
-    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60 }
+    # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B
+    # VIPs (10.10.2.x) -- so a reconnectable client given both VIPs can ride a
+    # cross-site DR cutover and keep producing on the survivor. net-client
+    # reaches the standalone message-path QM (10.30.0.10).
+    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
@@ -104,3 +106,23 @@ nodes:
     cpus: 2
     memory: 2048
     nics: { net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53 }
+
+  # --- Phase D DR: site B mirrors site A on the .2/.6x address plan. san-b is
+  # the DRBD secondary (LUN replicated from san-a over net-wan); pcmk-b1..3 are
+  # the peer cluster that receives the QM on cutover. hb IPs (172.16.2.61-63)
+  # match ansible/site-pcmk-dr.yml; site-B VIP is 10.10.2.200, portal 10.40.2.6.
+  san-b:
+    extra_disk: 8
+    nics: { net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
+  pcmk-b1:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61 }
+  pcmk-b2:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62 }
+  pcmk-b3:
+    cpus: 2
+    memory: 2048
+    nics: { net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63 }

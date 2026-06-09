@@ -46,9 +46,10 @@ def _parse_reply(raw):
     return parse_body(raw[idx:])
 
 
-def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
+def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
     deadline = time.monotonic() + seconds
     keep = lambda: not STOP.is_set() and time.monotonic() < deadline  # noqa: E731
+    last_flush = time.monotonic()
     pmo = pymqi.PMO(
         Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING
     )
@@ -108,6 +109,14 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
         with lock:  # record SENT only after a clean commit
             ledger.append(LedgerEntry(Event.SENT, pseq, puuid, time.time()))
         pending = None
+        # Periodically flush the (shared) ledger to disk so a client that later
+        # hangs on a dead VIP -- MQCONNX blocks past the deadline when the site
+        # is gone -- still leaves its evidence behind (write-at-exit alone loses
+        # everything on a hang/kill).
+        if time.monotonic() - last_flush > 2.0:
+            with lock:
+                ledger.write_jsonl(ledger_path)
+            last_flush = time.monotonic()
         time.sleep(interval)
 
     if qmgr is not None:
@@ -211,7 +220,7 @@ def main():
         target=consumer, args=(c, args.reply_queue, ledger, lock), daemon=True
     )
     t.start()
-    producer(c, args.rate, args.seconds, args.expiry, args.req_queue, ledger, lock)
+    producer(c, args.rate, args.seconds, args.expiry, args.req_queue, ledger, lock, args.ledger)
     time.sleep(DRAIN_SECONDS)  # let in-flight replies land before stopping
     STOP.set()
     t.join(timeout=5)

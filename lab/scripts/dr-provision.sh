@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# lab/scripts/dr-provision.sh — provision the DR-ready Pacemaker arm (both
+# sites, DRBD async under the SAN). Reproducible and hands-off: it auto-sources
+# the persisted, auto-generated cluster secret (no env var to remember or lose —
+# the bug that stalled the first DR build), regenerates the inventory from the
+# running nodes, then runs the cross-site DR playbook. Idempotent.
+#
+# Run once all 8 arm nodes are booted: san-a, san-b, pcmk-a1..3, pcmk-b1..3.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+export PCMK_HACLUSTER_PASSWORD="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"
+"$HERE/../../ansible/inventory.sh"            # writes build/inventory.ini
+cd "$HERE/../../ansible"
+exec uv run ansible-playbook site-pcmk-dr.yml "$@"
