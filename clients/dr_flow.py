@@ -83,15 +83,29 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
             header = pack_header(
                 password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
             ).encode()
-            while True:  # ride an HA failover: retry a backed-out unit of work
+            sent_ok = False
+            while not STOP.is_set() and time.monotonic() < deadline:
                 try:
                     q.put(header + body, md, pmo)
                     qmgr.commit()
+                    sent_ok = True
                     break
                 except pymqi.MQMIError as e:
                     if e.reason in _RECONNECT_BACKOUT:
+                        # Clear the stuck unit of work so the next put+commit starts
+                        # fresh. Without this, after an HA failover every commit
+                        # re-returns MQRC_BACKED_OUT (2003) and the producer can
+                        # never resume sending. The sleep also yields the GIL so the
+                        # reconnect background thread can actually run.
+                        try:
+                            qmgr.backout()
+                        except pymqi.MQMIError:
+                            pass
+                        time.sleep(0.5)
                         continue
                     raise
+            if not sent_ok:
+                break  # gave up at the deadline while retrying — stop producing
             with lock:  # record SENT only after a clean commit
                 ledger.append(LedgerEntry(Event.SENT, seq, u, time.time()))
             time.sleep(interval)
