@@ -4,7 +4,7 @@ This page walks the lab from the outside in: the host machine, the virtual
 machines on it, the network fabric and node fleet inside the lab VM, and
 finally the three MQ-service arms built on top. Everything shown here is
 **as-built** and traces back to
-[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/main/lab/topology.yaml).
+[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml).
 
 ## Layer 1 — The host and its VMs
 

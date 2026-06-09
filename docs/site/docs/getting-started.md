@@ -7,7 +7,7 @@ detail lives in the design spec and (later) the Operations section.
 ## 1. Build and enter the lab VM
 
 The lab runs inside an ephemeral Vergil VM declared by
-[`vergil.toml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/main/vergil.toml)
+[`vergil.toml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/vergil.toml)
 (the `[vm.vergil-user]` profile). It is 100% reproducible — rebuild it
 freely.
 
@@ -22,7 +22,7 @@ from the host. Nothing else in the VM is precious.
 ## 2. Bring up the network fabric and a node set
 
 The lab's shape is a single source of truth:
-[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/main/lab/topology.yaml).
+[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml).
 It defines the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN)
 and every guest's NICs and platform. The Vagrant/libvirt harness reads it to
 create networks and boot nodes.
