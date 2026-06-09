@@ -23,14 +23,19 @@ from mqlab.epn import pack_header
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--qm", default="QDTCC")
+    ap.add_argument("--conn", default="localhost(1414)")
+    ap.add_argument("--channel", default="SIM.SVRCONN")
+    ap.add_argument("--in-queue", default="TRADE.REQUEST")
+    ap.add_argument("--out-queue", default="FIRM.REPLY")
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--ledger", required=True)
     args = ap.parse_args()
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
-    qmgr = pymqi.connect("QDTCC", "SIM.SVRCONN", "localhost(1414)")
-    qin = pymqi.Queue(qmgr, "TRADE.REQUEST")
-    qout = pymqi.Queue(qmgr, "FIRM.REPLY")
+    qmgr = pymqi.connect(args.qm, args.channel, args.conn)
+    qin = pymqi.Queue(qmgr, args.in_queue)
+    qout = pymqi.Queue(qmgr, args.out_queue)
     gmo = pymqi.GMO(
         Options=pymqi.CMQC.MQGMO_SYNCPOINT
         | pymqi.CMQC.MQGMO_WAIT
