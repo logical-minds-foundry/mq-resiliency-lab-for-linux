@@ -8,11 +8,13 @@ finally the three MQ-service arms built on top. Everything shown here is
 
 ## Layer 1 — The host and its VMs
 
-The lab lives on an Apple-silicon Mac. Vergil runs two identity VMs — a
-`vergil-user` VM where work happens and a `vergil-audit` VM that reviews it —
-plus the large lab VM ("the big special one") that hosts the entire MQ
-cluster lab. Isolating the lab in its own VM is what makes it disposable and
-reproducible.
+The lab lives on an Apple-silicon Mac running Vergil identities. Each
+identity has a `base` VM and may have a repo-scoped VM. The `vergil-user`
+identity (where work happens) carries a `base` VM **and** a repo-scoped VM
+for this project — that repo-scoped VM is the lab ("the big special one"),
+hosting the entire MQ cluster. The `vergil-audit` identity provides
+independent review. Isolating the lab in its own repo-scoped VM is what makes
+it disposable and reproducible.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/01-host-and-vms.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Host and identity VMs"></iframe>
