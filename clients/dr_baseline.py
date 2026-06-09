@@ -1,6 +1,6 @@
 """Host-side LIVE self-correctness baseline (spec §7).
 
-Loads the firm + god's-eye ledgers collected from a NO-FAULT run through the live
+Loads the firm + Watcher ledgers collected from a NO-FAULT run through the live
 message path and asserts the instrument agrees with itself: every message the
 firm SENT is CONFIRMED, and DTCC received each exactly once. Fail loud
 (SelfCorrectnessError) otherwise — if the oracle and the app ledger disagree with
