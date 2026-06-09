@@ -20,6 +20,12 @@ from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import parse_body
 from mqlab.epn import pack_header
 
+# MQI reason codes meaning an HA failover backed out the in-flight unit of work.
+_RECONNECT_BACKOUT = (
+    pymqi.CMQC.MQRC_BACKED_OUT,
+    pymqi.CMQC.MQRC_CALL_INTERRUPTED,
+)
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -33,7 +39,14 @@ def main():
     args = ap.parse_args()
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
-    qmgr = pymqi.connect(args.qm, args.channel, args.conn)
+    cd = pymqi.CD(
+        ChannelName=args.channel.encode(),
+        ConnectionName=args.conn.encode(),
+        TransportType=pymqi.CMQC.MQXPT_TCP,
+    )
+    qmgr = pymqi.QueueManager(None)
+    # auto-reconnect across HA failover (same QM via the VIP), like the firm
+    qmgr.connect_with_options(args.qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
     qin = pymqi.Queue(qmgr, args.in_queue)
     qout = pymqi.Queue(qmgr, args.out_queue)
     gmo = pymqi.GMO(
@@ -53,10 +66,11 @@ def main():
         except pymqi.MQMIError as e:
             if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
                 continue
+            if e.reason in _RECONNECT_BACKOUT:
+                continue  # failover; retry the get
             raise
         idx = raw.find(b"DRv1|")
         msg = parse_body(raw[idx:])
-        ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
         reply = (
             pack_header(
                 password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=msg.busdate
@@ -64,7 +78,16 @@ def main():
             + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
         )
         qout.put(reply, md_persist, pmo)
-        qmgr.commit()
+        try:
+            qmgr.commit()
+        except pymqi.MQMIError as e:
+            if e.reason in _RECONNECT_BACKOUT:
+                continue  # get+reply rolled back across failover; request requeued
+            raise
+        # record RECEIVED + REPLIED only after a clean commit — recording the
+        # receive before the commit would log a phantom receive on a failover
+        # rollback and inflate the duplicate count.
+        ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
         ledger.append(LedgerEntry(Event.REPLIED, msg.seq, msg.uuid, time.time()))
 
     ledger.write_jsonl(args.ledger)

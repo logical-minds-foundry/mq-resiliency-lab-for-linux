@@ -33,6 +33,14 @@ from mqlab.epn import pack_header
 STOP = threading.Event()
 DRAIN_SECONDS = 4.0
 
+# MQI reason codes meaning "an HA failover backed out the in-flight unit of work"
+# — retry the operation (record the ledger entry only on a clean commit) rather
+# than dying. This is what lets the flow ride through a failover under load.
+_RECONNECT_BACKOUT = (
+    pymqi.CMQC.MQRC_BACKED_OUT,
+    pymqi.CMQC.MQRC_CALL_INTERRUPTED,
+)
+
 
 def _connect(conn, channel, qm):
     cd = pymqi.CD(
@@ -41,7 +49,10 @@ def _connect(conn, channel, qm):
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
     qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options(qm, cd=cd)
+    # MQCNO_RECONNECT_Q_MGR: the client library transparently reconnects to the
+    # same QM (via the VIP) across an HA failover, so the flow survives the fault
+    # and continues — the whole point of the under-load drills.
+    qmgr.connect_with_options(qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
     return qmgr
 
 
@@ -72,9 +83,16 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
             header = pack_header(
                 password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
             ).encode()
-            q.put(header + body, md, pmo)
-            qmgr.commit()
-            with lock:
+            while True:  # ride an HA failover: retry a backed-out unit of work
+                try:
+                    q.put(header + body, md, pmo)
+                    qmgr.commit()
+                    break
+                except pymqi.MQMIError as e:
+                    if e.reason in _RECONNECT_BACKOUT:
+                        continue
+                    raise
+            with lock:  # record SENT only after a clean commit
                 ledger.append(LedgerEntry(Event.SENT, seq, u, time.time()))
             time.sleep(interval)
     finally:
@@ -97,10 +115,17 @@ def consumer(c, reply_queue, ledger, lock):
             except pymqi.MQMIError as e:
                 if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
                     continue
+                if e.reason in _RECONNECT_BACKOUT:
+                    continue  # failover; retry the get
                 raise
             msg = _parse_reply(raw)
-            qmgr.commit()
-            with lock:
+            try:
+                qmgr.commit()
+            except pymqi.MQMIError as e:
+                if e.reason in _RECONNECT_BACKOUT:
+                    continue  # get rolled back across failover; reply requeued, retry
+                raise
+            with lock:  # record CONFIRMED only after a clean commit
                 ledger.append(
                     LedgerEntry(Event.CONFIRMED, msg.seq, msg.uuid, time.time())
                 )
