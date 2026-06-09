@@ -10,6 +10,9 @@ extra:
   version:
     provider: mike
 
+extra_javascript:
+  - js/resize-iframes.js
+
 theme:
   name: material
   palette:

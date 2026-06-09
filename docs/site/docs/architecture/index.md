@@ -15,7 +15,7 @@ cluster lab. Isolating the lab in its own VM is what makes it disposable and
 reproducible.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe src="diagrams/01-host-and-vms.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Host and identity VMs"></iframe>
+<iframe class="diagram" src="diagrams/01-host-and-vms.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Host and identity VMs"></iframe>
 
 ## Layer 2 — Inside the lab VM
 
@@ -27,7 +27,7 @@ application networks, and the SAN networks. The networks are designed to be
 **severable** so failures can be injected cleanly.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe src="diagrams/02-inside-lab-vm.html" style="width:100%;height:520px;border:0;border-radius:8px;" title="Inside the lab VM"></iframe>
+<iframe class="diagram" src="diagrams/02-inside-lab-vm.html" style="width:100%;height:520px;border:0;border-radius:8px;" title="Inside the lab VM"></iframe>
 
 ## Layer 3 — The RDQM arm (HA + DR building block)
 
@@ -40,7 +40,7 @@ turn a DC-to-DC partition into a cluster collapse; cross-site resilience is
 always a separate, asynchronous DR relationship with a manual cutover.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe src="diagrams/03-rdqm-arm.html" style="width:100%;height:480px;border:0;border-radius:8px;" title="RDQM HA/DR arm"></iframe>
+<iframe class="diagram" src="diagrams/03-rdqm-arm.html" style="width:100%;height:480px;border:0;border-radius:8px;" title="RDQM HA/DR arm"></iframe>
 
 ## Layer 3 — The standalone QM arm (the message path)
 
@@ -50,7 +50,7 @@ application client over the client network. This is the foundation the HA/DR
 arms build on.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe src="diagrams/04-standalone-qm.html" style="width:100%;height:320px;border:0;border-radius:8px;" title="Standalone QM message path"></iframe>
+<iframe class="diagram" src="diagrams/04-standalone-qm.html" style="width:100%;height:320px;border:0;border-radius:8px;" title="Standalone QM message path"></iframe>
 
 ## Layer 3 — The Pacemaker/SAN arm (the HA contrast)
 
@@ -61,4 +61,4 @@ the same fabric lets the lab compare replicated-storage HA against
 shared-storage HA directly.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
-<iframe src="diagrams/05-pacemaker-san.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Pacemaker/SAN arm"></iframe>
+<iframe class="diagram" src="diagrams/05-pacemaker-san.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Pacemaker/SAN arm"></iframe>
