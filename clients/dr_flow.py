@@ -10,9 +10,11 @@ safe to share across threads (MQRC_HCONN_ERROR). The ledger is shared under a
 lock. The producer runs to its deadline and returns; main then drains in-flight
 replies for a few seconds before signalling the consumer to stop.
 
-Run on app-client:
-    ~/mqvenv/bin/python ~/dr_flow.py --rate 20 --seconds 30 \
-        --ledger ~/dr-ledgers/firm.jsonl
+Target QM / connection / queues are parameterized so the same client drives any
+arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
+    ~/mqvenv/bin/python ~/dr_flow.py --qm QMPCMK --conn "10.10.1.200(1414)" \
+        --req-queue DR.REQUEST --reply-queue DR.REPLY \
+        --rate 20 --seconds 30 --ledger ~/dr-ledgers/firm.jsonl
 
 Deployed to lab nodes by ansible alongside mqlab/ (the dr framework package).
 """
@@ -32,14 +34,14 @@ STOP = threading.Event()
 DRAIN_SECONDS = 4.0
 
 
-def _connect():
+def _connect(conn, channel, qm):
     cd = pymqi.CD(
-        ChannelName=b"APP.SVRCONN",
-        ConnectionName=b"10.30.0.10(1414)",  # qm-main on net-client (VIP on the HA arms)
+        ChannelName=channel.encode(),
+        ConnectionName=conn.encode(),
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
     qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options("QMAIN", cd=cd)
+    qmgr.connect_with_options(qm, cd=cd)
     return qmgr
 
 
@@ -49,10 +51,10 @@ def _parse_reply(raw):
     return parse_body(raw[idx:])
 
 
-def producer(rate, seconds, expiry, ledger, lock):
-    qmgr = _connect()
+def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
+    qmgr = _connect(c.conn, c.channel, c.qm)
     try:
-        q = pymqi.Queue(qmgr, "DTCC.REQUEST")
+        q = pymqi.Queue(qmgr, req_queue)
         pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
         expiry_tenths = (
             pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
@@ -79,10 +81,10 @@ def producer(rate, seconds, expiry, ledger, lock):
         qmgr.disconnect()
 
 
-def consumer(ledger, lock):
-    qmgr = _connect()
+def consumer(c, reply_queue, ledger, lock):
+    qmgr = _connect(c.conn, c.channel, c.qm)
     try:
-        q = pymqi.Queue(qmgr, "TRADE.REPLY")
+        q = pymqi.Queue(qmgr, reply_queue)
         gmo = pymqi.GMO(
             Options=pymqi.CMQC.MQGMO_SYNCPOINT
             | pymqi.CMQC.MQGMO_WAIT
@@ -106,8 +108,18 @@ def consumer(ledger, lock):
         qmgr.disconnect()
 
 
+class _Conn:
+    def __init__(self, conn, channel, qm):
+        self.conn, self.channel, self.qm = conn, channel, qm
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--qm", default="QMAIN")
+    ap.add_argument("--conn", default="10.30.0.10(1414)")
+    ap.add_argument("--channel", default="APP.SVRCONN")
+    ap.add_argument("--req-queue", default="DTCC.REQUEST")
+    ap.add_argument("--reply-queue", default="TRADE.REPLY")
     ap.add_argument("--rate", type=float, default=20.0)
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument(
@@ -118,10 +130,13 @@ def main():
     args = ap.parse_args()
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
+    c = _Conn(args.conn, args.channel, args.qm)
     ledger, lock = Ledger(), threading.Lock()
-    t = threading.Thread(target=consumer, args=(ledger, lock), daemon=True)
+    t = threading.Thread(
+        target=consumer, args=(c, args.reply_queue, ledger, lock), daemon=True
+    )
     t.start()
-    producer(args.rate, args.seconds, args.expiry, ledger, lock)
+    producer(c, args.rate, args.seconds, args.expiry, args.req_queue, ledger, lock)
     time.sleep(DRAIN_SECONDS)  # let in-flight replies land before stopping
     STOP.set()
     t.join(timeout=5)
