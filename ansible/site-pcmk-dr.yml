@@ -24,6 +24,34 @@
   vars: { drbd_role: secondary }
   roles: [drbd-san]
 
+# Both peers are up now -> skip the 8 GB initial full sync: both backing disks
+# are blank, so the primary declares the bitmap clear (both UpToDate at zero)
+# instead of copying, then lays down the filesystem, which replicates as normal
+# protocol-A traffic. Turns an I/O-bound minutes-to-hours resync into seconds.
+- hosts: san-a
+  become: true
+  tasks:
+    - name: wait for the DRBD peer to connect
+      ansible.builtin.shell: |
+        for i in $(seq 1 60); do
+          drbdadm cstate mqlun 2>/dev/null | grep -q Connected && exit 0
+          sleep 2
+        done
+        echo "peer not connected:"; drbdadm cstate mqlun; exit 1
+      changed_when: false
+    - name: skip-initial-sync + promote + filesystem (run once)
+      ansible.builtin.shell: |
+        set -e
+        if blkid /dev/drbd0 2>/dev/null | grep -q MQSHARED; then
+          echo already-initialized; exit 0
+        fi
+        drbdadm new-current-uuid --clear-bitmap mqlun
+        drbdadm primary mqlun
+        mkfs.xfs -L MQSHARED /dev/drbd0
+        echo initialized
+      register: drbd_init
+      changed_when: "'initialized' == drbd_init.stdout"
+
 # --- LIO target at site A, backed by the DRBD device ---
 - hosts: san-a
   vars:

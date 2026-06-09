@@ -46,9 +46,11 @@ nodes:
     memory: 2048
     nics: { net-dtcc: 10.20.0.50 }
   app-client:
-    # net-data-a gives the firm client a path to the HA arms' VIPs (10.10.1.x);
-    # net-client reaches the standalone message-path QM (10.30.0.10).
-    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60 }
+    # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B
+    # VIPs (10.10.2.x) -- so a reconnectable client given both VIPs can ride a
+    # cross-site DR cutover and keep producing on the survivor. net-client
+    # reaches the standalone message-path QM (10.30.0.10).
+    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:

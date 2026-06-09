@@ -57,15 +57,22 @@
       }
   become: true
 
-- name: create metadata (idempotent - skip if already present)
+- name: create metadata (idempotent - skip if the resource is up or md present)
   ansible.builtin.shell: |
-    if drbdadm dump-md mqlun >/dev/null 2>&1; then
+    # `drbdadm dump-md` HANGS on an in-use (Primary/up) device -- it took down a
+    # whole re-provision for 2 hours in #67. Check the live state FIRST (status
+    # never blocks); only probe/create metadata when the resource is actually
+    # down.
+    if drbdadm status mqlun >/dev/null 2>&1; then
+      echo resource-up
+    elif drbdadm dump-md mqlun >/dev/null 2>&1; then
       echo md-exists
     else
       drbdadm create-md --force mqlun
+      echo created
     fi
   register: drbd_md
-  changed_when: "'md-exists' not in drbd_md.stdout"
+  changed_when: "'created' in drbd_md.stdout"
   become: true
 
 - name: bring the resource up
@@ -76,19 +83,7 @@
   changed_when: false
   become: true
 
-# One-time initial sync: the designated primary forces itself UpToDate and
-# lays down the filesystem on /dev/drbd0. The secondary syncs from it.
-- name: initial primary + filesystem (run once, primary only)
-  ansible.builtin.shell: |
-    set -e
-    if blkid /dev/drbd0 2>/dev/null | grep -q MQSHARED; then
-      echo already-initialized
-      exit 0
-    fi
-    drbdadm primary --force mqlun
-    mkfs.xfs -L MQSHARED /dev/drbd0
-    echo initialized
-  when: drbd_role == "primary"
-  register: drbd_init
-  changed_when: "'initialized' == drbd_init.stdout"
-  become: true
+# NOTE: promotion + skip-initial-sync + mkfs is NOT here. It needs BOTH peers up
+# and connected so the primary can `--clear-bitmap` (declare both in-sync at
+# zero, skipping the 8 GB full copy), and this role runs per-host before the
+# peer exists. It lives in a post-both-up play in site-pcmk-dr.yml.
