@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
-from mqlab.netstatus import net_status_core
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import lab_script
 from mqlab.pauser import NoTTYError, TTYPauser
@@ -70,6 +69,15 @@ def _net_down_steps() -> list[CommandStep]:
     return [CommandStep("networks down", Command(["bash", str(lab_script("net-down.sh"))]))]
 
 
+_NET_LIST = Command(["virsh", "-c", "qemu:///system", "net-list", "--all"])  # noqa: S607 - virsh on PATH (lab)
+
+
+def _net_status_steps() -> list[CommandStep]:
+    # No script exists; mqlab drives virsh directly. virsh's own output is already
+    # tabular, so this is a plain treatment-A pass-through — no re-rendering (#70).
+    return [CommandStep("networks status", _NET_LIST)]
+
+
 def _twin_steps() -> list[CommandStep]:
     # Test-only helper: two trivial steps so the headless --step branch is reachable.
     return [
@@ -100,14 +108,7 @@ def net_down(step: _StepFlag = False) -> None:
 @net_app.command("status")
 def net_status() -> None:
     """Show which lab networks are defined / active / autostart."""
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("net-status", timestamp)
-    try:
-        code = net_status_core(deps.runner, deps.renderer, deps.transcript)
-    finally:
-        deps.transcript.close()
-    if code != 0:
-        raise typer.Exit(code=code)
+    _execute("net-status", _net_status_steps(), step_mode=False)
 
 
 def main() -> None:
