@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
+from mqlab.netstatus import net_status_core
 from mqlab.orchestrator import CommandStep, StepFailed, run_steps
 from mqlab.paths import lab_script
 from mqlab.pauser import NoTTYError, TTYPauser
@@ -94,6 +95,19 @@ def net_up(step: _StepFlag = False) -> None:
 def net_down(step: _StepFlag = False) -> None:
     """Destroy and undefine every lab network."""
     _execute("net-down", _net_down_steps(), step_mode=step)
+
+
+@net_app.command("status")
+def net_status() -> None:
+    """Show which lab networks are defined / active / autostart."""
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("net-status", timestamp)
+    try:
+        code = net_status_core(deps.runner, deps.renderer, deps.transcript)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
 
 
 def main() -> None:
