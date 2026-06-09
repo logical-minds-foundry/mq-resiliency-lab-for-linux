@@ -24,7 +24,11 @@ run pcmk-a2,pcmk-a3 "su mqm -c '/opt/mqm/bin/${INF#*/opt/mqm/bin/}' || su mqm -c
 run pcmk-a1 "umount /mqshared"
 
 # 3. systemd unit on every node, disabled - Pacemaker is the only starter.
-run pcmk_a "printf '[Unit]\nDescription=IBM MQ queue manager $QM (pacemaker-managed)\n[Service]\nType=forking\nUser=mqm\nExecStart=/opt/mqm/bin/strmqm $QM\nExecStop=/opt/mqm/bin/endmqm -w $QM\nTimeoutStartSec=300\n' > /etc/systemd/system/mq-$QM.service && mkdir -p /mqshared && systemctl daemon-reload && systemctl disable mq-$QM.service 2>/dev/null; true"
+#    ExecStop uses `endmqm -r` (reconnectable), NOT -w: a Pacemaker-driven stop
+#    must tell reconnectable clients to RECONNECT (to the same QM when it
+#    restarts on the survivor), or they get MQRC_CONNECTION_BROKEN and never come
+#    back — which is exactly what broke the HA-under-load drills (#64).
+run pcmk_a "printf '[Unit]\nDescription=IBM MQ queue manager $QM (pacemaker-managed)\n[Service]\nType=forking\nUser=mqm\nExecStart=/opt/mqm/bin/strmqm $QM\nExecStop=/opt/mqm/bin/endmqm -r $QM\nTimeoutStartSec=300\n' > /etc/systemd/system/mq-$QM.service && mkdir -p /mqshared && systemctl daemon-reload && systemctl disable mq-$QM.service 2>/dev/null; true"
 
 # 4. The resource group: fs -> vip -> qm, in one group (order+colocation).
 run pcmk-a1 "pcs resource status mq_fs >/dev/null 2>&1 || pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs --group mq_group"
