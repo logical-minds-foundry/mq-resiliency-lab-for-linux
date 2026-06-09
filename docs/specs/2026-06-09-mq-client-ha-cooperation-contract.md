@@ -27,6 +27,7 @@ a loss) before it was fixed — so the contract is empirical, not theoretical.
 - [The two detection paths a client must survive](#the-two-detection-paths-a-client-must-survive)
 - [Requirement detail](#requirement-detail)
 - [Infrastructure-side companions](#infrastructure-side-companions)
+- [Cross-site DR additions](#cross-site-dr-additions)
 - [Reference implementation](#reference-implementation)
 - [Sources](#sources)
 
@@ -113,6 +114,47 @@ here because a client-requirements decision depends on them:
   `mqclient.ini` `TCP:KeepAlive=Yes` and a short OS keepalive, so a blocked
   call detects a fenced peer in ~30 s instead of stalling ~`HBINT` (default
   300 s). Codified in `lab/scripts/pcmk-qm-create.sh` and `ansible/site.yml`.
+
+## Cross-site DR additions
+
+The contract above is HA-shaped — one queue manager, one VIP, a failover that
+stays inside a single subnet. Forced cross-site DR (#67) surfaced two more
+requirements that single-site auto-reconnect does **not** cover. A client that
+passes every HA row above can still silently fail a DR cutover without these.
+
+**DR-1. The connection name must list BOTH sites' VIPs (or use a CCDT that
+does).** `MQCNO_RECONNECT_Q_MGR` reconnects to the *same* queue manager — but on
+a cross-site cutover that QM comes back at a *different* VIP on a *different*
+subnet (site A `10.10.1.200` → site B `10.10.2.200`). Auto-reconnect to a single
+VIP cannot follow it. The reference client connects with a comma-separated list,
+`"10.10.1.200(1414),10.10.2.200(1414)"`, so it tries A and on A's loss fails over
+to B — exactly how the "flow continues through cutover" result was achieved (the
+firm kept producing on the survivor). Production equivalents: a CCDT listing both
+sites, or connection-list configuration.
+
+*Discovered by:* the first DR drill, where the client could only reach site A —
+after the kill it had nowhere to reconnect, so it hung (see DR-2) and the flow
+could not continue.
+
+**DR-2. Bound the connect attempt — `MQCONNX` blocks on a dead site's VIP.**
+When the primary site is gone, a (re)connect to its VIP is a TCP connect to a
+host that no longer answers, which blocks for the OS connect timeout (minutes),
+**ignoring the application's own deadline** (that deadline bounds the reconnect
+*retry loop*, not a single in-progress `MQCONNX`). A DR-aware client needs either
+a short connect timeout or — better — the multi-address list from DR-1, so the
+stack moves on to the reachable site instead of wedging on the dead one.
+
+*Discovered by:* the empty-ledger drill — a single-VIP client hung in `MQCONNX`
+past its deadline and never wrote its ledger. Two fixes followed: the multi-VIP
+list (DR-1), and a **crash-safe periodic ledger flush** so evidence survives a
+hang regardless.
+
+**Infrastructure companion.** The DR site's cluster must already *know* the QM
+before cutover: the QM definition (`addmqinf`) + its systemd unit pre-seeded on
+the peer nodes, with matching iSCSI initiator IQNs and the target package
+present. The data travels via DRBD; the *identity* must be pre-staged. (RDQM
+bundles this; the hand-built arm makes it explicit — see the #56 operability
+notes.)
 
 ## Reference implementation
 
