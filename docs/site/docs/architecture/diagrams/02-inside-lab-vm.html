@@ -11,15 +11,15 @@
   <div class="panel">
     <h3>① Nested-virtualization stack</h3>
     <p class="sub">KVM acceleration on Apple silicon; TCG emulation for the x86_64 RHEL guests.</p>
-    <div class="row">
+    <div class="flow">
       <div class="node">Apple silicon (M-series)</div>
-      <div class="wanlink"><div class="arrow">→</div></div>
+      <span class="sep">→</span>
       <div class="node">macOS Virtualization (vz)</div>
-      <div class="wanlink"><div class="arrow">→</div></div>
+      <span class="sep">→</span>
       <div class="node">Lima</div>
-      <div class="wanlink"><div class="arrow">→</div></div>
+      <span class="sep">→</span>
       <div class="node">KVM (arm64) / TCG (x86_64)</div>
-      <div class="wanlink"><div class="arrow">→</div></div>
+      <span class="sep">→</span>
       <div class="node">libvirt + Vagrant</div>
     </div>
   </div>
@@ -38,7 +38,7 @@
         <h4>Data Center B</h4>
         <span class="net net-data">net-data-b · 10.10.2.0/24</span>
         <span class="net net-priv">net-hb-b · 172.16.2.0/24</span>
-        <span class="net net-san">net-san-b</span>
+        <span class="net net-san">net-san-b · 10.40.2.0/24</span>
       </div>
       <div class="box b">
         <h4>Cross-site &amp; application</h4>
