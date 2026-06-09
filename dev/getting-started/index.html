@@ -861,10 +861,21 @@ disposable, reproducible illusion.</p>
 — the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN) and every
 guest's NICs and platform. See the <a href="../architecture/">Architecture</a>
 walkthrough for what each network is for.</p>
+<p>Once the fabric is up, bring up the guest VMs with <strong><code>mqlab vm</code></strong> — the same
+selector paradigm, over <code>topology.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>status<span class="w">          </span><span class="c1"># ground-truth guest state (via virsh)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>rdqm<span class="w">         </span><span class="c1"># boot + provision just the RDQM guests — watch Ansible run</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>all<span class="w"> </span>--step<span class="w">   </span><span class="c1"># bring up every guest, pausing between each to poke around</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>rdqm-a1<span class="w">     </span><span class="c1"># drop into a shell on one guest</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>down<span class="w"> </span>all<span class="w">        </span><span class="c1"># halt them ( `vm destroy all` removes them entirely )</span>
+</code></pre></div>
+<p><code>vm up</code> runs <code>vagrant up</code> per guest — booting <strong>and</strong> provisioning, so this is
+where you watch Ansible build each machine. Like <code>net</code>, the mutating verbs
+require a selector, so a bare <code>mqlab vm destroy</code> cannot wipe every guest.</p>
 <blockquote>
-<p><strong>More verbs land as the slices ship.</strong> Today <code>mqlab net</code> is live; guest
-lifecycle (<code>mqlab vms</code>), arm setup, HA/DR operations, and the <code>status</code> /
-<code>check</code> dashboard arrive in subsequent slices, each extending this walkthrough.</p>
+<p><strong>More verbs land as the slices ship.</strong> <code>mqlab net</code> and <code>mqlab vm</code> are live;
+arm setup, HA/DR operations, and the <code>status</code> / <code>check</code> dashboard arrive in
+subsequent slices, each extending this walkthrough.</p>
 </blockquote>
 <h2 id="3-stand-up-one-stack-end-to-end">3. Stand up one stack end to end<a class="headerlink" href="#3-stand-up-one-stack-end-to-end" title="Permanent link">&para;</a></h2>
 <p>The <strong>standalone queue manager</strong> path (Phase B) is the simplest proof that
@@ -876,15 +887,15 @@ higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
 alternative.</p>
 <h2 id="building-these-docs-locally">Building these docs locally<a class="headerlink" href="#building-these-docs-locally" title="Permanent link">&para;</a></h2>
 <p>The site builds inside the project's docs container, the same way CI does:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>vrg-container-docs<span class="w"> </span>serve
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>vrg-container-docs<span class="w"> </span>serve
 </code></pre></div>
 
 
