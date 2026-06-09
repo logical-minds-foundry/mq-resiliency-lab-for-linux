@@ -1,10 +1,12 @@
 """`vm status` — topology-aware fleet view (#86).
 
-Echoes the virsh command (transparency) and tees its raw rows to the transcript,
-then renders the *full* topology fleet joined with live virsh state — guests that
-exist and guests that are merely defined (`not created`), with arm and platform.
-The rendered table earns its keep here because it composes two sources (vs the
-pass-through net table removed in #70).
+Echoes the virsh command AND streams its raw output (the live-State source), tees
+it to the transcript, then renders the *full* topology fleet joined with that state
+— guests that exist and guests that are merely defined (`not created`), with arm and
+platform. Both inputs are exposed and the table caption attributes every column to
+its source (#88): a transparency tool must show where its synthesis comes from. The
+rendered table earns its keep because it composes two sources (vs the pass-through
+net table removed in #70).
 """
 
 from __future__ import annotations
@@ -25,8 +27,14 @@ if TYPE_CHECKING:
 _VM_LIST = Command(["virsh", "-c", "qemu:///system", "list", "--all"])  # noqa: S607 - virsh on PATH (lab)
 
 
+_CAPTION = (
+    "Guest / Arm / Platform from lab/topology.yaml  ·  State from the virsh output above  "
+    "( 'not created' = defined in topology, absent from virsh )"
+)
+
+
 def _table(rows: list[FleetRow]) -> Table:
-    table = Table(title="lab fleet")
+    table = Table(title="lab fleet", caption=_CAPTION)
     for column in ("Guest", "Arm", "Platform", "State"):
         table.add_column(column)
     for row in rows:
@@ -41,7 +49,9 @@ def vm_status_core(runner: CommandRunner, renderer: Renderer, transcript: Transc
     captured: list[str] = []
 
     def sink(line: str) -> None:
-        # Raw rows go to the transcript (evidence); the screen gets the joined table.
+        # Stream the raw virsh output to the screen too — it is the live-State source,
+        # and a transparency tool must show where the table's data comes from (#88).
+        renderer.output(line)
         transcript.write(line)
         captured.append(line)
 
