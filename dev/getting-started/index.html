@@ -634,10 +634,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-bring-up-the-network-fabric-and-a-node-set" class="md-nav__link">
+  <a href="#2-drive-the-lab-with-mqlab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Bring up the network fabric and a node set
+        2. Drive the lab with mqlab
       
     </span>
   </a>
@@ -766,10 +766,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-bring-up-the-network-fabric-and-a-node-set" class="md-nav__link">
+  <a href="#2-drive-the-lab-with-mqlab" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. Bring up the network fabric and a node set
+        2. Drive the lab with mqlab
       
     </span>
   </a>
@@ -829,14 +829,34 @@ freely.</p>
 </code></pre></div>
 <p>All working state lives under the gitignored <code>build/</code> directory, mounted
 from the host. Nothing else in the VM is precious.</p>
-<h2 id="2-bring-up-the-network-fabric-and-a-node-set">2. Bring up the network fabric and a node set<a class="headerlink" href="#2-bring-up-the-network-fabric-and-a-node-set" title="Permanent link">&para;</a></h2>
+<h2 id="2-drive-the-lab-with-mqlab">2. Drive the lab with <code>mqlab</code><a class="headerlink" href="#2-drive-the-lab-with-mqlab" title="Permanent link">&para;</a></h2>
+<p>The lab is driven by <strong><code>mqlab</code></strong>, an operator orchestrator that does the
+opposite of most tooling: rather than hiding the mechanics, it <strong>shows</strong> them.
+Every command it runs — <code>virsh</code>, Ansible, <code>runmqsc</code> — is printed verbatim as it
+runs, streamed live, and teed to a transcript under <code>build/runs/</code>. You can watch
+a step, understand it, then reproduce it by hand. (Why expose rather than
+encapsulate? Because the deliverable is transparent evidence for the
+RDQM-vs-Ubuntu comparison — see <a href="../design-and-specs/">design &amp; specs</a>.)</p>
+<p>Bring up the libvirt network fabric and watch it happen:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mqlab<span class="w"> </span>net<span class="w"> </span>up<span class="w">        </span><span class="c1"># define, start, autostart every lab network</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mqlab<span class="w"> </span>net<span class="w"> </span>status<span class="w">    </span><span class="c1"># which networks are defined / active / autostart</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>mqlab<span class="w"> </span>net<span class="w"> </span>down<span class="w">      </span><span class="c1"># tear them all down</span>
+</code></pre></div>
+<p><code>mqlab net up</code> runs the proven <code>lab/scripts/net-up.sh</code>, echoing each
+<code>virsh net-define</code> / <code>net-start</code> / <code>net-autostart</code> so you see — and can copy —
+exactly what brings the fabric up. Add <code>--step</code> to pause after each step and go
+poke at the live system; break something and <code>mqlab net down &amp;&amp; mqlab net up</code> to
+rebuild, because the lab is a disposable, reproducible illusion.</p>
 <p>The lab's shape is a single source of truth:
-<a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>.
-It defines the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN)
-and every guest's NICs and platform. The Vagrant/libvirt harness reads it to
-create networks and boot nodes.</p>
-<p>See the <a href="../architecture/">Architecture</a> walkthrough for what each
-network is for and why the fleet is shaped the way it is.</p>
+<a href="https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>
+— the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN) and every
+guest's NICs and platform. See the <a href="../architecture/">Architecture</a>
+walkthrough for what each network is for.</p>
+<blockquote>
+<p><strong>More verbs land as the slices ship.</strong> Today <code>mqlab net</code> is live; guest
+lifecycle (<code>mqlab vms</code>), arm setup, HA/DR operations, and the <code>status</code> /
+<code>check</code> dashboard arrive in subsequent slices, each extending this walkthrough.</p>
+</blockquote>
 <h2 id="3-stand-up-one-stack-end-to-end">3. Stand up one stack end to end<a class="headerlink" href="#3-stand-up-one-stack-end-to-end" title="Permanent link">&para;</a></h2>
 <p>The <strong>standalone queue manager</strong> path (Phase B) is the simplest proof that
 the stack works: a single queue manager, a simulated upstream (<code>dtcc-sim</code>),
@@ -847,15 +867,15 @@ higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
 alternative.</p>
 <h2 id="building-these-docs-locally">Building these docs locally<a class="headerlink" href="#building-these-docs-locally" title="Permanent link">&para;</a></h2>
 <p>The site builds inside the project's docs container, the same way CI does:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>vrg-container-docs<span class="w"> </span>serve
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>vrg-container-docs<span class="w"> </span>serve
 </code></pre></div>
 
 
