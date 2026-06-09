@@ -26,7 +26,8 @@
 - [Task 8: Groom the network scripts to self-echo](#task-8-groom-the-network-scripts-to-self-echo)
 - [Task 9: CLI — net up / net down](#task-9-cli--net-up--net-down)
 - [Task 10: CLI — net status](#task-10-cli--net-status)
-- [Task 11: Full validation & lab-time smoke](#task-11-full-validation--lab-time-smoke)
+- [Task 11: Update the site — getting-started net walkthrough](#task-11-update-the-site--getting-started-net-walkthrough)
+- [Task 12: Full validation & lab-time smoke](#task-12-full-validation--lab-time-smoke)
 - [Self-review](#self-review)
 
 ---
@@ -44,6 +45,7 @@
 | `src/mqlab/cli.py` | Typer app, `net` group, dependency wiring, `main()`. |
 | `lab/scripts/net-up.sh` | Groomed to echo each `virsh` command (modify). |
 | `lab/scripts/net-down.sh` | Groomed to echo each `virsh` command (modify). |
+| `docs/site/docs/getting-started.md` | Rewrite the network section as the `mqlab net` walkthrough (modify). |
 | `tests/fakes.py` | `RecordingRunner`, `ScriptedResult` — test doubles for the seam. |
 | `tests/test_*.py` | One test module per source module. |
 
@@ -1311,7 +1313,79 @@ vrg-commit --type feat --scope mqlab --message "CLI net status: virsh net-list p
 
 ---
 
-## Task 11: Full validation & lab-time smoke
+## Task 11: Update the site — getting-started net walkthrough
+
+**Files:**
+- Modify: `docs/site/docs/getting-started.md`
+
+The getting-started page describes network bring-up abstractly ("the harness
+reads `topology.yaml` to create networks") and points at raw scripts. Now that
+`mqlab net` exists, the network section becomes a concrete, watchable
+walkthrough — the real entry point. **Scope is the network section only;** the
+later sections (full-stack bring-up) describe verbs that don't exist yet, so they
+stay until their slices land and the walkthrough grows from there.
+
+- [ ] **Step 1: Replace the network section**
+
+In `docs/site/docs/getting-started.md`, replace the entire section beginning
+`## 2. Bring up the network fabric and a node set` (up to, but not including,
+`## 3. Stand up one stack end to end`) with exactly:
+
+````markdown
+## 2. Drive the lab with `mqlab`
+
+The lab is driven by **`mqlab`**, an operator orchestrator that does the
+opposite of most tooling: rather than hiding the mechanics, it **shows** them.
+Every command it runs — `virsh`, Ansible, `runmqsc` — is printed verbatim as it
+runs, streamed live, and teed to a transcript under `build/runs/`. You can watch
+a step, understand it, then reproduce it by hand. (Why expose rather than
+encapsulate? Because the deliverable is transparent evidence for the
+RDQM-vs-Ubuntu comparison — see [design & specs](design-and-specs.md).)
+
+Bring up the libvirt network fabric and watch it happen:
+
+```bash
+mqlab net up        # define, start, autostart every lab network
+mqlab net status    # which networks are defined / active / autostart
+mqlab net down      # tear them all down
+```
+
+`mqlab net up` runs the proven `lab/scripts/net-up.sh`, echoing each
+`virsh net-define` / `net-start` / `net-autostart` so you see — and can copy —
+exactly what brings the fabric up. Add `--step` to pause after each step and go
+poke at the live system; break something and `mqlab net down && mqlab net up` to
+rebuild, because the lab is a disposable, reproducible illusion.
+
+The lab's shape is a single source of truth:
+[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml)
+— the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN) and every
+guest's NICs and platform. See the [Architecture](architecture/index.md)
+walkthrough for what each network is for.
+
+> **More verbs land as the slices ship.** Today `mqlab net` is live; guest
+> lifecycle (`mqlab vms`), arm setup, HA/DR operations, and the `status` /
+> `check` dashboard arrive in subsequent slices, each extending this walkthrough.
+````
+
+- [ ] **Step 2: Stage and strict-build the site**
+
+Run:
+```bash
+vrg-container-run -- vrg-docs-stage --docs-dir docs/site/docs
+vrg-container-docs build --strict
+```
+Expected: the strict build succeeds with no broken links or orphan pages; the
+internal links (`design-and-specs.md`, `architecture/index.md`) resolve.
+
+- [ ] **Step 3: Commit**
+
+```bash
+vrg-commit --type docs --scope site --message "getting-started: mqlab net walkthrough replaces the abstract network section (#32)"
+```
+
+---
+
+## Task 12: Full validation & lab-time smoke
 
 **Files:** none (verification only)
 
@@ -1355,7 +1429,10 @@ vrg-commit --type test --scope mqlab --message "close coverage/lint gaps for the
 - Criterion 5 (fail loud, non-zero propagates): T7 `StepFailed`, T9 `typer.Exit`. ✅
 - Criterion 6 (thin surface): CLI delegates only; no abstraction beyond the verbs. ✅
 - Criterion 7 (core unit-tested with no live lab): every src module tested via fakes/StringIO. ✅
-- Criterion 8 (`vrg-validate` green): T11. ✅
+- Criterion 8 (`vrg-validate` green): T12. ✅
+- Site stays current: the getting-started network section becomes the `mqlab net`
+  walkthrough, strict docs build verified → T11. (Later sections grow as their
+  verbs ship.) ✅
 
 **2. Placeholder scan:** No TBD/TODO; every code step contains complete code; every command has expected output. ✅
 
