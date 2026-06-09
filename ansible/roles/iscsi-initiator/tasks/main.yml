@@ -36,4 +36,8 @@
       --op update -n node.startup -v automatic
   register: ilogin
   changed_when: "'already-logged-in' not in ilogin.stdout"
+  # Skip the login when no target is given yet: the DR-peer site sets its stable
+  # IQN now (needed for the cutover ACLs) but only logs in at cutover, when the
+  # peer SAN actually exports the LUN.
+  when: san_portal_ip is defined
   become: true

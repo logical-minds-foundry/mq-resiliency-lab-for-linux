@@ -36,6 +36,20 @@
       - iqn.2026-06.lab.mq:pcmk-a3
   roles: [iscsi-target]
 
+# --- DR-peer prep so the FORCED cutover to B needs no manual fixups (#67) ---
+# san-b gets the LIO package now; it exports the LUN only at cutover, once it is
+# force-promoted to primary (the drbd device is inaccessible on the secondary).
+- hosts: san-b
+  become: true
+  tasks:
+    - name: LIO target package on the DR-peer SAN
+      ansible.builtin.apt: { name: targetcli-fb, update_cache: true }
+# pcmk-b* get their stable initiator IQNs now (the cutover ACLs match on them);
+# they log in to san-b's target only at cutover -> iscsi-initiator with no
+# san_portal_ip sets the IQN and skips the login.
+- hosts: pcmk_b
+  roles: [iscsi-initiator]
+
 # --- Site A: initiators, cluster, fencing, MQ ---
 - hosts: pcmk_a
   vars: { san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0, san_portal_ip: 10.40.1.5 }
