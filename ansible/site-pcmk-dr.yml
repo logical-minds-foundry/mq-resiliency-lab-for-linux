@@ -1,8 +1,14 @@
 # Phase D DR build: the full 8-node cross-site topology with DRBD-async
 # under the SAN. DR-ready from the start (the Phase C lesson: don't bolt
 # DR on afterward). Run after both sites' nodes are booted.
-#   export PCMK_HACLUSTER_PASSWORD=...
-#   uv run ansible-playbook site-pcmk-dr.yml
+#
+# Run via the wrapper, which auto-sources the persisted hacluster secret
+# (PCMK_HACLUSTER_PASSWORD) instead of requiring a human to inject it -- the
+# secret is auto-generated once and saved in build/secrets/, so it survives
+# rebuilds and is never lost:
+#   lab/scripts/dr-provision.sh
+# (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is
+# exported; the wrapper just removes that footgun.)
 
 - hosts: pcmk_a:pcmk_b:san_hosts
   become: true
