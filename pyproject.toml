@@ -4,7 +4,10 @@ version = "1.0.0"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6"]
+dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6", "typer>=0.12", "rich>=13"]
+
+[project.scripts]
+mqlab = "mqlab.cli:main"
 
 [dependency-groups]
 dev = ["ruff", "mypy", "ty", "pytest", "pytest-cov", "pip-audit", "pip-licenses", "types-PyYAML"]
@@ -45,4 +48,7 @@ exclude_lines = [
     "if __name__ == .__main__.",
     "if TYPE_CHECKING:",
     "pragma: no cover",
+    # Protocol / abstract method stub bodies (e.g. `def f() -> int: ...`) are
+    # never executed — exclude their inline ellipsis from branch coverage.
+    ": \\.\\.\\.$",
 ]
