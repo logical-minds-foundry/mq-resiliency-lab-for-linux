@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — Layer 2: inside the lab VM</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>Layer 2 — inside the lab VM</h2>
+<p class="subtitle">Nested virtualization runs the guest fleet on a fabric of isolated, severable libvirt networks.</p>
+<div class="wrap">
+
+  <div class="panel">
+    <h3>① Nested-virtualization stack</h3>
+    <p class="sub">KVM acceleration on Apple silicon; TCG emulation for the x86_64 RHEL guests.</p>
+    <div class="row">
+      <div class="node">Apple silicon (M-series)</div>
+      <div class="wanlink"><div class="arrow">→</div></div>
+      <div class="node">macOS Virtualization (vz)</div>
+      <div class="wanlink"><div class="arrow">→</div></div>
+      <div class="node">Lima</div>
+      <div class="wanlink"><div class="arrow">→</div></div>
+      <div class="node">KVM (arm64) / TCG (x86_64)</div>
+      <div class="wanlink"><div class="arrow">→</div></div>
+      <div class="node">libvirt + Vagrant</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>② Network fabric — the libvirt networks</h3>
+    <p class="sub">Per-site data + heartbeat, a cross-site WAN, application nets, and shared-SAN nets. Each can be severed to inject faults.</p>
+    <div class="row">
+      <div class="box">
+        <h4>Data Center A</h4>
+        <span class="net net-data">net-data-a · 10.10.1.0/24</span>
+        <span class="net net-priv">net-hb-a · 172.16.1.0/24</span>
+        <span class="net net-san">net-san-a · 10.40.1.0/24</span>
+      </div>
+      <div class="box">
+        <h4>Data Center B</h4>
+        <span class="net net-data">net-data-b · 10.10.2.0/24</span>
+        <span class="net net-priv">net-hb-b · 172.16.2.0/24</span>
+        <span class="net net-san">net-san-b</span>
+      </div>
+      <div class="box b">
+        <h4>Cross-site &amp; application</h4>
+        <span class="net net-wan">net-wan · 10.99.0.0/24</span>
+        <span class="net net-data">net-client · 10.30.0.0/24</span>
+        <span class="net net-data">net-dtcc · 10.20.0.0/24</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>③ Node fleet — guests grouped by arm</h3>
+    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs.</p>
+    <div class="group">
+      <div class="glabel">Phase A — placeholder fleet (Ubuntu arm64)</div>
+      <div class="nodes"><div class="node">node-a1</div><div class="node">node-a2</div><div class="node">node-a3</div><div class="node">node-b1</div><div class="node">node-b2</div><div class="node">node-b3</div></div>
+    </div>
+    <div class="group">
+      <div class="glabel">Phase B — standalone QM message path</div>
+      <div class="nodes"><div class="node">qm-main</div><div class="node">dtcc-sim</div><div class="node">app-client</div></div>
+    </div>
+    <div class="group">
+      <div class="glabel">Phase C — RDQM arm (RHEL 9.6 x86_64)</div>
+      <div class="nodes"><div class="node">rdqm-a1</div><div class="node">rdqm-a2</div><div class="node">rdqm-a3</div><div class="node">rdqm-b1</div><div class="node">rdqm-b2</div><div class="node">rdqm-b3</div></div>
+    </div>
+    <div class="group">
+      <div class="glabel">Phase D — Pacemaker/SAN arm</div>
+      <div class="nodes"><div class="node">san-a</div><div class="node">pcmk-a1</div><div class="node">pcmk-a2</div><div class="node">pcmk-a3</div></div>
+    </div>
+  </div>
+
+</div>
+</body></html>

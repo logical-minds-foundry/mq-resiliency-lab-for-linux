@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — Layer 1: host &amp; VMs</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>Layer 1 — the host and its VMs</h2>
+<p class="subtitle">Apple-silicon Mac → two Vergil identity VMs + the lab VM. Everything below lives inside the lab VM.</p>
+<div class="wrap">
+  <div class="panel">
+    <h3>macOS host — Apple silicon (M-series)</h3>
+    <p class="sub">Vergil manages the VMs; the host itself stays clean.</p>
+    <div class="row">
+      <div class="box">
+        <h4>vergil-user VM</h4>
+        <div class="sub">where work happens — the development identity (this agent)</div>
+      </div>
+      <div class="box">
+        <h4>vergil-audit VM</h4>
+        <div class="sub">independent review identity — reads the user's branch read-only</div>
+      </div>
+      <div class="box b">
+        <h4>lab VM — the MQ cluster lab</h4>
+        <div class="sub">12 vCPU · 64 GiB RAM · 300 GiB disk · nested virtualization enabled</div>
+        <div class="group" style="margin-top:8px;">
+          <div class="glabel">drill down → Layer 2</div>
+          <div class="nodes"><div class="node">nested virt</div><div class="node">network fabric</div><div class="node">node fleet</div><div class="node">MQ services</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ok">The lab VM is <b>ephemeral and 100% reproducible</b> — declared by the <code>[vm.vergil-user]</code> profile in <code>vergil.toml</code> and rebuilt on demand. Only the mounted <code>build/</code> directory carries working state.</div>
+</div>
+</body></html>
