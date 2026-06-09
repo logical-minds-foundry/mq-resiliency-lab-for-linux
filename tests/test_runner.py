@@ -22,3 +22,11 @@ def test_subprocess_runner_merges_stderr_into_the_stream():
     code = runner.run(Command(["sh", "-c", "echo out; echo err 1>&2"]), lines.append)
     assert set(lines) == {"out", "err"}
     assert code == 0
+
+
+def test_subprocess_runner_handles_no_output():
+    lines: list[str] = []
+    runner = SubprocessRunner()
+    code = runner.run(Command(["sh", "-c", "exit 0"]), lines.append)
+    assert lines == []
+    assert code == 0

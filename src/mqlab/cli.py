@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 
 from mqlab.netstatus import net_status_core
-from mqlab.orchestrator import CommandStep, StepFailed, run_steps
+from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import lab_script
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
@@ -56,7 +56,7 @@ def _execute(verb: str, steps: list[CommandStep], *, step_mode: bool) -> None:
     except NoTTYError as exc:
         deps.renderer.error(str(exc))
         raise typer.Exit(code=2) from exc
-    except StepFailed as exc:
+    except StepFailedError as exc:
         raise typer.Exit(code=exc.exit_code) from exc
     finally:
         deps.transcript.close()

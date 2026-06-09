@@ -18,7 +18,7 @@ def repo_root() -> Path:
     for parent in Path(__file__).resolve().parents:
         if (parent / "pyproject.toml").is_file():
             return parent
-    raise RuntimeError("repo root (pyproject.toml) not found above the mqlab package")  # pragma: no cover
+    raise RuntimeError("repo root not found above mqlab package")  # pragma: no cover
 
 
 def runs_dir() -> Path:

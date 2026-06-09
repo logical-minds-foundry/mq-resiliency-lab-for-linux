@@ -5,7 +5,7 @@ import io
 import pytest
 from rich.console import Console
 
-from mqlab.orchestrator import CommandStep, StepFailed, run_steps
+from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.render import Renderer
 from mqlab.runner import Command
 from mqlab.transcript import Transcript, transcript_path
@@ -54,7 +54,7 @@ def test_run_steps_runs_each_step_and_tees_to_transcript(tmp_path, monkeypatch):
 def test_run_steps_raises_on_nonzero_exit(tmp_path, monkeypatch):
     runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=3)])
     transcript = _transcript(tmp_path, monkeypatch)
-    with pytest.raises(StepFailed) as caught:
+    with pytest.raises(StepFailedError) as caught:
         run_steps(
             [CommandStep("networks up", Command(["bash", "net-up.sh"]))],
             runner=runner,
@@ -84,3 +84,18 @@ def test_step_mode_pauses_between_steps_but_not_after_the_last(tmp_path, monkeyp
         now=lambda: 0.0,
     )
     assert pauser.calls == 1
+
+
+def test_run_steps_with_no_steps_emits_zero_summary(tmp_path, monkeypatch):
+    transcript = _transcript(tmp_path, monkeypatch)
+    run_steps(
+        [],
+        runner=RecordingRunner(),
+        renderer=_renderer(),
+        transcript=transcript,
+        step_mode=False,
+        pauser=SpyPauser(),
+        now=lambda: 0.0,
+    )
+    transcript.close()
+    assert "SUMMARY: 0/0 steps 0.00s" in transcript.path.read_text(encoding="utf-8")

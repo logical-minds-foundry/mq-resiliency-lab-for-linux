@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from mqlab.runner import Command
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class ScriptedResult:
     """The output lines and exit code a RecordingRunner replays for one call."""
 
-    lines: list[str]
+    lines: Sequence[str]
     exit_code: int = 0
 
 

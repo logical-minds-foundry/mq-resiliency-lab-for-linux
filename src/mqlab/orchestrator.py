@@ -23,7 +23,7 @@ class CommandStep:
     command: Command
 
 
-class StepFailed(RuntimeError):
+class StepFailedError(RuntimeError):
     """A command step exited non-zero; the run halts loudly."""
 
     def __init__(self, label: str, exit_code: int) -> None:
@@ -64,7 +64,7 @@ def run_steps(
         if exit_code != 0:
             renderer.fail(step.label, exit_code)
             transcript.write(f"FAILED: {step.label} exit {exit_code}")
-            raise StepFailed(step.label, exit_code)
+            raise StepFailedError(step.label, exit_code)
         renderer.ok(step.label, elapsed)
         transcript.write(f"OK: {step.label} {elapsed:.2f}s")
         completed += 1

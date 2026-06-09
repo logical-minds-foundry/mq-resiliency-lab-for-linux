@@ -1,31 +1,19 @@
 from __future__ import annotations
 
+import io
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
 from mqlab.pauser import NoTTYError, TTYPauser
 
-
-class _FakeTTY:
-    """A fake controlling terminal that records the read and ignores close."""
-
-    def __init__(self) -> None:
-        self.read = False
-
-    def readline(self) -> str:
-        self.read = True
-        return "\n"
-
-    def __enter__(self) -> _FakeTTY:
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        return None
+if TYPE_CHECKING:
+    from typing import TextIO
 
 
 def test_pauser_reads_one_line_from_the_tty():
-    tty = _FakeTTY()
-    TTYPauser(open_tty=lambda: tty).wait()
-    assert tty.read is True
+    tty = cast("TextIO", io.StringIO("\n"))
+    assert TTYPauser(open_tty=lambda: tty).wait() is None
 
 
 def test_pauser_fails_fast_without_a_tty():
