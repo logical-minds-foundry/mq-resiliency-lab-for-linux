@@ -94,13 +94,23 @@ def test_vm_destroy_runs_vagrant_destroy(monkeypatch, tmp_path):
     assert runner.recorded[0].argv == ["vagrant", "destroy", "-f", "node-a1"]
 
 
-def test_vm_status_reads_virsh_list(monkeypatch, tmp_path):
+def test_vm_status_reads_virsh_and_joins_topology(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    runner = RecordingRunner(results=[ScriptedResult([" lab_node-a1 running"])])
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[ScriptedResult([" -  lab_pcmk-a1  shut off"])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "status"])
     assert result.exit_code == 0
     assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "list", "--all"]
+
+
+def test_vm_status_nonzero_exit_propagates(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[ScriptedResult([], exit_code=1)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "status"])
+    assert result.exit_code == 1
 
 
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):

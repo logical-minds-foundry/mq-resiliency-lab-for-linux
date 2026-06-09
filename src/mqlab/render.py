@@ -13,6 +13,7 @@ from rich.text import Text
 
 if TYPE_CHECKING:
     from rich.console import Console
+    from rich.table import Table
 
 
 def command_line(display: str) -> Text:
@@ -66,3 +67,6 @@ class Renderer:
 
     def summary(self, steps_ok: int, steps_total: int, seconds: float) -> None:
         self._console.print(summary_line(steps_ok, steps_total, seconds))
+
+    def table(self, table: Table) -> None:
+        self._console.print(table)

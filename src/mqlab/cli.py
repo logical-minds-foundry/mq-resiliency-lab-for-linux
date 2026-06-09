@@ -19,6 +19,7 @@ from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.vmstatus import vm_status_core
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -172,14 +173,6 @@ def _vm_destroy_steps(guests: list[str]) -> list[CommandStep]:
     ]
 
 
-_VM_LIST = Command(["virsh", "-c", "qemu:///system", "list", "--all"])  # noqa: S607 - virsh on PATH (lab)
-
-
-def _vm_status_steps() -> list[CommandStep]:
-    # Ground truth via virsh, deliberately independent of vagrant metadata (#80).
-    return [CommandStep("guests", _VM_LIST)]
-
-
 def _ssh_into(guest: str) -> None:
     # Interactive: replace this process with vagrant ssh so the TTY passes through —
     # the one verb that is not a captured/streamed step. Runs from lab/.
@@ -210,8 +203,15 @@ def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
 
 @vm_app.command("status")
 def vm_status() -> None:
-    """Show guest VM state — ground truth via virsh (robust to vagrant desync)."""
-    _execute("vm-status", _vm_status_steps(), step_mode=False)
+    """Show the full fleet — topology joined with live virsh state (arm/platform/state)."""
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("vm-status", timestamp)
+    try:
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
 
 
 @vm_app.command("ssh")
