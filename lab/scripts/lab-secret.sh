@@ -23,8 +23,11 @@ DIR="$(cd "$(dirname "$0")/../.." && pwd)/build/secrets"
 mkdir -p "$DIR"; chmod 700 "$DIR"
 F="$DIR/$NAME"
 if [ ! -s "$F" ]; then
-  # 32 url/shell-safe chars; the value is irrelevant, persistence is the point.
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32 > "$F"
+  # 32 hex chars, shell/url-safe. Single command (no pipe) on purpose: a
+  # `... | head -c 32` here would SIGPIPE the upstream and, under pipefail,
+  # abort the script before the first value is returned (the inventory.sh
+  # footgun). The value is irrelevant; persistence is the point.
+  openssl rand -hex 16 > "$F"
   chmod 600 "$F"
 fi
 cat "$F"
