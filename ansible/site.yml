@@ -42,3 +42,14 @@
         - { src: "{{ playbook_dir }}/../src/mqlab/epn.py", dest: epn.py }
         - { src: "{{ playbook_dir }}/../clients/epn_requester.py", dest: epn_requester.py }
         - { src: "{{ playbook_dir }}/../clients/epn_responder.py", dest: epn_responder.py }
+        - { src: "{{ playbook_dir }}/../clients/dr_flow.py", dest: dr_flow.py }
+        - { src: "{{ playbook_dir }}/../clients/dr_responder.py", dest: dr_responder.py }
+
+    # The DR clients import the pure mqlab.dr core (ledger + wire) and mqlab.epn.
+    # mqlab/__init__.py is empty (no deps), so shipping the source tree to ~/mqlab
+    # makes `import mqlab.dr...` resolve via sys.path[0] — no pip install / no
+    # pulling pymqrest/ansible onto the node.
+    - name: deploy mqlab package tree for the DR clients
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../src/mqlab/"
+        dest: /home/vagrant/mqlab/

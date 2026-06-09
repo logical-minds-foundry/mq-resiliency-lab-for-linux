@@ -1,0 +1,137 @@
+"""Firm-side continuous flow generator (persistent + syncpoint).
+
+Producer: build_body() -> MQPUT (PERSISTENT) under syncpoint -> commit ->
+          firm ledger SENT.
+Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit ->
+          firm ledger CONFIRMED.
+
+Producer and consumer run on SEPARATE MQ connections — a single Hconn is not
+safe to share across threads (MQRC_HCONN_ERROR). The ledger is shared under a
+lock. The producer runs to its deadline and returns; main then drains in-flight
+replies for a few seconds before signalling the consumer to stop.
+
+Run on app-client:
+    ~/mqvenv/bin/python ~/dr_flow.py --rate 20 --seconds 30 \
+        --ledger ~/dr-ledgers/firm.jsonl
+
+Deployed to lab nodes by ansible alongside mqlab/ (the dr framework package).
+"""
+
+import argparse
+import pathlib
+import threading
+import time
+import uuid as uuidlib
+
+import pymqi
+from mqlab.dr.ledger import Event, Ledger, LedgerEntry
+from mqlab.dr.wire import build_body, parse_body
+from mqlab.epn import pack_header
+
+STOP = threading.Event()
+DRAIN_SECONDS = 4.0
+
+
+def _connect():
+    cd = pymqi.CD(
+        ChannelName=b"APP.SVRCONN",
+        ConnectionName=b"10.30.0.10(1414)",  # qm-main on net-client (VIP on the HA arms)
+        TransportType=pymqi.CMQC.MQXPT_TCP,
+    )
+    qmgr = pymqi.QueueManager(None)
+    qmgr.connect_with_options("QMAIN", cd=cd)
+    return qmgr
+
+
+def _parse_reply(raw):
+    # the reply echoes the DRv1 body after the EPN header; slice from the marker
+    idx = raw.find(b"DRv1|")
+    return parse_body(raw[idx:])
+
+
+def producer(rate, seconds, expiry, ledger, lock):
+    qmgr = _connect()
+    try:
+        q = pymqi.Queue(qmgr, "DTCC.REQUEST")
+        pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
+        expiry_tenths = (
+            pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
+        )
+        md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
+        interval = 1.0 / rate
+        seq = 0
+        deadline = time.monotonic() + seconds
+        while not STOP.is_set() and time.monotonic() < deadline:
+            seq += 1
+            u = uuidlib.uuid4().hex
+            body = build_body(
+                seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}"
+            )
+            header = pack_header(
+                password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
+            ).encode()
+            q.put(header + body, md, pmo)
+            qmgr.commit()
+            with lock:
+                ledger.append(LedgerEntry(Event.SENT, seq, u, time.time()))
+            time.sleep(interval)
+    finally:
+        qmgr.disconnect()
+
+
+def consumer(ledger, lock):
+    qmgr = _connect()
+    try:
+        q = pymqi.Queue(qmgr, "TRADE.REPLY")
+        gmo = pymqi.GMO(
+            Options=pymqi.CMQC.MQGMO_SYNCPOINT
+            | pymqi.CMQC.MQGMO_WAIT
+            | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING,
+            WaitInterval=2000,
+        )
+        while not STOP.is_set():
+            try:
+                raw = q.get(None, pymqi.MD(), gmo)
+            except pymqi.MQMIError as e:
+                if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+                    continue
+                raise
+            msg = _parse_reply(raw)
+            qmgr.commit()
+            with lock:
+                ledger.append(
+                    LedgerEntry(Event.CONFIRMED, msg.seq, msg.uuid, time.time())
+                )
+    finally:
+        qmgr.disconnect()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--rate", type=float, default=20.0)
+    ap.add_argument("--seconds", type=float, default=30.0)
+    ap.add_argument(
+        "--expiry", type=float, default=None,
+        help="per-message expiry in seconds (default: unlimited)",
+    )
+    ap.add_argument("--ledger", required=True)
+    args = ap.parse_args()
+    pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
+
+    ledger, lock = Ledger(), threading.Lock()
+    t = threading.Thread(target=consumer, args=(ledger, lock), daemon=True)
+    t.start()
+    producer(args.rate, args.seconds, args.expiry, ledger, lock)
+    time.sleep(DRAIN_SECONDS)  # let in-flight replies land before stopping
+    STOP.set()
+    t.join(timeout=5)
+    with lock:
+        ledger.write_jsonl(args.ledger)
+    sent = len(ledger.sent_seqs())
+    confirmed = len(ledger.confirmed_seqs())
+    print(f"flow done: {sent} sent, {confirmed} confirmed -> {args.ledger}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
