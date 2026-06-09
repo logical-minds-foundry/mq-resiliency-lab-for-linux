@@ -1,19 +1,30 @@
 site_name: "mq-cluster-tooling"
+site_description: "Reproducible nested-virtualization IBM MQ cluster lab for exercising HA and DR topologies"
 repo_url: https://github.com/logical-minds-foundry/mq-cluster-tooling
+repo_name: logical-minds-foundry/mq-cluster-tooling
 docs_dir: docs
 strict: true
 edit_uri: ""
 
+extra:
+  version:
+    provider: mike
+
+extra_javascript:
+  - js/resize-iframes.js
+
 theme:
   name: material
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: indigo
       accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: indigo
       accent: indigo
       toggle:
@@ -34,7 +45,8 @@ plugins:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
   - pymdownx.superfences
   - pymdownx.tabbed:
       alternate_style: true
@@ -45,4 +57,10 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Releases:
+      - Changelog: changelog.md
+      - Release Notes:
+          - releases/index.md
   - Getting Started: getting-started.md
+  - Architecture: architecture/index.md
+  - Design & Specs: design-and-specs.md
