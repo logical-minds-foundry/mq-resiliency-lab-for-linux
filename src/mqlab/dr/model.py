@@ -32,7 +32,7 @@ class MessageFacts:
     seq: int
     uuid: str
     firm_confirmed: bool  # firm received its reply at/before cutover
-    dtcc_received: int  # god's-eye: number of times DTCC received this message
-    dtcc_replied: bool  # god's-eye: DTCC produced a reply
+    dtcc_received: int  # Watcher: number of times DTCC received this message
+    dtcc_replied: bool  # Watcher: DTCC produced a reply
     on_secondary: bool  # present/processable on the secondary after cutover
     on_primary_disk: bool  # physically present on the failed primary (post-mortem)

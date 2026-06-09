@@ -1,7 +1,7 @@
-"""DTCC-side god's-eye responder (syncpoint, HA-reconnect-aware).
+"""DTCC-side Watcher responder (syncpoint, HA-reconnect-aware).
 
 Records RECEIVED for EVERY get (so a redelivered message counts as a duplicate,
-spec §5) and REPLIED for every reply, into the god's-eye ledger -- but only
+spec §5) and REPLIED for every reply, into the Watcher ledger -- but only
 AFTER a clean commit, so a failover rollback never logs a phantom receive.
 Runs on the dtcc-sim node (outside both DC sites, so the oracle survives a full
 site loss).
@@ -86,7 +86,7 @@ def _serve(qmgr, args, ledger, deadline):
         ledger.append(LedgerEntry(Event.REPLIED, msg.seq, msg.uuid, time.time()))
         # Periodically flush to disk so a client that later hangs on a dead VIP
         # (MQCONNX blocks past the deadline when the site is gone) still leaves
-        # its god's-eye evidence behind.
+        # the Watcher's ledger behind.
         if time.monotonic() - last_flush > 2.0:
             ledger.write_jsonl(args.ledger)
             last_flush = time.monotonic()
