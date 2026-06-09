@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
+from mqlab.netsel import resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import lab_script
 from mqlab.pauser import NoTTYError, TTYPauser
@@ -61,12 +63,25 @@ def _execute(verb: str, steps: list[CommandStep], *, step_mode: bool) -> None:
         deps.transcript.close()
 
 
-def _net_up_steps() -> list[CommandStep]:
-    return [CommandStep("networks up", Command(["bash", str(lab_script("net-up.sh"))]))]
+def _selected_or_exit(pattern: str) -> list[str]:
+    """Resolve a net pattern to names, or exit 2 with a clear message (#75)."""
+    try:
+        nets = resolve_nets(pattern)
+    except re.error as exc:
+        typer.echo(f"invalid pattern /{pattern}/: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    if not nets:
+        typer.echo(f"no lab network matches /{pattern}/", err=True)
+        raise typer.Exit(code=2)
+    return nets
 
 
-def _net_down_steps() -> list[CommandStep]:
-    return [CommandStep("networks down", Command(["bash", str(lab_script("net-down.sh"))]))]
+def _net_up_steps(nets: list[str]) -> list[CommandStep]:
+    return [CommandStep("networks up", Command(["bash", str(lab_script("net-up.sh")), *nets]))]
+
+
+def _net_down_steps(nets: list[str]) -> list[CommandStep]:
+    return [CommandStep("networks down", Command(["bash", str(lab_script("net-down.sh")), *nets]))]
 
 
 _NET_LIST = Command(["virsh", "-c", "qemu:///system", "net-list", "--all"])  # noqa: S607 - virsh on PATH (lab)
@@ -78,11 +93,15 @@ def _net_status_steps() -> list[CommandStep]:
     return [CommandStep("networks status", _NET_LIST)]
 
 
-def _twin_steps() -> list[CommandStep]:
-    # Test-only helper: two trivial steps so the headless --step branch is reachable.
+def _net_show_steps(nets: list[str]) -> list[CommandStep]:
+    # Multi-step verb (#75): three virsh reads per selected net — config and who is
+    # attached. Pass-through; net-dhcp-leases exits 0 even on no-DHCP nets.
+    base = ["virsh", "-c", "qemu:///system"]
+    reads = [("info", "net-info"), ("config", "net-dumpxml"), ("leases", "net-dhcp-leases")]
     return [
-        CommandStep("a", Command(["true"])),
-        CommandStep("b", Command(["true"])),
+        CommandStep(f"{net} {label}", Command([*base, verb, net]))  # noqa: S607
+        for net in nets
+        for label, verb in reads
     ]
 
 
@@ -91,24 +110,31 @@ net_app = typer.Typer(help="libvirt lab networks", no_args_is_help=True)
 app.add_typer(net_app, name="net")
 
 _StepFlag = Annotated[bool, typer.Option("--step", help="pause after each step to inspect the lab")]
+_Pattern = Annotated[str, typer.Argument(help="net name, regex, or 'all'")]
 
 
 @net_app.command("up")
-def net_up(step: _StepFlag = False) -> None:
-    """Define, start, and autostart every lab network."""
-    _execute("net-up", _net_up_steps(), step_mode=step)
+def net_up(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Define/start/autostart the selected lab networks (a name, regex, or 'all')."""
+    _execute("net-up", _net_up_steps(_selected_or_exit(pattern)), step_mode=step)
 
 
 @net_app.command("down")
-def net_down(step: _StepFlag = False) -> None:
-    """Destroy and undefine every lab network."""
-    _execute("net-down", _net_down_steps(), step_mode=step)
+def net_down(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Destroy/undefine the selected lab networks (a name, regex, or 'all')."""
+    _execute("net-down", _net_down_steps(_selected_or_exit(pattern)), step_mode=step)
 
 
 @net_app.command("status")
 def net_status() -> None:
     """Show which lab networks are defined / active / autostart."""
     _execute("net-status", _net_status_steps(), step_mode=False)
+
+
+@net_app.command("show")
+def net_show(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Show config + DHCP leases for the selected lab networks (name, regex, or 'all')."""
+    _execute("net-show", _net_show_steps(_selected_or_exit(pattern)), step_mode=step)
 
 
 def main() -> None:
