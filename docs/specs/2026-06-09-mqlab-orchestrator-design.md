@@ -1,7 +1,7 @@
 # `mqlab` — Operator Orchestrator for the MQ Cluster Lab — Design
 
 - **Date:** 2026-06-09
-- **Status:** Design — brainstormed (awaiting review)
+- **Status:** Design — brainstormed; pushback applied 2026-06-09
 - **Issue:** #32 — broadened during the brainstorm from "ops/observability tooling"
   (health checks + a `status` verb) to **the full operator orchestrator**, with
   observability as one slice. This riff supersedes the original issue body.
@@ -131,6 +131,18 @@ A verb resolves to a list of steps. A step is one of three kinds:
   step, or a flag that an obvious next step is one the operator runs **manually**.
   Advisories never block.
 
+**The `CommandRunner` seam.** Every command step executes through a single
+`CommandRunner` protocol — the *only* component that touches `subprocess`. The
+real runner spawns, streams stdout/stderr line by line, and returns the exit
+status; a fake/recording runner is injected in tests so the entire orchestration
+core (step sequencing, stream handling, exit-code propagation, the `--step`
+boundary) is unit-testable with no live lab. This seam is deliberately
+MQ-agnostic: it — with the renderer, transcript tee, and step model — is the
+**liftable nucleus** a future lab repo could copy, while the verbs and recipes
+stay bespoke. We keep it clean for that reason, but build no reuse machinery now
+(non-goal: not a framework). The same discipline that makes it testable makes it
+portable.
+
 ### 4.2 Run modes — run-through and `--step`
 
 - **Run-through (default).** Execute all steps back-to-back; the operator watches
@@ -142,14 +154,30 @@ A verb resolves to a list of steps. A step is one of three kinds:
 
 Gate steps halt in **both** modes — they are preconditions, not teaching pauses.
 
+**Interactivity.** Run-through is fully non-interactive — it never reads input, so
+it is safe in tests, CI, and scripts. `--step` requires an interactive terminal
+and reads the continue keypress from **`/dev/tty`** (not `stdin`), so it survives
+the transcript tee and never consumes piped input; with no TTY it **fails fast**
+with a clear message rather than hanging. The pause boundary is covered in tests
+through the same runner seam (§4.1).
+
 ### 4.3 Transcript capture & evidence
 
 Every run tees its full output — the echoed commands plus raw output, exactly what
-scrolled past — to `build/runs/<UTC-timestamp>-<verb>.log` (`build/` is
-gitignored, so this is local by default). A run worth keeping as evidence is
-**promoted** into `docs/reports/` by an explicit operator action. This is what
-makes the same verb against each arm diffable and quotable in the §10-E
-comparison.
+scrolled past — to `build/runs/<UTC-timestamp>-<verb>.log`. **`mqlab` only ever
+writes transcripts under the gitignored `build/` tree**; it never writes to a
+committed path. This makes the same verb against each arm diffable and quotable in
+the §10-E comparison while keeping the permanent record clean.
+
+Because the lab's credentials are throwaway and reproducible, the disposable
+`build/` capture needs no scrubbing. But that freedom stops at the git boundary:
+nothing credential-shaped should enter committed history (repo Secrets policy).
+So there is **no automatic promotion into `docs/reports/`** — keepable runs simply
+live in the build tree ("we wrote them here, come get them"). Archiving a specific
+run for the record is a deliberate, out-of-band human action (save it, open an
+issue, integrate it properly), not an `mqlab` feature. The guard is **structural**:
+`build/*` is gitignored and `mqlab` writes transcripts nowhere else, so evidence
+cannot accidentally land in git.
 
 ### 4.4 Rendering — treatment A
 
@@ -184,16 +212,27 @@ directly. Checks assert against the real tools, never against `mqlab`'s wrappers
 
 ### 4.6 Granularity follows risk
 
-How finely a verb is decomposed into command steps is chosen **per verb by risk**:
+Granularity is chosen **per verb**, and the default is to **wrap an existing
+script rather than re-implement its loop** — this keeps a single source of truth
+and honors principle 3 (wrappers over real mechanics):
 
-- **Cheap / low-risk domains** (e.g. networks) — `mqlab` owns the loop and drives
-  the primitive commands itself (one `virsh` call per step), giving fine-grained
-  echo, per-item status, and per-step `--step` pauses. The equivalent standalone
-  script is kept as the hand-runnable reference.
-- **Complex / verified procedures** (HA group formation, DR cutover/failback) —
-  `mqlab` **wraps** the proven script/playbook as a coarser step and streams its
-  output, rather than re-implementing and re-risking verified mechanics. Ansible's
-  own play/task stream supplies the visible granularity.
+- **Default — wrap a groomed, self-echoing script.** Where a script already
+  encodes the command sequence (and may be used elsewhere — e.g. `net-down.sh` is
+  also a DR fault injector), `mqlab` wraps and streams it. The script is groomed to
+  **echo each command verbatim before running it** (a `run() { echo "+ $*"; "$@"; }`
+  helper, as `rdqm-qm-create.sh` already does), so treatment A surfaces the
+  script's own commands — the most faithful "reproduce by hand" reference, because
+  the commands shown *are* the script's. This covers `net up`/`down` and the
+  Ansible bring-ups (Ansible's play/task stream supplies granularity). Re-risking
+  verified procedures (HA formation, DR cutover/failback) by re-implementing them
+  is explicitly avoided this way.
+- **Own the loop only when warranted** — when no script exists, or when per-step
+  `--step` pausing genuinely adds value. A read like `net status` (no script
+  exists) is driven directly by `mqlab`.
+
+The tradeoff of wrapping is coarser `--step` granularity (the whole script is one
+step); for cheap sequences like network bring-up, pausing mid-sequence has little
+value, so this is the right thing to give up.
 
 ## 5. Command surface
 
@@ -225,10 +264,13 @@ incrementally; each group past the first slice is its own spec→plan→build.
   dependencies added to `pyproject.toml`.
 - **Likely module shape** (to be firmed in the plan):
   - `mqlab.cli` — Typer app, the domain groups, global `--step`.
-  - `mqlab.orchestrator` — the step model (§4.1), the run loop (§4.2), exit-code
-    propagation (principle 6).
+  - `mqlab.runner` — the `CommandRunner` protocol and its real + fake/recording
+    implementations; the only code that touches `subprocess` (§4.1). The
+    MQ-agnostic, liftable nucleus.
+  - `mqlab.orchestrator` — the step model (§4.1), the run loop and `--step`
+    boundary (§4.2), exit-code propagation (principle 6).
   - `mqlab.render` — the Rich treatment-A renderer (§4.4).
-  - `mqlab.transcript` — the `build/runs/` tee and `docs/reports/` promotion (§4.3).
+  - `mqlab.transcript` — the `build/runs/` tee; never writes outside `build/` (§4.3).
   - `mqlab.checks` — the check/gate/health library (§4.5), reused by `check`,
     gate steps, and `status`.
 - **Testing:** the orchestrator core (step model, run loop, transcript, exit-code
@@ -243,20 +285,21 @@ Build `mqlab net up | down | status` end-to-end first. It has the lowest
 dependencies, is run constantly, and exercises the **entire** pattern, proving the
 skeleton before any heavier arm:
 
-- **`net up`** — drives `virsh net-define` / `net-start` / `net-autostart` per lab
-  network (§4.6 fine-grained), echoing each command verbatim, streaming output,
-  reporting per-network status and elapsed time. Idempotent (skip already-active),
-  matching the existing `net-up.sh` semantics.
-- **`net down`** — the inverse (`net-destroy` / `net-undefine`), per network.
-- **`net status`** — reads `virsh net-list --all` and renders which of the lab
-  networks are defined / active / autostart; shows the underlying `virsh` command
-  it ran (a `check`-style observe, §4.5).
+- **`net up` / `net down`** — wrap the groomed, self-echoing `net-up.sh` /
+  `net-down.sh` (§4.6): `mqlab` streams the script while treatment A surfaces each
+  `virsh net-define`/`net-start`/`net-autostart` (and the inverse) verbatim, with
+  per-network status and elapsed time. Grooming the two scripts to echo each
+  command is part of this slice; idempotency stays where it already is, in the
+  scripts.
+- **`net status`** — no script exists, so `mqlab` drives `virsh net-list --all`
+  directly and renders which lab networks are defined / active / autostart, showing
+  the `virsh` command it ran (a `check`-style observe, §4.5).
 
-This slice delivers the reusable core: the step model, the streaming
-exit-code-propagating command runner, the Rich treatment-A renderer, the
-transcript tee, the run-through/`--step` loop, and the Typer app skeleton with the
-`net` group. `lab/scripts/net-up.sh` / `net-down.sh` are retained (and groomed if
-needed) as the hand-runnable reference equivalents.
+This slice delivers the reusable core: the step model and the `CommandRunner` seam
+(§4.1), the Rich treatment-A renderer, the transcript tee, the run-through/`--step`
+loop, and the Typer app skeleton with the `net` group. `net-up.sh` / `net-down.sh`
+remain the single source of the bring-up sequence and the hand-runnable reference;
+grooming them to self-echo is part of this slice.
 
 **Done when:** a human can run `mqlab net up`, `mqlab net down`, and
 `mqlab net status` in the VM; watch every `virsh` command and its output; replay
@@ -284,8 +327,6 @@ them by hand; find a complete transcript in `build/runs/`; and step through with
   verified script is decomposed for finer `--step` pauses or wrapped whole.
 - **`vms ssh` ergonomics.** Thin pass-through to `vagrant ssh`, or a richer
   multi-host helper? Defer to the `vms` slice.
-- **Transcript promotion UX.** A `mqlab` verb vs. a documented manual copy into
-  `docs/reports/`. Defer; `build/runs/` capture is the must-have.
 - **Arm selection default.** Whether `--arm` is always required or can default
   from a session/context setting. Defer to the `setup`/`ha` slices.
 
@@ -294,10 +335,14 @@ them by hand; find a complete transcript in `build/runs/`; and step through with
 1. The `net` slice meets its done bar (§7).
 2. Every command `mqlab` runs is visible verbatim and reproducible by hand from
    the transcript.
-3. A run leaves a complete transcript in `build/runs/`.
-4. `--step` halts between steps and resumes cleanly; gates halt in both modes.
+3. A run leaves a complete transcript in `build/runs/`, and `mqlab` writes
+   transcripts nowhere else (no committed path).
+4. Run-through is non-interactive; `--step` halts between steps and resumes
+   cleanly via `/dev/tty`, fails fast with no TTY, and gates halt in both modes.
 5. A failed underlying command fails the `mqlab` run loudly with a non-zero exit;
    nothing is swallowed.
 6. The command surface stays thin — no abstraction beyond what the verbs need
    (principle 2, non-goal: not a framework).
-7. `vrg-validate` is green (ruff, mypy strict, 100% branch coverage).
+7. The orchestrator core (the `CommandRunner` seam, step loop, `--step` boundary,
+   checks) is unit-tested with no live lab via the fake/recording runner.
+8. `vrg-validate` is green (ruff, mypy strict, 100% branch coverage).
