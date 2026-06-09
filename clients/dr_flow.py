@@ -1,14 +1,19 @@
-"""Firm-side continuous flow generator (persistent + syncpoint).
+"""Firm-side continuous flow generator (persistent + syncpoint, HA-aware).
 
-Producer: build_body() -> MQPUT (PERSISTENT) under syncpoint -> commit ->
-          firm ledger SENT.
-Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit ->
-          firm ledger CONFIRMED.
+Producer: build_body() -> MQPUT (PERSISTENT, FAIL_IF_QUIESCING) under syncpoint
+          -> commit -> firm ledger SENT.
+Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit -> firm
+          ledger CONFIRMED.
 
-Producer and consumer run on SEPARATE MQ connections — a single Hconn is not
-safe to share across threads (MQRC_HCONN_ERROR). The ledger is shared under a
-lock. The producer runs to its deadline and returns; main then drains in-flight
-replies for a few seconds before signalling the consumer to stop.
+Producer and consumer run on SEPARATE MQ connections (a single Hconn is not safe
+to share across threads -- MQRC_HCONN_ERROR); the ledger is shared under a lock.
+
+Each side wraps its work in an explicit reconnect loop (see dr_mqi.py): it
+cooperates with a controlled endmqm via FAIL_IF_QUIESCING, retries in-doubt
+operations against the same business key, and rebuilds the connection itself
+when a controlled endmqm -w disconnects it non-reconnectably (auto-reconnect
+only covers abrupt breaks). The producer carries the in-flight message's
+seq/uuid across a rebuild so a failover never drops or silently re-keys it.
 
 Target QM / connection / queues are parameterized so the same client drives any
 arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
@@ -16,7 +21,7 @@ arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
         --rate 20 --seconds 30 --ledger ~/dr-ledgers/firm.jsonl
 
-Deployed to lab nodes by ansible alongside mqlab/ (the dr framework package).
+Deployed to lab nodes by ansible alongside mqlab/ and dr_mqi.py.
 """
 
 import argparse
@@ -25,6 +30,7 @@ import threading
 import time
 import uuid as uuidlib
 
+import dr_mqi
 import pymqi
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import build_body, parse_body
@@ -34,17 +40,6 @@ STOP = threading.Event()
 DRAIN_SECONDS = 4.0
 
 
-def _connect(conn, channel, qm):
-    cd = pymqi.CD(
-        ChannelName=channel.encode(),
-        ConnectionName=conn.encode(),
-        TransportType=pymqi.CMQC.MQXPT_TCP,
-    )
-    qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options(qm, cd=cd)
-    return qmgr
-
-
 def _parse_reply(raw):
     # the reply echoes the DRv1 body after the EPN header; slice from the marker
     idx = raw.find(b"DRv1|")
@@ -52,60 +47,140 @@ def _parse_reply(raw):
 
 
 def producer(c, rate, seconds, expiry, req_queue, ledger, lock):
-    qmgr = _connect(c.conn, c.channel, c.qm)
-    try:
-        q = pymqi.Queue(qmgr, req_queue)
-        pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
-        expiry_tenths = (
-            pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
-        )
-        md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
-        interval = 1.0 / rate
-        seq = 0
-        deadline = time.monotonic() + seconds
-        while not STOP.is_set() and time.monotonic() < deadline:
+    deadline = time.monotonic() + seconds
+    keep = lambda: not STOP.is_set() and time.monotonic() < deadline  # noqa: E731
+    pmo = pymqi.PMO(
+        Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING
+    )
+    expiry_tenths = pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
+    md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
+    interval = 1.0 / rate
+
+    qmgr, q, seq = None, None, 0
+    pending = None  # (seq, uuid, payload) built but not yet confirmed-sent
+    while keep():
+        if qmgr is None:
+            qmgr = dr_mqi.connect_retry(c.qm, c.conn, c.channel, keep)
+            if qmgr is None:
+                break
+            q = pymqi.Queue(qmgr, req_queue)
+        if pending is None:
             seq += 1
             u = uuidlib.uuid4().hex
-            body = build_body(
-                seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}"
-            )
+            body = build_body(seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}")
             header = pack_header(
                 password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
             ).encode()
-            q.put(header + body, md, pmo)
+            pending = (seq, u, header + body)
+        pseq, puuid, payload = pending
+        try:
+            q.put(payload, md, pmo)
             qmgr.commit()
-            with lock:
-                ledger.append(LedgerEntry(Event.SENT, seq, u, time.time()))
-            time.sleep(interval)
-    finally:
-        qmgr.disconnect()
+        except pymqi.MQMIError as e:
+            if e.reason in dr_mqi.RECONNECT:
+                # Controlled endmqm disconnected us non-reconnectably: drop the
+                # dead connection and rebuild. `pending` is kept so the SAME
+                # seq/uuid is resent (the broken commit did not land) -- no loss.
+                try:
+                    qmgr.disconnect()
+                except pymqi.MQMIError:
+                    pass
+                qmgr, q = None, None
+                time.sleep(0.5)
+                continue
+            if e.reason == dr_mqi.CALL_INTERRUPTED:
+                # 2549: commit outcome IN DOUBT -- the message may already have
+                # landed. Do NOT back out; retry the SAME seq/uuid so a
+                # double-landing is a detectable duplicate (classifier's
+                # Duplicated bucket), never a silent loss.
+                time.sleep(0.5)
+                continue
+            if e.reason in dr_mqi.RETRY_INPLACE:
+                # 2003/2161: clean rollback. Back out the stuck UOW so the next
+                # commit starts fresh, then retry the same seq.
+                try:
+                    qmgr.backout()
+                except pymqi.MQMIError:
+                    pass
+                time.sleep(0.5)
+                continue
+            raise
+        with lock:  # record SENT only after a clean commit
+            ledger.append(LedgerEntry(Event.SENT, pseq, puuid, time.time()))
+        pending = None
+        time.sleep(interval)
+
+    if qmgr is not None:
+        try:
+            qmgr.disconnect()
+        except pymqi.MQMIError:
+            pass
 
 
 def consumer(c, reply_queue, ledger, lock):
-    qmgr = _connect(c.conn, c.channel, c.qm)
-    try:
-        q = pymqi.Queue(qmgr, reply_queue)
-        gmo = pymqi.GMO(
-            Options=pymqi.CMQC.MQGMO_SYNCPOINT
+    keep = lambda: not STOP.is_set()  # noqa: E731
+    # FAIL_IF_QUIESCING: the blocking MQGET-WAIT must notice a controlled endmqm
+    # quiesce instead of hanging through it.
+    gmo = pymqi.GMO(
+        Options=(
+            pymqi.CMQC.MQGMO_SYNCPOINT
             | pymqi.CMQC.MQGMO_WAIT
-            | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING,
-            WaitInterval=2000,
-        )
-        while not STOP.is_set():
-            try:
-                raw = q.get(None, pymqi.MD(), gmo)
-            except pymqi.MQMIError as e:
-                if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
-                    continue
-                raise
-            msg = _parse_reply(raw)
+            | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
+        ),
+        WaitInterval=2000,
+    )
+    qmgr, q = None, None
+    while keep():
+        if qmgr is None:
+            qmgr = dr_mqi.connect_retry(c.qm, c.conn, c.channel, keep)
+            if qmgr is None:
+                break
+            q = pymqi.Queue(qmgr, reply_queue)
+        try:
+            raw = q.get(None, pymqi.MD(), gmo)
+        except pymqi.MQMIError as e:
+            if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+                continue
+            if e.reason in dr_mqi.RECONNECT:
+                try:
+                    qmgr.disconnect()
+                except pymqi.MQMIError:
+                    pass
+                qmgr, q = None, None
+                time.sleep(0.5)
+                continue
+            if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
+                time.sleep(0.2)  # yield to the reconnect thread; no busy-spin
+                continue
+            raise
+        msg = _parse_reply(raw)
+        try:
             qmgr.commit()
-            with lock:
-                ledger.append(
-                    LedgerEntry(Event.CONFIRMED, msg.seq, msg.uuid, time.time())
-                )
-    finally:
-        qmgr.disconnect()
+        except pymqi.MQMIError as e:
+            if e.reason in dr_mqi.RECONNECT:
+                try:
+                    qmgr.disconnect()
+                except pymqi.MQMIError:
+                    pass
+                qmgr, q = None, None
+                time.sleep(0.5)
+                continue
+            if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
+                # outcome in doubt: don't record CONFIRMED. If it did not commit
+                # the reply is requeued and we re-get it; if it did, the seq
+                # stays sent-but-unconfirmed and the reconciler honestly buckets
+                # it as Ambiguous rather than claiming an unsure confirmation.
+                time.sleep(0.2)
+                continue
+            raise
+        with lock:  # record CONFIRMED only after a clean commit
+            ledger.append(LedgerEntry(Event.CONFIRMED, msg.seq, msg.uuid, time.time()))
+
+    if qmgr is not None:
+        try:
+            qmgr.disconnect()
+        except pymqi.MQMIError:
+            pass
 
 
 class _Conn:
