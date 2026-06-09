@@ -73,6 +73,8 @@ not a convenience layer.
   the live system between steps.
 - Provide ground-truth precondition checks usable both standalone (inspect) and
   inline (gate a sequence) — fail-loud, exit-non-zero.
+- Keep the getting-started walkthrough current with each slice — a shipped verb
+  is documented as a watchable walkthrough, not just code.
 
 **Non-goals.**
 
@@ -131,6 +133,10 @@ A verb resolves to a list of steps. A step is one of three kinds:
   step, or a flag that an obvious next step is one the operator runs **manually**.
   Advisories never block.
 
+Of these, the **`net` slice implements command steps only**. Gate and advisory
+steps are introduced by the first slice that needs them (e.g. the `dr`
+convergence gate); building them earlier would be speculative (principle 2).
+
 **The `CommandRunner` seam.** Every command step executes through a single
 `CommandRunner` protocol — the *only* component that touches `subprocess`. The
 real runner spawns, streams stdout/stderr line by line, and returns the exit
@@ -188,6 +194,11 @@ beneath it, a per-item status marker and elapsed time, and a compact running
 summary line. Full width is non-negotiable — these commands and their output are
 long, and the point is to see them whole. Rich provides the styling; the content
 is the literal mechanics, never a glossed summary.
+
+For verbs that **wrap** a script (§4.6), the running summary is per-*step* (steps
+completed, total elapsed); per-*item* counts (e.g. "N of 9 networks") are not
+synthesized by `mqlab`, because the wrapped script owns the loop — its own
+per-item lines stream through as output.
 
 ### 4.5 Checks are gates are health — one primitive
 
@@ -338,7 +349,9 @@ them by hand; find a complete transcript in `build/runs/`; and step through with
 3. A run leaves a complete transcript in `build/runs/`, and `mqlab` writes
    transcripts nowhere else (no committed path).
 4. Run-through is non-interactive; `--step` halts between steps and resumes
-   cleanly via `/dev/tty`, fails fast with no TTY, and gates halt in both modes.
+   cleanly via `/dev/tty`, fails fast with no TTY. (Gate/advisory step kinds and
+   the "gates halt in both modes" rule are forward-looking — first implemented by
+   the slice that needs them; the `net` slice's step model is command-steps-only.)
 5. A failed underlying command fails the `mqlab` run loudly with a non-zero exit;
    nothing is swallowed.
 6. The command surface stays thin — no abstraction beyond what the verbs need

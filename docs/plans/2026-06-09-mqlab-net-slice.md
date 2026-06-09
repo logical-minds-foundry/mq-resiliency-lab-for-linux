@@ -483,7 +483,7 @@ import io
 
 from rich.console import Console
 
-from mqlab.render import Renderer, command_line, fail_line, ok_line, output_line
+from mqlab.render import Renderer, command_line, fail_line, ok_line, output_line, summary_line
 
 
 def test_command_line_is_prefixed_and_verbatim():
@@ -502,6 +502,10 @@ def test_fail_line_shows_exit_code():
     assert fail_line("networks up", 3).plain == "  ✗ networks up   exit 3"
 
 
+def test_summary_line_reports_steps_and_total():
+    assert summary_line(1, 1, 3.10).plain == "  ✓ 1/1 steps   3.10s"
+
+
 def test_renderer_prints_through_a_console():
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=80))
@@ -510,12 +514,14 @@ def test_renderer_prints_through_a_console():
     renderer.ok("networks up", 0.42)
     renderer.fail("networks up", 3)
     renderer.error("--step requires a terminal")
+    renderer.summary(1, 1, 3.10)
     text = buffer.getvalue()
     assert "$ virsh net-start net-wan" in text
     assert "Network net-wan started" in text
     assert "networks up" in text
     assert "exit 3" in text
     assert "--step requires a terminal" in text
+    assert "1/1 steps" in text
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -543,6 +549,7 @@ from rich.text import Text
 
 if TYPE_CHECKING:
     from rich.console import Console
+    from rich.table import Table
 
 
 def command_line(display: str) -> Text:
@@ -565,6 +572,14 @@ def error_line(message: str) -> Text:
     return Text.assemble(("  ! ", "bold red"), (message, "red"))
 
 
+def summary_line(steps_ok: int, steps_total: int, seconds: float) -> Text:
+    return Text.assemble(
+        ("  ✓ ", "bold green"),
+        (f"{steps_ok}/{steps_total} steps", "green"),
+        (f"   {seconds:.2f}s", "grey50"),
+    )
+
+
 class Renderer:
     """Prints treatment-A lines through a Rich console."""
 
@@ -585,6 +600,12 @@ class Renderer:
 
     def error(self, message: str) -> None:
         self._console.print(error_line(message))
+
+    def summary(self, steps_ok: int, steps_total: int, seconds: float) -> None:
+        self._console.print(summary_line(steps_ok, steps_total, seconds))
+
+    def table(self, table: Table) -> None:
+        self._console.print(table)
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -758,6 +779,7 @@ def test_run_steps_runs_each_step_and_tees_to_transcript(tmp_path, monkeypatch):
     assert "$ bash net-up.sh" in body
     assert "Network net-wan started" in body
     assert "OK: networks up 0.50s" in body
+    assert "SUMMARY: 1/1 steps 0.50s" in body
     assert runner.recorded[0].argv == ["bash", "net-up.sh"]
 
 
@@ -855,6 +877,8 @@ def run_steps(
     now: Callable[[], float] = time.monotonic,
 ) -> None:
     total = len(steps)
+    completed = 0
+    elapsed_total = 0.0
     for index, step in enumerate(steps, start=1):
         display = step.command.display()
         renderer.command(display)
@@ -873,8 +897,12 @@ def run_steps(
             raise StepFailed(step.label, exit_code)
         renderer.ok(step.label, elapsed)
         transcript.write(f"OK: {step.label} {elapsed:.2f}s")
+        completed += 1
+        elapsed_total += elapsed
         if step_mode and index < total:
             pauser.wait()
+    renderer.summary(completed, total, elapsed_total)
+    transcript.write(f"SUMMARY: {completed}/{total} steps {elapsed_total:.2f}s")
 ```
 
 - [ ] **Step 4: Run to verify it passes**
@@ -1174,7 +1202,13 @@ vrg-commit --type feat --scope mqlab --message "CLI net up/down: wrap groomed sc
 ```python
 from __future__ import annotations
 
+import io
+
+from rich.console import Console
+
 from mqlab.netstatus import NetRow, net_status_core, parse_net_list
+from mqlab.render import Renderer
+from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
 
 SAMPLE = """\
@@ -1199,14 +1233,22 @@ def test_parse_net_list_ignores_blank_and_short_lines():
     assert parse_net_list("\n   \nName x\n----\n bad row\n") == []
 
 
-def test_net_status_core_runs_virsh_and_returns_exit_code(capsys):
+def test_net_status_core_streams_raw_output_and_tees(tmp_path, monkeypatch):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    buffer = io.StringIO()
+    renderer = Renderer(Console(file=buffer, force_terminal=False, width=100))
+    transcript = Transcript(transcript_path("net-status", "20260609T000000Z"))
     runner = RecordingRunner(results=[ScriptedResult(SAMPLE.splitlines())])
-    code = net_status_core(runner)
+    code = net_status_core(runner, renderer, transcript)
+    transcript.close()
     assert code == 0
     assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "net-list", "--all"]
-    out = capsys.readouterr().out
-    assert "net-wan" in out
+    out = buffer.getvalue()
     assert "$ virsh -c qemu:///system net-list --all" in out
+    assert "net-wan" in out  # raw line + table both render
+    body = transcript.path.read_text(encoding="utf-8")
+    assert "$ virsh -c qemu:///system net-list --all" in body
+    assert "net-san-b" in body  # raw virsh lines teed to the transcript
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1230,14 +1272,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from rich.console import Console
 from rich.table import Table
 
-from mqlab.render import command_line
 from mqlab.runner import Command
 
 if TYPE_CHECKING:
+    from mqlab.render import Renderer
     from mqlab.runner import CommandRunner
+    from mqlab.transcript import Transcript
 
 _NET_LIST = Command(["virsh", "-c", "qemu:///system", "net-list", "--all"])  # noqa: S607 - virsh on PATH (lab)
 
@@ -1272,12 +1314,19 @@ def _table(rows: list[NetRow]) -> Table:
     return table
 
 
-def net_status_core(runner: CommandRunner, console: Console | None = None) -> int:
-    console = console or Console()
-    console.print(command_line(_NET_LIST.display()))
+def net_status_core(runner: CommandRunner, renderer: Renderer, transcript: Transcript) -> int:
+    display = _NET_LIST.display()
+    renderer.command(display)
+    transcript.write(f"$ {display}")
     captured: list[str] = []
-    exit_code = runner.run(_NET_LIST, captured.append)
-    console.print(_table(parse_net_list("\n".join(captured))))
+
+    def sink(line: str) -> None:
+        renderer.output(line)
+        transcript.write(line)
+        captured.append(line)
+
+    exit_code = runner.run(_NET_LIST, sink)
+    renderer.table(_table(parse_net_list("\n".join(captured))))
     return exit_code
 ```
 
@@ -1295,7 +1344,12 @@ And add this command after `net_down` (before `def main`):
 @net_app.command("status")
 def net_status() -> None:
     """Show which lab networks are defined / active / autostart."""
-    code = net_status_core(SubprocessRunner())
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("net-status", timestamp)
+    try:
+        code = net_status_core(deps.runner, deps.renderer, deps.transcript)
+    finally:
+        deps.transcript.close()
     if code != 0:
         raise typer.Exit(code=code)
 ```
