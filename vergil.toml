@@ -13,6 +13,14 @@ integration-tests = false
 release = false
 docs = true
 
+# Exclude generated docs artifacts from markdownlint. vrg-docs-stage copies
+# the changelog/release sources under docs/site/docs/ at build time; those
+# copies are machine-generated (and gitignored), so they are not hand-authored
+# markdown to lint. The committed sources live at the repo root and are not
+# under docs/site/, so markdownlint never sees them either way.
+[markdownlint]
+ignore = ["docs/site/docs/changelog.md", "docs/site/docs/releases"]
+
 [dependencies]
 vergil = "v2.1"
 

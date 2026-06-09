@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — RDQM arm (HA + DR)</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>RDQM arm — HA inside a site, async DR across the WAN</h2>
+<p class="subtitle">HA groups are 3-node, synchronous, single-site. Cross-site is always asynchronous DR with manual cutover. No node ever stretches across the WAN.</p>
+
+<div class="callout">
+  <b>Why no stretched groups?</b> An RDQM HA group replicates <b>synchronously</b> and is a single quorum domain. Putting a member in the other data center ties every commit to inter-site latency and makes a DC-to-DC partition <b>collapse the cluster</b> instead of giving clean DR. Cross-site resilience is a <b>separate, asynchronous DR relationship</b> — never a stretched sync group.
+</div>
+
+<div class="wrap">
+  <div class="panel">
+    <h3>The building block — one queue manager, HA + DR</h3>
+    <p class="sub">QM <code>TRADE.QM</code> — automatic HA inside DC-A, manual async DR to DC-B.</p>
+    <div class="row">
+      <div class="box">
+        <h4>Data Center A — PRIMARY</h4>
+        <span class="net net-data">net-data-a · 10.10.1.31-33</span>
+        <span class="net net-priv">net-hb-a · sync DRBD + Corosync</span>
+        <div class="group">
+          <div class="glabel">RDQM HA group — 3 nodes, synchronous, automatic failover</div>
+          <div class="nodes">
+            <div class="node active">rdqm-a1 ▶</div>
+            <div class="node">rdqm-a2</div>
+            <div class="node">rdqm-a3 <span class="tag">quorum</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="wanlink">
+        <span class="net net-wan">net-wan</span>
+        <div class="arrow">⇒</div>
+        <small><b>async</b> DR<br/>(manual <code>rdqmdr</code><br/>cutover)<br/>seconds-scale window</small>
+      </div>
+
+      <div class="box b">
+        <h4>Data Center B — DR RECOVERY</h4>
+        <span class="net net-data">net-data-b · 10.10.2.41-43</span>
+        <span class="net net-priv">net-hb-b · sync DRBD + Corosync</span>
+        <div class="group dr">
+          <div class="glabel">DR recovery — 3-node HA group (3+3)</div>
+          <div class="nodes">
+            <div class="node">rdqm-b1</div>
+            <div class="node">rdqm-b2</div>
+            <div class="node">rdqm-b3</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ok" style="margin-top:10px;">Inside a DC: <b>automatic</b> HA failover, RPO 0 (synchronous). Between DCs: <b>manual</b> <code>rdqmdr</code> cutover, small async window. As built: DC-B is a full 3-node HA group (3+3).</div>
+  </div>
+</div>
+</body></html>

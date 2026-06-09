@@ -40,3 +40,11 @@ build/*
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Staged/generated docs artifacts — vrg-docs-stage copies the root
+# CHANGELOG.md/releases sources here and mkdocs builds into site/. The
+# sources (CHANGELOG.md, releases/) are committed; these copies are
+# regenerated on every build.
+docs/site/site/
+docs/site/docs/changelog.md
+docs/site/docs/releases/
