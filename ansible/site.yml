@@ -42,6 +42,7 @@
         - { src: "{{ playbook_dir }}/../src/mqlab/epn.py", dest: epn.py }
         - { src: "{{ playbook_dir }}/../clients/epn_requester.py", dest: epn_requester.py }
         - { src: "{{ playbook_dir }}/../clients/epn_responder.py", dest: epn_responder.py }
+        - { src: "{{ playbook_dir }}/../clients/dr_mqi.py", dest: dr_mqi.py }
         - { src: "{{ playbook_dir }}/../clients/dr_flow.py", dest: dr_flow.py }
         - { src: "{{ playbook_dir }}/../clients/dr_responder.py", dest: dr_responder.py }
 
@@ -53,3 +54,36 @@
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../src/mqlab/"
         dest: /home/vagrant/mqlab/
+
+    # Client HA requirement #7: a blocking MQI call (esp. MQPUT) to a *fenced*
+    # node must detect the dead peer fast and trigger reconnect. Default
+    # detection is tied to HBINT (~300s), so a blocked put hangs for minutes.
+    # TCP KeepAlive on the client socket + a short OS keepalive interval cut
+    # that to ~30s. (Channel-side HBINT/KAINT are set in pcmk-qm-create.sh.)
+    - name: client TCP KeepAlive in mqclient.ini (fast dead-peer detection)
+      become: true
+      ansible.builtin.blockinfile:
+        path: /var/mqm/mqclient.ini
+        create: true
+        owner: mqm
+        group: mqm
+        marker: "# {mark} DR-HA TCP KEEPALIVE"
+        block: |
+          TCP:
+             KeepAlive=Yes
+
+    - name: short OS TCP keepalive so a blocked call detects a fenced peer
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-mq-keepalive.conf
+        content: |
+          # DR-HA: detect a fenced MQ peer in ~30s, not the ~15min TCP default.
+          net.ipv4.tcp_keepalive_time = 15
+          net.ipv4.tcp_keepalive_intvl = 5
+          net.ipv4.tcp_keepalive_probes = 3
+      register: mq_keepalive_sysctl
+
+    - name: apply the keepalive sysctl drop-in
+      become: true
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-mq-keepalive.conf
+      when: mq_keepalive_sysctl.changed

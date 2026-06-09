@@ -16,7 +16,7 @@ run() { uv run ansible "$1" -b -m shell -a "$2"; }
 run pcmk-a1 "mkdir -p /mqshared && mountpoint -q /mqshared || mount /dev/disk/by-label/MQSHARED /mqshared"
 run pcmk-a1 "mkdir -p /mqshared/qmgrs /mqshared/log && chown -R mqm:mqm /mqshared"
 run pcmk-a1 "su mqm -c '/opt/mqm/bin/crtmqm -md /mqshared/qmgrs -ld /mqshared/log $QM' || su mqm -c '/opt/mqm/bin/dspmq -m $QM'"
-run pcmk-a1 "su mqm -c '/opt/mqm/bin/strmqm $QM' || true; printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nSTART LISTENER(L1414)\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' || true; su mqm -c '/opt/mqm/bin/endmqm -w $QM'"
+run pcmk-a1 "su mqm -c '/opt/mqm/bin/strmqm $QM' || true; printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nSTART LISTENER(L1414)\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') HBINT(15) KAINT(15) REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' || true; su mqm -c '/opt/mqm/bin/endmqm -w $QM'"
 
 # 2. Teach the other nodes the QM definition (addmqinf from dspmqinf).
 INF=$(run pcmk-a1 "su mqm -c '/opt/mqm/bin/dspmqinf -o command $QM'" | grep '^addmqinf')

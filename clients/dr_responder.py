@@ -1,30 +1,88 @@
-"""DTCC-side god's-eye responder (syncpoint).
+"""DTCC-side god's-eye responder (syncpoint, HA-reconnect-aware).
 
 Records RECEIVED for EVERY get (so a redelivered message counts as a duplicate,
-spec §5) and REPLIED for every reply, into the god's-eye ledger. Runs on the
-dtcc-sim node (outside both DC sites, so the oracle survives a full site loss).
+spec §5) and REPLIED for every reply, into the god's-eye ledger -- but only
+AFTER a clean commit, so a failover rollback never logs a phantom receive.
+Runs on the dtcc-sim node (outside both DC sites, so the oracle survives a full
+site loss).
+
+Connection handling embodies the client HA requirements (see dr_mqi.py): cooperate
+with a controlled endmqm via FAIL_IF_QUIESCING, retry in-doubt operations, and --
+crucially -- rebuild the connection ourselves when a controlled endmqm -w
+disconnects us non-reconnectably (auto-reconnect only covers abrupt breaks).
 
 Run on dtcc-sim:
     ~/mqvenv/bin/python ~/dr_responder.py --seconds 40 --ledger ~/dr-ledgers/dtcc.jsonl
 
-Deployed by ansible alongside mqlab/. Echoes the DRv1 body back so the firm can
-match seq/uuid.
+Deployed by ansible alongside mqlab/ and dr_mqi.py. Echoes the DRv1 body back so
+the firm can match seq/uuid.
 """
 
 import argparse
 import pathlib
 import time
 
+import dr_mqi
 import pymqi
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import parse_body
 from mqlab.epn import pack_header
 
-# MQI reason codes meaning an HA failover backed out the in-flight unit of work.
-_RECONNECT_BACKOUT = (
-    pymqi.CMQC.MQRC_BACKED_OUT,
-    pymqi.CMQC.MQRC_CALL_INTERRUPTED,
-)
+
+def _serve(qmgr, args, ledger, deadline):
+    """Get/reply/commit loop on one connection. Returns when the deadline is
+    reached; raises MQMIError(reason in dr_mqi.RECONNECT) when the connection is
+    lost so the caller can rebuild it."""
+    qin = pymqi.Queue(qmgr, args.in_queue)
+    qout = pymqi.Queue(qmgr, args.out_queue)
+    # FAIL_IF_QUIESCING: a blocking MQGET-WAIT must notice a controlled endmqm
+    # quiesce instead of hanging through it.
+    gmo = pymqi.GMO(
+        Options=(
+            pymqi.CMQC.MQGMO_SYNCPOINT
+            | pymqi.CMQC.MQGMO_WAIT
+            | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
+        ),
+        WaitInterval=2000,
+    )
+    pmo = pymqi.PMO(
+        Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING
+    )
+    md_persist = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT)
+
+    while time.monotonic() < deadline:
+        try:
+            raw = qin.get(None, pymqi.MD(), gmo)
+        except pymqi.MQMIError as e:
+            if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+                continue
+            if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
+                time.sleep(0.2)  # yield to the reconnect thread; no busy-spin
+                continue
+            raise  # dr_mqi.RECONNECT or unexpected -> caller rebuilds / fails loud
+        idx = raw.find(b"DRv1|")
+        msg = parse_body(raw[idx:])
+        reply = (
+            pack_header(
+                password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=msg.busdate
+            ).encode()
+            + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
+        )
+        try:
+            qout.put(reply, md_persist, pmo)
+            qmgr.commit()
+        except pymqi.MQMIError as e:
+            if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
+                # get+reply rolled back (or in doubt) across failover; the request
+                # is requeued and we re-get it. Record nothing -- a clean commit
+                # is the only thing that logs RECEIVED/REPLIED.
+                time.sleep(0.2)
+                continue
+            raise
+        # record RECEIVED + REPLIED only after a clean commit (recording before
+        # would log a phantom receive on a failover rollback and inflate dups).
+        ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
+        ledger.append(LedgerEntry(Event.REPLIED, msg.seq, msg.uuid, time.time()))
 
 
 def main():
@@ -39,59 +97,39 @@ def main():
     args = ap.parse_args()
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
-    cd = pymqi.CD(
-        ChannelName=args.channel.encode(),
-        ConnectionName=args.conn.encode(),
-        TransportType=pymqi.CMQC.MQXPT_TCP,
-    )
-    qmgr = pymqi.QueueManager(None)
-    # auto-reconnect across HA failover (same QM via the VIP), like the firm
-    qmgr.connect_with_options(args.qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
-    qin = pymqi.Queue(qmgr, args.in_queue)
-    qout = pymqi.Queue(qmgr, args.out_queue)
-    gmo = pymqi.GMO(
-        Options=pymqi.CMQC.MQGMO_SYNCPOINT
-        | pymqi.CMQC.MQGMO_WAIT
-        | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING,
-        WaitInterval=2000,
-    )
-    pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
-    md_persist = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT)
-
     ledger = Ledger()
     deadline = time.monotonic() + args.seconds
-    while time.monotonic() < deadline:
-        try:
-            raw = qin.get(None, pymqi.MD(), gmo)
-        except pymqi.MQMIError as e:
-            if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
-                continue
-            if e.reason in _RECONNECT_BACKOUT:
-                continue  # failover; retry the get
-            raise
-        idx = raw.find(b"DRv1|")
-        msg = parse_body(raw[idx:])
-        reply = (
-            pack_header(
-                password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=msg.busdate
-            ).encode()
-            + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
-        )
-        qout.put(reply, md_persist, pmo)
-        try:
-            qmgr.commit()
-        except pymqi.MQMIError as e:
-            if e.reason in _RECONNECT_BACKOUT:
-                continue  # get+reply rolled back across failover; request requeued
-            raise
-        # record RECEIVED + REPLIED only after a clean commit — recording the
-        # receive before the commit would log a phantom receive on a failover
-        # rollback and inflate the duplicate count.
-        ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
-        ledger.append(LedgerEntry(Event.REPLIED, msg.seq, msg.uuid, time.time()))
+    qmgr = None
+    try:
+        # Outer reconnect loop: rebuild the connection whenever a controlled
+        # endmqm disconnects us non-reconnectably, until the deadline.
+        while time.monotonic() < deadline:
+            qmgr = dr_mqi.connect_retry(
+                args.qm, args.conn, args.channel, lambda: time.monotonic() < deadline
+            )
+            if qmgr is None:
+                break
+            try:
+                _serve(qmgr, args, ledger, deadline)
+                break  # deadline reached cleanly inside _serve
+            except pymqi.MQMIError as e:
+                if e.reason not in dr_mqi.RECONNECT:
+                    raise
+                # connection lost (controlled endmqm) -> drop it and rebuild
+                try:
+                    qmgr.disconnect()
+                except pymqi.MQMIError:
+                    pass
+                qmgr = None
+                time.sleep(0.5)
+    finally:
+        if qmgr is not None:
+            try:
+                qmgr.disconnect()
+            except pymqi.MQMIError:
+                pass
+        ledger.write_jsonl(args.ledger)
 
-    ledger.write_jsonl(args.ledger)
-    qmgr.disconnect()
     received = len(ledger.dtcc_receive_counts())
     print(f"responder done: {received} received -> {args.ledger}")
     return 0
