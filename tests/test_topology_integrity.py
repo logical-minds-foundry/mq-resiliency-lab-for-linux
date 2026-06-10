@@ -15,3 +15,10 @@ def test_every_setup_group_is_defined():
     for setup in lab_setups().values():
         for g in setup.groups:
             assert g in groups, f"{setup.name} references undefined group {g}"
+
+
+def test_pcmk_setups_declare_the_hacluster_secret():
+    setups = lab_setups()
+    assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password"]
+    assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password"]
+    assert setups["standalone"].secrets == ["mqweb_admin_password"]
