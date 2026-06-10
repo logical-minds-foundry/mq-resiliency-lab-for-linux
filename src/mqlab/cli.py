@@ -153,6 +153,28 @@ def net_show(pattern: _Pattern, step: _StepFlag = False) -> None:
 vm_app = typer.Typer(help="lab guest VMs (vagrant + virsh)", no_args_is_help=True)
 app.add_typer(vm_app, name="vm")
 
+obs_app = typer.Typer(help="observability stack (Prometheus + Grafana)", no_args_is_help=True)
+app.add_typer(obs_app, name="obs")
+
+
+@obs_app.command("targets")
+def obs_targets() -> None:
+    """Render build/prometheus/targets/node.json from topology and echo it."""
+    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+
+    deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_scrape_targets()
+        path = scrape_targets_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        for line in text.splitlines():
+            deps.renderer.output(line)
+            deps.transcript.write(line)
+    finally:
+        deps.transcript.close()
+
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 
