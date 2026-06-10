@@ -6,6 +6,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -399,7 +400,7 @@ def _provision(setup_name: str) -> None:
         step = CommandStep(
             f"{setup_name} provision",
             Command(
-                ["uv", "run", "ansible-playbook", os.path.basename(setup.provision)],  # noqa: S607, PTH119
+                ["uv", "run", "ansible-playbook", Path(setup.provision).name],  # noqa: S607
                 cwd=repo_root() / "ansible",
                 env=secret_env or None,
             ),
