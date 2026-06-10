@@ -39,8 +39,8 @@ lists the setups).
    illusion, so mqlab invents *every* secret — nothing is operator-supplied. For
    each name in the setup's `secrets:` → run `lab/scripts/lab-secret.sh <name>`
    (auto-generates + persists in gitignored `build/secrets/` on first use,
-   returns the same value forever after), **capture its stdout silently**, and
-   set `os.environ[<NAME>.upper()]` (e.g. `pcmk_hacluster_password` →
+   returns the same value forever after), capture its stdout (echoed like any
+   step — §5), and set `os.environ[<NAME>.upper()]` (e.g. `pcmk_hacluster_password` →
    `PCMK_HACLUSTER_PASSWORD`). The Ansible subprocess inherits it. There is no
    missing-secret case — `lab-secret.sh` always returns a value.
 4. **Render the inventory** (inline): write `build/inventory.ini` from topology
@@ -91,15 +91,14 @@ Only the password is a `secrets:` entry; mqlab injects it as
 …)`. To retrieve the generated console password later:
 `lab/scripts/lab-secret.sh mqweb_admin_password`.
 
-## 5. Secret hygiene
+## 5. Secret handling — no hiding needed
 
-Sourcing a secret captures the value **silently**: the command line
-(`bash lab/scripts/lab-secret.sh pcmk_hacluster_password`) may be echoed for
-transparency, but its **output value is never rendered to screen nor written to
-the transcript** (`build/runs/*.log`). A dedicated silent capture (a sink that
-appends to a local buffer only) is used, distinct from the normal echo-and-tee
-sink. This keeps secrets out of logs while preserving the "show the command"
-contract.
+These secrets are auto-generated and carry **no security weight**: the lab is a
+disposable illusion (power it off, throw it away, it stops existing). So we make
+no effort to hide their values. `_source_secret` echoes and tees the
+`lab-secret.sh` run exactly like any other step (`_probe_states`), and simply
+captures the printed value to inject it. (Anything touching *real* credentials
+would be done with grade-A care; this deliberately isn't that.)
 
 ## 6. Components
 
