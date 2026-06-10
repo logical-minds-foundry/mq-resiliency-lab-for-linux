@@ -279,6 +279,16 @@ def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):
     assert result.exit_code == 2
 
 
+def test_advisory_notes_name_fully_qualified_mqlab_commands():
+    # mqlab's own guidance points at the wrapper's own commands, fully qualified
+    # with the `mqlab` prefix — never bare subcommands or the raw virsh/vagrant
+    # invocation. This keeps mqlab's vocabulary distinct from the wrapped tool's.
+    _, create_notes = cli._plan_create(["g"], {"lab_g": "running"})  # already exists
+    assert any("mqlab vm up" in n and "mqlab vm destroy" in n for n in create_notes)
+    _, up_notes = cli._plan_up(["g"], {})  # absent -> guide to create
+    assert any("mqlab vm create" in n for n in up_notes)
+
+
 def test_vm_ssh_execs_vagrant_in_lab(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)

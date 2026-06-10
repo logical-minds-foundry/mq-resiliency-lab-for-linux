@@ -187,7 +187,9 @@ def _plan_create(guests: list[str], states: dict[str, str]) -> tuple[list[Comman
         if classify(states, g) == ABSENT:
             steps.append(_create_step(g))
         else:
-            notes.append(f"{g}: already created — vm up to start, vm destroy to recreate")
+            notes.append(
+                f"{g}: already created — mqlab vm up to start, mqlab vm destroy to recreate"
+            )
     return steps, notes
 
 
@@ -201,7 +203,7 @@ def _plan_up(guests: list[str], states: dict[str, str]) -> tuple[list[CommandSte
         elif state == RUNNING:
             notes.append(f"{g}: already running")
         else:
-            notes.append(f"{g}: not created — run vm create first")
+            notes.append(f"{g}: not created — run mqlab vm create first")
     return steps, notes
 
 
