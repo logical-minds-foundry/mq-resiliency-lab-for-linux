@@ -40,9 +40,10 @@ lists the setups).
    each name in the setup's `secrets:` → run `lab/scripts/lab-secret.sh <name>`
    (auto-generates + persists in gitignored `build/secrets/` on first use,
    returns the same value forever after), capture its stdout (echoed like any
-   step — §5), and set `os.environ[<NAME>.upper()]` (e.g. `pcmk_hacluster_password` →
-   `PCMK_HACLUSTER_PASSWORD`). The Ansible subprocess inherits it. There is no
-   missing-secret case — `lab-secret.sh` always returns a value.
+   step — §5), and inject it as `<NAME>.upper()` (e.g. `pcmk_hacluster_password` →
+   `PCMK_HACLUSTER_PASSWORD`) onto the playbook subprocess via `Command.env`
+   (merged over `os.environ` for that child only — no global mutation). There is
+   no missing-secret case — `lab-secret.sh` always returns a value.
 4. **Render the inventory** (inline): write `build/inventory.ini` from topology
    via the #101 renderer — a Python call, not a subprocess — echoing a one-line
    note that it was written. This guarantees Ansible runs against a current
@@ -104,13 +105,14 @@ would be done with grade-A care; this deliberately isn't that.)
 
 - **`src/mqlab/setups.py`** — `Setup` gains `secrets: list[str]` (default `[]`),
   parsed in `lab_setups()`.
+- **`src/mqlab/runner.py`** — `Command` gains optional `env`, merged over
+  `os.environ` for the child subprocess (so a secret rides only the playbook).
 - **`src/mqlab/cli.py`** — `vm_provision(setup)` command + a `_provision`
-  flow/helper that does resolve → probe → preflight → source secrets → render
+  flow that does resolve → probe → preflight → source secrets → render
   inventory → run the playbook step. Reuses `_probe_states`, `classify`,
-  `_resolve_or_exit`, `_execute`-style orchestration, and the
-  `lab_inventory`/`inventory_path` helpers from #101.
-- **A silent secret-source helper** — runs `lab-secret.sh <name>` via the
-  CommandRunner with a capture-only sink; returns the value.
+  `run_steps`, and the `lab_inventory`/`inventory_path` helpers from #101.
+- **A secret-source helper (`_source_secret`)** — runs `lab-secret.sh <name>`,
+  echoing + teeing like any step (§5), and returns the captured value.
 - **`ansible/group_vars/all.yml`** — `mqweb_admin_user` becomes the constant
   `mqadmin` (it is not a secret); `mqweb_admin_password` stays a `lookup('env',
   'MQWEB_ADMIN_PASSWORD')`, which mqlab now supplies from the generated secret.
@@ -133,13 +135,13 @@ failed. No swallowed failures, no empty-secret fallbacks.
 ## 8. Testing
 
 - `setups.py`: `Setup.secrets` parse (present + defaulted-empty).
+- `runner.py`: `Command.env` passed to the child, merged over `os.environ`.
 - provision flow (CommandRunner fake, no live lab):
   - members not all running → advisory note, **no** action commands run, exit 3.
-  - all running, secret setup → `lab-secret.sh` invoked, `os.environ` set, then
-    inventory rendered + `ansible-playbook` step runs.
-  - all running, no-secret setup (rdqm) → no `lab-secret.sh`, playbook runs.
-  - **secret hygiene**: the captured secret value appears **neither** in the
-    rendered output buffer **nor** in the transcript.
+  - all running, secret setup → `lab-secret.sh` invoked, the value injected as
+    `Command.env` on the playbook step, then inventory rendered + playbook runs.
+  - all running, no-secret setup (rdqm) → no `lab-secret.sh`, playbook `env` is None.
+  - lab-secret failure → exit 2; playbook failure → ansible's exit code.
   - unknown setup / no-provision setup → exit 2.
 - `vrg-container-run -- vrg-validate` green at 100% branch.
 
