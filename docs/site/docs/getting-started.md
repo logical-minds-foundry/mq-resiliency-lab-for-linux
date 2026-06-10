@@ -84,6 +84,15 @@ and **up/down** (power):
   `undefine`). **libvirt is the ground truth for state; Vagrant is used only for
   create** — so these work regardless of Vagrant's metadata.
 
+Every verb is **state-aware and idempotent**: it first runs `virsh list --all`
+(streamed verbatim, like every other step) to see the live state, then acts only
+on the guests that need it. Re-running `vm create all` skips guests that already
+exist; `vm up` skips those already running; `vm down` skips those already off;
+`vm destroy` force-stops a running guest before removing it, and skips any that
+are already gone. Guests it leaves alone get a one-line advisory note (`·`)
+explaining why — so the output always traces the decision back to the probed
+state. Running a verb twice is safe and converges on the same result.
+
 Like `net`, the mutating verbs require a selector, so a bare `mqlab vm destroy`
 cannot wipe every guest.
 
