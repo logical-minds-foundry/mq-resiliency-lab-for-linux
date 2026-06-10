@@ -176,6 +176,61 @@ def obs_targets() -> None:
         deps.transcript.close()
 
 
+GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
+
+
+def _obs_up_steps() -> list[CommandStep]:
+    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+
+    path = scrape_targets_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(lab_scrape_targets())  # render eagerly when the steps are built
+
+    return [
+        CommandStep("render scrape targets", Command(["echo", f"rendered -> {path}"])),  # noqa: S607
+        CommandStep(
+            "monitoring create",
+            Command(["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab"),  # noqa: S607
+        ),
+        CommandStep(
+            "provision monitoring",
+            Command(
+                ["uv", "run", "ansible-playbook", "ansible/site-obs.yml"],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        ),
+    ]
+
+
+@obs_app.command("up")
+def obs_up(step: _StepFlag = False) -> None:
+    """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
+    _execute("obs-up", _obs_up_steps(), step_mode=step)
+
+
+@obs_app.command("status")
+def obs_status() -> None:
+    """Show the monitoring pair's state (topology joined with live virsh state)."""
+    guests = _resolve_or_exit("monitoring", resolve_guests, "guest")
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("obs-status", timestamp)
+    try:
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+@obs_app.command("open")
+def obs_open() -> None:
+    """Print the Grafana URL and the SSH tunnel to reach it from your workstation."""
+    typer.echo(f"Grafana: {GRAFANA_URL}")
+    typer.echo("From inside the Vergil VM session this URL is directly reachable.")
+    typer.echo("From your workstation, tunnel through the session host:")
+    typer.echo(f"  ssh -L 3000:10.50.0.2:3000 <vergil-vm-session-host>  # then open {GRAFANA_URL}")
+
+
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
