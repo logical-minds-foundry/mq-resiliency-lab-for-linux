@@ -1,9 +1,9 @@
-# lab/topology.yaml — single source of truth for the lab shape.
-# Phase A: 3+3 placeholder nodes, Ubuntu arm64 (KVM). The RDQM arm swaps
-# platform to a RHEL x86_64 entry per-node in Phase C without touching
-# the Vagrantfile. Arch-specific provider mechanics (UEFI, input, CPU
-# mode) live in the Vagrantfile keyed on `arch` — see the provider spike
-# report (docs/reports/2026-06-06-phase-a-provider-spike.md).
+# lab/topology.yaml — single source of truth for the lab shape: the guest VMs
+# (nodes), the networks/boxes, and the named `setups` that group guests into
+# runnable configurations. The RDQM arm uses a RHEL x86_64 platform per-node;
+# arch-specific provider mechanics (UEFI, input, CPU mode) live in the Vagrantfile
+# keyed on `arch` — see the provider spike report
+# (docs/reports/2026-06-06-phase-a-provider-spike.md).
 boxes:
   ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
   alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
@@ -17,25 +17,6 @@ boxes:
 defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
 
 nodes:
-  node-a1:
-    nics: { net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11,
-            net-wan: 10.99.0.11, net-dtcc: 10.20.0.11 }
-  node-a2:
-    nics: { net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12,
-            net-wan: 10.99.0.12, net-dtcc: 10.20.0.12 }
-  node-a3:
-    nics: { net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13,
-            net-wan: 10.99.0.13, net-dtcc: 10.20.0.13 }
-  node-b1:
-    nics: { net-data-b: 10.10.2.21, net-hb-b: 172.16.2.21,
-            net-wan: 10.99.0.21, net-dtcc: 10.20.0.21 }
-  node-b2:
-    nics: { net-data-b: 10.10.2.22, net-hb-b: 172.16.2.22,
-            net-wan: 10.99.0.22, net-dtcc: 10.20.0.22 }
-  node-b3:
-    nics: { net-data-b: 10.10.2.23, net-hb-b: 172.16.2.23,
-            net-wan: 10.99.0.23, net-dtcc: 10.20.0.23 }
-
   # --- Phase B: standalone QM + fixtures (spec 10-B; 5-amendment: VMs) ---
   qm-main:
     cpus: 2
@@ -126,3 +107,29 @@ nodes:
     cpus: 2
     memory: 2048
     nics: { net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63 }
+
+# setups — named groupings of guests into runnable configurations: the single
+# source of truth for "which machines compose each config, in what bring-up order
+# (SAN first), and which Ansible playbook provisions them" (#90). `mqlab vm` and
+# `mqlab vm status` read this; ansible/inventory.sh will derive its groups here too.
+setups:
+  pcmk-san-ha:
+    description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
+    members: [san-a, pcmk-a1, pcmk-a2, pcmk-a3]
+    provision: ansible/site-pcmk.yml
+  pcmk-san-dr:
+    description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
+    members: [san-a, pcmk-a1, pcmk-a2, pcmk-a3, san-b, pcmk-b1, pcmk-b2, pcmk-b3]
+    provision: ansible/site-pcmk-dr.yml
+  rdqm-ha:
+    description: RDQM/RHEL shared-nothing — site-A 3-node HA
+    members: [rdqm-a1, rdqm-a2, rdqm-a3]
+    provision: ansible/site-rdqm.yml
+  rdqm-dr:
+    description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
+    members: [rdqm-a1, rdqm-a2, rdqm-a3, rdqm-b1, rdqm-b2, rdqm-b3]
+    provision: ansible/site-rdqm.yml
+  standalone:
+    description: Phase-B standalone QM + DTCC sim + client (message path)
+    members: [qm-main, dtcc-sim, app-client]
+    provision: ansible/site.yml

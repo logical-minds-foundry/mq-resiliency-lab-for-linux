@@ -35,3 +35,14 @@ def test_resolve_filters_lab_guest_names(monkeypatch, tmp_path):
         "nodes:\n  pcmk-a1: {}\n  pcmk-b1: {}\n  node-a1: {}\n"
     )
     assert resolve_guests("pcmk") == ["pcmk-a1", "pcmk-b1"]
+
+
+def test_resolve_guests_resolves_a_setup_name_to_members_in_order(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n"
+        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1, pcmk-a2]\n"
+    )
+    # a setup name wins over regex, and returns members in declared (bring-up) order
+    assert resolve_guests("pcmk-san-ha") == ["san-a", "pcmk-a1", "pcmk-a2"]
