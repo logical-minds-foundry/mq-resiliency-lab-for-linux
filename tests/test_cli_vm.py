@@ -37,12 +37,12 @@ def _seed_topology(tmp_path, names):
     (tmp_path / "lab" / "topology.yaml").write_text(body)
 
 
-def test_vm_up_all_runs_vagrant_up_per_guest(monkeypatch, tmp_path):
+def test_vm_create_runs_vagrant_up_per_guest(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1", "rdqm-a1"])
     runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "up", "all"])
+    result = CliRunner().invoke(cli.app, ["vm", "create", "all"])
     assert result.exit_code == 0
     assert [c.argv for c in runner.recorded] == [
         ["vagrant", "up", "node-a1"],
@@ -51,17 +51,7 @@ def test_vm_up_all_runs_vagrant_up_per_guest(monkeypatch, tmp_path):
     assert all(str(c.cwd).endswith("/lab") for c in runner.recorded)
 
 
-def test_vm_up_regex_selects_subset(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_topology(tmp_path, ["rdqm-a1", "rdqm-b1", "node-a1"])
-    runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([])])
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "up", "rdqm"])
-    assert result.exit_code == 0
-    assert [c.argv[-1] for c in runner.recorded] == ["rdqm-a1", "rdqm-b1"]
-
-
-def test_vm_up_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
+def test_vm_create_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
@@ -70,9 +60,22 @@ def test_vm_up_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
     )
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(3)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "up", "pcmk-san-ha"])
+    result = CliRunner().invoke(cli.app, ["vm", "create", "pcmk-san-ha"])
     assert result.exit_code == 0
     assert [c.argv[-1] for c in runner.recorded] == ["san-a", "pcmk-a1", "pcmk-a2"]
+
+
+def test_vm_up_runs_virsh_start_on_the_domain(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1", "pcmk-a2"])
+    runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "up", "pcmk"])
+    assert result.exit_code == 0
+    assert [c.argv for c in runner.recorded] == [
+        ["virsh", "-c", "qemu:///system", "start", "lab_pcmk-a1"],
+        ["virsh", "-c", "qemu:///system", "start", "lab_pcmk-a2"],
+    ]
 
 
 def test_vm_up_without_pattern_is_a_usage_error():
@@ -88,24 +91,31 @@ def test_vm_no_match_exits_two(monkeypatch, tmp_path):
     assert "no lab guest matches" in result.output
 
 
-def test_vm_down_runs_vagrant_halt(monkeypatch, tmp_path):
+def test_vm_down_runs_virsh_shutdown(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1"])
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "down", "all"])
     assert result.exit_code == 0
-    assert runner.recorded[0].argv == ["vagrant", "halt", "node-a1"]
+    assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "shutdown", "lab_node-a1"]
 
 
-def test_vm_destroy_runs_vagrant_destroy(monkeypatch, tmp_path):
+def test_vm_destroy_runs_virsh_undefine_with_storage(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1"])
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "destroy", "all"])
     assert result.exit_code == 0
-    assert runner.recorded[0].argv == ["vagrant", "destroy", "-f", "node-a1"]
+    assert runner.recorded[0].argv == [
+        "virsh",
+        "-c",
+        "qemu:///system",
+        "undefine",
+        "lab_node-a1",
+        "--remove-all-storage",
+    ]
 
 
 def test_vm_status_reads_virsh_and_joins_topology(monkeypatch, tmp_path):

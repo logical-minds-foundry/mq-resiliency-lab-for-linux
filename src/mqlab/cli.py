@@ -149,28 +149,42 @@ vm_app = typer.Typer(help="lab guest VMs (vagrant + virsh)", no_args_is_help=Tru
 app.add_typer(vm_app, name="vm")
 
 
-def _vm_up_steps(guests: list[str]) -> list[CommandStep]:
+_VIRSH = ["virsh", "-c", "qemu:///system"]
+
+
+def _vm_create_steps(guests: list[str]) -> list[CommandStep]:
+    # Create + provision via Vagrant — the one verb that needs Vagrant (#96).
     lab = repo_root() / "lab"
     return [
-        CommandStep(f"{g} up", Command(["vagrant", "up", g], cwd=lab))  # noqa: S607
+        CommandStep(f"{g} create", Command(["vagrant", "up", g], cwd=lab))  # noqa: S607
+        for g in guests
+    ]
+
+
+def _vm_up_steps(guests: list[str]) -> list[CommandStep]:
+    # Start an existing domain. virsh is ground truth — works regardless of
+    # Vagrant metadata (e.g. churn-orphaned domains) (#96).
+    return [
+        CommandStep(f"{g} start", Command([*_VIRSH, "start", f"lab_{g}"]))  # noqa: S607
         for g in guests
     ]
 
 
 def _vm_down_steps(guests: list[str]) -> list[CommandStep]:
-    lab = repo_root() / "lab"
     return [
-        CommandStep(f"{g} halt", Command(["vagrant", "halt", g], cwd=lab))  # noqa: S607
+        CommandStep(f"{g} shutdown", Command([*_VIRSH, "shutdown", f"lab_{g}"]))  # noqa: S607
         for g in guests
     ]
 
 
 def _vm_destroy_steps(guests: list[str]) -> list[CommandStep]:
-    lab = repo_root() / "lab"
-    return [
-        CommandStep(f"{g} destroy", Command(["vagrant", "destroy", "-f", g], cwd=lab))  # noqa: S607
-        for g in guests
-    ]
+    # Remove the domain + its per-guest overlay disk (the base box is a separate
+    # volume, untouched). Requires the guest shut off — run vm down first (#96).
+    steps: list[CommandStep] = []
+    for g in guests:
+        cmd = Command([*_VIRSH, "undefine", f"lab_{g}", "--remove-all-storage"])  # noqa: S607
+        steps.append(CommandStep(f"{g} undefine", cmd))
+    return steps
 
 
 def _ssh_into(guest: str) -> None:
@@ -180,23 +194,30 @@ def _ssh_into(guest: str) -> None:
     os.execvp("vagrant", ["vagrant", "ssh", guest])  # noqa: S606, S607 - TTY passthrough (lab)
 
 
+@vm_app.command("create")
+def vm_create(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Create + provision the selected guests via Vagrant (a name, regex, or 'all')."""
+    guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    _execute("vm-create", _vm_create_steps(guests), step_mode=step)
+
+
 @vm_app.command("up")
 def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Boot and provision the selected guests (a name, regex, or 'all')."""
+    """Start the selected (already-created) guests — virsh start."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
     _execute("vm-up", _vm_up_steps(guests), step_mode=step)
 
 
 @vm_app.command("down")
 def vm_down(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Halt the selected guests (a name, regex, or 'all')."""
+    """Shut down the selected guests — virsh shutdown."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
     _execute("vm-down", _vm_down_steps(guests), step_mode=step)
 
 
 @vm_app.command("destroy")
 def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Destroy (remove) the selected guests (a name, regex, or 'all')."""
+    """Remove the selected guests + their disks (must be shut off first)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
     _execute("vm-destroy", _vm_destroy_steps(guests), step_mode=step)
 
