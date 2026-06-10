@@ -10,17 +10,17 @@
 # (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is
 # exported; the wrapper just removes that footgun.)
 
-- hosts: pcmk_a:pcmk_b:san_hosts
+- hosts: pcmk_san_dr
   become: true
   tasks:
     - name: acl package for unprivileged become
       ansible.builtin.apt: { name: acl, update_cache: false }
 
 # --- DRBD between the two SAN VMs (san-a primary, san-b secondary) ---
-- hosts: san-a
+- hosts: san_a
   vars: { drbd_role: primary }
   roles: [drbd-san]
-- hosts: san-b
+- hosts: san_b
   vars: { drbd_role: secondary }
   roles: [drbd-san]
 
@@ -28,7 +28,7 @@
 # are blank, so the primary declares the bitmap clear (both UpToDate at zero)
 # instead of copying, then lays down the filesystem, which replicates as normal
 # protocol-A traffic. Turns an I/O-bound minutes-to-hours resync into seconds.
-- hosts: san-a
+- hosts: san_a
   become: true
   tasks:
     - name: wait for the DRBD peer to connect
@@ -53,7 +53,7 @@
       changed_when: "'initialized' == drbd_init.stdout"
 
 # --- LIO target at site A, backed by the DRBD device ---
-- hosts: san-a
+- hosts: san_a
   vars:
     san_backing_dev: /dev/drbd0
     san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0
@@ -67,7 +67,7 @@
 # --- DR-peer prep so the FORCED cutover to B needs no manual fixups (#67) ---
 # san-b gets the LIO package now; it exports the LUN only at cutover, once it is
 # force-promoted to primary (the drbd device is inaccessible on the secondary).
-- hosts: san-b
+- hosts: san_b
   become: true
   tasks:
     - name: LIO target package on the DR-peer SAN
