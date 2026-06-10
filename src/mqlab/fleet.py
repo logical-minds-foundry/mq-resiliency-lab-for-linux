@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import yaml
 
 from mqlab.paths import repo_root
-from mqlab.setups import lab_setups
+from mqlab.setups import setups_of
 
 DEFAULT_PLATFORM = "ubuntu2404-arm64"
 
@@ -52,13 +52,13 @@ def parse_domain_states(text: str) -> dict[str, str]:
 def fleet_rows(platforms: dict[str, str], states: dict[str, str]) -> list[FleetRow]:
     """Join topology guests with virsh state (domains are named lab_<guest>) and the
     setups each guest belongs to. Sorted so guests cluster by setup membership."""
-    setups = lab_setups()
-
-    def setups_for(guest: str) -> str:
-        return ", ".join(sorted(name for name, s in setups.items() if guest in s.members))
-
     rows = [
-        FleetRow(guest, platform, states.get(f"lab_{guest}", "not created"), setups_for(guest))
+        FleetRow(
+            guest,
+            platform,
+            states.get(f"lab_{guest}", "not created"),
+            ", ".join(setups_of(guest)),
+        )
         for guest, platform in platforms.items()
     ]
     return sorted(rows, key=lambda r: (r.setups, r.guest))

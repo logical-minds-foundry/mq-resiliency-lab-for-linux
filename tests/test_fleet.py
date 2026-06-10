@@ -32,8 +32,9 @@ def test_fleet_rows_joins_state_and_setups_and_sorts_by_setup(monkeypatch, tmp_p
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1]\n"
-        "  rdqm-ha:\n    members: [rdqm-a1]\n"
+        "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n  rdqm_a: [rdqm-a1]\n"
+        "setups:\n  pcmk-san-ha:\n    groups: [san_a, pcmk_a]\n"
+        "  rdqm-ha:\n    groups: [rdqm_a]\n"
     )
     platforms = {
         "rdqm-a1": "rhel96-x86_64",
