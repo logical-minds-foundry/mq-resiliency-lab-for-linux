@@ -742,12 +742,13 @@ vrg-commit --type feat --scope ansible --message "prometheus role (#103)" --body
 
 **Files:**
 - Create: `ansible/roles/grafana/tasks/main.yml`
+- Create: `ansible/roles/grafana/defaults/main.yml`
 - Create: `ansible/roles/grafana/templates/datasource.yml.j2`
 - Create: `ansible/roles/grafana/templates/dashboards.yml.j2`
 - Create: `ansible/roles/grafana/files/dashboards/fleet-node.json`
 - Create: `ansible/roles/grafana/handlers/main.yml`
 
-Grafana OSS via the official apt repo (obs is ubuntu-arm64), provisioned file-based: the Prometheus datasource + a node-exporter fleet dashboard, so it's reproducible with no click-ops.
+Grafana OSS via the official apt repo (obs is ubuntu-arm64), provisioned file-based: the Prometheus datasource + a node-exporter fleet dashboard, so it's reproducible with no click-ops. The admin password is **runtime-injected** (spec §8.2) — never committed.
 
 - [ ] **Step 1: Datasource provisioning template**
 
@@ -881,7 +882,36 @@ Create `ansible/roles/grafana/tasks/main.yml`:
     state: started
 ```
 
-- [ ] **Step 5: The handler**
+- [ ] **Step 5: Inject the admin password from `lab-secret.sh` (spec §8.2)**
+
+Create `ansible/roles/grafana/defaults/main.yml` — the password comes from the
+environment (`lab-secret.sh` exports it before the playbook runs), defaulting to
+`admin` only when unset so the spike still works:
+
+```yaml
+---
+grafana_admin_password: "{{ lookup('ansible.builtin.env', 'GF_SECURITY_ADMIN_PASSWORD') | default('admin', true) }}"
+```
+
+Add this task to `ansible/roles/grafana/tasks/main.yml` **before** the
+"enable + start grafana" task, so the first start already carries the override:
+
+```yaml
+- name: inject the admin password via a systemd env drop-in (never committed)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/grafana-server.service.d/admin.conf
+    mode: "0600"
+    content: |
+      [Service]
+      Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+  notify: restart grafana
+```
+
+The drop-in path's parent dir is created by systemd's package install; if the
+task fails on a missing dir, add a preceding `ansible.builtin.file` task creating
+`/etc/systemd/system/grafana-server.service.d/` with `state: directory`.
+
+- [ ] **Step 6: The handler**
 
 Create `ansible/roles/grafana/handlers/main.yml`:
 
@@ -891,12 +921,13 @@ Create `ansible/roles/grafana/handlers/main.yml`:
   ansible.builtin.systemd:
     name: grafana-server
     state: restarted
+    daemon_reload: true
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-vrg-commit --type feat --scope ansible --message "grafana role + fleet dashboard (#103)" --body "Grafana OSS via apt on obs, file-provisioned: Prometheus datasource + a node-exporter fleet dashboard (per-host up + CPU busy). Reproducible, no click-ops."
+vrg-commit --type feat --scope ansible --message "grafana role + fleet dashboard (#103)" --body "Grafana OSS via apt on obs, file-provisioned: Prometheus datasource + a node-exporter fleet dashboard (per-host up + CPU busy). Admin password runtime-injected from lab-secret (GF_SECURITY_ADMIN_PASSWORD), never committed (spec 8.2). Reproducible, no click-ops."
 ```
 
 ---
@@ -984,7 +1015,7 @@ Expected: JSON `{"database": "ok", ...}`.
 
 - [ ] **Step 4: Prove the URL opens from the workstation**
 
-Run `mqlab obs open`, follow the printed tunnel one-liner from your Mac, and load `http://10.50.0.2:3000` (or the tunneled `localhost:3000`). Log in (default `admin`/`admin`), confirm the **Lab / Fleet — Node Health** dashboard renders with `obs` and `mon-probe` tiles green.
+Run `mqlab obs open`, follow the printed tunnel one-liner from your Mac, and load `http://10.50.0.2:3000` (or the tunneled `localhost:3000`). Log in as `admin` with the injected `GF_SECURITY_ADMIN_PASSWORD` (or `admin` if unset for the spike), confirm the **Lab / Fleet — Node Health** dashboard renders with `obs` and `mon-probe` tiles green.
 Expected: dashboard loads; both tiles UP. **This is the Layer-0 success criterion — an observability stack you can open.**
 
 - [ ] **Step 5: Commit the spike evidence**
@@ -1002,14 +1033,15 @@ vrg-commit --type docs --scope obs --message "Layer-0 spike: obs stack up, URL r
 
 - [ ] **Step 1: Roll node_exporter across a running arm**
 
-Bring up an arm (e.g. the RDQM HA arm) and overlay node_exporter:
+Targets are rendered from the **full topology** (Task 2), so the arm's nodes are
+*already* Prometheus targets (showing `up == 0` until reachable) — no re-render or
+Prometheus restart is needed. The only action is installing node_exporter on the
+arm. Bring up an arm and run the fleet overlay:
 ```bash
 mqlab vm up rdqm_ha          # or whichever arm is convenient
-mqlab obs targets            # re-render targets (idempotent; arm nodes already in topology)
-mqlab vm ssh obs             # then: sudo systemctl restart prometheus  (reload targets)
 cd ansible && uv run ansible-playbook observability.yml --limit rdqm_a
 ```
-Expected: `observability.yml` completes; node_exporter active on `rdqm-a1..a3`.
+Expected: `observability.yml` completes; node_exporter active on `rdqm-a1..a3`; their tiles flip from DOWN to UP on the dashboard as the exporter starts.
 
 - [ ] **Step 2: Confirm the arm appears on the fleet dashboard**
 

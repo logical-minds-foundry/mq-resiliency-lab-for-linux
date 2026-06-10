@@ -313,7 +313,8 @@ A new slice alongside `mqlab vm` (which now includes `vm inventory`):
 
 | Command | Does |
 |---|---|
-| `mqlab obs up` | bring up the `monitoring` setup (`obs` + `mon-probe`) and render Prometheus targets from topology |
+| `mqlab obs targets` | render `build/prometheus/targets/node.json` from topology and echo it (the `vm inventory` sibling — inspect what would be scraped) |
+| `mqlab obs up` | render targets, bring up the `monitoring` setup (`obs` + `mon-probe`), and provision Prometheus/Grafana |
 | `mqlab obs status` | report Prometheus/Grafana up, configured targets, and which are `up`/`down` |
 | `mqlab obs open` | port-forward `obs:3000` and print the Grafana URL |
 
