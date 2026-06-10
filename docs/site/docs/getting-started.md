@@ -67,12 +67,19 @@ selector paradigm, over `topology.yaml`:
 
 ```bash
 mqlab vm status            # ground-truth fleet (via virsh), joined with topology
+mqlab vm inventory         # render build/inventory.ini from topology — the static map
 mqlab vm create rdqm       # create + provision the RDQM guests — watch Ansible run
 mqlab vm create all --step # create every guest, pausing between each to poke around
-mqlab vm up pcmk-san-ha    # start an existing setup's guests (virsh start)
+mqlab vm up pcmk_san_ha    # start an existing setup's guests (virsh start)
 mqlab vm down all          # shut them down  ( vm destroy all removes them + disks )
 mqlab vm ssh rdqm-a1       # drop into a shell on one guest
 ```
+
+Setups are named with **underscores** (`pcmk_san_ha`, `rdqm_dr`, …) so the same
+token is the topology setup, the `mqlab` selector, **and** the Ansible inventory
+group. `mqlab vm inventory` renders that inventory — every host with its static
+management IP, the atomic role groups, and each setup as a group-of-groups —
+straight from `topology.yaml`, no live probing.
 
 The verbs mirror a domain's lifecycle on two axes — **create/destroy** (existence)
 and **up/down** (power):
