@@ -202,12 +202,13 @@ def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
 
 
 @vm_app.command("status")
-def vm_status() -> None:
-    """Show the full fleet — topology joined with live virsh state (arm/platform/state)."""
+def vm_status(selector: _Pattern = "all") -> None:
+    """Show the fleet — topology joined with live virsh state; optional selector filters it."""
+    guests = _resolve_or_exit(selector, resolve_guests, "guest")
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("vm-status", timestamp)
     try:
-        code = vm_status_core(deps.runner, deps.renderer, deps.transcript)
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
     finally:
         deps.transcript.close()
     if code != 0:

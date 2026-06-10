@@ -43,3 +43,22 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert "rdqm-ha" in out  # config-driven Setup(s) column, from topology.yaml setups (#90)
     body = transcript.path.read_text(encoding="utf-8")
     assert "lab_pcmk-b1      running" in body  # raw rows teed to the transcript
+
+
+def test_vm_status_core_filters_to_given_guests(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  rdqm-a1: {}\n  pcmk-a1: {}\n  pcmk-b1: {}\n"
+    )
+    buffer = io.StringIO()
+    renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))
+    transcript = Transcript(transcript_path("vm-status", "20260610T000000Z"))
+    runner = RecordingRunner(results=[ScriptedResult([])])  # empty virsh output
+    code = vm_status_core(runner, renderer, transcript, guests=["pcmk-a1", "pcmk-b1"])
+    transcript.close()
+    assert code == 0
+    out = buffer.getvalue()
+    assert "pcmk-a1" in out
+    assert "pcmk-b1" in out
+    assert "rdqm-a1" not in out  # filtered out of the table

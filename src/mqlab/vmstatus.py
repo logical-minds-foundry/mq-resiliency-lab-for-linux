@@ -42,7 +42,12 @@ def _table(rows: list[FleetRow]) -> Table:
     return table
 
 
-def vm_status_core(runner: CommandRunner, renderer: Renderer, transcript: Transcript) -> int:
+def vm_status_core(
+    runner: CommandRunner,
+    renderer: Renderer,
+    transcript: Transcript,
+    guests: list[str] | None = None,
+) -> int:
     display = _VM_LIST.display()
     renderer.command(display)
     transcript.write(f"$ {display}")
@@ -56,6 +61,9 @@ def vm_status_core(runner: CommandRunner, renderer: Renderer, transcript: Transc
         captured.append(line)
 
     exit_code = runner.run(_VM_LIST, sink)
-    rows = fleet_rows(lab_guests(), parse_domain_states("\n".join(captured)))
+    platforms = lab_guests()
+    if guests is not None:
+        platforms = {g: p for g, p in platforms.items() if g in guests}
+    rows = fleet_rows(platforms, parse_domain_states("\n".join(captured)))
     renderer.table(_table(rows))
     return exit_code

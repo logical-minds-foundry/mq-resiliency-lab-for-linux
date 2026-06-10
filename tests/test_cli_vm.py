@@ -127,6 +127,20 @@ def test_vm_status_nonzero_exit_propagates(monkeypatch, tmp_path):
     assert result.exit_code == 1
 
 
+def test_vm_status_accepts_a_setup_selector(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  rdqm-a1: {}\n"
+        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1]\n"
+    )
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "status", "pcmk-san-ha"])
+    assert result.exit_code == 0
+    assert runner.recorded[0].argv[-1] == "--all"  # still virsh list --all (the source)
+
+
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1", "node-a2"])  # 2 steps -> pause fires after step 1
