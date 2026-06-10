@@ -75,8 +75,10 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert "ansible-playbook" in argvs[2]
     # bare filename (run from ansible/), not a doubled ansible/ansible/ path
     assert argvs[2][-1] == "site-obs.yml"
-    # targets were rendered eagerly when the steps were built
+    # both artifacts rendered eagerly when the steps were built: the scrape
+    # targets AND the Ansible inventory the provision step reads
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
+    assert (tmp_path / "build" / "inventory.ini").exists()
 
 
 def test_obs_up_propagates_step_failure(monkeypatch, tmp_path):
