@@ -125,4 +125,5 @@ def test_obs_open_prints_url_and_tunnel():
     result = CliRunner().invoke(cli.app, ["obs", "open"])
     assert result.exit_code == 0
     assert "http://10.50.0.2:3000" in result.stdout
-    assert "ssh -L" in result.stdout
+    assert "-L 3000:10.50.0.2:3000" in result.stdout
+    assert "limactl list" in result.stdout

@@ -237,11 +237,17 @@ def obs_status() -> None:
 
 @obs_app.command("open")
 def obs_open() -> None:
-    """Print the Grafana URL and the SSH tunnel to reach it from your workstation."""
-    typer.echo(f"Grafana: {GRAFANA_URL}")
-    typer.echo("From inside the Vergil VM session this URL is directly reachable.")
-    typer.echo("From your workstation, tunnel through the session host:")
-    typer.echo(f"  ssh -L 3000:10.50.0.2:3000 <vergil-vm-session-host>  # then open {GRAFANA_URL}")
+    """Print the Grafana URL and how to reach it from your workstation."""
+    typer.echo(f"Grafana:   {GRAFANA_URL}  (directly reachable inside the Vergil VM)")
+    typer.echo(f"Dashboard: {GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
+    typer.echo("")
+    typer.echo("obs is a guest *inside* the Vergil VM, so forward a port through the VM.")
+    typer.echo("On your workstation:")
+    typer.echo("  1. limactl list   # find the instance whose DIR is this repo, note its name")
+    typer.echo("  2. ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>")
+    typer.echo("     # the <host-alias> is the ssh.config 'Host' line — Lima turns the")
+    typer.echo("     # instance's dots into hyphens (lima-vergil-user-...-mq-cluster-tooling)")
+    typer.echo("  3. browse http://localhost:3000/d/lab-fleet-node   (admin / admin)")
 
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
