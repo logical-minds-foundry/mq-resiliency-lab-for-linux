@@ -2,7 +2,9 @@
 
 Unlike a pass-through (the net status table removed in #70), this *composes* two
 sources — what the topology defines and what virsh has — to show the whole intended
-fleet, instantiated or not, with each guest's arm and platform.
+fleet, instantiated or not, with each guest's platform and the setups it belongs to.
+The setups come from config (topology.yaml), replacing the old hardcoded arm-from-
+name-prefix map — config, not knowledge baked into code (#90).
 """
 
 from __future__ import annotations
@@ -12,35 +14,17 @@ from dataclasses import dataclass
 import yaml
 
 from mqlab.paths import repo_root
+from mqlab.setups import lab_setups
 
 DEFAULT_PLATFORM = "ubuntu2404-arm64"
-
-# Bespoke lab structure: guest-name prefix -> arm/role label.
-_ARM_PREFIXES = (
-    ("rdqm-", "RDQM / RHEL"),
-    ("pcmk-", "Pacemaker / SAN"),
-    ("san-", "Pacemaker / SAN"),
-    ("node-", "Phase-A placeholder"),
-)
-_STANDALONE = {"qm-main", "dtcc-sim", "app-client"}
 
 
 @dataclass(frozen=True)
 class FleetRow:
     guest: str
-    arm: str
     platform: str
     state: str
-
-
-def arm_of(guest: str) -> str:
-    """Map a guest name to its arm/role label (bespoke lab structure)."""
-    for prefix, label in _ARM_PREFIXES:
-        if guest.startswith(prefix):
-            return label
-    if guest in _STANDALONE:
-        return "Phase-B standalone"
-    return "?"
+    setups: str
 
 
 def lab_guests() -> dict[str, str]:
@@ -66,9 +50,15 @@ def parse_domain_states(text: str) -> dict[str, str]:
 
 
 def fleet_rows(platforms: dict[str, str], states: dict[str, str]) -> list[FleetRow]:
-    """Join topology guests with virsh state (domains are named lab_<guest>)."""
+    """Join topology guests with virsh state (domains are named lab_<guest>) and the
+    setups each guest belongs to. Sorted so guests cluster by setup membership."""
+    setups = lab_setups()
+
+    def setups_for(guest: str) -> str:
+        return ", ".join(sorted(name for name, s in setups.items() if guest in s.members))
+
     rows = [
-        FleetRow(guest, arm_of(guest), platform, states.get(f"lab_{guest}", "not created"))
+        FleetRow(guest, platform, states.get(f"lab_{guest}", "not created"), setups_for(guest))
         for guest, platform in platforms.items()
     ]
-    return sorted(rows, key=lambda r: (r.arm, r.guest))
+    return sorted(rows, key=lambda r: (r.setups, r.guest))

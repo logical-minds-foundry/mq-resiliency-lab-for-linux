@@ -23,6 +23,8 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(
         "defaults: { platform: ubuntu2404-arm64 }\nnodes:\n"
         "  rdqm-a1: { platform: rhel96-x86_64 }\n  pcmk-a1: {}\n  pcmk-b1: {}\n"
+        "setups:\n  rdqm-ha:\n    members: [rdqm-a1]\n"
+        "  pcmk-san:\n    members: [pcmk-a1, pcmk-b1]\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))
@@ -38,6 +40,6 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert "rdqm-a1" in out  # full fleet — incl the defined-but-not-instantiated RHEL node
     assert "not created" in out
     assert "rhel96-x86_64" in out
-    assert "RDQM" in out  # arm label
+    assert "rdqm-ha" in out  # config-driven Setup(s) column, from topology.yaml setups (#90)
     body = transcript.path.read_text(encoding="utf-8")
     assert "lab_pcmk-b1      running" in body  # raw rows teed to the transcript

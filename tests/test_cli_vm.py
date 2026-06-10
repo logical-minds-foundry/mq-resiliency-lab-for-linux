@@ -61,6 +61,20 @@ def test_vm_up_regex_selects_subset(monkeypatch, tmp_path):
     assert [c.argv[-1] for c in runner.recorded] == ["rdqm-a1", "rdqm-b1"]
 
 
+def test_vm_up_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n"
+        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1, pcmk-a2]\n"
+    )
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(3)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "up", "pcmk-san-ha"])
+    assert result.exit_code == 0
+    assert [c.argv[-1] for c in runner.recorded] == ["san-a", "pcmk-a1", "pcmk-a2"]
+
+
 def test_vm_up_without_pattern_is_a_usage_error():
     result = CliRunner().invoke(cli.app, ["vm", "up"])
     assert result.exit_code == 2

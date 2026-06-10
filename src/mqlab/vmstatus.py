@@ -28,17 +28,17 @@ _VM_LIST = Command(["virsh", "-c", "qemu:///system", "list", "--all"])  # noqa: 
 
 
 _CAPTION = (
-    "Guest / Arm / Platform from lab/topology.yaml  ·  State from the virsh output above  "
+    "Guest / Platform / Setup(s) from lab/topology.yaml  ·  State from the virsh output above  "
     "( 'not created' = defined in topology, absent from virsh )"
 )
 
 
 def _table(rows: list[FleetRow]) -> Table:
     table = Table(title="lab fleet", caption=_CAPTION)
-    for column in ("Guest", "Arm", "Platform", "State"):
+    for column in ("Guest", "Platform", "State", "Setup(s)"):
         table.add_column(column)
     for row in rows:
-        table.add_row(row.guest, row.arm, row.platform, row.state)
+        table.add_row(row.guest, row.platform, row.state, row.setups)
     return table
 
 
