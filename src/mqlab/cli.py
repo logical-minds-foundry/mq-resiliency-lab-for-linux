@@ -331,6 +331,25 @@ def vm_status(selector: _Pattern = "all") -> None:
         raise typer.Exit(code=code)
 
 
+@vm_app.command("inventory")
+def vm_inventory() -> None:
+    """Render build/inventory.ini from topology and echo it (the static map)."""
+    from mqlab.inventory import inventory_path, lab_inventory
+
+    deps = build_deps("vm-inventory", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_inventory()
+        path = inventory_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        for line in text.splitlines():
+            deps.renderer.output(line)
+            deps.transcript.write(line)
+    finally:
+        deps.transcript.close()
+
+
 @vm_app.command("ssh")
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
