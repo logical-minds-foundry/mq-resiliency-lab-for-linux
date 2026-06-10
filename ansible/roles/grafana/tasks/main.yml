@@ -1,0 +1,74 @@
+---
+- name: grafana apt key
+  ansible.builtin.get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: "0644"
+
+- name: grafana apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+    filename: grafana
+    state: present
+
+- name: install grafana
+  ansible.builtin.apt:
+    name: grafana
+    update_cache: true
+
+- name: provisioning dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+  loop:
+    - /etc/grafana/provisioning/datasources
+    - /etc/grafana/provisioning/dashboards
+    - /var/lib/grafana/dashboards
+
+- name: provision the prometheus datasource
+  ansible.builtin.template:
+    src: datasource.yml.j2
+    dest: /etc/grafana/provisioning/datasources/prometheus.yml
+    mode: "0644"
+  notify: restart grafana
+
+- name: provision the dashboard provider
+  ansible.builtin.template:
+    src: dashboards.yml.j2
+    dest: /etc/grafana/provisioning/dashboards/lab.yml
+    mode: "0644"
+  notify: restart grafana
+
+- name: deploy the fleet dashboard
+  ansible.builtin.copy:
+    src: dashboards/fleet-node.json
+    dest: /var/lib/grafana/dashboards/fleet-node.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
+- name: systemd drop-in dir for grafana-server
+  ansible.builtin.file:
+    path: /etc/systemd/system/grafana-server.service.d
+    state: directory
+    mode: "0755"
+
+- name: inject the admin password via a systemd env drop-in (never committed)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/grafana-server.service.d/admin.conf
+    mode: "0600"
+    content: |
+      [Service]
+      Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+  notify: restart grafana
+
+- name: enable + start grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    enabled: true
+    state: started
+    daemon_reload: true
