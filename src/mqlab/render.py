@@ -44,6 +44,11 @@ def summary_line(steps_ok: int, steps_total: int, seconds: float) -> Text:
     )
 
 
+def note_line(message: str) -> Text:
+    # Advisory: state-aware no-ops / guidance (#99) — never a command, never a failure.
+    return Text.assemble(("  · ", "cyan"), (message, "grey62"))
+
+
 class Renderer:
     """Prints treatment-A lines through a Rich console."""
 
@@ -67,6 +72,9 @@ class Renderer:
 
     def summary(self, steps_ok: int, steps_total: int, seconds: float) -> None:
         self._console.print(summary_line(steps_ok, steps_total, seconds))
+
+    def note(self, message: str) -> None:
+        self._console.print(note_line(message))
 
     def table(self, table: Table) -> None:
         self._console.print(table)
