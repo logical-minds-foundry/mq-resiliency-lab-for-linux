@@ -194,8 +194,10 @@ def _obs_up_steps() -> list[CommandStep]:
         ),
         CommandStep(
             "provision monitoring",
+            # bare filename, run from ansible/ so ansible.cfg (inventory path) is
+            # picked up — matches dr-provision.sh.
             Command(
-                ["uv", "run", "ansible-playbook", "ansible/site-obs.yml"],  # noqa: S607
+                ["uv", "run", "ansible-playbook", "site-obs.yml"],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),

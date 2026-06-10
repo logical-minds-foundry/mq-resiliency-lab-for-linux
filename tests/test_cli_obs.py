@@ -73,7 +73,8 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     argvs = [c.argv for c in runner.recorded]
     assert argvs[1][:3] == ["vagrant", "up", "obs"]
     assert "ansible-playbook" in argvs[2]
-    assert "ansible/site-obs.yml" in " ".join(argvs[2])
+    # bare filename (run from ansible/), not a doubled ansible/ansible/ path
+    assert argvs[2][-1] == "site-obs.yml"
     # targets were rendered eagerly when the steps were built
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
 
