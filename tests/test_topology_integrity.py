@@ -22,3 +22,14 @@ def test_pcmk_setups_declare_the_hacluster_secret():
     assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password"]
     assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password"]
     assert setups["standalone"].secrets == ["mqweb_admin_password"]
+
+
+def test_real_topology_renders_scrape_targets():
+    import json
+
+    from mqlab.scrape import lab_scrape_targets
+
+    entries = json.loads(lab_scrape_targets())  # raises ScrapeError on any missing mgmt IP
+    hosts = {e["labels"]["host"] for e in entries}
+    assert {"obs", "mon-probe"} <= hosts
+    assert all(e["targets"][0].endswith(":9100") for e in entries)
