@@ -863,15 +863,25 @@ guest's NICs and platform. See the <a href="../architecture/">Architecture</a>
 walkthrough for what each network is for.</p>
 <p>Once the fabric is up, bring up the guest VMs with <strong><code>mqlab vm</code></strong> — the same
 selector paradigm, over <code>topology.yaml</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>status<span class="w">          </span><span class="c1"># ground-truth guest state (via virsh)</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>rdqm<span class="w">         </span><span class="c1"># boot + provision just the RDQM guests — watch Ansible run</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>all<span class="w"> </span>--step<span class="w">   </span><span class="c1"># bring up every guest, pausing between each to poke around</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>rdqm-a1<span class="w">     </span><span class="c1"># drop into a shell on one guest</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>down<span class="w"> </span>all<span class="w">        </span><span class="c1"># halt them ( `vm destroy all` removes them entirely )</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>status<span class="w">            </span><span class="c1"># ground-truth fleet (via virsh), joined with topology</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>rdqm<span class="w">       </span><span class="c1"># create + provision the RDQM guests — watch Ansible run</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>all<span class="w"> </span>--step<span class="w"> </span><span class="c1"># create every guest, pausing between each to poke around</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>pcmk-san-ha<span class="w">    </span><span class="c1"># start an existing setup&#39;s guests (virsh start)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>down<span class="w"> </span>all<span class="w">          </span><span class="c1"># shut them down  ( vm destroy all removes them + disks )</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>rdqm-a1<span class="w">       </span><span class="c1"># drop into a shell on one guest</span>
 </code></pre></div>
-<p><code>vm up</code> runs <code>vagrant up</code> per guest — booting <strong>and</strong> provisioning, so this is
-where you watch Ansible build each machine. Like <code>net</code>, the mutating verbs
-require a selector, so a bare <code>mqlab vm destroy</code> cannot wipe every guest.</p>
+<p>The verbs mirror a domain's lifecycle on two axes — <strong>create/destroy</strong> (existence)
+and <strong>up/down</strong> (power):</p>
+<ul>
+<li><code>vm create</code> runs <code>vagrant up</code> per guest — the one verb that uses Vagrant, because
+  it both <strong>creates</strong> the VM and <strong>provisions</strong> it (this is where you watch Ansible
+  build each machine).</li>
+<li><code>vm up</code> / <code>vm down</code> / <code>vm destroy</code> drive <strong><code>virsh</code></strong> (<code>start</code> / <code>shutdown</code> /
+  <code>undefine</code>). <strong>libvirt is the ground truth for state; Vagrant is used only for
+  create</strong> — so these work regardless of Vagrant's metadata.</li>
+</ul>
+<p>Like <code>net</code>, the mutating verbs require a selector, so a bare <code>mqlab vm destroy</code>
+cannot wipe every guest.</p>
 <blockquote>
 <p><strong>More verbs land as the slices ship.</strong> <code>mqlab net</code> and <code>mqlab vm</code> are live;
 arm setup, HA/DR operations, and the <code>status</code> / <code>check</code> dashboard arrive in
