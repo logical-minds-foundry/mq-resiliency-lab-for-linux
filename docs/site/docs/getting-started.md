@@ -118,6 +118,53 @@ From there, the [Architecture](architecture/index.md) page walks the
 higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
 alternative.
 
+## 4. Watch the lab live (observability)
+
+A dedicated **`obs`** VM runs **Prometheus + Grafana**, scraping `node_exporter`
+across the whole fleet over the host-only **`net-mgmt`** plane — the one network
+fault drills never sever, so the dashboard stays live exactly when something
+breaks. A second node, **`mon-probe`**, carries the data-net NICs for the MQ
+client exporters that land in a later slice.
+
+Bring the pair up and provision it — one verb, provisioned as code:
+
+```bash
+mqlab obs up        # render scrape targets + inventory, create obs + mon-probe, provision
+mqlab obs status    # are the pair up? which targets are scraped, up/down?
+mqlab obs targets   # render build/prometheus/targets/node.json from topology + echo it
+mqlab obs open      # print the Grafana URL + the workstation tunnel recipe
+```
+
+`obs` is a guest **inside** the Vergil VM, so opening Grafana from your
+workstation means forwarding a local port through the VM. `mqlab obs open`
+prints the exact recipe; in short:
+
+```bash
+# on your workstation (macOS):
+limactl list                                                  # find this repo's instance
+ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>
+# then browse:  http://localhost:3000/d/lab-fleet-node   (admin / admin)
+```
+
+The **Fleet — Node Health** dashboard shows a tile per node. Scrape targets are
+rendered from **the full `topology.yaml`**, so *every* node is a target — a node
+that isn't running simply shows **red (`up == 0`)** rather than vanishing. That
+is deliberate: a missing thing you can see beats a missing thing you can't.
+
+`obs up` brings up only the observer pair; to put host metrics on a running arm,
+overlay the fleet role onto its group:
+
+```bash
+mqlab vm create pcmk_a                                  # boots the arm (arm64, KVM-fast)
+cd ansible && uv run ansible-playbook observability.yml --limit pcmk_a
+```
+
+Those tiles flip from red to green as `node_exporter` starts — no re-render or
+restart needed, because the nodes were already targets. Now watch a fault become
+visible: `mqlab vm down pcmk-a2` turns that tile red within a scrape interval,
+`mqlab vm up pcmk-a2` turns it green again. That live red↔green flip is the
+point — a fault you can *watch*.
+
 ## Building these docs locally
 
 The site builds inside the project's docs container, the same way CI does:
