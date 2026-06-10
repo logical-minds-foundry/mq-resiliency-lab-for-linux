@@ -136,10 +136,12 @@ setups:
     description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
     groups: [san_a, pcmk_a]
     provision: ansible/site-pcmk.yml
+    secrets: [pcmk_hacluster_password]
   pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
     groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
+    secrets: [pcmk_hacluster_password]
   rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
     groups: [rdqm_a]
@@ -152,3 +154,4 @@ setups:
     description: Phase-B standalone QM + DTCC sim + client (message path)
     groups: [qm, dtcc, client]
     provision: ansible/site.yml
+    secrets: [mqweb_admin_password]

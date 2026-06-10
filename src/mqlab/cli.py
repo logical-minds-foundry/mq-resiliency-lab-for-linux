@@ -6,6 +6,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -13,6 +14,7 @@ from rich.console import Console
 
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
+from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, OFF, RUNNING, classify
 from mqlab.netsel import resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
@@ -20,6 +22,7 @@ from mqlab.paths import lab_script, repo_root
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
 from mqlab.runner import Command, SubprocessRunner
+from mqlab.setups import lab_setups, setup_members
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
@@ -251,6 +254,27 @@ def _probe_states(deps: Deps) -> dict[str, str]:
     return parse_domain_states("\n".join(captured))
 
 
+def _source_secret(deps: Deps, name: str) -> str:
+    # Auto-generated lab secret -> its value, to inject into the playbook env.
+    # No hiding: the lab is a throwaway illusion, so this echoes + tees like any
+    # other step (mirrors _probe_states). lab-secret.sh generates+persists once.
+    cmd = Command(["bash", str(lab_script("lab-secret.sh")), name])  # noqa: S607
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+    captured: list[str] = []
+
+    def sink(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+        captured.append(line)
+
+    code = deps.runner.run(cmd, sink)
+    if code != 0:
+        deps.renderer.error(f"lab-secret.sh {name} failed (exit {code})")
+        raise typer.Exit(code=2)
+    return "\n".join(captured).strip()
+
+
 def _execute_stateful(
     verb: str,
     guests: list[str],
@@ -334,8 +358,6 @@ def vm_status(selector: _Pattern = "all") -> None:
 @vm_app.command("inventory")
 def vm_inventory() -> None:
     """Render build/inventory.ini from topology and echo it (the static map)."""
-    from mqlab.inventory import inventory_path, lab_inventory
-
     deps = build_deps("vm-inventory", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         text = lab_inventory()
@@ -348,6 +370,59 @@ def vm_inventory() -> None:
             deps.transcript.write(line)
     finally:
         deps.transcript.close()
+
+
+def _provision(setup_name: str) -> None:
+    setup = lab_setups().get(setup_name)
+    if setup is None:
+        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
+        raise typer.Exit(code=2)
+    if setup.provision is None:
+        typer.echo(f"setup {setup_name} has no provision playbook", err=True)
+        raise typer.Exit(code=2)
+    members = setup_members(setup_name) or []
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("vm-provision", timestamp)
+    try:
+        states = _probe_states(deps)
+        down = [m for m in members if classify(states, m) != RUNNING]
+        if down:
+            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
+            deps.renderer.note(note)
+            deps.transcript.write(note)
+            raise typer.Exit(code=3)
+        secret_env = {s.upper(): _source_secret(deps, s) for s in setup.secrets}
+        inv = inventory_path()
+        inv.parent.mkdir(parents=True, exist_ok=True)
+        inv.write_text(lab_inventory())
+        deps.renderer.note(f"rendered {inv}")
+        deps.transcript.write(f"rendered {inv}")
+        step = CommandStep(
+            f"{setup_name} provision",
+            Command(
+                ["uv", "run", "ansible-playbook", Path(setup.provision).name],  # noqa: S607
+                cwd=repo_root() / "ansible",
+                env=secret_env or None,
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@vm_app.command("provision")
+def vm_provision(setup: str) -> None:
+    """Provision a setup — render the inventory, then run its Ansible playbook."""
+    _provision(setup)
 
 
 @vm_app.command("ssh")

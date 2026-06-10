@@ -320,3 +320,115 @@ def test_vm_ssh_execs_vagrant_in_lab(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert execs == [("vagrant", ["vagrant", "ssh", "node-a1"])]
     assert chdirs and chdirs[0].endswith("/lab")
+
+
+_PCMK_TOPO = (
+    "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+    "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
+    "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
+    "    provision: ansible/site-pcmk.yml\n    secrets: [pcmk_hacluster_password]\n"
+)
+
+
+def test_vm_provision_sources_secret_renders_inventory_runs_playbook(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_PCMK_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"san-a": "running", "pcmk-a1": "running"}),
+            ScriptedResult(["s3cr3t"]),  # lab-secret.sh
+            ScriptedResult([]),  # ansible-playbook
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
+    assert result.exit_code == 0
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == [*_VIRSH, "list", "--all"]
+    assert argvs[1][0] == "bash" and argvs[1][2] == "pcmk_hacluster_password"
+    assert "lab-secret.sh" in argvs[1][1]
+    play = runner.recorded[-1]
+    assert play.argv == ["uv", "run", "ansible-playbook", "site-pcmk.yml"]
+    assert str(play.cwd).endswith("/ansible")
+    assert play.env == {"PCMK_HACLUSTER_PASSWORD": "s3cr3t"}  # secret injected on the subprocess
+    assert (tmp_path / "build" / "inventory.ini").read_text().startswith("[san_a]")
+
+
+def test_vm_provision_members_down_advises_and_exits_3(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_PCMK_TOPO)
+    runner = RecordingRunner(results=[_probe({"san-a": "running"})])  # pcmk-a1 not created
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
+    assert result.exit_code == 3
+    assert [c.argv for c in runner.recorded] == [[*_VIRSH, "list", "--all"]]  # probe only
+
+
+def test_vm_provision_no_secret_setup_runs_playbook_without_sourcing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n"
+        "setups:\n  rdqm_ha:\n    groups: [rdqm_a]\n    provision: ansible/site-rdqm.yml\n"
+    )
+    runner = RecordingRunner(results=[_probe({"rdqm-a1": "running"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "rdqm_ha"])
+    assert result.exit_code == 0
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs == [[*_VIRSH, "list", "--all"], ["uv", "run", "ansible-playbook", "site-rdqm.yml"]]
+    assert runner.recorded[-1].env is None  # no secrets -> no injected env
+
+
+def test_vm_provision_unknown_setup_exits_2(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text("setups: {}\n")
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "nope"])
+    assert result.exit_code == 2
+    assert "no lab setup" in result.output
+
+
+def test_vm_provision_setup_without_playbook_exits_2(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "groups:\n  g: [h]\nsetups:\n  bare:\n    groups: [g]\n"
+    )
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "bare"])
+    assert result.exit_code == 2
+    assert "no provision playbook" in result.output
+
+
+def test_vm_provision_lab_secret_failure_exits_2(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_PCMK_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"san-a": "running", "pcmk-a1": "running"}),
+            ScriptedResult([], exit_code=1),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
+    assert result.exit_code == 2
+
+
+def test_vm_provision_playbook_failure_propagates_exit_code(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_PCMK_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"san-a": "running", "pcmk-a1": "running"}),
+            ScriptedResult(["s"]),
+            ScriptedResult([], exit_code=4),  # ansible fails
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
+    assert result.exit_code == 4
