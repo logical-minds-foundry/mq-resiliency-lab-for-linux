@@ -46,11 +46,13 @@ In `lab/topology.yaml`, after the `app-client` node (end of the Phase-B block), 
 
 - [ ] **Step 2: Add the atomic groups**
 
-In the `groups:` block, after `client: [app-client]`, add:
+In the `groups:` block, after `client: [app-client]`, add (the group is named
+`obs_box`, **not** `obs`, so it never collides with the host named `obs` —
+Ansible warns on a group and host sharing a name):
 
 ```yaml
-  obs:   [obs]
-  probe: [mon-probe]
+  obs_box: [obs]
+  probe:   [mon-probe]
 ```
 
 - [ ] **Step 3: Add the `monitoring` setup**
@@ -60,7 +62,7 @@ In the `setups:` block, after `standalone:`, add:
 ```yaml
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
-    groups: [obs, probe]
+    groups: [obs_box, probe]
     provision: ansible/site-obs.yml
 ```
 

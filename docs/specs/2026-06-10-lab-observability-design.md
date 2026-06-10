@@ -138,12 +138,12 @@ New atomic groups and a setup carry them (underscore = group, hyphen = host, per
 
 ```yaml
 groups:
-  obs:   [obs]
-  probe: [mon-probe]
+  obs_box: [obs]      # group name ≠ host name (Ansible warns on group==host)
+  probe:   [mon-probe]
 setups:
   monitoring:
     description: Observability pair — Prometheus/Grafana + the MQ client probe
-    groups: [obs, probe]
+    groups: [obs_box, probe]
     provision: ansible/site-obs.yml
 ```
 
