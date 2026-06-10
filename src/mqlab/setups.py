@@ -25,6 +25,7 @@ class Setup:
     description: str
     groups: list[str]
     provision: str | None
+    secrets: list[str]
 
 
 def _topology() -> dict[str, Any]:
@@ -48,6 +49,7 @@ def lab_setups() -> dict[str, Setup]:
             description=cfg.get("description", ""),
             groups=list(cfg.get("groups", [])),
             provision=cfg.get("provision"),
+            secrets=list(cfg.get("secrets", [])),
         )
     return result
 
