@@ -1,0 +1,9 @@
+# Observability pair (#103). Run via `mqlab obs up`, or directly:
+#   uv run ansible-playbook site-obs.yml
+- hosts: obs_box:probe
+  become: true
+  roles: [node-exporter]
+
+- hosts: obs_box
+  become: true
+  roles: [prometheus, grafana]
