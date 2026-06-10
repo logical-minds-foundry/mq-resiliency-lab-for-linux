@@ -66,16 +66,26 @@ Once the fabric is up, bring up the guest VMs with **`mqlab vm`** — the same
 selector paradigm, over `topology.yaml`:
 
 ```bash
-mqlab vm status          # ground-truth guest state (via virsh)
-mqlab vm up rdqm         # boot + provision just the RDQM guests — watch Ansible run
-mqlab vm up all --step   # bring up every guest, pausing between each to poke around
-mqlab vm ssh rdqm-a1     # drop into a shell on one guest
-mqlab vm down all        # halt them ( `vm destroy all` removes them entirely )
+mqlab vm status            # ground-truth fleet (via virsh), joined with topology
+mqlab vm create rdqm       # create + provision the RDQM guests — watch Ansible run
+mqlab vm create all --step # create every guest, pausing between each to poke around
+mqlab vm up pcmk-san-ha    # start an existing setup's guests (virsh start)
+mqlab vm down all          # shut them down  ( vm destroy all removes them + disks )
+mqlab vm ssh rdqm-a1       # drop into a shell on one guest
 ```
 
-`vm up` runs `vagrant up` per guest — booting **and** provisioning, so this is
-where you watch Ansible build each machine. Like `net`, the mutating verbs
-require a selector, so a bare `mqlab vm destroy` cannot wipe every guest.
+The verbs mirror a domain's lifecycle on two axes — **create/destroy** (existence)
+and **up/down** (power):
+
+- `vm create` runs `vagrant up` per guest — the one verb that uses Vagrant, because
+  it both **creates** the VM and **provisions** it (this is where you watch Ansible
+  build each machine).
+- `vm up` / `vm down` / `vm destroy` drive **`virsh`** (`start` / `shutdown` /
+  `undefine`). **libvirt is the ground truth for state; Vagrant is used only for
+  create** — so these work regardless of Vagrant's metadata.
+
+Like `net`, the mutating verbs require a selector, so a bare `mqlab vm destroy`
+cannot wipe every guest.
 
 > **More verbs land as the slices ship.** `mqlab net` and `mqlab vm` are live;
 > arm setup, HA/DR operations, and the `status` / `check` dashboard arrive in
