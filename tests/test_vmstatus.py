@@ -33,6 +33,8 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert code == 0
     out = buffer.getvalue()
     assert "$ virsh -c qemu:///system list --all" in out  # command echoed (transparency)
+    assert "lab_pcmk-a1" in out  # raw virsh output streamed to screen — the State source (#88)
+    assert "topology.yaml" in out  # the other source named on the table (#88)
     assert "rdqm-a1" in out  # full fleet — incl the defined-but-not-instantiated RHEL node
     assert "not created" in out
     assert "rhel96-x86_64" in out
