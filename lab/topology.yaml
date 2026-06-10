@@ -137,8 +137,10 @@ groups:
   qm:     [qm-main]
   dtcc:   [dtcc-sim]
   client: [app-client]
-  obs:    [obs]
-  probe:  [mon-probe]
+  # obs_box (not "obs") so the group name never collides with the host named obs
+  # (Ansible warns on group==host); probe/mon-probe already differ.
+  obs_box: [obs]
+  probe:   [mon-probe]
 
 # setups — named configurations, each a composition of groups (in bring-up order,
 # SAN first), with the Ansible playbook that provisions it. Setup names are
@@ -170,5 +172,5 @@ setups:
     secrets: [mqweb_admin_password]
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
-    groups: [obs, probe]
+    groups: [obs_box, probe]
     provision: ansible/site-obs.yml

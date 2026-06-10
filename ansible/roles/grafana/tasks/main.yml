@@ -5,10 +5,14 @@
     dest: /etc/apt/keyrings/grafana.asc
     mode: "0644"
 
-- name: grafana apt repo
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
-    filename: grafana
+- name: grafana apt repo (deb822)
+  ansible.builtin.deb822_repository:
+    name: grafana
+    types: [deb]
+    uris: https://apt.grafana.com
+    suites: [stable]
+    components: [main]
+    signed_by: /etc/apt/keyrings/grafana.asc
     state: present
 
 - name: install grafana
