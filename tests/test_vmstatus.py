@@ -23,8 +23,9 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(
         "defaults: { platform: ubuntu2404-arm64 }\nnodes:\n"
         "  rdqm-a1: { platform: rhel96-x86_64 }\n  pcmk-a1: {}\n  pcmk-b1: {}\n"
-        "setups:\n  rdqm-ha:\n    members: [rdqm-a1]\n"
-        "  pcmk-san:\n    members: [pcmk-a1, pcmk-b1]\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
+        "setups:\n  rdqm-ha:\n    groups: [rdqm_a]\n"
+        "  pcmk-san:\n    groups: [pcmk_a, pcmk_b]\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))

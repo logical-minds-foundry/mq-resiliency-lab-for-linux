@@ -87,11 +87,12 @@ def test_vm_create_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n"
-        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1, pcmk-a2]\n"
+        "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1, pcmk-a2]\n"
+        "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
     )
     runner = RecordingRunner(results=[_probe({}), *(ScriptedResult([]) for _ in range(3))])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "create", "pcmk-san-ha"])
+    result = CliRunner().invoke(cli.app, ["vm", "create", "pcmk_san_ha"])
     assert result.exit_code == 0
     assert [c.argv[-1] for c in runner.recorded[1:]] == ["san-a", "pcmk-a1", "pcmk-a2"]
 
@@ -255,13 +256,32 @@ def test_vm_status_accepts_a_setup_selector(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  rdqm-a1: {}\n"
-        "setups:\n  pcmk-san-ha:\n    members: [san-a, pcmk-a1]\n"
+        "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
+        "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
     )
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "status", "pcmk-san-ha"])
+    result = CliRunner().invoke(cli.app, ["vm", "status", "pcmk_san_ha"])
     assert result.exit_code == 0
     assert runner.recorded[0].argv[-1] == "--all"  # still virsh list --all (the source)
+
+
+def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
+        "groups:\n  san_a: [san-a]\n"
+        "setups:\n  pcmk_san_ha: {groups: [san_a]}\n"
+    )
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "inventory"])
+    assert result.exit_code == 0
+    written = (tmp_path / "build" / "inventory.ini").read_text()
+    assert "[san_a]" in written
+    assert "san-a ansible_host=10.50.0.5" in written
+    assert "[pcmk_san_ha:children]" in written
 
 
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):

@@ -1,6 +1,6 @@
 # The Pacemaker/SAN arm (Phase D). Site A; site B plays land with the DR
 # task. Run: uv run ansible-playbook site-pcmk.yml [--limit ...]
-- hosts: pcmk_a:san_hosts
+- hosts: pcmk_san_ha
   become: true
   tasks:
     - name: acl package for unprivileged become
@@ -8,7 +8,7 @@
         name: acl
         update_cache: false
 
-- hosts: san-a
+- hosts: san_a
   vars:
     san_backing_dev: /dev/vdb
     san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0

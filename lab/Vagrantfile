@@ -18,6 +18,10 @@ Vagrant.configure("2") do |config|
   # repo-less (unregistered, offline) RHEL box cannot perform.
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
+  # All guests share Vagrant's well-known insecure key so the rendered inventory
+  # carries one constant key path instead of N scraped per-machine paths (#101).
+  config.ssh.insert_key = false
+
   topology.fetch("nodes").each do |name, spec|
     spec ||= {}
     platform = boxes.fetch(spec.fetch("platform", defaults["platform"]))

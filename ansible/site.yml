@@ -1,4 +1,4 @@
-- hosts: all
+- hosts: standalone
   become: true
   tasks:
     # setfacl is how Ansible hands temp files to an unprivileged become_user
@@ -8,23 +8,23 @@
         name: acl
         update_cache: false
 
-- hosts: qm_hosts
+- hosts: qm:dtcc
   roles: [mq-install]
 
-- hosts: client_hosts
+- hosts: client
   roles: [mq-client]
 
-- hosts: qm-main
+- hosts: qm
   vars: { qmgr_name: QMAIN }
   roles: [mq-qmgr]
 
-- hosts: dtcc-sim
+- hosts: dtcc
   vars: { qmgr_name: QDTCC }
   roles: [mq-qmgr]
 
 # Trade-path clients: pymqi venv + the EPN scripts (responder runs on
 # dtcc-sim in bindings mode; requester on app-client in client mode).
-- hosts: dtcc-sim:app-client
+- hosts: dtcc:client
   tasks:
     - name: pymqi venv
       ansible.builtin.shell: |

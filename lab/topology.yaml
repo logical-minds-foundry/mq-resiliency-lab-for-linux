@@ -1,9 +1,13 @@
 # lab/topology.yaml — single source of truth for the lab shape: the guest VMs
-# (nodes), the networks/boxes, and the named `setups` that group guests into
-# runnable configurations. The RDQM arm uses a RHEL x86_64 platform per-node;
-# arch-specific provider mechanics (UEFI, input, CPU mode) live in the Vagrantfile
-# keyed on `arch` — see the provider spike report
-# (docs/reports/2026-06-06-phase-a-provider-spike.md).
+# (nodes), the networks/boxes, the atomic `groups` (role × site), and the named
+# `setups` that compose those groups into runnable configurations. The RDQM arm
+# uses a RHEL x86_64 platform per-node; arch-specific provider mechanics (UEFI,
+# input, CPU mode) live in the Vagrantfile keyed on `arch` — see the provider
+# spike report (docs/reports/2026-06-06-phase-a-provider-spike.md).
+#
+# Every node carries a net-mgmt NIC (10.50.0.0/24): the dedicated, host-only
+# management plane Ansible connects over, kept off the modeled data/hb/san
+# planes. The inventory is rendered from this file (mqlab vm inventory, #101).
 boxes:
   ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
   alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
@@ -21,17 +25,17 @@ nodes:
   qm-main:
     cpus: 2
     memory: 2048
-    nics: { net-client: 10.30.0.10, net-dtcc: 10.20.0.10 }
+    nics: { net-mgmt: 10.50.0.10, net-client: 10.30.0.10, net-dtcc: 10.20.0.10 }
   dtcc-sim:
     cpus: 2
     memory: 2048
-    nics: { net-dtcc: 10.20.0.50 }
+    nics: { net-mgmt: 10.50.0.50, net-dtcc: 10.20.0.50 }
   app-client:
     # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B
     # VIPs (10.10.2.x) -- so a reconnectable client given both VIPs can ride a
     # cross-site DR cutover and keep producing on the survivor. net-client
     # reaches the standalone message-path QM (10.30.0.10).
-    nics: { net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
+    nics: { net-mgmt: 10.50.0.60, net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
@@ -39,54 +43,54 @@ nodes:
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31 }
+    nics: { net-mgmt: 10.50.0.31, net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31 }
   rdqm-a2:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32 }
+    nics: { net-mgmt: 10.50.0.32, net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32 }
   rdqm-a3:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33 }
+    nics: { net-mgmt: 10.50.0.33, net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33 }
   rdqm-b1:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
+    nics: { net-mgmt: 10.50.0.41, net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
   rdqm-b2:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
+    nics: { net-mgmt: 10.50.0.42, net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
   rdqm-b3:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43 }
+    nics: { net-mgmt: 10.50.0.43, net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43 }
 
   # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
   san-a:
     extra_disk: 8
-    nics: { net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
+    nics: { net-mgmt: 10.50.0.5, net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
   pcmk-a1:
     cpus: 2
     memory: 2048
-    nics: { net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51 }
+    nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51 }
   pcmk-a2:
     cpus: 2
     memory: 2048
-    nics: { net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52 }
+    nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52 }
   pcmk-a3:
     cpus: 2
     memory: 2048
-    nics: { net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53 }
+    nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53 }
 
   # --- Phase D DR: site B mirrors site A on the .2/.6x address plan. san-b is
   # the DRBD secondary (LUN replicated from san-a over net-wan); pcmk-b1..3 are
@@ -94,42 +98,57 @@ nodes:
   # match ansible/site-pcmk-dr.yml; site-B VIP is 10.10.2.200, portal 10.40.2.6.
   san-b:
     extra_disk: 8
-    nics: { net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
+    nics: { net-mgmt: 10.50.0.6, net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
   pcmk-b1:
     cpus: 2
     memory: 2048
-    nics: { net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61 }
+    nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61 }
   pcmk-b2:
     cpus: 2
     memory: 2048
-    nics: { net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62 }
+    nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62 }
   pcmk-b3:
     cpus: 2
     memory: 2048
-    nics: { net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63 }
+    nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63 }
 
-# setups — named groupings of guests into runnable configurations: the single
-# source of truth for "which machines compose each config, in what bring-up order
-# (SAN first), and which Ansible playbook provisions them" (#90). `mqlab vm` and
-# `mqlab vm status` read this; ansible/inventory.sh will derive its groups here too.
+# groups — atomic role × site groups, each host listed exactly once. These are the
+# shared grouping namespace: the Ansible inventory renders them verbatim and the
+# playbooks target them; setups (below) compose them. Convention: underscores name
+# a group, hyphens name a host (#101).
+groups:
+  san_a:  [san-a]
+  san_b:  [san-b]
+  pcmk_a: [pcmk-a1, pcmk-a2, pcmk-a3]
+  pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
+  rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
+  rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
+  qm:     [qm-main]
+  dtcc:   [dtcc-sim]
+  client: [app-client]
+
+# setups — named configurations, each a composition of groups (in bring-up order,
+# SAN first), with the Ansible playbook that provisions it. Setup names are
+# underscore-form so they double as Ansible :children parent groups in the rendered
+# inventory. `mqlab vm`, `mqlab vm status`, and the inventory renderer all read this.
 setups:
-  pcmk-san-ha:
+  pcmk_san_ha:
     description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
-    members: [san-a, pcmk-a1, pcmk-a2, pcmk-a3]
+    groups: [san_a, pcmk_a]
     provision: ansible/site-pcmk.yml
-  pcmk-san-dr:
+  pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
-    members: [san-a, pcmk-a1, pcmk-a2, pcmk-a3, san-b, pcmk-b1, pcmk-b2, pcmk-b3]
+    groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
-  rdqm-ha:
+  rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
-    members: [rdqm-a1, rdqm-a2, rdqm-a3]
+    groups: [rdqm_a]
     provision: ansible/site-rdqm.yml
-  rdqm-dr:
+  rdqm_dr:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
-    members: [rdqm-a1, rdqm-a2, rdqm-a3, rdqm-b1, rdqm-b2, rdqm-b3]
+    groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
   standalone:
     description: Phase-B standalone QM + DTCC sim + client (message path)
-    members: [qm-main, dtcc-sim, app-client]
+    groups: [qm, dtcc, client]
     provision: ansible/site.yml
