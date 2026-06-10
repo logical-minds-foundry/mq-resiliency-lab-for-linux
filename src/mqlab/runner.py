@@ -10,6 +10,7 @@ nucleus).
 
 from __future__ import annotations
 
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
@@ -21,10 +22,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class Command:
-    """One command to run: argv plus an optional working directory."""
+    """One command to run: argv, an optional working directory, and optional
+    extra environment (merged over os.environ for the child — used to inject
+    lab secrets onto a single subprocess, #102)."""
 
     argv: list[str]
     cwd: Path | None = None
+    env: dict[str, str] | None = None
 
     def display(self) -> str:
         """The verbatim, copy-pasteable command line (treatment A, spec §4.4)."""
@@ -42,9 +46,11 @@ class SubprocessRunner:
 
     def run(self, command: Command, on_line: Callable[[str], None]) -> int:
         cwd = str(command.cwd) if command.cwd is not None else None
+        env = {**os.environ, **command.env} if command.env else None
         process = subprocess.Popen(  # noqa: S603 - trusted internal argv; lab tool (spec §1)
             command.argv,
             cwd=cwd,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
