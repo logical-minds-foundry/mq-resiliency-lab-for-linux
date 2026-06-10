@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
+from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
+from mqlab.lifecycle import ABSENT, OFF, RUNNING, classify
 from mqlab.netsel import resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import lab_script, repo_root
@@ -152,39 +154,130 @@ app.add_typer(vm_app, name="vm")
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
-def _vm_create_steps(guests: list[str]) -> list[CommandStep]:
+def _create_step(g: str) -> CommandStep:
     # Create + provision via Vagrant — the one verb that needs Vagrant (#96).
-    lab = repo_root() / "lab"
-    return [
-        CommandStep(f"{g} create", Command(["vagrant", "up", g], cwd=lab))  # noqa: S607
-        for g in guests
-    ]
+    cmd = Command(["vagrant", "up", g], cwd=repo_root() / "lab")  # noqa: S607
+    return CommandStep(f"{g} create", cmd)
 
 
-def _vm_up_steps(guests: list[str]) -> list[CommandStep]:
-    # Start an existing domain. virsh is ground truth — works regardless of
-    # Vagrant metadata (e.g. churn-orphaned domains) (#96).
-    return [
-        CommandStep(f"{g} start", Command([*_VIRSH, "start", f"lab_{g}"]))  # noqa: S607
-        for g in guests
-    ]
+def _start_step(g: str) -> CommandStep:
+    return CommandStep(f"{g} start", Command([*_VIRSH, "start", f"lab_{g}"]))  # noqa: S607
 
 
-def _vm_down_steps(guests: list[str]) -> list[CommandStep]:
-    return [
-        CommandStep(f"{g} shutdown", Command([*_VIRSH, "shutdown", f"lab_{g}"]))  # noqa: S607
-        for g in guests
-    ]
+def _shutdown_step(g: str) -> CommandStep:
+    return CommandStep(f"{g} shutdown", Command([*_VIRSH, "shutdown", f"lab_{g}"]))  # noqa: S607
 
 
-def _vm_destroy_steps(guests: list[str]) -> list[CommandStep]:
-    # Remove the domain + its per-guest overlay disk (the base box is a separate
-    # volume, untouched). Requires the guest shut off — run vm down first (#96).
+def _forceoff_step(g: str) -> CommandStep:
+    return CommandStep(f"{g} force-off", Command([*_VIRSH, "destroy", f"lab_{g}"]))  # noqa: S607
+
+
+def _undefine_step(g: str) -> CommandStep:
+    # Remove the domain + per-guest overlay disk + UEFI nvram (base box untouched).
+    cmd = Command([*_VIRSH, "undefine", f"lab_{g}", "--remove-all-storage", "--nvram"])  # noqa: S607
+    return CommandStep(f"{g} undefine", cmd)
+
+
+# State-aware planners (#99): given the live state, act only where needed and emit
+# advisory notes for the rest. Idempotency = looking before you leap.
+def _plan_create(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
     steps: list[CommandStep] = []
+    notes: list[str] = []
     for g in guests:
-        cmd = Command([*_VIRSH, "undefine", f"lab_{g}", "--remove-all-storage"])  # noqa: S607
-        steps.append(CommandStep(f"{g} undefine", cmd))
-    return steps
+        if classify(states, g) == ABSENT:
+            steps.append(_create_step(g))
+        else:
+            notes.append(f"{g}: already created — vm up to start, vm destroy to recreate")
+    return steps, notes
+
+
+def _plan_up(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for g in guests:
+        state = classify(states, g)
+        if state == OFF:
+            steps.append(_start_step(g))
+        elif state == RUNNING:
+            notes.append(f"{g}: already running")
+        else:
+            notes.append(f"{g}: not created — run vm create first")
+    return steps, notes
+
+
+def _plan_down(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for g in guests:
+        state = classify(states, g)
+        if state == RUNNING:
+            steps.append(_shutdown_step(g))
+        elif state == OFF:
+            notes.append(f"{g}: already off")
+        else:
+            notes.append(f"{g}: not created")
+    return steps, notes
+
+
+def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for g in guests:
+        state = classify(states, g)
+        if state == RUNNING:
+            steps.extend([_forceoff_step(g), _undefine_step(g)])  # force off, then remove
+        elif state == OFF:
+            steps.append(_undefine_step(g))
+        else:
+            notes.append(f"{g}: already gone")
+    return steps, notes
+
+
+def _probe_states(deps: Deps) -> dict[str, str]:
+    # The awareness step: show + capture `virsh list --all`, parse to per-domain state.
+    cmd = Command([*_VIRSH, "list", "--all"])  # noqa: S607
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+    captured: list[str] = []
+
+    def sink(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+        captured.append(line)
+
+    deps.runner.run(cmd, sink)
+    return parse_domain_states("\n".join(captured))
+
+
+def _execute_stateful(
+    verb: str,
+    guests: list[str],
+    planner: Callable[[list[str], dict[str, str]], tuple[list[CommandStep], list[str]]],
+    *,
+    step_mode: bool,
+) -> None:
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps(verb, timestamp)
+    try:
+        steps, notes = planner(guests, _probe_states(deps))
+        for note in notes:
+            deps.renderer.note(note)
+            deps.transcript.write(note)
+        run_steps(
+            steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=step_mode,
+            pauser=deps.pauser,
+        )
+    except NoTTYError as exc:
+        deps.renderer.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
 
 
 def _ssh_into(guest: str) -> None:
@@ -196,30 +289,30 @@ def _ssh_into(guest: str) -> None:
 
 @vm_app.command("create")
 def vm_create(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Create + provision the selected guests via Vagrant (a name, regex, or 'all')."""
+    """Create + provision the selected guests (skips any that already exist)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute("vm-create", _vm_create_steps(guests), step_mode=step)
+    _execute_stateful("vm-create", guests, _plan_create, step_mode=step)
 
 
 @vm_app.command("up")
 def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Start the selected (already-created) guests — virsh start."""
+    """Start the selected guests (skips any already running)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute("vm-up", _vm_up_steps(guests), step_mode=step)
+    _execute_stateful("vm-up", guests, _plan_up, step_mode=step)
 
 
 @vm_app.command("down")
 def vm_down(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Shut down the selected guests — virsh shutdown."""
+    """Shut down the selected guests (skips any already off)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute("vm-down", _vm_down_steps(guests), step_mode=step)
+    _execute_stateful("vm-down", guests, _plan_down, step_mode=step)
 
 
 @vm_app.command("destroy")
 def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Remove the selected guests + their disks (must be shut off first)."""
+    """Remove the selected guests + disks (force-stops running ones; skips absent)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute("vm-destroy", _vm_destroy_steps(guests), step_mode=step)
+    _execute_stateful("vm-destroy", guests, _plan_destroy, step_mode=step)
 
 
 @vm_app.command("status")
