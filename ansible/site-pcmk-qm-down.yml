@@ -1,0 +1,21 @@
+# Remove the Pacemaker-managed QM + its HA resources. Driven by `mqlab qm destroy`.
+- hosts: pcmk_a
+  become: true
+  tasks:
+    - name: delete the resource group
+      ansible.builtin.command: pcs resource delete mq_group
+      run_once: true
+      failed_when: false
+      changed_when: true
+
+    - name: stop + delete the queue manager
+      ansible.builtin.shell: >
+        su mqm -c '/opt/mqm/bin/endmqm -i {{ qm_name }}' 2>/dev/null;
+        su mqm -c '/opt/mqm/bin/dltmqm {{ qm_name }}' 2>/dev/null;
+        su mqm -c '/opt/mqm/bin/rmvmqinf {{ qm_name }}' 2>/dev/null; true
+      changed_when: true
+
+    - name: remove the systemd unit
+      ansible.builtin.file:
+        path: "/etc/systemd/system/mq-{{ qm_name }}.service"
+        state: absent
