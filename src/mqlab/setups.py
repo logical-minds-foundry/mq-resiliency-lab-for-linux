@@ -20,12 +20,21 @@ from mqlab.paths import repo_root
 
 
 @dataclass(frozen=True)
+class QmConfig:
+    """A setup's queue-manager identity (#109): the QM name and its floating VIP."""
+
+    name: str
+    vip: str
+
+
+@dataclass(frozen=True)
 class Setup:
     name: str
     description: str
     groups: list[str]
     provision: str | None
     secrets: list[str]
+    qm: QmConfig | None
 
 
 def _topology() -> dict[str, Any]:
@@ -50,6 +59,7 @@ def lab_setups() -> dict[str, Setup]:
             groups=list(cfg.get("groups", [])),
             provision=cfg.get("provision"),
             secrets=list(cfg.get("secrets", [])),
+            qm=QmConfig(name=cfg["qm"]["name"], vip=cfg["qm"]["vip"]) if cfg.get("qm") else None,
         )
     return result
 
