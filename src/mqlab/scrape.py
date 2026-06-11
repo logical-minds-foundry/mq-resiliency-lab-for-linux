@@ -48,10 +48,12 @@ def render_scrape_targets(topo: dict[str, Any]) -> str:
         }
         for host, spec in nodes.items()
     ]
-    entries.append({
-        "targets": [f"{HYPERVISOR_MGMT_IP}:{NODE_EXPORTER_PORT}"],
-        "labels": {"host": "hypervisor", "groups": "hypervisor"},
-    })
+    entries.append(
+        {
+            "targets": [f"{HYPERVISOR_MGMT_IP}:{NODE_EXPORTER_PORT}"],
+            "labels": {"host": "hypervisor", "groups": "hypervisor"},
+        }
+    )
     return json.dumps(entries, indent=2) + "\n"
 
 
