@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from mqlab.orchestrator import Pauser
     from mqlab.runner import CommandRunner
+    from mqlab.setups import QmConfig
 
 
 @dataclass
@@ -165,6 +166,9 @@ app.add_typer(vm_app, name="vm")
 
 obs_app = typer.Typer(help="observability stack (Prometheus + Grafana)", no_args_is_help=True)
 app.add_typer(obs_app, name="obs")
+
+qm_app = typer.Typer(help="MQ queue managers (Pacemaker-managed HA)", no_args_is_help=True)
+app.add_typer(qm_app, name="qm")
 
 
 @obs_app.command("targets")
@@ -707,6 +711,146 @@ def vm_provision(setup: str) -> None:
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
     _ssh_into(guest)
+
+
+# --- qm: the MQ queue-manager lifecycle on the Pacemaker arm (#109) --------------
+# create/destroy run the reproducible mq-pcmk-qmgr role (the client-reproducible
+# deliverable); up/down/status are direct, streamed pcs ops on the cluster. Pacemaker
+# is the only thing allowed to start/stop the QM (its systemd units are disabled).
+_PCMK_CLUSTER_GROUP = "pcmk_a"  # the cluster's inventory group; pcs runs on its first node
+_PCMK_RESOURCE_GROUP = "mq_group"
+
+
+def _setup_qm_or_exit(setup_name: str) -> QmConfig:
+    setup = lab_setups().get(setup_name)
+    if setup is None:
+        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
+        raise typer.Exit(code=2)
+    if setup.qm is None:
+        typer.echo(f"setup {setup_name} has no qm config", err=True)
+        raise typer.Exit(code=2)
+    return setup.qm
+
+
+def _render_inventory(deps: Deps) -> None:
+    # The static map ansible needs to reach the hosts (#101). Cheap; always fresh.
+    inv = inventory_path()
+    inv.parent.mkdir(parents=True, exist_ok=True)
+    inv.write_text(lab_inventory())
+    deps.renderer.note(f"rendered {inv}")
+    deps.transcript.write(f"rendered {inv}")
+
+
+def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
+    # create/destroy: pre-flight members running -> render inventory -> run the play.
+    qm = _setup_qm_or_exit(setup_name)
+    members = setup_members(setup_name) or []
+    deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        states = _probe_states(deps)
+        down = [m for m in members if classify(states, m) != RUNNING]
+        if down:
+            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
+            deps.renderer.note(note)
+            deps.transcript.write(note)
+            raise typer.Exit(code=3)
+        _render_inventory(deps)
+        step = CommandStep(
+            f"{setup_name} {verb}",
+            Command(
+                [
+                    "uv",
+                    "run",
+                    "ansible-playbook",
+                    playbook,
+                    "-e",
+                    f"qm_name={qm.name}",
+                    "-e",
+                    f"qm_vip={qm.vip}",
+                ],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
+    # up/down/status: a single streamed pcs op on the cluster's first node. No
+    # pre-flight — if the cluster is unreachable, ansible's own error speaks (#109).
+    _setup_qm_or_exit(setup_name)
+    deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        _render_inventory(deps)
+        step = CommandStep(
+            f"{setup_name} {verb}",
+            Command(
+                [
+                    "uv",
+                    "run",
+                    "ansible",
+                    f"{_PCMK_CLUSTER_GROUP}[0]",
+                    "-b",
+                    "-m",
+                    "shell",
+                    "-a",
+                    pcs_cmd,
+                ],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@qm_app.command("create")
+def qm_create(setup: str) -> None:
+    """Create the queue manager + its Pacemaker HA resources (runs the role)."""
+    _qm_playbook(setup, "site-pcmk-qm.yml", "qm-create")
+
+
+@qm_app.command("destroy")
+def qm_destroy(setup: str) -> None:
+    """Remove the queue manager + its HA resources."""
+    _qm_playbook(setup, "site-pcmk-qm-down.yml", "qm-destroy")
+
+
+@qm_app.command("up")
+def qm_up(setup: str) -> None:
+    """Start the cluster-managed QM — pcs resource enable mq_group."""
+    _qm_pcs(setup, f"pcs resource enable {_PCMK_RESOURCE_GROUP}", "qm-up")
+
+
+@qm_app.command("down")
+def qm_down(setup: str) -> None:
+    """Cleanly stop the QM without tearing down HA — pcs resource disable mq_group."""
+    _qm_pcs(setup, f"pcs resource disable {_PCMK_RESOURCE_GROUP}", "qm-down")
+
+
+@qm_app.command("status")
+def qm_status(setup: str) -> None:
+    """Show the QM's HA resource state — pcs status resources."""
+    _qm_pcs(setup, "pcs status resources", "qm-status")
 
 
 def main() -> None:
