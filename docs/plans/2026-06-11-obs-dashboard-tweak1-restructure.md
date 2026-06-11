@@ -452,16 +452,18 @@ vrg-commit --type test --scope mqlab --message "cover dashboard renderer to 100%
 - [ ] **Step 1: Re-render + redeploy the dashboard onto the running obs box**
 
 ```bash
+mqlab obs targets          # render build/prometheus/targets/node.json
 mqlab obs dashboard        # render build/grafana/dashboards/lab-status.json
-mqlab vm inventory         # render build/inventory.ini — REQUIRED: a fresh worktree has none
+mqlab vm inventory         # render build/inventory.ini
 cd ansible && uv run ansible-playbook site-obs.yml && cd ..
 ```
-The `obs`/`mon-probe` domains persist across worktrees, so Ansible re-provisions
-them over `net-mgmt` via the static inventory — **no Vagrant needed** (do *not*
-`mqlab obs up` here: from a fresh worktree its `vagrant up` has no `.vagrant`
-metadata and would collide with the already-running domains). `mqlab vm
-inventory` is mandatory first — without `build/inventory.ini` the play matches no
-hosts and silently skips.
+`site-obs.yml` runs all three roles (node-exporter, prometheus, grafana), so all
+three rendered artifacts must exist first — a fresh worktree's `build/` has none.
+These are exactly what `mqlab obs up` renders in one shot, but `obs up` is
+off-limits from a worktree: its `vagrant up` has no `.vagrant` metadata and would
+collide with the already-running `obs`/`mon-probe` domains. The domains persist
+across worktrees, so Ansible re-provisions them over `net-mgmt` via the static
+inventory — **no Vagrant needed**.
 
 - [ ] **Step 2: Confirm the layered view**
 
