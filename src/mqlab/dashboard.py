@@ -40,7 +40,12 @@ class DashboardError(RuntimeError):
 
 
 def _row(title: str, y: int) -> dict[str, Any]:
-    return {"type": "row", "title": title, "gridPos": {"h": 1, "w": 24, "x": 0, "y": y}, "panels": []}
+    return {
+        "type": "row",
+        "title": title,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": y},
+        "panels": [],
+    }
 
 
 def _text(content: str, y: int) -> dict[str, Any]:
@@ -56,12 +61,19 @@ def _up_panel(label: str, sel: str, y: int) -> dict[str, Any]:
         "type": "stat",
         "title": f"{label} — up",
         "gridPos": {"h": 4, "w": 10, "x": 0, "y": y},
-        "fieldConfig": {"defaults": {"mappings": [
-            {"type": "value", "options": {
-                "0": {"text": "DOWN", "color": "red"},
-                "1": {"text": "UP", "color": "green"},
-            }}
-        ]}},
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    {
+                        "type": "value",
+                        "options": {
+                            "0": {"text": "DOWN", "color": "red"},
+                            "1": {"text": "UP", "color": "green"},
+                        },
+                    }
+                ]
+            }
+        },
         "targets": [{"expr": f'up{{job="node", groups=~"{sel}"}}', "legendFormat": "{{host}}"}],
     }
 
