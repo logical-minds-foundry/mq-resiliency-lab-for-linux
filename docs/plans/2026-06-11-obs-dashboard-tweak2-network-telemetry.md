@@ -588,21 +588,37 @@ vrg-commit --type feat --scope ansible --message "lab_net_reach: per-node peer-p
 - Modify: `src/mqlab/dashboard.py`
 - Test: `tests/test_dashboard.py`
 
-- [ ] **Step 1: Failing test — the Networks row is now a real state panel**
+The Networks row gets **two side-by-side panels** — a tri-state **state** panel
+(`lab_network_state`) and a **reachability** panel (`lab_net_reach`) — so both
+halves the spec calls for (§4) are emitted by `render_dashboard` *and tested*,
+not deferred. (A single combined-color tile is a later polish; surfacing
+reachability in a committed, tested panel is the requirement.)
+
+- [ ] **Step 1: Failing tests — both network panels**
 
 Append to `tests/test_dashboard.py`:
 
 ```python
-def test_network_row_uses_state_metric_with_tristate_mapping():
+def test_network_state_panel_has_tristate_mapping():
     panels = render_dashboard(TOPO)["panels"]
     net = next(p for p in panels if p.get("title") == "Networks — state")
     assert net["targets"][0]["expr"] == "lab_network_state"
     texts = {m["options"][k]["text"] for m in net["fieldConfig"]["defaults"]["mappings"]
              for k in m["options"]}
     assert {"ABSENT", "DOWN", "UP"} <= texts
+
+
+def test_network_reachability_panel_rolls_up_per_network():
+    panels = render_dashboard(TOPO)["panels"]
+    reach = next(p for p in panels if p.get("title") == "Networks — reachability")
+    # a network with ANY unreachable peer rolls up to 0 (per-network minimum)
+    assert reach["targets"][0]["expr"] == "min by (network) (lab_net_reach)"
+    texts = {m["options"][k]["text"] for m in reach["fieldConfig"]["defaults"]["mappings"]
+             for k in m["options"]}
+    assert {"UNREACHABLE", "REACHABLE"} <= texts
 ```
 
-- [ ] **Step 2: Run it** → FAIL (placeholder text panel, not a state panel).
+- [ ] **Step 2: Run it** → FAIL (placeholder text panel; no reachability panel).
 
 - [ ] **Step 3: Replace the placeholder network section** in `src/mqlab/dashboard.py`. Swap the two placeholder lines:
 
@@ -615,17 +631,18 @@ with:
 
 ```python
     panels.append(_row("Networks", y)); y += 1
-    panels.append(_network_panel(y)); y += 4
+    panels.append(_network_state_panel(y))
+    panels.append(_network_reach_panel(y)); y += 4
 ```
 
-and add the `_network_panel` helper (tri-state mapping; amber when active-but-unreachable is layered via the reachability query in the live panel — the base tile is the state):
+and add the two helpers:
 
 ```python
-def _network_panel(y: int) -> dict[str, Any]:
+def _network_state_panel(y: int) -> dict[str, Any]:
     return {
         "type": "stat",
         "title": "Networks — state",
-        "gridPos": {"h": 4, "w": 24, "x": 0, "y": y},
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": y},
         "fieldConfig": {"defaults": {"mappings": [
             {"type": "value", "options": {
                 "0": {"text": "ABSENT", "color": "grey"},
@@ -635,18 +652,36 @@ def _network_panel(y: int) -> dict[str, Any]:
         ]}},
         "targets": [{"expr": "lab_network_state", "legendFormat": "{{network}}"}],
     }
+
+
+def _network_reach_panel(y: int) -> dict[str, Any]:
+    # min by (network): a net with ANY unreachable peer rolls up to 0 (amber).
+    return {
+        "type": "stat",
+        "title": "Networks — reachability",
+        "gridPos": {"h": 4, "w": 12, "x": 12, "y": y},
+        "fieldConfig": {"defaults": {"mappings": [
+            {"type": "value", "options": {
+                "0": {"text": "UNREACHABLE", "color": "orange"},
+                "1": {"text": "REACHABLE", "color": "green"},
+            }}
+        ]}},
+        "targets": [{"expr": "min by (network) (lab_net_reach)", "legendFormat": "{{network}}"}],
+    }
 ```
 
-> The amber "active-but-unreachable" overlay is a second query/threshold on the
-> live panel; the base tri-state tile is what `render_dashboard` emits and tests.
-> Wiring the amber overlay is a dashboard-JSON refinement done in Step 5 (live).
+This makes the spec's "active-but-unreachable" visible: a net stays green in the
+**state** panel (it's active) while its **reachability** panel tile goes orange —
+the subtle fault surfaced, in a tested artifact. A net with no peers (e.g.
+`net-mgmt` is excluded; a single-member net) simply has no `lab_net_reach`
+series and no reachability tile, which is correct.
 
 - [ ] **Step 4: Run it** → PASS. Then `uv run pytest tests/test_dashboard.py -v` → all PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-vrg-commit --type feat --scope mqlab --message "dashboard: real tri-state network row (#<N>)" --body "render_dashboard's Networks row is now a stat panel over lab_network_state with the absent(grey)/down(red)/up(green) mapping, replacing the Tweak-1 placeholder. legend per network."
+vrg-commit --type feat --scope mqlab --message "dashboard: real network row — state + reachability (#<N>)" --body "render_dashboard's Networks row emits two tested panels: a tri-state state tile (lab_network_state: absent/grey, down/red, up/green) and a per-network reachability roll-up (min by (network) lab_net_reach: orange when any peer unreachable). Replaces the Tweak-1 placeholder and surfaces the collected lab_net_reach so it isn't orphaned (spec 4 / criterion 4)."
 ```
 
 ---
@@ -656,7 +691,7 @@ vrg-commit --type feat --scope mqlab --message "dashboard: real tri-state networ
 - [ ] **Step 1: Full validation**
 
 Run: `vrg-container-run -- vrg-validate`
-Expected: PASS at 100% branch coverage (`netstate.py` fully exercised by `tests/test_netstate.py`; new CLI commands by `tests/test_cli_obs.py`; `dashboard.py` network panel by `tests/test_dashboard.py`).
+Expected: PASS at 100% branch coverage (`netstate.py` fully exercised by `tests/test_netstate.py`; new CLI commands by `tests/test_cli_obs.py`; `dashboard.py` state + reachability panels by `tests/test_dashboard.py`).
 
 - [ ] **Step 2: Live — render, provision, break a net, watch the tile**
 
@@ -669,7 +704,7 @@ mqlab net down net-hb-a        # hb-a tile -> red (DOWN) within a scrape interva
 mqlab net destroy net-hb-a     # hb-a tile -> grey (ABSENT) — distinct from down
 mqlab net up net-hb-a          # back to green (UP)
 ```
-Expected: the Networks row shows every declared net; `down` reads red, `destroy` reads grey, `up` reads green — and with `pcmk_a` up, `lab_net_reach` is populated for hb-a peers.
+Expected: the **state** panel shows every declared net (`down` reads red, `destroy` reads grey, `up` reads green); and with `pcmk_a` up, the **reachability** panel shows hb-a REACHABLE — then `mqlab vm down pcmk-a2` flips hb-a's reachability tile to orange (UNREACHABLE) while its state tile stays green (still active), proving the active-but-unreachable case.
 
 - [ ] **Step 3: PR via the issue-implement oracle** (own issue/branch):
 
@@ -685,7 +720,7 @@ vrg-pr-workflow next   # -> DONE; human runs vrg-submit-pr
 
 ## Self-review notes
 
-- **Spec coverage:** §3.1 textfile prerequisite → Task 1; §3.4 host target → Task 2; §3.2 tri-state host collector → Tasks 3–4 (`render_net_state_prom` reuses `classify_net`, iterates declared nets); §3.3 reachability + privilege + fail-loud → Task 5 (`net_peers`, `ping_group_range`, `last_write_timestamp`); §4 network tile colors (grey/red/green + amber overlay) → Task 6 (+ live amber overlay note); §7 fail-loud / no-new-jobs → throughout (textfile on the node job).
-- **Placeholder scan:** the amber-overlay "done live" note (Task 6 Step 3) is the one deferral — the base tri-state tile is fully specified and tested; the amber threshold is a JSON refinement that needs the live panel. Flagged explicitly, not silent.
+- **Spec coverage:** §3.1 textfile prerequisite → Task 1; §3.4 host target → Task 2; §3.2 tri-state host collector → Tasks 3–4 (`render_net_state_prom` reuses `classify_net`, iterates declared nets); §3.3 reachability + privilege + fail-loud → Task 5 (`net_peers`, `ping_group_range`, `last_write_timestamp`); §4 network state+reachability → Task 6 — **two tested panels** (`lab_network_state` tri-state grey/red/green + `lab_net_reach` per-network roll-up that goes orange when any peer is unreachable), so the collected reachability metric is surfaced, not orphaned; §7 fail-loud / no-new-jobs → throughout (textfile on the node job).
+- **Placeholder scan:** none. Both network panels are fully specified and tested in `render_dashboard`; a single combined-color tile is noted as optional later polish, but the reachability requirement is delivered by the committed `Networks — reachability` panel.
 - **Type consistency:** `render_net_state_prom(net_names, parsed_states)`, `net_peers(topo)`, `HYPERVISOR_MGMT_IP`, the `mqlab obs net-state`/`reach-peers` verbs, and `lab_network_state`/`lab_net_reach` metric names are used identically across tasks. Reuses existing `classify_net`, `parse_net_states`, `lab_net_names` verbatim.
 - **`<N>` is the Tweak-2 issue number** — opened when this plan starts (Tweak 2 is its own issue/PR off `develop`, after Tweak 1 merges).

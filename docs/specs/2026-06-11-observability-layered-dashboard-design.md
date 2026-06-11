@@ -168,13 +168,20 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
 ```
 
 - **MQ service (top):** a reserved row with a placeholder note; Plan B fills it.
-- **VMs (middle):** one **row per group**, each row = member up/down stat tiles
-  (legend `{{host}}`) **+** a single CPU-busy% timeseries scoped to that group's
-  members. Order is **curated** to read like the lab — SAN → PCMK A/B → RDQM A/B
-  → standalone → observability — rather than alphabetical. Curated order lives in
-  the dashboard JSON; adding a *new group* (rare) needs a JSON touch-up.
-  CPU-busy% = `100 - avg by (host)(rate(node_cpu_seconds_total{mode="idle"}[1m]))*100`,
-  filtered to the row's group.
+- **VMs (middle):** rows in **curated, lab-shaped order** — SAN → PCMK A/B →
+  RDQM A/B → standalone → observability. **Each row composes one or more groups**
+  (SAN pairs both site SANs; the cluster arms split A/B; standalone and
+  observability each fold their members together), and shows member up/down stat
+  tiles (legend `{{host}}`) **+** a single CPU-busy% timeseries scoped to the
+  row's group(s). CPU-busy% =
+  `100 - avg by (host)(rate(node_cpu_seconds_total{mode="idle"}[1m]))*100`,
+  filtered to the row's group selector.
+  The curated order is **rendered from code, not hand-edited JSON**: a pure
+  `render_dashboard(topo)` (sibling of `render_inventory`/`render_scrape_targets`)
+  projects a curated `ROWS` list × the topology `groups` namespace into the
+  Grafana JSON. This keeps it DRY, unit-testable to the 100% bar, fail-loud on an
+  unknown group, and extendable by Tweak 2 / Plan B rather than hand-edited.
+  Adding/reordering a row is a one-line change to `ROWS`.
 - **Networks (bottom):** a flat tile strip, one tile per topology-declared
   network. Tile color rolls up state + reachability — `active & all reachable`
   →green, `active & any peer unreachable`→amber, `inactive` (defined, down)→red,
@@ -193,11 +200,19 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   creates the directory — the carrier both new collectors write to.
 - **Reachability collector** (§3.3): the `observability.yml` overlay gains the
   per-node peer-ping textfile timer; peer lists rendered from topology.
-- **Dashboard:** the `grafana` role's dashboard **evolves in place** — the title
-  becomes "Lab — Layered Status" and the file may be renamed, but the
-  **`uid` stays `lab-fleet-node`**. That uid is hard-referenced in `mqlab obs
-  open` (`cli.py`), `lab/scripts/obs-open.sh`, and `getting-started.md`; pinning
-  it keeps all of those deep-links working untouched.
+- **Dashboard:** `render_dashboard(topo)` (§4) emits the JSON; the `grafana` role
+  **deploys the rendered file** from `build/` — the same pattern the `prometheus`
+  role uses for its rendered targets, replacing the static `fleet-node.json`. The
+  dashboard **evolves in place**: title becomes "Lab — Layered Status" but the
+  **`uid` stays `lab-fleet-node`**, which is hard-referenced in `mqlab obs open`
+  (`cli.py`), `lab/scripts/obs-open.sh`, and `getting-started.md` — pinning it
+  keeps those deep-links working untouched.
+- **CLI verbs:** `mqlab obs` gains `dashboard` (render the dashboard JSON,
+  mirroring `obs targets`), and — for Tweak 2 — `net-state` (emit
+  `lab_network_state` from `virsh net-list`, invoked by the host timer) and
+  `reach-peers` (render the per-host peer map for the reachability collector).
+  `mqlab obs up` renders the dashboard + runs the host play alongside targets and
+  inventory.
 
 ## 6. Build split — one spec, two plans
 
