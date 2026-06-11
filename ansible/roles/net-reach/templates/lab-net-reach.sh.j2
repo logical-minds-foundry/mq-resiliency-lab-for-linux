@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# lab-net-reach.sh — ping this host's same-network peers, write a node_exporter
+# textfile. Peers are baked in from topology (reach_peers) at provision time.
+set -euo pipefail
+OUT=/var/lib/node_exporter/textfile/lab_net_reach.prom
+TMP="${OUT}.tmp"
+{
+  echo "# HELP lab_net_reach 1 if peer reachable on the network, else 0"
+  echo "# TYPE lab_net_reach gauge"
+{% for net, peers in (reach_peers | default({})).items() %}
+{% for p in peers %}
+  if ping -c1 -W1 {{ p.ip }} >/dev/null 2>&1; then R=1; else R=0; fi
+  echo "lab_net_reach{network=\"{{ net }}\",peer=\"{{ p.peer }}\"} ${R}"
+{% endfor %}
+{% endfor %}
+  echo "# TYPE lab_net_reach_last_write_timestamp gauge"
+  echo "lab_net_reach_last_write_timestamp $(date +%s)"
+} > "${TMP}"
+mv "${TMP}" "${OUT}"

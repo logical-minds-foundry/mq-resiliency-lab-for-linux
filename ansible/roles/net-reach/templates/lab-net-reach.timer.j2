@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh lab_net_reach every 15s
+
+[Timer]
+OnBootSec=15
+OnUnitActiveSec=15
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

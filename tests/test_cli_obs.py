@@ -183,3 +183,20 @@ def test_obs_net_state_emits_textfile_metrics(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert 'lab_network_state{network="net-hb-a"} 2' in result.stdout
+
+
+def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n"
+        "  pcmk-a1: {nics: {net-hb-a: 172.16.1.51}}\n"
+        "  pcmk-a2: {nics: {net-hb-a: 172.16.1.52}}\n"
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "reach-peers"])
+
+    assert result.exit_code == 0
+    data = json.loads((tmp_path / "build" / "obs" / "reach-peers.json").read_text())
+    assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"

@@ -219,6 +219,27 @@ def obs_net_state() -> None:
         deps.transcript.close()
 
 
+@obs_app.command("reach-peers")
+def obs_reach_peers() -> None:
+    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
+    import json as _json
+
+    import yaml as _yaml
+
+    from mqlab.netstate import net_peers
+
+    deps = build_deps("obs-reach-peers", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+        path = repo_root() / "build" / "obs" / "reach-peers.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
+        deps.renderer.command(f"render -> {path}")
+        deps.transcript.write(f"render -> {path}")
+    finally:
+        deps.transcript.close()
+
+
 GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
 
 
