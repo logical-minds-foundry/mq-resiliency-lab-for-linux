@@ -77,7 +77,12 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
     runner = RecordingRunner(
-        results=[ScriptedResult(["rendered"]), ScriptedResult(["up"]), ScriptedResult(["ok"])]
+        results=[
+            ScriptedResult(["rendered"]),
+            ScriptedResult(["up"]),
+            ScriptedResult(["ok"]),
+            ScriptedResult(["host ok"]),
+        ]
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
@@ -89,8 +94,9 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert "ansible-playbook" in argvs[2]
     # bare filename (run from ansible/), not a doubled ansible/ansible/ path
     assert argvs[2][-1] == "site-obs.yml"
-    # both artifacts rendered eagerly when the steps were built: the scrape
-    # targets AND the Ansible inventory the provision step reads
+    # the host collector is provisioned via a connection=local host-obs play
+    assert any("host-obs.yml" in a for a in argvs)
+    # all three artifacts rendered eagerly when the steps were built
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "inventory.ini").exists()
     assert (tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json").exists()
@@ -154,3 +160,43 @@ def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):
     assert result.exit_code == 0
     written = tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json"
     assert json.loads(written.read_text())["uid"] == "lab-fleet-node"
+
+
+def test_obs_net_state_emits_textfile_metrics(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab" / "networks").mkdir(parents=True)
+    (tmp_path / "lab" / "networks" / "net-hb-a.xml").write_text("<network/>")
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult(
+                [
+                    " Name      State    Autostart   Persistent",
+                    "----------------------------------------------",
+                    " net-hb-a   active   yes         yes",
+                ]
+            )
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "net-state"])
+
+    assert result.exit_code == 0
+    assert 'lab_network_state{network="net-hb-a"} 2' in result.stdout
+
+
+def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n"
+        "  pcmk-a1: {nics: {net-hb-a: 172.16.1.51}}\n"
+        "  pcmk-a2: {nics: {net-hb-a: 172.16.1.52}}\n"
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "reach-peers"])
+
+    assert result.exit_code == 0
+    data = json.loads((tmp_path / "build" / "obs" / "reach-peers.json").read_text())
+    assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"

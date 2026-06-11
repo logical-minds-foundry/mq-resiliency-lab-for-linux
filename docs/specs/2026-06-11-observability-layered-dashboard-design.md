@@ -116,6 +116,18 @@ showing Grafana "No data." This keeps the two operations distinct:
 `mqlab net down net-hb-a` → `inactive` (1); `mqlab net destroy net-hb-a` →
 `absent` (0). Authoritative, and matches exactly what `mqlab net status` shows.
 
+**Folded health (recording rule).** The dashboard's health tile (§4) wants one
+value combining state (host) and reachability (per-guest) — different scrape
+targets, so a Prometheus **recording rule** `lab_network_health` joins them:
+absent→0, inactive→1, active-but-a-peer-unreachable→2, active+reachable→3, with
+missing reach data defaulting to reachable. It lives in the prometheus role's
+rules file (`/etc/prometheus/rules/lab.rules.yml`).
+
+**Per-network throughput.** No new collector: each libvirt net `net-X` has a host
+bridge `virbr-X`, and the host node_exporter already exports
+`node_network_{receive,transmit}_bytes_total{device="virbr-X"}`. The dashboard's
+per-net rx/tx graphs (§4) query those directly.
+
 ### 3.3 Network reachability — per-node peer-ping
 
 State alone misses "active in libvirt but traffic isn't flowing" (a fenced node,
@@ -182,11 +194,22 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   Grafana JSON. This keeps it DRY, unit-testable to the 100% bar, fail-loud on an
   unknown group, and extendable by Tweak 2 / Plan B rather than hand-edited.
   Adding/reordering a row is a one-line change to `ROWS`.
-- **Networks (bottom):** a flat tile strip, one tile per topology-declared
-  network. Tile color rolls up state + reachability — `active & all reachable`
-  →green, `active & any peer unreachable`→amber, `inactive` (defined, down)→red,
-  `absent` (undefined / torn down)→grey. Grey vs. red keeps `mqlab net destroy`
-  visually distinct from `mqlab net down`.
+- **Networks (bottom):** **one row per network**, grouped into three
+  **collapsible section rows** in curated order — **Message path**
+  (client, dtcc, data-a, data-b) → **Cluster + storage** (hb-a, san-a, hb-b,
+  san-b) → **Cross-site + mgmt** (wan, mgmt). Names are shorthand (`data-a`, not
+  `net-data-a`). Each net row = a **folded-health tile** + its own **receive**
+  and **transmit** throughput graphs:
+  - **Health tile** — `lab_network_health` → `0/1/2/3` = grey (absent) / red
+    (down) / amber (active-but-unreachable) / green (up+reachable). The fold of
+    state + reachability is a Prometheus **recording rule** (§3.2), since state is
+    host-side and reachability per-guest; amber only appears during a live drill.
+    Grey vs. red still distinguishes `mqlab net destroy` from `mqlab net down`.
+  - **rx + tx graphs** — `rate(node_network_{receive,transmit}_bytes_total{device="virbr-<x>"}[1m])`
+    from the host node_exporter (each libvirt net `net-X` has host bridge
+    `virbr-X`; **already scraped — no new telemetry**). Separate graphs give each
+    net its own Y-scale, so the heartbeat net's tiny traffic stays visible
+    instead of being flattened against the data net.
 
 ## 5. Provisioning — all as code
 

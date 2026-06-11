@@ -203,6 +203,43 @@ def obs_dashboard() -> None:
         deps.transcript.close()
 
 
+@obs_app.command("net-state")
+def obs_net_state() -> None:
+    """Emit lab_network_state textfile metrics from `virsh net-list --all` (run on the host)."""
+    from mqlab.netsel import lab_net_names, parse_net_states
+    from mqlab.netstate import render_net_state_prom
+
+    deps = build_deps("obs-net-state", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    captured: list[str] = []
+    try:
+        deps.runner.run(Command([*_VIRSH, "net-list", "--all"]), captured.append)  # noqa: S607
+        states = parse_net_states("\n".join(captured))
+        typer.echo(render_net_state_prom(lab_net_names(), states), nl=False)
+    finally:
+        deps.transcript.close()
+
+
+@obs_app.command("reach-peers")
+def obs_reach_peers() -> None:
+    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
+    import json as _json
+
+    import yaml as _yaml
+
+    from mqlab.netstate import net_peers
+
+    deps = build_deps("obs-reach-peers", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+        path = repo_root() / "build" / "obs" / "reach-peers.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
+        deps.renderer.command(f"render -> {path}")
+        deps.transcript.write(f"render -> {path}")
+    finally:
+        deps.transcript.close()
+
+
 GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
 
 
@@ -241,6 +278,24 @@ def _obs_up_steps() -> list[CommandStep]:
             # picked up — matches dr-provision.sh.
             Command(
                 ["uv", "run", "ansible-playbook", "site-obs.yml"],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        ),
+        CommandStep(
+            "provision host collector",
+            # the Vergil VM (libvirt host) — node_exporter + the lab_network_state
+            # timer — via a connection=local play.
+            Command(
+                [
+                    "uv",
+                    "run",
+                    "ansible-playbook",
+                    "host-obs.yml",
+                    "-c",
+                    "local",
+                    "-i",
+                    "localhost,",
+                ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),

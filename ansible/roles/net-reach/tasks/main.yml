@@ -1,0 +1,38 @@
+---
+- name: textfile dir
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    mode: "0755"
+
+- name: deploy the peer-ping script (this host's peers baked in)
+  ansible.builtin.template:
+    src: lab-net-reach.sh.j2
+    dest: /usr/local/bin/lab-net-reach.sh
+    mode: "0755"
+
+- name: install service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop: [lab-net-reach.service.j2, lab-net-reach.timer.j2]
+
+- name: unprivileged ICMP for the ping (no setuid needed)
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-lab-net-reach.conf
+    content: "net.ipv4.ping_group_range = 0 2147483647\n"
+    mode: "0644"
+  register: reach_sysctl
+
+- name: apply the ping_group_range sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: reach_sysctl.changed
+  when: reach_sysctl.changed
+
+- name: enable + start the timer
+  ansible.builtin.systemd:
+    name: lab-net-reach.timer
+    enabled: true
+    state: started
+    daemon_reload: true

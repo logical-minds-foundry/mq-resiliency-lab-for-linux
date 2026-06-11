@@ -584,9 +584,21 @@ vrg-commit --type feat --scope ansible --message "lab_net_reach: per-node peer-p
 
 ### Task 6: The real network row in `render_dashboard` (TDD)
 
+> **REVISED (brainstormed mid-build):** the flat two-panel approach below was
+> superseded by the **per-network-rows** design — three collapsible section rows
+> (Message path / Cluster + storage / Cross-site + mgmt), each net a row of a
+> **folded-health tile** (`lab_network_health`, grey/red/amber/green via a new
+> Prometheus recording rule joining state + reachability) **+ own-scale rx/tx
+> graphs** off the host bridge (`virbr-<x>`, existing `node_network_*` metrics —
+> no new telemetry), shorthand names. See spec §3.2/§4. A `NET_SECTIONS` guard
+> test asserts the curated list matches the declared `net-*.xml`. Implemented in
+> the "per-network rows" commit; the original two-panel steps below are retained
+> for history.
+
 **Files:**
 - Modify: `src/mqlab/dashboard.py`
-- Test: `tests/test_dashboard.py`
+- Modify: `ansible/roles/prometheus/` (recording rule + config)
+- Test: `tests/test_dashboard.py`, `tests/test_topology_integrity.py`
 
 The Networks row gets **two side-by-side panels** — a tri-state **state** panel
 (`lab_network_state`) and a **reachability** panel (`lab_net_reach`) — so both

@@ -30,12 +30,22 @@
   loop:
     - /etc/prometheus
     - /etc/prometheus/targets
+    - /etc/prometheus/rules
     - /var/lib/prometheus
 
 - name: deploy prometheus.yml
   ansible.builtin.template:
     src: prometheus.yml.j2
     dest: /etc/prometheus/prometheus.yml
+    mode: "0644"
+  notify: restart prometheus
+
+- name: deploy the lab recording rules (lab_network_health)
+  ansible.builtin.copy:
+    src: lab.rules.yml
+    dest: /etc/prometheus/rules/lab.rules.yml
+    owner: prometheus
+    group: prometheus
     mode: "0644"
   notify: restart prometheus
 

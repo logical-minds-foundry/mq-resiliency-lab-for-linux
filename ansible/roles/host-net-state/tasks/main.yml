@@ -1,0 +1,22 @@
+---
+- name: textfile dir for the host collector
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    mode: "0755"
+
+- name: install the net-state service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop:
+    - lab-net-state.service.j2
+    - lab-net-state.timer.j2
+
+- name: enable + start the net-state timer
+  ansible.builtin.systemd:
+    name: lab-net-state.timer
+    enabled: true
+    state: started
+    daemon_reload: true

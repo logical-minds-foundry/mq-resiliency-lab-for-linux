@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 NODE_EXPORTER_PORT = 9100
+HYPERVISOR_MGMT_IP = "10.50.0.1"  # the Vergil VM (libvirt host) on net-mgmt
 
 
 class ScrapeError(RuntimeError):
@@ -47,6 +48,12 @@ def render_scrape_targets(topo: dict[str, Any]) -> str:
         }
         for host, spec in nodes.items()
     ]
+    entries.append(
+        {
+            "targets": [f"{HYPERVISOR_MGMT_IP}:{NODE_EXPORTER_PORT}"],
+            "labels": {"host": "hypervisor", "groups": "hypervisor"},
+        }
+    )
     return json.dumps(entries, indent=2) + "\n"
 
 

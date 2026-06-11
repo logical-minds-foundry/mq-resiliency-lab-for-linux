@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh lab_network_state every 10s
+
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=10
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

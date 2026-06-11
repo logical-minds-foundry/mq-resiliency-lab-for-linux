@@ -1,0 +1,10 @@
+# Host-side observability on the Vergil VM (the libvirt host). Run locally:
+#   uv run ansible-playbook host-obs.yml -c local -i localhost,
+- hosts: localhost
+  connection: local
+  become: true
+  vars:
+    repo_root: "{{ playbook_dir | dirname }}"  # normalized (no '..'); systemd rejects unnormalized paths
+  roles:
+    - node-exporter
+    - host-net-state

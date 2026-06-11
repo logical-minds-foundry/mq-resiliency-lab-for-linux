@@ -6,7 +6,9 @@ Wants=network-online.target
 [Service]
 User=node_exporter
 Group=node_exporter
-ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+ExecStart=/usr/local/bin/node_exporter \
+  --web.listen-address=:9100 \
+  --collector.textfile.directory=/var/lib/node_exporter/textfile
 Restart=on-failure
 
 [Install]

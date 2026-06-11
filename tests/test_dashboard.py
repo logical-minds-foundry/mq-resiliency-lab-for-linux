@@ -37,7 +37,9 @@ def test_has_a_row_header_per_curated_row_in_order():
         "VMs · RDQM · B",
         "VMs · Standalone",
         "VMs · Observability",
-        "Networks",
+        "Networks · Message path",
+        "Networks · Cluster + storage",
+        "Networks · Cross-site + mgmt",
     ]
 
 
@@ -53,3 +55,34 @@ def test_unknown_curated_group_fails_loud():
     topo = {"groups": {"san_a": ["san-a"]}}  # ROWS references many groups not here
     with pytest.raises(DashboardError, match="unknown group in ROWS"):
         render_dashboard(topo)
+
+
+def test_network_sections_are_curated_collapsible_rows():
+    titles = [p["title"] for p in render_dashboard(TOPO)["panels"] if p["type"] == "row"]
+    # three curated network section rows, in order, after the VM rows
+    assert titles[-3:] == [
+        "Networks · Message path",
+        "Networks · Cluster + storage",
+        "Networks · Cross-site + mgmt",
+    ]
+
+
+def test_each_net_has_a_health_tile_and_rx_tx_graphs_with_shorthand():
+    panels = render_dashboard(TOPO)["panels"]
+    by_title = {p.get("title"): p for p in panels}
+    # shorthand titles (no net- prefix)
+    health = by_title["hb-a — health"]
+    assert health["targets"][0]["expr"] == 'lab_network_health{network="net-hb-a"}'
+    texts = {
+        m["options"][k]["text"]
+        for m in health["fieldConfig"]["defaults"]["mappings"]
+        for k in m["options"]
+    }
+    assert {"ABSENT", "DOWN", "DEGRADED", "UP"} == texts
+    # own-scale rx + tx graphs off the host bridge interface
+    assert by_title["hb-a — rx"]["targets"][0]["expr"] == (
+        'rate(node_network_receive_bytes_total{device="virbr-hb-a"}[1m])'
+    )
+    assert by_title["hb-a — tx"]["targets"][0]["expr"] == (
+        'rate(node_network_transmit_bytes_total{device="virbr-hb-a"}[1m])'
+    )
