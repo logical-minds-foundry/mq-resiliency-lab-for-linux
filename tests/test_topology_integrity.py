@@ -33,3 +33,15 @@ def test_real_topology_renders_scrape_targets():
     hosts = {e["labels"]["host"] for e in entries}
     assert {"obs", "mon-probe"} <= hosts
     assert all(e["targets"][0].endswith(":9100") for e in entries)
+
+
+def test_real_topology_renders_a_valid_dashboard():
+    import json
+
+    from mqlab.dashboard import DASHBOARD_UID, lab_dashboard
+
+    dash = json.loads(lab_dashboard())  # raises DashboardError on an unknown ROWS group
+    assert dash["uid"] == DASHBOARD_UID
+    row_titles = [p["title"] for p in dash["panels"] if p["type"] == "row"]
+    # every curated VM row is present against the real groups
+    assert "VMs · SAN" in row_titles and "VMs · RDQM · B" in row_titles
