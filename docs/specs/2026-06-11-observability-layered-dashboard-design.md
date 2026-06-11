@@ -88,17 +88,33 @@ jobs, no new exporters. The two new metric families ride `node_exporter`'s
 |---|---|---|
 | VM up/down | `up{job="node"}` | guest `node_exporter` (have it) |
 | VM CPU | `node_cpu_seconds_total` | guest `node_exporter` (have it) |
-| Network state | `lab_network_active{network}` 0/1 | **host** `node_exporter` textfile |
+| Network state | `lab_network_state{network}` 0/1/2 | **host** `node_exporter` textfile |
 | Network reachability | `lab_net_reach{network,peer}` 0/1 | **each guest** `node_exporter` textfile |
+
+**Prerequisite (Tweak 2, first task):** the Plan-A `node-exporter` role does
+**not** yet enable the textfile collector — its unit is just
+`--web.listen-address=:9100`. Both new metric families are written as
+`node_exporter` textfiles, so Tweak 2 must first add
+`--collector.textfile.directory=/var/lib/node_exporter/textfile` to the role and
+create that directory. (Plan C's QM-owner collector will rely on the same
+capability.) Without it, the collectors write `.prom` files nothing ever scrapes
+— an empty-dashboard failure the §7 fail-loud rule exists to prevent.
 
 ### 3.2 Network state — host collector
 
 Libvirt networks are host-side objects; no guest can see them. On the **Vergil
 VM** (the libvirt host, where `mqlab net` and `virsh` already run), a systemd
-timer runs `virsh net-list --all` and writes a `node_exporter` textfile
-exposing `lab_network_active{network="net-hb-a"} 0/1` (1 = libvirt-active). This
-is authoritative and matches the test action exactly: `mqlab net down net-hb-a`
-→ `virsh net-destroy` → inactive → tile flips.
+timer runs `virsh net-list --all` and writes a `node_exporter` textfile exposing
+a **tri-state** metric — `lab_network_state{network}` = `0`/`1`/`2` for
+`absent`/`inactive`/`active`, mirroring #107's `lifecycle.classify_net`
+(`ABSENT`/`INACTIVE`/`ACTIVE`).
+
+Crucially, the collector iterates the **topology-declared** network list (not
+just what `virsh net-list` returns), so a *destroyed* (undefined) net — which
+`net-list` omits entirely — still gets an explicit `state=0` tile instead of
+showing Grafana "No data." This keeps the two operations distinct:
+`mqlab net down net-hb-a` → `inactive` (1); `mqlab net destroy net-hb-a` →
+`absent` (0). Authoritative, and matches exactly what `mqlab net status` shows.
 
 ### 3.3 Network reachability — per-node peer-ping
 
@@ -110,6 +126,13 @@ per network is **derived from topology** (a pure function: hosts sharing a
 network, minus self). This reuses `node_exporter` — no new target — and surfaces
 a heartbeat break or a fenced peer directly as "pcmk-a1 can't reach pcmk-a2 on
 hb-a."
+
+**Privilege & fail-loud.** `ping` needs a raw ICMP socket, so the timer either
+runs as root (it is a lab VM) or the node sets `net.ipv4.ping_group_range` so an
+unprivileged ping works. The collector emits a `lab_net_reach_last_write_timestamp`
+alongside the samples; a probe that can't run (permissions, crash) must read as
+**stale**, never as green — a silently-blind reachability check that shows
+"reachable" is exactly the lie §7 forbids.
 
 ### 3.4 The host as a scrape target
 
@@ -139,7 +162,7 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
 ║  STDALONE│ qm-main │ dtcc-sim │ app-client │   CPU% │ …                  ║
 ║  OBS     │ obs │ mon-probe │                   CPU% │ …                  ║
 ╟──────────────────────────────────────────────────────────────────────────╢
-║ ▌NETWORKS  (green=active+reachable, amber=active-not-reachable, red=down) ║
+║ ▌NETWORKS (green=active+reachable, amber=active-unreachable, red=down, grey=absent)║
 ║  data-a│data-b│ hb-a │ hb-b │san-a│san-b│ wan │client│ dtcc │ mgmt        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 ```
@@ -152,9 +175,11 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   the dashboard JSON; adding a *new group* (rare) needs a JSON touch-up.
   CPU-busy% = `100 - avg by (host)(rate(node_cpu_seconds_total{mode="idle"}[1m]))*100`,
   filtered to the row's group.
-- **Networks (bottom):** a flat tile strip, one tile per libvirt network. Tile
-  color rolls up both signals — `inactive`→red, `active & any peer unreachable`
-  →amber, `active & all reachable`→green.
+- **Networks (bottom):** a flat tile strip, one tile per topology-declared
+  network. Tile color rolls up state + reachability — `active & all reachable`
+  →green, `active & any peer unreachable`→amber, `inactive` (defined, down)→red,
+  `absent` (undefined / torn down)→grey. Grey vs. red keeps `mqlab net destroy`
+  visually distinct from `mqlab net down`.
 
 ## 5. Provisioning — all as code
 
@@ -163,10 +188,16 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   VM. `mqlab obs up` gains a step to run it (the host is part of the observability
   fabric, brought up with the pair). Kept out of `vergil.toml` so the dev-VM
   profile stays about the toolchain, not lab services.
+- **Textfile collector** (§3.1, Tweak 2 first task): the `node-exporter` role
+  gains `--collector.textfile.directory=/var/lib/node_exporter/textfile` and
+  creates the directory — the carrier both new collectors write to.
 - **Reachability collector** (§3.3): the `observability.yml` overlay gains the
   per-node peer-ping textfile timer; peer lists rendered from topology.
-- **Dashboard:** the `grafana` role's `fleet-node.json` is replaced by the
-  layered design (renamed e.g. `lab-status.json`, uid retained or redirected).
+- **Dashboard:** the `grafana` role's dashboard **evolves in place** — the title
+  becomes "Lab — Layered Status" and the file may be renamed, but the
+  **`uid` stays `lab-fleet-node`**. That uid is hard-referenced in `mqlab obs
+  open` (`cli.py`), `lab/scripts/obs-open.sh`, and `getting-started.md`; pinning
+  it keeps all of those deep-links working untouched.
 
 ## 6. Build split — one spec, two plans
 
@@ -174,9 +205,11 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   shell (reserved MQ row / grouped VM rows / **placeholder** network strip),
   per-group up/down tiles + per-group CPU graphs, curated order. Independent and
   fast — no new telemetry. Delivers the grouped, lab-shaped view immediately.
-- **Tweak 2 — Network telemetry + live panel**: the host net-state collector, the
-  per-node reachability collector, the `render_scrape_targets` host target, and
-  wiring the bottom strip to real `lab_network_active` / `lab_net_reach` data.
+- **Tweak 2 — Network telemetry + live panel**: **first** enable the
+  `node-exporter` textfile collector (§3.1 prerequisite), then the host
+  tri-state net-state collector, the per-node reachability collector, the
+  `render_scrape_targets` host target, and wiring the bottom strip to real
+  `lab_network_state` / `lab_net_reach` data.
 
 Tweak 1 stands alone; Tweak 2 lights up the network strip. Each is its own plan
 and PR.
@@ -199,9 +232,10 @@ and PR.
 - **Curated-order maintenance.** The group-row order is hand-curated in the
   dashboard JSON. If group churn becomes common, revisit a topology-ordered
   template variable; for now groups are stable, so curation wins on clarity.
-- **`mqlab net` peer semantics under #107.** Confirm the host collector reads the
-  same `virsh net-list` view `mqlab net status` renders, so the tile and the CLI
-  never disagree.
+- **Reuse `lifecycle.classify_net` in the host collector** rather than
+  re-parsing `virsh net-list`, so the tile's state and `mqlab net status` can
+  never disagree (both go through the same #107 classifier). Confirm the
+  collector can import/shell that path cleanly from the host.
 - **Reachability cadence.** Ping interval vs. ICMP load on the isolated nets —
   tune so a break shows within a scrape interval without flooding.
 
@@ -211,10 +245,12 @@ and PR.
    section is grouped in lab-structured order with per-group up/down + CPU.
 2. Killing a VM reddens its tile within a scrape interval; its group's CPU graph
    drops it — at a glance, "who's up and who's busy."
-3. `mqlab net down net-hb-a` flips the `hb-a` network tile to red within a scrape
-   interval; bringing it back returns it to green.
+3. `mqlab net down net-hb-a` flips the `hb-a` tile to red within a scrape
+   interval; `mqlab net destroy net-hb-a` flips it to **grey** (absent) — visibly
+   distinct from down; bringing it back up returns it to green.
 4. A network that is libvirt-active but has an unreachable peer shows **amber**,
-   not green — the subtle fault is visible.
+   not green — the subtle fault is visible; an unrunnable reachability probe
+   reads as stale, never green.
 5. The whole dashboard + collectors are reproducible from scratch and pass
    `vrg-validate`, including a guard that the renderer still emits valid targets
    (now including the hypervisor host).
