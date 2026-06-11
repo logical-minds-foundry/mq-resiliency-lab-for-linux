@@ -203,6 +203,22 @@ def obs_dashboard() -> None:
         deps.transcript.close()
 
 
+@obs_app.command("net-state")
+def obs_net_state() -> None:
+    """Emit lab_network_state textfile metrics from `virsh net-list --all` (run on the host)."""
+    from mqlab.netsel import lab_net_names, parse_net_states
+    from mqlab.netstate import render_net_state_prom
+
+    deps = build_deps("obs-net-state", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    captured: list[str] = []
+    try:
+        deps.runner.run(Command([*_VIRSH, "net-list", "--all"]), captured.append)  # noqa: S607
+        states = parse_net_states("\n".join(captured))
+        typer.echo(render_net_state_prom(lab_net_names(), states), nl=False)
+    finally:
+        deps.transcript.close()
+
+
 GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
 
 

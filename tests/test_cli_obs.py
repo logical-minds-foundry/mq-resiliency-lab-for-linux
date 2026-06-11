@@ -154,3 +154,26 @@ def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):
     assert result.exit_code == 0
     written = tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json"
     assert json.loads(written.read_text())["uid"] == "lab-fleet-node"
+
+
+def test_obs_net_state_emits_textfile_metrics(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab" / "networks").mkdir(parents=True)
+    (tmp_path / "lab" / "networks" / "net-hb-a.xml").write_text("<network/>")
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult(
+                [
+                    " Name      State    Autostart   Persistent",
+                    "----------------------------------------------",
+                    " net-hb-a   active   yes         yes",
+                ]
+            )
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "net-state"])
+
+    assert result.exit_code == 0
+    assert 'lab_network_state{network="net-hb-a"} 2' in result.stdout
