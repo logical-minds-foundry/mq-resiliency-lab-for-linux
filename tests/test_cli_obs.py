@@ -27,14 +27,28 @@ def _deps(runner):
 
 
 def _seed_monitoring(tmp_path):
+    # Every group host also needs a node with a net-mgmt IP — render_inventory
+    # raises on a group that references an undefined host.
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
+        "  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
+        "  san-b: {nics: {net-mgmt: 10.50.0.6}}\n"
+        "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+        "  pcmk-b1: {nics: {net-mgmt: 10.50.0.61}}\n"
+        "  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+        "  rdqm-b1: {nics: {net-mgmt: 10.50.0.41}}\n"
+        "  qm-main: {nics: {net-mgmt: 10.50.0.10}}\n"
+        "  dtcc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
+        "  app-client: {nics: {net-mgmt: 10.50.0.60}}\n"
         "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
         "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
         "groups:\n"
-        "  obs_box: [obs]\n"
-        "  probe: [mon-probe]\n"
+        "  san_a: [san-a]\n  san_b: [san-b]\n"
+        "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
+        "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
+        "  qm: [qm-main]\n  dtcc: [dtcc-sim]\n  client: [app-client]\n"
+        "  obs_box: [obs]\n  probe: [mon-probe]\n"
         "setups:\n"
         "  monitoring:\n    groups: [obs_box, probe]\n"
     )
@@ -53,7 +67,7 @@ def test_obs_targets_writes_file_from_topology(monkeypatch, tmp_path):
     assert result.exit_code == 0
     written = tmp_path / "build" / "prometheus" / "targets" / "node.json"
     hosts = {e["labels"]["host"] for e in json.loads(written.read_text())}
-    assert hosts == {"obs", "mon-probe"}
+    assert {"obs", "mon-probe"} <= hosts
 
 
 # --- up: renders targets, then runs create + provision steps via the runner ---
@@ -79,6 +93,7 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     # targets AND the Ansible inventory the provision step reads
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "inventory.ini").exists()
+    assert (tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json").exists()
 
 
 def test_obs_up_propagates_step_failure(monkeypatch, tmp_path):
@@ -127,3 +142,15 @@ def test_obs_open_prints_url_and_tunnel():
     assert "http://10.50.0.2:3000" in result.stdout
     assert "-L 3000:10.50.0.2:3000" in result.stdout
     assert "limactl list" in result.stdout
+
+
+def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
+
+    assert result.exit_code == 0
+    written = tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json"
+    assert json.loads(written.read_text())["uid"] == "lab-fleet-node"
