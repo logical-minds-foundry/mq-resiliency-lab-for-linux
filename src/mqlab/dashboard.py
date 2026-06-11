@@ -91,11 +91,22 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
     }
 
 
-def _network_state_panel(y: int) -> dict[str, Any]:
+# Curated network sections (application first, infrastructure last). Each entry's
+# nets become per-net rows under a collapsible section header. A net `net-X` maps
+# to host bridge `virbr-X` (throughput) and shorthand `X` (display).
+NET_SECTIONS: list[tuple[str, list[str]]] = [
+    ("Message path", ["net-client", "net-dtcc", "net-data-a", "net-data-b"]),
+    ("Cluster + storage", ["net-hb-a", "net-san-a", "net-hb-b", "net-san-b"]),
+    ("Cross-site + mgmt", ["net-wan", "net-mgmt"]),
+]
+
+
+def _net_health_panel(net: str, y: int) -> dict[str, Any]:
+    short = net.removeprefix("net-")
     return {
         "type": "stat",
-        "title": "Networks — state",
-        "gridPos": {"h": 4, "w": 12, "x": 0, "y": y},
+        "title": f"{short} — health",
+        "gridPos": {"h": 4, "w": 4, "x": 0, "y": y},
         "fieldConfig": {
             "defaults": {
                 "mappings": [
@@ -104,36 +115,28 @@ def _network_state_panel(y: int) -> dict[str, Any]:
                         "options": {
                             "0": {"text": "ABSENT", "color": "grey"},
                             "1": {"text": "DOWN", "color": "red"},
-                            "2": {"text": "UP", "color": "green"},
+                            "2": {"text": "DEGRADED", "color": "orange"},
+                            "3": {"text": "UP", "color": "green"},
                         },
                     }
                 ]
             }
         },
-        "targets": [{"expr": "lab_network_state", "legendFormat": "{{network}}"}],
+        "targets": [{"expr": f'lab_network_health{{network="{net}"}}'}],
     }
 
 
-def _network_reach_panel(y: int) -> dict[str, Any]:
-    # min by (network): a net with ANY unreachable peer rolls up to 0 (orange).
+def _net_throughput_panel(net: str, direction: str, x: int, y: int) -> dict[str, Any]:
+    # rx/tx off the host bridge (virbr-<x>) — own Y-scale per net so tiny
+    # heartbeat traffic stays visible.
+    short = net.removeprefix("net-")
+    bridge = net.replace("net-", "virbr-", 1)
+    metric = "receive" if direction == "rx" else "transmit"
     return {
-        "type": "stat",
-        "title": "Networks — reachability",
-        "gridPos": {"h": 4, "w": 12, "x": 12, "y": y},
-        "fieldConfig": {
-            "defaults": {
-                "mappings": [
-                    {
-                        "type": "value",
-                        "options": {
-                            "0": {"text": "UNREACHABLE", "color": "orange"},
-                            "1": {"text": "REACHABLE", "color": "green"},
-                        },
-                    }
-                ]
-            }
-        },
-        "targets": [{"expr": "min by (network) (lab_net_reach)", "legendFormat": "{{network}}"}],
+        "type": "timeseries",
+        "title": f"{short} — {direction}",
+        "gridPos": {"h": 4, "w": 10, "x": x, "y": y},
+        "targets": [{"expr": f'rate(node_network_{metric}_bytes_total{{device="{bridge}"}}[1m])'}],
     }
 
 
@@ -159,11 +162,14 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
         panels.append(_cpu_panel(label, sel, y))
         y += 4
 
-    panels.append(_row("Networks", y))
-    y += 1
-    panels.append(_network_state_panel(y))
-    panels.append(_network_reach_panel(y))
-    y += 4
+    for section, nets in NET_SECTIONS:
+        panels.append(_row(f"Networks · {section}", y))
+        y += 1
+        for net in nets:
+            panels.append(_net_health_panel(net, y))
+            panels.append(_net_throughput_panel(net, "rx", 4, y))
+            panels.append(_net_throughput_panel(net, "tx", 14, y))
+            y += 4
 
     return {
         "title": "Lab — Layered Status",

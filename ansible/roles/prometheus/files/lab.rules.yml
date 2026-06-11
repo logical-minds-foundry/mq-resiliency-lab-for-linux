@@ -1,0 +1,16 @@
+groups:
+  - name: lab_network
+    rules:
+      # lab_network_health folds host state + guest reachability into one per-net
+      # value for the dashboard tile: 0=absent(grey) 1=down(red) 2=degraded/amber
+      # (active but a peer unreachable) 3=up(green).
+      #   - absent/inactive: pass lab_network_state (0 or 1) through.
+      #   - active (state==2): 2 + min-reachability, where missing reach data
+      #     defaults to 1 (reachable) so an active net with no live peers reads UP.
+      - record: lab_network_health
+        expr: |
+          (lab_network_state < bool 2) * lab_network_state
+          +
+          (lab_network_state == bool 2)
+          * (2 + ((min by (network) (lab_net_reach))
+                  or (count by (network) (lab_network_state) * 0 + 1)))

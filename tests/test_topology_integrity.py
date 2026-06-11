@@ -45,3 +45,11 @@ def test_real_topology_renders_a_valid_dashboard():
     row_titles = [p["title"] for p in dash["panels"] if p["type"] == "row"]
     # every curated VM row is present against the real groups
     assert "VMs · SAN" in row_titles and "VMs · RDQM · B" in row_titles
+
+
+def test_network_sections_cover_exactly_the_declared_networks():
+    from mqlab.dashboard import NET_SECTIONS
+    from mqlab.netsel import lab_net_names
+
+    curated = {net for _, nets in NET_SECTIONS for net in nets}
+    assert curated == set(lab_net_names()), "NET_SECTIONS must match lab/networks/net-*.xml"

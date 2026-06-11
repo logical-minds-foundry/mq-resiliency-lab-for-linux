@@ -37,7 +37,9 @@ def test_has_a_row_header_per_curated_row_in_order():
         "VMs · RDQM · B",
         "VMs · Standalone",
         "VMs · Observability",
-        "Networks",
+        "Networks · Message path",
+        "Networks · Cluster + storage",
+        "Networks · Cross-site + mgmt",
     ]
 
 
@@ -55,26 +57,32 @@ def test_unknown_curated_group_fails_loud():
         render_dashboard(topo)
 
 
-def test_network_state_panel_has_tristate_mapping():
-    panels = render_dashboard(TOPO)["panels"]
-    net = next(p for p in panels if p.get("title") == "Networks — state")
-    assert net["targets"][0]["expr"] == "lab_network_state"
-    texts = {
-        m["options"][k]["text"]
-        for m in net["fieldConfig"]["defaults"]["mappings"]
-        for k in m["options"]
-    }
-    assert {"ABSENT", "DOWN", "UP"} <= texts
+def test_network_sections_are_curated_collapsible_rows():
+    titles = [p["title"] for p in render_dashboard(TOPO)["panels"] if p["type"] == "row"]
+    # three curated network section rows, in order, after the VM rows
+    assert titles[-3:] == [
+        "Networks · Message path",
+        "Networks · Cluster + storage",
+        "Networks · Cross-site + mgmt",
+    ]
 
 
-def test_network_reachability_panel_rolls_up_per_network():
+def test_each_net_has_a_health_tile_and_rx_tx_graphs_with_shorthand():
     panels = render_dashboard(TOPO)["panels"]
-    reach = next(p for p in panels if p.get("title") == "Networks — reachability")
-    # a network with ANY unreachable peer rolls up to 0 (per-network minimum)
-    assert reach["targets"][0]["expr"] == "min by (network) (lab_net_reach)"
+    by_title = {p.get("title"): p for p in panels}
+    # shorthand titles (no net- prefix)
+    health = by_title["hb-a — health"]
+    assert health["targets"][0]["expr"] == 'lab_network_health{network="net-hb-a"}'
     texts = {
         m["options"][k]["text"]
-        for m in reach["fieldConfig"]["defaults"]["mappings"]
+        for m in health["fieldConfig"]["defaults"]["mappings"]
         for k in m["options"]
     }
-    assert {"UNREACHABLE", "REACHABLE"} <= texts
+    assert {"ABSENT", "DOWN", "DEGRADED", "UP"} == texts
+    # own-scale rx + tx graphs off the host bridge interface
+    assert by_title["hb-a — rx"]["targets"][0]["expr"] == (
+        'rate(node_network_receive_bytes_total{device="virbr-hb-a"}[1m])'
+    )
+    assert by_title["hb-a — tx"]["targets"][0]["expr"] == (
+        'rate(node_network_transmit_bytes_total{device="virbr-hb-a"}[1m])'
+    )
