@@ -1,0 +1,32 @@
+{
+  "title": "Lab Fleet — Node Health",
+  "uid": "lab-fleet-node",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Node up",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "mappings": [
+        { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+      ] } },
+      "targets": [
+        { "expr": "up{job=\"node\"}", "legendFormat": "{{host}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU busy % (per host)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 - (avg by (host) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "{{host}}"
+        }
+      ]
+    }
+  ]
+}

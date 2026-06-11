@@ -153,6 +153,102 @@ def net_show(pattern: _Pattern, step: _StepFlag = False) -> None:
 vm_app = typer.Typer(help="lab guest VMs (vagrant + virsh)", no_args_is_help=True)
 app.add_typer(vm_app, name="vm")
 
+obs_app = typer.Typer(help="observability stack (Prometheus + Grafana)", no_args_is_help=True)
+app.add_typer(obs_app, name="obs")
+
+
+@obs_app.command("targets")
+def obs_targets() -> None:
+    """Render build/prometheus/targets/node.json from topology and echo it."""
+    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+
+    deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_scrape_targets()
+        path = scrape_targets_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        for line in text.splitlines():
+            deps.renderer.output(line)
+            deps.transcript.write(line)
+    finally:
+        deps.transcript.close()
+
+
+GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
+
+
+def _obs_up_steps() -> list[CommandStep]:
+    from mqlab.inventory import inventory_path, lab_inventory
+    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+
+    # Render both artifacts eagerly when the steps are built: the Prometheus
+    # scrape targets AND the Ansible inventory the provision step needs (the
+    # latter mirrors dr-provision.sh, which renders the inventory before it runs).
+    targets = scrape_targets_path()
+    targets.parent.mkdir(parents=True, exist_ok=True)
+    targets.write_text(lab_scrape_targets())
+
+    inv = inventory_path()
+    inv.parent.mkdir(parents=True, exist_ok=True)
+    inv.write_text(lab_inventory())
+
+    return [
+        CommandStep(
+            "render targets + inventory",
+            Command(["echo", f"rendered -> {targets}, {inv}"]),  # noqa: S607
+        ),
+        CommandStep(
+            "monitoring create",
+            Command(["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab"),  # noqa: S607
+        ),
+        CommandStep(
+            "provision monitoring",
+            # bare filename, run from ansible/ so ansible.cfg (inventory path) is
+            # picked up — matches dr-provision.sh.
+            Command(
+                ["uv", "run", "ansible-playbook", "site-obs.yml"],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        ),
+    ]
+
+
+@obs_app.command("up")
+def obs_up(step: _StepFlag = False) -> None:
+    """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
+    _execute("obs-up", _obs_up_steps(), step_mode=step)
+
+
+@obs_app.command("status")
+def obs_status() -> None:
+    """Show the monitoring pair's state (topology joined with live virsh state)."""
+    guests = _resolve_or_exit("monitoring", resolve_guests, "guest")
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("obs-status", timestamp)
+    try:
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+@obs_app.command("open")
+def obs_open() -> None:
+    """Print the Grafana URL and how to reach it from your workstation."""
+    typer.echo(f"Grafana:   {GRAFANA_URL}  (directly reachable inside the Vergil VM)")
+    typer.echo(f"Dashboard: {GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
+    typer.echo("")
+    typer.echo("obs is a guest *inside* the Vergil VM, so forward a port through the VM.")
+    typer.echo("On your workstation:")
+    typer.echo("  1. limactl list   # find the instance whose DIR is this repo, note its name")
+    typer.echo("  2. ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>")
+    typer.echo("     # the <host-alias> is the ssh.config 'Host' line — Lima turns the")
+    typer.echo("     # instance's dots into hyphens (lima-vergil-user-...-mq-cluster-tooling)")
+    typer.echo("  3. browse http://localhost:3000/d/lab-fleet-node   (admin / admin)")
+
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 

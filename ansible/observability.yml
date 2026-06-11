@@ -1,0 +1,5 @@
+# Fleet-wide host metrics (#103, Layer 1). Run against whatever arm is up, e.g.:
+#   uv run ansible-playbook observability.yml --limit rdqm_a
+- hosts: all
+  become: true
+  roles: [node-exporter]

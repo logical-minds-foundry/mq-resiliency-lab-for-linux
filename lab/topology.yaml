@@ -37,6 +37,17 @@ nodes:
     # reaches the standalone message-path QM (10.30.0.10).
     nics: { net-mgmt: 10.50.0.60, net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
+  # --- Observability (#103): obs runs Prometheus+Grafana on the mgmt plane only;
+  # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters. ---
+  obs:
+    cpus: 2
+    memory: 4096
+    nics: { net-mgmt: 10.50.0.2 }
+  mon-probe:
+    cpus: 1
+    memory: 1024
+    nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7 }
+
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
     platform: rhel96-x86_64
@@ -126,6 +137,10 @@ groups:
   qm:     [qm-main]
   dtcc:   [dtcc-sim]
   client: [app-client]
+  # obs_box (not "obs") so the group name never collides with the host named obs
+  # (Ansible warns on group==host); probe/mon-probe already differ.
+  obs_box: [obs]
+  probe:   [mon-probe]
 
 # setups — named configurations, each a composition of groups (in bring-up order,
 # SAN first), with the Ansible playbook that provisions it. Setup names are
@@ -155,3 +170,7 @@ setups:
     groups: [qm, dtcc, client]
     provision: ansible/site.yml
     secrets: [mqweb_admin_password]
+  monitoring:
+    description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
+    groups: [obs_box, probe]
+    provision: ansible/site-obs.yml
