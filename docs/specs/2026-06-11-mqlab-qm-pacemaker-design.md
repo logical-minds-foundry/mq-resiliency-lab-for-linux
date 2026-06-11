@@ -35,7 +35,7 @@ Pacemaker arm; each takes a **setup selector** (e.g. `pcmk_san_ha`):
 | `qm up <setup>` | start the cluster-managed QM | `pcs resource enable mq_group` (direct, streamed) |
 | `qm down <setup>` | clean stop without tearing down HA | `pcs resource disable mq_group` |
 | `qm destroy <setup>` | remove the QM + HA resources | teardown play `site-pcmk-qm-down.yml` |
-| `qm status <setup>` | who owns the QM + resource-group state | `pcs status` / `dspmq` on the cluster |
+| `qm status <setup>` | who owns the QM + resource-group state | `pcs status resources` |
 
 Same shape as vm/net: **create/destroy go through the reproducible playbook/role;
 up/down are direct one-liner `pcs` ops** mqlab streams verbatim (exactly like
@@ -104,13 +104,17 @@ machinery was required), the `qm` ops are **already idempotent**: an Ansible rol
 (re-run converges) and `pcs enable/disable` (no-ops if already in state). So `qm`
 **leans on that** — **no probe-classify-plan**. Instead:
 
-- **Light pre-flight** (reuse #99 `_probe_states`/`classify`): the setup's members must
-  be `RUNNING`. If not, advise `mqlab vm up <setup> first` and exit 3 (the
-  `vm provision` precondition pattern). If the cluster isn't *provisioned* (members up
-  but `site-pcmk.yml` not run), the role fails loud with Ansible's own clear error — we
-  do not pre-check cluster formation.
-- **`qm status`** for visibility (`pcs status resources` + `dspmq` on the owner),
-  streamed pass-through.
+- **Light pre-flight on `create`/`destroy` only** (reuse #99 `_probe_states`/`classify`):
+  the setup's members must be `RUNNING`. If not, advise `mqlab vm up <setup> first` and
+  exit 3 (the `vm provision` precondition pattern). `up`/`down`/`status` are single-node
+  `pcs` ops with **no pre-flight** — if the cluster is unreachable, Ansible's own error
+  speaks for itself and mqlab propagates it (proportionate; the layered-error-vocabulary
+  principle). If the cluster isn't *provisioned* (members up but `site-pcmk.yml` not
+  run), the role likewise fails loud with Ansible's own clear error — we do not
+  pre-check cluster formation.
+- **`qm status`** for visibility (`pcs status resources`), a streamed pass-through —
+  enough to answer "is the QM up and where." Internal QM-state drill-down is a
+  later add-if-needed, not this verb.
 
 ## 6. Components
 
@@ -139,8 +143,9 @@ uv run ansible-playbook site-pcmk-qm.yml -e qm_name=… -e qm_vip=…   (streame
 mq-pcmk-qmgr role applies the 6 task groups → Pacemaker mq_group up
 ```
 
-`up`/`down`/`status` skip the playbook and run a single streamed `pcs` op on a cluster
-node.
+`up`/`down`/`status` skip the playbook and the pre-flight — they render the inventory
+and run a single streamed `pcs` op on a cluster node; if the cluster is unreachable,
+Ansible's own error speaks for itself.
 
 ## 8. Error handling (fail-loud)
 
