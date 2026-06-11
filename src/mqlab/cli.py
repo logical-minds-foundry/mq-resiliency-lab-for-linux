@@ -260,6 +260,15 @@ def _obs_up_steps() -> list[CommandStep]:
                 cwd=repo_root() / "ansible",
             ),
         ),
+        CommandStep(
+            "provision host collector",
+            # the Vergil VM (libvirt host) — node_exporter + the lab_network_state
+            # timer — via a connection=local play.
+            Command(
+                ["uv", "run", "ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        ),
     ]
 
 

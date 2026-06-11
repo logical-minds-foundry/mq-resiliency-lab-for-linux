@@ -1,0 +1,7 @@
+[Unit]
+Description=Render lab_network_state textfile
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ repo_root }}
+ExecStart=/bin/sh -c 'uv run mqlab obs net-state > /var/lib/node_exporter/textfile/lab_network_state.prom.tmp && mv /var/lib/node_exporter/textfile/lab_network_state.prom.tmp /var/lib/node_exporter/textfile/lab_network_state.prom'

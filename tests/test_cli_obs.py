@@ -77,7 +77,12 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
     runner = RecordingRunner(
-        results=[ScriptedResult(["rendered"]), ScriptedResult(["up"]), ScriptedResult(["ok"])]
+        results=[
+            ScriptedResult(["rendered"]),
+            ScriptedResult(["up"]),
+            ScriptedResult(["ok"]),
+            ScriptedResult(["host ok"]),
+        ]
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
@@ -89,8 +94,9 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert "ansible-playbook" in argvs[2]
     # bare filename (run from ansible/), not a doubled ansible/ansible/ path
     assert argvs[2][-1] == "site-obs.yml"
-    # both artifacts rendered eagerly when the steps were built: the scrape
-    # targets AND the Ansible inventory the provision step reads
+    # the host collector is provisioned via a connection=local host-obs play
+    assert any("host-obs.yml" in a for a in argvs)
+    # all three artifacts rendered eagerly when the steps were built
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "inventory.ini").exists()
     assert (tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json").exists()
