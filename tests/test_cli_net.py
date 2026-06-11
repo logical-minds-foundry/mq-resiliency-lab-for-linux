@@ -12,6 +12,8 @@ from mqlab.runner import SubprocessRunner
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
 
+_VIRSH = ["virsh", "-c", "qemu:///system"]
+
 
 class _NoPause:
     def wait(self) -> None:
@@ -39,31 +41,76 @@ def _seed_nets(tmp_path, names):
         (nets / f"{name}.xml").write_text("<network/>")
 
 
-def test_net_up_all_runs_script_with_resolved_names(monkeypatch, tmp_path):
+def _probe_net(states):
+    """A scripted `virsh net-list --all` result that puts each net in a given state.
+
+    `states` maps net name -> "active"/"inactive". Nets omitted are undefined.
+    """
+    lines = [" Name         State      Autostart   Persistent", "------------------------------"]
+    lines += [f" {n}   {st}   yes   yes" for n, st in states.items()]
+    return ScriptedResult(lines)
+
+
+def _argvs(runner):
+    return [c.argv for c in runner.recorded]
+
+
+# --- create: define + autostart absent nets; skip defined with a note ---
+
+
+def test_net_create_defines_and_autostarts_absent(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_nets(tmp_path, ["net-data-a", "net-data-b", "net-wan"])
-    runner = RecordingRunner(results=[ScriptedResult(["up: net-wan"])])
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({}), ScriptedResult([]), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["net", "up", "all"])
+    result = CliRunner().invoke(cli.app, ["net", "create", "all"])
     assert result.exit_code == 0
-    argv = runner.recorded[0].argv
-    assert argv[0] == "bash"
-    assert argv[1].endswith("lab/scripts/net-up.sh")
-    assert argv[2:] == ["net-data-a", "net-data-b", "net-wan"]
+    argvs = _argvs(runner)
+    assert argvs[0] == [*_VIRSH, "net-list", "--all"]
+    assert argvs[1][3] == "net-define" and argvs[1][4].endswith("lab/networks/net-wan.xml")
+    assert argvs[2] == [*_VIRSH, "net-autostart", "net-wan"]
 
 
-def test_net_up_regex_selects_subset(monkeypatch, tmp_path):
+def test_net_create_already_defined_is_a_no_op(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_nets(tmp_path, ["net-data-a", "net-data-b", "net-wan"])
-    runner = RecordingRunner(results=[ScriptedResult([])])
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({"net-wan": "active"})])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "create", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "net-list", "--all"]]  # probe only
+
+
+# --- up: net-start inactive nets; skip active/absent with a note ---
+
+
+def test_net_up_starts_only_inactive(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-data-a", "net-data-b"])
+    runner = RecordingRunner(
+        results=[_probe_net({"net-data-a": "inactive", "net-data-b": "active"}), ScriptedResult([])]
+    )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["net", "up", "data"])
     assert result.exit_code == 0
-    assert runner.recorded[0].argv[2:] == ["net-data-a", "net-data-b"]
+    assert _argvs(runner) == [
+        [*_VIRSH, "net-list", "--all"],
+        [*_VIRSH, "net-start", "net-data-a"],
+    ]
+
+
+def test_net_up_absent_is_a_no_op(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({})])  # not created
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "up", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "net-list", "--all"]]
 
 
 def test_net_up_without_pattern_is_a_usage_error():
-    # The safety gate: a bare destructive/bulk verb must not default to everything.
+    # The safety gate: a bare bulk verb must not default to everything.
     result = CliRunner().invoke(cli.app, ["net", "up"])
     assert result.exit_code == 2
 
@@ -71,27 +118,110 @@ def test_net_up_without_pattern_is_a_usage_error():
 def test_net_up_propagates_step_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_nets(tmp_path, ["net-wan"])
-    runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=3)])
+    runner = RecordingRunner(
+        results=[_probe_net({"net-wan": "inactive"}), ScriptedResult([], exit_code=3)]
+    )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["net", "up", "all"])
     assert result.exit_code == 3
 
 
-def test_net_down_all_runs_script_with_resolved_names(monkeypatch, tmp_path):
+def test_net_up_step_without_tty_exits_two(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-a", "net-b"])  # 2 start steps -> pause after step 1
+    runner = RecordingRunner(
+        results=[
+            _probe_net({"net-a": "inactive", "net-b": "inactive"}),
+            ScriptedResult([]),
+            ScriptedResult([]),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _FailPause()))
+    result = CliRunner().invoke(cli.app, ["net", "up", "all", "--step"])
+    assert result.exit_code == 2
+
+
+# --- down: net-destroy (deactivate) active nets; skip inactive/absent ---
+
+
+def test_net_down_deactivates_only_active(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_nets(tmp_path, ["net-wan"])
-    runner = RecordingRunner(results=[ScriptedResult(["down: net-wan"])])
+    runner = RecordingRunner(results=[_probe_net({"net-wan": "active"}), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["net", "down", "all"])
     assert result.exit_code == 0
-    argv = runner.recorded[0].argv
-    assert argv[1].endswith("lab/scripts/net-down.sh")
-    assert argv[2:] == ["net-wan"]
+    assert _argvs(runner) == [
+        [*_VIRSH, "net-list", "--all"],
+        [*_VIRSH, "net-destroy", "net-wan"],
+    ]
+
+
+def test_net_down_already_inactive_is_a_no_op(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({"net-wan": "inactive"})])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "down", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "net-list", "--all"]]
+
+
+def test_net_down_absent_is_a_no_op(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({})])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "down", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "net-list", "--all"]]
 
 
 def test_net_down_without_pattern_is_a_usage_error():
     result = CliRunner().invoke(cli.app, ["net", "down"])
     assert result.exit_code == 2
+
+
+# --- destroy: active -> deactivate then undefine; inactive -> undefine; absent -> skip ---
+
+
+def test_net_destroy_active_deactivates_then_undefines(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(
+        results=[_probe_net({"net-wan": "active"}), ScriptedResult([]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "destroy", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [
+        [*_VIRSH, "net-list", "--all"],
+        [*_VIRSH, "net-destroy", "net-wan"],  # deactivate first
+        [*_VIRSH, "net-undefine", "net-wan"],
+    ]
+
+
+def test_net_destroy_inactive_undefines(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({"net-wan": "inactive"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "destroy", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [
+        [*_VIRSH, "net-list", "--all"],
+        [*_VIRSH, "net-undefine", "net-wan"],
+    ]
+
+
+def test_net_destroy_absent_is_a_no_op(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_nets(tmp_path, ["net-wan"])
+    runner = RecordingRunner(results=[_probe_net({})])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["net", "destroy", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "net-list", "--all"]]
 
 
 def test_net_no_match_exits_two(monkeypatch, tmp_path):
@@ -108,6 +238,9 @@ def test_net_invalid_regex_exits_two(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["net", "show", "["])
     assert result.exit_code == 2
     assert "invalid pattern" in result.output
+
+
+# --- status + show (pass-through, unchanged by #98) ---
 
 
 def test_net_status_renders_and_succeeds(monkeypatch, tmp_path):

@@ -15,10 +15,10 @@ from rich.console import Console
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
 from mqlab.inventory import inventory_path, lab_inventory
-from mqlab.lifecycle import ABSENT, OFF, RUNNING, classify
-from mqlab.netsel import resolve_nets
+from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
+from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
-from mqlab.paths import lab_script, repo_root
+from mqlab.paths import lab_network, lab_script, repo_root
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
 from mqlab.runner import Command, SubprocessRunner
@@ -86,14 +86,6 @@ def _resolve_or_exit(pattern: str, resolver: Callable[[str], list[str]], noun: s
     return names
 
 
-def _net_up_steps(nets: list[str]) -> list[CommandStep]:
-    return [CommandStep("networks up", Command(["bash", str(lab_script("net-up.sh")), *nets]))]
-
-
-def _net_down_steps(nets: list[str]) -> list[CommandStep]:
-    return [CommandStep("networks down", Command(["bash", str(lab_script("net-down.sh")), *nets]))]
-
-
 _NET_LIST = Command(["virsh", "-c", "qemu:///system", "net-list", "--all"])  # noqa: S607 - virsh on PATH (lab)
 
 
@@ -123,18 +115,36 @@ _StepFlag = Annotated[bool, typer.Option("--step", help="pause after each step t
 _Pattern = Annotated[str, typer.Argument(help="name, regex, or 'all'")]
 
 
+@net_app.command("create")
+def net_create(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Define + autostart the selected networks (skips any already defined)."""
+    nets = _resolve_or_exit(pattern, resolve_nets, "network")
+    _execute_stateful(
+        "net-create", nets, _net_plan_create, step_mode=step, prober=_probe_net_states
+    )
+
+
 @net_app.command("up")
 def net_up(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Define/start/autostart the selected lab networks (a name, regex, or 'all')."""
+    """Activate the selected (already-defined) networks (skips any already up)."""
     nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute("net-up", _net_up_steps(nets), step_mode=step)
+    _execute_stateful("net-up", nets, _net_plan_up, step_mode=step, prober=_probe_net_states)
 
 
 @net_app.command("down")
 def net_down(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Destroy/undefine the selected lab networks (a name, regex, or 'all')."""
+    """Deactivate the selected networks — virsh net-destroy (skips any already down)."""
     nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute("net-down", _net_down_steps(nets), step_mode=step)
+    _execute_stateful("net-down", nets, _net_plan_down, step_mode=step, prober=_probe_net_states)
+
+
+@net_app.command("destroy")
+def net_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
+    """Remove the selected networks — deactivates active ones first (skips absent)."""
+    nets = _resolve_or_exit(pattern, resolve_nets, "network")
+    _execute_stateful(
+        "net-destroy", nets, _net_plan_destroy, step_mode=step, prober=_probe_net_states
+    )
 
 
 @net_app.command("status")
@@ -277,6 +287,29 @@ def _undefine_step(g: str) -> CommandStep:
     return CommandStep(f"{g} undefine", cmd)
 
 
+def _net_define_step(net: str) -> CommandStep:
+    # Create the network from its declarative XML (the one verb that needs the file).
+    cmd = Command([*_VIRSH, "net-define", str(lab_network(net))])  # noqa: S607
+    return CommandStep(f"{net} define", cmd)
+
+
+def _net_autostart_step(net: str) -> CommandStep:
+    return CommandStep(f"{net} autostart", Command([*_VIRSH, "net-autostart", net]))  # noqa: S607
+
+
+def _net_start_step(net: str) -> CommandStep:
+    return CommandStep(f"{net} start", Command([*_VIRSH, "net-start", net]))  # noqa: S607
+
+
+def _net_deactivate_step(net: str) -> CommandStep:
+    # virsh confusingly names *deactivate* `net-destroy` — this is mqlab `net down`.
+    return CommandStep(f"{net} deactivate", Command([*_VIRSH, "net-destroy", net]))  # noqa: S607
+
+
+def _net_undefine_step(net: str) -> CommandStep:
+    return CommandStep(f"{net} undefine", Command([*_VIRSH, "net-undefine", net]))  # noqa: S607
+
+
 # State-aware planners (#99): given the live state, act only where needed and emit
 # advisory notes for the rest. Idempotency = looking before you leap.
 def _plan_create(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
@@ -334,9 +367,70 @@ def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[Comma
     return steps, notes
 
 
-def _probe_states(deps: Deps) -> dict[str, str]:
-    # The awareness step: show + capture `virsh list --all`, parse to per-domain state.
-    cmd = Command([*_VIRSH, "list", "--all"])  # noqa: S607
+# State-aware net planners (#98) — the same probe-then-act model as the guest verbs,
+# mapped onto the virsh net-* lifecycle. Existence = define/undefine; active =
+# start/deactivate. (virsh `net-destroy` means *deactivate*, not remove.)
+def _net_plan_create(
+    nets: list[str], states: dict[str, str]
+) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for net in nets:
+        if classify_net(states, net) == ABSENT:
+            steps.extend([_net_define_step(net), _net_autostart_step(net)])
+        else:
+            notes.append(
+                f"{net}: already created — mqlab net up to start, mqlab net destroy to recreate"
+            )
+    return steps, notes
+
+
+def _net_plan_up(nets: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for net in nets:
+        state = classify_net(states, net)
+        if state == INACTIVE:
+            steps.append(_net_start_step(net))
+        elif state == ACTIVE:
+            notes.append(f"{net}: already up")
+        else:
+            notes.append(f"{net}: not created — run mqlab net create first")
+    return steps, notes
+
+
+def _net_plan_down(nets: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for net in nets:
+        state = classify_net(states, net)
+        if state == ACTIVE:
+            steps.append(_net_deactivate_step(net))
+        elif state == INACTIVE:
+            notes.append(f"{net}: already down")
+        else:
+            notes.append(f"{net}: not created")
+    return steps, notes
+
+
+def _net_plan_destroy(
+    nets: list[str], states: dict[str, str]
+) -> tuple[list[CommandStep], list[str]]:
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for net in nets:
+        state = classify_net(states, net)
+        if state == ACTIVE:
+            steps.extend([_net_deactivate_step(net), _net_undefine_step(net)])  # deactivate, remove
+        elif state == INACTIVE:
+            steps.append(_net_undefine_step(net))
+        else:
+            notes.append(f"{net}: already gone")
+    return steps, notes
+
+
+def _probe(deps: Deps, cmd: Command, parser: Callable[[str], dict[str, str]]) -> dict[str, str]:
+    # The awareness step: show + capture a virsh listing, parse it to per-name state.
     deps.renderer.command(cmd.display())
     deps.transcript.write(f"$ {cmd.display()}")
     captured: list[str] = []
@@ -347,7 +441,17 @@ def _probe_states(deps: Deps) -> dict[str, str]:
         captured.append(line)
 
     deps.runner.run(cmd, sink)
-    return parse_domain_states("\n".join(captured))
+    return parser("\n".join(captured))
+
+
+def _probe_states(deps: Deps) -> dict[str, str]:
+    # Per-domain state from `virsh list --all` (keyed lab_<guest>).
+    return _probe(deps, Command([*_VIRSH, "list", "--all"]), parse_domain_states)  # noqa: S607
+
+
+def _probe_net_states(deps: Deps) -> dict[str, str]:
+    # Per-network state from `virsh net-list --all` (keyed by plain net name).
+    return _probe(deps, Command([*_VIRSH, "net-list", "--all"]), parse_net_states)  # noqa: S607
 
 
 def _source_secret(deps: Deps, name: str) -> str:
@@ -373,15 +477,16 @@ def _source_secret(deps: Deps, name: str) -> str:
 
 def _execute_stateful(
     verb: str,
-    guests: list[str],
+    items: list[str],
     planner: Callable[[list[str], dict[str, str]], tuple[list[CommandStep], list[str]]],
     *,
     step_mode: bool,
+    prober: Callable[[Deps], dict[str, str]] = _probe_states,
 ) -> None:
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps(verb, timestamp)
     try:
-        steps, notes = planner(guests, _probe_states(deps))
+        steps, notes = planner(items, prober(deps))
         for note in notes:
             deps.renderer.note(note)
             deps.transcript.write(note)

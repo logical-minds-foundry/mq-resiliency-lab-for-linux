@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mqlab.paths import lab_script, repo_root, runs_dir
+from mqlab.paths import lab_network, lab_script, repo_root, runs_dir
 
 
 def test_repo_root_contains_pyproject():
@@ -18,3 +18,7 @@ def test_runs_dir_is_under_build():
 
 def test_lab_script_points_at_lab_scripts_dir():
     assert lab_script("net-up.sh") == repo_root() / "lab" / "scripts" / "net-up.sh"
+
+
+def test_lab_network_points_at_lab_networks_xml():
+    assert lab_network("net-data-a") == repo_root() / "lab" / "networks" / "net-data-a.xml"

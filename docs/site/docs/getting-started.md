@@ -32,29 +32,39 @@ RDQM-vs-Ubuntu comparison — see [design & specs](design-and-specs.md).)
 Bring up the libvirt network fabric and watch it happen:
 
 ```bash
-mqlab net up all       # define/start/autostart every lab network
+mqlab net create all   # define + autostart every lab network (virsh net-define)
+mqlab net up all       # activate them (virsh net-start)
 mqlab net status       # which networks are defined / active / autostart
 mqlab net show all     # per-network config + who is attached (DHCP leases)
-mqlab net down all     # tear them all down
+mqlab net down all     # deactivate (virsh net-destroy)
+mqlab net destroy all  # remove the definitions (virsh net-undefine)
 ```
 
-`up`, `down`, and `show` take a **selector** — a net name, a regex, or the
-keyword `all` — so you can act on a subset:
+Like `vm`, `net` is symmetric on two axes — **create/destroy** (existence) and
+**up/down** (active) — each mapped onto its virsh verb (note virsh confusingly
+names *deactivate* `net-destroy`):
 
-```bash
-mqlab net up data       # just net-data-a, net-data-b
-mqlab net show net-wan  # one network
-```
+| mqlab | virsh | axis |
+|-------|-------|------|
+| `net create` | `net-define` (+ `net-autostart`) | existence |
+| `net up` | `net-start` | active |
+| `net down` | `net-destroy` | active |
+| `net destroy` | `net-undefine` | existence |
+
+Every verb takes a **selector** (a net name, a regex, or `all`) and is
+**state-aware and idempotent**: it first runs `virsh net-list --all`, then acts
+only where needed — `net create` skips already-defined nets, `net up` skips
+active ones, `net down` skips inactive ones, `net destroy` deactivates an active
+net before removing it. Skipped nets get a one-line advisory note. Re-running any
+verb is safe and converges.
 
 There is **no bare default**: `mqlab net down` with no selector is a usage
-error, so a fat-finger cannot wipe the whole fabric — you must say `all`.
-
-`mqlab net up all` runs the proven `lab/scripts/net-up.sh`, echoing each
-`virsh net-define` / `net-start` / `net-autostart` so you see — and can copy —
-exactly what brings the fabric up. Add `--step` to pause after each step and go
-poke at the live system; break something and
-`mqlab net down all && mqlab net up all` to rebuild, because the lab is a
-disposable, reproducible illusion.
+error, so a fat-finger cannot wipe the whole fabric — you must say `all`. Add
+`--step` to pause after each step and go poke at the live system. (The groomed
+`lab/scripts/net-up.sh` / `net-down.sh` remain as a hand-run reference for the
+combined create+up / down+destroy in one shot.) Break something and
+`mqlab net destroy all && mqlab net create all && mqlab net up all` to rebuild,
+because the lab is a disposable, reproducible illusion.
 
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mqlab.netsel import lab_net_names, resolve_nets, select_nets
+from mqlab.netsel import lab_net_names, parse_net_states, resolve_nets, select_nets
 
 NAMES = ["net-data-a", "net-data-b", "net-hb-a", "net-wan"]
 
@@ -38,3 +38,17 @@ def test_resolve_filters_lab_net_names(monkeypatch, tmp_path):
     for name in ("net-hb-a", "net-hb-b", "net-wan"):
         (nets / f"{name}.xml").write_text("<network/>")
     assert resolve_nets("hb") == ["net-hb-a", "net-hb-b"]
+
+
+def test_parse_net_states_extracts_name_and_state():
+    text = (
+        " Name         State      Autostart   Persistent\n"
+        "------------------------------------------------------\n"
+        " net-data-a   active     yes         yes\n"
+        " net-wan      inactive   no          yes\n"
+    )
+    assert parse_net_states(text) == {"net-data-a": "active", "net-wan": "inactive"}
+
+
+def test_parse_net_states_skips_header_rule_and_short_lines():
+    assert parse_net_states("\n   \nName State Autostart\n------\n bad\n") == {}

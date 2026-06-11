@@ -31,3 +31,21 @@ def select_nets(pattern: str, names: list[str]) -> list[str]:
 def resolve_nets(pattern: str) -> list[str]:
     """Resolve a selection pattern to the matching lab net names."""
     return select_nets(pattern, lab_net_names())
+
+
+def parse_net_states(text: str) -> dict[str, str]:
+    """Parse `virsh net-list --all` output -> {net_name: state}.
+
+    Columns are Name / State / Autostart / Persistent — so the name is the first
+    field and the state the second (unlike `virsh list`, which leads with an Id).
+    """
+    states: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("Name") or set(line) <= {"-"}:
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        states[parts[0]] = parts[1]
+    return states
