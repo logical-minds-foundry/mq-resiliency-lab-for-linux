@@ -207,12 +207,13 @@ GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
 
 
 def _obs_up_steps() -> list[CommandStep]:
+    from mqlab.dashboard import dashboard_path, lab_dashboard
     from mqlab.inventory import inventory_path, lab_inventory
     from mqlab.scrape import lab_scrape_targets, scrape_targets_path
 
-    # Render both artifacts eagerly when the steps are built: the Prometheus
-    # scrape targets AND the Ansible inventory the provision step needs (the
-    # latter mirrors dr-provision.sh, which renders the inventory before it runs).
+    # Render all three artifacts eagerly when the steps are built: the Prometheus
+    # scrape targets, the Ansible inventory the provision step needs (mirrors
+    # dr-provision.sh), and the Grafana dashboard the grafana role deploys.
     targets = scrape_targets_path()
     targets.parent.mkdir(parents=True, exist_ok=True)
     targets.write_text(lab_scrape_targets())
@@ -221,10 +222,14 @@ def _obs_up_steps() -> list[CommandStep]:
     inv.parent.mkdir(parents=True, exist_ok=True)
     inv.write_text(lab_inventory())
 
+    dash = dashboard_path()
+    dash.parent.mkdir(parents=True, exist_ok=True)
+    dash.write_text(lab_dashboard())
+
     return [
         CommandStep(
-            "render targets + inventory",
-            Command(["echo", f"rendered -> {targets}, {inv}"]),  # noqa: S607
+            "render targets + inventory + dashboard",
+            Command(["echo", f"rendered -> {targets}, {inv}, {dash}"]),  # noqa: S607
         ),
         CommandStep(
             "monitoring create",
