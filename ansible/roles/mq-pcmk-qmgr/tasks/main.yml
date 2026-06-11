@@ -1,0 +1,122 @@
+# Crystallized from lab/scripts/pcmk-qm-create.sh (#109). The hand-built spelling
+# of RDQM's `crtmqm -sx` + `rdqmint`: QM on the shared LUN, taught to every node,
+# handed to Pacemaker as fs -> vip -> qm. Idempotent (guards on every step).
+
+# 0. The mountpoint dir must exist on EVERY node — Pacemaker's Filesystem
+#    resource mounts the LUN on whichever node the group lands on (script L34).
+- name: mountpoint directory on every node
+  ansible.builtin.file:
+    path: /mqshared
+    state: directory
+    mode: "0755"
+
+# 1. QM on the LUN (creation node only; Pacemaker owns the mount afterward).
+- name: mount the shared LUN (creation node)
+  ansible.builtin.shell: >
+    (mountpoint -q /mqshared ||
+    mount /dev/disk/by-label/MQSHARED /mqshared) &&
+    mkdir -p /mqshared/qmgrs /mqshared/log && chown -R mqm:mqm /mqshared
+  run_once: true
+  changed_when: false
+
+- name: create the queue manager on the LUN
+  ansible.builtin.command:
+    cmd: su mqm -c '/opt/mqm/bin/crtmqm -md /mqshared/qmgrs -ld /mqshared/log {{ qm_name }}'
+  run_once: true
+  register: crtmqm
+  failed_when: crtmqm.rc != 0 and 'already exists' not in (crtmqm.stderr | default(''))
+  changed_when: crtmqm.rc == 0
+
+# 2. MQSC config (lab posture, spec 1), then a clean stop.
+- name: apply MQSC config
+  ansible.builtin.shell: |
+    su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
+    printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
+    START LISTENER(L1414)\n
+    DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
+    ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
+    REFRESH SECURITY TYPE(CONNAUTH)\n
+    DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
+    su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
+  run_once: true
+  changed_when: true
+
+# 3. Teach the other nodes the QM definition, then release the mount.
+- name: capture the addmqinf command from the creation node
+  ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'"
+  run_once: true
+  register: addmqinf_cmd
+  changed_when: false
+
+- name: teach the QM definition to the other nodes
+  ansible.builtin.command:
+    cmd: "su mqm -c '{{ hostvars[groups['pcmk_a'][0]].addmqinf_cmd.stdout }}'"
+  when: inventory_hostname != groups['pcmk_a'][0]
+  register: addmqinf
+  failed_when: addmqinf.rc != 0 and 'already' not in (addmqinf.stderr | default(''))
+  changed_when: addmqinf.rc == 0
+
+- name: release the LUN on the creation node (Pacemaker owns it now)
+  ansible.builtin.command: umount /mqshared
+  run_once: true
+  failed_when: false
+  changed_when: true
+
+# 4. Disabled systemd unit on every node (Pacemaker is the only starter).
+#    ExecStop uses `endmqm -w` (clean, blocking) so Pacemaker gets the exit
+#    code it expects and relocates cleanly. A crash never runs ExecStop; the
+#    only thing that broke reconnect in #64 was the controlled move-BACK to a
+#    rebooted node, fixed by resource stickiness below (not -r).
+- name: queue-manager systemd unit (disabled)
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/mq-{{ qm_name }}.service"
+    content: |
+      [Unit]
+      Description=IBM MQ queue manager {{ qm_name }} (pacemaker-managed)
+      [Service]
+      Type=forking
+      User=mqm
+      ExecStart=/opt/mqm/bin/strmqm {{ qm_name }}
+      ExecStop=/opt/mqm/bin/endmqm -w {{ qm_name }}
+      TimeoutStartSec=300
+  notify: daemon-reload
+
+- name: ensure the unit is disabled (cluster-only start)
+  ansible.builtin.systemd:
+    name: "mq-{{ qm_name }}.service"
+    enabled: false
+    daemon_reload: true
+
+# 5. Resource stickiness — no auto-failback (the #64 lesson).
+- name: resource stickiness (no auto-failback)
+  ansible.builtin.command: pcs resource defaults update resource-stickiness=1000
+  run_once: true
+  changed_when: true
+
+# 6. The resource group: fs -> vip -> qm. mq_fs monitors with OCF_CHECK_LEVEL=20
+#    (a real read/write probe, not just the mount table) + on-fail=fence, so a
+#    dead SAN under the owner is caught in one interval instead of the default
+#    check's ~12-min blind spot.
+- name: mq_fs resource (LUN, OCF_CHECK_LEVEL=20, fence on I/O failure)
+  ansible.builtin.shell: >
+    pcs resource status mq_fs >/dev/null 2>&1 ||
+    pcs resource create mq_fs ocf:heartbeat:Filesystem
+    device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs
+    op monitor interval=20s timeout=40s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group
+  run_once: true
+  changed_when: true
+
+- name: mq_vip resource (floating IP)
+  ansible.builtin.shell: >
+    pcs resource status mq_vip >/dev/null 2>&1 ||
+    pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip={{ qm_vip }} cidr_netmask=24
+    --group mq_group --after mq_fs
+  run_once: true
+  changed_when: true
+
+- name: mq_qm resource (the queue manager)
+  ansible.builtin.shell: >
+    pcs resource status mq_qm >/dev/null 2>&1 ||
+    pcs resource create mq_qm systemd:mq-{{ qm_name }} --group mq_group --after mq_vip
+  run_once: true
+  changed_when: true

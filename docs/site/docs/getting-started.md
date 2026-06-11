@@ -113,9 +113,44 @@ state. Running a verb twice is safe and converges on the same result.
 Like `net`, the mutating verbs require a selector, so a bare `mqlab vm destroy`
 cannot wipe every guest.
 
-> **More verbs land as the slices ship.** `mqlab net` and `mqlab vm` are live;
-> arm setup, HA/DR operations, and the `status` / `check` dashboard arrive in
-> subsequent slices, each extending this walkthrough.
+### Build the queue manager with `mqlab qm`
+
+`vm create` provisions the cluster **infrastructure** — iSCSI/SAN, Corosync,
+Pacemaker, the MQ install — but stops short of the queue manager itself. **`mqlab
+qm`** is the next layer: it builds the IBM MQ queue manager on the shared LUN and
+hands it to Pacemaker as a highly-available resource group. Run it *after*
+`mqlab vm create <setup>` has stood the infrastructure up.
+
+```bash
+mqlab qm create pcmk_san_ha   # build the QM on the LUN + the HA resource group
+mqlab qm status pcmk_san_ha   # pcs status resources — where mq_group is Started
+mqlab qm down  pcmk_san_ha    # stop the QM cluster-side (pcs resource disable)
+mqlab qm up    pcmk_san_ha    # start it again (pcs resource enable)
+mqlab qm destroy pcmk_san_ha  # remove the QM + its HA resources
+```
+
+The same two axes as `net` and `vm` — **create/destroy** (the QM and its HA
+group exist or not) and **up/down** (the cluster runs it or not):
+
+- `qm create` runs the **`mq-pcmk-qmgr` Ansible role**: the queue manager is
+  created on the shared LUN, taught to every node (`dspmqinf` → `addmqinf`),
+  wrapped in a **disabled** systemd unit, and handed to Pacemaker as the
+  `mq_fs` → `mq_vip` → `mq_qm` resource group. `qm destroy` removes it.
+- `qm up` / `qm down` go **through Pacemaker** — `pcs resource enable` /
+  `disable mq_group` on the cluster's first node. Because the systemd units are
+  disabled, the cluster is the *only* thing that starts the QM; you never
+  `strmqm` it by hand. `qm status` is `pcs status resources`.
+
+`qm create` is **idempotent** — every step guards on existing state, so re-running
+it converges. And the role is the point: the streamed, verbatim task output *is*
+the reproducible, step-by-step HA procedure — the artifact a client re-implements
+under their own automation. Watching it run is how you come to understand exactly
+how MQ HA is built on Pacemaker/SAN.
+
+> **More verbs land as the slices ship.** `mqlab net`, `mqlab vm`, and `mqlab qm`
+> (the Pacemaker/SAN arm) are live; the RDQM arm, the HA/DR experiment layer
+> (failover, cross-site cutover, DR drills), and the `status` / `check` dashboard
+> arrive in subsequent slices, each extending this walkthrough.
 
 ## 3. Stand up one stack end to end
 

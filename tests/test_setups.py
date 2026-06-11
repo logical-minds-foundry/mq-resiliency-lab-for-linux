@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mqlab.setups import lab_groups, lab_setups, setup_members, setups_of
+from mqlab.setups import QmConfig, lab_groups, lab_setups, setup_members, setups_of
 
 TOPO = (
     "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n  rdqm-a1: {}\n"
@@ -14,6 +14,7 @@ TOPO = (
     "    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password]\n"
+    "    qm: { name: QMPCMK, vip: 10.10.1.200 }\n"
     "  rdqm_ha:\n"
     "    groups: [rdqm_a]\n"
 )
@@ -40,6 +41,14 @@ def test_lab_setups_parses_secrets_defaulting_empty(monkeypatch, tmp_path):
     setups = lab_setups()
     assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password"]
     assert setups["rdqm_ha"].secrets == []  # default empty
+
+
+def test_lab_setups_parses_qm_config_defaulting_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    setups = lab_setups()
+    assert setups["pcmk_san_ha"].qm == QmConfig(name="QMPCMK", vip="10.10.1.200")
+    assert setups["rdqm_ha"].qm is None  # default
 
 
 def test_lab_groups_reads_atomic_groups(monkeypatch, tmp_path):
