@@ -452,10 +452,16 @@ vrg-commit --type test --scope mqlab --message "cover dashboard renderer to 100%
 - [ ] **Step 1: Re-render + redeploy the dashboard onto the running obs box**
 
 ```bash
-mqlab obs dashboard
-cd ansible && uv run ansible-playbook site-obs.yml --tags grafana || uv run ansible-playbook site-obs.yml
+mqlab obs dashboard        # render build/grafana/dashboards/lab-status.json
+mqlab vm inventory         # render build/inventory.ini — REQUIRED: a fresh worktree has none
+cd ansible && uv run ansible-playbook site-obs.yml && cd ..
 ```
-(If the role has no `grafana` tag, re-run the whole `site-obs.yml`; it's idempotent.)
+The `obs`/`mon-probe` domains persist across worktrees, so Ansible re-provisions
+them over `net-mgmt` via the static inventory — **no Vagrant needed** (do *not*
+`mqlab obs up` here: from a fresh worktree its `vagrant up` has no `.vagrant`
+metadata and would collide with the already-running domains). `mqlab vm
+inventory` is mandatory first — without `build/inventory.ini` the play matches no
+hosts and silently skips.
 
 - [ ] **Step 2: Confirm the layered view**
 
