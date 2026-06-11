@@ -656,6 +656,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#4-watch-the-lab-live-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Watch the lab live (observability)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#building-these-docs-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -788,6 +799,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#4-watch-the-lab-live-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Watch the lab live (observability)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#building-these-docs-locally" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -909,17 +931,51 @@ it up, send a message, and confirm it survives a guest reboot.</p>
 <p>From there, the <a href="../architecture/">Architecture</a> page walks the
 higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
 alternative.</p>
+<h2 id="4-watch-the-lab-live-observability">4. Watch the lab live (observability)<a class="headerlink" href="#4-watch-the-lab-live-observability" title="Permanent link">&para;</a></h2>
+<p>A dedicated <strong><code>obs</code></strong> VM runs <strong>Prometheus + Grafana</strong>, scraping <code>node_exporter</code>
+across the whole fleet over the host-only <strong><code>net-mgmt</code></strong> plane — the one network
+fault drills never sever, so the dashboard stays live exactly when something
+breaks. A second node, <strong><code>mon-probe</code></strong>, carries the data-net NICs for the MQ
+client exporters that land in a later slice.</p>
+<p>Bring the pair up and provision it — one verb, provisioned as code:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>up<span class="w">        </span><span class="c1"># render scrape targets + inventory, create obs + mon-probe, provision</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>status<span class="w">    </span><span class="c1"># are the pair up? which targets are scraped, up/down?</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">   </span><span class="c1"># render build/prometheus/targets/node.json from topology + echo it</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">      </span><span class="c1"># print the Grafana URL + the workstation tunnel recipe</span>
+</code></pre></div>
+<p><code>obs</code> is a guest <strong>inside</strong> the Vergil VM, so opening Grafana from your
+workstation means forwarding a local port through the VM. <code>mqlab obs open</code>
+prints the exact recipe; in short:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># on your workstation (macOS):</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>limactl<span class="w"> </span>list<span class="w">                                                  </span><span class="c1"># find this repo&#39;s instance</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>ssh<span class="w"> </span>-F<span class="w"> </span>~/.lima/&lt;instance&gt;/ssh.config<span class="w"> </span>-L<span class="w"> </span><span class="m">3000</span>:10.50.0.2:3000<span class="w"> </span>&lt;host-alias&gt;
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># then browse:  http://localhost:3000/d/lab-fleet-node   (admin / admin)</span>
+</code></pre></div>
+<p>The <strong>Fleet — Node Health</strong> dashboard shows a tile per node. Scrape targets are
+rendered from <strong>the full <code>topology.yaml</code></strong>, so <em>every</em> node is a target — a node
+that isn't running simply shows <strong>red (<code>up == 0</code>)</strong> rather than vanishing. That
+is deliberate: a missing thing you can see beats a missing thing you can't.</p>
+<p><code>obs up</code> brings up only the observer pair; to put host metrics on a running arm,
+overlay the fleet role onto its group:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>pcmk_a<span class="w">                                  </span><span class="c1"># boots the arm (arm64, KVM-fast)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">cd</span><span class="w"> </span>ansible<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>ansible-playbook<span class="w"> </span>observability.yml<span class="w"> </span>--limit<span class="w"> </span>pcmk_a
+</code></pre></div>
+<p>Those tiles flip from red to green as <code>node_exporter</code> starts — no re-render or
+restart needed, because the nodes were already targets. Now watch a fault become
+visible: <code>mqlab vm down pcmk-a2</code> turns that tile red within a scrape interval,
+<code>mqlab vm up pcmk-a2</code> turns it green again. That live red↔green flip is the
+point — a fault you can <em>watch</em>.</p>
 <h2 id="building-these-docs-locally">Building these docs locally<a class="headerlink" href="#building-these-docs-locally" title="Permanent link">&para;</a></h2>
 <p>The site builds inside the project's docs container, the same way CI does:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>vrg-container-docs<span class="w"> </span>serve
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>vrg-container-docs<span class="w"> </span>serve
 </code></pre></div>
 
 
