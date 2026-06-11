@@ -4,7 +4,7 @@
   connection: local
   become: true
   vars:
-    repo_root: "{{ playbook_dir }}/.."
+    repo_root: "{{ playbook_dir | dirname }}"  # normalized (no '..'); systemd rejects unnormalized paths
   roles:
     - node-exporter
     - host-net-state
