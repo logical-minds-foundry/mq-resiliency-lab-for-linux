@@ -91,6 +91,52 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
     }
 
 
+def _network_state_panel(y: int) -> dict[str, Any]:
+    return {
+        "type": "stat",
+        "title": "Networks — state",
+        "gridPos": {"h": 4, "w": 12, "x": 0, "y": y},
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    {
+                        "type": "value",
+                        "options": {
+                            "0": {"text": "ABSENT", "color": "grey"},
+                            "1": {"text": "DOWN", "color": "red"},
+                            "2": {"text": "UP", "color": "green"},
+                        },
+                    }
+                ]
+            }
+        },
+        "targets": [{"expr": "lab_network_state", "legendFormat": "{{network}}"}],
+    }
+
+
+def _network_reach_panel(y: int) -> dict[str, Any]:
+    # min by (network): a net with ANY unreachable peer rolls up to 0 (orange).
+    return {
+        "type": "stat",
+        "title": "Networks — reachability",
+        "gridPos": {"h": 4, "w": 12, "x": 12, "y": y},
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    {
+                        "type": "value",
+                        "options": {
+                            "0": {"text": "UNREACHABLE", "color": "orange"},
+                            "1": {"text": "REACHABLE", "color": "green"},
+                        },
+                    }
+                ]
+            }
+        },
+        "targets": [{"expr": "min by (network) (lab_net_reach)", "legendFormat": "{{network}}"}],
+    }
+
+
 def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
     """Project the curated ROWS + topology groups -> a Grafana dashboard dict."""
     known = set(topo.get("groups", {}))
@@ -115,8 +161,9 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
 
     panels.append(_row("Networks", y))
     y += 1
-    panels.append(_text("Network status arrives in **Tweak 2** (#108 follow-up).", y))
-    y += 3
+    panels.append(_network_state_panel(y))
+    panels.append(_network_reach_panel(y))
+    y += 4
 
     return {
         "title": "Lab — Layered Status",

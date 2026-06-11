@@ -53,3 +53,28 @@ def test_unknown_curated_group_fails_loud():
     topo = {"groups": {"san_a": ["san-a"]}}  # ROWS references many groups not here
     with pytest.raises(DashboardError, match="unknown group in ROWS"):
         render_dashboard(topo)
+
+
+def test_network_state_panel_has_tristate_mapping():
+    panels = render_dashboard(TOPO)["panels"]
+    net = next(p for p in panels if p.get("title") == "Networks — state")
+    assert net["targets"][0]["expr"] == "lab_network_state"
+    texts = {
+        m["options"][k]["text"]
+        for m in net["fieldConfig"]["defaults"]["mappings"]
+        for k in m["options"]
+    }
+    assert {"ABSENT", "DOWN", "UP"} <= texts
+
+
+def test_network_reachability_panel_rolls_up_per_network():
+    panels = render_dashboard(TOPO)["panels"]
+    reach = next(p for p in panels if p.get("title") == "Networks — reachability")
+    # a network with ANY unreachable peer rolls up to 0 (per-network minimum)
+    assert reach["targets"][0]["expr"] == "min by (network) (lab_net_reach)"
+    texts = {
+        m["options"][k]["text"]
+        for m in reach["fieldConfig"]["defaults"]["mappings"]
+        for k in m["options"]
+    }
+    assert {"UNREACHABLE", "REACHABLE"} <= texts
