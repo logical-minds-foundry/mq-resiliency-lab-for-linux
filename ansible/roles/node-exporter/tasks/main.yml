@@ -21,6 +21,14 @@
     remote_src: true
   notify: restart node_exporter
 
+- name: node_exporter textfile dir
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    owner: node_exporter
+    group: node_exporter
+    mode: "0755"
+
 - name: install the systemd unit
   ansible.builtin.template:
     src: node_exporter.service.j2
