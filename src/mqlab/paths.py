@@ -29,3 +29,8 @@ def runs_dir() -> Path:
 def lab_script(name: str) -> Path:
     """Absolute path to a script under lab/scripts/."""
     return repo_root() / "lab" / "scripts" / name
+
+
+def lab_network(name: str) -> Path:
+    """Absolute path to a network definition under lab/networks/ (e.g. net-define)."""
+    return repo_root() / "lab" / "networks" / f"{name}.xml"

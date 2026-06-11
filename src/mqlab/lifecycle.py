@@ -1,16 +1,19 @@
-"""Classify a guest's current libvirt state — the awareness that makes the vm
-lifecycle idempotent (#99). You cannot be idempotent without first looking at the
-world: each verb checks state, then acts only where needed.
+"""Classify a guest's or network's current libvirt state — the awareness that makes
+the lifecycle verbs idempotent (#99/#98). You cannot be idempotent without first
+looking at the world: each verb checks state, then acts only where needed.
 
-State is derived from `virsh list --all` (the ground-truth source, per #96), keyed
-by the `lab_<guest>` domain name.
+Guest state is derived from `virsh list --all`, keyed by the `lab_<guest>` domain
+name; network state from `virsh net-list --all`, keyed by the plain network name
+(the ground-truth sources, per #96).
 """
 
 from __future__ import annotations
 
-ABSENT = "absent"  # no domain defined
-OFF = "off"  # defined, not running
-RUNNING = "running"  # defined and running
+ABSENT = "absent"  # no domain/network defined
+OFF = "off"  # guest defined, not running
+RUNNING = "running"  # guest defined and running
+INACTIVE = "inactive"  # network defined, not active
+ACTIVE = "active"  # network defined and active
 
 
 def classify(states: dict[str, str], guest: str) -> str:
@@ -21,3 +24,16 @@ def classify(states: dict[str, str], guest: str) -> str:
     if raw == "running":
         return RUNNING
     return OFF  # shut off / paused / etc. — defined but not running
+
+
+def classify_net(states: dict[str, str], net: str) -> str:
+    """Map a network to ABSENT / INACTIVE / ACTIVE from parsed `virsh net-list --all`.
+
+    Networks are named plainly (no `lab_` prefix); virsh reports active/inactive.
+    """
+    raw = states.get(net)
+    if raw is None:
+        return ABSENT
+    if raw == "active":
+        return ACTIVE
+    return INACTIVE  # defined but not active
