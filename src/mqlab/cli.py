@@ -186,6 +186,23 @@ def obs_targets() -> None:
         deps.transcript.close()
 
 
+@obs_app.command("dashboard")
+def obs_dashboard() -> None:
+    """Render build/grafana/dashboards/lab-status.json from topology and echo it."""
+    from mqlab.dashboard import dashboard_path, lab_dashboard
+
+    deps = build_deps("obs-dashboard", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_dashboard()
+        path = dashboard_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        deps.transcript.write(f"render -> {path}")
+    finally:
+        deps.transcript.close()
+
+
 GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
 
 
