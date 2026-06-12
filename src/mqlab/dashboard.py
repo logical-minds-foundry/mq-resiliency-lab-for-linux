@@ -1,11 +1,11 @@
 """Render the Grafana dashboard as a pure function of the curated layout + topology (#108).
 
-Sibling of scrape.py / inventory.py: one source of truth. A curated ROWS list
-fixes the lab-shaped order (SAN, the PCMK/RDQM arms split A/B, standalone,
-observability); the topology `groups` namespace validates it. Emits a layered
-Grafana dashboard — reserved MQ row on top, grouped VM rows (up/down + per-group
-CPU) in the middle, a placeholder network row at the bottom (Tweak 2 replaces
-it). uid is pinned so mqlab obs open / the docs deep-links keep working.
+Sibling of scrape.py / inventory.py: one source of truth. Curated QMS + ROWS +
+NET_SECTIONS lists fix the lab-shaped order; the topology `groups` namespace
+validates the VM rows. Emits a layered Grafana dashboard — the MQ Service rows
+(one per queue manager) on top, grouped VM rows (up/down + per-group CPU) in the
+middle, per-network rows at the bottom. uid is pinned so mqlab obs open / the
+docs deep-links keep working.
 """
 
 from __future__ import annotations
@@ -50,14 +50,6 @@ def _row(title: str, y: int) -> dict[str, Any]:
     }
 
 
-def _text(content: str, y: int) -> dict[str, Any]:
-    return {
-        "type": "text",
-        "gridPos": {"h": 3, "w": 24, "x": 0, "y": y},
-        "options": {"mode": "markdown", "content": content},
-    }
-
-
 def _up_panel(label: str, sel: str, y: int) -> dict[str, Any]:
     return {
         "type": "stat",
@@ -90,6 +82,110 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
         "title": f"{label} — CPU busy %",
         "gridPos": {"h": 4, "w": 14, "x": 10, "y": y},
         "targets": [{"expr": expr, "legendFormat": "{{host}}"}],
+    }
+
+
+# --- MQ Service (Layer 2) ---------------------------------------------------
+# One curated row per queue manager. Current names (rename normalizes later, #73);
+# QMRDQM asserted for the RHEL arm. Metrics confirmed from the exporter source in
+# the #141 spike — they read no-data until mq_prometheus is wired, but the layout
+# is real. Each QM row: status / msg-rate / connections stat tiles + a channels
+# table (ibmmq_channel_status_squash) + a queues table (ibmmq_queue_depth).
+QMS: list[tuple[str, str]] = [
+    ("QMPCMK", "service · Ubuntu HA/DR"),
+    ("QMRDQM", "service · RHEL RDQM"),
+    ("QMAIN", "service · standalone"),
+    ("QDTCC", "counterparty · DTCC sim"),
+]
+
+
+def _qm_status_panel(qm: str, y: int) -> dict[str, Any]:
+    return {
+        "type": "stat",
+        "title": f"{qm} — status",
+        "gridPos": {"h": 4, "w": 5, "x": 0, "y": y},
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    {"type": "value", "options": {"0": {"text": "STOPPED", "color": "red"}}}
+                ],
+                "thresholds": {
+                    "steps": [{"value": None, "color": "red"}, {"value": 1, "color": "green"}]
+                },
+            }
+        },
+        "targets": [{"expr": f'ibmmq_qmgr_status{{qmgr="{qm}"}}'}],
+    }
+
+
+def _qm_rate_panel(qm: str, y: int) -> dict[str, Any]:
+    # The "it's moving" QM stat — message activity (puts + destructive gets).
+    expr = (
+        f'rate(ibmmq_qmgr_interval_mqput_mqput1_total_count{{qmgr="{qm}"}}[1m]) '
+        f'+ rate(ibmmq_qmgr_interval_destructive_get_total_count{{qmgr="{qm}"}}[1m])'
+    )
+    return {
+        "type": "stat",
+        "title": f"{qm} — msg rate",
+        "gridPos": {"h": 4, "w": 5, "x": 5, "y": y},
+        "options": {"graphMode": "area"},
+        "fieldConfig": {"defaults": {"unit": "short"}},
+        "targets": [{"expr": expr}],
+    }
+
+
+def _qm_conn_panel(qm: str, y: int) -> dict[str, Any]:
+    return {
+        "type": "stat",
+        "title": f"{qm} — connections",
+        "gridPos": {"h": 4, "w": 5, "x": 10, "y": y},
+        "targets": [{"expr": f'ibmmq_qmgr_connection_count{{qmgr="{qm}"}}'}],
+    }
+
+
+def _channels_table(qm: str, y: int) -> dict[str, Any]:
+    # Inter-QM links + the client SVRCONN — status for watching retries.
+    return {
+        "type": "table",
+        "title": f"{qm} — channels",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": y},
+        "targets": [
+            {
+                "expr": f'ibmmq_channel_status_squash{{qmgr="{qm}"}}',
+                "format": "table",
+                "instant": True,
+            }
+        ],
+        "transformations": [
+            {
+                "id": "organize",
+                "options": {
+                    "excludeByName": {"Time": True, "qmgr": True, "job": True, "instance": True},
+                    "renameByName": {"channel": "Channel", "chltype": "Type", "Value": "Status"},
+                },
+            }
+        ],
+    }
+
+
+def _queues_table(qm: str, y: int) -> dict[str, Any]:
+    # Transmission + application queues — depth (the staging/backlog signal).
+    return {
+        "type": "table",
+        "title": f"{qm} — queues",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": y},
+        "targets": [
+            {"expr": f'ibmmq_queue_depth{{qmgr="{qm}"}}', "format": "table", "instant": True}
+        ],
+        "transformations": [
+            {
+                "id": "organize",
+                "options": {
+                    "excludeByName": {"Time": True, "qmgr": True, "job": True, "instance": True},
+                    "renameByName": {"queue": "Queue", "usage": "Type", "Value": "Depth"},
+                },
+            }
+        ],
     }
 
 
@@ -148,10 +244,16 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
     panels: list[dict[str, Any]] = []
     y = 0
 
-    panels.append(_row("MQ Service — reserved · Layer 2", y))
-    y += 1
-    panels.append(_text("Queue-manager owner · depth · channel status arrive in **Layer 2**.", y))
-    y += 3
+    for qm, role in QMS:
+        panels.append(_row(f"MQ Service · {qm} · {role}", y))
+        y += 1
+        panels.append(_qm_status_panel(qm, y))
+        panels.append(_qm_rate_panel(qm, y))
+        panels.append(_qm_conn_panel(qm, y))
+        y += 4
+        panels.append(_channels_table(qm, y))
+        panels.append(_queues_table(qm, y))
+        y += 8
 
     for label, groups in ROWS:
         for g in groups:

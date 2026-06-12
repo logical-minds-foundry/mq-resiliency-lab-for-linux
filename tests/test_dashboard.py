@@ -29,7 +29,10 @@ def test_has_a_row_header_per_curated_row_in_order():
     panels = render_dashboard(TOPO)["panels"]
     row_titles = [p["title"] for p in panels if p["type"] == "row"]
     assert row_titles == [
-        "MQ Service — reserved · Layer 2",
+        "MQ Service · QMPCMK · service · Ubuntu HA/DR",
+        "MQ Service · QMRDQM · service · RHEL RDQM",
+        "MQ Service · QMAIN · service · standalone",
+        "MQ Service · QDTCC · counterparty · DTCC sim",
         "VMs · PCMK · A",
         "VMs · PCMK · B",
         "VMs · RDQM · A",
@@ -51,6 +54,21 @@ def test_group_rows_filter_by_their_groups_selector():
     assert any('groups=~"pcmk_a|san_a"' in e and e.startswith("100 - ") for e in exprs)
     # no standalone SAN row anymore
     assert not any("san_a|san_b" in e for e in exprs)
+
+
+def test_mq_service_rows_use_confirmed_ibmmq_metrics():
+    by_title = {p.get("title"): p for p in render_dashboard(TOPO)["panels"]}
+    # QM tiles — status, the "it's moving" rate, connections (per #141 spike)
+    assert by_title["QMPCMK — status"]["targets"][0]["expr"] == 'ibmmq_qmgr_status{qmgr="QMPCMK"}'
+    assert "ibmmq_qmgr_connection_count" in by_title["QMPCMK — connections"]["targets"][0]["expr"]
+    rate = by_title["QMPCMK — msg rate"]["targets"][0]["expr"]
+    assert "ibmmq_qmgr_interval_mqput_mqput1_total_count" in rate
+    assert "ibmmq_qmgr_interval_destructive_get_total_count" in rate
+    # channels + queues tables, keyed by the squash/depth metrics, formatted as tables
+    ch = by_title["QMPCMK — channels"]["targets"][0]
+    assert ch["expr"] == 'ibmmq_channel_status_squash{qmgr="QMPCMK"}' and ch["format"] == "table"
+    qd = by_title["QDTCC — queues"]["targets"][0]
+    assert qd["expr"] == 'ibmmq_queue_depth{qmgr="QDTCC"}' and qd["instant"] is True
 
 
 def test_unknown_curated_group_fails_loud():
