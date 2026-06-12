@@ -1,0 +1,75 @@
+---
+- name: loki system user
+  ansible.builtin.user:
+    name: loki
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: unzip (needed to unpack the loki release archive)
+  ansible.builtin.apt:
+    name: unzip
+    update_cache: true
+
+- name: download + unpack loki
+  ansible.builtin.unarchive:
+    src: "{{ loki_url }}"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/{{ loki_pkg }}"
+
+- name: install the loki binary
+  ansible.builtin.copy:
+    src: "/tmp/{{ loki_pkg }}"
+    dest: /usr/local/bin/loki
+    mode: "0755"
+    remote_src: true
+
+- name: loki data dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: loki
+    group: loki
+    mode: "0755"
+  loop:
+    - /etc/loki
+    - /var/lib/loki
+    - /var/lib/loki/chunks
+    - /var/lib/loki/compactor
+
+- name: deploy loki config
+  ansible.builtin.template:
+    src: loki-config.yml.j2
+    dest: /etc/loki/config.yml
+    owner: loki
+    group: loki
+    mode: "0644"
+  notify: restart loki
+
+- name: install the systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/loki.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Grafana Loki
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=loki
+      Group=loki
+      ExecStart=/usr/local/bin/loki -config.file=/etc/loki/config.yml
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart loki
+
+- name: enable + start loki
+  ansible.builtin.systemd:
+    name: loki
+    enabled: true
+    state: started
+    daemon_reload: true
