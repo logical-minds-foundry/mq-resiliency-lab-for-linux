@@ -50,8 +50,9 @@ during a test, including across an HADR failover.
 
 - During a test run, the firm and DTCC app messages appear in Grafana panels in
   **near-real-time** (Loki live-tail), reading naturally as a human log line.
-- The operator can filter/pivot on structured fields — e.g. follow one trade by
-  `msg_id` across *both* apps, or isolate `event="ack"` with `latency_ms > 50`.
+- The operator can narrow the stream by **severity, host, and source**, and
+  full-text-search the message (e.g. `|= "id=abc"`) to follow a specific trade —
+  without the lab needing to understand trade semantics.
 - Adding a further log source later (cluster daemons, MQ `AMQERR`, MQ-web) is a
   **one-line catalog entry**, not a refactor.
 - Everything renders from topology as a pure function, unit-tested, and passes
@@ -128,33 +129,38 @@ stream count bounded while still allowing arbitrary field filtering.
 
 ## 4. The application log contract
 
-Both apps emit **one JSON object per line** through a **single shared emitter**
-(`mqlab/obslog.py`, deployed next to the clients) so the two apps are guaranteed
-to speak the same schema. The emitter writes to stdout and nothing else; journald
-and Alloy own everything downstream.
+Keep the structured contract **generic and syslog-shaped**, not domain-specific.
+The lab does not parse trade semantics — any proprietary metadata (trade ids,
+sequence numbers, queue names, payload detail) lives **inside the message text**
+and in the source identity (host + unit), exactly as it would in ordinary
+syslog. We are building a log viewer, not a trade-aware parser.
 
-| field | example | purpose |
-|---|---|---|
-| `ts` | `2026-06-12T14:03:01.123Z` | app-side precision timestamp (RFC 3339, UTC) |
-| `level` | `info` / `warn` / `error` | panel coloring, error filtering |
-| `role` | `firm` / `dtcc` | which side is speaking |
-| `event` | `send` / `recv` / `ack` / `connect` / `reconnect` / `error` | the verb |
-| `seq` | `42` | message sequence number |
-| `msg_id` | `a1b2c3…` | correlation id — follow one trade across **both** apps |
-| `queue` | `DTCC.REQUEST` | the queue involved |
-| `latency_ms` | `12` | round-trip time, present on `ack` |
-| `msg` | `→ sent trade #42 to DTCC.REQUEST` | the human-readable line shown in the tail |
+Both apps emit **one JSON object per line** through a **single shared emitter**
+(`mqlab/obslog.py`, deployed next to the clients), with only generic fields:
+
+| field | syslog analogue | example | purpose |
+|---|---|---|---|
+| `ts` | timestamp | `2026-06-12T14:03:01.123Z` | app-side precision timestamp (RFC 3339, UTC) |
+| `level` | severity | `info` / `warn` / `error` | panel coloring, severity filtering |
+| `msg` | message | `sent trade #42 to DTCC.REQUEST (id=a1b2c3)` | the human line; carries any domain detail as free text |
+
+Two further dimensions arrive **from the journald + Alloy labels**, not the JSON
+line, mirroring syslog's hostname and tag:
+
+- `host` — which node (syslog hostname), attached by Alloy from inventory.
+- `unit` — which app/source (syslog tag), e.g. `mqlab-requester`.
 
 **Design notes.**
 
-- The Logs panel displays `msg` for natural reading; LogQL `| json` exposes the
-  rest for filtering and coloring.
-- `msg_id` is the spine of the demo: watching a single id traverse
-  `send → recv → ack` while a failover happens is the marquee narration.
-- We own the apps, so we emit *exactly* the events worth watching and nothing
-  else — no scavenging incidental output.
-- The emitter is deliberately tiny and dependency-free (stdlib `json` + a clock).
-  It is unit-tested for schema shape and one-object-per-line output.
+- The Logs panel displays `msg`; `| json` extracts `level` for coloring.
+- Domain questions ("where did trade abc go?") are answered by **full-text line
+  filters** over `msg` (`|= "id=a1b2c3"`) and by `host` / `unit` selectors — not
+  by bespoke structured fields baked into the lab. This keeps the contract
+  reusable for any future log source with zero schema change.
+- We own the apps, so the `msg` text says exactly what is worth watching — but
+  what we *parse* stays generic.
+- The emitter is deliberately tiny and dependency-free (stdlib `json` + a clock),
+  unit-tested for schema shape and one-object-per-line output.
 
 The existing DR ledgers (`~/dr-ledgers/*.jsonl`) are **not** repurposed as a log
 source; they serve DR-state reconciliation. Log emission is a separate, purpose-
@@ -221,12 +227,26 @@ Each Logs panel is configured with:
 - **Live-tail enabled**.
 - `msg` as the displayed field; level-based coloring from `level`.
 
-Layout: a new **"Application messages" row** holds the two app panels, placed
-**above** the existing VM/network rows — logs are the thing the operator stares
-at during a test. The renderer remains a pure function `topo → dashboard JSON`,
-unit-tested in `test_dashboard.py`. Selectors are topology-aware but
-hand-curated, exactly like the curated VM rows — the cluster entry's
-`host=~"pcmk-.*"` derives from a topology group when it is added.
+Layout follows the operator's **top-down investigation path**. A new
+**"Application messages" row** holds the two app panels and goes at the **very
+top** of the dashboard. Full order, top to bottom:
+
+1. **Application messages** — the new Logs row. Watch the app first: are
+   messages flowing?
+2. **MQ service** — the existing reserved middleware (queue-manager) row.
+3. **VMs** — the existing PCMK / RDQM / standalone / observability rows.
+4. **Networks** — the existing network sections, at the bottom.
+
+You start at the application, drop to the queue manager, then dig down into hosts
+and wires — increasing depth, decreasing abstraction. The renderer inserts the
+Application-messages row at the top and pushes the existing rows down; it remains
+a pure function `topo → dashboard JSON`, unit-tested in `test_dashboard.py`.
+Selectors are topology-aware but hand-curated, exactly like the curated VM rows —
+the cluster entry's `host=~"pcmk-.*"` derives from a topology group when added.
+
+These app panels are **secondary** in visual weight for now and may be broken
+into sub-panels later; the ordering above is the conceptual hierarchy, not a
+final pixel layout.
 
 ## 8. CLI surface
 
