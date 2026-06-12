@@ -1,0 +1,26 @@
+// Grafana Alloy: ship the systemd journal to Loki on obs.
+// Labels stay low-cardinality (host + unit); the JSON payload is parsed in
+// Grafana with `| json`. host is templated from the Ansible inventory name.
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+}
+
+loki.source.journal "system" {
+  forward_to    = [loki.write.obs.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {
+    host = "{{ inventory_hostname }}",
+  }
+}
+
+loki.write "obs" {
+  endpoint {
+    url = "{{ loki_push_url }}"
+  }
+}

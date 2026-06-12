@@ -1,0 +1,63 @@
+---
+- name: unzip (needed to unpack the alloy release archive)
+  ansible.builtin.apt:
+    name: unzip
+    update_cache: true
+
+- name: download + unpack alloy
+  ansible.builtin.unarchive:
+    src: "{{ alloy_url }}"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/{{ alloy_pkg }}"
+
+- name: install the alloy binary
+  ansible.builtin.copy:
+    src: "/tmp/{{ alloy_pkg }}"
+    dest: /usr/local/bin/alloy
+    mode: "0755"
+    remote_src: true
+
+- name: alloy config + data dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/alloy
+    - /var/lib/alloy
+
+- name: deploy alloy config (journald -> loki)
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    mode: "0644"
+  notify: restart alloy
+
+- name: install the systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/alloy.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Grafana Alloy (journald -> Loki)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      # root: read the system journal without extra group wiring. Acceptable in
+      # an ephemeral, mgmt-plane-only lab.
+      User=root
+      ExecStart=/usr/local/bin/alloy run --storage.path=/var/lib/alloy /etc/alloy/config.alloy
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart alloy
+
+- name: enable + start alloy
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+    daemon_reload: true
