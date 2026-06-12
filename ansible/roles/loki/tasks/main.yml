@@ -36,6 +36,7 @@
     - /etc/loki
     - /var/lib/loki
     - /var/lib/loki/chunks
+    - /var/lib/loki/rules
     - /var/lib/loki/compactor
 
 - name: deploy loki config
