@@ -9,4 +9,5 @@
     reach_peers: "{{ reach_all[inventory_hostname] | default({}) }}"
   roles:
     - node-exporter
+    - alloy
     - {role: net-reach, when: reach_peers | length > 0}

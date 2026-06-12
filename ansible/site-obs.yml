@@ -2,11 +2,11 @@
 #   ansible-playbook site-obs.yml
 - hosts: obs_box:probe
   become: true
-  roles: [node-exporter]
+  roles: [node-exporter, alloy]
 
 - hosts: obs_box
   become: true
-  roles: [prometheus, grafana]
+  roles: [prometheus, grafana, loki]
 
 # MQ-service exporters on the probe: client-mode mq_prometheus, one instance per
 # QM, each scraped by Prometheus on the mgmt plane (#172, #182). The role's build
