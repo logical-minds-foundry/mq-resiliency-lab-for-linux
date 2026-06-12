@@ -10,57 +10,75 @@
     state: directory
     mode: "0755"
 
-# 1. QM on the LUN (creation node only; Pacemaker owns the mount afterward).
-- name: mount the shared LUN (creation node)
-  ansible.builtin.shell: >
-    (mountpoint -q /mqshared ||
-    mount /dev/disk/by-label/MQSHARED /mqshared) &&
-    mkdir -p /mqshared/qmgrs /mqshared/log && chown -R mqm:mqm /mqshared
+# Re-run safety (#134): once Pacemaker owns the LUN (the mq_fs resource exists),
+# the one-time creation flow below must NOT run again — re-mounting, the MQSC
+# step's `endmqm -w`, and especially `umount /mqshared` would each disrupt the
+# filesystem/QM Pacemaker is actively managing and fail mq_fs. Detect that and
+# skip the whole creation block; the resource definitions further down are
+# individually idempotent.
+- name: detect whether Pacemaker already owns the LUN (QM already created)
+  ansible.builtin.command: pcs resource status mq_fs
   run_once: true
+  register: mq_fs_owned
   changed_when: false
-
-- name: create the queue manager on the LUN
-  ansible.builtin.command:
-    cmd: su mqm -c '/opt/mqm/bin/crtmqm -md /mqshared/qmgrs -ld /mqshared/log {{ qm_name }}'
-  run_once: true
-  register: crtmqm
-  failed_when: crtmqm.rc != 0 and 'already exists' not in (crtmqm.stderr | default(''))
-  changed_when: crtmqm.rc == 0
-
-# 2. MQSC config (lab posture, spec 1), then a clean stop.
-- name: apply MQSC config
-  ansible.builtin.shell: |
-    su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
-    printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
-    START LISTENER(L1414)\n
-    DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
-    ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
-    REFRESH SECURITY TYPE(CONNAUTH)\n
-    DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
-    su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
-  run_once: true
-  changed_when: true
-
-# 3. Teach the other nodes the QM definition, then release the mount.
-- name: capture the addmqinf command from the creation node
-  ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'"
-  run_once: true
-  register: addmqinf_cmd
-  changed_when: false
-
-- name: teach the QM definition to the other nodes
-  ansible.builtin.command:
-    cmd: "su mqm -c '{{ hostvars[groups['pcmk_a'][0]].addmqinf_cmd.stdout }}'"
-  when: inventory_hostname != groups['pcmk_a'][0]
-  register: addmqinf
-  failed_when: addmqinf.rc != 0 and 'already' not in (addmqinf.stderr | default(''))
-  changed_when: addmqinf.rc == 0
-
-- name: release the LUN on the creation node (Pacemaker owns it now)
-  ansible.builtin.command: umount /mqshared
-  run_once: true
   failed_when: false
-  changed_when: true
+
+# 1-3. Create the QM on the LUN, teach the other nodes, release the mount.
+#      First-time only — skipped entirely once Pacemaker owns the LUN (#134).
+- name: create and hand over the queue manager (first-time only)
+  when: hostvars[groups['pcmk_a'][0]].mq_fs_owned.rc != 0
+  block:
+    # 1. QM on the LUN (creation node only; Pacemaker owns the mount afterward).
+    - name: mount the shared LUN (creation node)
+      ansible.builtin.shell: >
+        (mountpoint -q /mqshared ||
+        mount /dev/disk/by-label/MQSHARED /mqshared) &&
+        mkdir -p /mqshared/qmgrs /mqshared/log && chown -R mqm:mqm /mqshared
+      run_once: true
+      changed_when: false
+
+    - name: create the queue manager on the LUN
+      ansible.builtin.command:
+        cmd: su mqm -c '/opt/mqm/bin/crtmqm -md /mqshared/qmgrs -ld /mqshared/log {{ qm_name }}'
+      run_once: true
+      register: crtmqm
+      failed_when: crtmqm.rc != 0 and 'already exists' not in (crtmqm.stderr | default(''))
+      changed_when: crtmqm.rc == 0
+
+    # 2. MQSC config (lab posture, spec 1), then a clean stop.
+    - name: apply MQSC config
+      ansible.builtin.shell: |
+        su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
+        printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
+        START LISTENER(L1414)\n
+        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
+        ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
+        REFRESH SECURITY TYPE(CONNAUTH)\n
+        DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
+        su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
+      run_once: true
+      changed_when: true
+
+    # 3. Teach the other nodes the QM definition, then release the mount.
+    - name: capture the addmqinf command from the creation node
+      ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'"
+      run_once: true
+      register: addmqinf_cmd
+      changed_when: false
+
+    - name: teach the QM definition to the other nodes
+      ansible.builtin.command:
+        cmd: "su mqm -c '{{ hostvars[groups['pcmk_a'][0]].addmqinf_cmd.stdout }}'"
+      when: inventory_hostname != groups['pcmk_a'][0]
+      register: addmqinf
+      failed_when: addmqinf.rc != 0 and 'already' not in (addmqinf.stderr | default(''))
+      changed_when: addmqinf.rc == 0
+
+    - name: release the LUN on the creation node (Pacemaker owns it now)
+      ansible.builtin.command: umount /mqshared
+      run_once: true
+      failed_when: false
+      changed_when: true
 
 # 4. Disabled systemd unit on every node (Pacemaker is the only starter).
 #    ExecStop uses `endmqm -w` (clean, blocking) so Pacemaker gets the exit
