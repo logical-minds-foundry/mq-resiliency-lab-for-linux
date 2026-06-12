@@ -43,8 +43,8 @@ def test_real_topology_renders_a_valid_dashboard():
     dash = json.loads(lab_dashboard())  # raises DashboardError on an unknown ROWS group
     assert dash["uid"] == DASHBOARD_UID
     row_titles = [p["title"] for p in dash["panels"] if p["type"] == "row"]
-    # every curated VM row is present against the real groups
-    assert "VMs · SAN" in row_titles and "VMs · RDQM · B" in row_titles
+    # every curated VM row is present against the real groups (SAN folds into PCMK)
+    assert "VMs · PCMK · A" in row_titles and "VMs · RDQM · B" in row_titles
 
 
 def test_network_sections_cover_exactly_the_declared_networks():
