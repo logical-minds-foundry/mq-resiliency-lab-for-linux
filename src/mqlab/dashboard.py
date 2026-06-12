@@ -25,9 +25,11 @@ DASHBOARD_UID = "lab-fleet-node"  # pinned — referenced by mqlab obs open + do
 # Curated, lab-shaped order. Each row rolls up one-or-more atomic groups; SAN
 # pairs both site SANs, the cluster arms split by site.
 ROWS: list[tuple[str, list[str]]] = [
-    ("SAN", ["san_a", "san_b"]),
-    ("PCMK · A", ["pcmk_a"]),
-    ("PCMK · B", ["pcmk_b"]),
+    # SAN folds into its PCMK site row — the iSCSI SAN is part of that arm's HA
+    # setup, so each site shows 4 nodes (san + 3 cluster) as one unit (no separate
+    # SAN row). Topology groups are unchanged; this is display grouping only.
+    ("PCMK · A", ["pcmk_a", "san_a"]),
+    ("PCMK · B", ["pcmk_b", "san_b"]),
     ("RDQM · A", ["rdqm_a"]),
     ("RDQM · B", ["rdqm_b"]),
     ("Standalone", ["qm", "dtcc", "client"]),
