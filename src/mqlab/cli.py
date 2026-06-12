@@ -223,21 +223,27 @@ def obs_net_state() -> None:
         deps.transcript.close()
 
 
-@obs_app.command("reach-peers")
-def obs_reach_peers() -> None:
-    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
+def _render_reach_peers() -> Path:
+    """Write build/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json
 
     import yaml as _yaml
 
     from mqlab.netstate import net_peers
 
+    topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    path = repo_root() / "build" / "obs" / "reach-peers.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
+    return path
+
+
+@obs_app.command("reach-peers")
+def obs_reach_peers() -> None:
+    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
     deps = build_deps("obs-reach-peers", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
-        topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-        path = repo_root() / "build" / "obs" / "reach-peers.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
+        path = _render_reach_peers()
         deps.renderer.command(f"render -> {path}")
         deps.transcript.write(f"render -> {path}")
     finally:
@@ -339,6 +345,62 @@ def obs_open() -> None:
     typer.echo("     # the <host-alias> is the ssh.config 'Host' line — Lima turns the")
     typer.echo("     # instance's dots into hyphens (lima-vergil-user-...-mq-cluster-tooling)")
     typer.echo("  3. browse http://localhost:3000/d/lab-fleet-node   (admin / admin)")
+
+
+@obs_app.command("instrument")
+def obs_instrument(setup: str) -> None:
+    """Instrument a setup's guests — install node_exporter (+ net-reach) via observability.yml."""
+    _instrument(setup)
+
+
+def _instrument(setup_name: str) -> None:
+    # Fleet telemetry lives in observability.yml (hosts: all); per-setup provision
+    # playbooks don't install node_exporter. This runs that play limited to the
+    # setup, so its guests start reporting to Prometheus. Mirrors _provision.
+    setup = lab_setups().get(setup_name)
+    if setup is None:
+        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
+        raise typer.Exit(code=2)
+    members = setup_members(setup_name) or []
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("obs-instrument", timestamp)
+    try:
+        states = _probe_states(deps)
+        down = [m for m in members if classify(states, m) != RUNNING]
+        if down:
+            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
+            deps.renderer.note(note)
+            deps.transcript.write(note)
+            raise typer.Exit(code=3)
+        # Render the inventory the play resolves through and the reach-peers map
+        # the net-reach role consumes, then run the play limited to this setup.
+        inv = inventory_path()
+        inv.parent.mkdir(parents=True, exist_ok=True)
+        inv.write_text(lab_inventory())
+        deps.renderer.note(f"rendered {inv}")
+        deps.transcript.write(f"rendered {inv}")
+        peers = _render_reach_peers()
+        deps.renderer.note(f"rendered {peers}")
+        deps.transcript.write(f"rendered {peers}")
+        step = CommandStep(
+            f"{setup_name} instrument",
+            Command(
+                ["uv", "run", "ansible-playbook", "observability.yml", "--limit", setup_name],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
 
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
