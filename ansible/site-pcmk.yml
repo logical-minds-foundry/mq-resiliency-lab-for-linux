@@ -1,5 +1,40 @@
 # The Pacemaker/SAN arm (Phase D). Site A; site B plays land with the DR
 # task. Run: uv run ansible-playbook site-pcmk.yml [--limit ...]
+
+# STONITH prerequisite (#133): fence_virsh ssh's from each cluster node to the
+# hypervisor (this VM, the libvirt host) as the fence user, then virsh-fences a
+# domain. That needs the keypair to exist AND its public half authorized for the
+# fence user here. Both are hypervisor-local, and the fence user is the user
+# running this play (== fence_hypervisor_user). Without it fence_virsh fails
+# "Permission denied (publickey)", STONITH never starts, and the cluster can
+# never fence or recover. The pcmk-stonith role copies the private key to the
+# nodes; this play generates it (if absent) and authorizes the public half.
+- name: fence keypair + hypervisor authorization (STONITH prerequisite)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fence_key: "{{ playbook_dir }}/../build/fence_key"
+  tasks:
+    - name: generate the fence keypair once (gitignored, under build/)
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -N "" -C "fence_virsh@lab" -f "{{ fence_key }}"
+        creates: "{{ fence_key }}"
+
+    - name: ensure the fence user's ~/.ssh exists
+      ansible.builtin.file:
+        path: ~/.ssh
+        state: directory
+        mode: "0700"
+
+    - name: authorize the fence public key for fence_virsh on the hypervisor
+      ansible.builtin.lineinfile:
+        path: ~/.ssh/authorized_keys
+        line: "{{ lookup('file', fence_key + '.pub') }}"
+        create: true
+        mode: "0600"
+        state: present
+
 - hosts: pcmk_san_ha
   become: true
   tasks:
