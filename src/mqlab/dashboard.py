@@ -106,7 +106,7 @@ def _net_health_panel(net: str, y: int) -> dict[str, Any]:
     return {
         "type": "stat",
         "title": f"{short} — health",
-        "gridPos": {"h": 4, "w": 4, "x": 0, "y": y},
+        "gridPos": {"h": 6, "w": 4, "x": 0, "y": y},
         "fieldConfig": {
             "defaults": {
                 "mappings": [
@@ -135,7 +135,7 @@ def _net_throughput_panel(net: str, direction: str, x: int, y: int) -> dict[str,
     return {
         "type": "timeseries",
         "title": f"{short} — {direction}",
-        "gridPos": {"h": 4, "w": 10, "x": x, "y": y},
+        "gridPos": {"h": 6, "w": 10, "x": x, "y": y},
         "targets": [{"expr": f'rate(node_network_{metric}_bytes_total{{device="{bridge}"}}[1m])'}],
     }
 
@@ -169,7 +169,7 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
             panels.append(_net_health_panel(net, y))
             panels.append(_net_throughput_panel(net, "rx", 4, y))
             panels.append(_net_throughput_panel(net, "tx", 14, y))
-            y += 4
+            y += 6
 
     return {
         "title": "Lab — Layered Status",
