@@ -200,3 +200,102 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
     assert result.exit_code == 0
     data = json.loads((tmp_path / "build" / "obs" / "reach-peers.json").read_text())
     assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"
+
+
+# --- instrument: install node_exporter (+ net-reach) on a setup's running guests ---
+
+_VIRSH = ["virsh", "-c", "qemu:///system"]
+
+_INSTRUMENT_TOPO = (
+    "nodes:\n"
+    "  san-a: {nics: {net-mgmt: 10.50.0.5, net-hb-a: 172.16.1.5}}\n"
+    "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51, net-hb-a: 172.16.1.51}}\n"
+    "  pcmk-a2: {nics: {net-mgmt: 10.50.0.52, net-hb-a: 172.16.1.52}}\n"
+    "groups:\n"
+    "  san_a: [san-a]\n"
+    "  pcmk_a: [pcmk-a1, pcmk-a2]\n"
+    "setups:\n"
+    "  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
+)
+
+
+def _probe(states):
+    """A scripted `virsh list --all` result placing each guest in a given state."""
+    lines = [" Id   Name              State", "------------------------------------"]
+    lines += [f" -    lab_{g}    {st}" for g, st in states.items()]
+    return ScriptedResult(lines)
+
+
+def test_obs_instrument_renders_then_runs_observability_playbook(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(_INSTRUMENT_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"san-a": "running", "pcmk-a1": "running", "pcmk-a2": "running"}),
+            ScriptedResult([]),  # ansible-playbook observability.yml
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "instrument", "pcmk_san_ha"])
+
+    assert result.exit_code == 0
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == [*_VIRSH, "list", "--all"]
+    play = runner.recorded[-1]
+    assert play.argv == [
+        "uv",
+        "run",
+        "ansible-playbook",
+        "observability.yml",
+        "--limit",
+        "pcmk_san_ha",
+    ]
+    assert str(play.cwd).endswith("/ansible")
+    # renders the inventory the play resolves through + the reach-peers map net-reach reads
+    assert (tmp_path / "build" / "inventory.ini").exists()
+    assert (tmp_path / "build" / "obs" / "reach-peers.json").exists()
+
+
+def test_obs_instrument_unknown_setup_exits_2(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(_INSTRUMENT_TOPO)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "instrument", "nope"])
+
+    assert result.exit_code == 2
+    assert "no lab setup named" in result.output
+
+
+def test_obs_instrument_members_down_advises_and_exits_3(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(_INSTRUMENT_TOPO)
+    runner = RecordingRunner(results=[_probe({"san-a": "running"})])  # pcmk-a* absent
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "instrument", "pcmk_san_ha"])
+
+    assert result.exit_code == 3
+    # only the probe ran — no playbook against down guests
+    assert [c.argv for c in runner.recorded] == [[*_VIRSH, "list", "--all"]]
+
+
+def test_obs_instrument_playbook_failure_propagates_exit_code(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "lab" / "topology.yaml").write_text(_INSTRUMENT_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"san-a": "running", "pcmk-a1": "running", "pcmk-a2": "running"}),
+            ScriptedResult([], exit_code=4),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "instrument", "pcmk_san_ha"])
+
+    assert result.exit_code == 4
