@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Distributed MQ Architecture — two businesses, QM-to-QM across a WAN (#145)</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background:#1d1d1f; color:#f5f5f7; margin:0 auto; max-width:1180px;
+         padding:28px 32px; line-height:1.5;
+         font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  h1 { font-size:1.7rem; margin:0 0 6px; }
+  h2 { font-size:1.4rem; font-weight:600; margin:0 0 .4rem; }
+  h3 { font-size:1.1rem; font-weight:600; margin:0 0 .25rem; }
+  .subtitle { color:#a1a1a6; margin:0 0 1.2rem; font-size:.95rem; }
+  .label { font-size:.7rem; color:#a1a1a6; text-transform:uppercase; letter-spacing:.05em; margin-bottom:.5rem; }
+  .mockup { background:#2d2d2f; border:1px solid #424245; border-radius:12px; overflow:hidden; margin-bottom:1.5rem; }
+  .mockup-header { background:#3d3d3f; padding:.5rem 1rem; font-size:.75rem; color:#a1a1a6; border-bottom:1px solid #424245; }
+  .mockup-body { padding:1.5rem; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
+  table td, table th { padding:2px 6px; }
+  hr { border:none; border-top:1px solid #424245; margin:2.6rem 0; }
+  .intro { color:#a1a1a6; font-size:.9rem; border-left:3px solid #4ea1ff; padding:6px 14px; margin-bottom:1.6rem; }
+  .docnav { font-size:.85rem; margin-bottom:2rem; }
+  .docnav a { color:#4ea1ff; margin-right:1.1rem; text-decoration:none; }
+  .docnav a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+<h1>Distributed MQ Architecture — diagram set</h1>
+<div class="intro">
+  Companion diagrams for <code>docs/specs/2026-06-13-distributed-mq-architecture-design.md</code>
+  (issue&nbsp;#145). Two businesses, each with its own queue manager, exchanging messages over
+  sender/receiver channels across a WAN; HA/DR is instrumented on <b>our</b> queue manager only.
+  These are the glass-box explanation of the architecture — built to be understood without MQ
+  expertise.
+</div>
+<div class="docnav">
+  <a href="#overview">① Overview</a>
+  <a href="#network">② Network topology</a>
+  <a href="#twovip">③ Two-site / two-VIP</a>
+  <a href="#lifecycle">④ HA/DR lifecycle</a>
+  <a href="#flow">⑤ Message-flow plumbing</a>
+</div>
+
+<section id="overview">
+<h2>① The architecture — two businesses across a WAN</h2>
+<p class="subtitle">Service side cheats: one VM runs the DTCC queue manager <i>and</i> the responder (bindings, local). App side can't collapse — apps are remote clients, never on our HA/DR cluster.</p>
+<div class="mockup">
+  <div class="mockup-header">app → our HA/DR QM  ⇄ (WAN) ⇄  their service QM (+responder, bindings)</div>
+  <div class="mockup-body">
+    <div style="display:flex; align-items:stretch; gap:0; font-size:13px;">
+      <div style="flex:1.1; border:2px solid #4ea1ff; border-radius:10px; padding:14px; background:rgba(78,161,255,0.07);">
+        <div class="label" style="color:#4ea1ff;">BUSINESS A · US — the instrumented HA/DR (the whole point)</div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+          <div style="border:1px solid #888; border-radius:8px; padding:10px; text-align:center; min-width:115px;">
+            <div style="font-weight:700;">APP VM</div>
+            <div style="opacity:.7; font-size:11px;">requester <b>app</b><br>(separate VM — apps are<br>remote clients)</div>
+          </div>
+          <div style="text-align:center; min-width:80px; opacity:.85;">──client──▶<br><span style="font-size:10px; opacity:.7;">SVRCONN<br>→ VIP</span></div>
+          <div style="border:2px solid #4ea1ff; border-radius:8px; padding:10px; text-align:center; min-width:150px; background:rgba(78,161,255,0.12);">
+            <div style="font-weight:700;">HA/DR QUEUE MANAGER</div>
+            <div style="font-size:11px; opacity:.8;">QMPCMK (or QMRDQM)</div>
+            <div style="margin-top:8px; display:flex; flex-direction:column; gap:3px;">
+              <div style="background:#2a3b52; border-radius:3px; padding:2px;">node a1</div>
+              <div style="background:#2a3b52; border-radius:3px; padding:2px;">node a2</div>
+              <div style="background:#2a3b52; border-radius:3px; padding:2px;">node a3</div>
+              <div style="background:#3a2f1a; border-radius:3px; padding:2px; font-size:10px;">SAN / DRBD → DR site</div>
+            </div>
+            <div style="margin-top:6px; font-size:10px; color:#4ea1ff;">moves: node→node (HA) · site→site (DR)</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 6px; min-width:165px;">
+        <div style="border-left:3px dashed #c0c0c0; height:50px;"></div>
+        <div style="text-align:center; padding:8px; font-size:11px;">
+          <div style="font-weight:700; letter-spacing:1px;">~ WAN ~</div>
+          <div style="opacity:.7;">internet / private link</div>
+          <div style="margin-top:6px; color:#ffcf6b;">══ SENDER / RECEIVER ══<br>══ channels (both ways) ══</div>
+          <div style="margin-top:5px; opacity:.7; font-size:10px;">+ xmitqs + remote-queue defs</div>
+          <div style="margin-top:8px; font-size:10px; opacity:.6; border-top:1px dotted #666; padding-top:5px;">today: just separate networks<br><i>future:</i> traffic-shape (throttle/drop)<br>to simulate WAN degradation</div>
+        </div>
+        <div style="border-left:3px dashed #c0c0c0; height:50px;"></div>
+      </div>
+      <div style="flex:.9; border:2px dashed #999; border-radius:10px; padding:14px; background:rgba(255,255,255,0.03);">
+        <div class="label" style="color:#bbb;">BUSINESS B · DTCC — black box (NOT our HA/DR)</div>
+        <div style="margin-top:12px;">
+          <div style="border:2px solid #999; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-weight:700; letter-spacing:.5px;">DTCC SERVICE VM &nbsp;<span style="font-size:10px; opacity:.6;">(one box)</span></div>
+            <div style="margin-top:10px; border:1px solid #999; border-radius:6px; padding:8px; background:#33342f;">
+              <div style="font-weight:700;">SERVICE QUEUE MANAGER</div>
+              <div style="font-size:11px; opacity:.8;">QMDTCC — standalone, no HA/DR</div>
+            </div>
+            <div style="margin:6px 0; opacity:.8; font-size:11px;">▲ bindings (local, no client)</div>
+            <div style="border:1px solid #888; border-radius:6px; padding:8px;">
+              <div style="font-weight:700;">responder <b>service</b></div>
+              <div style="font-size:11px; opacity:.7;">processes requests, replies</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px; padding:10px; border-top:1px solid #444; font-size:12px; opacity:.85;">
+      <b>Linear flow:</b>&nbsp; APP VM → <span style="color:#4ea1ff;">our HA/DR QM</span> → <span style="color:#ffcf6b;">sender + xmitq</span> ⇢ WAN ⇢ <span style="color:#ffcf6b;">receiver</span> → DTCC QM → responder (bindings) → reply travels back the same path.
+      <br><b>The real HA/DR test:</b> our QM fails over (node, then site) <i>while the cross-WAN channel is live</i> — channel re-establishes, staged xmitq messages survive &amp; flush, no loss / no dupes.
+    </div>
+  </div>
+</div>
+</section>
+
+<hr/>
+
+<section id="network">
+<h2>② Network topology &amp; trust boundaries</h2>
+<p class="subtitle">Which VM sits on which network, and which networks cross which boundary. The whole point: exactly one segment crosses each boundary — <b>net-ext</b> between the two businesses, <b>net-wan</b> between our two sites. Everything else is per-site and internal.</p>
+<div class="mockup">
+  <div class="mockup-header">segment legend — purpose &amp; boundary crossed</div>
+  <div class="mockup-body" style="font-size:11px; padding:10px 14px;">
+    <table style="width:100%; border-collapse:collapse;">
+      <tr style="opacity:.7; text-align:left;"><th>network</th><th>CIDR</th><th>purpose</th><th>crosses</th></tr>
+      <tr><td><b style="color:#7ee0a0;">net-ext</b> 🆕</td><td>10.60.0.0/24</td><td>inter-business WAN ("the internet")</td><td><b style="color:#ff6b6b;">Business A ⇄ B</b></td></tr>
+      <tr><td><b style="color:#ffcf6b;">net-wan</b></td><td>10.99.0.0/24</td><td>intra-org cross-site DRBD replication</td><td><b style="color:#ffcf6b;">Site A ⇄ Site B</b></td></tr>
+      <tr><td>net-data-a / -b</td><td>10.10.1/2.0/24</td><td>internal service plane (app ⇄ QM VIP)</td><td>per-site (internal)</td></tr>
+      <tr><td>net-san-a / -b</td><td>10.40.1/2.0/24</td><td>iSCSI SAN (shared storage)</td><td>per-site (internal)</td></tr>
+      <tr><td>net-hb-a / -b</td><td>172.16.1/2.0/24</td><td>Corosync heartbeat</td><td>per-site (internal)</td></tr>
+      <tr><td style="opacity:.6;">net-mgmt</td><td style="opacity:.6;">10.50.0.0/24</td><td style="opacity:.6;">out-of-band lab control (Ansible) — models no real path</td><td style="opacity:.6;">spans all (OOB)</td></tr>
+    </table>
+  </div>
+</div>
+<div class="mockup">
+  <div class="mockup-header">topology — app · our two-site HA/DR QM · WAN · DTCC</div>
+  <div class="mockup-body" style="font-size:11.5px;">
+    <div style="display:flex; align-items:stretch; gap:0;">
+      <div style="flex:1.5; border:2px solid #4ea1ff; border-radius:10px; padding:10px; background:rgba(78,161,255,0.06);">
+        <div class="label" style="color:#4ea1ff;">BUSINESS A · US</div>
+        <div style="border:1px solid #888; border-radius:7px; padding:7px; margin-top:6px; display:flex; justify-content:space-between; align-items:center;">
+          <div><b>app VM</b> <span style="opacity:.65; font-size:10px;">requester (client)</span></div>
+          <div style="font-size:10px; color:#9cd; text-align:right;">on net-data-a <code>.10.1.60</code><br>+ net-data-b <code>.10.2.60</code> → reaches both site VIPs</div>
+        </div>
+        <div style="display:flex; gap:0; margin-top:8px; align-items:stretch;">
+          <div style="flex:1; border:2px solid #4ea1ff; border-radius:8px; padding:7px; background:rgba(78,161,255,0.1);">
+            <div style="font-weight:700; font-size:11px;">SITE A <span style="color:#7ee0a0; font-size:10px;">(active)</span></div>
+            <div style="font-size:10px; margin-top:4px;">pcmk-a1/a2/a3 · san-a</div>
+            <div style="margin-top:5px; border:1px solid #7ee0a0; border-radius:5px; padding:4px; font-size:10px;">
+              VIP-data <code style="color:#7ee0a0;">10.10.1.200</code> <span style="opacity:.6;">(net-data-a)</span><br>
+              VIP-ext &nbsp;<code style="color:#7ee0a0;">10.60.0.10</code> <span style="opacity:.6;">(net-ext)</span> 🆕
+            </div>
+            <div style="font-size:9px; opacity:.6; margin-top:4px;">net-data-a · net-san-a · net-hb-a</div>
+          </div>
+          <div style="min-width:74px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+            <div style="font-size:10px; color:#ffcf6b; font-weight:700;">net-wan</div>
+            <div style="font-size:14px; color:#ffcf6b;">⇄</div>
+            <div style="font-size:9px; opacity:.7;">DRBD async<br>replication</div>
+            <div style="font-size:8px; opacity:.5;">10.99.0.0/24</div>
+          </div>
+          <div style="flex:1; border:2px dashed #4ea1ff; border-radius:8px; padding:7px; background:rgba(78,161,255,0.04);">
+            <div style="font-weight:700; font-size:11px;">SITE B <span style="opacity:.6; font-size:10px;">(DR standby)</span></div>
+            <div style="font-size:10px; margin-top:4px;">pcmk-b1/b2/b3 · san-b</div>
+            <div style="margin-top:5px; border:1px dashed #888; border-radius:5px; padding:4px; font-size:10px; opacity:.85;">
+              VIP-data <code>10.10.2.200</code> <span style="opacity:.6;">(net-data-b)</span><br>
+              VIP-ext &nbsp;<code>10.60.0.20</code> <span style="opacity:.6;">(net-ext)</span> 🆕
+            </div>
+            <div style="font-size:9px; opacity:.6; margin-top:4px;">net-data-b · net-san-b · net-hb-b</div>
+            <div style="font-size:9px; color:#ff9d6b; margin-top:3px;">VIPs inactive until DR cutover</div>
+          </div>
+        </div>
+        <div style="font-size:9px; opacity:.55; margin-top:6px;">+ lab instrumentation: obs / mon-probe (net-mgmt; probe also on net-data-a/-b)</div>
+      </div>
+      <div style="min-width:118px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 4px; text-align:center;">
+        <div style="border-left:3px dashed #ff6b6b; height:30px;"></div>
+        <div style="border:2px dashed #7ee0a0; border-radius:50px; padding:10px 8px; background:rgba(126,224,160,0.08);">
+          <div style="font-weight:700; color:#7ee0a0; font-size:11px;">net-ext</div>
+          <div style="font-size:9px; opacity:.75;">inter-business<br>WAN</div>
+          <div style="font-size:8px; opacity:.6;">10.60.0.0/24</div>
+          <div style="font-size:9px; margin-top:5px; color:#7ee0a0;">.10 ⇄ .20 ⇄ .50</div>
+        </div>
+        <div style="font-size:9px; color:#ff6b6b; font-weight:700; margin-top:4px;">⟵ TRUST BOUNDARY ⟶</div>
+        <div style="border-left:3px dashed #ff6b6b; height:30px;"></div>
+      </div>
+      <div style="flex:.85; border:2px dashed #999; border-radius:10px; padding:10px; background:rgba(255,255,255,0.03);">
+        <div class="label" style="color:#bbb;">BUSINESS B · DTCC</div>
+        <div style="border:2px solid #999; border-radius:8px; padding:9px; margin-top:6px; text-align:center;">
+          <div style="font-weight:700;">DTCC SERVICE VM</div>
+          <div style="font-size:10px; color:#9cd; margin-top:3px;">on net-ext <code>10.60.0.50</code></div>
+          <div style="margin-top:7px; border:1px solid #999; border-radius:5px; padding:5px; background:#33342f; font-size:11px;"><b>QMDTCC</b> <span style="opacity:.6; font-size:10px;">standalone</span></div>
+          <div style="font-size:10px; opacity:.8; margin:4px 0;">▲ bindings</div>
+          <div style="border:1px solid #888; border-radius:5px; padding:5px; font-size:11px;"><b>service</b> <span style="opacity:.6; font-size:10px;">responder</span></div>
+        </div>
+        <div style="font-size:9px; opacity:.6; margin-top:6px;">no HA/DR · no internal planes · only reachable across net-ext</div>
+      </div>
+    </div>
+    <div style="margin-top:8px; border:1px dotted #777; border-radius:6px; padding:5px 10px; font-size:10px; opacity:.6; text-align:center;">
+      net-mgmt 10.50.0.0/24 — out-of-band lab control plane (Ansible reaches every VM here) · models no real data path
+    </div>
+    <div style="margin-top:10px; padding-top:8px; border-top:1px solid #444; font-size:11px;">
+      <b>Reads as:</b> the app and DTCC both connect <i>to our QM</i>, but over <b>different</b> networks — the app over our internal <span style="color:#9cd;">net-data</span> VIP, DTCC over the <span style="color:#7ee0a0;">net-ext</span> partner VIP. Each site owns one of each VIP; they float with the QM and only the active site's are live. <b style="color:#ff6b6b;">net-ext</b> is the only business-boundary crossing; <b style="color:#ffcf6b;">net-wan</b> is the only site-boundary crossing.
+    </div>
+  </div>
+</div>
+</section>
+
+<hr/>
+
+<section id="twovip">
+<h2>③ Two sites, two VIPs — the resilience model</h2>
+<p class="subtitle">Our HA/DR QM exists across TWO data centers with TWO different VIPs. HA floats the VIP <i>within</i> a site; DR moves the QM to the <i>other</i> site's VIP. Everything that connects to it — the app AND the DTCC sender channel — must carry a CONNAME list of <b>both</b> VIPs.</p>
+<div class="mockup">
+  <div class="mockup-header">app &amp; DTCC-channel both use CONNAME(siteA-VIP, siteB-VIP) → follow the QM across HA and DR</div>
+  <div class="mockup-body">
+    <div style="display:flex; align-items:stretch; gap:0; font-size:12.5px;">
+      <div style="flex:1.25; border:2px solid #4ea1ff; border-radius:10px; padding:12px; background:rgba(78,161,255,0.07);">
+        <div class="label" style="color:#4ea1ff;">BUSINESS A · US — instrumented HA/DR (one QM, two sites)</div>
+        <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+          <div style="border:1px solid #888; border-radius:8px; padding:9px; text-align:center; min-width:120px;">
+            <div style="font-weight:700;">APP VM</div>
+            <div style="opacity:.7; font-size:11px;">requester <b>app</b></div>
+            <div style="margin-top:6px; font-size:10px; color:#7ee0a0;">CONNAME(<br>10.10.1.200,<br>10.10.2.200)</div>
+          </div>
+          <div style="text-align:center; min-width:50px; opacity:.7; font-size:18px;">⤜</div>
+          <div style="flex:1;">
+            <div style="border:2px solid #4ea1ff; border-radius:8px; padding:8px; background:rgba(78,161,255,0.12);">
+              <div style="font-weight:700;">SITE A &nbsp;<span style="color:#7ee0a0; font-size:11px;">VIP 10.10.1.200</span> <span style="font-size:10px; opacity:.6;">(net-data-a)</span></div>
+              <div style="font-size:10px; opacity:.7;">pcmk-a1/a2/a3 + SAN — VIP floats node→node (HA)</div>
+            </div>
+            <div style="text-align:center; font-size:11px; color:#ffcf6b; padding:3px;">↕ DRBD async replication</div>
+            <div style="border:2px dashed #4ea1ff; border-radius:8px; padding:8px; background:rgba(78,161,255,0.05);">
+              <div style="font-weight:700;">SITE B (DR) &nbsp;<span style="color:#7ee0a0; font-size:11px;">VIP 10.10.2.200</span> <span style="font-size:10px; opacity:.6;">(net-data-b)</span></div>
+              <div style="font-size:10px; opacity:.7;">pcmk-b1/b2/b3 + SAN — QM lands here on DR cutover</div>
+            </div>
+            <div style="text-align:center; font-size:10px; opacity:.6; margin-top:3px;">QM active on ONE site at a time · QMPCMK</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 6px; min-width:150px;">
+        <div style="border-left:3px dashed #c0c0c0; height:55px;"></div>
+        <div style="text-align:center; padding:6px; font-size:11px;">
+          <div style="font-weight:700;">~ WAN ~</div>
+          <div style="opacity:.7;">dedicated net (net-ext)</div>
+          <div style="margin-top:5px; color:#ffcf6b;">SENDER/RECEIVER<br>channels</div>
+          <div style="margin-top:5px; font-size:10px; color:#7ee0a0;">DTCC sender →<br>CONNAME(<br>10.60.0.10,<br>10.60.0.20)</div>
+          <div style="margin-top:5px; font-size:9px; opacity:.55;">future: throttle/drop</div>
+        </div>
+        <div style="border-left:3px dashed #c0c0c0; height:55px;"></div>
+      </div>
+      <div style="flex:.8; border:2px dashed #999; border-radius:10px; padding:12px; background:rgba(255,255,255,0.03);">
+        <div class="label" style="color:#bbb;">BUSINESS B · DTCC — black box, one VM, no HA/DR</div>
+        <div style="margin-top:10px; border:2px solid #999; border-radius:8px; padding:10px; text-align:center;">
+          <div style="font-weight:700;">DTCC SERVICE VM</div>
+          <div style="margin-top:8px; border:1px solid #999; border-radius:6px; padding:7px; background:#33342f;">
+            <div style="font-weight:700;">SERVICE QM (QMDTCC)</div>
+            <div style="font-size:10px; opacity:.7;">single VIP (no failover)</div>
+          </div>
+          <div style="margin:5px 0; opacity:.8; font-size:11px;">▲ bindings</div>
+          <div style="border:1px solid #888; border-radius:6px; padding:7px;">
+            <div style="font-weight:700;">responder <b>service</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px; padding:9px; border-top:1px solid #444; font-size:11.5px; opacity:.88;">
+      <b>Why this matters:</b> HA failover (node→node) keeps the same VIP — <code>MQCNO_RECONNECT</code> rides it. <b>DR cutover (site→site) changes the VIP</b> — only a <span style="color:#7ee0a0;">CONNAME list of both VIPs</span> lets the app AND the DTCC channel follow the QM to the other DC. Enforced underneath by DRBD single-primary + Pacemaker: the QM only starts where storage is promoted, so the two sites are never both live.
+    </div>
+  </div>
+</div>
+</section>
+
+<hr/>
+
+<section id="lifecycle">
+<h2>④ HA vs DR lifecycle — the operational semantics</h2>
+<p class="subtitle">HA is automated and in-site. DR is a deliberate, human-triggered, heavily-automated <b>single command</b> across sites — and so is failback. The hard invariant: apps can never reach a live QM on <i>both</i> sites at once.</p>
+<div class="mockup">
+  <div class="mockup-header">QMPCMK lifecycle — node→node is free; site→site costs a big red button (twice)</div>
+  <div class="mockup-body" style="font-size:12.5px;">
+    <div style="display:flex; align-items:stretch; gap:10px;">
+      <div style="flex:1; border:2px solid #7ee0a0; border-radius:10px; padding:12px; background:rgba(126,224,160,0.08);">
+        <div style="font-weight:700; color:#7ee0a0;">① NORMAL</div>
+        <div style="margin-top:6px; font-size:11.5px;">QM active on <b>SITE A</b> · VIP-A <code>10.10.1.200</code></div>
+        <div style="margin-top:8px; padding:6px; border:1px dashed #7ee0a0; border-radius:6px; font-size:10.5px;">
+          <b>HA event (node fails):</b> Pacemaker moves QM to another Site-A node. <b>Same VIP-A.</b> <code>MQCNO_RECONNECT</code> rides it.<br><span style="color:#7ee0a0;">⟲ automated · zero-touch · stays in ①</span>
+        </div>
+        <div style="margin-top:6px; font-size:10.5px; opacity:.75;">SITE B = warm standby · DRBD <b>secondary</b> · QM <b>not running</b></div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:96px; text-align:center;">
+        <div style="color:#ff6b6b; font-weight:700; font-size:11px;">🔴 BIG RED BUTTON</div>
+        <div style="font-size:20px;">▶</div>
+        <div style="font-size:10px; opacity:.7;">DR FAILOVER<br>(manual · 1 command)</div>
+        <div style="font-size:9.5px; opacity:.55; margin-top:4px;">both sites effectively<br>DOWN during transition<br>apps reconnect</div>
+      </div>
+      <div style="flex:1; border:2px solid #ffcf6b; border-radius:10px; padding:12px; background:rgba(255,207,107,0.08);">
+        <div style="font-weight:700; color:#ffcf6b;">② DR MODE</div>
+        <div style="margin-top:6px; font-size:11.5px;">QM active on <b>SITE B</b> · VIP-B <code>10.10.2.200</code></div>
+        <div style="margin-top:8px; padding:6px; border:1px dashed #ffcf6b; border-radius:6px; font-size:10.5px;">
+          DR command: demote/abandon A → <b>promote B's DRBD</b> → start QM on B → VIP-B live. App's <code>CONNAME(A,B)</code> finds B.
+        </div>
+        <div style="margin-top:6px; font-size:10.5px; opacity:.85;"><b>SITE A under repair.</b> Comes back as standby only — DRBD stays <b>secondary on A</b>, so the QM <i>cannot</i> start there. HA still protects B in-site.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:96px; text-align:center;">
+        <div style="color:#ff6b6b; font-weight:700; font-size:11px;">🔴 BIG RED BUTTON</div>
+        <div style="font-size:20px;">◀</div>
+        <div style="font-size:10px; opacity:.7;">FAILBACK<br>(separate managed outage)</div>
+        <div style="font-size:9.5px; opacity:.55; margin-top:4px;">quiesce B → demote B →<br>promote A → start QM on A<br>apps reconnect → home to A</div>
+      </div>
+    </div>
+    <div style="margin-top:14px; padding:9px; border-top:2px solid #ff6b6b; font-size:12px;">
+      <b style="color:#ff6b6b;">INVARIANT — never both live:</b> at no instant may apps reach a running QM on both sites. <b>Enforced by DRBD single-primary + Pacemaker</b> (the QM only starts where the volume is promoted), <i>not</i> by the client. The CONNAME list is just discovery; the storage layer is the lock.
+    </div>
+  </div>
+</div>
+</section>
+
+<hr/>
+
+<section id="flow">
+<h2>⑤ The MQ object plumbing — message flow</h2>
+<p class="subtitle">Request/reply across two queue managers: two one-way channel pairs, one xmitq per direction, a remote-queue definition outbound, automatic xmitq resolution on the reply. Follow the numbers.</p>
+<div class="mockup">
+  <div class="mockup-header">app → QMPCMK ⇢ WAN ⇢ QMDTCC → service, reply returns the mirror path</div>
+  <div class="mockup-body" style="font-size:12px;">
+    <div style="display:flex; align-items:stretch; gap:0;">
+      <div style="flex:1.15; border:2px solid #4ea1ff; border-radius:10px; padding:11px; background:rgba(78,161,255,0.07);">
+        <div class="label" style="color:#4ea1ff;">QMPCMK — our HA/DR QM (data VIP 10.10.1/2.200 · ext VIP 10.60.0.10/20)</div>
+        <div style="margin-top:8px; border:1px solid #888; border-radius:6px; padding:6px;">
+          <b>APP.SVRCONN</b> <span style="opacity:.6; font-size:10px;">(app connects client-mode here)</span>
+        </div>
+        <div style="margin-top:8px; border:1px solid #4ea1ff; border-radius:6px; padding:6px; background:rgba(78,161,255,0.1);">
+          <span style="color:#7ee0a0;">②</span> <b>QREMOTE DTCC.REQUEST</b><br>
+          <span style="font-size:10px; opacity:.75;">RNAME=SVC.REQUEST · RQMNAME=QMDTCC · XMITQ=QMDTCC</span>
+        </div>
+        <div style="margin-top:6px; border:1px solid #ffcf6b; border-radius:6px; padding:6px;">
+          <span style="color:#7ee0a0;">③</span> <b>QLOCAL QMDTCC</b> <span style="font-size:10px; opacity:.7;">(xmitq, outbound)</span>
+        </div>
+        <div style="margin-top:6px; border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
+          <span style="color:#7ee0a0;">④</span> <b>SENDER QMPCMK.QMDTCC</b><br>
+          <span style="font-size:10px; opacity:.75;">XMITQ=QMDTCC · CONNAME=<b>10.60.0.50</b>(1414) <i>(DTCC, single static)</i></span>
+        </div>
+        <div style="margin-top:10px; border-top:1px dotted #555; padding-top:8px;">
+          <div style="border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
+            <span style="color:#ff9d6b;">⑦</span> <b>RECEIVER QMDTCC.QMPCMK</b> <span style="font-size:10px; opacity:.7;">(replies inbound)</span>
+          </div>
+          <div style="margin-top:6px; border:1px solid #888; border-radius:6px; padding:6px;">
+            <span style="color:#ff9d6b;">⑧</span> <b>QLOCAL APP.REPLY</b> <span style="font-size:10px; opacity:.7;">(app GETs reply by CorrelId)</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:128px; padding:0 6px; text-align:center;">
+        <div style="border-left:3px dashed #c0c0c0; height:40px;"></div>
+        <div style="font-weight:700;">~ WAN ~</div>
+        <div style="font-size:10px; opacity:.65;">net-ext</div>
+        <div style="margin-top:8px; font-size:11px; color:#7ee0a0;">→ ⑤ request →</div>
+        <div style="margin-top:6px; font-size:11px; color:#ff9d6b;">← ⑥ reply ←</div>
+        <div style="margin-top:8px; font-size:9px; opacity:.5;">future: throttle/drop</div>
+        <div style="border-left:3px dashed #c0c0c0; height:40px;"></div>
+      </div>
+      <div style="flex:1; border:2px dashed #999; border-radius:10px; padding:11px; background:rgba(255,255,255,0.03);">
+        <div class="label" style="color:#bbb;">QMDTCC — standalone, transparent single endpoint (black box)</div>
+        <div style="margin-top:8px; border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
+          <span style="color:#7ee0a0;">⑤</span> <b>RECEIVER QMPCMK.QMDTCC</b>
+        </div>
+        <div style="margin-top:6px; border:1px solid #888; border-radius:6px; padding:6px;">
+          <b>QLOCAL SVC.REQUEST</b> <span style="font-size:10px; opacity:.7;">(service GETs)</span>
+        </div>
+        <div style="margin-top:6px; text-align:center; font-size:11px; opacity:.85;">▲▼ bindings</div>
+        <div style="margin-top:6px; border:1px solid #888; border-radius:6px; padding:6px;">
+          <b>service</b> <span style="font-size:10px; opacity:.7;">GET SVC.REQUEST → PUT reply to {APP.REPLY @ QMPCMK} from msg ReplyToQ/QMgr</span>
+        </div>
+        <div style="margin-top:10px; border-top:1px dotted #555; padding-top:8px;">
+          <div style="border:1px solid #ff9d6b; border-radius:6px; padding:6px;">
+            <span style="color:#ff9d6b;">⑥</span> <b>QLOCAL QMPCMK</b> <span style="font-size:10px; opacity:.7;">(xmitq — name = remote QM ⇒ auto-resolves, no remote qdef)</span>
+          </div>
+          <div style="margin-top:6px; border:1px dashed #ff9d6b; border-radius:6px; padding:6px;">
+            <b>SENDER QMDTCC.QMPCMK</b><br>
+            <span style="font-size:10px; opacity:.75;">XMITQ=QMPCMK · CONNAME=<b>(10.60.0.10, 10.60.0.20)</b> <i>← chases our QM across sites</i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px; padding:8px; border-top:1px solid #444; font-size:11px;">
+      <b>① </b>app PUTs to <code>DTCC.REQUEST</code> (ReplyToQ=<code>APP.REPLY</code>, ReplyToQMgr=<code>QMPCMK</code>) ·
+      <b>②</b> qdef resolves to SVC.REQUEST@QMDTCC via xmitq ·
+      <b>③④⑤</b> sender drains xmitq across WAN to DTCC's receiver ·
+      lands on <b>SVC.REQUEST</b> · service replies ·
+      <b>⑥</b> reply routed via xmitq <code>QMPCMK</code> (auto-resolved by name) ·
+      <b>⑦⑧</b> back through DTCC's sender → our receiver → <code>APP.REPLY</code> · app GETs by CorrelId.
+      <br><b style="color:#4ea1ff;">The HA/DR test:</b> trigger HA (then DR) on QMPCMK <i>mid-flow</i> — sender link to DTCC retries, staged xmitq messages survive &amp; flush after recovery, DTCC's sender re-finds us at the new VIP. No loss, no dupes.
+    </div>
+  </div>
+</div>
+</section>
+
+</body>
+</html>
