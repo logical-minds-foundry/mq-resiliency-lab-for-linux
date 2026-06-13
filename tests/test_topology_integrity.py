@@ -95,3 +95,4 @@ def test_distributed_setup_composed():
     assert dist.groups == ["san_a", "pcmk_a", "dtcc"]
     assert dist.provision == "ansible/site-distributed.yml"
     assert dist.qm is not None and dist.qm.name == "QMPCMK"
+    assert dist.qm.dtcc_conn == "10.60.0.50"
