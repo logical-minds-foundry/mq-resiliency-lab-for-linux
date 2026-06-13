@@ -1,0 +1,42 @@
+# Distributed MQ (#147): our site-A HA queue manager (QMPCMK) joined to the DTCC
+# service queue manager (QMDTCC) by inter-QM sender/receiver channels over net-ext.
+#
+# Reuses the ENTIRE SAN/cluster bring-up (site-pcmk.yml) for our side, then stands
+# up the counterparty: QMDTCC + the their-side channels + the bindings responder.
+# Our-side inter-QM MQSC is defined later, at `mqlab qm create distributed`
+# (site-pcmk-qm.yml, gated on dtcc_conn). Channels establish bidirectionally once
+# both QMs exist; the responder retries until QMPCMK is up, so order is immaterial.
+- import_playbook: site-pcmk.yml
+
+# Cold-boot guard for the DTCC host (mirrors site-pcmk.yml's guard; #151 lesson):
+# a guest not yet SSH-ready when its play fires must not drop out of the run.
+- name: wait for the DTCC service host to be SSH-ready (cold-boot guard)
+  hosts: dtcc
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+- hosts: dtcc
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+
+- hosts: dtcc
+  roles: [mq-install]
+
+- hosts: dtcc
+  vars:
+    qmgr_name: QMDTCC
+  roles: [mq-qmgr]
+
+- hosts: dtcc
+  vars:
+    qmgr_name: QMDTCC
+    our_qm: QMPCMK
+    our_conn: "10.60.0.10(1414),10.60.0.20(1414)"
+  roles: [mq-inter-qm]
