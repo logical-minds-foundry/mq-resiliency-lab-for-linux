@@ -93,15 +93,15 @@ nodes:
   pcmk-a1:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51 }
+    nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51, net-ext: 10.60.0.51 }
   pcmk-a2:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52 }
+    nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52, net-ext: 10.60.0.52 }
   pcmk-a3:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53 }
+    nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53, net-ext: 10.60.0.53 }
 
   # --- Phase D DR: site B mirrors site A on the .2/.6x address plan. san-b is
   # the DRBD secondary (LUN replicated from san-a over net-wan); pcmk-b1..3 are
@@ -113,15 +113,15 @@ nodes:
   pcmk-b1:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61 }
+    nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61, net-ext: 10.60.0.61 }
   pcmk-b2:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62 }
+    nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62, net-ext: 10.60.0.62 }
   pcmk-b3:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63 }
+    nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the

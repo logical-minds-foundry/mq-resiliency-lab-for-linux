@@ -53,3 +53,24 @@ def test_network_sections_cover_exactly_the_declared_networks():
 
     curated = {net for _, nets in NET_SECTIONS for net in nets}
     assert curated == set(lab_net_names()), "NET_SECTIONS must match lab/networks/net-*.xml"
+
+
+def test_pcmk_nodes_attach_to_net_ext():
+    """Both Pacemaker sites carry a net-ext NIC so the partner VIP (mq_vip_ext)
+    can bind on the inter-business WAN (#146)."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    nodes = topo["nodes"]
+    expected = {
+        "pcmk-a1": "10.60.0.51",
+        "pcmk-a2": "10.60.0.52",
+        "pcmk-a3": "10.60.0.53",
+        "pcmk-b1": "10.60.0.61",
+        "pcmk-b2": "10.60.0.62",
+        "pcmk-b3": "10.60.0.63",
+    }
+    for host, ip in expected.items():
+        assert nodes[host]["nics"].get("net-ext") == ip, f"{host} missing net-ext {ip}"
