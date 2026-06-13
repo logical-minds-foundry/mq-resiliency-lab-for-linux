@@ -14,10 +14,20 @@
     update_cache: true
   become: true
 
-- name: load drbd module
-  community.general.modprobe:
-    name: drbd
-    state: present
+- name: load drbd module (builtin-only; no external collection)
+  # ansible-core ships no community.general, and the lab never installs galaxy
+  # collections (a hand-installed one vanished on VM rebuild — #156). modprobe
+  # is idempotent; the lsmod guard keeps reporting honest. set -e fails loud.
+  ansible.builtin.shell: |
+    set -e
+    if lsmod | grep -q '^drbd '; then
+      echo already-loaded
+    else
+      modprobe drbd
+      echo loaded
+    fi
+  register: drbd_modprobe
+  changed_when: "'loaded' in drbd_modprobe.stdout"
   become: true
 
 - name: drbd resource definition
