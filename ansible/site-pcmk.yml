@@ -35,6 +35,20 @@
         mode: "0600"
         state: present
 
+# Cold-boot guard (#151): a clean ground-up bootstrap runs `vm up` then
+# `vm provision` in quick succession, and a guest that is not yet SSH-ready when
+# its play fires drops out of the run — which is how a first provision can skip
+# the storage stage entirely (target never installed, initiators never logged in)
+# and still report success, leaving `qm create` to fail at the LUN mount. Wait
+# for every SAN-arm host to accept a connection before any storage work runs.
+- name: wait for all SAN-arm hosts to be SSH-ready (cold-boot guard)
+  hosts: pcmk_san_ha
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
 - hosts: pcmk_san_ha
   become: true
   tasks:
@@ -84,6 +98,26 @@
       run_once: true
       register: lun_mkfs
       changed_when: "'formatted' in lun_mkfs.stdout_lines"
+
+    # The mkfs above is run_once: it labels the LUN on a single node. The other
+    # nodes logged in to the *raw* LUN beforehand, so their udev never sees the
+    # new MQSHARED label until the device is rescanned — /dev/disk/by-label/MQSHARED
+    # resolves only on the formatting node. Pacemaker can then place mq_fs on a
+    # peer that cannot resolve the device and fences it (this bit initial
+    # placement, not just failover). Rescan + re-trigger udev on EVERY node so the
+    # label resolves cluster-wide, and assert it (fail loud, never silent) before
+    # the QM resource group is ever created (#151).
+    - name: refresh the iSCSI block view so MQSHARED resolves on every node
+      ansible.builtin.shell: |
+        set -e
+        iscsiadm -m session --rescan
+        udevadm trigger --action=change --subsystem-match=block
+        udevadm settle
+        test -e /dev/disk/by-label/MQSHARED
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
 
 - hosts: pcmk_a
   vars: &pcmk_a_vars
