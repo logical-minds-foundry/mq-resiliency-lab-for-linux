@@ -59,6 +59,30 @@
       run_once: true
       changed_when: true
 
+    # 2b. Inter-QM objects (#147): only when this QM talks to a counterparty
+    #     (dtcc_conn set, i.e. the distributed setup). Defined here at creation so
+    #     a cold boot is one-pass and the objects persist on the shared LUN, exactly
+    #     like the base MQSC above. The QREMOTE/xmitq/SENDER/RECEIVER/APP.REPLY set
+    #     is the our-side half of the QM-to-QM link (spec §5.2).
+    - name: render the inter-QM MQSC (counterparty link)
+      ansible.builtin.template:
+        src: inter-qm.mqsc.j2
+        dest: /var/mqm/inter-qm.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      run_once: true
+      when: dtcc_conn is defined
+
+    - name: apply the inter-QM MQSC
+      ansible.builtin.shell: |
+        su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
+        su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/inter-qm.mqsc'
+        su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
+      run_once: true
+      when: dtcc_conn is defined
+      changed_when: true
+
     # 3. Teach the other nodes the QM definition, then release the mount.
     - name: capture the addmqinf command from the creation node
       ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'"

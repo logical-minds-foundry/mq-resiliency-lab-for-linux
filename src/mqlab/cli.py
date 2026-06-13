@@ -831,6 +831,8 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
                     f"qm_vip={qm.vip}",
                     "-e",
                     f"qm_vip_ext={qm.vip_ext}",
+                    # the counterparty CONNAME, only when this QM talks to one (#147)
+                    *(["-e", f"dtcc_conn={qm.dtcc_conn}"] if qm.dtcc_conn else []),
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),

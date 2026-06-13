@@ -1,0 +1,9 @@
+* Their-side inter-QM objects (#147): {{ qmgr_name }} <-> {{ our_qm }} across net-ext.
+* {{ our_qm }}'s SENDER connects in to RECEIVER {{ our_qm }}.{{ qmgr_name }}; replies
+* leave via SENDER {{ qmgr_name }}.{{ our_qm }} over xmitq {{ our_qm }}, whose CONNAME
+* lists BOTH our site VIPs so it follows our QM across HA (same site) and DR (other
+* site). Retry timers tuned for lab snappiness (spec §5.2 / §6).
+DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
+DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+DEFINE QLOCAL({{ our_qm }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qmgr_name }}.{{ our_qm }}) REPLACE
+DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE

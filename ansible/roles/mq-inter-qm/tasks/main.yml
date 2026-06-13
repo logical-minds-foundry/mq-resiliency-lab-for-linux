@@ -1,0 +1,59 @@
+# Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to QMDTCC and
+# run the bindings responder as a systemd service. Expects (set by the caller):
+#   qmgr_name  — the counterparty QM (QMDTCC)
+#   our_qm     — our HA QM name (QMPCMK)
+#   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
+# QMDTCC must already be created + started (mq-qmgr role runs first).
+- name: render the their-side inter-QM MQSC
+  ansible.builtin.template:
+    src: their-side.mqsc.j2
+    dest: /var/mqm/inter-qm.mqsc
+    owner: mqm
+    group: mqm
+    mode: "0640"
+  become: true
+
+- name: apply the their-side inter-QM MQSC to {{ qmgr_name }}
+  ansible.builtin.command: su mqm -c '/opt/mqm/bin/runmqsc {{ qmgr_name }} < /var/mqm/inter-qm.mqsc'
+  become: true
+  register: mqsc_apply
+  changed_when: true
+  failed_when: mqsc_apply.rc not in [0, 10]
+
+# pymqi for the responder, built against /opt/mqm (mq-install provides the SDK +
+# build deps). Owned by mqm so the bindings service can run as mqm.
+- name: pymqi venv for the responder
+  ansible.builtin.shell: |
+    set -e
+    python3 -m venv /var/mqm/rvenv
+    /var/mqm/rvenv/bin/pip install --quiet pymqi
+  args:
+    creates: /var/mqm/rvenv/bin/python
+  environment:
+    LD_LIBRARY_PATH: /opt/mqm/lib64
+  become: true
+  become_user: mqm
+
+- name: deploy the service responder
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../clients/service_responder.py"
+    dest: /var/mqm/service_responder.py
+    owner: mqm
+    group: mqm
+    mode: "0644"
+  become: true
+
+- name: responder systemd unit
+  ansible.builtin.template:
+    src: mq-service-responder.service.j2
+    dest: /etc/systemd/system/mq-service-responder.service
+    mode: "0644"
+  become: true
+
+- name: enable + start the responder
+  ansible.builtin.systemd:
+    name: mq-service-responder
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
