@@ -69,16 +69,22 @@
 
 - name: create metadata (idempotent - skip if the resource is up or md present)
   ansible.builtin.shell: |
-    # `drbdadm dump-md` HANGS on an in-use (Primary/up) device -- it took down a
-    # whole re-provision for 2 hours in #67. Check the live state FIRST (status
-    # never blocks); only probe/create metadata when the resource is actually
-    # down.
+    set -e
+    # `drbdadm dump-md`/`create-md` have TWO ways to wedge a provision:
+    #   1. on an in-use (Primary/up) device they block forever on exclusive
+    #      access (D-state, the 2-hour stall in #67) -> dodged by checking the
+    #      live state first; `drbdadm status` never blocks.
+    #   2. on a DOWN device they can still PROMPT on stdin (residual/foreign
+    #      md), and Ansible has no stdin to answer -> infinite S-state hang
+    #      (#158). Defend with </dev/null (a prompt gets EOF and bails) AND a
+    #      timeout (bounded failure, never hours). set -e makes a real create-md
+    #      failure abort loud instead of falling through to `echo created`.
     if drbdadm status mqlun >/dev/null 2>&1; then
       echo resource-up
-    elif drbdadm dump-md mqlun >/dev/null 2>&1; then
+    elif timeout 30 drbdadm dump-md mqlun </dev/null >/dev/null 2>&1; then
       echo md-exists
     else
-      drbdadm create-md --force mqlun
+      timeout 60 drbdadm create-md --force mqlun </dev/null
       echo created
     fi
   register: drbd_md
