@@ -74,3 +74,24 @@ def test_pcmk_nodes_attach_to_net_ext():
     }
     for host, ip in expected.items():
         assert nodes[host]["nics"].get("net-ext") == ip, f"{host} missing net-ext {ip}"
+
+
+def test_dtcc_sim_on_net_ext():
+    """The DTCC service VM joins net-ext so its QM can reach our partner VIP and be
+    reached across the inter-business WAN (#147)."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    assert topo["nodes"]["dtcc-sim"]["nics"].get("net-ext") == "10.60.0.50"
+
+
+def test_distributed_setup_composed():
+    """The distributed setup wires our HA QM (site A) to the DTCC service VM (#147)."""
+    from mqlab.setups import lab_setups
+
+    dist = lab_setups()["distributed"]
+    assert dist.groups == ["san_a", "pcmk_a", "dtcc"]
+    assert dist.provision == "ansible/site-distributed.yml"
+    assert dist.qm is not None and dist.qm.name == "QMPCMK"

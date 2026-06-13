@@ -29,7 +29,9 @@ nodes:
   dtcc-sim:
     cpus: 2
     memory: 2048
-    nics: { net-mgmt: 10.50.0.50, net-dtcc: 10.20.0.50 }
+    # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP
+    # (#147). net-dtcc stays until the legacy standalone setup is retired (Plan 3).
+    nics: { net-mgmt: 10.50.0.50, net-dtcc: 10.20.0.50, net-ext: 10.60.0.50 }
   app-client:
     # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B
     # VIPs (10.10.2.x) -- so a reconnectable client given both VIPs can ride a
@@ -158,6 +160,12 @@ setups:
     groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
     secrets: [pcmk_hacluster_password]
+  distributed:
+    description: Distributed MQ — site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    groups: [san_a, pcmk_a, dtcc]
+    provision: ansible/site-distributed.yml
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }
   rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
     groups: [rdqm_a]
