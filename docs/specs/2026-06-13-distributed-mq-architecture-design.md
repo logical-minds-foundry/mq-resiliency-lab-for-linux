@@ -17,12 +17,43 @@ Model the actual point of IBM MQ: **two businesses, each operating its own queue
 manager, exchanging messages asynchronously over channels.** Make the inter-QM
 link a first-class, instrumented part of the lab so we can prove that
 QM-to-QM message flow survives our queue manager failing over — node-to-node
-(HA) and site-to-site (DR) — with no loss and no duplication.
+(HA) and site-to-site (DR).
+
+The loss guarantee differs by event, and that difference is itself a lab
+objective:
+
+- **HA is RPO 0.** Zero loss is an absolute requirement we *demonstrate* —
+  shared storage, no replication gap (proven under load in #66).
+- **DR is RPO ≥ 0.** Async cross-site replication means an unplanned cutover
+  loses any un-replicated tail; RPO 0 in an unplanned DR event is luck, not a
+  guarantee. A primary purpose of the DR lab is to build tooling that
+  **measures and quantifies** the real RPO of a DR event and drives it toward
+  minimal through engineering — not to pretend it is zero.
+
+Neither event may ever produce **duplicates or corruption** — that is
+non-negotiable in both.
 
 The deliverable of the *implementation* this spec leads to is a runnable
 distributed setup: an **app** puts a request that crosses the WAN to a
 counterparty **service** and the reply comes home, and that flow keeps working
 across a forced failover of our QM.
+
+### 1.1 Non-goals — security is explicitly out of scope
+
+This lab tests **message flow and resiliency only**. Security is a deliberate
+non-goal of this version: the inter-QM and app channels run **wide open**
+(`MCAUSER('mqm')`, `CHLAUTH(DISABLED)`, no transport encryption), and secrets are
+allowed to be exposed in the lab. This is intentional, not an oversight — there
+is **no security functionality here**, and nothing in this spec should be read as
+providing any.
+
+Security (mutual TLS, `CHLAUTH` peer/cert mapping, non-privileged identities,
+secret management) is a substantial, awkward layer best built and reasoned about
+on its own — a candidate future minor/major version or a separate (possibly
+later-merged) security lab. It is expected to sit **on top of** this architecture:
+the object names, channel names, and structure here stay the same; security adds
+controls to their configuration rather than reshaping the design. Deferring it
+keeps the core architecture unblocked (tracked in §11).
 
 ## 2. What this corrects (the gap)
 
@@ -112,6 +143,14 @@ resolution (xmitq named after the remote QM) on the reply.
    `QMDTCC.QMPCMK` on QMPCMK delivers to `APP.REPLY`.
 8. **app** `MQGET`s `APP.REPLY` by `CorrelId`.
 
+**Correlation contract (load-bearing).** The request/reply match works only if
+the service sets the reply's `CorrelId` to the **request's `MsgId`** and puts with
+`MQPMO_NEW_MSG_ID` (so the reply gets its own `MsgId`); the app then `MQGET`s
+`APP.REPLY` with `MATCH(CORREL_ID)` against the `MsgId` it received from its put.
+Get this wrong and every reply is delivered but **un-matchable** — the app blocks
+forever and it looks like message loss. Spelled out here because the lab is
+glass-box and must be supportable without the AI.
+
 ### 5.2 MQSC object set (target)
 
 **On QMPCMK:**
@@ -120,7 +159,7 @@ resolution (xmitq named after the remote QM) on the reply.
 DEFINE QLOCAL(APP.REPLY)              REPLACE
 DEFINE QREMOTE(DTCC.REQUEST)  RNAME(SVC.REQUEST) RQMNAME(QMDTCC) XMITQ(QMDTCC) REPLACE
 DEFINE QLOCAL(QMDTCC)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMPCMK.QMDTCC) REPLACE
-DEFINE CHANNEL(QMPCMK.QMDTCC) CHLTYPE(SDR)  CONNAME('10.60.0.50(1414)') XMITQ(QMDTCC) REPLACE
+DEFINE CHANNEL(QMPCMK.QMDTCC) CHLTYPE(SDR)  CONNAME('10.60.0.50(1414)') XMITQ(QMDTCC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
 DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(RCVR) REPLACE
 * APP.SVRCONN already defined by the mq-pcmk-qmgr role (CHLAUTH/ MCAUSER handled there)
 ```
@@ -130,14 +169,26 @@ DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(RCVR) REPLACE
 ```mqsc
 DEFINE QLOCAL(SVC.REQUEST)            REPLACE
 DEFINE QLOCAL(QMPCMK)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMDTCC.QMPCMK) REPLACE
-DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(SDR)  CONNAME('10.60.0.10(1414),10.60.0.20(1414)') XMITQ(QMPCMK) REPLACE
+DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(SDR)  CONNAME('10.60.0.10(1414),10.60.0.20(1414)') XMITQ(QMPCMK) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
 DEFINE CHANNEL(QMPCMK.QMDTCC) CHLTYPE(RCVR) REPLACE
 ```
 
 The endpoint addresses are the partner-facing VIPs defined in §7 (DTCC at
 `10.60.0.50`; our per-site ext VIPs `10.60.0.10`/`10.60.0.20`). Channel security
-(`MCAUSER`, `CHLAUTH`) follows the same pattern the `mq-pcmk-qmgr` role already
-establishes for `APP.SVRCONN`; the exact mapping is an implementation detail.
+is **deliberately absent**: the inter-QM channels run wide open, exactly like
+`APP.SVRCONN` (`MCAUSER('mqm')`, `CHLAUTH(DISABLED)`), by the explicit non-goal
+in §1.1 — not by accident or silent inheritance.
+
+**Retry timers are tuned for lab snappiness, not production.** The SENDER timers
+above (`SHORTTMR(5)` then `LONGTMR(20)`, effectively unlimited `LONGRTY`) make a
+moved QM re-found within seconds and keep retrying indefinitely. Production uses
+long retry intervals so channels self-heal after multi-hour outages with
+operators on a bridge; here the outages are *artificial and short*, and the
+day-long failover loop (§9) measures recovery — default timers (`LONGTMR` 1200s)
+would leave the sender idle for up to 20 minutes and the flow would read as hung
+when it is merely waiting. Values to be finalised in the plan. The **channel
+initiator** must be running for trigger-driven sender start; it restarts with the
+QM on failover, so this holds across HA and DR.
 
 ## 6. Connection and resilience model
 
@@ -180,6 +231,19 @@ QM there, so a client probing A-first simply falls through to B. "Don't let apps
 prematurely connect to the recovered primary" is therefore enforced by *not
 promoting its storage*, not by client configuration.
 
+### 6.4 Loss semantics — RPO by event type
+
+The resilience model carries an explicit, asymmetric loss guarantee:
+
+- **HA failover → RPO 0.** Shared storage means no replication gap; staged and
+  in-flight persistent messages survive (demonstrated under load, #66).
+- **DR cutover → RPO ≥ 0.** Async cross-site replication means a *graceful,
+  quiesced* cutover can drain to RPO 0, but a *disaster* cutover loses the
+  un-replicated tail. The DR lab's job is to **measure and quantify** that real
+  RPO with tooling and minimise it through engineering — not to assume it away
+  (cf. the measured RPO>0 result in #74 and the master design §4.2).
+- **No duplication or corruption, ever** — in either event.
+
 ## 7. Network / WAN modeling
 
 The two-business boundary must be **structurally real**: the counterparty must
@@ -205,6 +269,18 @@ So: `QMDTCC.QMPCMK` SENDER `CONNAME('10.60.0.10(1414),10.60.0.20(1414)')`;
 `QMPCMK.QMDTCC` SENDER `CONNAME('10.60.0.50(1414)')`. Pacemaker manages the
 partner VIP as a second `IPaddr2` resource colocated and ordered with the QM, per
 site. The internal app continues to use the data-plane VIPs unchanged.
+
+**HA/DR automation impact (do not miss).** The current automation is built for a
+*single* VIP — the `mq-pcmk-qmgr` role creates the group as `mq_fs → mq_vip →
+mq_qm`, and `pcmk-dr-cutover.sh` hardcodes one `TO_VIP` per direction. The
+partner VIP is therefore **not** free wiring; it requires changes in **two**
+places: (i) the **role** adds `mq_vip_ext` into the group with ordering
+`mq_fs → mq_vip → mq_vip_ext → mq_qm`, and (ii) the **cutover script** sets and
+creates the per-site `TO_VIP_EXT` alongside `TO_VIP` when it rebuilds the group at
+the target site. The silent failure mode if either is missed: a DR cutover brings
+up the data VIP and the QM, the internal app works, but the partner VIP never
+comes up and the **cross-business flow is dead** — the exact bug this rework
+exists to prevent. Acceptance gates this (§13.4).
 
 This mirrors production accurately — internal consumers hit an internal service
 address; external partners hit a separate, internet-facing address that differs
@@ -291,6 +367,11 @@ requirements are known. The expectation is that the eventual real model is on th
    inter-QM design (CONNAME handling, channel set) on *our* side.
 2. **WAN traffic-shaping.** Throttle/delay/drop on `net-ext` to simulate WAN
    degradation (§7.3).
+3. **Security layer (future version / separate lab).** Mutual TLS (`SSLCIPH`),
+   `CHLAUTH` peer/cert mapping, non-privileged identities, secret management —
+   explicitly out of scope here (§1.1). Expected to layer on top of this
+   architecture without reshaping it (same object/channel names; added controls
+   on their configuration). Candidate to merge into this lab or run standalone.
 
 ## 12. Diagrams
 
@@ -309,12 +390,24 @@ A build is "done" against this spec when:
    the **service**, and the reply returns to `APP.REPLY` — across two distinct
    queue managers connected only by sender/receiver channels.
 2. Forcing an **HA** failover of QMPCMK *mid-flow* leaves the request/reply path
-   working: the inter-QM SENDER re-establishes, staged xmitq messages survive and
-   flush, no loss, no duplication.
-3. Forcing a **DR** cutover of QMPCMK leaves the path working: the app and the
-   DTCC SENDER follow QMPCMK to the site-B VIP via their CONNAME lists; the
-   never-both-live invariant holds throughout.
-4. The two-business boundary is structurally real: DTCC reaches our QM only
+   working at **RPO 0**: the inter-QM SENDER re-establishes, staged xmitq
+   messages survive and flush, **no loss, no duplication, no corruption** (shared
+   storage; proven under load in #66).
+3. Forcing a **DR** cutover of QMPCMK leaves the path working — the app and the
+   DTCC SENDER follow QMPCMK to the site-B VIP via their CONNAME lists, and the
+   never-both-live invariant holds throughout — with loss semantics by cutover
+   type:
+   - **Planned/graceful** DR (quiesce → drain xmitqs → promote): **RPO 0**, no
+     loss.
+   - **Unplanned/disaster** DR: a **bounded RPO > 0** equal to the
+     async-replication tail; assert **no loss beyond that tail, no duplication,
+     no corruption**, and that the tail is **measured and quantified** (per the
+     DR-validation framework; cf. #74, master design §4.2). RPO 0 here is an
+     edge-case windfall, not a pass condition.
+4. After a **DR cutover**, **both** VIPs are live at the target site — the data
+   VIP *and* the partner (`net-ext`) VIP — and **DTCC's SENDER reconnects** and
+   resumes flow. (Guards the two-VIP automation gap, §7.1.)
+5. The two-business boundary is structurally real: DTCC reaches our QM only
    across `net-ext`, never our internal planes.
-5. `QMAIN`/`standalone` and the vestigial EPN clients are removed; the tree
+6. `QMAIN`/`standalone` and the vestigial EPN clients are removed; the tree
    contains no single-QM-masquerading-as-distributed paths.
