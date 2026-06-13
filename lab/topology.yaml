@@ -152,7 +152,7 @@ setups:
     groups: [san_a, pcmk_a]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password]
-    qm: { name: QMPCMK, vip: 10.10.1.200 }
+    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }
   pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
     groups: [san_a, san_b, pcmk_a, pcmk_b]
