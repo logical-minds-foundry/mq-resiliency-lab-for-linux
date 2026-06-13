@@ -67,16 +67,30 @@ showed a stuck `drbdadm dump-md mqlun` and its child `drbdmeta`, both in **D
 `if drbdadm dump-md ...; then md-exists; else create-md; fi` — so re-running over
 an already-up resource wedged.
 
-**Fix.** Check the live resource state first; `drbdadm status` **never blocks**:
+**Fix.** Check the live resource state first; `drbdadm status` **never blocks**.
+
+**The second hang mode — an interactive prompt (#158).** Even on a **down**
+device, `dump-md`/`create-md` can block — but in **S (interruptible)** state, not
+D, on a **free** device — when they hit a confirmation prompt (residual/foreign
+on-disk md) and Ansible supplies no stdin to answer. Tell them apart by `ps stat`
+(`D` = exclusive-access, reboot to clear; `S+` = stdin prompt, killable) and by
+`fuser /dev/vdb` (a free device rules out the in-use case). The hardened probe
+closes stdin so a prompt EOFs and bails, and bounds every metadata op with a
+`timeout` so it fails in seconds, never hours; `set -e` keeps a real `create-md`
+failure from silently falling through to a success echo:
 ```sh
-if drbdadm status mqlun >/dev/null 2>&1; then echo resource-up   # skip
-elif drbdadm dump-md mqlun >/dev/null 2>&1; then echo md-exists   # down, md present
-else drbdadm create-md --force mqlun; fi                          # down, fresh
+set -e
+if drbdadm status mqlun >/dev/null 2>&1; then echo resource-up         # up: skip
+elif timeout 30 drbdadm dump-md mqlun </dev/null >/dev/null 2>&1; then  # down, md present
+  echo md-exists
+else timeout 60 drbdadm create-md --force mqlun </dev/null; echo created  # down, fresh
+fi
 ```
 
 **Meta-lesson (→ #72).** A wedged sync and a slow sync look identical from the
 outside; only a watchdog on log-progress tells them apart. Actively monitor long
-operations — don't trust that a hang will announce itself.
+operations — don't trust that a hang will announce itself. Corollary (#158): never
+let a provisioning command read from an interactive stdin — close it and bound it.
 
 ## Force-promote on a dead peer
 
