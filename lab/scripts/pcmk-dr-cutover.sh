@@ -13,11 +13,11 @@ run() { uv run ansible "$1" -b -m shell -a "$2"; }
 
 if [ "$DIR" = a2b ]; then
   FROM_SAN=san-a; TO_SAN=san-b; FROM_PCMK=pcmk_a; TO_PCMK=pcmk_b
-  TO_PORTAL=10.40.2.6; TO_VIP=10.10.2.200
+  TO_PORTAL=10.40.2.6; TO_VIP=10.10.2.200; TO_VIP_EXT=10.60.0.20
   TO_NODES="pcmk-b1 pcmk-b2 pcmk-b3"; TO_IQNS="pcmk-b1 pcmk-b2 pcmk-b3"
 else
   FROM_SAN=san-b; TO_SAN=san-a; FROM_PCMK=pcmk_b; TO_PCMK=pcmk_a
-  TO_PORTAL=10.40.1.5; TO_VIP=10.10.1.200
+  TO_PORTAL=10.40.1.5; TO_VIP=10.10.1.200; TO_VIP_EXT=10.60.0.10
   TO_NODES="pcmk-a1 pcmk-a2 pcmk-a3"; TO_IQNS="pcmk-a1 pcmk-a2 pcmk-a3"
 fi
 
@@ -52,10 +52,11 @@ run "$FIRST" "pcs cluster unstandby --all 2>/dev/null || true
   if ! pcs resource status mq_group >/dev/null 2>&1; then
     pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs op monitor interval=30s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group
     pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip=${TO_VIP} cidr_netmask=24 --group mq_group --after mq_fs
-    pcs resource create mq_qm systemd:mq-QMPCMK --group mq_group --after mq_vip
+    pcs resource create mq_vip_ext ocf:heartbeat:IPaddr2 ip=${TO_VIP_EXT} cidr_netmask=24 --group mq_group --after mq_vip
+    pcs resource create mq_qm systemd:mq-QMPCMK --group mq_group --after mq_vip_ext
   else
     pcs resource enable mq_group
   fi"
 sleep 8
 run "$FIRST" "pcs status resources | tail -3"
-echo "=== cutover $DIR complete; live site is now $TO_PCMK, VIP $TO_VIP ==="
+echo "=== cutover $DIR complete; live site is now $TO_PCMK, VIP $TO_VIP / ext $TO_VIP_EXT ==="

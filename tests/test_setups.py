@@ -14,7 +14,7 @@ TOPO = (
     "    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password]\n"
-    "    qm: { name: QMPCMK, vip: 10.10.1.200 }\n"
+    "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
     "  rdqm_ha:\n"
     "    groups: [rdqm_a]\n"
 )
@@ -47,7 +47,9 @@ def test_lab_setups_parses_qm_config_defaulting_none(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     setups = lab_setups()
-    assert setups["pcmk_san_ha"].qm == QmConfig(name="QMPCMK", vip="10.10.1.200")
+    assert setups["pcmk_san_ha"].qm == QmConfig(
+        name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10"
+    )
     assert setups["rdqm_ha"].qm is None  # default
 
 

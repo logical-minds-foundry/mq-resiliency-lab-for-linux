@@ -33,7 +33,8 @@ _TOPO = (
     "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
     "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
     "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
-    "    provision: ansible/site-pcmk.yml\n    qm: { name: QMPCMK, vip: 10.10.1.200 }\n"
+    "    provision: ansible/site-pcmk.yml\n"
+    "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
 )
 
 
@@ -71,6 +72,8 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
         "qm_name=QMPCMK",
         "-e",
         "qm_vip=10.10.1.200",
+        "-e",
+        "qm_vip_ext=10.60.0.10",
     ]
     assert str(play.cwd).endswith("/ansible")
     assert (tmp_path / "build" / "inventory.ini").exists()

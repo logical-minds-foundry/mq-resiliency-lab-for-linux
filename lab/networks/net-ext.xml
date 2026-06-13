@@ -1,0 +1,8 @@
+<!-- lab/networks/net-ext.xml — inter-business WAN ("the internet") between
+     Business A (our HA/DR QM) and Business B (DTCC). Isolated: no <forward>,
+     no DHCP. Traffic-shaping (tc netem) is a future enhancement (#145 §7.3). -->
+<network>
+  <name>net-ext</name>
+  <bridge name="virbr-ext"/>
+  <ip address="10.60.0.1" netmask="255.255.255.0"/>
+</network>

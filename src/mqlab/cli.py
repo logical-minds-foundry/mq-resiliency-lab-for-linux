@@ -829,6 +829,8 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
                     f"qm_name={qm.name}",
                     "-e",
                     f"qm_vip={qm.vip}",
+                    "-e",
+                    f"qm_vip_ext={qm.vip_ext}",
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),

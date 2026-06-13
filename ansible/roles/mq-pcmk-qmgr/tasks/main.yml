@@ -124,7 +124,7 @@
   run_once: true
   changed_when: true
 
-- name: mq_vip resource (floating IP)
+- name: mq_vip resource (internal data-plane floating IP)
   ansible.builtin.shell: >
     pcs resource status mq_vip >/dev/null 2>&1 ||
     pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip={{ qm_vip }} cidr_netmask=24
@@ -132,9 +132,21 @@
   run_once: true
   changed_when: true
 
+# Partner-facing VIP on net-ext (#146): the address the counterparty (DTCC) QM's
+# sender channel connects to. A second IPaddr2 in the same group so it follows the
+# QM across node (HA) and site (DR) moves, exactly like the data-plane VIP. The
+# internal app keeps using mq_vip; external partners use mq_vip_ext.
+- name: mq_vip_ext resource (partner-facing floating IP on net-ext)
+  ansible.builtin.shell: >
+    pcs resource status mq_vip_ext >/dev/null 2>&1 ||
+    pcs resource create mq_vip_ext ocf:heartbeat:IPaddr2 ip={{ qm_vip_ext }} cidr_netmask=24
+    --group mq_group --after mq_vip
+  run_once: true
+  changed_when: true
+
 - name: mq_qm resource (the queue manager)
   ansible.builtin.shell: >
     pcs resource status mq_qm >/dev/null 2>&1 ||
-    pcs resource create mq_qm systemd:mq-{{ qm_name }} --group mq_group --after mq_vip
+    pcs resource create mq_qm systemd:mq-{{ qm_name }} --group mq_group --after mq_vip_ext
   run_once: true
   changed_when: true

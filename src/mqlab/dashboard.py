@@ -97,7 +97,7 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 # nets become per-net rows under a collapsible section header. A net `net-X` maps
 # to host bridge `virbr-X` (throughput) and shorthand `X` (display).
 NET_SECTIONS: list[tuple[str, list[str]]] = [
-    ("Message path", ["net-client", "net-dtcc", "net-data-a", "net-data-b"]),
+    ("Message path", ["net-client", "net-dtcc", "net-ext", "net-data-a", "net-data-b"]),
     ("Cluster + storage", ["net-hb-a", "net-san-a", "net-hb-b", "net-san-b"]),
     ("Cross-site + mgmt", ["net-wan", "net-mgmt"]),
 ]
