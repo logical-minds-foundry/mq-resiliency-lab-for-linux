@@ -54,7 +54,8 @@
         DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
         REFRESH SECURITY TYPE(CONNAUTH)\n
-        DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
+        DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n
+        ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
         su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
       run_once: true
       changed_when: true
