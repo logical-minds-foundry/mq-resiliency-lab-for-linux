@@ -1,0 +1,30 @@
+---
+# Deploy the cluster-state collector (the tested mqlab.clusterstate module, verbatim)
+# and run it on a 5s timer. Mirrors the net-reach collector role: textfile dir ->
+# deploy collector -> service + timer -> enable. cluster_state_role is set by the
+# observability overlay (cluster | storage).
+- name: textfile dir
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    mode: "0755"
+
+- name: deploy the cluster-state collector (the tested mqlab module, verbatim)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/mqlab/clusterstate.py"
+    dest: /usr/local/bin/lab-cluster-state
+    mode: "0755"
+
+- name: install service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop: [lab-cluster-state.service.j2, lab-cluster-state.timer.j2]
+
+- name: enable + start the timer
+  ansible.builtin.systemd:
+    name: lab-cluster-state.timer
+    enabled: true
+    state: started
+    daemon_reload: true
