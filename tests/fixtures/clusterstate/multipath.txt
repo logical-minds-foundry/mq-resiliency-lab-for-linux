@@ -1,0 +1,7 @@
+# SAMPLE (Plan 1a, Task 1) — reference only; the iSCSI session count comes from
+# `iscsiadm -m session` (parse_iscsi), not from multipath. Replace with live
+# `multipath -ll` from pcmk-a1 if a multipath-based signal is added later.
+MQSHARED (36001405abcdef0123456789abcdef012) dm-0 LIO-ORG,san-a.lun0
+size=8.0G features='0' hwhandler='1 alua' wp=rw
+`-+- policy='service-time 0' prio=50 status=active
+  `- 7:0:0:0 sda 8:0 active ready running

@@ -1,0 +1,23 @@
+<!-- SAMPLE fixture (Plan 1a, Task 1). Replace with live output of
+     `crm_mon --one-shot --output-as=xml` from pcmk-a1, then reconcile in Task 10.
+     Captured command goes here once real. -->
+<pacemaker-result api-version="2.0" request="crm_mon --one-shot --output-as=xml">
+  <summary>
+    <current_dc present="true" name="pcmk-a1" id="1" with_quorum="true"/>
+    <nodes_configured number="3"/>
+    <resources_configured number="4" disabled="0" blocked="0"/>
+  </summary>
+  <nodes>
+    <node name="pcmk-a1" online="true" standby="false" unclean="false"/>
+    <node name="pcmk-a2" online="true" standby="false" unclean="false"/>
+    <node name="pcmk-a3" online="true" standby="false" unclean="false"/>
+  </nodes>
+  <resources>
+    <group id="mq_group">
+      <resource id="mq_fs"      role="Started" active="true"><node name="pcmk-a2"/></resource>
+      <resource id="mq_vip"     role="Started" active="true"><node name="pcmk-a2"/></resource>
+      <resource id="mq_vip_ext" role="Started" active="true"><node name="pcmk-a2"/></resource>
+      <resource id="mq_qm"      role="Started" active="true"><node name="pcmk-a2"/></resource>
+    </group>
+  </resources>
+</pacemaker-result>
