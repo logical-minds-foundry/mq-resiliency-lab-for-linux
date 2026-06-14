@@ -4,6 +4,10 @@
 * lists BOTH our site VIPs so it follows our QM across HA (same site) and DR (other
 * site). Retry timers tuned for lab snappiness (spec §5.2 / §6).
 DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
+* The co-located service responder connects client-mode via this SVRCONN (#180):
+* pip's pymqi is client-only, so a true bindings connect fails 2058. MCAUSER(mqm)
+* gives it admin authority; CHLAUTH is already disabled on this QM.
+DEFINE CHANNEL(SVC.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') REPLACE
 DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
 DEFINE QLOCAL({{ our_qm }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qmgr_name }}.{{ our_qm }}) REPLACE
 DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
