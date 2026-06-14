@@ -207,6 +207,13 @@ pre-flight; tests. **Retire** `pcmk-dr-seed-peer.sh`, `pcmk-dr-cutover.sh`,
 (mid-flow HA+DR, RPO semantics) live in #149's territory and warrant their own
 spec. This design only makes the lifecycle *driveable*; measuring it comes next.
 
+**Platform scope: Pacemaker/SAN (Ubuntu) only — by deliberate focus.** `dr` is
+pcmk-scoped; RDQM (RHEL) DR is set aside for now. Its procedures are genuinely
+different (`rdqmdr`-driven, not DRBD/LIO/`pcs`), so it would get its own commands
+and any renaming when/if revisited. The bet: prove the approach end-to-end on
+Ubuntu first; RDQM can be re-covered later. This keeps `dr` cohesive instead of
+prematurely abstracting across two very different HA stacks.
+
 ## 10. Open questions
 
 - **`status` output shape** — a Rich table (site / DRBD role / mq_group / VIPs)
@@ -214,6 +221,5 @@ spec. This design only makes the lifecycle *driveable*; measuring it comes next.
 - **`bootstrap` idempotency on an already-bootstrapped peer** — re-running should
   be a clean no-op (addmqinf already present, unit already installed+disabled);
   confirm the guards.
-- **Does `dr` belong only on `pcmk_san_dr`, or also a future `rdqm_dr`?** This
-  spec targets the Pacemaker/SAN arm; RDQM has its own `rdqmdr` verbs. Keep `dr`
-  pcmk-scoped for now; revisit if RDQM-DR is folded into the CLI.
+  (Resolved: `dr` is Pacemaker/Ubuntu-only by deliberate focus — see §9 Platform
+  scope. RDQM-DR is set aside, not an open question for this spec.)
