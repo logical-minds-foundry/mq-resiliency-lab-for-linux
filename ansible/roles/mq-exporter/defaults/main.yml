@@ -3,6 +3,8 @@
 # HA QM, reached via its data-plane VIP so the exporter follows it across
 # failover). Override per QM instance from site-obs.yml.
 mq_exporter_qm: QMPCMK
+# Per-instance unit suffix so the probe can run one exporter per QM (#182).
+mq_exporter_instance: "{{ mq_exporter_qm | lower }}"
 mq_exporter_conn: "10.10.1.200(1414)"
 mq_exporter_channel: APP.SVRCONN
 mq_exporter_port: 9157

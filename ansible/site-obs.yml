@@ -8,8 +8,26 @@
   become: true
   roles: [prometheus, grafana]
 
-# The MQ-service exporter on the probe: client-mode mq_prometheus against the
-# QM VIP, scraped by Prometheus at mon-probe:9157 (#172). Defaults target QMPCMK;
-# QMDTCC needs net-ext on the probe + a second instance (follow-up).
+# MQ-service exporters on the probe: client-mode mq_prometheus, one instance per
+# QM, each scraped by Prometheus on the mgmt plane (#172, #182). The role's build
+# steps are idempotent (`creates:` guards), so the second include reuses the one
+# binary and just adds a per-QM systemd unit.
+#   - QMPCMK on :9157 — our HA QM via its data-plane VIP (role defaults).
+#   - QMDTCC on :9158 — the DTCC counterparty via net-ext, its SVC.SVRCONN.
 - hosts: probe
-  roles: [mq-exporter]
+  become: true
+  tasks:
+    - name: QMPCMK exporter (our HA QM)
+      ansible.builtin.include_role:
+        name: mq-exporter
+
+    - name: QMDTCC exporter (DTCC counterparty, across net-ext)
+      ansible.builtin.include_role:
+        name: mq-exporter
+      vars:
+        mq_exporter_qm: QMDTCC
+        mq_exporter_conn: "10.60.0.50(1414)"
+        mq_exporter_channel: SVC.SVRCONN
+        mq_exporter_port: 9158
+        mq_exporter_monitored_queues: "SVC.REQUEST,QMPCMK"
+        mq_exporter_monitored_channels: "SVC.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
