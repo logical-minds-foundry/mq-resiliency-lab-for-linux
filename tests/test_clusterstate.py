@@ -100,3 +100,68 @@ def test_parse_daemons_reads_systemctl_is_active_block():
         "pacemaker": True,
         "drbd": False,
     }
+
+
+def test_render_cluster_section_emits_quorum_resource_and_timestamp():
+    crm = {
+        "quorate": True,
+        "nodes": {"pcmk-a2": {"online": True, "standby": False, "unclean": False}},
+        "resources": {"mq_qm": {"state": "Started", "node": "pcmk-a2"}},
+    }
+    out = clusterstate.render_cluster_state_prom(
+        node="pcmk-a1",
+        crm=crm,
+        stonith={"pcmk-a2": 0},
+        iscsi=2,
+        daemons={"corosync": True, "pacemaker": True},
+        drbd=None,
+        now=1781455000,
+        fresh_sources=("crm", "stonith", "iscsi", "daemons"),
+    )
+    assert 'cluster_quorate{node="pcmk-a1"} 1' in out
+    assert 'cluster_resource_started{node="pcmk-a1",resource="mq_qm"} 1' in out
+    assert 'cluster_resource_owner{node="pcmk-a1",resource="mq_qm",holder="pcmk-a2"} 1' in out
+    assert 'cluster_iscsi_sessions{node="pcmk-a1"} 2' in out
+    assert 'cluster_daemon_up{node="pcmk-a1",unit="corosync"} 1' in out
+    assert 'cluster_state_last_write_timestamp{node="pcmk-a1",source="crm"} 1781455000' in out
+
+
+def test_render_omits_timestamp_for_stale_source():
+    # crm timed out this cycle -> not in fresh_sources -> no crm timestamp (cells go STALE)
+    out = clusterstate.render_cluster_state_prom(
+        node="pcmk-a1",
+        crm=None,
+        stonith={},
+        iscsi=0,
+        daemons={},
+        drbd=None,
+        now=1781455000,
+        fresh_sources=("stonith", "iscsi", "daemons"),
+    )
+    assert 'source="crm"' not in out
+    assert 'cluster_state_last_write_timestamp{node="pcmk-a1",source="stonith"} 1781455000' in out
+
+
+def test_render_storage_section_emits_drbd_enums_and_rpo():
+    drbd = {
+        "r0": {
+            "role": "Primary",
+            "disk": "UpToDate",
+            "conn": "StandAlone",
+            "resync_pct": 42.0,
+            "out_of_sync_bytes": 2202010,
+        }
+    }
+    out = clusterstate.render_cluster_state_prom(
+        node="san-a",
+        crm=None,
+        stonith=None,
+        iscsi=None,
+        daemons={"drbd": True},
+        drbd=drbd,
+        now=1781455000,
+        fresh_sources=("drbd", "daemons"),
+    )
+    assert 'cluster_drbd_conn{node="san-a",resource="r0",conn="StandAlone"} 1' in out
+    assert 'cluster_drbd_out_of_sync_bytes{node="san-a",resource="r0"} 2202010' in out
+    assert 'cluster_drbd_resync_pct{node="san-a",resource="r0"} 42.0' in out

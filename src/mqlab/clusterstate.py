@@ -91,3 +91,61 @@ def parse_daemons(text: str, units: list[str]) -> dict[str, bool]:
         unit: (lines[i].strip() == "active" if i < len(lines) else False)
         for i, unit in enumerate(units)
     }
+
+
+def render_cluster_state_prom(
+    *,
+    node: str,
+    crm: dict | None,
+    stonith: dict | None,
+    iscsi: int | None,
+    daemons: dict,
+    drbd: dict | None,
+    now: int,
+    fresh_sources: tuple[str, ...],
+) -> str:
+    """Project parsed probe results -> node_exporter textfile lines (label node=<self>)."""
+    lines: list[str] = []
+
+    if crm is not None:
+        lines.append(f'cluster_quorate{{node="{node}"}} {1 if crm["quorate"] else 0}')
+        for member, st in crm["nodes"].items():
+            online = 1 if st["online"] else 0
+            unclean = 1 if st["unclean"] else 0
+            lines.append(f'cluster_node_online{{node="{node}",member="{member}"}} {online}')
+            lines.append(f'cluster_node_unclean{{node="{node}",member="{member}"}} {unclean}')
+        for rid, r in crm["resources"].items():
+            started = 1 if r["state"] == "Started" else 0
+            lines.append(f'cluster_resource_started{{node="{node}",resource="{rid}"}} {started}')
+            if r["node"]:
+                lines.append(
+                    f'cluster_resource_owner{{node="{node}",resource="{rid}",holder="{r["node"]}"}} 1'
+                )
+
+    if stonith is not None:
+        for member, count in stonith.items():
+            lines.append(f'cluster_fence_count{{node="{node}",member="{member}"}} {count}')
+
+    if iscsi is not None:
+        lines.append(f'cluster_iscsi_sessions{{node="{node}"}} {iscsi}')
+
+    for unit, up in daemons.items():
+        lines.append(f'cluster_daemon_up{{node="{node}",unit="{unit}"}} {1 if up else 0}')
+
+    if drbd is not None:
+        for res, d in drbd.items():
+            for kind in ("role", "disk", "conn"):
+                lines.append(
+                    f'cluster_drbd_{kind}{{node="{node}",resource="{res}",{kind}="{d[kind]}"}} 1'
+                )
+            if d["resync_pct"] is not None:
+                lines.append(f'cluster_drbd_resync_pct{{node="{node}",resource="{res}"}} {d["resync_pct"]}')
+            if d["out_of_sync_bytes"] is not None:
+                lines.append(
+                    f'cluster_drbd_out_of_sync_bytes{{node="{node}",resource="{res}"}} {d["out_of_sync_bytes"]}'
+                )
+
+    for source in fresh_sources:
+        lines.append(f'cluster_state_last_write_timestamp{{node="{node}",source="{source}"}} {now}')
+
+    return "\n".join(lines) + "\n"
