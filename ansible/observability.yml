@@ -1,7 +1,7 @@
 # Fleet-wide host metrics (#103) + reachability (#108). Render peers first:
-#   uv run mqlab obs reach-peers
+#   mqlab obs reach-peers
 # then run against whatever arm is up, e.g.:
-#   uv run ansible-playbook observability.yml --limit rdqm_a
+#   ansible-playbook observability.yml --limit rdqm_a
 - hosts: all
   become: true
   vars:

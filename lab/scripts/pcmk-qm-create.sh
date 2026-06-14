@@ -9,7 +9,7 @@ QM="${1:-QMPCMK}"
 VIP="${2:-10.10.1.200}"
 cd "$(dirname "$0")/../../ansible"
 
-run() { uv run ansible "$1" -b -m shell -a "$2"; }
+run() { ansible "$1" -b -m shell -a "$2"; }
 
 # 1. Create the QM with data+logs on the LUN (a1 holds the mount only for
 #    creation; Pacemaker owns it afterwards).

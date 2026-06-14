@@ -455,7 +455,7 @@ vrg-commit --type test --scope mqlab --message "cover dashboard renderer to 100%
 mqlab obs targets          # render build/prometheus/targets/node.json
 mqlab obs dashboard        # render build/grafana/dashboards/lab-status.json
 mqlab vm inventory         # render build/inventory.ini
-cd ansible && uv run ansible-playbook site-obs.yml && cd ..
+cd ansible && ansible-playbook site-obs.yml && cd ..
 ```
 `site-obs.yml` runs all three roles (node-exporter, prometheus, grafana), so all
 three rendered artifacts must exist first — a fresh worktree's `build/` has none.

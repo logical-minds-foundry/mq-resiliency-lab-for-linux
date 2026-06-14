@@ -1,5 +1,5 @@
 # The Pacemaker/SAN arm (Phase D). Site A; site B plays land with the DR
-# task. Run: uv run ansible-playbook site-pcmk.yml [--limit ...]
+# task. Run: ansible-playbook site-pcmk.yml [--limit ...]
 
 # STONITH prerequisite (#133): fence_virsh ssh's from each cluster node to the
 # hypervisor (this VM, the libvirt host) as the fence user, then virsh-fences a

@@ -240,7 +240,7 @@ Before committing to the transport-pinning premise, prove the path end to end:
    NIC at its static IP.
 2. Hand-write a 1-host inventory (`<host> ansible_host=10.50.0.N`, the shared
    key, `ansible_user=vagrant`).
-3. `uv run ansible <host> -m ping` succeeds.
+3. `ansible <host> -m ping` succeeds.
 
 Go = build the rest. No-go (shared key or static-mgmt SSH doesn't work) = the
 transport approach is re-examined before any further code. The spike result is

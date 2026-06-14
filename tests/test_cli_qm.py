@@ -64,8 +64,6 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
     assert result.exit_code == 0
     play = runner.recorded[-1]
     assert play.argv == [
-        "uv",
-        "run",
         "ansible-playbook",
         "site-pcmk-qm.yml",
         "-e",
@@ -130,7 +128,7 @@ def test_qm_destroy_runs_teardown_playbook(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
     result = CliRunner().invoke(cli.app, ["qm", "destroy", "pcmk_san_ha"])
     assert result.exit_code == 0
-    assert runner.recorded[-1].argv[3] == "site-pcmk-qm-down.yml"
+    assert runner.recorded[-1].argv[1] == "site-pcmk-qm-down.yml"
 
 
 def test_qm_up_runs_pcs_enable_on_first_cluster_node(monkeypatch, tmp_path):
@@ -140,8 +138,6 @@ def test_qm_up_runs_pcs_enable_on_first_cluster_node(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["qm", "up", "pcmk_san_ha"])
     assert result.exit_code == 0
     assert runner.recorded[-1].argv == [
-        "uv",
-        "run",
         "ansible",
         "pcmk_a[0]",
         "-b",

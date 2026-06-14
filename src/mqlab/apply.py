@@ -1,6 +1,6 @@
 """Apply declarative MQ object definitions through pymqrest ensure_*.
 
-Usage: uv run python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443
+Usage: python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443
 Credentials from MQWEB_ADMIN_USER / MQWEB_ADMIN_PASSWORD (never committed).
 """
 

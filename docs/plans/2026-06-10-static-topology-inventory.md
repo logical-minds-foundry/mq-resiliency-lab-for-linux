@@ -69,7 +69,7 @@ ansible_ssh_private_key_file=~/.vagrant.d/insecure_private_key
 ansible_ssh_common_args=-o StrictHostKeyChecking=no
 ```
 
-Run (live lab, from `ansible/`): `uv run ansible spike -i /tmp/spike-inv.ini -m ping`
+Run (live lab, from `ansible/`): `ansible spike -i /tmp/spike-inv.ini -m ping`
 Expected: `pcmk-a1 | SUCCESS => {"ping": "pong"}`.
 
 - [ ] **Step 4: Record the GO/NO-GO**
@@ -740,7 +740,7 @@ Expected: guests come up with their `net-mgmt` NICs.
 - [ ] **Step 3: Live — inventory + ping**
 
 Run: `mqlab vm inventory` (inspect the echoed INI)
-Then (from `ansible/`): `uv run ansible pcmk_san_ha -m ping`
+Then (from `ansible/`): `ansible pcmk_san_ha -m ping`
 Expected: every member returns `pong` over the static `net-mgmt` transport.
 
 - [ ] **Step 4: Write the PR template (the "done" signal)**

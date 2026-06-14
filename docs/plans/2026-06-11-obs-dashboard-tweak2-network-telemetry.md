@@ -54,7 +54,7 @@ In `ansible/roles/node-exporter/tasks/main.yml`, add **before** the "install the
 
 - [ ] **Step 3: Syntax-check + commit**
 
-Run: `cd ansible && uv run ansible-playbook --syntax-check site-obs.yml`
+Run: `cd ansible && ansible-playbook --syntax-check site-obs.yml`
 Expected: `playbook: site-obs.yml`, no error.
 
 ```bash
@@ -264,7 +264,7 @@ Description=Render lab_network_state textfile
 [Service]
 Type=oneshot
 WorkingDirectory={{ repo_root }}
-ExecStart=/bin/sh -c 'uv run mqlab obs net-state > /var/lib/node_exporter/textfile/lab_network_state.prom.tmp && mv /var/lib/node_exporter/textfile/lab_network_state.prom.tmp /var/lib/node_exporter/textfile/lab_network_state.prom'
+ExecStart=/bin/sh -c 'mqlab obs net-state > /var/lib/node_exporter/textfile/lab_network_state.prom.tmp && mv /var/lib/node_exporter/textfile/lab_network_state.prom.tmp /var/lib/node_exporter/textfile/lab_network_state.prom'
 ```
 
 `ansible/roles/host-net-state/templates/lab-net-state.timer.j2`:
@@ -313,7 +313,7 @@ WantedBy=timers.target
 
 ```yaml
 # Host-side observability on the Vergil VM (the libvirt host). Run locally:
-#   uv run ansible-playbook host-obs.yml -c local -i localhost,
+#   ansible-playbook host-obs.yml -c local -i localhost,
 - hosts: localhost
   connection: local
   become: true
@@ -348,7 +348,7 @@ Run: `uv run pytest tests/test_cli_obs.py -v` → PASS.
 
 - [ ] **Step 5: Syntax-check + commit**
 
-Run: `cd ansible && uv run ansible-playbook --syntax-check host-obs.yml -i localhost,`
+Run: `cd ansible && ansible-playbook --syntax-check host-obs.yml -i localhost,`
 Expected: `playbook: host-obs.yml`.
 
 ```bash
@@ -560,7 +560,7 @@ WantedBy=timers.target
 
 ```yaml
 # Fleet-wide host metrics (#103) + reachability (#108). Render peers first:
-#   uv run mqlab obs reach-peers
+#   mqlab obs reach-peers
 - hosts: all
   become: true
   vars:
@@ -573,7 +573,7 @@ WantedBy=timers.target
 
 - [ ] **Step 8: Syntax-check + commit**
 
-Run: `cd ansible && uv run ansible-playbook --syntax-check observability.yml`
+Run: `cd ansible && ansible-playbook --syntax-check observability.yml`
 Expected: `playbook: observability.yml`.
 
 ```bash
@@ -710,7 +710,7 @@ Expected: PASS at 100% branch coverage (`netstate.py` fully exercised by `tests/
 ```bash
 mqlab obs reach-peers          # render the peer map
 mqlab obs up                   # renders dashboard+targets+inventory, provisions host + pair
-mqlab vm up pcmk_a && cd ansible && uv run ansible-playbook observability.yml --limit pcmk_a && cd ..
+mqlab vm up pcmk_a && cd ansible && ansible-playbook observability.yml --limit pcmk_a && cd ..
 # watch http://localhost:3000/d/lab-fleet-node :
 mqlab net down net-hb-a        # hb-a tile -> red (DOWN) within a scrape interval
 mqlab net destroy net-hb-a     # hb-a tile -> grey (ABSENT) — distinct from down

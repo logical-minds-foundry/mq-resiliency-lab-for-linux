@@ -349,7 +349,7 @@ def test_vm_provision_sources_secret_renders_inventory_runs_playbook(monkeypatch
     assert argvs[1][0] == "bash" and argvs[1][2] == "pcmk_hacluster_password"
     assert "lab-secret.sh" in argvs[1][1]
     play = runner.recorded[-1]
-    assert play.argv == ["uv", "run", "ansible-playbook", "site-pcmk.yml"]
+    assert play.argv == ["ansible-playbook", "site-pcmk.yml"]
     assert str(play.cwd).endswith("/ansible")
     assert play.env == {"PCMK_HACLUSTER_PASSWORD": "s3cr3t"}  # secret injected on the subprocess
     assert (tmp_path / "build" / "inventory.ini").read_text().startswith("[san_a]")
@@ -379,7 +379,7 @@ def test_vm_provision_no_secret_setup_runs_playbook_without_sourcing(monkeypatch
     result = CliRunner().invoke(cli.app, ["vm", "provision", "rdqm_ha"])
     assert result.exit_code == 0
     argvs = [c.argv for c in runner.recorded]
-    assert argvs == [[*_VIRSH, "list", "--all"], ["uv", "run", "ansible-playbook", "site-rdqm.yml"]]
+    assert argvs == [[*_VIRSH, "list", "--all"], ["ansible-playbook", "site-rdqm.yml"]]
     assert runner.recorded[-1].env is None  # no secrets -> no injected env
 
 

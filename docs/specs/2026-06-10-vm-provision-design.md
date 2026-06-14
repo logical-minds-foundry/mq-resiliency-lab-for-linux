@@ -49,7 +49,7 @@ lists the setups).
    note that it was written. This guarantees Ansible runs against a current
    static inventory.
 5. **Run the playbook** (the one orchestrated, streamed/teed `CommandStep`):
-   `uv run ansible-playbook <basename(provision)>` with cwd `ansible/`, streamed
+   `ansible-playbook <basename(provision)>` with cwd `ansible/`, streamed
    verbatim through `run_steps`. `ansible.cfg` already points at
    `../build/inventory.ini`.
 

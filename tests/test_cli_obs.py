@@ -245,8 +245,6 @@ def test_obs_instrument_renders_then_runs_observability_playbook(monkeypatch, tm
     assert argvs[0] == [*_VIRSH, "list", "--all"]
     play = runner.recorded[-1]
     assert play.argv == [
-        "uv",
-        "run",
         "ansible-playbook",
         "observability.yml",
         "--limit",

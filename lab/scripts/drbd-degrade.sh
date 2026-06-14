@@ -15,7 +15,7 @@ NODE="${2:-san-a}"
 RES="${3:-mqlun}"
 RATE="${4:-250k}"
 cd "$(dirname "$0")/../../ansible"
-run() { uv run ansible "$1" -b -m shell -a "$2"; }
+run() { ansible "$1" -b -m shell -a "$2"; }
 
 case "$MODE" in
   break)

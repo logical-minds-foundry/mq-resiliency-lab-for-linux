@@ -10,7 +10,7 @@ QM="${1:-QMPCMK}"
 PEER="${2:-pcmk_b}"
 SRC="${3:-pcmk-a1}"
 cd "$(dirname "$0")/../../ansible"
-run() { uv run ansible "$1" -b -m shell -a "$2"; }
+run() { ansible "$1" -b -m shell -a "$2"; }
 
 INF=$(run "$SRC" "su mqm -c '/opt/mqm/bin/dspmqinf -o command $QM'" | grep '^addmqinf' | tr -d '\r')
 run "$PEER" "mkdir -p /mqshared; su mqm -c '/opt/mqm/bin/${INF#*/opt/mqm/bin/}' || su mqm -c '/opt/mqm/bin/dspmq -m $QM'"
