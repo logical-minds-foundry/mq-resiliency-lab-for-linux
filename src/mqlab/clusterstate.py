@@ -47,7 +47,10 @@ def parse_crm(xml_text: str) -> dict[str, Any]:
         }
 
     resources: dict[str, dict[str, Any]] = {}
-    for r in root.findall(".//resources//resource"):
+    # Scope to the mq_group — the resource-group row the cockpit shows. Top-level
+    # STONITH (fence_*) resources are deliberately excluded; fencing is reported
+    # separately from stonith_admin history (§3.1).
+    for r in root.findall(".//group[@id='mq_group']//resource"):
         rid = r.get("id", "")
         held = r.find("./node")
         resources[rid] = {
@@ -176,12 +179,19 @@ _COMMANDS = {
 }
 
 
-def probe(cmd: list[str], timeout: int) -> str | None:
-    """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE)."""
+def probe(cmd: list[str], timeout: int, *, ignore_rc: bool = False) -> str | None:
+    """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE).
+
+    ignore_rc=True returns stdout regardless of exit code — for tools like
+    `systemctl is-active` that report a valid state ("inactive") with a non-zero exit,
+    where non-zero means "down", not "the probe failed".
+    """
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
     except (subprocess.TimeoutExpired, OSError):
         return None
+    if ignore_rc:
+        return cp.stdout
     return cp.stdout if cp.returncode == 0 else None
 
 
@@ -193,7 +203,9 @@ def collect(role: str, node: str, now: int) -> str:
     for source in PROBE_SETS[role]:
         if source == "daemons":
             units = DAEMON_UNITS[role]
-            raw = probe(["systemctl", "is-active", *units], timeout=2)
+            # is-active exits non-zero when a unit is inactive/failed — that is a valid
+            # "down" reading, not a probe failure, so keep stdout regardless of rc.
+            raw = probe(["systemctl", "is-active", *units], timeout=2, ignore_rc=True)
             if raw is not None:
                 daemons = parse_daemons(raw, units)
                 fresh.append("daemons")

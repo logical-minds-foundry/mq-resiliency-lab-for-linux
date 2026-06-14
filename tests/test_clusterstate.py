@@ -15,13 +15,17 @@ def test_module_exposes_role_probe_sets():
 
 
 def test_parse_crm_extracts_quorum_nodes_and_resource_placement():
+    # real capture: QM group currently on pcmk-a3; top-level fence_* resources present
     xml = (FIXTURES / "crm_mon.xml").read_text()
     out = clusterstate.parse_crm(xml)
     assert out["quorate"] is True
     assert out["nodes"]["pcmk-a2"] == {"online": True, "standby": False, "unclean": False}
     # resource -> (state, holding node or None)
-    assert out["resources"]["mq_qm"] == {"state": "Started", "node": "pcmk-a2"}
-    assert out["resources"]["mq_fs"]["node"] == "pcmk-a2"
+    assert out["resources"]["mq_qm"] == {"state": "Started", "node": "pcmk-a3"}
+    assert out["resources"]["mq_fs"]["node"] == "pcmk-a3"
+    # only the mq_group is collected; top-level STONITH resources are excluded
+    assert set(out["resources"]) == {"mq_fs", "mq_vip", "mq_vip_ext", "mq_qm"}
+    assert "fence_pcmk-a1" not in out["resources"]
 
 
 def test_parse_crm_marks_offline_node_and_unplaced_resource():
@@ -256,10 +260,23 @@ def test_probe_returns_none_on_nonzero_or_oserror(monkeypatch):
     assert clusterstate.probe(["nope"], timeout=3) is None
 
 
+def test_probe_ignore_rc_returns_stdout_on_nonzero(monkeypatch):
+    # `systemctl is-active` exits 3 for an inactive unit but its stdout is the real state
+    monkeypatch.setattr(
+        clusterstate.subprocess,
+        "run",
+        lambda c, **k: subprocess.CompletedProcess(c, 3, "inactive\n", ""),
+    )
+    assert clusterstate.probe(["systemctl"], timeout=2) is None  # default: nonzero -> None
+    assert clusterstate.probe(["systemctl"], timeout=2, ignore_rc=True) == "inactive\n"
+
+
 def test_main_writes_textfile_atomically_for_storage_role(tmp_path, monkeypatch):
     drbd_json = (FIXTURES / "drbd_status.json").read_text()
     monkeypatch.setattr(
-        clusterstate, "probe", lambda cmd, timeout: drbd_json if "drbd" in cmd[0] else "active\n"
+        clusterstate,
+        "probe",
+        lambda cmd, timeout, ignore_rc=False: drbd_json if "drbd" in cmd[0] else "active\n",
     )
     out = tmp_path / "lab_cluster_state.prom"
     clusterstate.main(
@@ -274,11 +291,11 @@ def test_main_writes_textfile_atomically_for_storage_role(tmp_path, monkeypatch)
 def test_main_cluster_role_runs_crm_stonith_iscsi(tmp_path, monkeypatch):
     crm_xml = (FIXTURES / "crm_mon.xml").read_text()
 
-    def fake_probe(cmd, timeout):
+    def fake_probe(cmd, timeout, ignore_rc=False):
         if cmd[0] == "crm_mon":
             return crm_xml
         if cmd[0] == "stonith_admin":
-            return ""
+            return "0 events found\n"
         if cmd[0] == "iscsiadm":
             return "tcp: [1] 10.40.1.5:3260,1 iqn.lab:san-a\n"
         if cmd[0] == "systemctl":
@@ -296,7 +313,8 @@ def test_main_cluster_role_runs_crm_stonith_iscsi(tmp_path, monkeypatch):
 
 
 def test_main_marks_source_stale_when_probe_times_out(tmp_path, monkeypatch):
-    monkeypatch.setattr(clusterstate, "probe", lambda cmd, timeout: None)  # everything times out
+    # everything times out -> every source None -> STALE
+    monkeypatch.setattr(clusterstate, "probe", lambda cmd, timeout, ignore_rc=False: None)
     out = tmp_path / "c.prom"
     clusterstate.main(
         ["--role", "cluster", "--node", "pcmk-a1", "--out", str(out), "--now", "1781455000"]
@@ -310,7 +328,7 @@ def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
     # no --node and no --now: exercise both default branches (os.uname, time.time)
     drbd_json = (FIXTURES / "drbd_status.json").read_text()
 
-    def fake_probe(cmd, timeout):
+    def fake_probe(cmd, timeout, ignore_rc=False):
         return drbd_json if cmd[0] == "drbdsetup" else "active\n"
 
     monkeypatch.setattr(clusterstate, "probe", fake_probe)

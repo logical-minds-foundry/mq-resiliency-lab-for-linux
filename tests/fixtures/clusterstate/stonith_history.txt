@@ -1,2 +1,1 @@
-# SAMPLE (Plan 1a, Task 1) — clean fence history baseline.
-# Replace with live `stonith_admin --history '*'` from pcmk-a1; reconcile in Task 10.
+0 events found
