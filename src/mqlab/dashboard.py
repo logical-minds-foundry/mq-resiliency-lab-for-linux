@@ -6,6 +6,12 @@ validates the VM rows. Emits a layered Grafana dashboard — the MQ Service rows
 (one per queue manager) on top, grouped VM rows (up/down + per-group CPU) in the
 middle, per-network rows at the bottom. uid is pinned so mqlab obs open / the
 docs deep-links keep working.
+
+The MQ Service rows are **object-driven, not metric-driven** (#178): the channels
+and queues we run are known up front, so each renders a row at all times. The MQSC
+object always exists; only its *status* comes and goes. A channel with no live
+status reads "No status" (the row stays put — that absence is the signal, not a
+vanished row), and lights up Running/Transitioning/Stopped once its status flows.
 """
 
 from __future__ import annotations
@@ -39,6 +45,22 @@ ROWS: list[tuple[str, list[str]]] = [
 
 class DashboardError(RuntimeError):
     """The curated layout cannot be rendered against the topology."""
+
+
+# A status metric (qmgr / channel status_squash) is numeric; every status tile
+# maps it to the same coloured-string family so the panel reads at a glance.
+# -1 is our object-driven sentinel: the curated object exists but has no live
+# status (exporter down, channel inactive) — the row stays, labelled "No status".
+_STATUS_OPTIONS: dict[str, dict[str, str]] = {
+    "-1": {"text": "No status", "color": "grey"},
+    "0": {"text": "Stopped", "color": "red"},
+    "1": {"text": "Transitioning", "color": "yellow"},
+    "2": {"text": "Running", "color": "green"},
+}
+
+
+def _status_mappings() -> list[dict[str, Any]]:
+    return [{"type": "value", "options": dict(_STATUS_OPTIONS)}]
 
 
 def _row(title: str, y: int) -> dict[str, Any]:
@@ -87,34 +109,28 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 
 # --- MQ Service (Layer 2) ---------------------------------------------------
 # One curated row per queue manager we actually run today: our HA QM (QMPCMK)
-# and the DTCC counterparty (QMDTCC, #153). Metrics confirmed from the exporter
-# source in the #141 spike — they read no-data until mq_prometheus is wired
-# (#172), but the layout is real. Each QM row: status / msg-rate / connections
-# stat tiles + a channels table (ibmmq_channel_status_squash) + a queues table
-# (ibmmq_queue_depth). QMRDQM (RHEL arm) and QMAIN (standalone) return if/when
-# those arms are in play.
-QMS: list[tuple[str, str]] = [
-    ("QMPCMK", "service · Ubuntu HA/DR"),
-    ("QMDTCC", "counterparty · DTCC service"),
+# and the DTCC counterparty (QMDTCC, #153). Each entry also names the channels we
+# care about (the client SVRCONN + the inter-QM SENDER/RECEIVER pair, named
+# identically on both ends), so the panel draws a tile per channel object even
+# when it has no live status. Queue rows are driven by the exporter's curated
+# monitoredQueues, so the depth table + rate graphs need no per-QM list here.
+# QMDTCC reads "No status" until its exporter lands (#182); QMRDQM / QMAIN return
+# if/when those arms are in play.
+QMS: list[tuple[str, str, list[str]]] = [
+    ("QMPCMK", "service · Ubuntu HA/DR", ["APP.SVRCONN", "QMPCMK.QMDTCC", "QMDTCC.QMPCMK"]),
+    ("QMDTCC", "counterparty · DTCC service", ["SVC.SVRCONN", "QMDTCC.QMPCMK", "QMPCMK.QMDTCC"]),
 ]
 
 
 def _qm_status_panel(qm: str, y: int) -> dict[str, Any]:
+    # `or vector(-1)` keeps the tile populated when the QM has no live status
+    # (its exporter is down / not yet wired) — object-driven, never blank.
     return {
         "type": "stat",
         "title": f"{qm} — status",
         "gridPos": {"h": 4, "w": 5, "x": 0, "y": y},
-        "fieldConfig": {
-            "defaults": {
-                "mappings": [
-                    {"type": "value", "options": {"0": {"text": "STOPPED", "color": "red"}}}
-                ],
-                "thresholds": {
-                    "steps": [{"value": None, "color": "red"}, {"value": 1, "color": "green"}]
-                },
-            }
-        },
-        "targets": [{"expr": f'ibmmq_qmgr_status{{qmgr="{qm}"}}'}],
+        "fieldConfig": {"defaults": {"mappings": _status_mappings()}},
+        "targets": [{"expr": f'max(ibmmq_qmgr_status{{qmgr="{qm}"}}) or vector(-1)'}],
     }
 
 
@@ -143,37 +159,38 @@ def _qm_conn_panel(qm: str, y: int) -> dict[str, Any]:
     }
 
 
-def _channels_table(qm: str, y: int) -> dict[str, Any]:
-    # Inter-QM links + the client SVRCONN — status for watching retries.
-    return {
-        "type": "table",
-        "title": f"{qm} — channels",
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
-        "targets": [
+def _channel_tiles(qm: str, channels: list[str], y: int) -> list[dict[str, Any]]:
+    # Object-driven: a status tile per curated channel, always rendered. The MQSC
+    # channel object always exists; only its status comes and goes — so when the
+    # SENDER/RECEIVER pair is INACTIVE (no inter-QM traffic) the tile reads
+    # "No status" rather than vanishing, and lights up Running once a request
+    # crosses the WAN. `or vector(-1)` supplies the sentinel when the series is
+    # absent.
+    width = 24 // len(channels)
+    tiles: list[dict[str, Any]] = []
+    for i, channel in enumerate(channels):
+        expr = f'max(ibmmq_channel_status_squash{{qmgr="{qm}",channel="{channel}"}}) or vector(-1)'
+        tiles.append(
             {
-                "expr": f'ibmmq_channel_status_squash{{qmgr="{qm}"}}',
-                "format": "table",
-                "instant": True,
+                "type": "stat",
+                "title": f"{qm} · {channel}",
+                "gridPos": {"h": 4, "w": width, "x": i * width, "y": y},
+                "fieldConfig": {"defaults": {"mappings": _status_mappings()}},
+                "targets": [{"expr": expr}],
             }
-        ],
-        "transformations": [
-            {
-                "id": "organize",
-                "options": {
-                    "excludeByName": {"Time": True, "qmgr": True, "job": True, "instance": True},
-                    "renameByName": {"channel": "Channel", "chltype": "Type", "Value": "Status"},
-                },
-            }
-        ],
-    }
+        )
+    return tiles
 
 
 def _queues_table(qm: str, y: int) -> dict[str, Any]:
     # Transmission + application queues — depth (the staging/backlog signal).
+    # Queues always have a status, so the curated monitoredQueues populate this
+    # directly. Strip the metadata columns the exporter leaks in; keep name +
+    # depth only.
     return {
         "type": "table",
         "title": f"{qm} — queues",
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": y},
         "targets": [
             {"expr": f'ibmmq_queue_depth{{qmgr="{qm}"}}', "format": "table", "instant": True}
         ],
@@ -181,10 +198,37 @@ def _queues_table(qm: str, y: int) -> dict[str, Any]:
             {
                 "id": "organize",
                 "options": {
-                    "excludeByName": {"Time": True, "qmgr": True, "job": True, "instance": True},
-                    "renameByName": {"queue": "Queue", "usage": "Type", "Value": "Depth"},
+                    "excludeByName": {
+                        "Time": True,
+                        "qmgr": True,
+                        "job": True,
+                        "instance": True,
+                        "__name__": True,
+                        "cluster": True,
+                        "description": True,
+                        "platform": True,
+                        "usage": True,
+                    },
+                    "renameByName": {"queue": "Queue", "Value": "Depth"},
                 },
             }
+        ],
+    }
+
+
+def _queue_rates_panel(qm: str, y: int) -> dict[str, Any]:
+    # Depth says "how backed up"; rates say "is it flowing" — enqueue (mqput) and
+    # dequeue (mqget) per queue, beside the depth table.
+    put = f'rate(ibmmq_queue_mqput_mqput1_count{{qmgr="{qm}"}}[1m])'
+    get = f'rate(ibmmq_queue_mqget_count{{qmgr="{qm}"}}[1m])'
+    return {
+        "type": "timeseries",
+        "title": f"{qm} — queue rates",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": y},
+        "fieldConfig": {"defaults": {"unit": "short"}},
+        "targets": [
+            {"expr": put, "legendFormat": "{{queue}} put"},
+            {"expr": get, "legendFormat": "{{queue}} get"},
         ],
     }
 
@@ -244,16 +288,17 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
     panels: list[dict[str, Any]] = []
     y = 0
 
-    for qm, role in QMS:
+    for qm, role, channels in QMS:
         panels.append(_row(f"MQ Service · {qm} · {role}", y))
         y += 1
         panels.append(_qm_status_panel(qm, y))
         panels.append(_qm_rate_panel(qm, y))
         panels.append(_qm_conn_panel(qm, y))
         y += 4
-        panels.append(_channels_table(qm, y))
-        y += 8
+        panels.extend(_channel_tiles(qm, channels, y))
+        y += 4
         panels.append(_queues_table(qm, y))
+        panels.append(_queue_rates_panel(qm, y))
         y += 8
 
     for label, groups in ROWS:
