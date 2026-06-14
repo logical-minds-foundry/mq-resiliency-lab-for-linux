@@ -67,3 +67,36 @@ def test_parse_drbd_handles_no_connections():
     assert r0["disk"] == "Diskless"
     assert r0["resync_pct"] is None
     assert r0["out_of_sync_bytes"] is None
+
+
+def test_parse_stonith_counts_recent_fence_actions_per_node():
+    text = (
+        "pcmk-a2 was reset (off) by pcmk-a1 at Sat Jun 14 12:04:01 2026\n"
+        "pcmk-a2 was reset (on) by pcmk-a1 at Sat Jun 14 12:05:10 2026\n"
+    )
+    # node -> count of fence actions seen in history (0 == clean)
+    assert clusterstate.parse_stonith(text) == {"pcmk-a2": 2}
+
+
+def test_parse_stonith_empty_history_is_clean():
+    assert clusterstate.parse_stonith("") == {}
+
+
+def test_parse_iscsi_paths_counts_sessions():
+    text = "tcp: [1] 10.40.1.5:3260,1 iqn.2003-01.lab:san-a (non-flash)\n"
+    assert clusterstate.parse_iscsi(text) == 1
+
+
+def test_parse_iscsi_no_sessions_is_zero():
+    assert clusterstate.parse_iscsi("iscsiadm: No active sessions.\n") == 0
+
+
+def test_parse_daemons_reads_systemctl_is_active_block():
+    # one "is-active" line per unit, in PROBE order
+    text = "active\nactive\nfailed\n"
+    units = ["corosync", "pacemaker", "drbd"]
+    assert clusterstate.parse_daemons(text, units) == {
+        "corosync": True,
+        "pacemaker": True,
+        "drbd": False,
+    }

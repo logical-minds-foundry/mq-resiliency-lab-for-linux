@@ -66,3 +66,28 @@ def parse_drbd(json_text: str) -> dict:
             "out_of_sync_bytes": oos,
         }
     return out
+
+
+def parse_stonith(text: str) -> dict[str, int]:
+    """stonith_admin --history '*' -> {node: fence_action_count}; empty == clean."""
+    counts: dict[str, int] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if " was reset " in line or " was fenced " in line:
+            node = line.split(" ", 1)[0]
+            counts[node] = counts.get(node, 0) + 1
+    return counts
+
+
+def parse_iscsi(text: str) -> int:
+    """iscsiadm -m session -> count of active sessions (lines starting with a transport)."""
+    return sum(1 for raw in text.splitlines() if raw.strip().startswith(("tcp:", "iser:")))
+
+
+def parse_daemons(text: str, units: list[str]) -> dict[str, bool]:
+    """One `systemctl is-active` line per unit (same order) -> {unit: is_active}."""
+    lines = text.splitlines()
+    return {
+        unit: (lines[i].strip() == "active" if i < len(lines) else False)
+        for i, unit in enumerate(units)
+    }
