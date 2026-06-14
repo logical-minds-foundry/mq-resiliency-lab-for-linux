@@ -874,51 +874,53 @@ vrg-commit --type feat --scope obs --message "cluster-state collector role (depl
 
 ---
 
-### Task 9: Wire the role into the cluster bring-up playbook
+### Task 9: Wire the role into the observability overlay
 
 **Files:**
-- Modify: the Pacemaker/SAN bring-up playbook (find it in Step 1)
+- Modify: `ansible/observability.yml`
 
-- [ ] **Step 1: Locate the playbook and groups**
+The cluster-state collector is a guest textfile collector, so it belongs with its
+siblings in `ansible/observability.yml` — the `hosts: all` obs overlay that already
+applies `node-exporter` and `{role: net-reach, when: reach_peers | length > 0}` — **not**
+in the cluster bring-up playbook. (Confirmed against current `develop` post-#179:
+`site.yml` was removed; `site-distributed.yml` imports `site-pcmk.yml` for cluster
+bring-up, while the obs overlay stays separate and runs on all guests.) The relevant
+groups are `pcmk_a`/`pcmk_b` (cluster role) and `san_a`/`san_b` (storage role).
 
-Run: `ls ansible/ | grep -iE "pcmk|san|site" && grep -rn "hosts:" ansible/site-pcmk*.yml ansible/site-obs.yml 2>/dev/null`
-Identify the play(s) that target the `pcmk_a`/`pcmk_b` and `san_a`/`san_b` groups (the
-same groups used by `mq-pcmk-qmgr` / `drbd-san`). Note the exact file and group names.
+- [ ] **Step 1: Read the current overlay**
 
-- [ ] **Step 2: Add the collector to the cluster nodes**
+Run: `cat ansible/observability.yml`
+Confirm the single `- hosts: all` play whose `roles:` includes `node-exporter` and the
+conditional `{role: net-reach, when: reach_peers | length > 0}`.
 
-In the play targeting the pcmk groups, add to its `roles:` list:
+- [ ] **Step 2: Add the two conditional cluster-state entries**
 
-```yaml
-    - role: cluster-state
-      vars:
-        cluster_state_role: cluster
-```
-
-- [ ] **Step 3: Add the collector to the SAN nodes**
-
-In the play targeting the san groups, add:
+In that play's `roles:` list, after the `net-reach` line, add:
 
 ```yaml
     - role: cluster-state
-      vars:
-        cluster_state_role: storage
+      vars: {cluster_state_role: cluster}
+      when: "'pcmk_a' in group_names or 'pcmk_b' in group_names"
+    - role: cluster-state
+      vars: {cluster_state_role: storage}
+      when: "'san_a' in group_names or 'san_b' in group_names"
 ```
 
-> If pcmk and san are one play over a combined group, instead set the var per-host via
-> `group_vars/` (`cluster_state_role: cluster` for `pcmk_*`, `storage` for `san_*`) and
-> add the role once. Keep it declarative; do not branch in the role.
+This runs the collector only on the cluster + SAN nodes, with the right `--role`, and
+skips obs/app/dtcc — matching how `net-reach` is conditionally applied. The role's
+`copy` src `{{ playbook_dir }}/../src/mqlab/clusterstate.py` resolves correctly because
+`observability.yml` lives in `ansible/`.
 
-- [ ] **Step 4: Lint-validate**
+- [ ] **Step 3: Lint-validate**
 
 Run: `vrg-container-run -- vrg-validate`
-Expected: PASS (ansible-lint clean on the modified playbook).
+Expected: PASS (ansible-lint clean on `observability.yml`).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-vrg-git add ansible/
-vrg-commit --type feat --scope obs --message "apply cluster-state role to pcmk + san nodes (#177)"
+vrg-git add ansible/observability.yml
+vrg-commit --type feat --scope obs --message "apply cluster-state collector via the obs overlay (#177)"
 ```
 
 ---
@@ -936,10 +938,10 @@ rebuild + a drill; this task is the inner verification loop before that.
   Reconcile any parser mismatch (real schema vs sample) now — this is the spike
   closing the loop. Re-commit fixtures + any parser fixes.
 
-- [ ] **Step 2: Provision the collector** (human-run, or via the lab's bring-up):
+- [ ] **Step 2: Provision the collector** (human-run, via the obs overlay from Task 9):
 
 ```bash
-mqlab ... # the playbook from Task 9, against the pcmk + san nodes
+ansible-playbook ansible/observability.yml   # or `mqlab obs up`, which runs it
 ```
 
 - [ ] **Step 3: Confirm the textfile exists and has fresh timestamps** on a pcmk node:
