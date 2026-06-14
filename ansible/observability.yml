@@ -10,3 +10,11 @@
   roles:
     - node-exporter
     - {role: net-reach, when: reach_peers | length > 0}
+    # Cluster-state collector (#177) — only on the PCMK arm. cluster nodes probe
+    # crm/stonith/iscsi/daemons; SAN nodes probe drbd/daemons.
+    - role: cluster-state
+      vars: {cluster_state_role: cluster}
+      when: "'pcmk_a' in group_names or 'pcmk_b' in group_names"
+    - role: cluster-state
+      vars: {cluster_state_role: storage}
+      when: "'san_a' in group_names or 'san_b' in group_names"
