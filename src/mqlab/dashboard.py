@@ -86,16 +86,16 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 
 
 # --- MQ Service (Layer 2) ---------------------------------------------------
-# One curated row per queue manager. Current names (rename normalizes later, #73);
-# QMRDQM asserted for the RHEL arm. Metrics confirmed from the exporter source in
-# the #141 spike — they read no-data until mq_prometheus is wired, but the layout
-# is real. Each QM row: status / msg-rate / connections stat tiles + a channels
-# table (ibmmq_channel_status_squash) + a queues table (ibmmq_queue_depth).
+# One curated row per queue manager we actually run today: our HA QM (QMPCMK)
+# and the DTCC counterparty (QMDTCC, #153). Metrics confirmed from the exporter
+# source in the #141 spike — they read no-data until mq_prometheus is wired
+# (#172), but the layout is real. Each QM row: status / msg-rate / connections
+# stat tiles + a channels table (ibmmq_channel_status_squash) + a queues table
+# (ibmmq_queue_depth). QMRDQM (RHEL arm) and QMAIN (standalone) return if/when
+# those arms are in play.
 QMS: list[tuple[str, str]] = [
     ("QMPCMK", "service · Ubuntu HA/DR"),
-    ("QMRDQM", "service · RHEL RDQM"),
-    ("QMAIN", "service · standalone"),
-    ("QDTCC", "counterparty · DTCC sim"),
+    ("QMDTCC", "counterparty · DTCC service"),
 ]
 
 

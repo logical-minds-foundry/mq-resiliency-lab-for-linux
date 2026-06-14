@@ -30,9 +30,7 @@ def test_has_a_row_header_per_curated_row_in_order():
     row_titles = [p["title"] for p in panels if p["type"] == "row"]
     assert row_titles == [
         "MQ Service · QMPCMK · service · Ubuntu HA/DR",
-        "MQ Service · QMRDQM · service · RHEL RDQM",
-        "MQ Service · QMAIN · service · standalone",
-        "MQ Service · QDTCC · counterparty · DTCC sim",
+        "MQ Service · QMDTCC · counterparty · DTCC service",
         "VMs · PCMK · A",
         "VMs · PCMK · B",
         "VMs · RDQM · A",
@@ -67,8 +65,8 @@ def test_mq_service_rows_use_confirmed_ibmmq_metrics():
     # channels + queues tables, keyed by the squash/depth metrics, formatted as tables
     ch = by_title["QMPCMK — channels"]["targets"][0]
     assert ch["expr"] == 'ibmmq_channel_status_squash{qmgr="QMPCMK"}' and ch["format"] == "table"
-    qd = by_title["QDTCC — queues"]["targets"][0]
-    assert qd["expr"] == 'ibmmq_queue_depth{qmgr="QDTCC"}' and qd["instant"] is True
+    qd = by_title["QMDTCC — queues"]["targets"][0]
+    assert qd["expr"] == 'ibmmq_queue_depth{qmgr="QMDTCC"}' and qd["instant"] is True
 
 
 def test_unknown_curated_group_fails_loud():
