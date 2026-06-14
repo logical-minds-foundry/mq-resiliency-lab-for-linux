@@ -34,7 +34,8 @@ nodes:
     nics: { net-mgmt: 10.50.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
   # --- Observability (#103): obs runs Prometheus+Grafana on the mgmt plane only;
-  # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters. ---
+  # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters, plus
+  # net-ext to reach the DTCC counterparty QM across the inter-business WAN (#182). ---
   obs:
     cpus: 2
     memory: 4096
@@ -42,7 +43,7 @@ nodes:
   mon-probe:
     cpus: 1
     memory: 1024
-    nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7 }
+    nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
