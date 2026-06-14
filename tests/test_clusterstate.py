@@ -35,3 +35,35 @@ def test_parse_crm_marks_offline_node_and_unplaced_resource():
     assert out["quorate"] is False
     assert out["nodes"]["pcmk-a2"]["unclean"] is True
     assert out["resources"]["mq_qm"] == {"state": "Stopped", "node": None}
+
+
+def test_parse_drbd_extracts_role_disk_conn_and_rpo_tail():
+    out = clusterstate.parse_drbd((FIXTURES / "drbd_status.json").read_text())
+    r0 = out["r0"]
+    assert r0["role"] == "Primary"
+    assert r0["disk"] == "UpToDate"
+    assert r0["conn"] == "Connected"
+    assert r0["resync_pct"] == 100.0
+    assert r0["out_of_sync_bytes"] == 0
+
+
+def test_parse_drbd_flags_split_brain_standalone_and_resync_tail():
+    text = """[{"name":"r0","role":"Secondary",
+      "devices":[{"volume":0,"disk-state":"Outdated"}],
+      "connections":[{"name":"san-b","connection-state":"StandAlone","peer-role":"Unknown",
+        "peer_devices":[{"volume":0,"peer-disk-state":"DUnknown",
+          "replication-state":"Off","percent-in-sync":42.0,"out-of-sync":2202010}]}]}]"""
+    r0 = clusterstate.parse_drbd(text)["r0"]
+    assert r0["conn"] == "StandAlone"  # split-brain / disconnected
+    assert r0["disk"] == "Outdated"
+    assert r0["resync_pct"] == 42.0
+    assert r0["out_of_sync_bytes"] == 2202010
+
+
+def test_parse_drbd_handles_no_connections():
+    text = '[{"name":"r0","role":"Secondary","devices":[{"volume":0,"disk-state":"Diskless"}],"connections":[]}]'
+    r0 = clusterstate.parse_drbd(text)["r0"]
+    assert r0["conn"] == "Disconnected"
+    assert r0["disk"] == "Diskless"
+    assert r0["resync_pct"] is None
+    assert r0["out_of_sync_bytes"] is None

@@ -9,6 +9,7 @@ source bounded + non-blocking (timeout -> no fresh sample -> the cell reads STAL
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 
 # role -> ordered probe sources it runs
@@ -41,3 +42,27 @@ def parse_crm(xml_text: str) -> dict:
             "node": held.get("name") if held is not None else None,
         }
     return {"quorate": quorate, "nodes": nodes, "resources": resources}
+
+
+def parse_drbd(json_text: str) -> dict:
+    """drbdsetup/drbdadm status --json -> {resource: {role, disk, conn, resync_pct, out_of_sync_bytes}}."""
+    out: dict[str, dict] = {}
+    for res in json.loads(json_text):
+        dev0 = (res.get("devices") or [{}])[0]
+        conns = res.get("connections") or []
+        if conns:
+            conn0 = conns[0]
+            peerdev0 = (conn0.get("peer_devices") or [{}])[0]
+            conn = conn0.get("connection-state", "Unknown")
+            resync = peerdev0.get("percent-in-sync")
+            oos = peerdev0.get("out-of-sync")
+        else:
+            conn, resync, oos = "Disconnected", None, None
+        out[res.get("name", "")] = {
+            "role": res.get("role", "Unknown"),
+            "disk": dev0.get("disk-state", "Unknown"),
+            "conn": conn,
+            "resync_pct": resync,
+            "out_of_sync_bytes": oos,
+        }
+    return out
