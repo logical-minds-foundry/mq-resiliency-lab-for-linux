@@ -1,5 +1,5 @@
 # Host-side observability on the Vergil VM (the libvirt host). Run locally:
-#   uv run ansible-playbook host-obs.yml -c local -i localhost,
+#   ansible-playbook host-obs.yml -c local -i localhost,
 - hosts: localhost
   connection: local
   become: true

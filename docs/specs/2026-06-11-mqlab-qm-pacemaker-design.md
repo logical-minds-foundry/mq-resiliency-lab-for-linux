@@ -138,7 +138,7 @@ topology.yaml (setup.qm, secrets)
 pre-flight (members RUNNING?) ──no──▶ advise mqlab vm up, exit 3
         │ yes
         ▼  render the static inventory (#101)
-uv run ansible-playbook site-pcmk-qm.yml -e qm_name=… -e qm_vip=…   (streamed)
+ansible-playbook site-pcmk-qm.yml -e qm_name=… -e qm_vip=…   (streamed)
         ▼
 mq-pcmk-qmgr role applies the 6 task groups → Pacemaker mq_group up
 ```

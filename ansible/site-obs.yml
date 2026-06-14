@@ -1,5 +1,5 @@
 # Observability pair (#103). Run via `mqlab obs up`, or directly:
-#   uv run ansible-playbook site-obs.yml
+#   ansible-playbook site-obs.yml
 - hosts: obs_box:probe
   become: true
   roles: [node-exporter]

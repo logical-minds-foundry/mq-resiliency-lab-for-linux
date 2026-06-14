@@ -9,6 +9,6 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export PCMK_HACLUSTER_PASSWORD="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"
-( cd "$HERE/../.." && uv run mqlab vm inventory )   # renders build/inventory.ini from topology
+( cd "$HERE/../.." && mqlab vm inventory )   # renders build/inventory.ini from topology
 cd "$HERE/../../ansible"
-exec uv run ansible-playbook site-pcmk-dr.yml "$@"
+exec ansible-playbook site-pcmk-dr.yml "$@"

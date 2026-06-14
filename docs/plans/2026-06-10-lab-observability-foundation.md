@@ -592,7 +592,7 @@ Create `ansible/roles/node-exporter/handlers/main.yml`:
 
 - [ ] **Step 5: Syntax-check the role wiring (deferred live run to Task 10/11)**
 
-Run: `cd ansible && uv run ansible-playbook --syntax-check -i /dev/null -e 'targets=localhost' /dev/stdin <<'YAML'
+Run: `cd ansible && ansible-playbook --syntax-check -i /dev/null -e 'targets=localhost' /dev/stdin <<'YAML'
 - hosts: localhost
   roles: [node-exporter]
 YAML`
@@ -960,7 +960,7 @@ Create `ansible/site-obs.yml`:
 
 ```yaml
 # Observability pair (#103). Run via `mqlab obs up`, or directly:
-#   uv run ansible-playbook site-obs.yml
+#   ansible-playbook site-obs.yml
 - hosts: obs:probe
   become: true
   roles: [node-exporter]
@@ -976,7 +976,7 @@ Create `ansible/observability.yml`:
 
 ```yaml
 # Fleet-wide host metrics (#103, Layer 1). Run against whatever arm is up, e.g.:
-#   uv run ansible-playbook observability.yml --limit rdqm_a
+#   ansible-playbook observability.yml --limit rdqm_a
 - hosts: all
   become: true
   roles: [node-exporter]
@@ -984,7 +984,7 @@ Create `ansible/observability.yml`:
 
 - [ ] **Step 3: Syntax-check both playbooks**
 
-Run: `cd ansible && uv run ansible-playbook --syntax-check site-obs.yml && uv run ansible-playbook --syntax-check observability.yml`
+Run: `cd ansible && ansible-playbook --syntax-check site-obs.yml && ansible-playbook --syntax-check observability.yml`
 Expected: both print `playbook: ...` with no error. (No live hosts needed for a syntax check.)
 
 - [ ] **Step 4: Commit**
@@ -1053,7 +1053,7 @@ Prometheus restart is needed. The only action is installing node_exporter on the
 arm. Bring up an arm and run the fleet overlay:
 ```bash
 mqlab vm up rdqm_ha          # or whichever arm is convenient
-cd ansible && uv run ansible-playbook observability.yml --limit rdqm_a
+cd ansible && ansible-playbook observability.yml --limit rdqm_a
 ```
 Expected: `observability.yml` completes; node_exporter active on `rdqm-a1..a3`; their tiles flip from DOWN to UP on the dashboard as the exporter starts.
 

@@ -10,7 +10,7 @@
 set -euo pipefail
 DIR="${1:-a2b}"
 cd "$(dirname "$0")/../../ansible"
-run() { uv run ansible "$1" -b -m shell -a "$2"; }
+run() { ansible "$1" -b -m shell -a "$2"; }
 
 if [ "$DIR" = a2b ]; then
   TO_SAN=san-b; TO_PCMK=pcmk_b; TO_PORTAL=10.40.2.6; TO_VIP=10.10.2.200

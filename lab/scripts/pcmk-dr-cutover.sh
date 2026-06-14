@@ -9,7 +9,7 @@
 set -euo pipefail
 DIR="${1:-a2b}"
 cd "$(dirname "$0")/../../ansible"
-run() { uv run ansible "$1" -b -m shell -a "$2"; }
+run() { ansible "$1" -b -m shell -a "$2"; }
 
 if [ "$DIR" = a2b ]; then
   FROM_SAN=san-a; TO_SAN=san-b; FROM_PCMK=pcmk_a; TO_PCMK=pcmk_b

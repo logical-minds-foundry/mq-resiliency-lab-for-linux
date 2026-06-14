@@ -201,7 +201,7 @@ overlay the fleet role onto its group:
 
 ```bash
 mqlab vm create pcmk_a                                  # boots the arm (arm64, KVM-fast)
-cd ansible && uv run ansible-playbook observability.yml --limit pcmk_a
+cd ansible && ansible-playbook observability.yml --limit pcmk_a
 ```
 
 Those tiles flip from red to green as `node_exporter` starts — no re-render or

@@ -287,7 +287,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
             Command(
-                ["uv", "run", "ansible-playbook", "site-obs.yml"],  # noqa: S607
+                ["ansible-playbook", "site-obs.yml"],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),
@@ -297,8 +297,6 @@ def _obs_up_steps() -> list[CommandStep]:
             # timer — via a connection=local play.
             Command(
                 [
-                    "uv",
-                    "run",
                     "ansible-playbook",
                     "host-obs.yml",
                     "-c",
@@ -385,7 +383,7 @@ def _instrument(setup_name: str) -> None:
         step = CommandStep(
             f"{setup_name} instrument",
             Command(
-                ["uv", "run", "ansible-playbook", "observability.yml", "--limit", setup_name],  # noqa: S607
+                ["ansible-playbook", "observability.yml", "--limit", setup_name],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         )
@@ -744,7 +742,7 @@ def _provision(setup_name: str) -> None:
         step = CommandStep(
             f"{setup_name} provision",
             Command(
-                ["uv", "run", "ansible-playbook", Path(setup.provision).name],  # noqa: S607
+                ["ansible-playbook", Path(setup.provision).name],  # noqa: S607
                 cwd=repo_root() / "ansible",
                 env=secret_env or None,
             ),
@@ -821,8 +819,6 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
             f"{setup_name} {verb}",
             Command(
                 [
-                    "uv",
-                    "run",
                     "ansible-playbook",
                     playbook,
                     "-e",
@@ -862,8 +858,6 @@ def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
             f"{setup_name} {verb}",
             Command(
                 [
-                    "uv",
-                    "run",
                     "ansible",
                     f"{_PCMK_CLUSTER_GROUP}[0]",
                     "-b",

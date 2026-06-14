@@ -1456,9 +1456,9 @@ If ruff flags `S603`/`S607` anywhere beyond the annotated `# noqa` lines, add a 
 
 Run:
 ```bash
-uv run mqlab net up
-uv run mqlab net status
-uv run mqlab net down
+mqlab net up
+mqlab net status
+mqlab net down
 ```
 Expected: `net up` echoes each `virsh net-define/net-start/net-autostart` verbatim and ends with all lab networks up; `net status` shows them active; `net down` tears them down. A transcript for each appears under `build/runs/`. Confirm no transcript was written anywhere outside `build/`.
 

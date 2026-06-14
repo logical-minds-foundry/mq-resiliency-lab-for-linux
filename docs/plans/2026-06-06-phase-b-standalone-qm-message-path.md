@@ -339,7 +339,7 @@ host_key_checking = False
 retry_files_enabled = False
 ```
 
-Run: `ansible/inventory.sh && cd ansible && uv run ansible -m ping all`
+Run: `ansible/inventory.sh && cd ansible && ansible -m ping all`
 Expected: three `SUCCESS` pongs.
 
 - [ ] **Step 3: `mq-install` role** (consumes the Task-2 tar; L0 prep is
@@ -424,7 +424,7 @@ here only.)*
   roles: [mq-client]
 ```
 
-Run: `cd ansible && uv run ansible-playbook site.yml`
+Run: `cd ansible && ansible-playbook site.yml`
 Expected: ok/changed across all three, zero failed; re-run: zero changed
 (idempotence). `vagrant ssh qm-main -c '/opt/mqm/bin/dspmqver'` shows
 9.4.5.0. Commit (`feat(ansible): L1 install roles`).
@@ -559,7 +559,7 @@ WantedBy=multi-user.target
 
 ```bash
 export MQWEB_ADMIN_USER=mqadmin MQWEB_ADMIN_PASSWORD=$(openssl rand -hex 12)
-cd ansible && uv run ansible-playbook site.yml
+cd ansible && ansible-playbook site.yml
 curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" \
   https://10.30.0.10:9443/ibmmq/rest/v2/admin/qmgr | head -3
 curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" \
@@ -624,7 +624,7 @@ objects:
 ```python
 # src/mqlab/apply.py
 """Apply declarative MQ object definitions through pymqrest ensure_*.
-Usage: uv run python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443
+Usage: python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443
 Credentials from MQWEB_ADMIN_USER / MQWEB_ADMIN_PASSWORD (never committed)."""
 import os, sys, yaml
 from pymqrest import MQRESTSession, BasicAuth   # adjust import per Step 1
@@ -661,13 +661,13 @@ used in `content/*.yaml` (pure file parse — no live QM in CI).
 - [ ] **Step 4: Apply to both QMs; prove convergence and the channels**
 
 ```bash
-uv run python -m mqlab.apply content/qm-main.yaml  https://10.30.0.10:9443
-uv run python -m mqlab.apply content/dtcc-sim.yaml https://10.20.0.50:9443
+python -m mqlab.apply content/qm-main.yaml  https://10.30.0.10:9443
+python -m mqlab.apply content/dtcc-sim.yaml https://10.20.0.50:9443
 # second run: every line UNCHANGED (the pymqrest drift-detection showcase)
 # then start senders once (runmqsc via ansible ad-hoc or REST) and check:
-cd ansible && uv run ansible qm-main -b --become-user=mqm -m shell \
+cd ansible && ansible qm-main -b --become-user=mqm -m shell \
   -a 'echo "START CHANNEL(QMAIN.QDTCC)" | /opt/mqm/bin/runmqsc QMAIN'
-uv run ansible dtcc-sim -b --become-user=mqm -m shell \
+ansible dtcc-sim -b --become-user=mqm -m shell \
   -a 'echo "START CHANNEL(QDTCC.QMAIN)" | /opt/mqm/bin/runmqsc QDTCC'
 ```
 
