@@ -21,7 +21,7 @@ def test_pcmk_setups_declare_the_hacluster_secret():
     setups = lab_setups()
     assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password"]
     assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password"]
-    assert setups["standalone"].secrets == ["mqweb_admin_password"]
+    assert setups["distributed"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
 
 
 def test_real_topology_renders_scrape_targets():
@@ -92,7 +92,7 @@ def test_distributed_setup_composed():
     from mqlab.setups import lab_setups
 
     dist = lab_setups()["distributed"]
-    assert dist.groups == ["san_a", "pcmk_a", "dtcc"]
+    assert dist.groups == ["san_a", "pcmk_a", "dtcc", "app"]
     assert dist.provision == "ansible/site-distributed.yml"
     assert dist.qm is not None and dist.qm.name == "QMPCMK"
     assert dist.qm.dtcc_conn == "10.60.0.50"
