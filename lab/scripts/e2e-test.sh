@@ -1,18 +1,10 @@
 #!/usr/bin/env bash
-# lab/scripts/e2e-test.sh - N trades through app-client -> QMAIN ->
-# channel -> QDTCC -> responder -> back. Exits non-zero unless every
-# trade round-trips with a clean ACK.
+# lab/scripts/e2e-test.sh - N requests through the distributed flow:
+#   app -> QMPCMK -> inter-QM SENDER/RECEIVER -> QMDTCC -> service -> reply back.
+# The DTCC service responder runs as a systemd service (mq-service-responder on
+# dtcc-sim), so we just drive the app. Exits non-zero unless every request
+# round-trips (app_requester returns 1 on any miss). (#148)
 set -euo pipefail
 N="${1:-5}"
 cd "$(dirname "$0")/.."
-# Drain the trade queues first - residue from interrupted runs otherwise
-# satisfies (or starves) the counted get loops and corrupts the assertion.
-vagrant ssh qm-main -c 'echo "CLEAR QLOCAL(TRADE.REPLY)" | sudo -u mqm /opt/mqm/bin/runmqsc QMAIN' >/dev/null 2>&1 || true
-vagrant ssh dtcc-sim -c 'echo "CLEAR QLOCAL(TRADE.REQUEST)" | sudo -u mqm /opt/mqm/bin/runmqsc QDTCC' >/dev/null 2>&1 || true
-vagrant ssh dtcc-sim -c "~/mqvenv/bin/python ~/epn_responder.py $N" &
-RESP=$!
-sleep 3
-RC=0
-vagrant ssh app-client -c "~/mqvenv/bin/python ~/epn_requester.py $N" || RC=$?
-wait "$RESP" || RC=$?
-exit "$RC"
+vagrant ssh app-client -c "~/mqvenv/bin/python ~/app_requester.py --count ${N}"
