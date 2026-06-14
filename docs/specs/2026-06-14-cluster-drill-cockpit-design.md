@@ -95,6 +95,11 @@ main page's own philosophy. Authoritative mockup:
 | 3 | **System perf** (OS + storage) | ✅ build now | **Existing** node/host metrics (§6) |
 | 4 | **Network foundation** | ✅ build now | **Existing** `lab_network_*` + virbr rx/tx (§6) |
 
+Only **§1 needs new telemetry**; §3/§4 ride metrics we already scrape. **§2 ships in
+v1 as a reserved, collapsed placeholder row** (between the matrix and perf), mirroring
+the layered dashboard's reserved MQ-service row, so the board structure stays stable
+when #143 fills it — no reflow, and the slot self-documents.
+
 ### 3.1 The cluster-state matrix (§1)
 
 Rows = nodes; columns = the relevant components, **grouped by HA layer**:
@@ -120,6 +125,15 @@ STALE** when a collector is silent (§9). The mid-cutover mockup snapshot is the
 acceptance picture: a fenced node red with daemon STALE, quorum dipped, DRBD flipped,
 the resource group relighting amber→green on the target, the RPO tail a live number.
 
+**Integrity alarm (first-class).** Above the grid sits a dedicated **integrity light**
+that goes loud with a distinct treatment (a banner/colour unlike the routine
+green/amber/red) — not just one more cell — on any data-integrity hazard: DRBD
+**split-brain** (`StandAlone`, or dual-`Primary`), `Diskless`, or an **`Outdated`
+secondary being promoted**. This is the cockpit's most important safety light: it makes
+the *"no duplication or corruption, ever"* guarantee visible and must be unmistakable
+from a routine resync (which is merely amber). Promoting an `Outdated` secondary is how
+a DR cutover loses data, so it earns the same alarm, not a quiet cell.
+
 ## 4. Section 1 telemetry — the cluster-state collector
 
 A new collector following the **established textfile-collector pattern**
@@ -128,7 +142,9 @@ per-node **systemd timer**, writes `node_exporter` textfiles to the existing
 `--collector.textfile.directory`. **No new Prometheus job** — the metrics ride the
 existing `node` job. Collector logic lives in the `mqlab obs` Python CLI (unit-tested,
 glass-box), not a fat shell script, consistent with the `net-state`/`reach-peers`
-verbs and the repo's ansible/CLI-over-shell convention.
+verbs and the repo's ansible/CLI-over-shell convention. The resource group it reads is
+the literal **`mq_group`** (`mq_fs → mq_vip → mq_vip_ext → mq_qm`), per the
+`mq-pcmk-qmgr` role.
 
 ### 4.1 Signals by node role
 
@@ -158,7 +174,27 @@ Exact metric names, enum encodings, and which `drbdadm`/`crm_mon` fields are sta
 are **finalised in the rendering spike** (§5) — both are read together so the panel
 and the collector agree from day one.
 
-### 4.2 Cluster-wide facts and fail-loud
+### 4.2 Cadence and bounding
+
+The collector **timer interval is the load-bearing latency number** for a *live*
+cockpit — tighter than the scrape interval matters little if the timer is lazy. It is
+pinned aggressively: the cluster-state timer fires every **~5s** (notably tighter than
+the net-state collector), the Prometheus scrape interval is set to **match or beat**
+it, and the STALE window (§4.3) is **~3× the timer** (~15s). Worst-case
+latency-to-visible for a transition is therefore **≤ ~10s**. The 5s target is a spike
+input (§5): the underlying commands' cost must tolerate that cadence on a node that is
+itself mid-drill.
+
+Every probe is **bounded and non-blocking** — the repo's bounded-command lesson (from
+the DRBD work) applies directly. During a partition or fence — exactly when the board
+matters most — `crm_mon` can block on the CIB and `drbdadm status` can hang on a wedged
+peer. So each command (`crm_mon`, `drbdadm`, `stonith_admin`, `iscsiadm`, `multipath`)
+runs with an explicit **timeout well under the 5s tick**; on timeout it emits **no
+fresh sample** for that signal (the cell reads STALE per §4.3) rather than blocking or
+guessing. Overlapping runs are prevented (a no-overlap timer guard / lockfile) so hung
+invocations cannot stack up and thrash the host during the drill.
+
+### 4.3 Cluster-wide facts, fail-loud, and source precedence
 
 Quorum, resource placement, and fence history are **cluster-wide** — any live cluster
 node reports the same global view via `crm_mon --as-xml`. The collector emits them
@@ -166,10 +202,22 @@ from **every** cluster node (labelled by the reporting `instance`); the dashboar
 `max by (resource, node)(…)`. That redundancy **is** the fail-loud design: if the
 node that happened to report dies, a peer still reports, so the panel never goes blank
 mid-drill. Each collector run stamps `cluster_state_last_write_timestamp{node}`; a
-sample older than a small multiple of the timer interval renders **STALE** (hatched),
-distinct from both green and red. A collector that cannot run (permissions, crash,
+sample older than the STALE window (§4.2, ~3× the ~5s timer) renders **STALE**
+(hatched), distinct from both green and red. A collector that cannot run (permissions, crash,
 fenced node) must read stale, never healthy — the silently-blind tile is exactly the
 lie the repo's fail-loud rule forbids.
+
+**Source precedence — fenced ≠ blind.** A node carries both *local* signals (its own
+corosync ring, iSCSI, daemon liveness) and *cluster-wide* signals (the peers' `crm_mon`
+view of it). When a node is fenced these disagree by construction: peers authoritatively
+report it OFFLINE/UNCLEAN (fresh, known) while its own collector goes silent (STALE).
+The rule: **the authoritative cluster-wide view wins** — a node the cluster reports
+OFFLINE/fenced renders as a clear *fenced/offline* state, and its local-only cells show
+*n/a — node down*, **not** STALE. STALE is reserved for silence that **no** authoritative
+signal explains (the genuinely-blind collector). This keeps two different alarms —
+*fenced* (known, expected in a drill) and *collector broke* (unknown) — visually
+distinct, and stops every routine fence from lighting up STALE and training the operator
+to ignore it.
 
 ## 5. Section 1 rendering — spike-decided
 
@@ -183,7 +231,8 @@ lab's actual Grafana and picks on how they look:
   the replication band + summary become adjacent stacked panels.
 - **Canvas panel** — reproduces the mockup faithfully (grouped headers, inline band,
   summary, ★), each element's colour bound to a metric. Best looking; most authoring
-  effort and the verbose JSON to maintain.
+  effort and the verbose JSON to maintain. Assumes a Grafana version where Canvas is GA;
+  if it isn't on the lab's Grafana, Table wins by default.
 
 Either way the panel is **generated by extending `render_dashboard(topo)`**, so the
 per-node/per-column projection is code, not hand-edited JSON, and is unit-tested. The
@@ -221,10 +270,16 @@ tri-state), unit-tested.
 
 Each is its own plan and PR.
 
-- **Plan 1 — Matrix + collector** *(the core)*: the `cluster-state` collector role +
-  `mqlab obs cluster-state` verb + per-node timers; the rendering spike (§5) and the
-  resulting matrix panel; the overview roll-up + drill-link (§7). Delivers the live
-  cluster picture.
+- **Plan 1a — Cluster-state collector** *(no Grafana)*: the `cluster-state` collector
+  role + `mqlab obs cluster-state` verb + per-node ~5s timers, the §4.1 metrics,
+  bounded/non-blocking probes (§4.2), fail-loud + source precedence (§4.3). Verifiable
+  headless via `promtool` / textfile inspection — lands and is proven before any
+  rendering risk.
+- **Plan 1b — Matrix panel** *(rendering spike → panel)*: the §5 table-vs-canvas spike,
+  then the chosen matrix panel + the first-class integrity alarm (§3.1), generated by
+  `render_dashboard` on the dedicated `lab-pcmk-cluster` board with the reserved §2 row.
+- **Plan 1c — Overview roll-up + drill-link** *(§7)*: replace the binary PCMK-A/B tiles
+  with the per-side roll-up fold + drill-link to the board.
 - **Plan 2 — Perf + network sections** *(existing metrics)*: §3 and §4 on the dedicated
   board. Independent of the collector; can land in parallel once the board exists.
 - **Plan 3 — Critical log stream** *(after #143)*: fill the §2 slot once log-streaming
@@ -233,9 +288,11 @@ Each is its own plan and PR.
 
 ## 9. Cross-cutting concerns
 
-- **Fail-loud.** STALE on a silent collector; redundant cluster-wide reporting (§4.2);
-  a fenced/dead node reads red + STALE, never green. The amber DRBD state during resync
-  is the loud "not yet consistent" signal.
+- **Fail-loud.** STALE on a silent collector; redundant cluster-wide reporting (§4.3);
+  a fenced node reads as *fenced/offline* and a genuinely-blind collector reads STALE —
+  both loud, kept distinct (§4.3 precedence). The amber DRBD state during resync is the
+  loud "not yet consistent" signal; **split-brain trips the first-class integrity alarm**
+  (§3.1).
 - **No new Prometheus jobs / no new secrets.** Pure additive textfile metrics on the
   existing `node` job; cluster tooling is read-only (`crm_mon`, `drbdadm status`,
   `stonith_admin --history`), no privileged mutation.
@@ -261,23 +318,31 @@ Each is its own plan and PR.
 - **Roll-up fold severity order.** The exact precedence (STALE vs red vs amber) the
   overview tile uses — trivial, but make it explicit so the overview and board never
   disagree.
-- **STALE threshold.** Timer interval vs. staleness window, tuned so a real transition
-  shows within a scrape interval without flapping STALE.
+- **Collector cost at the ~5s cadence (§4.2).** Confirm `crm_mon` / `drbdadm status` /
+  `stonith_admin --history` / `iscsiadm` / `multipath` tolerate the ~5s tick on a node
+  that is itself mid-drill; if a probe is too costly, back its cadence off independently
+  and state the resulting latency, rather than slowing the whole collector.
 
 ## 11. Success criteria
 
 1. The dedicated **PCMK Cluster · Infrastructure View** board renders the four-section
    stack; the matrix shows both DR sites with per-node component state, the
    cluster-unit summary, and the cross-site DRBD replication/RPO tail.
-2. Mid-drill the board tells the story with no log line read: a **fenced node** reddens
-   with its daemon **STALE**, **quorum** dips, **DRBD flips Primary and resync % climbs**,
-   the **resource group relights** amber→green on the target node, and the **RPO tail is
-   a measured number** — matching the mid-cutover mockup.
+2. Mid-drill the board tells the story with no log line read: a **fenced node** shows
+   as *fenced/offline* (authoritative, §4.3), **quorum** dips, **DRBD flips Primary and
+   resync % climbs**, the **resource group relights** amber→green on the target node, and
+   the **RPO tail is a measured number** — matching the mid-cutover mockup.
 3. A silent/blind collector renders **STALE**, never green; killing the reporting node
-   does not blank the cluster-wide tiles (a peer still reports).
+   does not blank the cluster-wide tiles (a peer still reports); a **fenced** node reads
+   as *fenced/offline*, visually distinct from a blind-collector STALE (§4.3).
 4. The overview's binary PCMK-A/B tiles are replaced by a per-side **roll-up** that
    folds the matrix and **drill-links** to the board; the overview stays scannable.
 5. §3/§4 use only existing metrics (no new scrape job); only §1 adds the cluster-state
    collector.
-6. The whole board + collector are reproducible from a **cold rebuild** and pass
+6. An induced **DRBD split-brain** (or an attempt to promote an `Outdated` secondary)
+   trips the **first-class integrity alarm** (§3.1) — unmistakable, and distinct from a
+   routine resync.
+7. A transition becomes visible **within ~10s** (the §4.2 cadence); during a partition
+   the collector stays **bounded** — affected cells go STALE and the board never blocks.
+8. The whole board + collector are reproducible from a **cold rebuild** and pass
    `vrg-validate`; the RDQM twin can be added later without reshaping the board.
