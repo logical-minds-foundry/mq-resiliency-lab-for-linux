@@ -17,13 +17,46 @@ uv sync          # creates .venv and puts `mqlab` on PATH (so it's `mqlab …`, 
 ```
 
 Run every `mqlab` command from the **repo root** (the main `develop` checkout).
-A from-scratch run usually means `lab/.vagrant` was removed, so every guest is
-ABSENT and `vm create` will boot them fresh.
 
 Secrets and the fence key are **auto-generated and persisted** under the
 gitignored `build/secrets/` and `build/fence_key` — they survive VM rebuilds and
 regenerate on a full `build/` wipe. There is no password to remember or export
 (`lab/scripts/lab-secret.sh`).
+
+### Where state lives (and how to actually wipe it)
+
+Three independent layers — know which one you're touching:
+
+| Layer | Lives on | `rm lab/.vagrant`? | `vrg-vm rebuild`? | Wiped by |
+|---|---|---|---|---|
+| Repo + `build/` (secrets, fence key, rendered configs) | virtiofs mount from your Mac | survives | **survives** (host, not VM) | `rm -rf build/` |
+| Lab VM disks (`lab_*.img`, `lab_san-*-vdb.qcow2`, incl. the SAN `/dev/vdb` with DRBD md) | `/var/lib/libvirt/images` on the Vergil VM's root disk | **survives** | not reliably | **`mqlab vm destroy`** |
+| `lab/.vagrant/` | the repo | n/a | survives | `rm lab/.vagrant` |
+
+**`rm lab/.vagrant` wipes nothing real.** It is only Vagrant's bookkeeping
+(per-machine `libvirt/id` = the domain UUID, box metadata, created-networks). It
+makes Vagrant *forget* which libvirt domains are "its" — the domains and disks
+stay, and the next `up` then collides with the orphans. It is **not** a reset.
+
+**The only true wipe is `mqlab vm destroy`** — `virsh undefine
+--remove-all-storage --nvram`, which deletes the domain, **both** disks (`vda`
+*and* the SAN `vdb` carrying stale DRBD metadata), and the UEFI nvram. Stale
+`/dev/vdb` md is what breaks a DR build (#158/#160), so a clean DR build **must**
+go through `vm destroy`, not `rm .vagrant`.
+
+**Cold-reset a setup (the real one):**
+
+```bash
+mqlab vm destroy pcmk_san_dr      # destroys ALL members (8 VMs) + their disks — not just the SANs
+virsh -c qemu:///system vol-list --pool default | grep -E 'lab_(san|pcmk)' || echo clean
+mqlab vm create pcmk_san_dr
+mqlab vm provision pcmk_san_dr
+```
+
+Recreating only *some* VMs (e.g. just the SANs) leaves the rest carrying stale
+state (e.g. a prior Pacemaker cluster config → `pcs cluster setup` fails). Wipe
+the whole setup. `build/` (secrets/keys) survives, so the rebuild stays
+reproducible; to reset those too, `rm -rf build/`.
 
 ---
 
