@@ -1,0 +1,55 @@
+# mq_prometheus exporter on a stable off-cluster node (mon-probe), client-mode
+# against the QM VIP (#172). The exporter is built from source (no IBM arm64
+# redistributable exists), so the node needs the full MQ client libs + SDK
+# (/opt/mqm/inc + lib64 for the cgo build). The exporter itself runs no QM.
+#
+# First-cut from the #141 recipe — the Go-from-source build specifics
+# (build path, binary name, module fetch) are confirmed/iterated on a cold boot.
+- name: install full MQ (client libs + SDK for the cgo build)
+  ansible.builtin.include_role:
+    name: mq-install
+
+- name: build toolchain (Go + git)
+  ansible.builtin.apt:
+    name:
+      - golang-go
+      - git
+      - build-essential
+    update_cache: true
+  become: true
+
+- name: fetch mq-metric-samples source
+  ansible.builtin.git:
+    repo: https://github.com/ibm-messaging/mq-metric-samples.git
+    dest: /usr/local/src/mq-metric-samples
+    version: "{{ mq_exporter_ref }}"
+  become: true
+
+# cgo against /opt/mqm — the whole reason the node carries the full MQ SDK.
+# Idempotent: `creates` skips the (slow, network-fetching) build on re-runs.
+- name: build mq_prometheus
+  ansible.builtin.command:
+    cmd: go build -o /usr/local/bin/mq_prometheus ./cmd/mq_prometheus
+    chdir: /usr/local/src/mq-metric-samples
+    creates: /usr/local/bin/mq_prometheus
+  environment:
+    CGO_CFLAGS: -I/opt/mqm/inc
+    CGO_LDFLAGS: -L/opt/mqm/lib64
+    GOFLAGS: -mod=mod
+  become: true
+
+- name: exporter systemd unit
+  ansible.builtin.template:
+    src: mq-exporter.service.j2
+    dest: /etc/systemd/system/mq-exporter.service
+    mode: "0644"
+  become: true
+  notify: restart mq-exporter
+
+- name: enable + start the exporter
+  ansible.builtin.systemd:
+    name: mq-exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
