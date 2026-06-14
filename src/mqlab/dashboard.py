@@ -32,7 +32,7 @@ ROWS: list[tuple[str, list[str]]] = [
     ("PCMK · B", ["pcmk_b", "san_b"]),
     ("RDQM · A", ["rdqm_a"]),
     ("RDQM · B", ["rdqm_b"]),
-    ("Standalone", ["qm", "dtcc", "client"]),
+    ("App · DTCC", ["app", "dtcc"]),
     ("Observability", ["obs_box", "probe"]),
 ]
 

@@ -21,23 +21,17 @@ boxes:
 defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
 
 nodes:
-  # --- Phase B: standalone QM + fixtures (spec 10-B; 5-amendment: VMs) ---
-  qm-main:
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.10, net-client: 10.30.0.10, net-dtcc: 10.20.0.10 }
+  # --- DTCC service VM + app client (the distributed message path) ---
   dtcc-sim:
     cpus: 2
     memory: 2048
-    # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP
-    # (#147). net-dtcc stays until the legacy standalone setup is retired (Plan 3).
-    nics: { net-mgmt: 10.50.0.50, net-dtcc: 10.20.0.50, net-ext: 10.60.0.50 }
+    # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP (#147).
+    nics: { net-mgmt: 10.50.0.50, net-ext: 10.60.0.50 }
   app-client:
-    # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B
-    # VIPs (10.10.2.x) -- so a reconnectable client given both VIPs can ride a
-    # cross-site DR cutover and keep producing on the survivor. net-client
-    # reaches the standalone message-path QM (10.30.0.10).
-    nics: { net-mgmt: 10.50.0.60, net-client: 10.30.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
+    # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B VIPs
+    # (10.10.2.x) -- so the app, a reconnectable client given both VIPs, rides a
+    # cross-site DR cutover and keeps producing on the survivor.
+    nics: { net-mgmt: 10.50.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
   # --- Observability (#103): obs runs Prometheus+Grafana on the mgmt plane only;
   # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters. ---
@@ -136,9 +130,8 @@ groups:
   pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
-  qm:     [qm-main]
   dtcc:   [dtcc-sim]
-  client: [app-client]
+  app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
   # (Ansible warns on group==host); probe/mon-probe already differ.
   obs_box: [obs]
@@ -161,8 +154,8 @@ setups:
     provision: ansible/site-pcmk-dr.yml
     secrets: [pcmk_hacluster_password]
   distributed:
-    description: Distributed MQ — site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
-    groups: [san_a, pcmk_a, dtcc]
+    description: Distributed MQ — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    groups: [san_a, pcmk_a, dtcc, app]
     provision: ansible/site-distributed.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }
@@ -174,11 +167,6 @@ setups:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
-  standalone:
-    description: Phase-B standalone QM + DTCC sim + client (message path)
-    groups: [qm, dtcc, client]
-    provision: ansible/site.yml
-    secrets: [mqweb_admin_password]
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]
