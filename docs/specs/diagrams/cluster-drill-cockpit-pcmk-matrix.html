@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCMK Cluster Matrix — Drill Cockpit (v2)</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#0a0c10;color:#e6edf3;font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:26px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 3px}
+  h2{font-size:15px;margin:26px 0 8px;color:#c9d1d9}
+  .subtitle{color:#8b93a1;font-size:13.5px;margin:0 0 8px}
+  .chip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;color:#fff;line-height:1.5}
+  .g{background:#2f9e44}.a{background:#e0922e}.r{background:#d83c3e}.x{background:#3a4150}.b{background:#2f6fed}
+  .stale{background:repeating-linear-gradient(45deg,#5a4b00,#5a4b00 4px,#3a3000 4px,#3a3000 8px);color:#ffe08a}
+  .lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8b93a1}
+  .cockpit{background:#0e1116;border:1px solid #2a2f3a;border-radius:8px;padding:14px}
+  /* summary bar */
+  .sumrow{display:grid;grid-template-columns:1fr 150px 1fr;gap:10px;align-items:center;margin-bottom:12px}
+  .scard{background:#11161d;border:1px solid #232833;border-radius:7px;padding:9px 11px}
+  .scard.active{box-shadow:0 0 0 2px #2f9e44 inset}
+  .scard.target{box-shadow:0 0 0 2px #e0922e inset}
+  .shead{font-size:13px;font-weight:700}
+  .spine{background:#161b22;border:1px dashed #3a4150;border-radius:7px;padding:7px;text-align:center}
+  /* matrix */
+  table.mx{border-collapse:collapse;width:100%}
+  table.mx td,table.mx th{border:1px solid #232833;padding:4px 6px;text-align:center;font-size:10.5px;white-space:nowrap}
+  table.mx th{color:#8b93a1;font-weight:600;background:#11161d}
+  table.mx th.grp{background:#161b22;color:#aeb6c2;font-size:9.5px;letter-spacing:.05em}
+  table.mx td.node{text-align:left;color:#c9d1d9;font-weight:600}
+  tr.siteband td{background:#11161d;text-align:left;color:#e6edf3;font-weight:700;font-size:11px;letter-spacing:.04em}
+  .repl td{background:#0b0e13;border-top:2px solid #3a4150;border-bottom:2px solid #3a4150;color:#aeb6c2;font-size:10.5px}
+  .dash{color:#3f4651}
+  .legend{margin-top:10px;font-size:11px;color:#8b93a1}
+  .legend .chip{margin-right:2px}
+  .note{color:#8b93a1;font-size:13px;margin-top:8px}
+  .col-fence{background:#0b0e13}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>PCMK Cluster — Node × Component matrix <span class="chip b">drill cockpit</span></h1>
+<p class="subtitle">Your chosen frame (C), refined. Replaces the binary VMs-PCMK-A / VMs-PCMK-B tiles. Both DR sides in one matrix; columns grouped by HA layer. An RDQM twin slots in later as a second instance of this same panel.</p>
+
+<!-- ================= SNAPSHOT 1: HEALTHY BASELINE ================= -->
+<h2>① Healthy baseline — Site A active, fully in sync</h2>
+<div class="cockpit">
+  <!-- cluster-as-a-unit summary -->
+  <div class="sumrow">
+    <div class="scard active">
+      <div class="shead">SITE A <span class="chip g">ACTIVE</span></div>
+      <div class="cell"><span class="chip g">QUORATE 3/3</span> <span class="chip g">QMPCMK RUNNING @ pcmk-a2</span></div>
+    </div>
+    <div class="spine">
+      <div class="lbl">DRBD r0 · net-wan</div>
+      <div style="font-size:18px;color:#2f9e44">A ➜ B</div>
+      <span class="chip g">100% · 0 KiB</span>
+      <div class="lbl" style="margin-top:2px">RPO ≈ 0</div>
+    </div>
+    <div class="scard">
+      <div class="shead">SITE B <span class="chip x">STANDBY</span></div>
+      <div class="cell"><span class="chip g">QUORATE 3/3</span> <span class="chip x">QMPCMK stopped</span></div>
+    </div>
+  </div>
+  <!-- matrix -->
+  <table class="mx">
+    <tr>
+      <th rowspan="2">node</th>
+      <th class="grp" colspan="2">membership</th>
+      <th class="grp" colspan="2">storage</th>
+      <th class="grp" colspan="4">resource group (mq_fs→vip→vip_ext→qm)</th>
+      <th class="grp" rowspan="2">fence</th>
+    </tr>
+    <tr>
+      <th>corosync</th><th>pacemaker</th><th>DRBD</th><th>iSCSI</th>
+      <th>mq_fs</th><th>mq_vip</th><th>mq_vip_ext</th><th>mq_qm</th>
+    </tr>
+    <tr class="siteband"><td colspan="10">▌ SITE A</td></tr>
+    <tr><td class="node">san-a</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip g">Primary · UpToDate</span></td><td><span class="chip g">tgt up</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence dash">—</td></tr>
+    <tr><td class="node">pcmk-a1</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-a2 ★</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●</span></td><td><span class="chip g">RUNNING</span></td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-a3</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr class="repl"><td colspan="10">↕ DRBD cross-site replication &nbsp; <span class="chip g">Connected</span> &nbsp; SyncSource→SyncTarget &nbsp; <b>100%</b> &nbsp; out-of-sync <b>0 KiB</b> &nbsp; <span class="lbl">(the RPO tail you watch in a DR drill)</span></td></tr>
+    <tr class="siteband"><td colspan="10">▌ SITE B</td></tr>
+    <tr><td class="node">san-b</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip x">Secondary · UpToDate</span></td><td><span class="chip g">tgt up</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence dash">—</td></tr>
+    <tr><td class="node">pcmk-b1</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-b2</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-b3</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+  </table>
+  <div class="legend">
+    <span class="chip g">healthy</span><span class="chip a">transitional / resyncing</span><span class="chip r">down / failed</span><span class="chip x">standby / n-a</span><span class="chip stale">STALE — collector silent</span>
+    &nbsp;· ★ = current QM owner · <span class="dash">—</span> = component not on this node
+  </div>
+</div>
+
+<!-- ================= SNAPSHOT 2: MID-CUTOVER ================= -->
+<h2>② Same panel mid-DR-cutover — this is the drill you're watching</h2>
+<p class="subtitle">Site A node holding the QM was fenced; DR cutover promoting Site B. Notice how the matrix tells the story without you reading a single log line.</p>
+<div class="cockpit">
+  <div class="sumrow">
+    <div class="scard">
+      <div class="shead">SITE A <span class="chip r">LOST</span></div>
+      <div class="cell"><span class="chip a">QUORATE 2/3</span> <span class="chip r">QMPCMK stopped</span></div>
+    </div>
+    <div class="spine">
+      <div class="lbl">DRBD r0 · net-wan</div>
+      <div style="font-size:18px;color:#e0922e">B ➜ A?</div>
+      <span class="chip a">WFConnection</span>
+      <div class="lbl" style="margin-top:2px">tail measuring…</div>
+    </div>
+    <div class="scard target">
+      <div class="shead">SITE B <span class="chip a">PROMOTING</span></div>
+      <div class="cell"><span class="chip g">QUORATE 3/3</span> <span class="chip a">QMPCMK starting @ pcmk-b1</span></div>
+    </div>
+  </div>
+  <table class="mx">
+    <tr>
+      <th rowspan="2">node</th>
+      <th class="grp" colspan="2">membership</th>
+      <th class="grp" colspan="2">storage</th>
+      <th class="grp" colspan="4">resource group (mq_fs→vip→vip_ext→qm)</th>
+      <th class="grp" rowspan="2">fence</th>
+    </tr>
+    <tr><th>corosync</th><th>pacemaker</th><th>DRBD</th><th>iSCSI</th><th>mq_fs</th><th>mq_vip</th><th>mq_vip_ext</th><th>mq_qm</th></tr>
+    <tr class="siteband"><td colspan="10">▌ SITE A</td></tr>
+    <tr><td class="node">san-a</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip r">Secondary · Outdated</span></td><td><span class="chip a">tgt up</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence dash">—</td></tr>
+    <tr><td class="node">pcmk-a1</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-a2 ✗</td><td><span class="chip r">no ring</span></td><td><span class="chip stale">STALE</span></td><td class="dash">—</td><td><span class="chip r">0/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip r">FENCED</span></td></tr>
+    <tr><td class="node">pcmk-a3</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr class="repl"><td colspan="10">↕ DRBD cross-site &nbsp; <span class="chip a">WFConnection</span> &nbsp; promotion in progress &nbsp; out-of-sync <b>≈ 2.1 MiB</b> &nbsp; <span class="lbl">(← the un-replicated tail = the real RPO, measured live)</span></td></tr>
+    <tr class="siteband"><td colspan="10">▌ SITE B</td></tr>
+    <tr><td class="node">san-b</td><td class="dash">—</td><td class="dash">—</td><td><span class="chip a">Primary · UpToDate</span></td><td><span class="chip g">tgt up</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence dash">—</td></tr>
+    <tr><td class="node">pcmk-b1 ★</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●</span></td><td><span class="chip a">starting</span></td><td><span class="chip a">starting</span></td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-b2</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+    <tr><td class="node">pcmk-b3</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td class="dash">—</td><td><span class="chip g">2/2</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="col-fence"><span class="chip g">ok</span></td></tr>
+  </table>
+  <div class="legend">Read it at a glance: <b>pcmk-a2 fenced</b> (red, daemon STALE — fail-loud, never faked green) · <b>quorum dipped to 2/3</b> on A · <b>DRBD flipped</b> san-b→Primary · <b>resource group relighting</b> on pcmk-b1 (amber → green as it starts) · the <b>RPO tail</b> is a live number, not a guess.</div>
+</div>
+
+<div class="note">Feasible in Grafana as a state-grid / table panel with per-cell value mappings, rendered from topology (one row per node, fixed columns). The ★ owner, fence column, and the DRBD replication band are the additions over plain C. <b>What's still not perfect?</b></div>
+</div>
+</body>
+</html>

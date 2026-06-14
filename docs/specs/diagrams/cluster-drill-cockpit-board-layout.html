@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCMK Cluster — Infrastructure View (full board)</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#0a0c10;color:#e6edf3;font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:24px;line-height:1.45}
+  .wrap{max-width:1060px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 2px}
+  .crumb{color:#6b7280;font-size:12px;margin:0 0 14px}
+  .crumb b{color:#9aa4b2}
+  .subtitle{color:#8b93a1;font-size:13px;margin:0 0 6px}
+  .chip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10.5px;font-weight:600;color:#fff;line-height:1.5}
+  .g{background:#2f9e44}.a{background:#e0922e}.r{background:#d83c3e}.x{background:#3a4150}.b{background:#2f6fed}
+  .soon{background:#4b3a6b;color:#d9c7ff}
+  .lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8b93a1}
+  .sect{background:#0e1116;border:1px solid #2a2f3a;border-radius:9px;padding:13px;margin-bottom:14px}
+  .secthead{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .secthead .n{flex:0 0 22px;height:22px;border-radius:6px;background:#2f6fed;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px}
+  .secthead h3{margin:0;font-size:14px}
+  .collapsed{opacity:.85}
+  /* condensed matrix */
+  .miniwrap{display:flex;gap:8px}
+  .mini{flex:1;background:#11161d;border:1px solid #232833;border-radius:6px;padding:7px}
+  .mini .h{font-size:11px;font-weight:700;margin-bottom:5px}
+  .grid{display:grid;grid-template-columns:auto repeat(8,1fr);gap:2px}
+  .gc{height:13px;border-radius:2px;background:#2f9e44}
+  .gc.x{background:#22272f}.gc.r{background:#d83c3e}.gc.a{background:#e0922e}
+  .rowlab{font-size:9px;color:#aeb6c2;display:flex;align-items:center}
+  .spine{flex:0 0 96px;background:#161b22;border:1px dashed #3a4150;border-radius:6px;padding:6px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+  /* log panel */
+  .logs{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:#0b0e13;border:1px solid #1c222b;border-radius:6px;padding:8px;max-height:150px;overflow:hidden}
+  .logline{display:flex;gap:8px;padding:1px 0;white-space:nowrap}
+  .ts{color:#5b6472}.src{color:#7aa2f7;flex:0 0 120px}
+  .sev-w{color:#e0922e;flex:0 0 46px}.sev-e{color:#f7768e;flex:0 0 46px}.sev-i{color:#56a868;flex:0 0 46px}
+  .msg{color:#c9d1d9;overflow:hidden;text-overflow:ellipsis}
+  /* perf graphs */
+  .graphs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .graph{background:#11161d;border:1px solid #232833;border-radius:6px;padding:8px}
+  .graph .gt{font-size:11px;font-weight:600;margin-bottom:2px}
+  .graph .gs{font-size:9.5px;color:#8b93a1;margin-bottom:6px}
+  .spark{height:46px;width:100%;display:block}
+  .pick{border-left:3px solid #2f9e44;padding-left:7px}
+  .note{color:#8b93a1;font-size:12.5px;margin-top:4px}
+  .q{background:#11161d;border:1px solid #2f6fed55;border-radius:8px;padding:12px;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>PCMK Cluster — Infrastructure View</h1>
+<p class="crumb"><b>Lab — Layered Status</b> (overview / highlight) &nbsp;›&nbsp; <b style="color:#e6edf3">PCMK Cluster — Infrastructure View</b> &nbsp;<span class="chip x">dedicated deep-dive board</span></p>
+<p class="subtitle">One board you bring up and <i>watch</i>. Four stacked sections, read top-to-bottom like the main page — most important first (cluster state), network foundation last. The app message-flow board will be a separate sibling (application view); this one owns the infrastructure.</p>
+
+<!-- ===== SECTION 1: CLUSTER STATE MATRIX ===== -->
+<div class="sect">
+  <div class="secthead"><div class="n">1</div><h3>Cluster state — node × component matrix</h3><span class="chip g">built now</span><span class="lbl">A &amp; B · watch it change</span></div>
+  <div class="miniwrap">
+    <div class="mini">
+      <div class="h">SITE A <span class="chip g">ACTIVE</span> · QMPCMK@a2 · QUORATE 3/3</div>
+      <div class="grid">
+        <div class="rowlab">san-a</div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+        <div class="rowlab">a1</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+        <div class="rowlab">a2★</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc"></div><div class="gc"></div><div class="gc"></div><div class="gc"></div>
+        <div class="rowlab">a3</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+      </div>
+    </div>
+    <div class="spine">
+      <div class="lbl">DRBD</div><div style="font-size:15px;color:#2f9e44">A➜B</div><span class="chip g">100%</span><div class="lbl" style="margin-top:2px">0 KiB</div>
+    </div>
+    <div class="mini">
+      <div class="h">SITE B <span class="chip x">STANDBY</span> · stopped · QUORATE 3/3</div>
+      <div class="grid">
+        <div class="rowlab">san-b</div><div class="gc"></div><div class="gc x"></div><div class="gc a"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+        <div class="rowlab">b1</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+        <div class="rowlab">b2</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+        <div class="rowlab">b3</div><div class="gc"></div><div class="gc"></div><div class="gc x"></div><div class="gc"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div><div class="gc x"></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">↑ condensed reference — the full matrix (grouped columns, summary bar, replication band, fail-loud states) is the panel we just finalised.</div>
+</div>
+
+<!-- ===== SECTION 2: CRITICAL LOG STREAM ===== -->
+<div class="sect collapsed">
+  <div class="secthead"><div class="n">2</div><h3>Critical log stream — HA services</h3><span class="chip soon">lands with #143 log-streaming</span><span class="lbl">WARN/ERROR · corosync · pacemaker · drbd · QM · fencing</span></div>
+  <div class="logs">
+    <div class="logline"><span class="ts">12:04:01</span><span class="src">pcmk-a2 stonith</span><span class="sev-e">ERR</span><span class="msg">Node pcmk-a2 fenced (reboot) — agent fence_xvm confirmed</span></div>
+    <div class="logline"><span class="ts">12:04:00</span><span class="src">pcmk-a1 corosync</span><span class="sev-w">WARN</span><span class="msg">Sync members[2]: lost pcmk-a2 — quorum recalculated 2/3 (retained)</span></div>
+    <div class="logline"><span class="ts">12:03:58</span><span class="src">san-b drbd</span><span class="sev-w">WARN</span><span class="msg">r0: role( Secondary -&gt; Primary ) — promotion requested by cutover</span></div>
+    <div class="logline"><span class="ts">12:03:57</span><span class="src">pcmk-b1 pacemaker</span><span class="sev-i">INFO</span><span class="msg">Starting mq_qm (QMPCMK) — resource group relocating to site B</span></div>
+    <div class="logline"><span class="ts">12:03:55</span><span class="src">pcmk-a1 QMPCMK</span><span class="sev-e">ERR</span><span class="msg">AMQ9999 channel QMPCMK.QMDTCC ended abnormally (host moved)</span></div>
+  </div>
+  <div class="note">Severity-coloured, source-tagged, auto-scrolling. The exact transport (Loki / Grafana logs panel) follows #143; the section is a designed-in slot.</div>
+</div>
+
+<!-- ===== SECTION 3: PERFORMANCE GRAPHS ===== -->
+<div class="sect">
+  <div class="secthead"><div class="n">3</div><h3>Performance — where relevant</h3><span class="chip g">built now (existing metrics)</span><span class="lbl">cluster-scoped, picky &amp; minimal</span></div>
+  <div class="graphs">
+    <div class="graph pick">
+      <div class="gt">DRBD replication throughput <span class="chip g">★ key</span></div>
+      <div class="gs">net-wan rx/tx — watch resync bandwidth &amp; the tail drain</div>
+      <svg class="spark" viewBox="0 0 200 46" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="2" points="0,40 20,38 40,39 60,10 80,6 100,8 120,20 140,33 160,40 180,41 200,41"/></svg>
+    </div>
+    <div class="graph pick">
+      <div class="gt">Per-node CPU busy%</div>
+      <div class="gs">the 8 cluster nodes — who's working (like the main page)</div>
+      <svg class="spark" viewBox="0 0 200 46" preserveAspectRatio="none"><polyline fill="none" stroke="#e0922e" stroke-width="2" points="0,30 20,28 40,31 60,18 80,12 100,22 120,16 140,25 160,29 180,27 200,28"/><polyline fill="none" stroke="#2f6fed" stroke-width="1.5" points="0,38 20,37 40,38 60,30 80,33 100,28 120,35 140,34 160,36 180,35 200,36"/></svg>
+    </div>
+    <div class="graph pick">
+      <div class="gt">SAN disk I/O</div>
+      <div class="gs">san-a / san-b — replication &amp; QM data write load</div>
+      <svg class="spark" viewBox="0 0 200 46" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="2" points="0,36 20,35 40,34 60,22 80,14 100,18 120,30 140,33 160,35 180,36 200,36"/></svg>
+    </div>
+  </div>
+  <div class="note">Confirmed: <b>OS + storage</b> — all from metrics we already scrape (no new telemetry). QM message rate stays out (it's the MQ-Service panel's job); network traffic moves to its own foundation section ↓.</div>
+</div>
+
+<!-- ===== SECTION 4: NETWORK FOUNDATION ===== -->
+<div class="sect">
+  <div class="secthead"><div class="n">4</div><h3>Network foundation — bottom of the stack</h3><span class="chip g">built now (existing metrics)</span><span class="lbl">the planes this cluster rides</span></div>
+  <div class="graphs" style="grid-template-columns:1fr 1fr 1fr 1fr">
+    <div class="graph pick">
+      <div class="gt">Heartbeat <span class="chip g">★ critical</span></div>
+      <div class="gs">net-hb-a · net-hb-b — a break here triggers fencing</div>
+      <div style="display:flex;gap:5px;margin-bottom:5px"><span class="chip g">hb-a active</span><span class="chip g">hb-b active</span></div>
+      <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="1.5" points="0,22 30,21 60,23 90,20 120,22 150,21 180,22 200,21"/></svg>
+    </div>
+    <div class="graph">
+      <div class="gt">SAN plane</div>
+      <div class="gs">net-san-a · net-san-b — iSCSI to the storage</div>
+      <div style="display:flex;gap:5px;margin-bottom:5px"><span class="chip g">san-a active</span><span class="chip g">san-b active</span></div>
+      <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="1.5" points="0,24 30,18 60,12 90,16 120,20 150,22 180,23 200,24"/></svg>
+    </div>
+    <div class="graph">
+      <div class="gt">WAN / replication</div>
+      <div class="gs">net-wan — carries cross-site DRBD</div>
+      <div style="display:flex;gap:5px;margin-bottom:5px"><span class="chip g">wan active</span></div>
+      <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="1.5" points="0,25 30,24 60,8 90,6 120,10 150,20 180,24 200,25"/></svg>
+    </div>
+    <div class="graph">
+      <div class="gt">Data plane</div>
+      <div class="gs">net-data-a · net-data-b — app/VIP traffic</div>
+      <div style="display:flex;gap:5px;margin-bottom:5px"><span class="chip g">data-a active</span><span class="chip x">data-b idle</span></div>
+      <svg class="spark" viewBox="0 0 200 30" preserveAspectRatio="none"><polyline fill="none" stroke="#2f9e44" stroke-width="1.5" points="0,20 30,19 60,21 90,18 120,20 150,19 180,20 200,19"/></svg>
+    </div>
+  </div>
+  <div class="note">Per-plane active/reachable state (tri-state, same vocabulary as the main page's network layer) + throughput — but scoped to just the planes this cluster rides. Heartbeat is starred: it's the plane whose loss drives a fence.</div>
+</div>
+
+<!-- ===== COMPOSITION LOCKED ===== -->
+<div class="q">
+  <b>Board composition — four sections, top-to-bottom:</b>
+  <span class="chip b">1 · cluster state matrix</span> <span class="chip soon">2 · critical logs (#143)</span> <span class="chip b">3 · system perf (OS+storage)</span> <span class="chip b">4 · network foundation</span>.
+  Built-now = 1, 3, 4 (existing/derivable metrics); 2 fills in when log-streaming lands. If this is the shape, the visual design is locked and we move to <i>how it's wired</i> — the HA-state telemetry and Grafana rendering.
+</div>
+</div>
+</body>
+</html>
