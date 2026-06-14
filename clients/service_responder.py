@@ -22,9 +22,20 @@ import argparse
 import pymqi
 
 
-def serve(qmgr_name: str, in_queue: str) -> None:
-    """Get/reply/commit forever on a bindings connection to `qmgr_name`."""
-    qmgr = pymqi.connect(qmgr_name)  # bindings: no channel / conn name
+def serve(qmgr_name: str, in_queue: str, channel: str, conn: str) -> None:
+    """Get/reply/commit forever on a client connection to `qmgr_name`.
+
+    Client-mode to localhost -- the QM is co-located, but pip-installed pymqi
+    links the client library only, so a true bindings connect fails 2058 (#180).
+    A loopback client connection is local-in-spirit and matches dr_responder.py.
+    """
+    cd = pymqi.CD(
+        ChannelName=channel.encode(),
+        ConnectionName=conn.encode(),
+        TransportType=pymqi.CMQC.MQXPT_TCP,
+    )
+    qmgr = pymqi.QueueManager(None)
+    qmgr.connect_with_options(qmgr_name, cd=cd)
     qin = pymqi.Queue(qmgr, in_queue)
     gmo = pymqi.GMO(
         Options=(
@@ -72,8 +83,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--qm", default="QMDTCC")
     ap.add_argument("--in-queue", default="SVC.REQUEST")
+    ap.add_argument("--channel", default="SVC.SVRCONN")
+    ap.add_argument("--conn", default="localhost(1414)")
     args = ap.parse_args()
-    serve(args.qm, args.in_queue)
+    serve(args.qm, args.in_queue, args.channel, args.conn)
     return 0
 
 
