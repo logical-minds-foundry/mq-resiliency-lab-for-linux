@@ -9,8 +9,17 @@ source bounded + non-blocking (timeout -> no fresh sample -> the cell reads STAL
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
+import subprocess
+import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # role -> ordered probe sources it runs
 PROBE_SETS: dict[str, tuple[str, ...]] = {
@@ -19,9 +28,13 @@ PROBE_SETS: dict[str, tuple[str, ...]] = {
 }
 
 
-def parse_crm(xml_text: str) -> dict:
-    """crm_mon --output-as=xml -> {quorate, nodes{name:{online,standby,unclean}}, resources{id:{state,node}}}."""
-    root = ET.fromstring(xml_text)
+def parse_crm(xml_text: str) -> dict[str, Any]:
+    """Parse crm_mon XML into quorum, per-node states, and resource placement.
+
+    Returns {quorate: bool, nodes: {name: {online, standby, unclean}},
+    resources: {id: {state, node}}}.
+    """
+    root = ET.fromstring(xml_text)  # noqa: S314  # locally-run crm_mon output, not untrusted input
     dc = root.find("./summary/current_dc")
     quorate = dc is not None and dc.get("with_quorum") == "true"
 
@@ -33,7 +46,7 @@ def parse_crm(xml_text: str) -> dict:
             "unclean": n.get("unclean") == "true",
         }
 
-    resources: dict[str, dict] = {}
+    resources: dict[str, dict[str, Any]] = {}
     for r in root.findall(".//resources//resource"):
         rid = r.get("id", "")
         held = r.find("./node")
@@ -44,9 +57,9 @@ def parse_crm(xml_text: str) -> dict:
     return {"quorate": quorate, "nodes": nodes, "resources": resources}
 
 
-def parse_drbd(json_text: str) -> dict:
-    """drbdsetup/drbdadm status --json -> {resource: {role, disk, conn, resync_pct, out_of_sync_bytes}}."""
-    out: dict[str, dict] = {}
+def parse_drbd(json_text: str) -> dict[str, Any]:
+    """Parse drbd status JSON into {resource: {role,disk,conn,resync_pct,out_of_sync_bytes}}."""
+    out: dict[str, dict[str, Any]] = {}
     for res in json.loads(json_text):
         dev0 = (res.get("devices") or [{}])[0]
         conns = res.get("connections") or []
@@ -93,59 +106,137 @@ def parse_daemons(text: str, units: list[str]) -> dict[str, bool]:
     }
 
 
+def _m(name: str, labels: Mapping[str, object], value: object) -> str:
+    """Format one Prometheus sample line: name{k="v",...} value."""
+    rendered = ",".join(f'{k}="{v}"' for k, v in labels.items())
+    return f"{name}{{{rendered}}} {value}"
+
+
 def render_cluster_state_prom(
     *,
     node: str,
-    crm: dict | None,
-    stonith: dict | None,
+    crm: dict[str, Any] | None,
+    stonith: dict[str, int] | None,
     iscsi: int | None,
-    daemons: dict,
-    drbd: dict | None,
+    daemons: dict[str, bool],
+    drbd: dict[str, Any] | None,
     now: int,
     fresh_sources: tuple[str, ...],
 ) -> str:
-    """Project parsed probe results -> node_exporter textfile lines (label node=<self>)."""
+    """Project parsed probe results into node_exporter textfile lines (label node=<self>)."""
     lines: list[str] = []
 
     if crm is not None:
-        lines.append(f'cluster_quorate{{node="{node}"}} {1 if crm["quorate"] else 0}')
+        lines.append(_m("cluster_quorate", {"node": node}, 1 if crm["quorate"] else 0))
         for member, st in crm["nodes"].items():
-            online = 1 if st["online"] else 0
-            unclean = 1 if st["unclean"] else 0
-            lines.append(f'cluster_node_online{{node="{node}",member="{member}"}} {online}')
-            lines.append(f'cluster_node_unclean{{node="{node}",member="{member}"}} {unclean}')
+            base = {"node": node, "member": member}
+            lines.append(_m("cluster_node_online", base, 1 if st["online"] else 0))
+            lines.append(_m("cluster_node_unclean", base, 1 if st["unclean"] else 0))
         for rid, r in crm["resources"].items():
+            rbase = {"node": node, "resource": rid}
             started = 1 if r["state"] == "Started" else 0
-            lines.append(f'cluster_resource_started{{node="{node}",resource="{rid}"}} {started}')
+            lines.append(_m("cluster_resource_started", rbase, started))
             if r["node"]:
-                lines.append(
-                    f'cluster_resource_owner{{node="{node}",resource="{rid}",holder="{r["node"]}"}} 1'
-                )
+                lines.append(_m("cluster_resource_owner", {**rbase, "holder": r["node"]}, 1))
 
     if stonith is not None:
         for member, count in stonith.items():
-            lines.append(f'cluster_fence_count{{node="{node}",member="{member}"}} {count}')
+            lines.append(_m("cluster_fence_count", {"node": node, "member": member}, count))
 
     if iscsi is not None:
-        lines.append(f'cluster_iscsi_sessions{{node="{node}"}} {iscsi}')
+        lines.append(_m("cluster_iscsi_sessions", {"node": node}, iscsi))
 
     for unit, up in daemons.items():
-        lines.append(f'cluster_daemon_up{{node="{node}",unit="{unit}"}} {1 if up else 0}')
+        lines.append(_m("cluster_daemon_up", {"node": node, "unit": unit}, 1 if up else 0))
 
     if drbd is not None:
         for res, d in drbd.items():
+            rbase = {"node": node, "resource": res}
             for kind in ("role", "disk", "conn"):
-                lines.append(
-                    f'cluster_drbd_{kind}{{node="{node}",resource="{res}",{kind}="{d[kind]}"}} 1'
-                )
+                lines.append(_m(f"cluster_drbd_{kind}", {**rbase, kind: d[kind]}, 1))
             if d["resync_pct"] is not None:
-                lines.append(f'cluster_drbd_resync_pct{{node="{node}",resource="{res}"}} {d["resync_pct"]}')
+                lines.append(_m("cluster_drbd_resync_pct", rbase, d["resync_pct"]))
             if d["out_of_sync_bytes"] is not None:
-                lines.append(
-                    f'cluster_drbd_out_of_sync_bytes{{node="{node}",resource="{res}"}} {d["out_of_sync_bytes"]}'
-                )
+                lines.append(_m("cluster_drbd_out_of_sync_bytes", rbase, d["out_of_sync_bytes"]))
 
     for source in fresh_sources:
-        lines.append(f'cluster_state_last_write_timestamp{{node="{node}",source="{source}"}} {now}')
+        ts = {"node": node, "source": source}
+        lines.append(_m("cluster_state_last_write_timestamp", ts, now))
 
     return "\n".join(lines) + "\n"
+
+
+# source -> (command, timeout seconds). Timeouts are well under the 5s tick (§4.2).
+DAEMON_UNITS = {"cluster": ["corosync", "pacemaker"], "storage": ["drbd"]}
+_COMMANDS = {
+    "crm": (["crm_mon", "--one-shot", "--output-as=xml"], 3),
+    "drbd": (["drbdsetup", "status", "--json"], 2),
+    "stonith": (["stonith_admin", "--history", "*"], 2),
+    "iscsi": (["iscsiadm", "-m", "session"], 2),
+}
+
+
+def probe(cmd: list[str], timeout: int) -> str | None:
+    """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE)."""
+    try:
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    return cp.stdout if cp.returncode == 0 else None
+
+
+def collect(role: str, node: str, now: int) -> str:
+    """Run this role's probe set and render the textfile body."""
+    crm = stonith = iscsi = drbd = None
+    daemons: dict[str, bool] = {}
+    fresh: list[str] = []
+    for source in PROBE_SETS[role]:
+        if source == "daemons":
+            units = DAEMON_UNITS[role]
+            raw = probe(["systemctl", "is-active", *units], timeout=2)
+            if raw is not None:
+                daemons = parse_daemons(raw, units)
+                fresh.append("daemons")
+            continue
+        cmd, timeout = _COMMANDS[source]
+        raw = probe(cmd, timeout)
+        if raw is None:
+            continue
+        if source == "crm":
+            crm = parse_crm(raw)
+        elif source == "drbd":
+            drbd = parse_drbd(raw)
+        elif source == "stonith":
+            stonith = parse_stonith(raw)
+        else:  # iscsi — the only remaining probe source
+            iscsi = parse_iscsi(raw)
+        fresh.append(source)
+    return render_cluster_state_prom(
+        node=node,
+        crm=crm,
+        stonith=stonith,
+        iscsi=iscsi,
+        daemons=daemons,
+        drbd=drbd,
+        now=now,
+        fresh_sources=tuple(fresh),
+    )
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Entry point for the deployed collector. `lab-cluster-state --role {cluster,storage}`."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--role", required=True, choices=sorted(PROBE_SETS))
+    ap.add_argument("--node", default=os.uname().nodename)
+    ap.add_argument("--out", default="/var/lib/node_exporter/textfile/lab_cluster_state.prom")
+    ap.add_argument("--now", type=int, default=None)
+    args = ap.parse_args(argv)
+    now = args.now if args.now is not None else int(time.time())
+    body = collect(args.role, args.node, now)
+    tmp = Path(args.out + ".tmp")
+    tmp.write_text(body)
+    tmp.replace(args.out)
+
+
+if __name__ == "__main__":
+    main()
