@@ -148,7 +148,7 @@ def _channels_table(qm: str, y: int) -> dict[str, Any]:
     return {
         "type": "table",
         "title": f"{qm} — channels",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": y},
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
         "targets": [
             {
                 "expr": f'ibmmq_channel_status_squash{{qmgr="{qm}"}}',
@@ -173,7 +173,7 @@ def _queues_table(qm: str, y: int) -> dict[str, Any]:
     return {
         "type": "table",
         "title": f"{qm} — queues",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": y},
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
         "targets": [
             {"expr": f'ibmmq_queue_depth{{qmgr="{qm}"}}', "format": "table", "instant": True}
         ],
@@ -252,6 +252,7 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
         panels.append(_qm_conn_panel(qm, y))
         y += 4
         panels.append(_channels_table(qm, y))
+        y += 8
         panels.append(_queues_table(qm, y))
         y += 8
 
