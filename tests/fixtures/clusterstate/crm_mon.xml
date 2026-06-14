@@ -1,7 +1,8 @@
-<!-- SAMPLE fixture (Plan 1a, Task 1). Replace with live output of
-     `crm_mon --one-shot --output-as=xml` from pcmk-a1, then reconcile in Task 10.
-     Captured command goes here once real. -->
-<pacemaker-result api-version="2.0" request="crm_mon --one-shot --output-as=xml">
+<!-- SAMPLE fixture (Plan 1a, Task 1). Replace with live crm_mon output
+     (one-shot, output-as xml) from pcmk-a1, then reconcile in Task 10.
+     NOTE: XML comments cannot contain a double-hyphen, so the real command
+     is recorded in the request attribute below, not here. -->
+<pacemaker-result api-version="2.0" request="crm_mon one-shot output-as xml">
   <summary>
     <current_dc present="true" name="pcmk-a1" id="1" with_quorum="true"/>
     <nodes_configured number="3"/>
