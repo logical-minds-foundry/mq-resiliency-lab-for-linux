@@ -10,6 +10,19 @@
 # (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is
 # exported; the wrapper just removes that footgun.)
 
+# Cold-boot guard (#160; the DR twin of #151's site-pcmk.yml guard): a clean
+# ground-up build runs `vm create` then `vm provision` back-to-back, and a guest
+# that is not yet SSH-ready when its play fires drops out as UNREACHABLE -- which
+# silently skips the whole san_a/san_b DRBD+target stage and marches on to the
+# cluster plays against half a topology. Wait for every node before any work.
+- name: wait for all DR-arm hosts to be SSH-ready (cold-boot guard)
+  hosts: pcmk_san_dr
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
 - hosts: pcmk_san_dr
   become: true
   tasks:

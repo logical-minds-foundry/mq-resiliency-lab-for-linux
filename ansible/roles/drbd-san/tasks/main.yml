@@ -99,6 +99,26 @@
   changed_when: false
   become: true
 
+- name: assert the drbd disk attached (fail loud on a failed up)
+  ansible.builtin.shell: |
+    set -e
+    # `up` above is idempotent (so it can't fail-loud on its own), but a real
+    # attach failure -- e.g. `open(/dev/vdb) busy` or invalid md from a stale,
+    # reused SAN disk (#160) -- leaves the resource Diskless/Unconfigured. Catch
+    # it HERE with the actual dstate instead of letting it masquerade as a 120s
+    # peer-connect timeout two plays later (the trap that hid #158).
+    state=$(drbdadm dstate mqlun 2>&1 || true)
+    case "$state" in
+      *Diskless*|*Unconfigured*|"")
+        echo "drbd attach FAILED -- dstate: ${state:-<empty>}"
+        drbdadm status mqlun 2>&1 || true
+        echo "likely a stale /dev/vdb; cold-reset the SAN VMs (see docs/reference/lab-bootstrap.md)"
+        exit 1 ;;
+      *) echo "attached: $state" ;;
+    esac
+  changed_when: false
+  become: true
+
 # NOTE: promotion + skip-initial-sync + mkfs is NOT here. It needs BOTH peers up
 # and connected so the primary can `--clear-bitmap` (declare both in-sync at
 # zero, skipping the 8 GB full copy), and this role runs per-host before the
