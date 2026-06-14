@@ -1,0 +1,15 @@
+---
+# mq_prometheus exporter — client-mode target (the instrumented subject is our
+# HA QM, reached via its data-plane VIP so the exporter follows it across
+# failover). Override per QM instance from site-obs.yml.
+mq_exporter_qm: QMPCMK
+mq_exporter_conn: "10.10.1.200(1414)"
+mq_exporter_channel: APP.SVRCONN
+mq_exporter_port: 9157
+# Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
+# gate). The app queue + our outbound xmitq + the app reply queue.
+mq_exporter_monitored_queues: "HA.TEST,QMDTCC,APP.REPLY"
+mq_exporter_monitored_channels: "APP.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
+# mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
+# cold boot confirms the build — master is a placeholder for reproducibility.
+mq_exporter_ref: master

@@ -66,3 +66,16 @@
   register: lsr
   changed_when: "'AMQ8626' not in lsr.stdout"
   failed_when: lsr.rc not in [0, 10]
+
+# Enable the resource-monitoring + statistics the mq_prometheus exporter needs
+# ($SYS publications are sparse without it); MAXHANDS headroom for its per-queue
+# handles. Exporter-ready when an instance is pointed at this QM (#172).
+- name: enable QM monitoring for the prometheus exporter
+  ansible.builtin.shell: |
+    printf "ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  become: true
+  become_user: mqm
+  register: mon
+  changed_when: "'AMQ8005' in mon.stdout"
+  failed_when: mon.rc not in [0, 10]

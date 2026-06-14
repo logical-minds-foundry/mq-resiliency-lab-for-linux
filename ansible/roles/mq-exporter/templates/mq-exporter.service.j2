@@ -1,0 +1,16 @@
+[Unit]
+Description=mq_prometheus exporter — {{ mq_exporter_qm }} (client-mode, #172)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mqm
+Group=mqm
+Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
+ExecStart=/usr/local/bin/mq_prometheus -ibmmq.queueManager {{ mq_exporter_qm }} -ibmmq.connName "{{ mq_exporter_conn }}" -ibmmq.channel {{ mq_exporter_channel }} -ibmmq.monitoredQueues {{ mq_exporter_monitored_queues }} -ibmmq.monitoredChannels {{ mq_exporter_monitored_channels }} -ibmmq.httpListenPort {{ mq_exporter_port }}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

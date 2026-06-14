@@ -7,3 +7,9 @@
 - hosts: obs_box
   become: true
   roles: [prometheus, grafana]
+
+# The MQ-service exporter on the probe: client-mode mq_prometheus against the
+# QM VIP, scraped by Prometheus at mon-probe:9157 (#172). Defaults target QMPCMK;
+# QMDTCC needs net-ext on the probe + a second instance (follow-up).
+- hosts: probe
+  roles: [mq-exporter]
