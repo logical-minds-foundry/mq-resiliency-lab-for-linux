@@ -141,10 +141,12 @@ def render_cluster_state_prom(
             lines.append(_m("cluster_resource_started", rbase, started))
             if r["node"]:
                 lines.append(_m("cluster_resource_owner", {**rbase, "holder": r["node"]}, 1))
-
-    if stonith is not None:
-        for member, count in stonith.items():
-            lines.append(_m("cluster_fence_count", {"node": node, "member": member}, count))
+        # Fence baseline: every known member reads 0 (clean → green) unless stonith
+        # history shows events for it (→ red). Tied to the crm member set so a clean
+        # cluster isn't a column of grey no-data.
+        fences = stonith or {}
+        for member in crm["nodes"]:
+            lines.append(_m("cluster_fence_count", {"node": node, "member": member}, fences.get(member, 0)))
 
     if iscsi is not None:
         lines.append(_m("cluster_iscsi_sessions", {"node": node}, iscsi))

@@ -151,7 +151,25 @@ def test_render_cluster_section_emits_quorum_resource_and_timestamp():
     assert 'cluster_resource_owner{node="pcmk-a1",resource="mq_qm",holder="pcmk-a2"} 1' in out
     assert 'cluster_iscsi_sessions{node="pcmk-a1"} 2' in out
     assert 'cluster_daemon_up{node="pcmk-a1",unit="corosync"} 1' in out
+    assert 'cluster_fence_count{node="pcmk-a1",member="pcmk-a2"} 0' in out  # clean baseline
     assert 'cluster_state_last_write_timestamp{node="pcmk-a1",source="crm"} 1781455000' in out
+
+
+def test_render_fence_baseline_zero_for_clean_members_and_count_for_fenced():
+    crm = {
+        "quorate": True,
+        "nodes": {
+            "pcmk-a1": {"online": True, "standby": False, "unclean": False},
+            "pcmk-a2": {"online": False, "standby": False, "unclean": True},
+        },
+        "resources": {},
+    }
+    out = clusterstate.render_cluster_state_prom(
+        node="pcmk-a1", crm=crm, stonith={"pcmk-a2": 3}, iscsi=None, daemons={},
+        drbd=None, now=1, fresh_sources=(),
+    )
+    assert 'cluster_fence_count{node="pcmk-a1",member="pcmk-a1"} 0' in out  # clean -> green
+    assert 'cluster_fence_count{node="pcmk-a1",member="pcmk-a2"} 3' in out  # fenced -> red
 
 
 def test_render_omits_timestamp_for_stale_source():
