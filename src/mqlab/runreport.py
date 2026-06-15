@@ -48,3 +48,32 @@ def capture_metadata(
         config_digest=digest_reader(),
         versions=version_reader(),
     )
+
+
+@dataclass(frozen=True)
+class RunReport:
+    metadata: RunMetadata
+    scenarios: list[ScenarioReport]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "metadata": self.metadata.to_dict(),
+            "scenarios": [s.to_dict() for s in self.scenarios],
+        }
+
+    def to_markdown(self) -> str:
+        m = self.metadata
+        versions = ", ".join(f"{k}={v}" for k, v in sorted(m.versions.items())) or "(none)"
+        lines = [
+            f"# Run report — {m.setup} @ {m.timestamp}",
+            "",
+            f"- Setup: `{m.setup}`",
+            f"- Commit: `{m.commit}`",
+            f"- Config digest: `{m.config_digest}`",
+            f"- Versions: {versions}",
+            "",
+        ]
+        for s in self.scenarios:
+            lines.append(s.to_markdown())
+            lines.append("")
+        return "\n".join(lines)
