@@ -100,33 +100,52 @@ v1 as a reserved, collapsed placeholder row** (between the matrix and perf), mir
 the layered dashboard's reserved MQ-service row, so the board structure stays stable
 when #143 fills it — no reflow, and the slot self-documents.
 
-### 3.1 The cluster-state matrix (§1)
+### 3.1 The cockpit — three role-split sections (§1)
 
-Rows = nodes; columns = the relevant components, **grouped by HA layer**:
+Earlier drafts put every node in one node × component matrix. Live prototyping (the
+Plan 1b spike) showed that conflates two different **node-roles** — *compute* (the
+Pacemaker QM nodes) and *storage* (the SAN) — whose relevant attributes barely overlap,
+producing a sparse grid full of n/a cells. So the cockpit is **three stacked sections**,
+each homogeneous and carrying only the columns its role needs. Both DR halves appear
+together — the pair is watched as a unit, and the standby side's health gates any
+cutover. Authoritative mockup:
+`docs/specs/diagrams/cluster-drill-cockpit-matrix-split.html`.
 
-- **membership** — `corosync` (ring), `pacemaker` (online/standby)
-- **storage** — `DRBD` (role · disk state), `iSCSI` (sessions/paths)
-- **resource group** — `mq_fs`, `mq_vip`, `mq_vip_ext`, `mq_qm` (placement + state)
-- **fence** — STONITH state / recent fence
+**① Cluster status — the HA/DR pair as a unit.** Per-site cards (Site A / Site B):
+quorum (n/3) + QM owner + active/standby; between them a **cross-site DRBD** card
+(direction, resync %, out-of-sync RPO tail); and the first-class **integrity** light
+(below). The cluster-wide layer — no per-node noise.
 
-Node rows are grouped into **SITE A** (`san-a`, `pcmk-a1..3`) and **SITE B**
-(`san-b`, `pcmk-b1..3`). SAN nodes are storage, not cluster members, so their
-membership/resource-group cells are not-applicable (`—`); DRBD cells are populated
-**only** on SAN rows (DRBD replicates the SAN LUN site-to-site).
+**② Compute — queue-manager nodes (Pacemaker).** One table, rows = all six
+`pcmk-a1..3` + `pcmk-b1..3`, **banded by site**. Columns: *node health* — `corosync`
+(ring), `pacemaker` (online/standby), `iSCSI` (initiator sessions/paths), `fence`
+(STONITH ok / fenced) — and *resource group* — `mq_fs`, `mq_vip`, `mq_vip_ext`,
+`mq_qm`, which light (●) on the **active node's** row (the holder, `★`). The four
+service cells lining up on one row is the "who's active" read; a DR cutover reads as
+those cells jumping from a Site-A row to a Site-B row.
 
-Above the grid, a **cluster-as-a-unit summary bar**: per side, quorum + QM owner +
-active/standby; in the centre, the **cross-site DRBD** direction, resync %, and
-out-of-sync tail (the RPO proxy). A **replication band** stitched between the
-`san-a` and `san-b` rows repeats the live DRBD relationship inline.
+**③ Storage — SAN.** One table, rows = `san-a` + `san-b`. Storage-only columns: DRBD
+`role` (Primary/Secondary), `disk` (UpToDate/Outdated/Inconsistent/Diskless),
+`connection` (Connected/StandAlone/WFConnection), `resync %`, `out-of-sync` (RPO tail),
+`iSCSI target` (serving), `drbd` service. The `san-a ⇄ san-b` row-pair is the
+cross-site replication watched during a DR drill. None of these columns apply to the
+compute nodes, and vice-versa.
 
-`★` marks the current QM owner. Colour vocabulary: **green** healthy · **amber**
-transitional/resyncing · **red** down/failed · **grey** standby/n-a · **hatched
-STALE** when a collector is silent (§9). The mid-cutover mockup snapshot is the
-acceptance picture: a fenced node red with daemon STALE, quorum dipped, DRBD flipped,
-the resource group relighting amber→green on the target, the RPO tail a live number.
+**Why role-split:** compute and storage are different shapes; a shared matrix is sparse
+and doesn't scale. Per-role tables read cleaner and extend cleanly — a future app/DB
+tier becomes another role-section, not new columns smeared across unrelated nodes. The
+per-QM **application** detail (one QM's queues/channels/flow) is deliberately a
+**separate board** (the application view, §1), not folded in here.
 
-**Integrity alarm (first-class).** Above the grid sits a dedicated **integrity light**
-that goes loud with a distinct treatment (a banner/colour unlike the routine
+**Colour vocabulary:** green healthy · amber transitional/resyncing · red down/failed ·
+grey standby/n-a · hatched **STALE** when a collector is silent (§9, §4.3 precedence).
+The mid-cutover acceptance picture: a fenced compute node reads fenced/offline, quorum
+dips on its site, the resource-group cells relight amber→green on the Site-B target row,
+and the storage table shows DRBD flipping (san-b → Primary) with the RPO tail a live
+number.
+
+**Integrity alarm (first-class).** In the cluster-status section (①) sits a dedicated
+**integrity light** that goes loud with a distinct treatment (a banner/colour unlike the routine
 green/amber/red) — not just one more cell — on any data-integrity hazard: DRBD
 **split-brain** (`StandAlone`, or dual-`Primary`), `Diskless`, or an **`Outdated`
 secondary being promoted**. This is the cockpit's most important safety light: it makes
