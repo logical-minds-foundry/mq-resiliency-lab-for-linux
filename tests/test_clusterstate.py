@@ -165,8 +165,14 @@ def test_render_fence_baseline_zero_for_clean_members_and_count_for_fenced():
         "resources": {},
     }
     out = clusterstate.render_cluster_state_prom(
-        node="pcmk-a1", crm=crm, stonith={"pcmk-a2": 3}, iscsi=None, daemons={},
-        drbd=None, now=1, fresh_sources=(),
+        node="pcmk-a1",
+        crm=crm,
+        stonith={"pcmk-a2": 3},
+        iscsi=None,
+        daemons={},
+        drbd=None,
+        now=1,
+        fresh_sources=(),
     )
     assert 'cluster_fence_count{node="pcmk-a1",member="pcmk-a1"} 0' in out  # clean -> green
     assert 'cluster_fence_count{node="pcmk-a1",member="pcmk-a2"} 3' in out  # fenced -> red

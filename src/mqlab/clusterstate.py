@@ -146,7 +146,8 @@ def render_cluster_state_prom(
         # cluster isn't a column of grey no-data.
         fences = stonith or {}
         for member in crm["nodes"]:
-            lines.append(_m("cluster_fence_count", {"node": node, "member": member}, fences.get(member, 0)))
+            fc = {"node": node, "member": member}
+            lines.append(_m("cluster_fence_count", fc, fences.get(member, 0)))
 
     if iscsi is not None:
         lines.append(_m("cluster_iscsi_sessions", {"node": node}, iscsi))
