@@ -43,8 +43,10 @@ substrate** and making RDQM the fully-tooled, primary arm.
   observability, declarative `pymqrest` content, and the §3.1 fault + DR drills —
   all on RHEL.
 - **G2 — Parity as a standing property, not a snapshot.** Both arms are
-  co-maintained and co-testable going forward; the Phase-E comparison becomes a
-  re-assertable result, not a one-shot writeup.
+  co-maintained and co-tested **serially** going forward (sequential by default,
+  parallel-capable by design — §3.4); the Phase-E comparison becomes a
+  re-assertable result computed from recorded harness output, not a one-shot
+  writeup and not a requirement that both fleets co-reside.
 - **G3 — An open, N-arm abstraction.** "Arm" is a first-class registry across
   independent axes (HA mechanism × OS platform × substrate), not a hardcoded
   `rdqm | pcmk` binary — so the two future arms fold in without a retrofit.
@@ -61,6 +63,10 @@ substrate** and making RDQM the fully-tooled, primary arm.
 - **No security hardening** — out of scope per §1 of the authoritative design,
   unchanged here.
 - **No retirement of Ubuntu/Pacemaker.** It stays first-class.
+- **No concurrent multi-arm execution.** Arms run one at a time (§3.4);
+  parallelism is an explicit non-goal — it complicates every operational surface
+  (dashboards, the run report) for no evidentiary gain, since parity is a
+  comparison of recorded results (§4.4), not live co-residency.
 
 ## 3. The arm abstraction (approach A — the structural seam)
 
@@ -125,6 +131,120 @@ implementation of the same contract. The registry must not bake in a 2-backend
 assumption anywhere, and the substrate axis must not assume `vm` (Native HA's
 container/K8s substrate reshapes a few fault primitives — see §6).
 
+**Catalog vs. selection vs. mechanics — a deliberate three-way split.** Three
+different things must never be conflated:
+
+- **The catalog of what *can* be built** — the arm registry and the setups that
+  compose it — is a **committed declaration** in `topology.yaml` (extending its
+  existing `boxes` / `groups` / `setups` / platform model). Each `setup` names its
+  `arm`; each `arm` declares `(mechanism-backend, os-platform, substrate)`. This is
+  a *menu*; committing the menu is correct.
+- **The selection of what to build or run *right now*** is a **runtime argument**
+  to the `mqlab` commands — you name the arm-scoped setup at invocation
+  (`mqlab … distributed-rdqm-rhel` vs `… distributed-pcmk-ubuntu`), exactly as
+  setup names already drive `mqlab net` / `vm` / `obs` / `provision` today
+  (e.g. `mqlab vm provision <setup>`, #105). Choosing an arm is **never an
+  edit-and-commit** to a config file: the commands can build *any* catalogued arm,
+  and the unique name on the command line is what determines which.
+- **The mechanics of *how* to build each** live in the Ansible roles, templates,
+  and the per-arm backends (§3.2) — committed, and shared across arms wherever the
+  §3.3 contract lets them be.
+
+This split is *why* arm-namespaced identity (§3.4) is load-bearing: the unique
+name is the runtime selector. The `run` operation (§4.4) takes the same setup name
+as its argument and records it in the report.
+
+### 3.4 Sequential operation & arm-namespaced identity
+
+**Operating model: one arm at a time — sequential, firm.** The lab runs a single
+arm's setup at a time. The host cannot TCG-emulate two full RDQM fleets, the
+machine is shared with other work, and — decisively — **running arms concurrently
+buys little and costs much**: it complicates the dashboards, the report, and every
+operational surface for no evidentiary gain, because parity is a *comparison of
+recorded results* (§4.4), not a side-by-side live spectacle. **Concurrent
+execution of multiple arms is an explicit non-goal** (§2). We build each flavor
+once, run it on its own, and record what it did.
+
+**Arm-namespaced identity (still required — for a different reason).** Sequential
+operation does *not* excuse single-arm naming. Today the `distributed` setup is
+implicitly *the Pacemaker one*, and the shared `net-data-a` / `10.10.1.100` VIP is
+a latent collision the moment RDQM returns. Clean per-arm identity is what makes
+the **stop/restart/toggle** story (§3.5) work and keeps one arm's state from
+clobbering another's. The refactor (P2/P3) gives every arm a disjoint namespace:
+
+- **Setups** named `<workload>-<arm>` — e.g. `distributed-pcmk-ubuntu`,
+  `distributed-rdqm-rhel` — never a bare `distributed`.
+- **Disjoint per-arm:** node names (already arm-prefixed: `pcmk-*`, `rdqm-*`);
+  networks and VIP/data subnets (breaking the shared `net-data-a` / `.100` VIP so
+  each arm owns its space); QM names (`QMPCMK` vs `QMRDQM`); container/fixture names.
+- **Shared fixtures stay shared only by explicit intent** (e.g. one `dtcc-sim`
+  counterparty) — never by namespace accident.
+
+**Supporting VMs ride the fastest base; only the core-under-test pays the slow
+tax.** The instrumented core is the **3+3 HA/DR group** (plus a few support VMs as
+the tooling grows). Everything *outside* that core — `obs`, `mon-probe`,
+`dtcc-sim`, `app-client` — should use the cheapest/fastest-to-build platform, which
+today is **Ubuntu arm64 (KVM-accelerated)**. *Verified 2026-06-15:* only the six
+`rdqm-*` nodes carry the `rhel96-x86_64` (TCG) override; every other node —
+including the Pacemaker arm's own nodes — already inherits the Ubuntu arm64
+default. So when the RDQM arm is under test, only its six core nodes are slow x86;
+the whole support cast stays fast. Keep it that way: never put a support VM on a
+slow platform.
+
+### 3.5 Cached, toggleable per-arm state — restart without rebuild
+
+Iterating across arms must not mean rebuilding each from scratch every time. The
+target workflow: **build the RDQM environment, run it, shut it down; build the
+Pacemaker environment, run it, shut it down; later restart either from its cached
+state** — toggling between arms cheaply.
+
+- **Persistent across a base-VM *restart*, disposable across a *rebuild*.** A
+  setup's VMs and generated config survive stopping and restarting the core Lima
+  base VM; they are *not* expected to survive a full base-VM rebuild (we still
+  rebuild aggressively — every few days, as with the dev and MQ-tooling VMs).
+- **Per-arm cached state under `build/`, keyed for recall.** Structure the
+  `build/` snapshots so a run is addressable as "this tooling, this generated
+  config, this commit, on this date" and can be **stopped and restarted by
+  reference** — an RDQM env in one cache slot, a Pacemaker env in another, each
+  independently start/stop-able. This extends the state consolidation already
+  scoped in **#167** (Vagrant state → `build/` via `VAGRANT_DOTFILE_PATH`, reset
+  semantics) into a **per-arm, snapshot-addressable** layout, and shares
+  coordinates with the run report (§4.4).
+- **Ephemeral, not precious.** The cache is a toggling convenience, never a source
+  of truth — the source of truth is the committed tooling + generated config; any
+  cache can be discarded and regenerated.
+
+### 3.6 Developer-provided, entitlement-gated artifacts
+
+Some inputs **cannot** live in the repo — they are large and/or entitlement-gated,
+and the secrets policy forbids committing any MQ entitlement/license artifact. For
+the RDQM arm these are the **RHEL DVD ISO** (~12.7 GB) and the **IBM MQ Advanced
+for Developers tar** (~520 MB). The lab is built **from the outside, by a developer
+with their own entitlements** — the author is a contractor with deliberately
+limited access at the firm and leans on this personal laptop lab to prove concepts
+— so artifact provisioning is the developer's responsibility, **by design**.
+
+**Mechanism — a machine-local user config, never committed.** A user-level config
+file (e.g. `~/.config/mq-cluster-tooling/config.toml`) declares **where each
+required artifact lives on this machine** — the RHEL ISO path, the MQ dev tar path,
+and any future arm's equivalents. It is:
+
+- **Not in git** — machine-local and per-developer, the same trust boundary as
+  `build/` and the secrets policy.
+- **Not topology** — `topology.yaml` declares the *catalog* (§3.3); the user config
+  supplies *this developer's local artifact paths*. Selection stays runtime;
+  artifact location stays machine-local.
+- **Flexible on location** — artifacts may sit in `build/` (where they are today)
+  or anywhere else the developer points to.
+
+**The repo ships pointers, not artifacts.** Committed docs tell the next person
+*how to obtain* the inputs — sign up for a **Red Hat Developer** subscription (the
+no-charge Developer-edition path RDQM uses), where to download the RHEL ISO and the
+MQ Advanced for Developers tar — and *how to configure* their paths. Taking
+responsibility for obtaining entitlements is **left to the developer** (the author,
+or anyone who later uses this). The lab stays buildable by anyone with their own
+entitlements, with zero licensed bits in the repo.
+
 ## 4. The parity harness (approach C — the executable contract)
 
 Parity is *defined by an executable contract* and enforced, not asserted by prose.
@@ -165,16 +285,47 @@ The harness is stood up and made **green against today's working Pacemaker arm
 safety net under the approach-A extraction. RDQM rows start `not-yet` and turn
 green in P4 — and that green state *is* the first deliverable.
 
+### 4.4 The single-invocation `run` and the report corpus
+
+The harness contract (§4.1) is exercised by a **single named operation** that
+drives a whole arm end to end and emits a durable report. This is the deliverable's
+beating heart — the thing you invoke after a rebuild and walk away from.
+
+**One invocation, full sweep.** Post-rebuild, the `run` operation drives the entire
+pipeline for one arm: bootstrap → `net` + `vm` bring-up → provision → setup (form
+the 3+3 group, wire the distributed `QM*` ↔ `QMDTCC` mesh, bring up obs and
+declarative content) → drive the §4.1 fault + DR drills → tear down. It promotes
+the existing end-to-end test script and the HA/DR experiment-runner idea (#119)
+into a first-class, named, repeatable operation.
+
+**A timestamped, self-describing report per run**, capturing both halves of an
+experiment:
+
+- *Inputs (what was tested):* the arm/setup, the **generated `net`/`vm`/setup
+  config actually used**, tool/box/MQ versions, and the **exact code commit SHA** —
+  so every result refers back to the precise repo state that produced it.
+- *Outputs (what happened):* per-drill RTO/RPO/intervention/data-integrity results
+  and the capability-matrix verdicts (§4.1), with RDQM timings recorded
+  qualitatively per the §6 scope-honesty rule.
+
+**The corpus is the asset.** Each report is a point-in-time snapshot — "we ran
+*this* config at *this* commit and got *these* results." Accumulated, they form a
+**large, slow, automatable integration-test record**: a `(arm × config × commit) →
+outcomes` mapping, re-runnable on demand, that becomes the standing evidence base
+behind the Phase-E parity claim. The instrumented core is the **3+3 HA/DR group**;
+the report scales as that core grows by a few support VMs. Reports share their
+addressing coordinates with the per-arm state cache (§3.5).
+
 ## 5. Phasing
 
 | Phase | Outcome | Notes |
 |---|---|---|
-| **P0 — Wrap-up** | In-flight worktrees finished and landed; clean `develop`. | #143 log-streaming, #186 time-sync, #169 dr-commands, #175 ha-commands, #177 cluster-cockpit, #62 pcmk-flow. Treated as the **shared tooling layer**; where they touch HA/DR surfaces, land arm-generic where cheap, Pacemaker-backed for now. Docs reframe (this spec + the superseding section) runs concurrently. |
-| **P1 — Parity harness vs. Pacemaker** | Cross-arm harness + capability matrix **green on the Pacemaker backend**. | Approach C first, as the regression net. RDQM rows = `not-yet`. |
-| **P2 — Extract the arm-backend interface** | Pacemaker logic refactored behind the §3.3 contract; P1 harness stays green. | Approach A. No behavior change; the seam now exists with one conforming backend. Registry written **open** (N backends, N OS platforms, VM-or-container substrate). |
-| **P3 — RDQM backend to parity** | `rdqm-install`/`rdqm-ha`/`rdqmdr` ported into the seam; `QMRDQM` wired as the in-house HA substrate of the distributed architecture (`QMRDQM` ↔ `QMDTCC`); observability + declarative content online for RDQM. | Subject to the **cold-rebuild acceptance gate** — done only after a full cold rebuild proves it one-pass, not just lint-green. The frozen RDQM roles predate the tooling era; treat as "proven concept, re-validate," not "known-good." |
+| **P0 — Wrap-up** | In-flight worktrees finished and landed; clean `develop`. | The genuine in-flight set (verified ahead of `develop` 2026-06-15): **#143 log-streaming, #169 dr-commands, #175 ha-commands, #177 cluster-cockpit, #186 time-sync**. Treated as the **shared tooling layer**; where they touch HA/DR surfaces, land arm-generic where cheap, Pacemaker-backed for now. **Cleanup:** remove the stale worktrees `#141` mq-prometheus-spike (0 commits ahead — spike concluded) and confirm `#62` pcmk-flow is already merged (PR #63, 2026-06-09). Docs reframe (this spec + the superseding section) runs concurrently. |
+| **P1 — Parity harness vs. Pacemaker** | Cross-arm harness + capability matrix **green on the Pacemaker backend**; the single-invocation `run` driver (§4.4) emits the timestamped report. | Approach C first, as the regression net. RDQM rows = `not-yet`. The `run` operation drives the Pacemaker arm end to end and writes the first reports. |
+| **P2 — Extract the arm-backend interface** | Pacemaker logic refactored behind the §3.3 contract; P1 harness stays green. Arm-namespacing (§3.4) and per-arm state cache (§3.5 / #167) land here. | Approach A. No behavior change; the seam now exists with one conforming backend. Registry written **open** (N backends, N OS platforms, VM-or-container substrate). The `distributed` setup is renamed `distributed-pcmk-ubuntu` and its nets/VIPs de-collided. |
+| **P3 — RDQM backend to parity** | `rdqm-install`/`rdqm-ha`/`rdqmdr` ported into the seam; `QMRDQM` wired as the in-house HA substrate of the distributed architecture (`QMRDQM` ↔ `QMDTCC`); observability + declarative content online for RDQM. | **Entry gate (§3.6):** the RHEL ISO and MQ dev tar must be present and path-configured in the user config. Subject to the **cold-rebuild acceptance gate** — done only after a full cold rebuild proves it one-pass, not just lint-green. The frozen RDQM roles predate the tooling era; treat as "proven concept, re-validate," not "known-good." |
 | **P4 — Drive RDQM rows green = full parity** | The harness's RDQM rows go green: same capabilities + correctness as Pacemaker. | This green state **is** the first deliverable (G1). |
-| **P5 — Continuous parity** | Both arms co-tested; the harness runs across both backends in validation/CI. | Cadence bounded by the CPU/offline constraints (§7). Phase E recast: re-assert the comparison from harness output on demand. |
+| **P5 — Continuous parity** | Both arms co-tested **serially**; the `run` → report corpus (§4.4) is the standing mechanism, re-runnable per arm on demand. | Cadence bounded by the CPU/offline constraints (§7) and sequential operation (§3.4). Phase E recast: re-assert the comparison from accumulated report output, never from live co-residency. |
 
 ## 6. Deferred slots (strategic, not built)
 
@@ -213,11 +364,21 @@ closed to two arms — a constraint on *shape*, not extra build scope.
   authoritative design's §6 wire — stop and surface; escalate that arm to
   cloud-x86 only if jitter becomes indistinguishable from a real fault. Never
   tune timers to mask it.
-- **CPU/RAM budget.** Six TCG RDQM nodes + the Pacemaker arm + obs + fixtures
-  likely will **not** all run *simultaneously* on the ~12-core envelope. "Run both
-  in parallel" means **both maintained and co-testable**, with heavy full-fleet
-  drills possibly **alternating** per arm rather than truly concurrent. The P5
-  parity-harness cadence must be realistic about this.
+- **CPU/RAM budget — resolved as sequential-by-default (§3.4).** Six TCG RDQM
+  nodes + the Pacemaker arm + obs + fixtures will **not** all run simultaneously on
+  the ~12-core envelope, and the host is shared with other work. The lab therefore
+  runs **one arm at a time** by default; parity is asserted from recorded harness
+  output across serial runs, not from both fleets co-residing. Concurrency stays a
+  *capability* (arm-namespaced resources, §3.4) — realistic for two arm64 KVM
+  Pacemaker arms, expected to exhaust the host for two TCG RDQM fleets.
+- **Artifact & entitlement availability (§3.6).** RDQM bring-up depends on
+  developer-provided, entitlement-gated artifacts (RHEL ISO, MQ dev tar) being
+  present and path-configured. The entitlement basis is the no-charge **Red Hat
+  Developer** edition (as Phase C used); revisit only if a licensed/production
+  build is ever needed. Mitigated by the §3.6 user-config + committed
+  obtain-here pointers; no entitlement artifact ever enters git. (Closes the
+  authoritative §11 open risk on RHEL developer licensing.)
+
 - **Parity drift over time.** The capability matrix + CI enforcement is the
   standing guard — the whole reason C leads.
 - **Substrate assumption leakage.** If `vm` gets baked into the topology schema or
