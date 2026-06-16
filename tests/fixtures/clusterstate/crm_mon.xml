@@ -1,0 +1,43 @@
+<!-- REAL capture from pcmk-a1 (Plan 1a, Task 10), 2026-06-14, site-A pcmk_san_ha.
+     Command: crm_mon one-shot output-as xml. node_history trimmed for brevity
+     (the parser ignores it); summary/nodes/resources are verbatim. The top-level
+     fence_* STONITH resources are kept here to prove parse_crm excludes them. -->
+<pacemaker-result api-version="2.30" request="crm_mon --one-shot --output-as=xml">
+  <summary>
+    <stack type="corosync" pacemakerd-state="running"/>
+    <current_dc present="true" version="2.1.6-6fdc9deea29" name="pcmk-a2" id="2" with_quorum="true" mixed_version="false"/>
+    <nodes_configured number="3"/>
+    <resources_configured number="7" disabled="0" blocked="0"/>
+    <cluster_options stonith-enabled="true" symmetric-cluster="true" no-quorum-policy="stop" maintenance-mode="false"/>
+  </summary>
+  <nodes>
+    <node name="pcmk-a1" id="1" online="true" standby="false" unclean="false" health="green" type="member"/>
+    <node name="pcmk-a2" id="2" online="true" standby="false" unclean="false" health="green" is_dc="true" type="member"/>
+    <node name="pcmk-a3" id="3" online="true" standby="false" unclean="false" health="green" type="member"/>
+  </nodes>
+  <resources>
+    <resource id="fence_pcmk-a1" resource_agent="stonith:fence_virsh" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+      <node name="pcmk-a2" id="2" cached="true"/>
+    </resource>
+    <resource id="fence_pcmk-a2" resource_agent="stonith:fence_virsh" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+      <node name="pcmk-a1" id="1" cached="true"/>
+    </resource>
+    <resource id="fence_pcmk-a3" resource_agent="stonith:fence_virsh" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+      <node name="pcmk-a1" id="1" cached="true"/>
+    </resource>
+    <group id="mq_group" number_resources="4" maintenance="false" managed="true" disabled="false">
+      <resource id="mq_fs" resource_agent="ocf:heartbeat:Filesystem" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+        <node name="pcmk-a3" id="3" cached="true"/>
+      </resource>
+      <resource id="mq_vip" resource_agent="ocf:heartbeat:IPaddr2" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+        <node name="pcmk-a3" id="3" cached="true"/>
+      </resource>
+      <resource id="mq_vip_ext" resource_agent="ocf:heartbeat:IPaddr2" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+        <node name="pcmk-a3" id="3" cached="true"/>
+      </resource>
+      <resource id="mq_qm" resource_agent="systemd:mq-QMPCMK" role="Started" active="true" managed="true" failed="false" nodes_running_on="1">
+        <node name="pcmk-a3" id="3" cached="true"/>
+      </resource>
+    </group>
+  </resources>
+</pacemaker-result>

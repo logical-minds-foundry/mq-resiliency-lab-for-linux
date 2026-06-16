@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluster Drill Cockpit — Layout Options</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#0a0c10;color:#e6edf3;font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:28px;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .subtitle{color:#8b93a1;font-size:14px;margin:0 0 22px}
+  .options{display:flex;flex-direction:column;gap:18px}
+  .option{display:flex;gap:14px;background:#11161d;border:1px solid #232833;border-radius:10px;padding:16px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+  .option:hover{border-color:#3a4150}
+  .option.selected{border-color:#2f6fed;box-shadow:0 0 0 2px #2f6fed44}
+  .letter{flex:0 0 34px;height:34px;border-radius:8px;background:#2f6fed;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .content{flex:1;min-width:0}
+  .optt{margin:0 0 2px;font-size:16px}
+  .odesc{color:#aeb6c2;font-size:13px;margin:0 0 12px}
+  .cockpit{background:#0e1116;border:1px solid #2a2f3a;border-radius:8px;padding:14px}
+  .chip{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600;color:#fff;line-height:1.5}
+  .g{background:#2f9e44}.a{background:#e0922e}.r{background:#d83c3e}.x{background:#495057}.b{background:#2f6fed}
+  .lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8b93a1}
+  .cell{font-size:10px;color:#aeb6c2}
+  .sitehdr{font-size:13px;font-weight:700;color:#e6edf3}
+  .spine{background:#161b22;border:1px dashed #3a4150;border-radius:6px;padding:8px;text-align:center}
+  .panel{background:#11161d;border:1px solid #232833;border-radius:6px;padding:8px}
+  .active-ring{box-shadow:0 0 0 2px #2f9e44 inset}
+  table.mx{border-collapse:collapse;width:100%}
+  table.mx td,table.mx th{border:1px solid #232833;padding:4px 6px;text-align:center;font-size:10px}
+  table.mx th{color:#8b93a1;font-weight:600;background:#11161d}
+  table.mx td.node{text-align:left;color:#c9d1d9;font-weight:600}
+  .foot{color:#8b93a1;font-size:13px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Cluster Drill Cockpit — three ways to organize it</h1>
+<p class="subtitle">Same signals (quorum · resource placement · DRBD sync · per-node component health), three arrangements. Pacemaker/SAN arm, both DR sites. Snapshot = healthy baseline, <b>Site A active</b>. Click the shape that fits how you'd watch a failover/cutover.</p>
+
+<div class="options">
+
+  <!-- ===================== OPTION A ===================== -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3 class="optt">DR Mirror — two sides, replication spine down the middle</h3>
+      <p class="odesc">Site A and Site B as mirrored cluster cards; the cross-site DRBD link sits between them where the WAN actually is. A cutover = the green "active" ring visibly jumps columns.</p>
+      <div class="cockpit">
+        <div style="display:grid;grid-template-columns:1fr 130px 1fr;gap:10px;align-items:stretch">
+          <div class="panel active-ring">
+            <div class="sitehdr">SITE A <span class="chip g">ACTIVE</span></div>
+            <div style="margin:6px 0"><span class="lbl">cluster</span><br>
+              <span class="chip g">QUORATE 3/3</span> <span class="chip g">QMPCMK RUNNING</span><br>
+              <span class="cell">holder: <b>pcmk-a2</b></span></div>
+            <div class="lbl">nodes</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">
+              <span class="chip g">pcmk-a1</span><span class="chip g">pcmk-a2 ★</span><span class="chip g">pcmk-a3</span><span class="chip g">san-a P/UpToDate</span>
+            </div>
+            <div class="lbl" style="margin-top:6px">resource group @ pcmk-a2</div>
+            <div style="margin-top:3px"><span class="chip g">mq_fs</span> <span class="chip g">mq_vip</span> <span class="chip g">mq_vip_ext</span> <span class="chip g">mq_qm</span></div>
+          </div>
+          <div class="spine" style="display:flex;flex-direction:column;justify-content:center">
+            <div class="lbl">DRBD r0 · net-wan</div>
+            <div style="font-size:20px;color:#2f9e44">A ➜ B</div>
+            <span class="chip g">Connected</span>
+            <div class="cell" style="margin-top:4px">UpToDate / UpToDate<br>resync <b>100%</b><br>out-of-sync <b>0 KiB</b></div>
+          </div>
+          <div class="panel">
+            <div class="sitehdr">SITE B <span class="chip x">STANDBY</span></div>
+            <div style="margin:6px 0"><span class="lbl">cluster</span><br>
+              <span class="chip g">QUORATE 3/3</span> <span class="chip x">QMPCMK STOPPED</span><br>
+              <span class="cell">holder: <b>—</b></span></div>
+            <div class="lbl">nodes</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">
+              <span class="chip g">pcmk-b1</span><span class="chip g">pcmk-b2</span><span class="chip g">pcmk-b3</span><span class="chip g">san-b S/UpToDate</span>
+            </div>
+            <div class="lbl" style="margin-top:6px">resource group</div>
+            <div style="margin-top:3px"><span class="chip x">mq_fs</span> <span class="chip x">mq_vip</span> <span class="chip x">mq_vip_ext</span> <span class="chip x">mq_qm</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== OPTION B ===================== -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3 class="optt">Layer Stack — bands by HA layer, each split A | B</h3>
+      <p class="odesc">Rows are the stack: Quorum/Membership → Resource placement → Storage/Replication. When something breaks you see <i>which layer</i> at a glance. Site A left, Site B right within each band.</p>
+      <div class="cockpit">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div class="panel">
+            <div class="lbl">① quorum &amp; membership</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:3px">
+              <div><span class="cell">A:</span> <span class="chip g">QUORATE 3/3</span> <span class="chip g">corosync ring OK</span></div>
+              <div><span class="cell">B:</span> <span class="chip g">QUORATE 3/3</span> <span class="chip g">corosync ring OK</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="lbl">② resource group (mq_fs→mq_vip→mq_vip_ext→mq_qm)</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:3px">
+              <div><span class="cell">A:</span> <span class="chip g">Started @ pcmk-a2</span> <span class="chip g">QMPCMK</span></div>
+              <div><span class="cell">B:</span> <span class="chip x">Stopped</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="lbl">③ storage &amp; replication</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:3px">
+              <div><span class="cell">A san-a:</span> <span class="chip g">Primary</span> <span class="chip g">UpToDate</span> <span class="chip g">iSCSI 2/2</span></div>
+              <div><span class="cell">B san-b:</span> <span class="chip x">Secondary</span> <span class="chip g">UpToDate</span></div>
+            </div>
+            <div style="text-align:center;margin-top:5px"><span class="chip g">DRBD A➜B Connected · 100% · 0 KiB behind</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== OPTION C ===================== -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3 class="optt">Node Matrix — literal "what's running on each node" grid</h3>
+      <p class="odesc">Rows = nodes, columns = the relevant processes/resources; every cell a state chip. Most literal answer to "what's running where," with a thin cluster-unit summary on top. Weakest for the replication story (crammed into a column).</p>
+      <div class="cockpit">
+        <div style="display:flex;gap:8px;margin-bottom:6px">
+          <span class="chip g">SITE A · QUORATE · QMPCMK@pcmk-a2</span>
+          <span class="chip x">SITE B · QUORATE · QMPCMK stopped</span>
+        </div>
+        <table class="mx">
+          <tr><th>node</th><th>corosync</th><th>pacemaker</th><th>DRBD</th><th>iSCSI</th><th>mq_fs</th><th>mq_vip(s)</th><th>mq_qm</th></tr>
+          <tr><td class="node">san-a</td><td>—</td><td>—</td><td><span class="chip g">Pri·UpToDate</span></td><td><span class="chip g">tgt up</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">pcmk-a1</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">pcmk-a2 ★</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●●</span></td><td><span class="chip g">RUN</span></td></tr>
+          <tr><td class="node">pcmk-a3</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">san-b</td><td>—</td><td>—</td><td><span class="chip x">Sec·UpToDate</span></td><td><span class="chip g">tgt up</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">pcmk-b1</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">pcmk-b2</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td class="node">pcmk-b3</td><td><span class="chip g">on</span></td><td><span class="chip g">online</span></td><td>—</td><td><span class="chip g">2/2</span></td><td>—</td><td>—</td><td>—</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="foot">These aren't mutually exclusive — e.g. A could embed a node-matrix (C) <i>inside</i> each side's drill-down. Pick the primary frame; we layer detail underneath. <b>Recommendation: A (DR Mirror)</b> — it puts the replication link where the WAN is and makes a cutover read as the active ring jumping sides, which is exactly the drill you're watching.</p>
+</div>
+</body>
+</html>

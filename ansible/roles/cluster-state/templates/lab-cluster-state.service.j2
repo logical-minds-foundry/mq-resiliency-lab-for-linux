@@ -1,0 +1,7 @@
+{# lab-cluster-state.service — run the cluster-state collector once for this node's role #}
+[Unit]
+Description=Render lab_cluster_state textfile ({{ cluster_state_role }} role)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/lab-cluster-state --role {{ cluster_state_role }}
