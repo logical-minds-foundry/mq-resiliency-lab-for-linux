@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 
 from mqlab import parity
-from mqlab.arms import arm_of
+from mqlab.arms import arm_of, resolve_verb
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
@@ -793,7 +793,6 @@ def vm_ssh(guest: str) -> None:
 # deliverable); up/down/status are direct, streamed pcs ops on the cluster. Pacemaker
 # is the only thing allowed to start/stop the QM (its systemd units are disabled).
 _PCMK_CLUSTER_GROUP = "pcmk_a"  # the cluster's inventory group; pcs runs on its first node
-_PCMK_RESOURCE_GROUP = "mq_group"
 
 
 def _setup_qm_or_exit(setup_name: str) -> QmConfig:
@@ -898,34 +897,48 @@ def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
         deps.transcript.close()
 
 
+def _qm_dispatch(setup_name: str, verb: str) -> None:
+    # Validate the setup (exists + has a QM) for clean exit-2 messages, then resolve
+    # the arm's implementation of the verb from the registry and run it (#202).
+    _setup_qm_or_exit(setup_name)
+    impl = resolve_verb(setup_name, verb)
+    if impl.kind == "playbook":
+        _qm_playbook(setup_name, impl.value, verb)
+    elif impl.kind == "pcs":
+        _qm_pcs(setup_name, f"pcs {impl.value}", verb)
+    else:  # pragma: no cover - cmd/script kinds arrive with the RDQM backend (Plan B)
+        typer.echo(f"qm {verb}: arm verb kind {impl.kind!r} not supported yet", err=True)
+        raise typer.Exit(code=2)
+
+
 @qm_app.command("create")
 def qm_create(setup: str) -> None:
-    """Create the queue manager + its Pacemaker HA resources (runs the role)."""
-    _qm_playbook(setup, "site-pcmk-qm.yml", "qm-create")
+    """Create the queue manager + its HA resources (arm-dispatched)."""
+    _qm_dispatch(setup, "qm-create")
 
 
 @qm_app.command("destroy")
 def qm_destroy(setup: str) -> None:
     """Remove the queue manager + its HA resources."""
-    _qm_playbook(setup, "site-pcmk-qm-down.yml", "qm-destroy")
+    _qm_dispatch(setup, "qm-destroy")
 
 
 @qm_app.command("up")
 def qm_up(setup: str) -> None:
-    """Start the cluster-managed QM — pcs resource enable mq_group."""
-    _qm_pcs(setup, f"pcs resource enable {_PCMK_RESOURCE_GROUP}", "qm-up")
+    """Start the queue manager."""
+    _qm_dispatch(setup, "qm-up")
 
 
 @qm_app.command("down")
 def qm_down(setup: str) -> None:
-    """Cleanly stop the QM without tearing down HA — pcs resource disable mq_group."""
-    _qm_pcs(setup, f"pcs resource disable {_PCMK_RESOURCE_GROUP}", "qm-down")
+    """Stop the queue manager (HA intact)."""
+    _qm_dispatch(setup, "qm-down")
 
 
 @qm_app.command("status")
 def qm_status(setup: str) -> None:
-    """Show the QM's HA resource state — pcs status resources."""
-    _qm_pcs(setup, "pcs status resources", "qm-status")
+    """Show the queue manager's HA resource state."""
+    _qm_dispatch(setup, "qm-status")
 
 
 @app.command("parity")
