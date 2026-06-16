@@ -214,8 +214,22 @@ introduced in **MQ 9.4.2** (a Continuous Delivery release, Feb 2025).
 **The inter-region replication link is a second controlled cross-cluster
 boundary** (distinct from the §4.5 client/DTCC ingress): the CRR replication
 endpoints connect cluster-A ↔ cluster-B over the simulated WAN, TLS-secured.
-**Open sub-fork:** how the replication endpoints are exposed per cluster (Route
-vs LoadBalancer) — the next DR design decision.
+
+**Endpoint exposure — resolved (validated 2026-06-16).** IBM documents
+**OpenShift Routes with TLS passthrough + SNI** as the mechanism for CRR data
+traffic — the *same* mechanism as the client/DTCC listener ingress (§4.5), so one
+ingress pattern covers both boundaries. The flow: deploy the Recovery group,
+retrieve its Route address(es), and populate them as the `address` values in the
+`nativeHAGroups.remotes` config of each group. (On vanilla Kubernetes/Helm, where
+Routes don't exist, the equivalent is a **LoadBalancer** Service per endpoint —
+the fallback for any non-OpenShift substrate.)
+
+**Lab consequence (a real networking task).** Routes carry the replication only
+if each cluster can **resolve and reach the other's Route hostnames over the
+simulated WAN** — so the lab must wire cross-cluster DNS (the `*.apps.<cluster>`
+wildcard domains) and router exposure across `net-wan`, with per-instance SNI
+hostnames (expect ~3 Routes per group, SNI-distinguished — confirm exact count at
+build time). This extends the existing `mqlab net` slice.
 
 #### 4.4.1 References (verify against the licensed version)
 
@@ -223,6 +237,8 @@ vs LoadBalancer) — the next DR design decision.
 - Configuring Native HA CRR using the MQ Operator — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=operator-configuring-native-ha-crr-using-mq>
 - Adding a recovery group to an existing Native HA config (Operator) — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=chaqmumo-example-adding-recovery-group-existing-native-ha-configuration-using-mq-operator>
 - CRR switchover & failover — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=operating-native-ha-crr-switchover-failover>
+- Configuring CRR with the MQ Operator (Route addresses in `remotes`) — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=chaqmumo-example-configuring-native-ha-crr-using-mq-operator>
+- Red Hat / Cloud Pak reference — cross-region active/passive MQ — <https://production-gitops.dev/guides/cp4i/mq/high-availability/ha2-cr-ap/>
 - MQ 9.4.3 announcement (CRR add-on licensing) — <https://www.ibm.com/new/announcements/enhancing-security-productivity-and-resilience-with-ibm-mq-9-4-3>
 
 ### 4.5 Ingress — the DMZ-replacement boundary
@@ -411,6 +427,8 @@ Settled in brainstorming (2026-06-16):
    ✅
 6. DR mechanism: **Native HA CRR** validated (§4.4) — two clusters,
    sync-local/async-cross, manual switchover/failover via the CRD. ✅
+7. CRR endpoint exposure: **OpenShift Routes (passthrough/SNI)** — same mechanism
+   as the client ingress; one pattern, two boundaries (§4.4). ✅
 
 Defaults recommended, to confirm:
 
@@ -426,10 +444,8 @@ Defaults recommended, to confirm:
 - This design + the gap-analysis question bank captured and committed (PR into
   `develop`, issue #198). ✅ on merge.
 - Natural next brainstorming drill-downs, in priority order:
-  1. **CRR replication-endpoint exposure** (§4.4 open sub-fork) — Route vs
-     LoadBalancer for the inter-cluster replication link, and how it maps onto the
-     simulated WAN.
-  2. **The strategic framing** (§3) — sharpen the pitch surface for the firm.
+  1. **The strategic framing** (§3) — sharpen the pitch surface for the firm.
+     *(The CRR endpoint-exposure sub-fork is now resolved — Routes/SNI, §4.4.)*
   - *Pending external input:* the firm's **CD-vs-LTS posture** (§6 bucket A),
     which the author is asking today and which gates the timeline.
 - Implementation planning (writing-plans) is **not** triggered yet: build is
