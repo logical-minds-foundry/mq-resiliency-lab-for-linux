@@ -1,0 +1,14 @@
+---
+# The lab PKI provider. Runs locally on the controller (no managed hosts): it
+# generates CA + entity material under build/secrets/pki/. Mirrors host-obs.yml's
+# local-connection shape. repo_root is resolved from the playbook dir.
+- name: lab PKI provider
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    repo_root: "{{ playbook_dir }}/.."
+  vars_files:
+    - vars/pki-entities.yml
+  roles:
+    - lab-pki
