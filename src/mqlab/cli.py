@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 
 from mqlab import parity
+from mqlab.arms import arm_of
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
@@ -969,7 +970,7 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     )
     assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
     scenario = build_report(
-        "BASELINE", parity.provisional_arm(setup.name), facts, peak_exposure=peak_exposure(firm)
+        "BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(firm)
     )
     metadata = capture_metadata(
         setup.name,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from mqlab.arms import VerbImpl, arm_of, lab_arms, resolve_verb
+from mqlab.parity import MATRIX
 
 TOPO = (
     "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  rdqm-a1: {}\n"
@@ -67,3 +68,9 @@ def test_resolve_verb_unsupported_raises(monkeypatch, tmp_path):
     _seed(tmp_path)
     with pytest.raises(KeyError, match="does not implement"):
         resolve_verb("rdqm_ha", "qm-create")  # rdqm-rhel has no verbs yet
+
+
+def test_registry_arms_match_the_capability_matrix() -> None:
+    # the real topology registry and parity.MATRIX must agree on the arm set —
+    # one source of arm truth (reads the real lab/topology.yaml, no seeding)
+    assert set(lab_arms()) == set(MATRIX)
