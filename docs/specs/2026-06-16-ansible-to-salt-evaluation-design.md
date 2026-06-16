@@ -15,8 +15,8 @@ The deliverable is a written **evaluation report** that:
 
 1. Gives a **go/no-go recommendation**, weighing benefit (employer-fidelity,
    deliberate skills practice) against cost and risk.
-2. If go, **sizes the effort** as a phased t-shirt estimate with named risk
-   hotspots.
+2. If go, **sizes the effort** as a phased person-hours estimate (with
+   confidence bands) and named risk hotspots.
 
 This document is the **methodology spec**. Executing its plan *conducts* the
 evaluation and produces the report. No automation is migrated here.
@@ -25,12 +25,13 @@ evaluation and produces the report. No automation is migrated here.
 
 Grounding the estimate (surveyed 2026-06-16):
 
-- **8 playbooks, 21 roles, 21 Jinja2 templates, ~2,260 lines.**
+- **9 playbooks** (two are ~1-line QM up/down wrappers), **21 roles, 21 Jinja2
+  templates, ~2,260 lines.**
 - **Zero Galaxy collections** — pure `ansible-core` builtins. No
   `community.general`, no `ibm.ibm_mq`. All MQ logic is `shell`/`command`
   against `/opt/mqm/bin`.
-- **Shell-heavy:** 36 `shell` + 21 `command` tasks orchestrating `pcs`,
-  `drbdadm`, `iscsiadm`, `rdqmadm`, `runmqsc`.
+- **Shell-heavy:** ~39 `shell` + 21 `command` tasks (≈60 total) orchestrating
+  `pcs`, `drbdadm`, `iscsiadm`, `rdqmadm`, `runmqsc`.
 - **Idempotency** is a mix of native modules (`apt`/`dnf`/`systemd`/`template`/
   `copy`/`lineinfile`) and hand-rolled `changed_when` / `creates` /
   `run_once`+`register` cluster coordination.
@@ -85,11 +86,34 @@ explicitly; the spike turns "I think it translates" into measured evidence,
 retiring the two stated risks (knowledge stale since 2022; unknown current Salt
 ecosystem).
 
+### 4.0 Control-node tooling (prerequisite)
+
+The spike cannot run until `salt-ssh` exists on the control node, and *how* Salt
+is carried there is itself a cost the evaluation must record — Ansible today is
+declared in the `[vm.vergil-user]` profile in `vergil.toml` and invoked **by bare
+name via `$PATH`** (#165 purged runtime `uv run`); Salt has none of that
+scaffolding yet.
+
+- **For the spike:** provision `salt-ssh` as a **clearly-scoped throwaway** — an
+  isolated tool install on the dev VM (e.g. a dedicated `uv`/venv), **not** a
+  runtime dependency and **never** invoked via `uv run`. Do **not** `apt install`
+  into a live VM (repo policy: tooling changes go through the profile + rebuild);
+  the throwaway install is explicitly outside that managed footprint and is torn
+  down with the spike.
+- **As a cost line in the report:** record what production-grade adoption would
+  take — adding Salt to the `[vm.vergil-user]` profile, its install footprint on
+  the control node, and bare-name `$PATH` invocation from `mqlab` (mirroring how
+  Ansible is carried today). This feeds the cost side of the go/no-go.
+
 ### 4.1 Translation matrix
 
 Every idiom in the footprint mapped to its Salt equivalent, with a **confidence**
-rating and an **effort weight**. Draft target mappings (to be confirmed/corrected
-during the evaluation):
+rating and an **effort weight**. The unit throughout the evaluation is **rough
+person-hours**. Effort weight is a **1 / 3 / 5 ordinal** with a stated hours
+mapping (e.g. 1 ≈ trivial 1:1 swap, 3 ≈ needs rework/testing, 5 ≈ hard
+re-modelling), calibrated against the spike's measured wall-clock time (§4.2).
+Each cell is also tagged **spike-validated** or **paper-only** (§4.3). Draft
+target mappings (to be confirmed/corrected during the evaluation):
 
 | Ansible idiom | Salt equivalent | Notes / risk |
 |---|---|---|
@@ -100,7 +124,7 @@ during the evaluation):
 | `file` | `file.directory` / `file.symlink` | native |
 | `lineinfile` / `blockinfile` | `file.line` / `file.blockreplace` | native |
 | `unarchive` + `creates` | `archive.extracted` | native idempotency |
-| `shell` / `command` + `changed_when` | `cmd.run` + `onlyif` / `unless` | **high-volume idiom** (36 + 21 uses) |
+| `shell` / `command` + `changed_when` | `cmd.run` + `onlyif` / `unless` | **high-volume idiom** (≈39 + 21 uses) |
 | handlers / `notify` | `mod_watch` + `watch` / `listen` requisites | semantics differ |
 | `include_role` / `import_playbook` | `include` / orchestrate | native |
 | `run_once` + `register` cluster coordination | orchestrate runner / mine, or keep imperative | **highest-risk cell** |
@@ -112,38 +136,79 @@ during the evaluation):
 ### 4.2 Thin vertical spike
 
 Port a single representative role to an SLS formula and run it **agentless via
-`salt-ssh`** (a roster pointing at one live lab node).
+`salt-ssh`** (a roster pointing at the spike target below).
 
 - **Target role:** `prometheus` — self-contained, needs no MQ-entitlement
   artifacts, and exercises the common idiom cluster in ~90 lines: `user`,
   `file`, `get_url` + `unarchive` (with `creates`), `template`, `systemd`, and a
   **handler**. (Alternative if the codebase's signature shell-idempotency idiom
   is preferred for calibration: `mq-install` — but it requires MQ tars present.)
+- **Spike target host:** the **lightest sufficient** target. Because
+  `prometheus` installs a standalone server with no MQ or cluster dependency,
+  run it against **localhost or a throwaway scratch VM over `salt-ssh`** — no
+  lab bring-up required. *If* a real lab node is chosen instead, the **human
+  brings it up** (lab-ops boundary + cold-rebuild gate are the human's to drive).
+  Whatever the target, it must persist across both apply runs for the
+  idempotency check.
 - **Success criterion:** **idempotent apply** — run twice; the second run is a
   clean no-op.
-- **Record:** actual effort (time/LOC) and every surprise, to calibrate the
-  matrix weights and per-role-class estimate.
+- **Record:** actual effort in **wall-clock person-hours** (LOC noted only as a
+  secondary signal) plus every surprise, to calibrate the §4.1 effort weights and
+  the per-role-class estimate.
 - **Throwaway:** a scratch formula on this feature branch, never merged into the
   lab automation.
 
 ### 4.3 Scored recommendation + phased estimate
 
-Roll the matrix weights — calibrated by the spike's measured effort — into a
-t-shirt size per role-class and an overall go/no-go. The recommendation weighs
-benefit (employer-fidelity, skills) against cost (authoring effort) and risk
-(the hotspots below).
+Roll the matrix weights — calibrated by the spike's measured wall-clock time —
+into a **person-hours range per role-class** and a total authoring estimate.
+
+**Confidence tagging (honest-coverage requirement).** The thin spike validates
+the low-risk idioms (pkg / file / template / systemd / handler) and does *not*
+exercise the two highest-uncertainty areas — `run_once`+`register` cluster
+coordination and cross-distro `pkg` targeting. The report therefore must:
+
+- tag every matrix cell **spike-validated** or **paper-only**;
+- attach a **confidence band** to each role-class estimate, with HA /
+  cluster-coordination roles explicitly flagged **paper-only, wide variance**;
+- never present a single point number for a paper-only class without its band.
+
+**Go/no-go rubric.** The recommendation is decided against named dimensions, not
+narrative:
+
+| Dimension | Source |
+|---|---|
+| Total authoring effort (person-hours) | §4.1 matrix, spike-calibrated |
+| Count / severity of red-confidence (paper-only) hotspots | confidence tagging above |
+| Footprint + cold-rebuild impact | §4.0 cost line; salt-ssh baseline keeps it low |
+| Employer-fidelity / skills value | §1 benefit side |
+
+Combining rule (the person-hours bar is the human's to set; the spec commits to
+having one):
+
+- **Go** — effort ≤ the agreed person-hours bar **and** no unresolved
+  red-confidence hotspot.
+- **Defer** — the *only* blocker is an unvalidated hotspot (resolve it with a
+  targeted follow-up spike, then re-decide).
+- **No-go** — effort exceeds the bar, or a red hotspot proves genuinely costly.
 
 ## 5. Risk register
 
-Explicitly tested or flagged in the report:
+Explicitly tested or flagged in the report. The first two are **paper-only**
+under the thin spike (§4.3) and carry the widest confidence bands:
 
 - **`run_once` + `register` cluster coordination** (pcs / DRBD / iSCSI) — the
-  cell least likely to map cleanly. The report names the chosen Salt pattern
-  (orchestrate runner, mine, or retained imperative `cmd.run`) and its
-  confidence.
+  cell least likely to map cleanly, and *not* exercised by the `prometheus`
+  spike. The report names the chosen Salt pattern (orchestrate runner, mine, or
+  retained imperative `cmd.run`) and its confidence — but as a paper estimate
+  with wide variance until a follow-up spike retires it.
+- **Cross-distro `apt`/`dnf` → `pkg.installed`** — grain-based targeting
+  replacing `ansible_os_family` across the lab's Ubuntu-ARM64 / RHEL-x86_64
+  split. The single-target `prometheus` spike under-samples this; flag it
+  paper-only unless the spike is run on both arms.
 - **Jinja filter parity** — Ansible's `map(attribute=…)`, `default`, `from_json`
   vs Salt's filter set; flag any template needing rework.
-- **`changed_when` → `onlyif` / `unless` fidelity** across the 57 shell/command
+- **`changed_when` → `onlyif` / `unless` fidelity** across the ≈60 shell/command
   tasks.
 - **Roster generation** — `inventory.py` currently emits `inventory.ini`; Salt
   needs a roster. New small target, not a reuse.
@@ -152,10 +217,12 @@ Explicitly tested or flagged in the report:
 
 ## 6. Scope boundaries (YAGNI)
 
-- **In:** the translation matrix, one salt-ssh spike, the written report.
-- **Out:** any real migration; the master/minion overlay build; event-driven
-  (reactor / beacon / mine) work; touching live lab state.
-- The spike is **throwaway**.
+- **In:** the translation matrix, one salt-ssh spike (incl. a throwaway
+  `salt-ssh` tool install per §4.0), the written report.
+- **Out:** any real migration; adding Salt to the `[vm.vergil-user]` profile
+  (only *costed* in the report, not built); the master/minion overlay build;
+  event-driven (reactor / beacon / mine) work; touching live lab state.
+- The spike and its tooling install are **throwaway**.
 
 ## 7. Output
 
