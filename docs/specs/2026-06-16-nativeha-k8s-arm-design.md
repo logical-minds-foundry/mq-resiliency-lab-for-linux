@@ -99,32 +99,68 @@ settled decision — it is the author's call as the engagement clarifies.)*
 This is the half of the doc intended to be *argued*, not just built. The lab
 build (§4) is its proof.
 
+### 3.1 Posture — staged escalation, opening as an early-warning flag
+
+**Decided 2026-06-16:** open as an **early-warning flag plus evidence-building**,
+not a decision demand. Rationale: credibility must precede deviation from the
+IBM/status-quo path, and the author is new to the firm — the play is high-reward,
+but a premature hard ask risks the standing needed to land it later. The argument
+below is therefore framed as *what the investigation aims to demonstrate*, not as
+an immediate demand.
+
+The escalation ladder (stages, not stances):
+
+1. **Flag + investigate (now).** Raise the reproducibility/tech-debt risk (§3.2)
+   as a concern being actively de-risked; position K8s/Native HA as the mitigation
+   under investigation in the lab. No decision requested.
+2. **Parallel secondary-architecture proposal.** Put it forward as a co-equal
+   option to evaluate against the DMZ plan, lab demo as evidence.
+3. **Replacement proposal.** Pitch K8s as collapsing the DMZ workstream — only
+   when evidence is overwhelming and standing is established.
+
+**Triggers to escalate 1 → 2:** the lab demonstrates reliable end-to-end HADR
+message flow (§4); the firm confirms the OpenShift/security DMZ-exemption **in
+writing**; and a CRR-capable version stream (CD vs LTS, §7) is viable on the
+timeline.
+
+### 3.2 The risk being flagged (the opener)
+
+A foreseeable, avoidable debt, raised early so it can be weighed *before* it is
+incurred: the DMZ mandate forces bare metal (no DMZ VM support), which forces
+manual installation (no kickstart/automation estate), which yields a
+**non-reproducible** build of a critical, regulated, greenfield service. Framed
+constructively — not "the plan is wrong," but "here is a debt we can see coming,
+and here is the mitigation I am already proving out."
+
+### 3.3 What the evidence will show (the argument)
+
 - **Reproducibility restored.** The Native HA deployment is declarative end to
   end — the **IBM MQ Operator** reconciling a **`QueueManager` custom resource**,
-  GitOps-able, re-appliable, drift-correcting. It is the categorical opposite of
-  a by-hand bare-metal install. This directly answers the reproducibility
-  objection that motivated the whole pivot.
+  GitOps-able, re-appliable, drift-correcting. The categorical opposite of a
+  by-hand bare-metal install.
 - **DMZ eliminated.** The cluster's **controlled, policy-enforced ingress**
-  replaces the DMZ gateway. Access is limited and inspectable by the mechanisms
-  the security team already trusts (NetworkPolicies, ingress/Route config,
-  mTLS) — which is *why* they will exempt it from the DMZ.
-- **Two controlled boundaries, named honestly.** The deployment involves *two*
-  cross-cluster network paths, not one: the client/DTCC **ingress** (Routes,
-  §4.5) and the **inter-region CRR replication link** (TLS, async, §4.4). Each is
-  a set of firewall holes the security team blesses; naming both up front is more
-  honest than implying a single boundary.
-- **Bare metal eliminated.** Workloads are pods on the existing OpenShift
-  estate; no DMZ-specific bare-metal footprint to provision and hand-maintain.
-- **Supportability preserved.** This is the **IBM-recommended** deployment shape
-  for MQ on Kubernetes (Operator + Native HA), so the leapfrog does *not* trade
-  away the IBM-supportability criterion the firm weights highest — it stays
-  inside IBM's blessed envelope, unlike a bespoke self-managed cluster.
+  replaces the DMZ gateway — limited and inspectable by mechanisms the security
+  team already trusts (NetworkPolicies, ingress/Route config, mTLS), which is
+  *why* they will exempt it.
+- **Two controlled boundaries, named honestly.** *Two* cross-cluster paths, not
+  one: the client/DTCC **ingress** (Routes, §4.5) and the **inter-region CRR
+  replication link** (TLS, async, §4.4). Naming both up front is more honest than
+  implying a single boundary.
+- **Bare metal eliminated.** Workloads are pods on the existing OpenShift estate;
+  no DMZ-specific bare-metal footprint to provision and hand-maintain.
+- **Supportability preserved.** The **IBM-recommended** shape (Operator + Native
+  HA + CRR), so the play does *not* trade away the IBM-supportability criterion
+  the firm weights highest — it stays inside IBM's blessed envelope, unlike a
+  bespoke self-managed cluster.
 - **Greenfield tailwind (§1.1).** Nothing to stay compatible with internally.
 
-**Honest framing for the pitch:** this is a long shot on *timeline*, not on
-*soundness*. The risk is whether the team can come up to speed and the firm can
-deploy it inside the engagement window — not whether the architecture is right.
-The doc must say so plainly; overselling the timeline is how trust is lost.
+### 3.4 Honest framing
+
+This is a long shot on **timeline**, not on **soundness**: the risk is whether
+the team can come up to speed and the firm can deploy inside the engagement
+window — not whether the architecture is right. The CRR CD-vs-LTS gate (§7) is
+the single biggest timeline variable. State both plainly; overselling the
+timeline is how trust is lost.
 
 ## 4. The lab arm design
 
@@ -429,6 +465,8 @@ Settled in brainstorming (2026-06-16):
    sync-local/async-cross, manual switchover/failover via the CRD. ✅
 7. CRR endpoint exposure: **OpenShift Routes (passthrough/SNI)** — same mechanism
    as the client ingress; one pattern, two boundaries (§4.4). ✅
+8. Pitch posture: **early-warning flag + evidence-building**, staged escalation
+   (§3.1). ✅
 
 Defaults recommended, to confirm:
 
