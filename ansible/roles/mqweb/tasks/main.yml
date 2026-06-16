@@ -1,0 +1,36 @@
+# Enable the MQ administrative REST API (mqweb) on a node — the every-QM hard
+# requirement (lab design §1). Deliberately QM-service-agnostic: it installs and
+# runs the stateless per-node mqweb server (spec §8.3) and never touches the QM's
+# own lifecycle, so it serves a systemd-managed QM (mq-qmgr / QMDTCC) and a
+# cluster-managed QM (mq-pcmk-qmgr / RDQM) alike. Requires `mqweb_admin_password`
+# (injected from the lab secret at provision time, never committed).
+- name: mqweb systemd unit
+  ansible.builtin.template:
+    src: mqweb.service.j2
+    dest: /etc/systemd/system/mqweb.service
+  become: true
+
+- name: mqweb basic registry (creds from env, never committed)
+  ansible.builtin.template:
+    src: mqwebuser.xml.j2
+    dest: /var/mqm/web/installations/Installation1/servers/mqweb/mqwebuser.xml
+    owner: mqm
+    group: mqm
+  become: true
+  no_log: true
+
+- name: enable + start mqweb
+  ansible.builtin.systemd:
+    name: mqweb.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+- name: bind mqweb to all interfaces
+  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
+  become: true
+  become_user: mqm
+  register: setmqweb
+  changed_when: "'MQWB' not in setmqweb.stderr"
+  failed_when: false
