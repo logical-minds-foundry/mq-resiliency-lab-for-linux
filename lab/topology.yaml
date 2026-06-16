@@ -142,6 +142,22 @@ groups:
 # SAN first), with the Ansible playbook that provisions it. Setup names are
 # underscore-form so they double as Ansible :children parent groups in the rendered
 # inventory. `mqlab vm`, `mqlab vm status`, and the inventory renderer all read this.
+# The arm-backend registry (RDQM-parity design §2): the catalog of HA/DR arms and
+# their per-verb implementations. mqlab qm/dr commands resolve a setup's arm here
+# and dispatch. rdqm-rhel's verbs are filled in Plan B (after the verb spike).
+arms:
+  pcmk-ubuntu:
+    mechanism: pacemaker-san
+    verbs:
+      qm-create:  { playbook: site-pcmk-qm.yml }
+      qm-destroy: { playbook: site-pcmk-qm-down.yml }
+      qm-up:      { pcs: "resource enable mq_group" }
+      qm-down:    { pcs: "resource disable mq_group" }
+      qm-status:  { pcs: "status resources" }
+  rdqm-rhel:
+    mechanism: rdqm
+    verbs: {}
+
 setups:
   pcmk_san_ha:
     description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
