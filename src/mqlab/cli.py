@@ -927,6 +927,40 @@ def qm_status(setup: str) -> None:
     _qm_pcs(setup, "pcs status resources", "qm-status")
 
 
+# --- pki: the lab PKI / TLS certificate provider (#210) --------------------------
+# Wraps the connection=local site-pki.yml playbook (the provider generates CA +
+# entity material under build/secrets/pki/). Mirrors the qm command-wraps-playbook
+# shape. Cert expiry/rotation is out of scope (spec §8.2).
+pki_app = typer.Typer(help="lab PKI / TLS certificate provider", no_args_is_help=True)
+app.add_typer(pki_app, name="pki")
+
+_PKI_PLAYBOOK = ["ansible-playbook", "site-pki.yml", "-c", "local", "-i", "localhost,"]
+
+
+@pki_app.command("ensure")
+def pki_ensure(step: _StepFlag = False) -> None:
+    """Create/ensure both org CAs and every entity's certs + PKCS#12 keystores."""
+    cmd = Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible")  # noqa: S607
+    _execute("pki-ensure", [CommandStep("pki ensure", cmd)], step_mode=step)
+
+
+@pki_app.command("issue")
+def pki_issue(entity: str, step: _StepFlag = False) -> None:
+    """Issue (or re-issue) one entity's cert + keystore — runs the provider for just that CN."""
+    cmd = Command([*_PKI_PLAYBOOK, "-e", f"pki_only={entity}"], cwd=repo_root() / "ansible")  # noqa: S607
+    _execute("pki-issue", [CommandStep(f"pki issue {entity}", cmd)], step_mode=step)
+
+
+@pki_app.command("list")
+def pki_list() -> None:
+    """List the PKI entity inventory (org, OU, kind) from ansible/vars/pki-entities.yml."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load((repo_root() / "ansible" / "vars" / "pki-entities.yml").read_text())
+    for e in data.get("pki_entities", []):
+        typer.echo(f"{e['cn']:<14} org={e['org']:<11} ou={e.get('ou', '-'):<16} {e['kind']}")
+
+
 @app.command("parity")
 def parity_matrix() -> None:
     """Print the cross-arm capability matrix (which verbs each arm supports)."""
