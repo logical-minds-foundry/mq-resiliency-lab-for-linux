@@ -961,7 +961,7 @@ _Rate = Annotated[int, typer.Option("--rate", help="messages per second")]
 
 @app.command("run")
 def run_setup(  # pragma: no cover - drives the live lab; proven by the integration gate
-    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed)")],
+    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed-pcmk-ubuntu)")],
     seconds: _Seconds = 30,
     rate: _Rate = 20,
     step: _StepFlag = False,

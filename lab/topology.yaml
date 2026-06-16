@@ -172,8 +172,8 @@ setups:
     groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
-  distributed:
-    description: Distributed MQ — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+  distributed-pcmk-ubuntu:
+    description: Distributed MQ (Pacemaker arm) — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
     arm: pcmk-ubuntu
     groups: [san_a, pcmk_a, dtcc, app]
     provision: ansible/site-distributed.yml
