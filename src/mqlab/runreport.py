@@ -8,12 +8,15 @@ the generated config actually used, tool/box/MQ versions, and a UTC timestamp.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import subprocess
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from mqlab.dr import ScenarioReport
 
@@ -77,3 +80,51 @@ class RunReport:
             lines.append(s.to_markdown())
             lines.append("")
         return "\n".join(lines)
+
+
+def write_bundle(report: RunReport, root: Path) -> Path:
+    """Persist the bundle under root/<timestamp>-<setup>/ as report.json + report.md.
+    Returns the bundle directory."""
+    m = report.metadata
+    bundle = root / f"{m.timestamp}-{m.setup}"
+    bundle.mkdir(parents=True, exist_ok=True)
+    (bundle / "report.json").write_text(json.dumps(report.to_dict(), indent=2) + "\n")
+    (bundle / "report.md").write_text(report.to_markdown())
+    return bundle
+
+
+def append_index(report: RunReport, bundle: Path, root: Path) -> None:
+    """Append one line to root/index.jsonl: the (timestamp, setup, commit) -> bundle
+    path + per-scenario rpo_zero verdicts that make the corpus searchable."""
+    m = report.metadata
+    entry = {
+        "timestamp": m.timestamp,
+        "setup": m.setup,
+        "commit": m.commit,
+        "bundle": str(bundle.relative_to(root)),
+        "verdicts": {s.scenario_id: s.rpo_zero for s in report.scenarios},
+    }
+    with (root / "index.jsonl").open("a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+def read_commit() -> str:  # pragma: no cover - shells out to git
+    out = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True)  # noqa: S603, S607
+    return out.strip()
+
+
+def read_config_digest(paths: list[Path]) -> str:  # pragma: no cover - reads files
+    h = hashlib.sha256()
+    for p in paths:
+        h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+def read_versions() -> dict[str, str]:  # pragma: no cover - shells out to host tools
+    def _v(argv: list[str]) -> str:
+        return subprocess.check_output(argv, text=True).strip().splitlines()[0]  # noqa: S603
+
+    return {
+        "vagrant": _v(["vagrant", "--version"]),  # noqa: S607
+        "ansible": _v(["ansible", "--version"]),  # noqa: S607
+    }

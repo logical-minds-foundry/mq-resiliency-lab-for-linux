@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from mqlab.dr import ScenarioReport, build_report
 from mqlab.dr.model import MessageFacts
-from mqlab.runreport import RunMetadata, RunReport, capture_metadata
+from mqlab.runreport import (
+    RunMetadata,
+    RunReport,
+    append_index,
+    capture_metadata,
+    write_bundle,
+)
 
 
 def _confirmed_report(arm: str) -> ScenarioReport:
@@ -87,3 +96,28 @@ def test_run_report_markdown_handles_no_versions() -> None:
     md = RunMetadata("distributed", "c", "t", "d", {})
     report = RunReport(metadata=md, scenarios=[])
     assert "Versions: (none)" in report.to_markdown()
+
+
+def test_write_bundle_creates_json_and_markdown(tmp_path: Path) -> None:
+    md = RunMetadata("distributed", "abc123", "20260615T143000Z", "deadbeef", {})
+    report = RunReport(metadata=md, scenarios=[_confirmed_report("pcmk-ubuntu")])
+    bundle = write_bundle(report, tmp_path)
+    assert bundle == tmp_path / "20260615T143000Z-distributed"
+    loaded = json.loads((bundle / "report.json").read_text())
+    assert loaded["metadata"]["commit"] == "abc123"
+    assert "# Run report — distributed" in (bundle / "report.md").read_text()
+
+
+def test_append_index_writes_one_jsonl_line_per_call(tmp_path: Path) -> None:
+    md = RunMetadata("distributed", "abc123", "20260615T143000Z", "deadbeef", {})
+    report = RunReport(metadata=md, scenarios=[_confirmed_report("pcmk-ubuntu")])
+    bundle = write_bundle(report, tmp_path)
+    append_index(report, bundle, tmp_path)
+    append_index(report, bundle, tmp_path)
+    lines = (tmp_path / "index.jsonl").read_text().splitlines()
+    assert len(lines) == 2
+    entry = json.loads(lines[0])
+    assert entry["setup"] == "distributed"
+    assert entry["commit"] == "abc123"
+    assert entry["bundle"] == "20260615T143000Z-distributed"
+    assert entry["verdicts"] == {"BASELINE": True}
