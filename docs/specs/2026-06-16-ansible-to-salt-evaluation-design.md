@@ -161,5 +161,5 @@ Explicitly tested or flagged in the report:
 
 - **Methodology spec:** this document
   (`docs/specs/2026-06-16-ansible-to-salt-evaluation-design.md`).
-- **Evaluation report:** `docs/research/2026-06-16-ansible-to-salt-evaluation.md`
+- **Evaluation report:** `docs/reports/2026-06-16-ansible-to-salt-evaluation.md`
   (produced when the plan is executed).
