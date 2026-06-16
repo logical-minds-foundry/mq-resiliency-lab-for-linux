@@ -25,6 +25,56 @@
 
 ---
 
+## Decision & Pivot (2026-06-15) — supersedes the two-arm comparison framing below
+
+> **Status:** authoritative as of 2026-06-15. Where this section conflicts with
+> the "undecided comparison" framing in §0–§2 and §10, this section wins. The
+> body below is preserved as the R&D record that led here — read it as
+> *evidence*, not as an open question.
+
+**The platform decision is made: RHEL + RDQM.** On engagement day one the firm
+confirmed it standardizes on RHEL and will run IBM MQ HA/DR on **RDQM**, driven
+by **IBM-supportability concerns** — precisely the criterion this design already
+weighted most heavily (§2.7; §3 "vendor-supportability gap"). The decision
+*validates* the R&D lean rather than reversing it: the comparison thread did its
+job and independently pointed at RDQM for the same reason the firm did.
+
+**Consequences for this document:**
+
+1. **RDQM/RHEL is the priority arm and the first deliverable** — no longer "the
+   likely front-runner, to be proven," but the chosen architecture to build out.
+2. **The two-arm comparison is not retired — it is elevated to a standing
+   property.** Ubuntu/Pacemaker remains a **first-class, co-maintained,
+   co-tested** secondary arm. Phase E (§10) stops being a one-shot recommendation
+   writeup and becomes a **continuously re-assertable parity result** produced by
+   a cross-arm parity harness. We maintain parity, not a frozen snapshot.
+3. **"Arm" becomes a first-class, open abstraction — N arms, not two.** The lab
+   is being refactored so the HA/DR mechanism, the OS host-prep platform, and the
+   substrate (VM vs container/K8s) are independent, pluggable axes — an **arm
+   registry** — rather than a hardcoded `rdqm | pcmk` choice. Four arms are
+   anticipated:
+
+   | Arm | Mechanism | OS | Substrate | Status |
+   |---|---|---|---|---|
+   | `pcmk-ubuntu` | Pacemaker/SAN | Ubuntu | VM | built |
+   | `rdqm-rhel` | RDQM | RHEL | VM | **priority — this pivot** |
+   | `nativeha-rhel` | IBM MQ Native HA | RHEL/Linux | container/K8s | slot only |
+   | `pcmk-debian` | Pacemaker/SAN | Debian (Trixie / 13) | VM | slot only |
+
+   This **un-parks the Native HA arm** (§2.3 arm 3): the firm already runs IBM MQ
+   Native HA, so it is a real future arm, not a hypothetical. **Debian (Trixie)**
+   is added because the firm's actual base OS is Debian, not Ubuntu; the Pacemaker
+   backend ports to it with near-trivial L0 changes (Ubuntu is Debian-derived).
+   **Guardrail:** no build work on the Native HA or Debian slots until the
+   framework is proven on the `rdqm-rhel` + `pcmk-ubuntu` pair.
+
+**Transition design.** The full pivot — wrap-up of in-flight work, the
+arm-backend abstraction, the cross-arm parity harness, and the phased path to
+RDQM-at-parity — is specified in
+[`2026-06-15-rdqm-parity-pivot-design.md`](2026-06-15-rdqm-parity-pivot-design.md).
+
+---
+
 ## Contents
 
 - [0. Framing (non-negotiable)](#0-framing-non-negotiable)
