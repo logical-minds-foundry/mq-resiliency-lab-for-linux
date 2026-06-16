@@ -1,6 +1,6 @@
 # IBM MQ Native HA on Kubernetes/OpenShift — Arm Design (`nativeha-ocp`)
 
-> **Status:** design, first pass — brainstormed 2026-06-16, iterating.
+> **Status:** design, first pass — brainstormed & pushback-reviewed 2026-06-16.
 > **Date:** 2026-06-16
 > **Author:** Phillip Moore (with Claude)
 > **Tracking issue:** #198
@@ -77,22 +77,31 @@ a true MVP **without cutting corners** — optimizing *scope and sequencing*, no
 ## 2. Positioning vs. the RDQM-parity roadmap
 
 The pivot (#187 §6) set a guardrail: **no build work on the Native HA slot until
-the framework is proven on the `rdqm-rhel` + `pcmk-ubuntu` pair.** That guardrail
-still holds. This arm is positioned as a **parallel exploratory spike that
-generates evidence for the DMZ-collapse pitch** — *not* a disruption of the
-RDQM-parity mainline, which remains aligned with the platform decision the firm
-confirmed.
+the framework is proven on the `rdqm-rhel` + `pcmk-ubuntu` pair.** This arm is
+positioned as a **parallel exploratory spike that generates evidence for the
+DMZ-collapse pitch** — *not* a disruption of the RDQM-parity mainline.
 
-- The RDQM/Pacemaker work continues as the committed mainline.
-- This arm produces the *strategic evidence*; if the pitch lands, it gets
-  promoted from exploratory spike to a first-class, co-maintained arm.
-- The arm registry was deliberately written **open** (mechanism × OS × substrate
-  axes; the substrate axis must not assume `vm`), so this folds in without a
-  retrofit — that openness is exactly the cost the deferral was meant to buy
-  (#187 §6 guardrail).
+**Guardrail amendment (explicit and bounded, decided 2026-06-16).** A "parallel
+spike" technically crosses the #187 guardrail, so the relaxation is made
+*consciously and narrowly*, not implicitly:
 
-*(Default to confirm: this parallel-spike positioning is a recommendation, not a
-settled decision — it is the author's call as the engagement clarifies.)*
+- **What is unblocked now:** a **time-boxed, builds-nothing-permanent feasibility
+  spike** answering the one question the whole play hinges on — *can multi-node
+  OKD/arm64 (×2 clusters) even bootstrap and run on the laptop* (§4.7). Justified
+  by the engagement's October pressure.
+- **What stays gated:** the **full arm build** — HA/DR formation, app-slot,
+  observability, declarative content — remains behind the RDQM + Pacemaker proof,
+  *and* (new, §4.9) behind the lab-security layer. The line is "spike to answer a
+  feasibility question" vs. "build the slot."
+- **Reality check:** the arm-backend seam (#187 P2) and the RDQM proof that
+  *releases* the guardrail are **not built yet** — latest landed work is P1
+  (parity harness on Pacemaker). So "slots into the existing registry" is
+  *designed-open, not yet-built*; that openness is the cost the deferral bought,
+  not a present capability. Keep #187 in sync with this amendment.
+- If the pitch lands, the arm is promoted from exploratory spike to a first-class,
+  co-maintained arm.
+
+*(Positioning remains the author's call as the engagement clarifies.)*
 
 ## 3. The strategic case (the pitch surface)
 
@@ -183,19 +192,33 @@ substrate.
 
 ### 4.2 Substrate — multi-node OKD on arm64, per DC
 
-Two **independent multi-node OKD clusters**, one per simulated data center,
-running on the existing two-DC libvirt network topology (§5 of the authoritative
-design). Minimum **3 worker nodes per cluster** so the Native HA pods spread
-across real, individually-killable worker VMs.
+Two **independent OKD clusters**, one per simulated data center, on the existing
+two-DC libvirt network topology (§5 of the authoritative design). Each is a
+**3-node compact cluster** — schedulable control-plane nodes doubling as workers —
+so the Native HA 3-pod quorum spreads across three real, individually-killable
+VMs. That is **6 OKD node-VMs total** (3 per DC). 3-node compact is the realistic
+*floor*; the §4.7 spike confirms whether the footprint actually fits.
 
-**Why arm64 (the lever that makes this feasible on the laptop).** *(Data)* Unlike
-RDQM — hard-locked to x86 by the DRBD kernel module, which is why the RDQM arm
-pays the slow TCG-emulation tax — **Native HA has no x86 lock**: IBM ships arm64
-MQ container images and OpenShift/OKD support arm64. So this arm runs
-**arm64-native and KVM-accelerated**, sidestepping the TCG penalty that makes a
-multi-node OpenShift cluster (×2) otherwise prohibitive on an M-series laptop.
-*(Judgment)* This is the single decision that turns "probably infeasible locally"
-into "probably feasible" — and it is gated by the §4.7 spike, not assumed.
+**Storage.** Native HA needs **RWO block persistent volumes** (IBM recommends
+ext4/XFS) for each instance's recovery log, so the lab clusters need an in-cluster
+**block CSI/storage provider** — a spike build task (candidate: OKD LVM Storage /
+local-storage operator — verify). Without it the Native HA pods cannot bind their
+logs and will not start.
+
+**Why arm64 — and the load-bearing assumption it rests on.** Unlike RDQM —
+hard-locked to x86 by the DRBD kernel module, which is why the RDQM arm pays the
+slow TCG-emulation tax — **Native HA has no x86 lock**, so this arm *can* run
+**arm64-native and KVM-accelerated**, sidestepping the TCG penalty that otherwise
+makes two multi-node OpenShift clusters prohibitive on an M-series laptop. This is
+the single decision that turns "probably infeasible locally" into "probably
+feasible." **⚠️ It depends on an unverified assumption** — that IBM's **MQ server
+container image + MQ Operator + Native HA + CRR are all shipped and supported on
+arm64** (arm64 is confirmed for MQ *client/toolkit* tooling, but the
+server/Operator/CRR stack on arm64 is *not* yet confirmed — see the open
+[mq-container arm64 request](https://github.com/ibm-messaging/mq-container/issues/476)).
+**This is the first thing the §4.7 spike verifies, before any OKD build.** If it
+fails, the arm falls back to TCG-emulated x86 (heavier — feasibility then leans on
+SNO-per-DC or a cloud-x86 box).
 
 **Why real VMs, not containers-as-nodes.** The lab's entire identity is
 high-fidelity fault injection (§3.1, §7.1 of the authoritative design). On
@@ -307,15 +330,27 @@ change shape on Kubernetes:
 
 ### 4.7 Feasibility spike (Phase-A gate)
 
-Before committing the full arm, a **Phase-A spike** confirms the load-bearing
-assumption: that **multi-node OKD on arm64, two clusters, actually bootstraps and
-runs within budget on nested libvirt** inside the dev+lab VM. This matches the
-established spike-first, checkpointed execution pattern. If the spike fails, the
-documented fallback is **Single-Node OpenShift per DC** — which keeps the
-OpenShift surface (Operator, Routes, `oc`, RHCOS) but loses within-site
-node-power-off HA (all three Native HA pods land on one node), so it demonstrates
-pod-failure HA + cross-site DR rather than node-failure HA. Record the
-compromise explicitly if reached.
+Before committing the full arm, a **Phase-A spike** answers the questions the
+whole play hinges on, **in order, cheapest-to-kill first** (spike-first,
+checkpointed):
+
+1. **arm64 support (first, blocking).** Confirm IBM ships and supports the **MQ
+   server image + Operator + Native HA + CRR on arm64** — inspect the Operator/QM
+   image manifests for an arm64 variant and check IBM's CRR arm64-support
+   statement. Decisive and cheap; do it before standing up anything. **If
+   unsupported → the arm64 lever is gone**, and the spike instead asks whether two
+   multi-node x86 OKD clusters can run under TCG, or whether to fall back to
+   SNO-per-DC / cloud-x86.
+2. **Footprint/RAM (second).** Estimate, then measure, whether **two 3-node
+   compact OKD clusters (6 node-VMs)** fit the dev-VM budget — the §7.5 sizing was
+   built for ~6 × 1 GB VMs, and OKD nodes are far heavier (§7).
+3. **Bootstrap (third).** Confirm multi-node OKD/arm64 on nested libvirt actually
+   bootstraps and runs.
+
+**Fallback if multi-node won't fit: Single-Node OpenShift per DC** — keeps the
+OpenShift surface (Operator, Routes, `oc`, RHCOS) but puts all three Native HA
+pods on one node, so it demonstrates pod-failure HA + cross-site DR rather than
+node-failure HA. Record the compromise explicitly if reached.
 
 ### 4.8 App-flow slotting
 
@@ -325,6 +360,74 @@ as the in-house substrate in the existing distributed architecture
 `QMNATIVE ↔ QMDTCC` across the simulated WAN, `app-client` puts trades,
 `dtcc-sim` replies. **Same app contract, new substrate** — so the arm drops into
 the message flow already built, and the comparison stays like-for-like.
+
+**Fixture wiring (cross-substrate).** `app-client` and `dtcc-sim` stay containers
+on the dev-VM runtime, but they now reach `QMNATIVE` **as external clients through
+its Route** — which is *good* fidelity: they behave exactly as a remote
+counterparty/app would in production. The consequence: the fixtures must speak
+**TLS + SNI** to traverse the Route (plaintext SVRCONN won't pass), which ties
+directly into the security dependency (§4.9).
+
+### 4.9 Security is a hard, up-front dependency (TLS is not optional here)
+
+*(Decided 2026-06-16, elevated from a pushback finding.)*
+
+On the VM arms, security is deferred per §1 of the authoritative design — channels
+can run plaintext for convenience. **On this substrate that is impossible:**
+
+- **OpenShift Route SNI routing requires TLS** — the router selects the backend
+  from the SNI hostname *inside the TLS handshake*. No TLS, no routing. This binds
+  the client/DTCC ingress (§4.5), the CRR replication link (§4.4), the admin REST
+  Route (§4.10), and the fixture connections (§4.8).
+- **CRR replication is TLS-secured** between sites by design.
+
+So TLS — per-instance SNI certs, a CA, and cross-cluster trust between the two
+clusters' endpoints — is **mandatory plumbing**, not optional hardening. Rather
+than bolt on a minimal cert hack, the decision is to **do it properly:**
+
+- **The lab-security layer (TLS + cert/PKI management, securing the stack) becomes
+  a hard, blocking dependency.** The `nativeha-ocp` arm **will not be implemented
+  until that security layer is brainstormed → designed → planned → built.** It is
+  the *next* design effort after this spec.
+- This **raises the security bar lab-wide**, not only for this arm — a consequence
+  accepted as the price of doing it right.
+- **Distinguish two things:** *transport-TLS-as-plumbing* (mandatory here, in
+  scope) vs. *security posture/hardening* — auth policy, mTLS client-auth, channel
+  exits, DTCC's mandated transport security — which remains a separate,
+  requirements-driven effort (still out of scope for *this* arm, per §1). The
+  DMZ-vs-NetworkPolicy security-equivalence argument for the pitch also lands in
+  that workstream.
+
+### 4.10 Mandatory MQ bolt-ons on this substrate (admin REST API + metrics)
+
+Two components are **non-negotiable over and above the base QM**, and both need a
+substrate-specific solution. Good news: on the Operator substrate the Operator
+does most of the lifting (more tractable here than on the VM arms).
+
+**Admin REST API (`mqweb`) — required; co-located in-pod.** Without it the content
+plane (`pymqrest`, the systems-management automation) is dead, and the only
+fallback is **PCF** — not implemented in the lab and far more engineering — so
+making REST work is strongly preferred. *(Data)* The MQ Operator runs the web
+server (admin REST API + console) **inside the QM container**, exposed via a
+**Route** (the metrics config lists `web` as a source, confirming mqweb runs
+in-pod). This is the supported pattern and mirrors the VM-arm §8.3 logic (mqweb
+travels with the active QM; VIP there, Route here). **Engineering tasks:** enable
+`web` in the CRD, wire the Route, manage its TLS cert (→ §4.9). *(Verify the exact
+CRD field.)* The "independent client-connected instance" option is an unnecessary
+fallback.
+
+**Metrics — required; native Operator metrics, likely no `mq_prometheus` at all.**
+*(Data)* The Operator exposes **Prometheus metrics natively** (config values
+`qmgr,web`), collected by OpenShift **user-workload-monitoring** Prometheus as
+`ibmmq_qmgr*` series. So the VM-arm `mq_prometheus` client/local-bindings exporter
+is likely **unnecessary** here. *(Judgment)* The real decision is **dashboard
+parity:** native metric names differ from the `mq_prometheus` (mq-metric-samples)
+names the existing Grafana dashboards use — so either **adapt the dashboards to
+native metrics** (recommended) or run `mq_prometheus` as a **client-mode
+Deployment** to preserve them as-is. Either way, no host/local-bindings exporter.
+
+*Reference (verify):* Monitoring when using the MQ Operator —
+<https://www.ibm.com/docs/en/ibm-mq/9.3?topic=operator-monitoring-when-using-mq>.
 
 ## 5. The HADR-on-Kubernetes question (can MQ DR piggyback on the platform?)
 
@@ -436,8 +539,21 @@ Listed explicitly so no one mistakes silence for an oversight.
 - **CRR is newer/less-proven** (~16 months old at writing) — confirms the
   learning-cost flag (#187 §6); the DR *mechanism* is now understood (§4.4), but
   hands-on operational experience is still to be earned in the lab.
+- **arm64 support for the MQ server/Operator/CRR stack is unverified** — the
+  load-bearing assumption under the entire arm64 feasibility lever (§4.2). The
+  §4.7 spike checks it **first**, before any build; if it fails, fall back to TCG
+  x86 / SNO / cloud-x86.
 - **Feasibility of multi-node OKD on arm64 nested libvirt** (§4.7) — gated by the
   Phase-A spike; SNO-per-DC is the documented fallback.
+- **OKD footprint vs. the §7.5 sizing budget** — that budget assumed ~6 × 1 GB
+  cluster VMs; two 3-node compact OKD clusters are far heavier. The spike's second
+  gate is the RAM/footprint check (§4.7).
+- **Lab security is now a blocking up-front dependency** (§4.9) — TLS is mandatory
+  plumbing on this substrate, so the arm build waits on the lab-security layer
+  being designed and built. Adds schedule, but non-negotiable.
+- **Two mandatory bolt-ons need engineering** (§4.10) — admin REST API
+  (co-located mqweb + Route) and metrics (native Operator metrics + dashboard
+  adaptation). Tractable, but explicit build tasks, not freebies.
 - **arm64-lab vs x86-prod arch gap** — believed immaterial (§6); confirm via
   Bucket A.
 - **The firm's Kubernetes/security specifics are unconfirmed** — pending direct
@@ -477,14 +593,36 @@ Defaults recommended, to confirm:
   §1's "architect full HADR up front, prove one solid QM first."
 - **Feasibility spike** as the Phase-A gate before committing the full arm (§4.7).
 
+### Pushback resolutions (2026-06-16)
+
+A `paad:pushback` review hardened the spec. Resolutions:
+
+1. **arm64-support check is the spike's first, blocking gate**, with an explicit
+   x86/SNO/cloud fallback (§4.2, §4.7).
+2. **#187 guardrail relaxation made explicit and bounded** — spike unblocked, full
+   build still gated (§2).
+3. **TLS is mandatory → lab security becomes a hard, up-front blocking
+   dependency**; the arm waits on a security layer designed/built first (§4.9).
+4. **Node count pinned** — 3-node compact OKD per DC (6 node-VMs); RAM/footprint
+   is the spike's second gate (§4.2, §4.7).
+5. **Storage named** — in-cluster RWO block CSI provider, a spike build task
+   (§4.2).
+6. **Fixture wiring** — `app-client`/`dtcc-sim` attach as external clients via the
+   Route, must speak TLS+SNI (§4.8).
+7. **Mandatory bolt-ons documented** — admin REST API (co-located) + metrics
+   (native Operator), with the must-engineer flag (§4.10).
+8. **Observability** folded into §4.10 (native metrics + dashboard parity).
+
 ## 9. Definition of done (this doc's scope) & next steps
 
 - This design + the gap-analysis question bank captured and committed (PR into
   `develop`, issue #198). ✅ on merge.
-- Natural next brainstorming drill-downs, in priority order:
-  1. **The strategic framing** (§3) — sharpen the pitch surface for the firm.
-     *(The CRR endpoint-exposure sub-fork is now resolved — Routes/SNI, §4.4.)*
-  - *Pending external input:* the firm's **CD-vs-LTS posture** (§6 bucket A),
-    which the author is asking today and which gates the timeline.
-- Implementation planning (writing-plans) is **not** triggered yet: build is
-  gated behind the RDQM/Pacemaker framework proof (§2) and the §4.7 spike.
+- **The next design effort is the lab-security layer** (§4.9) — now a blocking
+  dependency for this arm, and the immediate next brainstorm.
+- *Pending external input:* the firm's **CD-vs-LTS posture** and the other Bucket A
+  questions (§6), which the author is asking the firm.
+- Implementation planning (writing-plans) is **not** triggered yet. The arm build
+  is gated behind **three** things: the RDQM/Pacemaker framework proof (§2), the
+  §4.7 feasibility spike (arm64 first), and the **lab-security layer** (§4.9). The
+  first plannable unit is the **Phase-A feasibility spike**, once the security
+  brainstorm is under way and the firm's stream answer is in.
