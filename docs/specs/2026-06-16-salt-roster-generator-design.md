@@ -58,30 +58,45 @@ No refactor of `inventory.py`; match the existing inline-parse style.
 
 Per-target, keyed by hostname (the salt-ssh minion id). Connection details are
 carried per-target (a roster's nature — the per-host mirror of inventory's
-`[all:vars]`); group/setup membership rides as **grains**:
+`[all:vars]`); group/setup membership rides as **grains under `minion_opts`**:
 
 ```yaml
 # salt-ssh roster — generated from lab/topology.yaml. Do not edit by hand.
 pcmk-a1:
   host: 10.50.0.51
   user: vagrant
-  priv: ~/.vagrant.d/insecure_private_key
+  priv: /home/<user>/.vagrant.d/insecure_private_key
   sudo: true
-  grains:
-    roster_groups: [pcmk_a]
-    roster_setups: [pcmk_san_ha]
+  minion_opts:
+    grains:
+      roster_groups: [pcmk_a]
+      roster_setups: [pcmk_san_ha]
 ```
 
-- `host` = the node's `net-mgmt` IP. `user`/`priv`/`sudo` are constant across the
-  fleet (the #101 insecure key; `sudo: true` = the Ansible `become` equivalent),
-  repeated per target because the roster is per-target.
-- Grain keys are **prefixed** `roster_groups` / `roster_setups` to avoid colliding
-  with any built-in Salt grain.
+- `host` = the node's `net-mgmt` IP.
+- `priv` = the #101 shared insecure key. The source constant `INSECURE_KEY`
+  (`~/.vagrant.d/insecure_private_key`) is **`expanduser()`'d to an absolute path
+  at render time**, because salt-ssh's `priv` is not guaranteed to expand `~`. The
+  rendered roster therefore embeds the environment's home — fine, since it lands in
+  gitignored `build/` and is regenerated per environment (exactly like
+  `build/inventory.ini`).
+- `sudo: true` is set on **every** target. This is an **intentional simplification**,
+  not a 1:1 mirror: Ansible escalates selectively (per-play `become`/`-b`), but
+  nearly all lab states require root and Salt requisites make per-state escalation
+  unnecessary, so the roster escalates globally.
+- **Grains live under `minion_opts: grains:`** — the salt-ssh flat-file roster has
+  no top-level `grains:` key, and only grains set under `minion_opts` are targetable
+  via `salt-ssh -G 'roster_groups:<grp>'`. Keys are **prefixed**
+  `roster_groups`/`roster_setups` to avoid colliding with built-in grains.
 - `roster_groups` = every atomic group the host belongs to. `roster_setups` =
   every setup whose `groups:` transitively includes the host.
 
-**Deterministic ordering** (exact-string tests depend on it): targets in topology
-`nodes` order; `roster_groups` in `groups`-declaration order; `roster_setups` in
+**Host set & ordering** (exact-string tests depend on it): the roster covers
+**exactly the hosts reachable through `groups`** — built by inverting the
+`groups`→host map with the same traversal `inventory.py` uses, so the two
+generators always cover an identical fleet. A node in no group is absent from both.
+Targets appear in **first-appearance order across the `groups` iteration**;
+`roster_groups` in `groups`-declaration order; `roster_setups` in
 `setups`-declaration order. Rendered via `yaml.safe_dump(data, sort_keys=False)`
 over an insertion-ordered structure, with a leading comment line prepended.
 
@@ -107,10 +122,15 @@ roster. Same Typer/`Deps` wiring as the inventory command.
 `tests/test_roster.py`, mirroring `test_inventory.py`:
 
 - inline `TOPO` fixture (a minimal multi-group, multi-setup topology);
-- one exact-string assertion on `render_roster(TOPO)` output;
+- one exact-string assertion on `render_roster(TOPO)` output. Because `priv` is an
+  `expanduser()`'d absolute path, the test pins the home (monkeypatch `HOME` /
+  `Path.home`, or assert against a computed `expanduser()` of `INSECURE_KEY`) so the
+  expected string is deterministic across environments;
 - `pytest.raises(RosterError, match=...)` for each of the three fail-loud cases;
 - grain correctness: a host in two groups and one setup lists both groups (in
-  declaration order) and the setup.
+  declaration order) and the setup, all under `minion_opts: grains:`;
+- host-set parity: a node present in `nodes` but in no group does **not** appear in
+  the roster (same fleet as `inventory.py`).
 
 Plus a CLI test for `mqlab vm roster` using `CliRunner` + the `RecordingRunner`
 fake (per `tests/test_cli_vm.py`), asserting it writes `build/salt/roster` and
@@ -125,11 +145,13 @@ Specified for completeness; **not built this round**.
   `$PATH`** (per #165, no `uv run`):
   `salt-ssh -c <saltdir> --roster-file build/salt/roster -G 'roster_groups:<grp>' state.apply <state>`.
   Secrets inject as env vars exactly as today.
-  **Open verification:** that salt-ssh honors roster-defined grains for `-G`
-  targeting. To be confirmed when the invocation is built (a disposable-VM
-  spot-check, the #205 pattern). Documented fallback if not: emit a `nodegroups`
-  mapping into the salt config and target via `-N` (evaluation approach B). The
-  generator's grain output is correct either way; only the targeting flag changes.
+  **Targeting placement is resolved against the docs:** grains live under
+  `minion_opts: grains:` (§3.1), the form the salt-ssh roster makes `-G`-targetable.
+  What remains to confirm at build-of-invocation time is a live `-G` run end-to-end
+  (a disposable-VM spot-check, the #205 pattern). Documented fallback if that ever
+  fails: emit a `nodegroups` mapping into the salt config and target via `-N`
+  (evaluation approach B) — the generator's grain output is unaffected; only the
+  targeting flag changes.
 - **Salt config.** `file_roots` (states base), the host-key bypass that is the
   roster's global analogue of `ansible_ssh_common_args`, and a `salt/` states dir
   paralleling `ansible/`.
