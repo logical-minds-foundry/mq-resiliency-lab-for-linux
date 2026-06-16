@@ -224,14 +224,18 @@ foundation is stable.
 
 ## 9. Where it sits
 
-- **Bring-up plane (Ansible).** The provider role generates the certs/keystores,
-  distributes each entity's PKCS#12 to its host, and sets `SSLKEYR` / `KEYRPWD` on
-  each QM via **`runmqsc` / `ALTER QMGR`** — the QMGR-level config pattern the
-  existing roles already use (`mq-qmgr`, `mq-pcmk-qmgr`). (`pymqrest` is the
-  *content* plane — queues/channels — not QMGR-level repo config.)
+- **Bring-up plane (Ansible).** The provider role **produces** each entity's
+  certs, keystores, and trust bundles under `build/secrets/pki/` — it runs
+  `connection=local` on the controller and does **not** reach into QM hosts.
+  **Distributing** each keystore to its QM host and **setting `SSLKEYR` /
+  `KEYRPWD`** via `runmqsc` / `ALTER QMGR` is the **first downstream integration
+  step** — it extends the existing `mq-qmgr` / `mq-pcmk-qmgr` roles, which already
+  own `ALTER QMGR`, and is not the provider's job. (`pymqrest` is the *content*
+  plane — queues/channels — separate again.)
 - **CLI surface.** An **`mqlab pki`** command group wraps the playbook (the repo's
-  CLI-wraps-playbook pattern): `create-ca`, `issue`, `list`, plus the deferred
-  `report`/`renew` (§8.2) when that follow-up lands.
+  CLI-wraps-playbook pattern): `ensure` (idempotent — both CAs + all entities),
+  `issue <entity>`, `list`, plus the deferred `report`/`renew` (§8.2) when that
+  follow-up lands.
 - **Content plane (downstream, separate spec).** Channel `SSLCIPH`,
   `CHLAUTH`/`SSLPEER` peer mapping, and mqweb TLS wiring *consume* these keystores
   — the "derive it easily" layer, not this spec.

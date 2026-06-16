@@ -644,11 +644,12 @@ Note in the PR description that the cold-rebuild gate passed (date, that `commun
 - §7 secrets/ephemerality (build/, lab-secret.sh) → Task 3/4 (paths, `KEYRPWD` via `lab-secret.sh`).
 - §8.1 lifecycle (ensure/add/issue) → Tasks 5, 6, 7 (`ensure`, `issue`, idempotent re-run = add-entity).
 - §8.2 expiry/rotation deferred → out of scope (no task), as designed.
-- §9 CLI surface + runmqsc/ALTER QMGR config → Tasks 6, 7; SSLKEYR via runmqsc shown in Task 8.
+- §9 CLI surface → Tasks 6, 7. Per §9, QM-side keystore distribution + `SSLKEYR`/`KEYRPWD` wiring is the first **downstream** step (not this plan); Task 8 exercises it only to load-test one keystore.
+- §10 GOV1683-24 fidelity → Task 3 defaults pin `pki_key_size: 4096`; signature digest is `community.crypto`'s SHA-256 default (representative). Cipher/TLS-version specifics are deferred downstream per §10.
 - §3/§11 cold-rebuild gate + collection provisioning → Tasks 1, 9.
 - Pushback [1] galaxy provisioning → Task 1; [2] encoding → Tasks 4, 8; [3] partial-DN → Task 2; [4] mqweb coupling → out of this plan (downstream, flagged in spec §9); [5] runmqsc/trust-only → Task 2 (`trust_only`), Task 8.
 
-**Out-of-plan (by design):** channel `SSLCIPH`/`CHLAUTH`/`SSLPEER` wiring, mqweb TLS adoption + the `verify_tls=False` flip (spec §9 downstream), and OpenShift/CRR cert extension — all separate later specs.
+**Out-of-plan (by design):** QM-side keystore distribution + `SSLKEYR`/`KEYRPWD` wiring (the first downstream step, extending the `mq-qmgr`/`mq-pcmk-qmgr` roles), channel `SSLCIPH`/`CHLAUTH`/`SSLPEER` wiring, mqweb TLS adoption + the `verify_tls=False` flip, and OpenShift/CRR cert extension — all downstream of this plan.
 
 **Placeholder scan:** none — every code/config step shows exact content; Task 8's branch is a real decision with concrete commands, not a TODO.
 
