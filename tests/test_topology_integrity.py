@@ -17,11 +17,16 @@ def test_every_setup_group_is_defined():
             assert g in groups, f"{setup.name} references undefined group {g}"
 
 
-def test_pcmk_setups_declare_the_hacluster_secret():
+def test_pcmk_setups_declare_hacluster_and_mqweb_secrets():
+    # every QM-bearing pcmk setup carries the cluster secret AND mqweb_admin_password
+    # (REST on every QM — design §1; mqweb is enabled at provision where it's injected)
     setups = lab_setups()
-    assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password"]
-    assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password"]
-    assert setups["distributed"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    assert setups["distributed-pcmk-ubuntu"].secrets == [
+        "pcmk_hacluster_password",
+        "mqweb_admin_password",
+    ]
 
 
 def test_real_topology_renders_scrape_targets():
@@ -91,7 +96,7 @@ def test_distributed_setup_composed():
     """The distributed setup wires our HA QM (site A) to the DTCC service VM (#147)."""
     from mqlab.setups import lab_setups
 
-    dist = lab_setups()["distributed"]
+    dist = lab_setups()["distributed-pcmk-ubuntu"]
     assert dist.groups == ["san_a", "pcmk_a", "dtcc", "app"]
     assert dist.provision == "ansible/site-distributed.yml"
     assert dist.qm is not None and dist.qm.name == "QMPCMK"

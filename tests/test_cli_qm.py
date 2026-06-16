@@ -27,12 +27,22 @@ def _deps(runner):
     )
 
 
+_ARMS = (
+    "arms:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    verbs:\n"
+    "      qm-create: { playbook: site-pcmk-qm.yml }\n"
+    "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
+    "      qm-up: { pcs: resource enable mq_group }\n"
+    "      qm-down: { pcs: resource disable mq_group }\n"
+    "      qm-status: { pcs: status resources }\n"
+)
+
 _TOPO = (
     "nodes:\n"
     "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"
     "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
     "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-    "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
+    + _ARMS
+    + "setups:\n  pcmk_san_ha:\n    arm: pcmk-ubuntu\n    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
 )
@@ -84,7 +94,8 @@ def test_qm_create_passes_dtcc_conn_when_set(monkeypatch, tmp_path):
         "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"
         "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-        "setups:\n  distributed:\n    groups: [san_a, pcmk_a]\n"
+        + _ARMS
+        + "setups:\n  distributed:\n    arm: pcmk-ubuntu\n    groups: [san_a, pcmk_a]\n"
         "    provision: ansible/site-distributed.yml\n"
         "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }\n"
     )
