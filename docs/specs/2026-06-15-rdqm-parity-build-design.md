@@ -62,7 +62,7 @@ arms:
     substrate: vm
     verbs:
       qm-create:  { script: rdqm-qm-create.sh }
-      qm-up:      { cmd: "<verified-in-Plan-B>" }    # §5 / Issue [5]
+      qm-up:      { cmd: "<verified-in-Plan-B>" }    # §5 — verified in Plan B spike
       qm-down:    { cmd: "<verified-in-Plan-B>" }
       qm-status:  { cmd: "<verified-in-Plan-B>" }
       dr-cutover: { script: rdqm-dr-cutover.sh }      # new — §6
@@ -206,7 +206,7 @@ Three plans, each independently green (writing-plans produces them in order):
   covers them.
 - **RDQM DR mechanics unproven in current tooling (Plan C).** `crtmqm -rr`/`rdqmdr`
   re-validated live; functional-only on TCG.
-- **RDQM QM-lifecycle verbs unknown.** Mitigated by the Plan-B spike (Issue [5]).
+- **RDQM QM-lifecycle verbs unknown.** Mitigated by the Plan-B verb spike (§5).
 - **TCG slowness** throughout the RDQM arm.
 
 ## 11. Definition of done (this design's scope)
