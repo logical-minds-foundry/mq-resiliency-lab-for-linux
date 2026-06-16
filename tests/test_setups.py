@@ -11,6 +11,7 @@ TOPO = (
     "setups:\n"
     "  pcmk_san_ha:\n"
     "    description: Pacemaker SAN HA\n"
+    "    arm: pcmk-ubuntu\n"
     "    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password]\n"
@@ -51,6 +52,14 @@ def test_lab_setups_parses_qm_config_defaulting_none(monkeypatch, tmp_path):
         name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10"
     )
     assert setups["rdqm_ha"].qm is None  # default
+
+
+def test_lab_setups_parses_arm_defaulting_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    setups = lab_setups()
+    assert setups["pcmk_san_ha"].arm == "pcmk-ubuntu"
+    assert setups["rdqm_ha"].arm is None  # default — not declared / arm-agnostic
 
 
 def test_lab_groups_reads_atomic_groups(monkeypatch, tmp_path):

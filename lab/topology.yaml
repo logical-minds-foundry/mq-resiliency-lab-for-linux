@@ -145,27 +145,32 @@ groups:
 setups:
   pcmk_san_ha:
     description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
+    arm: pcmk-ubuntu
     groups: [san_a, pcmk_a]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }
   pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
+    arm: pcmk-ubuntu
     groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
     secrets: [pcmk_hacluster_password]
   distributed:
     description: Distributed MQ — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    arm: pcmk-ubuntu
     groups: [san_a, pcmk_a, dtcc, app]
     provision: ansible/site-distributed.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }
   rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
+    arm: rdqm-rhel
     groups: [rdqm_a]
     provision: ansible/site-rdqm.yml
   rdqm_dr:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
+    arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
   monitoring:
