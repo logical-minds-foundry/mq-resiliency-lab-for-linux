@@ -11,11 +11,13 @@ TOPO = (
     "arms:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
+    "    cluster_group: pcmk_a\n"
     "    verbs:\n"
     "      qm-create: { playbook: site-pcmk-qm.yml }\n"
     "      qm-up: { pcs: resource enable mq_group }\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n"
+    "    cluster_group: rdqm_a\n"
     "    verbs: {}\n"
     "setups:\n"
     "  pcmk_san_ha:\n"
@@ -32,6 +34,13 @@ TOPO = (
 def _seed(tmp_path):
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(TOPO)
+
+
+def test_arm_declares_its_cluster_group(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    assert lab_arms()["pcmk-ubuntu"].cluster_group == "pcmk_a"
+    assert lab_arms()["rdqm-rhel"].cluster_group == "rdqm_a"
 
 
 def test_lab_arms_loads_pcmk_with_verbs(monkeypatch, tmp_path):

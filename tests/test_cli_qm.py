@@ -28,7 +28,7 @@ def _deps(runner):
 
 
 _ARMS = (
-    "arms:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    verbs:\n"
+    "arms:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    cluster_group: pcmk_a\n    verbs:\n"
     "      qm-create: { playbook: site-pcmk-qm.yml }\n"
     "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
     "      qm-up: { pcs: resource enable mq_group }\n"

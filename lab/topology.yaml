@@ -148,6 +148,7 @@ groups:
 arms:
   pcmk-ubuntu:
     mechanism: pacemaker-san
+    cluster_group: pcmk_a
     verbs:
       qm-create:  { playbook: site-pcmk-qm.yml }
       qm-destroy: { playbook: site-pcmk-qm-down.yml }
@@ -156,6 +157,7 @@ arms:
       qm-status:  { pcs: "status resources" }
   rdqm-rhel:
     mechanism: rdqm
+    cluster_group: rdqm_a
     verbs: {}
 
 setups:

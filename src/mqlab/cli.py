@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 
 from mqlab import parity
-from mqlab.arms import arm_of, resolve_verb
+from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
@@ -792,7 +792,6 @@ def vm_ssh(guest: str) -> None:
 # create/destroy run the reproducible mq-pcmk-qmgr role (the client-reproducible
 # deliverable); up/down/status are direct, streamed pcs ops on the cluster. Pacemaker
 # is the only thing allowed to start/stop the QM (its systemd units are disabled).
-_PCMK_CLUSTER_GROUP = "pcmk_a"  # the cluster's inventory group; pcs runs on its first node
 
 
 def _setup_qm_or_exit(setup_name: str) -> QmConfig:
@@ -861,10 +860,12 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
         deps.transcript.close()
 
 
-def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
-    # up/down/status: a single streamed pcs op on the cluster's first node. No
-    # pre-flight — if the cluster is unreachable, ansible's own error speaks (#109).
+def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
+    # up/down/status: a single streamed shell op on the arm's cluster first node
+    # (pcs for pcmk, rdqm* for rdqm). No pre-flight — if the cluster is unreachable,
+    # ansible's own error speaks (#109).
     _setup_qm_or_exit(setup_name)
+    group = lab_arms()[arm_of(setup_name)].cluster_group
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         _render_inventory(deps)
@@ -873,12 +874,12 @@ def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
             Command(
                 [
                     "ansible",
-                    f"{_PCMK_CLUSTER_GROUP}[0]",
+                    f"{group}[0]",
                     "-b",
                     "-m",
                     "shell",
                     "-a",
-                    pcs_cmd,
+                    shell_cmd,
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
@@ -905,8 +906,8 @@ def _qm_dispatch(setup_name: str, verb: str) -> None:
     if impl.kind == "playbook":
         _qm_playbook(setup_name, impl.value, verb)
     elif impl.kind == "pcs":
-        _qm_pcs(setup_name, f"pcs {impl.value}", verb)
-    else:  # pragma: no cover - cmd/script kinds arrive with the RDQM backend (Plan B)
+        _qm_cluster_cmd(setup_name, f"pcs {impl.value}", verb)
+    else:  # pragma: no cover - cmd/script kinds arrive in Task 3
         typer.echo(f"qm {verb}: arm verb kind {impl.kind!r} not supported yet", err=True)
         raise typer.Exit(code=2)
 
