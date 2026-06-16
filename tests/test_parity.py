@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from typer.testing import CliRunner
 
+from mqlab.cli import app
 from mqlab.parity import (
     MATRIX,
     VERBS,
@@ -57,3 +59,10 @@ def test_provisional_arm_maps_known_setups(setup: str, arm: str) -> None:
 def test_provisional_arm_unknown_raises() -> None:
     with pytest.raises(KeyError, match="no provisional arm"):
         provisional_arm("monitoring")
+
+
+def test_parity_command_prints_matrix() -> None:
+    result = CliRunner().invoke(app, ["parity"])
+    assert result.exit_code == 0
+    assert "pcmk-ubuntu" in result.stdout
+    assert "not_yet" in result.stdout

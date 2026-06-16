@@ -12,11 +12,11 @@ import hashlib
 import json
 import subprocess
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from mqlab.dr import ScenarioReport
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from mqlab.runplan import baseline_run_plan
@@ -19,9 +17,9 @@ def _setup(qm: QmConfig | None) -> Setup:
     )
 
 
-def test_baseline_plan_is_one_step_invoking_dr_run() -> None:
+def test_baseline_plan_is_one_step_invoking_dr_run(tmp_path) -> None:
     qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10", dtcc_conn="10.60.0.50")
-    run_dir = Path("/tmp/run/20260615T143000Z-distributed")
+    run_dir = tmp_path / "20260615T143000Z-distributed"
     steps = baseline_run_plan(_setup(qm), run_dir, seconds=30, rate=20)
     assert len(steps) == 1
     step = steps[0]
@@ -38,6 +36,6 @@ def test_baseline_plan_is_one_step_invoking_dr_run() -> None:
     assert str(run_dir / "dtcc.jsonl") in argv
 
 
-def test_baseline_plan_requires_a_qm() -> None:
+def test_baseline_plan_requires_a_qm(tmp_path) -> None:
     with pytest.raises(ValueError, match="no QM"):
-        baseline_run_plan(_setup(None), Path("/tmp/x"), seconds=30, rate=20)
+        baseline_run_plan(_setup(None), tmp_path, seconds=30, rate=20)

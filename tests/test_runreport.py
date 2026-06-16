@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -98,7 +97,7 @@ def test_run_report_markdown_handles_no_versions() -> None:
     assert "Versions: (none)" in report.to_markdown()
 
 
-def test_write_bundle_creates_json_and_markdown(tmp_path: Path) -> None:
+def test_write_bundle_creates_json_and_markdown(tmp_path) -> None:
     md = RunMetadata("distributed", "abc123", "20260615T143000Z", "deadbeef", {})
     report = RunReport(metadata=md, scenarios=[_confirmed_report("pcmk-ubuntu")])
     bundle = write_bundle(report, tmp_path)
@@ -108,7 +107,7 @@ def test_write_bundle_creates_json_and_markdown(tmp_path: Path) -> None:
     assert "# Run report — distributed" in (bundle / "report.md").read_text()
 
 
-def test_append_index_writes_one_jsonl_line_per_call(tmp_path: Path) -> None:
+def test_append_index_writes_one_jsonl_line_per_call(tmp_path) -> None:
     md = RunMetadata("distributed", "abc123", "20260615T143000Z", "deadbeef", {})
     report = RunReport(metadata=md, scenarios=[_confirmed_report("pcmk-ubuntu")])
     bundle = write_bundle(report, tmp_path)
