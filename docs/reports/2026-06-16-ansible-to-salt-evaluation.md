@@ -3,17 +3,34 @@
 - **Issue:** #197
 - **Date:** 2026-06-16
 - **Spec:** docs/specs/2026-06-16-ansible-to-salt-evaluation-design.md
-- **Status:** draft — **paper analysis complete; spike authored but not yet run** (needs a mutable target, §5)
+- **Status:** final — paper analysis + `prometheus` spike (RUN, idempotent). HA-coordination effort remains paper-only by design (§7/§8).
 
 ## 1. Summary & recommendation
 
-> **Pending spike calibration.** The go/no-go verdict and the headline person-hours
-> range are filled once the `prometheus` spike runs and calibrates the §4 weights
-> (plan Task 11). The paper analysis below points to a **likely Go on Axis 1 with the
-> master/minion overlay deferred** — the bulk of the footprint maps to native Salt
-> states at low effort; the cost and risk concentrate in two narrow areas
-> (`shell`+idempotency volume, and HA cluster coordination). This direction is
-> **not yet confirmed** and carries the caveats in §7.
+**Recommendation: GO on Axis 1 (port the content to SLS), with the master/minion
+overlay deferred** — contingent on the human's person-hours bar (§8). The spike confirms
+the load-bearing assumption: the bulk of the footprint maps to **native Salt states that
+port 1:1 and re-apply idempotently** (the `prometheus` role reached `changed=0, failed=0`).
+Salt content is transport-identical, so this is authored once on the agentless salt-ssh
+baseline with **near-zero footprint change** (§2); employer-fidelity via master/minion can
+follow later without redoing any of it.
+
+**The cost and risk concentrate in two narrow areas**, both unchanged by the spike's success:
+
+1. **Idempotency translation tax.** The spike found that **paper review under-counts
+   frictions**: of 7 frictions on one role, 2 surfaced only at apply time (`archive.extracted`
+   path semantics; `file.copy` not being content-idempotent) — both instances of the
+   `changed_when`→`unless` tax. Across ~60 `shell`/`command` idempotency translations this is
+   the dominant effort line.
+2. **HA cluster coordination** (`run_once`+`register` over pcs/DRBD/iSCSI) — **not exercised
+   by this spike; paper-only, widest band** (§7).
+
+**Plus a tooling finding:** Salt is no longer in Ubuntu 24.04's repos (post-VMware it ships
+from the Broadcom repo), so control-node adoption is more than `apt install` (§6).
+
+**Headline estimate (§8):** simple-provisioning roles calibrated at **~1–2 person-hours/role**
+incl. runtime debugging; MQ and HA classes remain paper estimates with wide bands. Total
+range and the go/defer/no-go call against the bar are in §8.
 
 ## 2. Two-axis framing
 
@@ -54,20 +71,21 @@ with RHEL confined to the RDQM arm. The cross-distro concern is therefore real b
 ## 4. Translation matrix
 
 Effort weight is a 1/3/5 ordinal in person-hours-per-idiom (1 ≈ trivial 1:1 swap,
-3 ≈ rework+test, 5 ≈ hard re-modelling). **All cells are `paper-only` until the spike runs**
-(plan Task 8 promotes the exercised ones).
+3 ≈ rework+test, 5 ≈ hard re-modelling). **Coverage** = `spike-validated` (exercised by the
+`prometheus` run, §5) or `paper-only`. Weights for the two spike-discovered idempotency
+frictions were revised **up** post-run.
 
 | Ansible idiom | Count | Salt equivalent | Confidence | Weight | Coverage |
 |---|---|---|---|---|---|
 | `apt`/`dnf` (cross-distro) | 14 | `pkg.installed` + grain (`os_family`) branch | Med | 3 | paper-only |
-| `systemd` | 21 | `service.running` (+`enable`) | High | 1 | paper-only |
-| `template` (.j2) | 18 | `file.managed` + `template: jinja` | High | 1 | paper-only |
-| `copy` | 26 | `file.managed` (`contents`/`source`) | High | 1 | paper-only |
-| `file` | 12 | `file.directory`/`file.symlink` | High | 1 | paper-only |
+| `systemd` | 21 | `service.running` (+`enable`) | High | 1 | **spike-validated** |
+| `template` (.j2) | 18 | `file.managed` + `template: jinja` | High | 1 | **spike-validated** (no Jinja vars in sample) |
+| `copy` | 26 | `file.managed` / `file.copy` (on-target) | Med | 3 | **spike-validated** (force≠idempotent; needs `unless`) |
+| `file` | 12 | `file.directory`/`file.symlink` | High | 1 | **spike-validated** |
 | `lineinfile`/`blockinfile` | 4 | `file.line`/`file.blockreplace` | Med | 3 | paper-only |
-| `unarchive`+`creates` | 7 | `archive.extracted` (needs `source_hash`) | Med | 3 | paper-only |
-| `shell`/`command`+`changed_when` | 57 | `cmd.run`+`onlyif`/`unless` | Low-Med | 5 | paper-only |
-| handlers/`notify` | ~6 | `service.running`+`watch` requisite | Med | 3 | paper-only |
+| `unarchive`+`creates` | 7 | `archive.extracted` (`source_hash`; path semantics) | Med | 3 | **spike-validated** (double-nest friction) |
+| `shell`/`command`+`changed_when` | 57 | `cmd.run`+`onlyif`/`unless` | Low-Med | 5 | paper-only (tax confirmed via `copy`) |
+| handlers/`notify` | ~6 | `service.running`+`watch` requisite | High | 1 | **spike-validated** |
 | `include_role`/`import_playbook` | 3+ | `include`/orchestrate | High | 1 | paper-only |
 | `run_once`+`register` coordination | pattern | orchestrate runner / mine / imperative | **Low** | **5** | paper-only |
 | `inventory.ini` (from `inventory.py`) | 1 | salt-ssh roster (regen from `topology.yaml`) | Med | 3 | paper-only |
@@ -80,46 +98,56 @@ The cost is not spread evenly: **~57 `shell`/`command` idempotency translations*
 
 ## 5. Spike: `prometheus` role → SLS
 
-**Status: PORT AUTHORED, NOT YET RUN.** The SLS port lives in `build/salt-spike/` (gitignored,
-throwaway). Running it (`state.apply`, idempotency re-apply) mutates a target VM and is
-pending control-node/scratch-VM ownership — see plan Tasks 3/5/6.
+**Status: RUN — converges and is idempotent.** Method: the role was ported to an SLS formula
+(`build/salt-spike/`, gitignored throwaway) and applied **masterless (`salt-call --local`,
+salt 3008.1) inside a disposable libvirt VM** isolated from the lab (unique domain, default
+mgmt net only, destroyed after). Masterless vs salt-ssh is an Axis-2 transport detail; the SLS
+content validated is identical, so the authoring evidence transfers directly.
 
-### 5.1 Predicted frictions (derived from authoring the port; to be confirmed by the run)
+**Result:** all 12 states succeed; prometheus active + `/-/ready`; re-apply reports
+**`changed=0, failed=0`** — fully idempotent. Convergence took 3 iterations (initial + 2
+runtime-friction fixes).
 
-These are read off the translation, **not yet empirically verified** — the run will confirm or
-correct them and produce the calibrated weights:
+### 5.1 Frictions — 5 predicted, **2 discovered only at apply time**
 
-1. **`archive.extracted` requires `source_hash`** for a remote source; Ansible's `unarchive`
-   did not. Bypassed with `skip_verify: True` for the spike — a real authoring difference.
-2. **On-target file copy:** Ansible `copy: remote_src=true` copies a file already on the host;
-   Salt `file.managed` sources come from `salt://`/URLs, so the binary copy uses **`file.copy`**
-   (the state) instead. A genuine idiom divergence.
-3. **`notify` → `watch`:** the handler becomes a declarative `watch` requisite on
-   `service.running`, not a queued handler. Same effect, different mental model.
-4. **This template exercises NO Jinja:** `prometheus.yml.j2` contains zero Ansible variables —
-   it is static YAML. So the spike **does not validate Jinja parity at all**; that risk stays
-   fully paper-only (§7).
-5. **Arch grain only:** the port uses `grains['cpuarch']` for the binary arch. This touches the
-   *arch* grain but **not** the `apt`/`dnf` `os_family` split — cross-distro stays paper-only.
+| # | Idiom | Friction | Source | Diff |
+|---|---|---|---|---|
+| 1 | remote unpack | `archive.extracted` needs `source_hash` (Ansible didn't) → `skip_verify` | predicted | 1 |
+| 2 | on-target copy | `file.managed` can't source a minion path → `file.copy` state | predicted | 1 |
+| 3 | restart-on-change | `notify` handler → declarative `watch` requisite | predicted | 1 |
+| 4 | config template | `.j2` had **zero variables** → plain `file.managed`; **no Jinja exercised** | predicted | 0 |
+| 5 | binary arch | `grains['cpuarch']`; **`os_family` split NOT exercised** | predicted | 1 |
+| 6 | extract path | **`archive.extracted name=/tmp/<pkg>` double-nested** vs `unarchive dest=/tmp`; broke the copy. Fix: `name=/tmp` | **spike** | 3 |
+| 7 | copy idempotency | **`file.copy force:True` re-copies every run** ("identical but force set") → needs `unless: cmp` | **spike** | 3 |
 
-The net signal: the `prometheus` role is a **weak sampler** — it confirms the easy native
-mappings but exercises none of the high-risk cells. The estimate's confidence ceiling for
-HA/cross-distro work is set by paper reasoning regardless of how clean the spike runs.
+**The load-bearing lesson:** paper review caught 5 of 7 frictions; the 2 it missed (#6, #7)
+were **both idempotency bugs that only appear when you actually apply**, and both are instances
+of the `changed_when`→`unless` tax. This is direct evidence that (a) the native mappings really
+are 1:1 (user/file/service+watch had zero surprises — now empirically confirmed), and (b) **paper
+estimates systematically under-count the idempotency translation cost** — here ~+2 frictions on a
+simple role. The high-risk cells (HA coordination, cross-distro, Jinja) were **not** sampled, so
+their confidence ceiling is still paper reasoning (§7).
 
 ## 6. Control-node tooling cost
 
-**Empirical part (install method, version, footprint): PENDING plan Task 1** (mutates the
-control node).
+**Empirical finding (from the spike):** Salt is **no longer in Ubuntu 24.04's repos** —
+`apt-get install salt-common` fails with "Unable to locate package". Post-VMware-acquisition,
+Salt ships from the **Broadcom repo**: install the `packages.broadcom.com` keyring + the
+`salt-install-guide` `salt.sources`, then `apt-get install salt-minion` (got salt **3008.1
+Argon**). So adoption is materially more than Ansible's `apt install ansible` — it needs a
+third-party repo pinned into the build.
 
-**Production-adoption cost (paper, decided now):** carrying Salt the way Ansible is carried
-today means adding it to the `[vm.vergil-user]` profile in `vergil.toml` (not an ad-hoc
-`apt install`) and invoking `salt-ssh` by **bare name via `$PATH`** from `mqlab` — mirroring the
-#165 cleanup that purged runtime `uv run`. This is a one-time profile + wrapper change, low
-effort but a real footprint addition on every control-node rebuild.
+**Production-adoption cost (paper):** carrying Salt the way Ansible is carried today means
+declaring that repo + package in the `[vm.vergil-user]` profile in `vergil.toml` (the `apt_repos`
+feature already exists) and invoking `salt-ssh`/`salt-call` by **bare name via `$PATH`** from
+`mqlab` — mirroring the #165 cleanup that purged runtime `uv run`. One-time profile + wrapper
+change; low effort, but a real third-party-repo footprint on every control-node rebuild.
 
 ## 7. Risk register & confidence bands
 
-The first two are **paper-only** under the thin spike and carry the widest bands:
+The spike **empirically confirmed the `changed_when`→`unless` idempotency tax** (via the
+`file.copy` friction, §5.1) and the clean native mappings; the items below are what it did
+**not** sample. The first two are paper-only and carry the widest bands:
 
 - **`run_once`+`register` cluster coordination** (pcs/DRBD/iSCSI) — least likely to map
   cleanly; *not* exercised by the `prometheus` spike. Candidate Salt patterns: an orchestrate
@@ -137,24 +165,42 @@ The first two are **paper-only** under the thin spike and carry the widest bands
 
 ## 8. Effort estimate & go/no-go
 
-**Spike-calibrated numbers PENDING.** Structure and paper-only ranges below; the
-simple-provisioning per-role figure is replaced by the spike's measured wall-clock at Task 11.
+Simple-provisioning is **spike-calibrated**; MQ and HA classes are paper estimates with
+explicit bands (HA the widest — it's unsampled). Ranges are rough person-hours.
 
-**Role-classes (21 roles):**
+| Role-class | Roles | Per-role | Class range | Confidence |
+|---|---|---|---|---|
+| **Simple-provisioning** (`prometheus`, `node-exporter`, `grafana`, `loki`, `alloy`, `cluster-state`, `host-net-state`, `net-reach`) | ~8 | ~1–2 h | **~10–16 h** | spike-calibrated |
+| **MQ install/config** (`mq-install`, `mq-qmgr`, `mq-inter-qm`, `mq-client`, `mq-exporter`) | ~5 | ~3–6 h | ~15–30 h | paper |
+| **HA-coordination** (`pcmk-cluster`, `pcmk-stonith`, `drbd-san`, `iscsi-initiator`, `iscsi-target`, `rdqm-install`, `rdqm-ha`, `mq-pcmk-qmgr`) | ~8 | ~5–12 h | **~40–95 h** | **paper, widest band** |
+| Cross-cutting (roster from `topology.yaml`, `mqlab` CLI swap, `vergil.toml` Salt repo/profile, `group_vars`→pillar) | — | — | ~8–15 h | mixed |
 
-- **Simple-provisioning** (~8: `prometheus`, `node-exporter`, `grafana`, `loki`, `alloy`,
-  `cluster-state`, `host-net-state`, `net-reach`) — native mappings, weight ≈ 1–3/role.
-  *Paper range pending spike calibration.*
-- **MQ install/config** (~5: `mq-install`, `mq-qmgr`, `mq-inter-qm`, `mq-client`, `mq-exporter`)
-  — shell-against-`/opt/mqm`, idempotency hand-translation; weight ≈ 3–5/role.
-- **HA-coordination** (~8: `pcmk-cluster`, `pcmk-stonith`, `drbd-san`, `iscsi-initiator`,
-  `iscsi-target`, `rdqm-install`, `rdqm-ha`, `mq-pcmk-qmgr`) — the `run_once`+register pattern;
-  weight ≈ 5/role, **widest band, paper-only**.
+**Indicative total: ~75–155 person-hours**, dominated by HA-coordination — which is also the
+least certain. The simple-provisioning floor is now solid; the spread lives almost entirely in
+the unsampled HA class. **Calibration caveat from the spike:** add ~1–2 frictions per role for
+idempotency bugs that only surface at apply time — already folded into the ranges above.
 
-**Go/no-go rubric** (spec §4.3) — evaluated against four dimensions: total authoring
-person-hours (above), red-confidence hotspot count (§7: two), footprint + cold-rebuild impact
-(§2 Axis-2 keeps it ≈ zero on salt-ssh; §6 profile add is the only footprint cost; the
-master/minion overlay is optional), and employer-fidelity/skills value (§1). **Bar = human
-decision input.** Verdict: **Go** if total ≤ bar and no unresolved red hotspot; **Defer** if the
-only blocker is an unvalidated hotspot (→ targeted coordination spike); **No-go** otherwise.
-*Verdict pending the spike.*
+**Go/no-go rubric** (spec §4.3), four dimensions:
+
+1. **Total authoring effort** — ~75–155 h (above).
+2. **Red-confidence hotspots** — two, both paper-only: HA `run_once`+register coordination, and
+   cross-distro `os_family` (§7).
+3. **Footprint + cold-rebuild impact** — **near zero on the salt-ssh baseline** (§2 Axis-2); the
+   only additions are the §6 third-party Salt repo in the profile. The master/minion overlay (the
+   one real footprint cost) is optional and deferred. Fits the one-pass cold-rebuild gate.
+4. **Employer-fidelity / skills value** — real (§1); mostly captured by Axis-1 authoring alone.
+
+**Bar = human decision input.** Applying the rule:
+
+- **GO** if the bar ≥ ~155 h (covers the worst case) **or** if the bar covers the spike-solid
+  **~25–45 h** of simple-provisioning + MQ and you accept staging HA later.
+- **DEFER the HA class** (recommended shape): the only thing blocking a confident *whole-lab*
+  number is the unsampled HA hotspot. Port the simple + MQ classes now (well-bounded), and run a
+  **targeted coordination spike** (one `run_once`+register → orchestrate/`cmd.run` translation)
+  to retire the widest band before committing the HA estimate.
+- **NO-GO** only if the bar is below the ~25–45 h simple+MQ floor, i.e. the lab can't spare even
+  the well-understood part.
+
+**Net:** Go on the content port (salt-ssh, footprint ≈ zero), stage HA behind a small follow-up
+spike. The evaluation's own method — paper + one thin spike — is what tells us the HA number
+isn't yet trustworthy; honoring that is the recommendation.
