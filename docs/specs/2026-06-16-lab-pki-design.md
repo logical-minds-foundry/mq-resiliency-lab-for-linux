@@ -66,13 +66,18 @@ over shell" principle (native `openssl_privatekey`, `openssl_csr`,
 cobbled `openssl` shell pipelines).
 
 **Prerequisite — provision the collection reproducibly (do not hand-install).**
-`community.crypto` (and its `cryptography` Python dependency) **must be declared in
-the `[vm.vergil-user]` profile in `vergil.toml`**, not hand-installed in a live VM.
-This is a hard requirement, not a detail: a hand-installed Ansible collection
-already **vanished on a VM rebuild once** (#156), and the lab's **cold-rebuild
-acceptance gate** means the provider must come up one-pass on a fresh VM. An
-undeclared collection passes on a warm VM and breaks the security foundation on the
-next rebuild. Declaring it in the profile is the only reproducible path.
+`community.crypto` is the lab's **first** galaxy collection — the lab otherwise uses
+`ansible.builtin` only, precisely because a hand-installed collection **vanished on a
+VM rebuild once** (#156, "the lab never installs galaxy"). So it is provisioned
+*declaratively*, not hand-installed: (a) **`cryptography`** (the module backend) is
+added to `pyproject.toml` `dependencies`, installed by `uv sync`; (b)
+**`community.crypto`** is declared in a committed **`ansible/requirements.yml`** and
+installed via `ansible-galaxy collection install -r ansible/requirements.yml` into a
+repo-relative `collections_path` (set in `ansible/ansible.cfg`), wired into the
+once-per-VM bootstrap right after `uv sync`. The **cold-rebuild acceptance gate**
+verifies a `community.crypto` play runs on a fresh VM. *(vergil v2.1's profile
+exposes `apt_repos`/`vagrant_plugins`, not an Ansible-collections key, so the
+`requirements.yml` path is the mechanism.)*
 
 The provider, run from a committed **entity inventory**, does this per run:
 
@@ -247,10 +252,10 @@ the goal is "representative, not toy."
 
 ## 11. Risks & open questions
 
-- **Collection provisioning (#156).** `community.crypto` + `cryptography` must be
-  declared in the `[vm.vergil-user]` profile (§3) — a hand-installed collection
-  vanished on a rebuild before (#156). Undeclared = passes warm, breaks on the cold
-  rebuild. First-class cold-rebuild gate item.
+- **Collection provisioning (#156).** `community.crypto` is the lab's **first**
+  galaxy collection ("the lab never installs galaxy"); provisioned reproducibly via
+  `ansible/requirements.yml` + `ansible-galaxy` at bootstrap + `cryptography` in
+  `pyproject.toml` (§3), never hand-installed. First-class cold-rebuild gate item.
 - **PKCS#12 ↔ GSKit encoding (most likely first-build blocker).** OpenSSL 3.x
   PKCS#12 defaults can be rejected by MQ's GSKit; mitigated by pinning the
   compatibility encoding and a blocking first-build load test, with `runmqktool`
@@ -268,8 +273,10 @@ the goal is "representative, not toy."
 
 A `paad:pushback` review hardened this spec — 5 findings, all resolved:
 
-1. **Collection provisioning** — declare `community.crypto` + `cryptography` in the
-   VM profile; cold-rebuild gate item (§3, §11).
+1. **Collection provisioning** — establish galaxy reproducibly
+   (`ansible/requirements.yml` + `ansible-galaxy` at bootstrap + `cryptography` in
+   `pyproject.toml`); the lab's first galaxy collection, cold-rebuild gate item
+   (§3, §11).
 2. **PKCS#12 encoding** — pin the compatibility encoding + blocking first-build load
    test; `runmqktool` assembly fallback (§6).
 3. **In-house identity** — partial-DN `SSLPEER` (stable `O`/`OU`, per-arm `CN`),
