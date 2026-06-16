@@ -1,6 +1,6 @@
 # Lab PKI / TLS Certificate Provider — Design
 
-> **Status:** design, first pass — brainstormed 2026-06-16.
+> **Status:** design, first pass — brainstormed & pushback-reviewed 2026-06-16.
 > **Date:** 2026-06-16
 > **Author:** Phillip Moore (with Claude)
 > **Tracking issue:** #201
@@ -65,6 +65,15 @@ over shell" principle (native `openssl_privatekey`, `openssl_csr`,
 `x509_certificate`, `openssl_pkcs12` modules; re-runnable and drift-correcting; no
 cobbled `openssl` shell pipelines).
 
+**Prerequisite — provision the collection reproducibly (do not hand-install).**
+`community.crypto` (and its `cryptography` Python dependency) **must be declared in
+the `[vm.vergil-user]` profile in `vergil.toml`**, not hand-installed in a live VM.
+This is a hard requirement, not a detail: a hand-installed Ansible collection
+already **vanished on a VM rebuild once** (#156), and the lab's **cold-rebuild
+acceptance gate** means the provider must come up one-pass on a fresh VM. An
+undeclared collection passes on a warm VM and breaks the security foundation on the
+next rebuild. Declaring it in the profile is the only reproducible path.
+
 The provider, run from a committed **entity inventory**, does this per run:
 
 1. **Build the two org root CAs** — `client-org` and `dtcc-org`, each a private
@@ -103,21 +112,32 @@ client-org Root CA                      dtcc-org Root CA
 
 ## 5. Entity inventory & naming (base lab)
 
-Driven by a committed inventory; DN scheme **`O=<org>, CN=<entity>`** so downstream
-`SSLPEER`/`CHLAUTH` DN matching has real structure to match.
+Driven by a committed inventory. **DN scheme: `O=<org>, OU=<service>, CN=<entity>`.**
 
-| Org (`O=`) | Entity (`CN=`) | Role / why it needs a cert |
-|---|---|---|
-| `client-org` | `QMPCMK` | Pacemaker-arm in-house QM (server cert; cross-org channel to DTCC) |
-| `client-org` | `QMRDQM` | RDQM-arm in-house QM (server cert; cross-org channel to DTCC) |
-| `client-org` | `app-client` | MQI client, mutual TLS over SVRCONN |
-| `client-org` | `mq_prometheus` | exporter client, TLS SVRCONN to the QM |
-| `client-org` | `mqweb` | admin REST API / web endpoint TLS (per the existing `mqwebuser.xml` sslRef) |
-| `client-org` | `pymqrest` | content-plane client; must trust the `mqweb` cert |
-| `dtcc-org` | `QMDTCC` | DTCC-sim service QM (server cert; cross-org channel to the in-house QMs) |
+**In-house identity toward DTCC (partial-DN matching).** The in-house clearing QMs
+across arms (`QMPCMK`, `QMRDQM`, later `QMNATIVE`) share a stable
+**`O=client-org, OU=clearing-service`** while keeping **distinct per-arm `CN`s**.
+DTCC pins **one** peer rule via a **partial-DN `SSLPEER`** on the `O`/`OU` (the `CN`
+is free to vary) — faithful single-counterparty onboarding **without** collapsing
+the per-arm identities, so the arm-namespacing concurrency capability (pivot §3.4)
+is preserved. *(Whether real DTCC pins full- or partial-DN is an onboarding /
+Bucket-A verification; the lab models partial-DN, the more flexible choice. The
+actual `SSLPEER` rule is configured in the downstream channel-security spec; the
+**DN structure** is pinned here so certs need no reissue.)*
 
-*(QMNATIVE / OpenShift Route + CRR endpoint certs are the future extension — same
-provider, new inventory entries.)*
+| Org (`O=`) | Entity (`CN=`) | Needs | Role |
+|---|---|---|---|
+| `client-org` | `QMPCMK` | personal + trust | Pacemaker-arm in-house QM; cross-org channel to DTCC |
+| `client-org` | `QMRDQM` | personal + trust | RDQM-arm in-house QM; cross-org channel to DTCC |
+| `client-org` | `app-client` | personal + trust | MQI client, mutual TLS over SVRCONN |
+| `client-org` | `mq_prometheus` | personal + trust | exporter client, TLS SVRCONN to the QM |
+| `client-org` | `mqweb` | personal | admin REST/web endpoint server cert (existing `mqwebuser.xml` sslRef) |
+| `client-org` | `pymqrest` | **trust-only** | REST client; authenticates by basic/LTPA, so it needs the org **CA bundle**, not a personal cert (unless mTLS-to-REST is added later) |
+| `dtcc-org` | `QMDTCC` | personal + trust | DTCC-sim service QM; cross-org channel to the in-house QMs |
+
+"trust" = the signer/CA certs that entity must hold (own org CA; plus the other
+org's CA for cross-org peers — §4). *(QMNATIVE / OpenShift Route + CRR endpoint
+certs are the future extension — same provider, new entries.)*
 
 ## 6. Key repository — PKCS#12, end to end
 
@@ -133,6 +153,18 @@ detour.** `community.crypto`'s `openssl_pkcs12` builds the keystore directly; th
 QM is configured with `SSLKEYR` → the PKCS#12 path and `KEYRPWD` → its password
 (runtime-injected, §7). No CMS key database, no `runmqakm` import step. The
 tooling choice (§3) and the keystore format are aligned by MQ's own direction.
+
+**Encoding interop — pin it, don't hope (the most likely first-build blocker).**
+`openssl_pkcs12` runs on OpenSSL 3.x, whose PKCS#12 defaults (AES-256-CBC + SHA-256
+MAC) can be **rejected by MQ's GSKit**, which historically wants the legacy
+3DES/RC2 + SHA-1 encoding. So the design **pins the PKCS#12 encryption explicitly**
+(`community.crypto`'s `encryption_level`/iteration/MAC controls — compatibility
+encoding) rather than relying on OpenSSL 3.x defaults, and makes **"build one
+keystore and load it in the licensed MQ" a blocking first-build check** before the
+full provider is built. **Fallback if the params won't cooperate:** produce PEM with
+`community.crypto` and assemble the final keystore with MQ's own **`runmqktool`**
+(9.4's PKCS#12 tool) — guaranteed-compatible encoding, at the cost of re-introducing
+one MQ tool into the otherwise end-to-end-Ansible pipeline.
 
 **References (verify):**
 
@@ -188,14 +220,22 @@ foundation is stable.
 ## 9. Where it sits
 
 - **Bring-up plane (Ansible).** The provider role generates the certs/keystores,
-  distributes each entity's PKCS#12 to its host, and configures `SSLKEYR` /
-  `KEYRPWD` on each QM (via `crtmqm`/`ALTER QMGR` or `pymqrest`).
+  distributes each entity's PKCS#12 to its host, and sets `SSLKEYR` / `KEYRPWD` on
+  each QM via **`runmqsc` / `ALTER QMGR`** — the QMGR-level config pattern the
+  existing roles already use (`mq-qmgr`, `mq-pcmk-qmgr`). (`pymqrest` is the
+  *content* plane — queues/channels — not QMGR-level repo config.)
 - **CLI surface.** An **`mqlab pki`** command group wraps the playbook (the repo's
   CLI-wraps-playbook pattern): `create-ca`, `issue`, `list`, plus the deferred
   `report`/`renew` (§8.2) when that follow-up lands.
 - **Content plane (downstream, separate spec).** Channel `SSLCIPH`,
   `CHLAUTH`/`SSLPEER` peer mapping, and mqweb TLS wiring *consume* these keystores
   — the "derive it easily" layer, not this spec.
+- **Coupled downstream change (REST plane).** Adopting CA-signed `mqweb` certs is a
+  *coordinated* change: every REST client currently runs `verify_tls=False` against
+  self-signed `mqweb` (authoritative §8.3) and must flip to **trust the org CA
+  bundle** when `mqweb` adopts a CA cert. Sequence the `pymqrest`/exporter trust-flip
+  with `mqweb` cert adoption so nothing silently breaks. (Provider issues the certs
+  here; the wiring + flip are downstream.)
 
 ## 10. Fidelity to GOV1683-24
 
@@ -207,19 +247,36 @@ the goal is "representative, not toy."
 
 ## 11. Risks & open questions
 
-- **`community.crypto` PKCS#12 ↔ MQ interop (verify on first build).** The verified
-  docs say MQ 9.3+ accepts PKCS#12 for `SSLKEYR`; confirm a `community.crypto`-built
-  PKCS#12 (bag attributes, friendly names, encryption algorithm) loads cleanly in
-  the licensed MQ version — a known fiddly spot. Cold-rebuild acceptance gate
-  applies.
+- **Collection provisioning (#156).** `community.crypto` + `cryptography` must be
+  declared in the `[vm.vergil-user]` profile (§3) — a hand-installed collection
+  vanished on a rebuild before (#156). Undeclared = passes warm, breaks on the cold
+  rebuild. First-class cold-rebuild gate item.
+- **PKCS#12 ↔ GSKit encoding (most likely first-build blocker).** OpenSSL 3.x
+  PKCS#12 defaults can be rejected by MQ's GSKit; mitigated by pinning the
+  compatibility encoding and a blocking first-build load test, with `runmqktool`
+  assembly as the fallback (§6).
 - **Deferred expiry/rotation (§8.2)** — the biggest owed risk; logged, off the
   critical path, must be revisited before anything lives a year.
 - **Two-org trust correctness** — the whole point is to catch trust-config bugs;
-  the downstream channel spec must actually exercise cross-org `SSLPEER` matching,
-  not just plaintext-with-certs-present.
+  the downstream channel spec must exercise cross-org **partial-DN `SSLPEER`**
+  matching (§5), not just plaintext-with-certs-present.
 - **`KEYRPWD` handling** — PKCS#12 lacks a stash file, so the password must reach
   the QM at runtime securely; reuse the existing runtime-injection pattern, keep it
   out of git.
+
+### Pushback resolutions (2026-06-16)
+
+A `paad:pushback` review hardened this spec — 5 findings, all resolved:
+
+1. **Collection provisioning** — declare `community.crypto` + `cryptography` in the
+   VM profile; cold-rebuild gate item (§3, §11).
+2. **PKCS#12 encoding** — pin the compatibility encoding + blocking first-build load
+   test; `runmqktool` assembly fallback (§6).
+3. **In-house identity** — partial-DN `SSLPEER` (stable `O`/`OU`, per-arm `CN`),
+   preserving the arm concurrency capability (§5).
+4. **mqweb coupling** — issue the certs, but sequence the `verify_tls=False` → CA-trust
+   flip as a downstream change (§9).
+5. **Precision** — `SSLKEYR`/`KEYRPWD` set via `runmqsc`; `pymqrest` is trust-only (§5, §9).
 
 ## 12. Definition of done & next steps
 
