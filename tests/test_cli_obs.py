@@ -147,6 +147,8 @@ def test_obs_open_prints_url_and_tunnel():
     assert "http://10.50.0.2:3000" in result.stdout
     assert "-L 3000:10.50.0.2:3000" in result.stdout
     assert "limactl list" in result.stdout
+    assert "/explore" in result.stdout
+    assert "mqlab-requester" in result.stdout
 
 
 def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):

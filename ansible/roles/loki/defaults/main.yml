@@ -1,0 +1,6 @@
+---
+loki_version: "3.1.1"  # confirm current stable in Task 11; URL must resolve
+loki_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+loki_pkg: "loki-linux-{{ loki_arch }}"
+loki_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/{{ loki_pkg }}.zip"
+loki_retention: "24h"   # lab-ephemeral, mirrors prometheus_retention

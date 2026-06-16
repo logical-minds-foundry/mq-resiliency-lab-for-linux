@@ -347,6 +347,8 @@ def obs_open() -> None:
     """Print the Grafana URL and how to reach it from your workstation."""
     typer.echo(f"Grafana:   {GRAFANA_URL}  (directly reachable inside the Vergil VM)")
     typer.echo(f"Dashboard: {GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
+    typer.echo(f"Live tail: {GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
+    typer.echo('           query {unit="mqlab-requester"} and toggle Live)')
     typer.echo("")
     typer.echo("obs is a guest *inside* the Vergil VM, so forward a port through the VM.")
     typer.echo("On your workstation:")
