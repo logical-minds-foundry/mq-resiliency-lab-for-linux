@@ -36,6 +36,7 @@ MATRIX: dict[str, dict[str, Support]] = {
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
 }
 
+
 def supported(arm: str, verb: str) -> Support:
     try:
         return MATRIX[arm][verb]

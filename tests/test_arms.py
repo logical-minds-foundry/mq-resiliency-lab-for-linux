@@ -59,8 +59,12 @@ def test_arm_of_raises_for_arm_agnostic_setup(monkeypatch, tmp_path):
 def test_resolve_verb_returns_kind_and_value(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
-    assert resolve_verb("pcmk_san_ha", "qm-create") == VerbImpl(kind="playbook", value="site-pcmk-qm.yml")
-    assert resolve_verb("pcmk_san_ha", "qm-up") == VerbImpl(kind="pcs", value="resource enable mq_group")
+    assert resolve_verb("pcmk_san_ha", "qm-create") == VerbImpl(
+        kind="playbook", value="site-pcmk-qm.yml"
+    )
+    assert resolve_verb("pcmk_san_ha", "qm-up") == VerbImpl(
+        kind="pcs", value="resource enable mq_group"
+    )
 
 
 def test_resolve_verb_unsupported_raises(monkeypatch, tmp_path):

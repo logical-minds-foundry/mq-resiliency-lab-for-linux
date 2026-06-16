@@ -39,7 +39,11 @@ def lab_arms() -> dict[str, Arm]:
     arms: dict[str, Arm] = {}
     for name, cfg in (_topology().get("arms") or {}).items():
         cfg = cfg or {}
-        arms[name] = Arm(name=name, mechanism=cfg.get("mechanism", ""), verbs=cfg.get("verbs") or {})
+        arms[name] = Arm(
+            name=name,
+            mechanism=cfg.get("mechanism", ""),
+            verbs=cfg.get("verbs") or {},
+        )
     return arms
 
 
