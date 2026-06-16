@@ -108,6 +108,11 @@ build (§4) is its proof.
   replaces the DMZ gateway. Access is limited and inspectable by the mechanisms
   the security team already trusts (NetworkPolicies, ingress/Route config,
   mTLS) — which is *why* they will exempt it from the DMZ.
+- **Two controlled boundaries, named honestly.** The deployment involves *two*
+  cross-cluster network paths, not one: the client/DTCC **ingress** (Routes,
+  §4.5) and the **inter-region CRR replication link** (TLS, async, §4.4). Each is
+  a set of firewall holes the security team blesses; naming both up front is more
+  honest than implying a single boundary.
 - **Bare metal eliminated.** Workloads are pods on the existing OpenShift
   estate; no DMZ-specific bare-metal footprint to provision and hand-maintain.
 - **Supportability preserved.** This is the **IBM-recommended** deployment shape
@@ -172,22 +177,53 @@ failover. Kubernetes handles scheduling and node-failure response; Native HA own
 the MQ-level quorum, log replication, and failover. This is the IBM-recommended
 shape and the thing to model faithfully (Operator + CRD + RHCOS + `oc`).
 
-### 4.4 DR — cross-site async replication
+### 4.4 DR — Native HA Cross-Region Replication (CRR)
 
-Cross-site DR replicates from the DC-A Native HA group to a DC-B recovery group,
-**asynchronously** (same WAN-latency reasoning as RDQM DR, §4.2 of the
-authoritative design: synchronous across out-of-region sites is impractical →
-non-zero RPO → a message-loss window the app must reconcile, §4.3). Cutover and
-failback drills mirror the §3.1 fault suite, steps 7 (full-site DR) and 9
-(planned, reversible role rotation).
+*(Validated against IBM docs 2026-06-16; re-verify against the licensed version
+per trust-but-verify. References in §4.4.1.)*
 
-> ⚠️ **Trust-but-verify (the riskiest unknown).** The *exact* IBM mechanism for
-> Native HA cross-region DR — its configuration surface in the `QueueManager`
-> CRD, its supported topologies, and its RPO characteristics — is **not asserted
-> here from memory.** It gets the same discipline §4.4 of the authoritative
-> design applies to RDQM: validate against IBM MQ 9.4 docs, cite for re-check
-> against the licensed version. This is the first item on the lab's own research
-> agenda (§6 bucket C) and the natural next brainstorming drill-down.
+The IBM-supported DR mechanism is **Native HA Cross-Region Replication (CRR)**,
+introduced in **MQ 9.4.2** (a Continuous Delivery release, Feb 2025).
+
+- **Topology.** Two Native HA groups — a **Live** group and a **Recovery**
+  group — each a 3-pod quorum, in **two separate Kubernetes/OpenShift clusters**:
+  6 pods across two clusters, mapping exactly onto the existing 3+3 two-DC
+  topology (§4.2).
+- **Replication model.** **Local replication is synchronous** (RPO 0 within a
+  group/site); **cross-region replication is asynchronous** (the active QM
+  updates local replicas, then ships deltas to the remote region) → non-zero RPO,
+  a message-loss window the app must reconcile (§4.3 of the authoritative
+  design). This is the **same sync-HA / async-DR split as RDQM** — §4.2's
+  analysis transfers wholesale.
+- **Roles & operations.** Live/Recovery roles are swappable. **Planned
+  switchover** swaps the roles via config; **unplanned failover** promotes
+  Recovery to Live and sets `nativeHAGroups.remotes.enabled: false`. **Both are
+  manual config operations**, not automatic cross-region failover — the same
+  operational shape as RDQM's manual `rdqmdr`, mapping onto the `mqlab dr`
+  `cutover`/`failback` verbs (§3.3 of the pivot contract).
+- **Config surface.** The **`QueueManager` CRD** (`nativeHAGroups.remotes` —
+  addresses + TLS), with advanced options via INI. Replication between sites is
+  TLS-secured.
+- **Composition.** A Native HA QM "appears to MQ clustering as a single node,"
+  and CRR extends recovery across regions — clustering + Native HA + CRR layer
+  cleanly.
+- **Drills.** Planned switchover → §3.1 step 9 (reversible role rotation);
+  unplanned failover → step 7 (full-site disaster) + the §4.3 RPO-window
+  reconciliation.
+
+**The inter-region replication link is a second controlled cross-cluster
+boundary** (distinct from the §4.5 client/DTCC ingress): the CRR replication
+endpoints connect cluster-A ↔ cluster-B over the simulated WAN, TLS-secured.
+**Open sub-fork:** how the replication endpoints are exposed per cluster (Route
+vs LoadBalancer) — the next DR design decision.
+
+#### 4.4.1 References (verify against the licensed version)
+
+- Native HA CRR overview — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=containers-native-ha-cross-region-replication>
+- Configuring Native HA CRR using the MQ Operator — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=operator-configuring-native-ha-crr-using-mq>
+- Adding a recovery group to an existing Native HA config (Operator) — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=chaqmumo-example-adding-recovery-group-existing-native-ha-configuration-using-mq-operator>
+- CRR switchover & failover — <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=operating-native-ha-crr-switchover-failover>
+- MQ 9.4.3 announcement (CRR add-on licensing) — <https://www.ibm.com/new/announcements/enhancing-security-productivity-and-resilience-with-ibm-mq-9-4-3>
 
 ### 4.5 Ingress — the DMZ-replacement boundary
 
@@ -266,6 +302,11 @@ firm.
   DR layer alongside, or instead of, MQ-native DR. This is why it leads the
   question bank (§6 bucket A).
 
+**Confirmed 2026-06-16:** IBM's own DR answer for Native HA *is* MQ-owns-DR —
+**CRR** (§4.4), asynchronous, MQ-layer replication. The piggyback judgment holds;
+the only open part is whether the firm mandates a platform DR pattern we must
+*also* accommodate.
+
 ## 6. Gap-analysis question bank
 
 The lab proves a *concept*; its value depends on knowing where the lab diverges
@@ -290,6 +331,11 @@ Kubernetes practice.
 - **Security specifics:** what exactly do they require to "control and limit
   access" (NetworkPolicies, ingress type, mTLS, egress), and is the
   DMZ-exemption-for-Kubernetes blessed **in writing**?
+- **Release stream — LTS or CD?** CRR (the DR mechanism, §4.4) is **CD-only
+  (9.4.2+), not in 9.4.0 LTS**, and is a **paid license add-on**. Which stream
+  will they run, and is the CRR add-on budgeted? *(Unknown as of 2026-06-16; the
+  author is asking the firm today. Pivotal — it gates the timeline of the whole
+  play, §7.)*
 
 ### Bucket B — the third-party gateway & the DTCC interface (answerable, but from the vendor relationship / contract / DTCC, not internal MQ staff)
 The one place MQ-adjacent reality exists today.
@@ -307,7 +353,10 @@ The one place MQ-adjacent reality exists today.
 No internal MQ expertise exists, so these become the lab's job, informed by IBM
 docs and the engagement.
 
-- The exact MQ **Native HA DR mechanism** (§4.4 — the riskiest unknown).
+- **Resolved 2026-06-16: the DR mechanism is CRR** (§4.4). Remaining: verify
+  **MQ Advanced for Developers unlocks CRR** for non-prod lab use, and confirm the
+  **CRR replication-endpoint exposure** cross-cluster (Route vs LoadBalancer,
+  ports, TLS).
 - MQ Operator + Native HA CRD + Routes specifics on OpenShift.
 - Whether MQ-owns-DR or platform-DR is right, *given* what Bucket A reveals.
 
@@ -323,9 +372,18 @@ Listed explicitly so no one mistakes silence for an oversight.
 
 ## 7. Risks & open questions
 
-- **Native HA DR is the riskiest unknown** (§4.4) — newer, less-proven, and
-  carries the learning cost the pivot flagged (#187 §6). Resolve by IBM-doc
-  research before any build.
+- **CRR is Continuous-Delivery-only and a paid add-on (headline risk).** *(Data)*
+  CRR landed in **MQ 9.4.2 (CD, Feb 2025)** — it is **not in the 9.4.0 LTS**
+  baseline Appendix C assumes — and it is a **paid production license add-on**
+  (expanded for K8s/OpenShift in 9.4.3). *(Judgment)* For a risk-averse,
+  LTS-preferring firm needing this by October, that is a real tension: they must
+  run a CD stream or wait for the next LTS to roll CRR up. **The firm's CD-vs-LTS
+  posture is currently unknown and pivotal** — it gates the timeline of the whole
+  play. Question raised to the firm (§6 bucket A, author asking 2026-06-16);
+  verify the lab dev-entitlement unlocks CRR before building (§6 bucket C).
+- **CRR is newer/less-proven** (~16 months old at writing) — confirms the
+  learning-cost flag (#187 §6); the DR *mechanism* is now understood (§4.4), but
+  hands-on operational experience is still to be earned in the lab.
 - **Feasibility of multi-node OKD on arm64 nested libvirt** (§4.7) — gated by the
   Phase-A spike; SNO-per-DC is the documented fallback.
 - **arm64-lab vs x86-prod arch gap** — believed immaterial (§6); confirm via
@@ -351,6 +409,8 @@ Settled in brainstorming (2026-06-16):
 4. Ingress: **OpenShift Routes** (settles the earlier LB-vs-ingress fork). ✅
 5. App slot: **`QMNATIVE`** replaces the in-house HA QM in the distributed mesh.
    ✅
+6. DR mechanism: **Native HA CRR** validated (§4.4) — two clusters,
+   sync-local/async-cross, manual switchover/failover via the CRD. ✅
 
 Defaults recommended, to confirm:
 
@@ -366,8 +426,11 @@ Defaults recommended, to confirm:
 - This design + the gap-analysis question bank captured and committed (PR into
   `develop`, issue #198). ✅ on merge.
 - Natural next brainstorming drill-downs, in priority order:
-  1. **The Native HA DR mechanism** (§4.4) — research against IBM 9.4 docs; the
-     riskiest unknown and the gate on the DR half of the design.
+  1. **CRR replication-endpoint exposure** (§4.4 open sub-fork) — Route vs
+     LoadBalancer for the inter-cluster replication link, and how it maps onto the
+     simulated WAN.
   2. **The strategic framing** (§3) — sharpen the pitch surface for the firm.
+  - *Pending external input:* the firm's **CD-vs-LTS posture** (§6 bucket A),
+    which the author is asking today and which gates the timeline.
 - Implementation planning (writing-plans) is **not** triggered yet: build is
   gated behind the RDQM/Pacemaker framework proof (§2) and the §4.7 spike.
