@@ -12,16 +12,28 @@ from typing import TYPE_CHECKING, Annotated
 import typer
 from rich.console import Console
 
+from mqlab import parity
+from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
-from mqlab.paths import lab_network, lab_script, repo_root
+from mqlab.paths import lab_network, lab_script, repo_root, reports_dir, runs_dir
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
 from mqlab.runner import Command, SubprocessRunner
+from mqlab.runplan import baseline_run_plan
+from mqlab.runreport import (
+    RunReport,
+    append_index,
+    capture_metadata,
+    read_commit,
+    read_config_digest,
+    read_versions,
+    write_bundle,
+)
 from mqlab.setups import lab_setups, setup_members
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
@@ -31,7 +43,7 @@ if TYPE_CHECKING:
 
     from mqlab.orchestrator import Pauser
     from mqlab.runner import CommandRunner
-    from mqlab.setups import QmConfig
+    from mqlab.setups import QmConfig, Setup
 
 
 @dataclass
@@ -911,6 +923,65 @@ def qm_down(setup: str) -> None:
 def qm_status(setup: str) -> None:
     """Show the QM's HA resource state — pcs status resources."""
     _qm_pcs(setup, "pcs status resources", "qm-status")
+
+
+@app.command("parity")
+def parity_matrix() -> None:
+    """Print the cross-arm capability matrix (which verbs each arm supports)."""
+    typer.echo(parity.render_markdown())
+
+
+def _lookup_setup_or_exit(name: str) -> Setup:
+    setup = lab_setups().get(name)
+    if setup is None:
+        typer.echo(f"no setup named {name!r}", err=True)
+        raise typer.Exit(code=2)
+    return setup
+
+
+_Seconds = Annotated[int, typer.Option("--seconds", help="flow duration in seconds")]
+_Rate = Annotated[int, typer.Option("--rate", help="messages per second")]
+
+
+@app.command("run")
+def run_setup(  # pragma: no cover - drives the live lab; proven by the integration gate
+    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed)")],
+    seconds: _Seconds = 30,
+    rate: _Rate = 20,
+    step: _StepFlag = False,
+) -> None:
+    """Drive one no-fault baseline run of a setup and write a timestamped report
+    bundle stamped with (setup x config x commit) under build/reports/."""
+    setup = _lookup_setup_or_exit(setup_name)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = runs_dir() / f"{timestamp}-{setup.name}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    steps = baseline_run_plan(setup, run_dir, seconds=seconds, rate=rate)
+    _execute("run", steps, step_mode=step)  # raises typer.Exit on any step failure
+
+    firm = Ledger.read_jsonl(run_dir / "firm.jsonl")
+    dtcc = Ledger.read_jsonl(run_dir / "dtcc.jsonl")
+    facts = reconcile(
+        firm, dtcc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
+    )
+    assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
+    scenario = build_report(
+        "BASELINE", parity.provisional_arm(setup.name), facts, peak_exposure=peak_exposure(firm)
+    )
+    metadata = capture_metadata(
+        setup.name,
+        timestamp,
+        commit_reader=read_commit,
+        digest_reader=lambda: read_config_digest(
+            [repo_root() / "lab" / "topology.yaml", inventory_path()]
+        ),
+        version_reader=read_versions,
+    )
+    report = RunReport(metadata=metadata, scenarios=[scenario])
+    bundle = write_bundle(report, reports_dir())
+    append_index(report, bundle, reports_dir())
+    typer.echo(f"run report written: {bundle}")
 
 
 def main() -> None:

@@ -26,6 +26,11 @@ def runs_dir() -> Path:
     return repo_root() / "build" / "runs"
 
 
+def reports_dir() -> Path:
+    """Where run-report bundles are written — under the gitignored build/ tree."""
+    return repo_root() / "build" / "reports"
+
+
 def lab_script(name: str) -> Path:
     """Absolute path to a script under lab/scripts/."""
     return repo_root() / "lab" / "scripts" / name
