@@ -10,3 +10,13 @@
   roles:
     - node-exporter
     - {role: net-reach, when: reach_peers | length > 0}
+    # Cluster-state collector (#177) — only on the PCMK arm. A SINGLE role entry with
+    # the role chosen by group membership: Ansible dedupes a role listed twice in one
+    # play (allow_duplicates defaults false), which silently skipped the cluster nodes.
+    # SAN nodes probe drbd/daemons; pcmk nodes probe crm/stonith/iscsi/daemons.
+    - role: cluster-state
+      vars:
+        cluster_state_role: "{{ 'storage' if ('san_a' in group_names or 'san_b' in group_names) else 'cluster' }}"
+      when: >-
+        'pcmk_a' in group_names or 'pcmk_b' in group_names
+        or 'san_a' in group_names or 'san_b' in group_names

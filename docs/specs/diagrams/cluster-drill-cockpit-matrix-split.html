@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCMK Cluster — role-split, both DR sites</title>
+<style>
+  :root{color-scheme:dark}
+  body{background:#0a0c10;color:#e6edf3;font-family:-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:26px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:21px;margin:0 0 3px}
+  .subtitle{color:#8b93a1;font-size:13.5px;margin:0 0 18px}
+  h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8b93a1;margin:20px 0 7px;border-bottom:1px solid #232833;padding-bottom:4px}
+  .chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:#fff;line-height:1.6}
+  .g{background:#2f9e44}.a{background:#e0922e}.r{background:#d83c3e}.x{background:#3a4150}.b{background:#2f6fed}
+  .cockpit{background:#0e1116;border:1px solid #2a2f3a;border-radius:8px;padding:12px}
+  .statusbar{display:flex;gap:10px;flex-wrap:wrap}
+  .scard{background:#11161d;border:1px solid #232833;border-radius:7px;padding:8px 12px;flex:1;min-width:150px}
+  .scard .k{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:#8b93a1}
+  .scard .v{font-size:14px;font-weight:700;margin-top:2px}
+  .scard.active{box-shadow:0 0 0 2px #2f9e44 inset}
+  .scard.standby{box-shadow:0 0 0 2px #3a4150 inset}
+  .scard.spine{background:#161b22;border:1px dashed #3a4150}
+  table{border-collapse:collapse;width:100%}
+  td,th{border:1px solid #232833;padding:5px 8px;text-align:center;font-size:11px;white-space:nowrap}
+  th{color:#8b93a1;font-weight:600;background:#11161d;font-size:10px;letter-spacing:.03em}
+  th.grp{background:#161b22;color:#aeb6c2}
+  td.node,th.node{text-align:left;color:#c9d1d9;font-weight:600}
+  tr.band td{background:#11161d;text-align:left;color:#e6edf3;font-weight:700;font-size:10.5px;letter-spacing:.05em}
+  .dash{color:#3f4651}
+  .note{color:#8b93a1;font-size:12.5px;margin-top:8px}
+  .legend{margin-top:14px;font-size:11px;color:#8b93a1}
+  .legend .chip{margin-right:3px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>PCMK Cluster — role-split, both DR sites <span class="chip b">revised</span></h1>
+<p class="subtitle">Three sections — <b>cluster status</b> → <b>compute</b> (QM nodes) → <b>storage</b> (SAN) — each carrying only the columns its node-role needs. Both DR halves shown together: you watch the <i>pair</i>, confirming the standby side is healthy before any cutover. Snapshot = Site A active, Site B healthy standby. (Per-QM application detail is a separate board.)</p>
+
+<div class="cockpit">
+
+  <!-- ===== 1. CLUSTER STATUS ===== -->
+  <h2>① Cluster status — the HA/DR pair as a unit</h2>
+  <div class="statusbar">
+    <div class="scard active"><div class="k">site A</div><div class="v"><span class="chip g">ACTIVE</span></div>
+      <div style="font-size:11px;margin-top:3px"><span class="chip g">QUORATE 3/3</span> <span class="chip g">QMPCMK @ pcmk-a3</span></div></div>
+    <div class="scard spine"><div class="k">cross-site DRBD</div><div class="v" style="color:#2f9e44">A ➜ B</div>
+      <div style="font-size:11px;margin-top:3px"><span class="chip g">Connected</span> 100% · RPO 0 KiB</div></div>
+    <div class="scard standby"><div class="k">site B</div><div class="v"><span class="chip x">STANDBY</span></div>
+      <div style="font-size:11px;margin-top:3px"><span class="chip g">QUORATE 3/3</span> <span class="chip x">QMPCMK stopped</span></div></div>
+    <div class="scard"><div class="k">integrity</div><div class="v"><span class="chip g">OK</span></div>
+      <div style="font-size:10px;color:#8b93a1;margin-top:3px">no split-brain</div></div>
+  </div>
+
+  <!-- ===== 2. COMPUTE ===== -->
+  <h2>② Compute — queue-manager nodes (Pacemaker), both sites</h2>
+  <table>
+    <tr>
+      <th class="node" rowspan="2">node</th>
+      <th class="grp" colspan="4">node health</th>
+      <th class="grp" colspan="4">resource group — lights on the active node</th>
+    </tr>
+    <tr>
+      <th>corosync</th><th>pacemaker</th><th>iSCSI</th><th>fence</th>
+      <th>mq_fs</th><th>mq_vip</th><th>mq_vip_ext</th><th>mq_qm</th>
+    </tr>
+    <tr class="band"><td colspan="9">▌ SITE A — active</td></tr>
+    <tr><td class="node">pcmk-a1</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td class="node">pcmk-a2</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td class="node">pcmk-a3 ★</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●</span></td><td><span class="chip g">●</span></td><td><span class="chip g">RUNNING</span></td></tr>
+    <tr class="band"><td colspan="9">▌ SITE B — standby (healthy, ready to receive)</td></tr>
+    <tr><td class="node">pcmk-b1</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td class="node">pcmk-b2</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+    <tr><td class="node">pcmk-b3</td><td><span class="chip g">ring</span></td><td><span class="chip g">online</span></td><td><span class="chip g">2/2</span></td><td><span class="chip g">ok</span></td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+  </table>
+  <div class="note">Both 3-node clusters in one table, banded by site. Site A's ★ active node carries the QM group; Site B sits quorate and online in standby with the group unplaced (DRBD secondary — Pacemaker physically can't start it there). A DR cutover reads as the four ● cells jumping from a Site-A row to a Site-B row.</div>
+
+  <!-- ===== 3. STORAGE ===== -->
+  <h2>③ Storage — SAN (DRBD-replicated iSCSI target), both sites</h2>
+  <table>
+    <tr>
+      <th class="node">node</th>
+      <th>DRBD role</th><th>disk</th><th>connection</th><th>resync</th><th>out-of-sync (RPO)</th><th>iSCSI target</th><th>drbd svc</th>
+    </tr>
+    <tr><td class="node">san-a</td><td><span class="chip g">Primary</span></td><td><span class="chip g">UpToDate</span></td><td><span class="chip g">Connected</span></td><td><span class="chip g">100%</span></td><td><span class="chip g">0 KiB</span></td><td><span class="chip g">serving</span></td><td><span class="chip g">active</span></td></tr>
+    <tr><td class="node">san-b</td><td><span class="chip x">Secondary</span></td><td><span class="chip g">UpToDate</span></td><td><span class="chip g">Connected</span></td><td><span class="chip g">100%</span></td><td><span class="chip g">0 KiB</span></td><td><span class="chip x">standby</span></td><td><span class="chip g">active</span></td></tr>
+  </table>
+  <div class="note">Storage-only columns: DRBD replication direction/state + the RPO tail + whether each SAN is serving its LUN. The cross-site DRBD link (san-a ⇄ san-b) is the row-pair you watch during a DR drill. (Current site-A-only lab: no DRBD peer yet, so san-b + the DRBD cells read STALE/n-a — correctly.)</div>
+
+  <div class="legend"><span class="chip g">healthy / active</span><span class="chip a">transitional</span><span class="chip r">down / alarm</span><span class="chip x">standby / n-a</span> · ★ = active node · <span class="dash">—</span> = service not running here</div>
+</div>
+
+<p class="note" style="margin-top:16px"><b>Scales by role, not by node:</b> compute and storage each have their own homogeneous table; both DR halves live in those same tables, banded by site, so the pair is always visible. Adding a tier later (app/DB) = another role-section, never new columns on unrelated nodes. The per-QM application detail stays on a separate board.</p>
+</div>
+</body>
+</html>
