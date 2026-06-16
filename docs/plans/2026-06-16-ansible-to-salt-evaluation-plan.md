@@ -65,7 +65,7 @@ Expected: empty (no tracked changes).
 
 - [ ] **Step 1: Write the report skeleton with all section headers and the matrix**
 
-Create `REPORT` with the structure below. The matrix lists **every** idiom from the footprint (spec §2/§4.1); fill the *Equivalent* column from the spec's draft mappings; set every *Coverage* cell to `paper-only` for now (Task 8 promotes the spike-touched ones); leave *Weight (hrs)* as your first paper estimate using the 1/3/5 ordinal (1 ≈ trivial 1:1 swap, 3 ≈ rework+test, 5 ≈ hard re-modelling).
+Create `REPORT` with the structure below. The matrix lists **every** idiom from the footprint (spec §2/§4.1); fill the *Equivalent* column from the spec's draft mappings; set every *Coverage* cell to `paper-only` for now (Task 8 promotes the spike-touched ones); leave *Weight (hrs)* as your first paper estimate using the 1/3/5 ordinal (1 ≈ trivial 1:1 swap, 3 ≈ rework+test, 5 ≈ hard re-modelling). **Write §2 (two-axis framing) now in full** — it is stable content from spec §3 and does not depend on the spike.
 
 ```markdown
 # Ansible → Salt migration evaluation — report
@@ -78,10 +78,19 @@ Create `REPORT` with the structure below. The matrix lists **every** idiom from 
 ## 1. Summary & recommendation
 <!-- filled in Task 11 -->
 
-## 2. Footprint under evaluation
+## 2. Two-axis framing
+
+The migration decomposes into two independent decisions (spec §3):
+
+- **Axis 1 — content authoring** (≈ all the effort, transport-independent): porting the Ansible roles/playbooks to SLS formulas. The SLS content is identical regardless of how it is delivered, so this cost is the same either way.
+- **Axis 2 — transport** (small, swappable): **salt-ssh is the baseline** — agentless, no master VM, footprint ≈ zero, preserving the lab's ephemeral/cold-rebuild model. **Master + minion is documented here as an optional later overlay**, not a prerequisite: it adds employer-fidelity and Salt's event-driven features (mine/reactor/beacons) at the cost of +1 master VM and a minion agent per node. Adding it later invalidates none of the Axis-1 work, and the SLS content one writes is byte-identical to what a master/minion shop writes — so employer-fidelity is *mostly* satisfied by Axis 1 alone.
+
+This framing is why the recommendation can separate "author the content cheaply on salt-ssh" from "adopt the agent model later, if ever."
+
+## 3. Footprint under evaluation
 <!-- 9 playbooks, 21 roles, 21 templates, ~2,260 lines, zero collections (spec §2) -->
 
-## 3. Translation matrix
+## 4. Translation matrix
 
 | Ansible idiom | Count | Salt equivalent | Confidence | Weight (hrs) | Coverage |
 |---|---|---|---|---|---|
@@ -101,16 +110,16 @@ Create `REPORT` with the structure below. The matrix lists **every** idiom from 
 | `ansible.cfg` | 1 | `Saltfile`/master config | … | … | paper-only |
 | `mqlab`→`ansible-playbook` | 1 | `mqlab`→`salt-ssh` | … | … | paper-only |
 
-## 4. Spike: prometheus role → SLS
+## 5. Spike: prometheus role → SLS
 <!-- filled in Task 8 -->
 
-## 5. Control-node tooling cost
+## 6. Control-node tooling cost
 <!-- filled in Task 9 -->
 
-## 6. Risk register & confidence bands
+## 7. Risk register & confidence bands
 <!-- filled in Task 10 -->
 
-## 7. Effort estimate & go/no-go
+## 8. Effort estimate & go/no-go
 <!-- filled in Task 11 -->
 ```
 
@@ -127,7 +136,7 @@ Expected: a frequency table (template/copy/systemd/command/shell/file/unarchive/
 - [ ] **Step 3: Verify no placeholders remain in the matrix rows**
 
 Run: `grep -n '…' docs/reports/2026-06-16-ansible-to-salt-evaluation.md`
-Expected: matches only in the `## 4/5/6/7` "filled in later" comment sections, **not** inside the Task-2 matrix rows. Every matrix cell except `Coverage` must hold a real value.
+Expected: matches only in the `## 5/6/7/8` "filled in later" comment sections, **not** inside the Task-2 matrix rows or §2. Every matrix cell except `Coverage` must hold a real value, and §2 (two-axis framing) must be fully written.
 
 - [ ] **Step 4: Commit**
 
@@ -421,11 +430,11 @@ Ensure `FINDINGS.md` contains, in order: (a) wall-clock person-hours for the por
 ### Task 8: Write the spike section and promote spike-validated matrix cells
 
 **Files:**
-- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§3 matrix, §4 spike)
+- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§4 matrix, §5 spike)
 
-- [ ] **Step 1: Write §4 (spike)** from `build/salt-spike/FINDINGS.md`: what was ported, the idempotency result, the friction list, and the measured wall-clock.
+- [ ] **Step 1: Write §5 (spike)** from `build/salt-spike/FINDINGS.md`: what was ported, the idempotency result, the friction list, and the measured wall-clock.
 
-- [ ] **Step 2: Promote the validated cells in §3**: for every idiom the spike exercised (per Task 7a/d), change `Coverage` from `paper-only` to `spike-validated` and adjust its `Weight (hrs)` to the spike-calibrated value. Leave cluster-coordination, cross-distro `apt`/`dnf`, and inter-host Jinja (`groups`/`hostvars`) as `paper-only`.
+- [ ] **Step 2: Promote the validated cells in §4**: for every idiom the spike exercised (per Task 7a/d), change `Coverage` from `paper-only` to `spike-validated` and adjust its `Weight (hrs)` to the spike-calibrated value. Leave cluster-coordination, cross-distro `apt`/`dnf`, and inter-host Jinja (`groups`/`hostvars`) as `paper-only`.
 
 - [ ] **Step 3: Verify the coverage split is honest**
 
@@ -441,12 +450,12 @@ vrg-commit --type docs --scope salt \
   --body "Spike section written; spike-exercised idioms promoted to spike-validated with calibrated weights; high-risk cells remain paper-only."
 ```
 
-### Task 9: Write the control-node tooling cost (§5)
+### Task 9: Write the control-node tooling cost (§6)
 
 **Files:**
-- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§5)
+- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§6)
 
-- [ ] **Step 1: Transcribe** `build/salt-spike/TOOLING.md` (Task 1) into report §5: install method, version, footprint, and the production-adoption paragraph (Salt into `[vm.vergil-user]`, bare-name `$PATH` from `mqlab`).
+- [ ] **Step 1: Transcribe** `build/salt-spike/TOOLING.md` (Task 1) into report §6: install method, version, footprint, and the production-adoption paragraph (Salt into `[vm.vergil-user]`, bare-name `$PATH` from `mqlab`).
 
 - [ ] **Step 2: Commit**
 
@@ -455,12 +464,12 @@ vrg-git add docs/reports/2026-06-16-ansible-to-salt-evaluation.md
 vrg-commit --type docs --scope salt --message "Control-node tooling cost line (#197)"
 ```
 
-### Task 10: Write the risk register with confidence bands (§6)
+### Task 10: Write the risk register with confidence bands (§7)
 
 **Files:**
-- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§6)
+- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§7)
 
-- [ ] **Step 1: Write §6** from spec §5, each risk carrying a confidence band. Mark the two widest-variance, paper-only risks explicitly:
+- [ ] **Step 1: Write §7** from spec §5, each risk carrying a confidence band. Mark the two widest-variance, paper-only risks explicitly:
   - `run_once`+`register` cluster coordination (pcs/DRBD/iSCSI) — not exercised by the spike; paper estimate, wide variance; name the candidate Salt pattern (orchestrate runner / mine / retained `cmd.run`).
   - Cross-distro `apt`/`dnf` → `pkg.installed` os_family split — the single-arch spike under-sampled it; paper-only.
   Plus: Jinja inter-host parity (`groups`/`hostvars`), roster generation from `topology.yaml`, `mqlab`+cold-rebuild integration.
@@ -472,20 +481,20 @@ vrg-git add docs/reports/2026-06-16-ansible-to-salt-evaluation.md
 vrg-commit --type docs --scope salt --message "Risk register + confidence bands (#197)"
 ```
 
-### Task 11: Compute the estimate and apply the go/no-go rubric (§7 + §1)
+### Task 11: Compute the estimate and apply the go/no-go rubric (§8 + §1)
 
 **Files:**
-- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§7, then §1)
+- Modify: `docs/reports/2026-06-16-ansible-to-salt-evaluation.md` (§8, then §1)
 
-- [ ] **Step 1: Roll up the estimate in §7**
+- [ ] **Step 1: Roll up the estimate in §8**
 
-Group the 21 roles into role-classes (e.g. *simple-provisioning* like `prometheus`/`node-exporter`/`grafana`/`loki`/`alloy`; *MQ-install/config*; *HA-coordination* like `pcmk-*`/`drbd-san`/`iscsi-*`/`rdqm-*`/`mq-pcmk-qmgr`). For each class, multiply representative per-role hours (spike-calibrated for simple-provisioning; paper for the rest) by the role count to get a **person-hours range**. Attach a confidence band per class; HA-coordination gets the widest. Sum to a total range.
+Group the 21 roles into role-classes (e.g. *simple-provisioning* like `prometheus`/`node-exporter`/`grafana`/`loki`/`alloy`; *MQ-install/config*; *HA-coordination* like `pcmk-*`/`drbd-san`/`iscsi-*`/`rdqm-*`/`mq-pcmk-qmgr`). For each class, multiply representative per-role hours (spike-calibrated for simple-provisioning; paper for the rest) by the role count to get a **person-hours range**. Attach a confidence band per class; HA-coordination gets the widest. Sum to a total range. **This estimate is the Axis-1 cost** — reference §2 so the reader connects the number to the framing.
 
-- [ ] **Step 2: Apply the rubric in §7**
+- [ ] **Step 2: Apply the rubric in §8**
 
-State the chosen person-hours **bar** (call this out as the human's decision input), then evaluate per spec §4.3: **Go** if total ≤ bar and no unresolved red hotspot; **Defer** if the only blocker is an unvalidated hotspot (name the targeted follow-up spike); **No-go** otherwise. Weigh the Axis-1 (authoring) cost against the Axis-2 (salt-ssh keeps footprint near-zero) and the benefit side (employer-fidelity, skills).
+State the chosen person-hours **bar** (call this out as the human's decision input), then evaluate per spec §4.3 against all four rubric dimensions: total authoring effort (Step 1); count/severity of red-confidence hotspots (§7); **footprint + cold-rebuild impact** — pull this explicitly from §7's `mqlab`+cold-rebuild risk and §2's Axis-2 (salt-ssh keeps footprint ≈ zero; the master/minion overlay is the only footprint cost, and it is optional); and employer-fidelity/skills value (§1 benefit side). Verdict: **Go** if total ≤ bar and no unresolved red hotspot; **Defer** if the only blocker is an unvalidated hotspot (name the targeted follow-up spike); **No-go** otherwise.
 
-- [ ] **Step 3: Write §1 summary** — the one-paragraph recommendation (go/defer/no-go), the headline person-hours range with its band, and the single biggest caveat (HA-coordination effort is paper-only).
+- [ ] **Step 3: Write §1 summary** — the one-paragraph recommendation (go/defer/no-go), the headline person-hours range with its band, the two-axis framing in one line (cheap salt-ssh authoring now; master/minion overlay deferred), and the single biggest caveat (HA-coordination effort is paper-only).
 
 - [ ] **Step 4: Commit**
 
@@ -503,7 +512,7 @@ vrg-commit --type docs --scope salt \
 
 - [ ] **Step 1: Check report against spec deliverables**
 
-Confirm the report delivers every spec output: go/no-go recommendation (§1), person-hours estimate with bands (§7), spike-validated/paper-only tagging on every matrix cell (§3), control-node cost (§5), risk register (§6). Fix any gap inline.
+Confirm the report delivers every spec output: go/no-go recommendation (§1), two-axis framing with master/minion overlay documented (§2, spec §3), person-hours estimate with bands (§8), spike-validated/paper-only tagging on every matrix cell (§4), control-node cost (§6), risk register (§7). Fix any gap inline.
 
 - [ ] **Step 2: Scan for leftover placeholders**
 
@@ -545,6 +554,6 @@ If `vrg-gh pr create` is denied for the agent, hand the exact command to the hum
 
 ## Self-review (author's check against the spec)
 
-- **Spec coverage:** §1 purpose → Tasks 11/12; §2 footprint → Task 2; §3 two-axis framing → Task 11 Step 2 (Axis-1 cost vs Axis-2 footprint); §4.0 tooling → Tasks 1/9; §4.1 matrix → Tasks 2/8; §4.2 spike → Tasks 3–7; §4.3 confidence tagging + rubric → Tasks 8/10/11; §5 risk register → Task 10; §6 scope (throwaway, gitignored, no profile build) → Tasks 1/3/12 Step 3; §7 outputs → Task 12. No uncovered requirement.
+- **Spec coverage:** §1 purpose → Tasks 11/12; §2 footprint → Task 2 (report §3); §3 two-axis framing → Task 2 (report §2, written in full) + Task 11 Steps 2–3 (rubric + summary cite it); §4.0 tooling → Tasks 1/9; §4.1 matrix → Tasks 2/8; §4.2 spike → Tasks 3–7; §4.3 confidence tagging + rubric → Tasks 8/10/11; §5 risk register → Task 10; §6 scope (throwaway, gitignored, no profile build) → Tasks 1/3/12 Step 3; §7 outputs → Task 12. No uncovered requirement.
 - **Placeholder scan:** the only `…` / `<!-- filled -->` tokens are *inside report artifacts* and each is explicitly resolved by a later task with a verifying `grep`; no plan step defers its own content.
 - **Type/name consistency:** `REPORT`, `SPIKE`, the SLS state IDs (`prometheus_user`/`_unpack`/`_binary`/`_dirs`/`_config`/`_rules`/`_targets`/`_unit`/`_service`), the roster id `spike`, and the config dir `build/salt-spike/etc` are used identically across all tasks.
