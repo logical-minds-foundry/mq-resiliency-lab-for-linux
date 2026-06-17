@@ -59,19 +59,40 @@ Provision **both** HA groups DR-ready in one playbook (the Phase-C/D lesson: DR-
 from the start, never bolt it on). Mirrors `site-pcmk-dr.yml`'s structure:
 
 - Cold-boot SSH guard over `rdqm_a:rdqm_b` (the #151/#160 lesson).
+- **Lab-wide name resolution (new shared foundation).** DR replicates *across* sites
+  over net-wan and DRBD identifies peers by name, but the `rdqm-ha` role's `/etc/hosts`
+  is same-site-only ("no DNS in the lab"). So Plan C introduces a single **canonical
+  lab hosts file rendered from `topology.yaml`** (the same single source the Ansible
+  inventory is rendered from) and synced to **every** VM. It carries **per-plane name
+  aliases** — every node IP is addressable by name: `<node>` (primary/mgmt) plus
+  `<node>-mgmt` / `-data-a` / `-data-b` / `-hb-a` / `-hb-b` / `-wan` / `-ext` for each
+  NIC the node declares. DR config then names partners on the **net-wan** plane
+  unambiguously, and any future hostname-based MQ channel resolves consistently too.
+  *Follow-up (backlogged): replace the synced file with real lab DNS (dnsmasq/CoreDNS
+  on a service VM, fed from the same topology source).*
 - `rdqm-install` on all six nodes (reuses the Plan B role).
 - **Firewall:** open the RDQM ports using IBM's shipped definitions —
   `rdqm-drbd` (TCP 7000–7100) and `rdqm-mq` (TCP 1414) firewalld services
   (`/opt/mqm/samp/rdqm/firewalld/`). DR replication and inter-node traffic need these
   across net-wan/net-hb.
-- `mqweb` on all six (REST on every QM — design §1).
-- Form the HA group on each site (the `rdqm-ha` role, once per group) — this is the
-  "configure an HA group on each site" canonical prerequisite.
+- `mqweb` on all six (REST on every QM — design §1; starts `--no-block`, the Plan B
+  TCG fix).
+- Form the HA group on each site (the `rdqm-ha` role, once per group, with that site's
+  `rdqm_site_nodes`) — the "configure an HA group on each site" canonical prerequisite.
 
 `site-rdqm.yml` (Plan B, site-A-only) is unchanged; Plan C adds the DR superset
 playbook rather than mutating the HA one.
 
 ## 5. QM create as DR/HA — `lab/scripts/rdqm-dr-qm-create.sh`
+
+**Run as a standalone script, not via the `qm-create` registry verb.** The registry
+resolves verbs per *arm*, and both `rdqm_ha` and `rdqm_dr` share the `rdqm-rhel` arm,
+whose `qm-create` is the HA `rdqm-qm-create.sh`. Rather than overload that script or
+add per-setup verb overrides, the DR create lives in the `rdqm-dr-*` script family and
+is invoked directly — exactly as the Pacemaker arm drives DR by standalone
+`pcmk-dr-*.sh` scripts, not verbs. `mqlab qm create` stays the HA-only path. The DR
+scripts own the DR addresses directly (the two FIPs as args/constants; node planes via
+the §4 lab hosts names) — no `QmConfig` change.
 
 The canonical six-step DR/HA create (first token = HA role, second = DR role):
 
@@ -109,10 +130,12 @@ Three scripts, RDQM-native analogs of the Pacemaker DR family:
   `rdqmadm -p` to set preferred location. RDQM refuses to promote a secondary while
   the primary is still running and the link is up (built-in split-brain guard), so
   the controlled path stops the source first.
-- **`lab/scripts/rdqm-dr-force.sh`** — *forced* cutover (abrupt full-site loss). The
-  source nodes are gone (so the old primary is already stopped — the canonical
-  safety requirement), so `rdqmdr` force-promotes site B. On site-A return, RDQM
-  brings it back as secondary and resynchronizes; failback reverses the roles.
+- **`lab/scripts/rdqm-dr-force.sh`** — *forced* cutover (abrupt full-site loss). Site A
+  is brought **down by a hard power-off** (not a graceful shutdown — so in-flight /
+  un-replicated messages are lost = the RPO; and **not** erased — the VMs and disks
+  persist, ready to power back on). With the source primary down, `rdqmdr`
+  force-promotes site B. On site-A power-up, RDQM brings it back as DR-secondary and
+  resynchronizes; failback then reverses the roles.
 - **`lab/scripts/wan-degrade.sh`** — `tc`/`netem` delay+loss on **net-wan**. RDQM
   encapsulates DRBD (we can't run `drbdadm` like the Pacemaker arm's
   `drbd-degrade.sh`), so we widen the async window at the only layer RDQM leaves open
@@ -120,27 +143,35 @@ Three scripts, RDQM-native analogs of the Pacemaker DR family:
   trade-off* explicitly.
 
 **The drill (acceptance):** provision `site-rdqm-dr.yml` → `rdqm-dr-qm-create.sh` →
-**snapshot the provisioned 3+3 (#218)** so re-runs skip the slow rebuild → app drives
-load → `wan-degrade` widens the window → abruptly `virsh destroy` rdqm-a1/2/3 →
-`rdqm-dr-force` promotes site B → app reconnects to `10.10.2.100` and resumes →
-record **RPO** (messages committed at A but not replicated) and **RTO** (reconnect
-time) → `rdqm-dr-cutover.sh b2a` failback. Findings →
+**snapshot the provisioned 3+3 (#218)** so the *whole* drill can be re-run cheaply from
+the baseline → app drives load → `wan-degrade` widens the async window → **hard
+power-off** rdqm-a1/2/3 (down, not erased) → `rdqm-dr-force` promotes site B → app
+reconnects to `10.10.2.100` and resumes → record **RPO** (messages committed at A but
+not yet replicated) and **RTO** (reconnect time) → **power site A back on** → RDQM
+resyncs it as DR-secondary → `rdqm-dr-cutover.sh b2a` failback. Findings →
 `docs/reports/<date>-rdqm-forced-dr-findings.md`, mirroring the Pacemaker report and
-separating data (observed) from judgment.
+separating data (observed) from judgment. (The #218 snapshot is for re-running the
+drill from the provisioned baseline, independent of the power-off/on failback path.)
 
 ## 8. Wiring — registry & setup
 
 - `lab/topology.yaml`: the `rdqm_dr` setup already exists (`groups: [rdqm_a, rdqm_b]`).
-  Change its `provision` to `ansible/site-rdqm-dr.yml`, add its `qm` config
-  (`name: QMRDQM`, `vip: 10.10.1.100`) and a site-B FIP field (e.g. `vip_dr:
-  10.10.2.100`; `vip_ext` stays unset per #223).
+  Change only its `provision` to `ansible/site-rdqm-dr.yml`. **No `qm:` block and no
+  `QmConfig` change** — DR is script-driven (§5), so the DR addresses live in the
+  `rdqm-dr-*` scripts (FIPs) and the lab hosts names (§4); a `vip_dr` schema field
+  would be dead weight nothing reads.
+- **Hosts renderer:** add a small renderer that emits the canonical lab hosts file
+  from `topology.yaml` (parallel to the existing inventory renderer), consumed by the
+  §4 sync step. Lab-wide, not RDQM-specific.
 - DR stays **script-driven** (parity with the Pacemaker arm, which uses
-  `pcmk-dr-*.sh`, not registry verbs). Promoting DR cutover/failback to first-class
-  `mqlab dr` arm-registry verbs — for *both* arms together — is a deliberate
-  follow-up, not Plan C.
-- New artifacts: `ansible/site-rdqm-dr.yml`, `lab/scripts/rdqm-dr-qm-create.sh`,
-  `rdqm-dr-cutover.sh`, `rdqm-dr-force.sh`, `wan-degrade.sh`. Reused: `rdqm-install`,
-  `rdqm-ha`, `mqweb` roles; `app_requester.py`; `e2e-test.sh`; the #218 snapshot tool.
+  `pcmk-dr-*.sh`, not registry verbs). The `qm-create` verb remains the HA-only path.
+  Promoting DR cutover/failback to first-class `mqlab dr` arm-registry verbs — for
+  *both* arms together — is a deliberate follow-up, not Plan C.
+- New artifacts: `ansible/site-rdqm-dr.yml`, the hosts renderer + sync step,
+  `lab/scripts/rdqm-dr-qm-create.sh`, `rdqm-dr-cutover.sh`, `rdqm-dr-force.sh`,
+  `wan-degrade.sh`. Reused: `rdqm-install`, `rdqm-ha`, `mqweb` roles;
+  `app_requester.py`; `e2e-test.sh`; the #218 snapshot tool.
+- **Backlog (separate issue):** real lab DNS to replace the synced hosts file (§4).
 
 ## 9. Sources
 
