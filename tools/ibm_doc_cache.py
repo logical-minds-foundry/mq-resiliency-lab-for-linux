@@ -90,8 +90,16 @@ class _TextExtractor(HTMLParser):
 
 
 def _get(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "text/html"})  # noqa: S310
-    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+    # This tool only ever fetches IBM Docs. Enforce that: reject non-https and any
+    # host outside ibm.com, so a dynamic URL can't be pointed at an internal/SSRF
+    # target. With that guard, the dynamic urlopen below is intended and safe.
+    parts = urlparse(url)
+    host = parts.hostname or ""
+    if parts.scheme != "https" or not (host == "ibm.com" or host.endswith(".ibm.com")):
+        raise RuntimeError(f"refusing to fetch non-https or non-ibm.com URL: {url}")
+    req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "text/html"})  # nosemgrep
+    # host-pinned to ibm.com above; the dynamic fetch is this tool's whole purpose.
+    with urllib.request.urlopen(req, timeout=30) as resp:  # nosemgrep
         if resp.status != 200:
             raise RuntimeError(f"HTTP {resp.status} for {url}")
         return resp.read().decode("utf-8", errors="replace")
