@@ -303,6 +303,23 @@ def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
     assert "roster_setups:\n      - pcmk_san_ha" in written
 
 
+def test_vm_hosts_writes_and_echoes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31, net-wan: 10.99.0.31}}\n"
+        "groups:\n  rdqm_a: [rdqm-a1]\n"
+        "setups:\n  rdqm_dr: {groups: [rdqm_a]}\n"
+    )
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "hosts"])
+    assert result.exit_code == 0
+    written = (tmp_path / "build" / "hosts").read_text()
+    assert "10.50.0.31 rdqm-a1 rdqm-a1-mgmt" in written  # bare name + mgmt alias
+    assert "10.99.0.31 rdqm-a1-wan" in written  # per-plane alias
+
+
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1", "node-a2"])  # 2 start steps -> pause after step 1
@@ -372,6 +389,7 @@ def test_vm_provision_sources_secret_renders_inventory_runs_playbook(monkeypatch
     assert str(play.cwd).endswith("/ansible")
     assert play.env == {"PCMK_HACLUSTER_PASSWORD": "s3cr3t"}  # secret injected on the subprocess
     assert (tmp_path / "build" / "inventory.ini").read_text().startswith("[san_a]")
+    assert "san-a san-a-mgmt" in (tmp_path / "build" / "hosts").read_text()  # hosts rendered too
 
 
 def test_vm_provision_members_down_advises_and_exits_3(monkeypatch, tmp_path):

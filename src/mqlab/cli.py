@@ -17,6 +17,7 @@ from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
+from mqlab.hosts import hosts_path, lab_hosts
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.netsel import parse_net_states, resolve_nets
@@ -747,6 +748,23 @@ def vm_roster() -> None:
         deps.transcript.close()
 
 
+@vm_app.command("hosts")
+def vm_hosts() -> None:
+    """Render build/hosts from topology and echo it (per-plane name aliases, #233)."""
+    deps = build_deps("vm-hosts", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_hosts()
+        path = hosts_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        for line in text.splitlines():
+            deps.renderer.output(line)
+            deps.transcript.write(line)
+    finally:
+        deps.transcript.close()
+
+
 def _provision(setup_name: str) -> None:
     setup = lab_setups().get(setup_name)
     if setup is None:
@@ -772,6 +790,11 @@ def _provision(setup_name: str) -> None:
         inv.write_text(lab_inventory())
         deps.renderer.note(f"rendered {inv}")
         deps.transcript.write(f"rendered {inv}")
+        hp = hosts_path()
+        hp.parent.mkdir(parents=True, exist_ok=True)
+        hp.write_text(lab_hosts())
+        deps.renderer.note(f"rendered {hp}")
+        deps.transcript.write(f"rendered {hp}")
         step = CommandStep(
             f"{setup_name} provision",
             Command(
