@@ -52,6 +52,18 @@
   become: true
   become_user: mqm
 
+# TLS (#250): the responder is a SVRCONN *client* (client-mode to localhost), so
+# it needs its own cert + a .sth stash, distinct from QMDTCC's server keystore
+# above. SSLPEER on SVC.SVRCONN matches O=dtcc-org (dtcc-responder is dtcc-org).
+- name: place the dtcc-responder keystore (TLS)
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: dtcc-responder
+    pki_dest_dir: /var/mqm/ssl
+    pki_owner: mqm
+    pki_stash: true
+
 - name: deploy the service responder
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../clients/service_responder.py"

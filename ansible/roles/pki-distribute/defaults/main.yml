@@ -6,3 +6,9 @@
 pki_src_dir: "{{ playbook_dir }}/../build/secrets/pki/entities"
 pki_secret_script: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh"
 pki_owner: mqm
+# MQI *clients* (pymqi app/responder, the exporter) read a PKCS#12 keystore's
+# password from a sibling `.sth` stash, since pymqi's SCO has no password field.
+# QMs/mqweb persist KEYRPWD in their own config instead, so this stays off by
+# default and the client roles flip it on (#250). Proven live: stash + SCO
+# CertificateLabel = TLS_CONNECT_OK over a mutual-TLS SVRCONN.
+pki_stash: false

@@ -62,7 +62,7 @@
         su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
         printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
         START LISTENER(L1414)\n
-        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
+        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('"'"'{{ tls_peer_client }}'"'"') HBINT(15) KAINT(15) REPLACE\n
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
         REFRESH SECURITY TYPE(CONNAUTH)\n
         ALTER QMGR SSLKEYR('"'"'/mqshared/ssl/{{ qm_name }}'"'"') KEYRPWD('"'"'{{ pki_keyrpwd.stdout }}'"'"') CERTLABL('"'"'{{ qm_name }}'"'"')\n

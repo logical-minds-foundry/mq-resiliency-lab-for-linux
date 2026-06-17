@@ -42,3 +42,16 @@
     /home/vagrant/mqvenv/bin/pip install pymqi
   args:
     creates: /home/vagrant/mqvenv/bin/python
+
+# TLS (#250): place the app-client keystore + a .sth stash so the requester can
+# present its cert over the now-mutual-TLS APP.SVRCONN. Owned by vagrant (the app
+# runs as vagrant); SSLPEER on the SVRCONN matches O=client-org (app-client is
+# OU=apps, so the org-only peer, not the OU=clearing-service channel identity).
+- name: place the app-client keystore (TLS)
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: app-client
+    pki_dest_dir: /home/vagrant/ssl
+    pki_owner: vagrant
+    pki_stash: true

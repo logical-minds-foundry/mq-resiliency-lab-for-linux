@@ -33,6 +33,10 @@ def main() -> int:
     ap.add_argument("--reply-queue", default="APP.REPLY")
     ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--interval", type=float, default=1.0)
+    # TLS (#250): --keyrepo is the keystore *stem* (no .p12); a sibling .sth stash
+    # supplies the password (pymqi's SCO has none). Omit both -> plaintext.
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/app-client")
+    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args()
 
     cd = pymqi.CD(
@@ -40,8 +44,16 @@ def main() -> int:
         ConnectionName=args.conn.encode(),
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
+    sco = None
+    if args.keyrepo:
+        # Mutual TLS 1.3 to the SVRCONN. The .sth next to <keyrepo>.p12 is read
+        # automatically; CertificateLabel selects which cert we present.
+        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
+        sco = pymqi.SCO(KeyRepository=args.keyrepo.encode())
+        if args.certlabel:
+            sco.CertificateLabel = args.certlabel.encode()
     qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options(args.qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT)
+    qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT)
 
     qreq = pymqi.Queue(qmgr, args.request_queue)
     qrep = pymqi.Queue(qmgr, args.reply_queue)
