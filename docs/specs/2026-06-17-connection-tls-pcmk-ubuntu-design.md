@@ -71,13 +71,20 @@ and the REST endpoint:
 
 ## 4. The recipe (applied uniformly)
 
-- **Each QM:** `ALTER QMGR SSLKEYR('<keystore stem>')` + `KEYRPWD('<value>')`, then
-  `REFRESH SECURITY TYPE(SSL)`. **`KEYRPWD` is set *once* at QM setup** — the value
-  is sourced from `lab-secret.sh` (never in git) and MQ then **persists it
-  (obfuscated) in the QMGR config on the shared LUN**, so it follows the QM on
-  failover with no agent to re-supply it (§7). *(Path convention: for PKCS#12 the QM
-  expects `<stem>.p12` located by the extensionless `SSLKEYR` stem — verify the exact
-  naming against the licensed MQ in the §11 keystore-load gate.)*
+- **Each QM:** `ALTER QMGR SSLKEYR('<keystore stem>')` + `KEYRPWD('<value>')` +
+  **`CERTLABL('<cert label>')`**, then `REFRESH SECURITY TYPE(SSL)`. **`KEYRPWD` is
+  set *once* at QM setup** — the value is sourced from `lab-secret.sh` (never in git)
+  and MQ then **persists it (obfuscated) in the QMGR config on the shared LUN**, so it
+  follows the QM on failover with no agent to re-supply it (§7). *(Path convention:
+  for PKCS#12 the QM expects `<stem>.p12` located by the extensionless `SSLKEYR`
+  stem — verify the exact naming against the licensed MQ in the §11 keystore-load
+  gate.)*
+  - **`CERTLABL` is required, not optional (verified live).** lab-pki labels each
+    cert by its CN (e.g. `QMPCMK`), but MQ's default channel cert label is
+    `ibmwebspheremq<qmgr>` (lowercase). Without `CERTLABL` set to the actual label,
+    the QM finds no matching personal cert and every TLS channel fails handshake with
+    **`AMQ9645E` (no SSL certificate for channel)** — even though the keystore loads
+    cleanly. Set `CERTLABL` to the entity CN at QM setup.
 - **Each channel / SVRCONN:** add `SSLCIPH(<cipher>)`, `SSLCAUTH(REQUIRED)` (require
   a peer cert), `SSLPEER('<expected peer DN>')` (validate it). Applied to **both
   ends** of every channel.

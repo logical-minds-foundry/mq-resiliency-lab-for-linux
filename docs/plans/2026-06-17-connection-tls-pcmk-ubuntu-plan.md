@@ -22,6 +22,32 @@
 
 ---
 
+## Status (2026-06-17)
+
+**Tasks 1–7 authored, `vrg-validate`-green, and committed** on
+`feature/250-conn-tls-pcmk`. The CRR-critical path (QM↔QM channels + both
+data-plane SVRCONN clients) was **proven live** this session (channels RUNNING over
+TLS 1.3 `TLS_CHACHA20_POLY1305_SHA256`; pymqi PKCS#12 client connect `TLS_CONNECT_OK`
+via `.sth` stash + `CertificateLabel`). **Task 8 is the remaining work and is
+entirely human-run** (live multi-VM lab): clean bring-up, unattended-failover gate,
+cold-rebuild gate.
+
+**Deviations from the original plan, discovered live (see commits + spec):**
+- **`CERTLABL` is mandatory** — without it, TLS channels fail `AMQ9645E` even with a
+  loadable keystore (spec §4). Wired into the QM-setup MQSC.
+- **Exporter (Task 6) uses a CCDT, not flags** — `mq-metric-samples` exposes *no*
+  MQ-TLS CLI flags, so a client TLS connection's `SSLCIPH` must come from a JSON
+  CCDT. Also added a dedicated `MON.SVRCONN` (the exporter's `O=client-org` identity
+  can't pass the app/responder SVRCONN `SSLPEER`s), and gave the exporter entity
+  `trust: [dtcc-org]` so it can validate QMDTCC's server cert.
+- **mqweb REST flip (Task 7) is partial by necessity** — `pymqrest.verify_tls` is a
+  strict bool (no CA-path → upstream epic `mq-rest-admin-common#215` /
+  `mq-rest-admin-python#518`), and the `mqweb` cert has no IP SANs, so full
+  CA-verified REST is blocked on per-host IP-SAN certs (#252). The server now serves
+  the org-CA cert over TLS 1.3; client verify is made opt-in (`MQLAB_REST_VERIFY_TLS`).
+
+---
+
 ## Task 1: Add the DTCC responder entity to the PKI inventory
 
 The SVC.SVRCONN service responder is a SVRCONN **client** and needs a client cert. Add a `dtcc-org` responder entity (spec §10).
