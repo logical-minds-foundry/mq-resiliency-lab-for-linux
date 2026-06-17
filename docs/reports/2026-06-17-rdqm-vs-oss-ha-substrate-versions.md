@@ -86,6 +86,44 @@ ships `9.27.0`) plus the **in-tree DRBD module** in the 6.8 kernel's
   DRBD" currency question disappears entirely under Native HA — a point worth
   making explicitly alongside the in-QM-replication argument.
 
+## Companion finding: RDQM's single floating IP is an `rdqmint` limit, not a Pacemaker version gap
+
+A natural hypothesis, given the Pacemaker-version gap above: *RDQM is stuck with
+one VIP because it bundles the old Pacemaker 2.1.2, and multi-VIP was added in a
+later release (the Ubuntu arm runs 2.1.6 and does two).* The evidence says **no** —
+the limit is architectural in IBM's `rdqmint` tooling, fully independent of the
+Pacemaker version.
+
+- **It's an MQ product limit with an MQ error code.** Our #216 verb spike
+  (`docs/reports/2026-06-16-rdqm-verb-spike.md`) tried a second `rdqmint` (a
+  partner-facing VIP, mirroring the Pacemaker arm). RDQM rejected it:
+  `AMQ3877E: Floating IP address already exists for queue manager 'QMRDQM'.`
+  `AMQ…` is an IBM MQ message — `rdqmint` refuses the second IP itself, before
+  Pacemaker is involved.
+- **IBM's `rdqmint` model is one floating IP per RDQM, by design.** The command is
+  `rdqmint -m qmname -a -f <ipv4> -l <iface>` (one `-f`) / `-m qmname -d` — there
+  is no facility for a second. (The doc's "must be unique" note is about not
+  *sharing* an IP across RDQMs, a separate point.)
+- **"Multiple VIPs" was never a Pacemaker feature to add.** Two VIPs = two
+  ordinary `IPaddr2` resources in the group, which our Ubuntu arm does
+  (`mq_vip` + `mq_vip_ext` in `mq-pcmk-qmgr`). Multiple resource instances are
+  core Pacemaker behaviour predating 2.1.2, and `IPaddr2` is an OCF agent in the
+  separate `resource-agents` package — not in Pacemaker at all. Running two VIPs
+  on 2.1.6 works identically on 2.1.2. So there is no 2.1.2→2.1.6 changelog entry
+  that "unlocked" a second VIP; that line of inquiry is the wrong layer.
+- **Unchanged in MQ 10.0 (forward check, docs only).** The v10 *Creating and
+  deleting a floating IP address* topic and the v10 `rdqmint` reference are
+  byte-for-byte the same single-`-f` model as 9.4 — no multi-VIP support added.
+  (Verified 2026-06-17 against `SSYHRD_10.0.0` — note v10's product code changed
+  from `SSFKSJ`.)
+
+**Conclusion:** RDQM's single-floating-IP constraint is a design property of
+`rdqmint` (enforced by `AMQ3877E`), not a consequence of the bundled Pacemaker
+2.1.2, and it is **unchanged through MQ 10.0**. The 2.1.2-vs-2.1.6 version delta
+is real but coincidental to this limitation. This is the kind of constraint
+**Native HA sidesteps**: it uses a single listener/connectivity address model and
+isn't bound to `rdqmint`'s per-QM-IP rule.
+
 ## Open follow-ups
 
 - Capture the **Ubuntu DRBD** versions live once the `pcmk_san_dr` setup is up
@@ -110,3 +148,10 @@ ships `9.27.0`) plus the **in-tree DRBD module** in the 6.8 kernel's
   <https://github.com/ClusterLabs/pacemaker/releases>
 - LINBIT drbd-utils releases (9.33.0 2025-11; 9.34.0 2026-03) —
   <https://github.com/LINBIT/drbd-utils/releases>
+
+**VIP finding:**
+- RDQM floating IP (9.4) — `rdqmint`, one per RDQM —
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=availability-creating-deleting-floating-ip-address>
+- RDQM floating IP (10.0) — identical model, no multi-VIP —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=availability-creating-deleting-floating-ip-address>
+- `AMQ3877E` observed live in `docs/reports/2026-06-16-rdqm-verb-spike.md` (#216).
