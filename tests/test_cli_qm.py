@@ -206,7 +206,8 @@ _RDQM_TOPO = (
     "      qm-status: { cmd: '/opt/mqm/bin/rdqmstatus -m {qm}' }\n"
     "      qm-create: { script: rdqm-qm-create.sh }\n"
     "setups:\n  rdqm_dist:\n    arm: rdqm-rhel\n    groups: [rdqm_a]\n"
-    "    qm: { name: QMRDQM, vip: 10.10.1.100, vip_ext: 10.60.0.30 }\n"
+    # no vip_ext: RDQM has one floating IP per QM (#216), spent on the data VIP
+    "    qm: { name: QMRDQM, vip: 10.10.1.100 }\n"
 )
 
 
@@ -236,8 +237,9 @@ def test_qm_create_runs_rdqm_script_with_qm_and_vip(monkeypatch, tmp_path):
     argv = runner.recorded[-1].argv
     assert argv[0] == "bash"
     assert argv[1].endswith("/lab/scripts/rdqm-qm-create.sh")
-    # QM, data VIP, partner VIP, counterparty CONNAME ("" when unset — #216)
-    assert argv[2:] == ["QMRDQM", "10.10.1.100", "10.60.0.30", ""]
+    # QM, the single data-plane floating IP, counterparty CONNAME ("" when unset).
+    # No partner VIP: RDQM allows one floating IP per QM (#216 spike).
+    assert argv[2:] == ["QMRDQM", "10.10.1.100", ""]
 
 
 def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):

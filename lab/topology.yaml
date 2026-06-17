@@ -161,8 +161,11 @@ arms:
     verbs:
       qm-create: { script: rdqm-qm-create.sh }
       qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
-      # up/down: provisional — the Task-1 verb spike confirms RDQM's managed-QM
-      # behaviour (strmqm/endmqm vs rdqmadm) on a live group and corrects these.
+      # up/down confirmed on a live group by the #216 verb spike
+      # (docs/reports/2026-06-16-rdqm-verb-spike.md): with mqm in haclient, a plain
+      # endmqm does a *controlled, cluster-wide* stop ("Replicated data queue manager
+      # disabled" — no rogue failover), and strmqm re-enables HA and restarts — the
+      # RDQM analogue of the pcmk arm's `pcs resource disable/enable mq_group`.
       qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
 
@@ -203,7 +206,10 @@ setups:
     groups: [rdqm_a, dtcc, app]
     provision: ansible/site-rdqm-distributed.yml
     secrets: [mqweb_admin_password]
-    qm: { name: QMRDQM, vip: 10.10.1.100, vip_ext: 10.60.0.30, dtcc_conn: 10.60.0.50 }
+    # No vip_ext: RDQM allows one floating IP per QM (#216 spike), spent on the data
+    # VIP for the app's HA path. The partner (QMDTCC) reaches QMRDQM over net-ext by
+    # per-node CONNAME list — see site-rdqm-distributed.yml (our_conn).
+    qm: { name: QMRDQM, vip: 10.10.1.100, dtcc_conn: 10.60.0.50 }
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]

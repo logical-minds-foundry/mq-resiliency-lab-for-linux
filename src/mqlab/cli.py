@@ -899,9 +899,11 @@ def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
 
 
 def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
-    # Run a lab script with the rdqm-qm-create contract: QM, data VIP, partner VIP,
-    # and (when set) the counterparty CONNAME for the inter-QM MQSC (#216).
-    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.vip_ext, qm.dtcc_conn or ""]
+    # Run a lab script with the rdqm-qm-create contract: QM, the single data-plane
+    # floating IP (RDQM allows one FIP per QM, #216 spike), and (when set) the
+    # counterparty CONNAME for the inter-QM MQSC. The partner reaches us over net-ext
+    # by per-node CONNAME list (site-rdqm-distributed.yml our_conn), not a second VIP.
+    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.dtcc_conn or ""]
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         step = CommandStep(f"{setup_name} {verb}", Command(argv))  # noqa: S607
