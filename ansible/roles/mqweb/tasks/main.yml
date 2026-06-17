@@ -19,13 +19,22 @@
   become: true
   no_log: true
 
-- name: enable + start mqweb
+- name: enable mqweb (boot persistence + daemon reload)
   ansible.builtin.systemd:
     name: mqweb.service
     enabled: true
-    state: started
     daemon_reload: true
   become: true
+
+# Start non-blocking: Liberty is slow to come up (minutes under x86 TCG), and a
+# blocking `state: started` makes provision wait on — and time out with — the
+# systemd job. --no-block returns immediately; REST becomes ready asynchronously
+# (the message path does not depend on it). Idempotent: starting an already-active
+# unit is a no-op.
+- name: start mqweb without blocking on its (slow) readiness
+  ansible.builtin.command: systemctl start mqweb.service --no-block
+  become: true
+  changed_when: true
 
 - name: bind mqweb to all interfaces
   ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"

@@ -101,3 +101,16 @@ def test_distributed_setup_composed():
     assert dist.provision == "ansible/site-distributed.yml"
     assert dist.qm is not None and dist.qm.name == "QMPCMK"
     assert dist.qm.dtcc_conn == "10.60.0.50"
+
+
+def test_distributed_rdqm_setup_composed():
+    """The RDQM arm's distributed setup mirrors pcmk's, over the RDQM substrate (#216)."""
+    from mqlab.setups import lab_setups
+
+    s = lab_setups()["distributed-rdqm-rhel"]
+    assert s.arm == "rdqm-rhel"
+    assert s.groups == ["rdqm_a", "dtcc", "app"]
+    assert s.provision == "ansible/site-rdqm-distributed.yml"
+    assert s.qm is not None and s.qm.name == "QMRDQM"
+    assert s.qm.dtcc_conn == "10.60.0.50"
+    assert "mqweb_admin_password" in s.secrets

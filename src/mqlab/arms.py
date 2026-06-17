@@ -21,6 +21,7 @@ class Arm:
     name: str
     mechanism: str
     verbs: dict[str, dict[str, str]]
+    cluster_group: str = ""
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ def lab_arms() -> dict[str, Arm]:
             name=name,
             mechanism=cfg.get("mechanism", ""),
             verbs=cfg.get("verbs") or {},
+            cluster_group=cfg.get("cluster_group", ""),
         )
     return arms
 

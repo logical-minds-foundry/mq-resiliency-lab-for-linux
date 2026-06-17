@@ -1,13 +1,23 @@
-# The RDQM arm (Phase C). Run with --limit rdqm_a until site B exists.
-- hosts: rdqm_a:rdqm_b
+# The RDQM arm (Phase C), site-A 3-node HA group. Site B (rdqm_b) is the
+# cross-site DR peer — it belongs to Plan C (RDQM 3+3 DR) and is provisioned by a
+# future ansible/site-rdqm-dr.yml that imports this play set and adds the rdqm_b
+# group + rdqmdr replication. Keeping this play set site-A-only means rdqm_ha and
+# the distributed setup provision cleanly without an unreachable, uncreated site B.
+- hosts: rdqm_a
   become: true
   tasks:
     - name: acl package for unprivileged become
       ansible.builtin.dnf:
         name: acl
 
-- hosts: rdqm_a:rdqm_b
+- hosts: rdqm_a
   roles: [rdqm-install]
+
+# REST on every node's QMRDQM (design §1). Stateless per-node mqweb (spec §8.3),
+# set up at provision where mqweb_admin_password is injected; administers the local
+# QM whenever RDQM lands it here. Mirrors the pcmk arm's site-pcmk.yml.
+- hosts: rdqm_a
+  roles: [mqweb]
 
 - hosts: rdqm_a
   vars:
@@ -15,12 +25,4 @@
       - { name: rdqm-a1, hb: 172.16.1.31, data: 10.10.1.31 }
       - { name: rdqm-a2, hb: 172.16.1.32, data: 10.10.1.32 }
       - { name: rdqm-a3, hb: 172.16.1.33, data: 10.10.1.33 }
-  roles: [rdqm-ha]
-
-- hosts: rdqm_b
-  vars:
-    rdqm_site_nodes:
-      - { name: rdqm-b1, hb: 172.16.2.41, data: 10.10.2.41 }
-      - { name: rdqm-b2, hb: 172.16.2.42, data: 10.10.2.42 }
-      - { name: rdqm-b3, hb: 172.16.2.43, data: 10.10.2.43 }
   roles: [rdqm-ha]
