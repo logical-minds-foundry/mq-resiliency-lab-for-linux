@@ -1,0 +1,6 @@
+# EL9 packages the LIO admin tool as `targetcli` (AppStream — on the DVD).
+- name: install targetcli (dnf)
+  ansible.builtin.dnf:
+    name: targetcli
+    state: present
+  become: true

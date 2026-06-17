@@ -1,0 +1,5 @@
+- name: install targetcli (apt)
+  ansible.builtin.apt:
+    name: targetcli-fb
+    update_cache: true
+  become: true
