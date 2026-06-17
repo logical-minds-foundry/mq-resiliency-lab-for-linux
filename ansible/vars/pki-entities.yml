@@ -20,3 +20,6 @@ pki_entities:
   - { cn: mqweb, org: client-org, ou: ops, kind: personal, trust: [] }
   - { cn: pymqrest, org: client-org, ou: ops, kind: trust_only, trust: [] }
   - { cn: QMDTCC, org: dtcc-org, ou: clearing-service, kind: personal, trust: [client-org] }
+  # The co-located DTCC service responder is a SVRCONN client (#250 / SVC.SVRCONN) —
+  # presents O=dtcc-org so QMDTCC's SVRCONN SSLPEER('O=dtcc-org') validates it.
+  - { cn: dtcc-responder, org: dtcc-org, ou: clearing-service, kind: personal, trust: [client-org] }
