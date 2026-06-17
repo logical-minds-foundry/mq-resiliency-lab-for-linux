@@ -32,14 +32,24 @@
 - hosts: rdqm_a:rdqm_b
   become: true
   tasks:
-    - name: open RDQM firewall ports (DRBD 7000-7100, MQ 1414) via IBM's services
+    # Open the RDQM ports ONLY where a firewall is actually running. The lab's
+    # vagrant RHEL box ships firewalld inactive (nothing blocks DRBD 7000-7100 / MQ
+    # 1414), so this is a clean no-op here; on a firewalled host it registers IBM's
+    # shipped service definitions (the samples are XML files, not pre-registered
+    # services) and opens them.
+    - name: open RDQM firewall ports when firewalld is running (DRBD 7000-7100, MQ 1414)
       ansible.builtin.shell: |
         set -e
+        if ! systemctl is-active --quiet firewalld; then
+          echo "firewalld inactive — no ports to open in this lab"; exit 0
+        fi
+        S=/opt/mqm/samp/rdqm/firewalld/services
+        install -m644 "$S/rdqm-drbd.xml" "$S/rdqm-mq.xml" /etc/firewalld/services/
+        firewall-cmd --reload
         firewall-cmd --permanent --add-service=rdqm-drbd
         firewall-cmd --permanent --add-service=rdqm-mq
         firewall-cmd --reload
-      register: fw
-      changed_when: "'ALREADY_ENABLED' not in fw.stderr"
+      changed_when: false
 
 # REST on every QM (design §1). The shared mqweb role starts --no-block (Plan B TCG
 # fix), so this does not stall on the slow Liberty start across six nodes.
