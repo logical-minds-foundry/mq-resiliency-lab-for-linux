@@ -10,7 +10,7 @@
 
 ---
 
-> **⏸ PARKED 2026-06-17 — resume here.** Design (`docs/specs/2026-06-16-salt-roster-generator-design.md`) and this plan are **complete and pushback-reviewed**; **implementation has not started** (no `roster.py`, no `tests/test_roster.py`, no CLI command yet). To resume: execute this plan from **Task 1** (inline or subagent-driven). The Task 1 exact-string assertion was captured from a real `yaml.safe_dump` run, so it should go green first try. Part of the Ansible→Salt migration groundwork (evaluation #205, merged). Sibling parked threads: HADR investigations #213/#239/#240 and DR brainstorm #235 — all capture-only, not blocking #206.
+> **✅ IMPLEMENTED 2026-06-17.** Design (`docs/specs/2026-06-16-salt-roster-generator-design.md`) and this plan are complete and pushback-reviewed, and the build landed per this plan: `src/mqlab/roster.py`, `tests/test_roster.py`, the `lab_roster` integrity test, and the `mqlab vm roster` CLI command — `vrg-validate` green (100% branch coverage). Part of the Ansible→Salt migration groundwork (evaluation #205, merged). Sibling threads remain capture-only: HADR investigations #213/#239/#240 and DR brainstorm #235.
 
 ---
 
