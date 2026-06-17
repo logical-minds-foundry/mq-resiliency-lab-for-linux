@@ -198,8 +198,9 @@ Add `SSLCIPH`/`SSLCAUTH`/`SSLPEER` to both ends of both channels, authored as a 
 ---
 # Shared channel-TLS attributes — identical across arms (#212 seam).
 tls_cipher: "ANY_TLS13_OR_HIGHER"
-tls_peer_inhouse: "O=client-org,OU=clearing-service" # what DTCC validates
-tls_peer_dtcc: "O=dtcc-org"                            # what the in-house QM validates
+tls_peer_inhouse: "O=client-org,OU=clearing-service" # QM-to-QM: the in-house clearing QM (O+OU)
+tls_peer_dtcc: "O=dtcc-org"                            # the DTCC side, org-only (matches QMDTCC + dtcc-responder)
+tls_peer_client: "O=client-org"                        # in-house SVRCONN clients, org-only (app-client OU=apps, exporter OU=ops)
 ```
 
 - [ ] **Step 2: Our-side channel TLS (QMPCMK)**
@@ -251,9 +252,13 @@ TLS the `APP.SVRCONN` (app-client → QMPCMK) and `SVC.SVRCONN` (responder → Q
 - Consumes: client keystores (`app-client.p12`, `dtcc-responder.p12`) on their hosts (Task 2).
 - Produces: TLS'd SVRCONNs + TLS pymqi connections.
 
-- [ ] **Step 1: TLS the SVRCONN defs**
+- [ ] **Step 1: TLS the SVRCONN defs (per-SVRCONN `SSLPEER` — match the client that uses each)**
 
-`APP.SVRCONN` (in `mq-pcmk-qmgr` base MQSC) and `SVC.SVRCONN` (their-side): add `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_inhouse }}')` (app-client and the responder both present `O=client-org`/`O=dtcc-org` certs — set `SSLPEER` to the matching org; the responder is `O=dtcc-org`).
+Add `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED)` to each SVRCONN, `SSLPEER` matching the client that connects on it:
+- `APP.SVRCONN` (in `mq-pcmk-qmgr` base MQSC) — `app-client` (`O=client-org, OU=apps`): `SSLPEER('{{ tls_peer_client }}')` (org-only).
+- `SVC.SVRCONN` (their-side, on QMDTCC) — the local DTCC responder (`O=dtcc-org`): `SSLPEER('{{ tls_peer_dtcc }}')`.
+
+**Do not** use `tls_peer_inhouse` here — that is the `OU=clearing-service` *channel* identity, which the `OU=apps` app-client cert would fail.
 
 - [ ] **Step 2: Distribute client keystores**
 
@@ -304,7 +309,7 @@ Run: `cat ansible/roles/mq-exporter/tasks/main.yml ansible/roles/mq-exporter/def
 
 - [ ] **Step 2: Add TLS to the exporter config**
 
-Add to the exporter's config (the mq-metric-samples `mq_prometheus` ini/yaml): `ibmmq.sslKeyRepository = <stem>`, `ibmmq.sslCipherSpec = ANY_TLS13_OR_HIGHER`. Distribute `mq_prometheus.p12` via `pki-distribute`. TLS the exporter's SVRCONN def (the one it connects on) with `SSLCIPH`/`SSLCAUTH`/`SSLPEER('O=client-org')`.
+Add to the exporter's config (the mq-metric-samples `mq_prometheus` ini/yaml): `ibmmq.sslKeyRepository = <stem>`, `ibmmq.sslCipherSpec = ANY_TLS13_OR_HIGHER`. Distribute `mq_prometheus.p12` via `pki-distribute`. TLS the exporter's SVRCONN def with `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}')` (`mq_prometheus` is `O=client-org, OU=ops` → org-only `SSLPEER`).
 
 - [ ] **Step 3: GATE — exporter scrapes over TLS**
 

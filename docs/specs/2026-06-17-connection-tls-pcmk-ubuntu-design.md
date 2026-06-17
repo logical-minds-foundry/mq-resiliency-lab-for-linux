@@ -109,8 +109,9 @@ counterparty pins one rule per org. Stage-1 `SSLPEER` values:
 | Validating end | Channel/SVRCONN | `SSLPEER` |
 |---|---|---|
 | QMPCMK | RCVR `QMDTCC.QMPCMK`, SDR `QMPCMK.QMDTCC` | `O=dtcc-org` |
-| QMDTCC | RCVR `QMPCMK.QMDTCC`, SDR `QMDTCC.QMPCMK`, `SVC.SVRCONN` | `O=client-org, OU=clearing-service` |
-| QMPCMK | `app-client` / exporter SVRCONN | `O=client-org` (their client cert) |
+| QMDTCC | RCVR `QMPCMK.QMDTCC`, SDR `QMDTCC.QMPCMK` | `O=client-org, OU=clearing-service` |
+| QMDTCC | `SVC.SVRCONN` (local DTCC responder) | `O=dtcc-org` (the `dtcc-responder` cert) |
+| QMPCMK | `app-client` / exporter SVRCONN | `O=client-org` (**org-only** — these clients are `OU=apps`/`OU=ops`, not `clearing-service`) |
 
 The in-house `SSLPEER` matches on **`O`/`OU`** only — so it holds across arms
 (QMPCMK today, QMRDQM/others later) without a rule change, exactly the partial-DN
