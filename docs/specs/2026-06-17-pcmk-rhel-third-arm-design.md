@@ -28,9 +28,20 @@ Ubuntu 22 (which the firm has rejected). RHEL does not *require* RDQM. The same
 open-source substrate already proven on the Ubuntu arm can run directly on RHEL,
 with the IBM-supported RHEL MQ build on top and no RDQM involved.
 
-That is a **third arm** the comparison never tasted. It isolates the operating
-system as the only variable against `pcmk-ubuntu`, and it isolates
-substrate-ownership as the only variable against `rdqm-rhel`.
+That is a **third arm** the comparison never tasted. Its clean,
+single-variable delta is against `rdqm-rhel`: same OS (RHEL 9.6) and same
+platform (x86_64 / TCG), with the **only** difference being substrate
+ownership — an OSS Pacemaker/DRBD substrate we own versus IBM's bundled,
+wrapped substrate. That is the axis the support-boundary thesis turns on, and
+this arm makes it rigorous.
+
+Against `pcmk-ubuntu` the comparison is strong but **not** clean: the Ubuntu
+arm runs on aarch64 / KVM while this arm runs on x86_64 / TCG to match the
+RDQM platform, so CPU architecture and virtualization accel are confounds, not
+constants. We treat the OS-vs-Ubuntu comparison as corroborating evidence and
+document those confounds rather than claiming OS as the sole variable. (A
+single box arch cannot be clean against both an aarch64 Ubuntu arm and an
+x86_64 RDQM arm; we choose to be clean against RDQM, the more important axis.)
 
 ## 2. Decision
 
@@ -57,23 +68,33 @@ Ubuntu arm's: a `distributed-pcmk-rhel` setup parallel to
 
 ### 3.2 Shared roles + OS-adapter seam
 
-The arm reuses the **same four roles** as `pcmk-ubuntu` — not copies:
-`pcmk-cluster`, `pcmk-stonith`, `drbd-san`, `mq-pcmk-qmgr`. Each role's
-OS-specific surface is factored into per-family task files
+The arm reuses the **same roles** as `pcmk-ubuntu` — not copies. The SAN
+pcmk arm composes roughly six roles, each with an OS-specific surface:
+`pcmk-cluster`, `pcmk-stonith`, `iscsi-target`, `iscsi-initiator`, `drbd-san`,
+and `mq-install`, plus the `mq-pcmk-qmgr` Pacemaker resource definitions. Each
+role's OS-specific surface is factored into per-family task files
 (`tasks/install-Debian.yml` vs `tasks/install-RedHat.yml`) selected by
 `ansible_os_family` via `include_tasks`. The cluster-formation, DRBD, VIP, and
 MQ-resource *orchestration* stays in shared task files.
 
 This makes parity **structural**: both arms execute the same orchestration, so
-"only the OS differs" is enforced by the code rather than asserted in a report.
-The known OS-specific surface is narrow:
+the only differences are in the OS-adapter task files, enforced by the code
+rather than asserted in a report.
 
 | Role | Debian/Ubuntu | RedHat/RHEL |
 |------|---------------|-------------|
 | `pcmk-cluster` | pacemaker/corosync/pcs via `apt` | HA Add-On via `dnf` (enable the add-on repo) |
-| `drbd-san` | DRBD + iSCSI tooling via `apt` | ELRepo `kmod-drbd` + `drbd-utils`; iSCSI target/initiator package names differ |
+| `iscsi-target` / `iscsi-initiator` | target/initiator tooling via `apt` | RHEL target/initiator packages (`targetcli`/`iscsi-initiator-utils`) |
+| `drbd-san` | DRBD via `apt` | ELRepo `kmod-drbd` + `drbd-utils` (kmod matched to the RHEL kernel) |
 | `pcmk-stonith` | `fence_virsh` (fence-agents) | `fence_virsh` (`fence-agents-virsh`) — agent portable, package name differs |
-| `mq-pcmk-qmgr` | MQ 9.4.5 from IBM tar; Pacemaker resource def | identical MQ resource def — the parity proof |
+| `mq-install` | MQ 9.4.5 `UbuntuLinuxARM64` tar, `.deb` via `apt` | **distinct workstream**: MQ 9.4.5 `LinuxX64` RPM tar via `rpm`/`dnf` (`MQSeriesRuntime`, `MQSeriesServer`, …) |
+| `mq-pcmk-qmgr` | Pacemaker resource def (`systemd:` unit) | identical resource def — the parity proof |
+
+**MQ install is the heaviest adapter, not a free one.** It is a different
+download (`LinuxX64` RPM tar, not `UbuntuLinuxARM64`) and a different packaging
+model (dpkg → rpm), so it is called out as its own workstream. The existing
+`rdqm-install` role already installs the base MQ RPMs on RHEL and serves as the
+template; only the RDQM-specific steps are dropped.
 
 ### 3.3 The two RDQM limitations fall out structurally
 
@@ -91,8 +112,11 @@ The known OS-specific surface is narrow:
 The arm reuses the existing parity harness unchanged — the
 `(setup × config × commit) → outcomes` run-report corpus and the capability
 matrix. A new `pcmk-rhel` column joins `pcmk-ubuntu` and `rdqm-rhel`.
-`pcmk-ubuntu` becomes the **control** (isolates the OS variable); `rdqm-rhel`
-becomes the **contrast** (isolates the substrate-ownership variable).
+`rdqm-rhel` is the **clean contrast** — same OS and platform, sole variable is
+substrate ownership — so it carries the rigorous comparison. `pcmk-ubuntu` is
+**corroborating** evidence of the OSS substrate's behavior on a different
+OS/arch (ARM64/KVM), with that arch/accel difference noted as a confound, not
+treated as a controlled variable.
 
 The arm is **real** only when its run-report corpus shows, on a one-pass cold
 RHEL 9.6 rebuild:
@@ -139,11 +163,15 @@ de-risks a large bring-up.
 
 - **ELRepo `kmod-drbd` ↔ RHEL 9.6 kernel matching** — kABI-tracking kmod vs
   kernel updates is the most likely first-rebuild failure; pin and verify.
-- **MQ as a generic Pacemaker resource** — confirm the resource model (an
-  IBM-provided multi-instance OCF agent vs a systemd/LSB resource) and that it is
-  genuinely identical to the Ubuntu arm's definition.
-- **STONITH on the RHEL/TCG box** — confirm `fence_virsh` parity with the
-  Ubuntu/KVM setup.
+- **MQ Pacemaker resource on RHEL** — the resource model is already settled: the
+  Ubuntu arm runs the QM as a `systemd:mq-<qm_name>` resource (not an OCF agent).
+  The only open part is confirming the equivalent `systemd` unit is present and
+  created the same way on RHEL.
+- **STONITH on the RHEL box** — the RHEL guests run under **TCG emulation**, not
+  KVM like the Ubuntu arm. `fence_virsh` drives libvirt on the hypervisor
+  regardless of accel, so it should port, but fencing an emulated guest warrants
+  explicit confirmation; reuse the hypervisor-side `fence_virsh` key
+  authorization established in #135.
 - **RHEL HA Add-On repo availability / entitlement** on the lab box.
 
 ## 8. Acceptance
