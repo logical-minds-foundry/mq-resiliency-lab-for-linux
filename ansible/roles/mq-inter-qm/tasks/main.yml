@@ -4,6 +4,24 @@
 #   our_qm     — our HA QM name (QMPCMK)
 #   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
 # QMDTCC must already be created + started (mq-qmgr role runs first).
+
+# TLS (#250): wire QMDTCC's keystore before the channel MQSC (which now defines
+# the channels with SSLCIPH/SSLPEER) — else the RCVR/SDR have no cert. Verified
+# live: channels run TLS 1.3, SSLPEER enforced with CHLAUTH disabled.
+- name: place QMDTCC keystore on its host
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: "{{ qmgr_name }}"
+    pki_dest_dir: /var/mqm/ssl
+
+- name: "{{ qmgr_name }}: SSLKEYR/KEYRPWD/CERTLABL + REFRESH SECURITY"
+  ansible.builtin.shell: |
+    printf "ALTER QMGR SSLKEYR('/var/mqm/ssl/{{ qmgr_name }}') KEYRPWD('%s') CERTLABL('{{ qmgr_name }}')\nREFRESH SECURITY TYPE(SSL)\n" '{{ pki_keyrpwd.stdout }}' | su mqm -c '/opt/mqm/bin/runmqsc {{ qmgr_name }}'
+  become: true
+  no_log: true
+  changed_when: true
+
 - name: render the their-side inter-QM MQSC
   ansible.builtin.template:
     src: their-side.mqsc.j2

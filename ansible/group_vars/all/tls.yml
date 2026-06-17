@@ -1,0 +1,10 @@
+---
+# Shared channel-TLS attributes — identical across arms (#212 seam), so the
+# rdqm-rhel extension is a keystore-wiring delta, not a channel-TLS rewrite (#250).
+# Verified live on the pcmk-ubuntu arm: channels run TLS 1.3
+# (TLS_CHACHA20_POLY1305_SHA256 negotiated from ANY_TLS13_OR_HIGHER), mutual auth
+# enforced with CHLAUTH disabled.
+tls_cipher: "ANY_TLS13_OR_HIGHER"
+tls_peer_inhouse: "O=client-org,OU=clearing-service" # QM-to-QM: the in-house clearing QM (O+OU)
+tls_peer_dtcc: "O=dtcc-org"                            # the DTCC side, org-only
+tls_peer_client: "O=client-org"                        # in-house SVRCONN clients, org-only
