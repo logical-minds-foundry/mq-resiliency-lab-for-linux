@@ -59,17 +59,20 @@ Provision **both** HA groups DR-ready in one playbook (the Phase-C/D lesson: DR-
 from the start, never bolt it on). Mirrors `site-pcmk-dr.yml`'s structure:
 
 - Cold-boot SSH guard over `rdqm_a:rdqm_b` (the #151/#160 lesson).
-- **Lab-wide name resolution (new shared foundation).** DR replicates *across* sites
-  over net-wan and DRBD identifies peers by name, but the `rdqm-ha` role's `/etc/hosts`
-  is same-site-only ("no DNS in the lab"). So Plan C introduces a single **canonical
-  lab hosts file rendered from `topology.yaml`** (the same single source the Ansible
-  inventory is rendered from) and synced to **every** VM. It carries **per-plane name
-  aliases** — every node IP is addressable by name: `<node>` (primary/mgmt) plus
-  `<node>-mgmt` / `-data-a` / `-data-b` / `-hb-a` / `-hb-b` / `-wan` / `-ext` for each
-  NIC the node declares. DR config then names partners on the **net-wan** plane
-  unambiguously, and any future hostname-based MQ channel resolves consistently too.
-  *Follow-up (backlogged): replace the synced file with real lab DNS (dnsmasq/CoreDNS
-  on a service VM, fed from the same topology source).*
+- **Name resolution on the instrumented cluster.** DR replicates *across* sites over
+  net-wan and DRBD identifies peers by name, but the `rdqm-ha` role's `/etc/hosts` is
+  same-site-only ("no DNS in the lab"). The mechanism is needed only on the **system
+  under test** — the 3+3 cluster (`rdqm_a:rdqm_b`) — because that is the only place
+  hostnames are *referenced* (DRBD partners, cluster config). The **surrounding lab**
+  (dtcc, app, obs) is scaffolding, hardwired by IP — names there don't matter. So Plan
+  C renders a **canonical hosts file from `topology.yaml`** (the same single source the
+  Ansible inventory comes from; the renderer is lab-generic and reusable) with
+  **per-plane name aliases** — every node IP addressable by name: `<node>`
+  (primary/mgmt) plus `<node>-mgmt` / `-data-a` / `-data-b` / `-hb-a` / `-hb-b` /
+  `-wan` / `-ext` for each NIC the node declares — and **syncs it to the six
+  instrumented nodes**. DR config then names partners on the **net-wan** plane
+  unambiguously. *Broader want, separate and NOT a Plan C dependency: real lab DNS fed
+  from the same topology source (#234).*
 - `rdqm-install` on all six nodes (reuses the Plan B role).
 - **Firewall:** open the RDQM ports using IBM's shipped definitions —
   `rdqm-drbd` (TCP 7000–7100) and `rdqm-mq` (TCP 1414) firewalld services
@@ -136,19 +139,26 @@ Three scripts, RDQM-native analogs of the Pacemaker DR family:
   persist, ready to power back on). With the source primary down, `rdqmdr`
   force-promotes site B. On site-A power-up, RDQM brings it back as DR-secondary and
   resynchronizes; failback then reverses the roles.
-- **`lab/scripts/wan-degrade.sh`** — `tc`/`netem` delay+loss on **net-wan**. RDQM
-  encapsulates DRBD (we can't run `drbdadm` like the Pacemaker arm's
-  `drbd-degrade.sh`), so we widen the async window at the only layer RDQM leaves open
-  to us — the network. This makes RPO measurable and *illustrates the encapsulation
-  trade-off* explicitly.
+- **`lab/scripts/wan-degrade.sh`** — `tc`/`netem` delay+loss applied on the **active
+  site-A primary's net-wan egress** (the replication sender), so it widens the
+  *cross-site DR* async window only; intra-site HA rides net-hb/net-data and is
+  untouched. RDQM encapsulates DRBD (we can't run `drbdadm` like the Pacemaker arm's
+  `drbd-degrade.sh`), so the network is the only layer it leaves open to us. This makes
+  RPO measurable and *illustrates the encapsulation trade-off* explicitly.
 
 **The drill (acceptance):** provision `site-rdqm-dr.yml` → `rdqm-dr-qm-create.sh` →
 **snapshot the provisioned 3+3 (#218)** so the *whole* drill can be re-run cheaply from
 the baseline → app drives load → `wan-degrade` widens the async window → **hard
 power-off** rdqm-a1/2/3 (down, not erased) → `rdqm-dr-force` promotes site B → app
-reconnects to `10.10.2.100` and resumes → record **RPO** (messages committed at A but
-not yet replicated) and **RTO** (reconnect time) → **power site A back on** → RDQM
-resyncs it as DR-secondary → `rdqm-dr-cutover.sh b2a` failback. Findings →
+reconnects to `10.10.2.100` and resumes → record **RPO** and **RTO** → **power site A
+back on** → RDQM resyncs it as DR-secondary → `rdqm-dr-cutover.sh b2a` failback.
+
+**Measuring RPO/RTO:** the app logs every PUT's id as *sent-and-acked* (committed at
+the site-A primary). After the forced promote, diff that ledger against the messages
+that actually survived on site B (ids / depth on `HA.TEST`): **RPO = acked-at-A −
+survived-at-B** (the un-replicated tail the netem window widened). **RTO** = the app's
+reconnect-and-resume gap across the cutover. Mirrors how the Pacemaker
+`forced-dr-findings` quantified loss. Findings →
 `docs/reports/<date>-rdqm-forced-dr-findings.md`, mirroring the Pacemaker report and
 separating data (observed) from judgment. (The #218 snapshot is for re-running the
 drill from the provisioned baseline, independent of the power-off/on failback path.)
@@ -160,9 +170,11 @@ drill from the provisioned baseline, independent of the power-off/on failback pa
   `QmConfig` change** — DR is script-driven (§5), so the DR addresses live in the
   `rdqm-dr-*` scripts (FIPs) and the lab hosts names (§4); a `vip_dr` schema field
   would be dead weight nothing reads.
-- **Hosts renderer:** add a small renderer that emits the canonical lab hosts file
-  from `topology.yaml` (parallel to the existing inventory renderer), consumed by the
-  §4 sync step. Lab-wide, not RDQM-specific.
+- **Hosts renderer:** add a small renderer that emits the canonical hosts file from
+  `topology.yaml` (parallel to the existing inventory renderer). The renderer is
+  generic/reusable, but Plan C's `site-rdqm-dr.yml` **syncs it only to the instrumented
+  cluster (`rdqm_a:rdqm_b`)** — the nodes that reference hostnames. Distributing it
+  more widely is the lab-DNS follow-up's job, not Plan C's.
 - DR stays **script-driven** (parity with the Pacemaker arm, which uses
   `pcmk-dr-*.sh`, not registry verbs). The `qm-create` verb remains the HA-only path.
   Promoting DR cutover/failback to first-class `mqlab dr` arm-registry verbs — for
