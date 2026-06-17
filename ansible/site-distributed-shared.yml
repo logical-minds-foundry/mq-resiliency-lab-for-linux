@@ -1,0 +1,91 @@
+# Shared distributed-MQ layer (RDQM-parity §4): the substrate-FREE DTCC counterparty
+# (QMDTCC) + the their-side inter-QM channels + the app (requester) message path.
+# Imported by each arm's distributed playbook OVER its own in-house QM substrate —
+# site-distributed.yml (Pacemaker) and site-rdqm-distributed.yml (RDQM, Plan B) — so
+# both arms run the identical DTCC/app code. The importer supplies `our_qm` (this
+# side's QM name) and `our_conn` (its CONNAMEs) for the their-side channels.
+
+# Cold-boot guard for the DTCC + app hosts (mirrors site-pcmk.yml's guard; #151
+# lesson): a guest not yet SSH-ready when its play fires must not drop out.
+- name: wait for the DTCC + app hosts to be SSH-ready (cold-boot guard)
+  hosts: dtcc:app
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+- hosts: dtcc
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+
+- hosts: dtcc
+  roles: [mq-install]
+
+- hosts: dtcc
+  vars:
+    qmgr_name: QMDTCC
+  roles: [mq-qmgr]
+
+- hosts: dtcc
+  vars:
+    qmgr_name: QMDTCC
+  # our_qm / our_conn are supplied by the importing playbook (per arm).
+  roles: [mq-inter-qm]
+
+# --- Business A's app (requester): MQ client libs + pymqi + the reconnect-aware
+#     app client. The TCP-keepalive tuning lets a blocking MQI call detect a
+#     fenced peer in ~30s -- the client HA-cooperation contract (#64). (#148) ---
+- hosts: app
+  become: true
+  roles: [mq-client]
+
+- hosts: app
+  tasks:
+    - name: pymqi venv
+      ansible.builtin.shell: |
+        set -e
+        python3 -m venv /home/vagrant/mqvenv
+        /home/vagrant/mqvenv/bin/pip install pymqi
+      args:
+        creates: /home/vagrant/mqvenv/bin/python
+
+    - name: deploy the app requester
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../clients/app_requester.py"
+        dest: /home/vagrant/app_requester.py
+        mode: "0644"
+
+    - name: client TCP KeepAlive in mqclient.ini (fast dead-peer detection)
+      become: true
+      ansible.builtin.blockinfile:
+        path: /var/mqm/mqclient.ini
+        create: true
+        owner: mqm
+        group: mqm
+        mode: "0644"
+        marker: "# {mark} DR-HA TCP KEEPALIVE"
+        block: |
+          TCP:
+             KeepAlive=Yes
+
+    - name: short OS TCP keepalive so a blocked call detects a fenced peer
+      become: true
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-mq-keepalive.conf
+        mode: "0644"
+        content: |
+          # DR-HA: detect a fenced MQ peer in ~30s, not the ~15min TCP default.
+          net.ipv4.tcp_keepalive_time = 15
+          net.ipv4.tcp_keepalive_intvl = 5
+          net.ipv4.tcp_keepalive_probes = 3
+      register: mq_keepalive_sysctl
+
+    - name: apply the keepalive sysctl drop-in
+      become: true
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-mq-keepalive.conf
+      when: mq_keepalive_sysctl.changed

@@ -39,6 +39,7 @@ class Setup:
     provision: str | None
     secrets: list[str]
     qm: QmConfig | None
+    arm: str | None = None
 
 
 def _topology() -> dict[str, Any]:
@@ -71,6 +72,7 @@ def lab_setups() -> dict[str, Setup]:
             )
             if cfg.get("qm")
             else None,
+            arm=cfg.get("arm"),
         )
     return result
 

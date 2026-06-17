@@ -2,8 +2,8 @@
 arm's backend supports. Parity = identical capability + identical correctness;
 this declares the capability half. RDQM rows start NOT_YET until P3/P4 land.
 
-The `provisional_arm` map is a P1 stopgap: the real arm registry arrives in P2
-(topology-declared), at which point this map is replaced by a registry lookup.
+The arm-to-setup mapping lives in the topology-declared registry (`mqlab.arms`);
+the test suite asserts this matrix and that registry agree on the arm set.
 """
 
 from __future__ import annotations
@@ -36,28 +36,12 @@ MATRIX: dict[str, dict[str, Support]] = {
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
 }
 
-# Provisional P1 setup -> arm map (replaced by the P2 registry).
-_PROVISIONAL_ARM: dict[str, str] = {
-    "distributed": "pcmk-ubuntu",
-    "pcmk_san_ha": "pcmk-ubuntu",
-    "pcmk_san_dr": "pcmk-ubuntu",
-    "rdqm_ha": "rdqm-rhel",
-    "rdqm_dr": "rdqm-rhel",
-}
-
 
 def supported(arm: str, verb: str) -> Support:
     try:
         return MATRIX[arm][verb]
     except KeyError as exc:
         raise KeyError(f"unknown arm/verb: {arm}/{verb}") from exc
-
-
-def provisional_arm(setup: str) -> str:
-    try:
-        return _PROVISIONAL_ARM[setup]
-    except KeyError as exc:
-        raise KeyError(f"no provisional arm for setup {setup!r}") from exc
 
 
 def render_markdown() -> str:

@@ -162,7 +162,7 @@ mqlab vm destroy <setup>             # remove guests + overlay disks (base box u
 | `pcmk_san_dr` | Pacemaker/SAN 3+3 cross-site DR | `site-pcmk-dr.yml` | `qm create pcmk_san_ha` + `pcmk-dr-seed-peer.sh` |
 | `rdqm_ha` / `rdqm_dr` | RDQM/RHEL HA / 3+3 DR | `site-rdqm.yml` | `lab/scripts/rdqm-qm-create.sh` |
 | `standalone` | Phase-B single QM + DTCC sim + client | `site.yml` | (QM comes up in provision) |
-| `distributed` | QMPCMK ⇄ QMDTCC over net-ext (epic #145) | `site-distributed.yml` | *(emerging — Plans 2–4; document once stable)* |
+| `distributed-pcmk-ubuntu` | QMPCMK ⇄ QMDTCC over net-ext (epic #145) | `site-distributed.yml` | `qm create distributed-pcmk-ubuntu` |
 | `monitoring` | Prometheus/Grafana + MQ probe | `site-obs.yml` | n/a (use `mqlab obs up`) |
 
 ## Notes / gotchas

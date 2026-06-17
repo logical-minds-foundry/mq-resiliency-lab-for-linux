@@ -110,6 +110,8 @@
   roles: [pcmk-stonith]
 - hosts: pcmk_a
   roles: [mq-install]
+- hosts: pcmk_a
+  roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)
 
 # --- Site B: cluster, fencing, MQ (no QM yet; receives on cutover) ---
 - hosts: pcmk_b
@@ -127,3 +129,5 @@
   roles: [pcmk-stonith]
 - hosts: pcmk_b
   roles: [mq-install]
+- hosts: pcmk_b
+  roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)
