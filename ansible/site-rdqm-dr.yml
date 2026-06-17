@@ -1,0 +1,65 @@
+# Plan C (#233): DR-ready substrate for the RDQM 3+3 cross-site HA/DR cluster.
+# Provisions BOTH HA groups DR-ready from the start (RDQM cannot add DR to an existing
+# HA QM — IBM 9.4). Mirrors site-pcmk-dr.yml's shape; reuses the Plan B roles. The QM
+# itself is created afterward by lab/scripts/rdqm-dr-qm-create.sh (script-driven DR).
+- name: wait for all RDQM DR-arm hosts to be SSH-ready (cold-boot guard, #151/#160)
+  hosts: rdqm_a:rdqm_b
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+- hosts: rdqm_a:rdqm_b
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.dnf:
+        name: acl
+    # Canonical lab name resolution on the instrumented cluster (#233): append the
+    # topology-rendered hosts file (build/hosts, from `mqlab vm hosts`/_provision) so
+    # every node IP is addressable by name across both sites (per-plane aliases).
+    # glibc /etc/hosts has no .include, so we inline a marked block (idempotent).
+    - name: lab name resolution (per-plane aliases) in /etc/hosts
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} LAB HOSTS (#233)"
+        block: "{{ lookup('file', playbook_dir + '/../build/hosts') }}"
+
+- hosts: rdqm_a:rdqm_b
+  roles: [rdqm-install]
+
+- hosts: rdqm_a:rdqm_b
+  become: true
+  tasks:
+    - name: open RDQM firewall ports (DRBD 7000-7100, MQ 1414) via IBM's services
+      ansible.builtin.shell: |
+        set -e
+        firewall-cmd --permanent --add-service=rdqm-drbd
+        firewall-cmd --permanent --add-service=rdqm-mq
+        firewall-cmd --reload
+      register: fw
+      changed_when: "'ALREADY_ENABLED' not in fw.stderr"
+
+# REST on every QM (design §1). The shared mqweb role starts --no-block (Plan B TCG
+# fix), so this does not stall on the slow Liberty start across six nodes.
+- hosts: rdqm_a:rdqm_b
+  roles: [mqweb]
+
+# Form the HA group on each site (canonical prerequisite: "configure an HA group on
+# each site"). The rdqm-ha role is parameterized per-site by rdqm_site_nodes.
+- hosts: rdqm_a
+  vars:
+    rdqm_site_nodes:
+      - { name: rdqm-a1, hb: 172.16.1.31, data: 10.10.1.31 }
+      - { name: rdqm-a2, hb: 172.16.1.32, data: 10.10.1.32 }
+      - { name: rdqm-a3, hb: 172.16.1.33, data: 10.10.1.33 }
+  roles: [rdqm-ha]
+
+- hosts: rdqm_b
+  vars:
+    rdqm_site_nodes:
+      - { name: rdqm-b1, hb: 172.16.2.41, data: 10.10.2.41 }
+      - { name: rdqm-b2, hb: 172.16.2.42, data: 10.10.2.42 }
+      - { name: rdqm-b3, hb: 172.16.2.43, data: 10.10.2.43 }
+  roles: [rdqm-ha]

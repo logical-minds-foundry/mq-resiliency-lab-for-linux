@@ -244,7 +244,7 @@ setups:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
     arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
-    provision: ansible/site-rdqm.yml
+    provision: ansible/site-rdqm-dr.yml
   distributed-rdqm-rhel:
     description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
     arm: rdqm-rhel
