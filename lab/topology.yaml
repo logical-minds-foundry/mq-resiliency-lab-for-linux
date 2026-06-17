@@ -120,6 +120,29 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
+  # --- pcmk-rhel arm: OSS Pacemaker/SAN substrate on RHEL 9.6 (issue #238/#244).
+  # Same SAN/hb/data shape as the Ubuntu Phase-D arm, on RHEL x86_64/TCG to match
+  # the RDQM platform. New net-san-rhel-a (10.40.3.0/24) plane; .7x host octets. ---
+  san-a-rhel:
+    platform: rhel96-x86_64
+    extra_disk: 8
+    nics: { net-mgmt: 10.50.0.70, net-san-rhel-a: 10.40.3.5, net-wan: 10.99.0.70 }
+  pcmk-rhel-a1:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.71, net-data-a: 10.10.1.71, net-hb-a: 172.16.1.71, net-san-rhel-a: 10.40.3.71, net-wan: 10.99.0.71, net-ext: 10.60.0.71 }
+  pcmk-rhel-a2:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.72, net-data-a: 10.10.1.72, net-hb-a: 172.16.1.72, net-san-rhel-a: 10.40.3.72, net-wan: 10.99.0.72, net-ext: 10.60.0.72 }
+  pcmk-rhel-a3:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.73, net-data-a: 10.10.1.73, net-hb-a: 172.16.1.73, net-san-rhel-a: 10.40.3.73, net-wan: 10.99.0.73, net-ext: 10.60.0.73 }
+
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
 # playbooks target them; setups (below) compose them. Convention: underscores name
@@ -129,6 +152,8 @@ groups:
   san_b:  [san-b]
   pcmk_a: [pcmk-a1, pcmk-a2, pcmk-a3]
   pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
+  san_a_rhel:  [san-a-rhel]
+  pcmk_rhel_a: [pcmk-rhel-a1, pcmk-rhel-a2, pcmk-rhel-a3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   dtcc:   [dtcc-sim]
@@ -168,6 +193,18 @@ arms:
       # RDQM analogue of the pcmk arm's `pcs resource disable/enable mq_group`.
       qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
+  # Same Pacemaker mechanism as pcmk-ubuntu — the QM is an mq_group either way
+  # (the structural-parity proof). qm-* verb playbooks are RHEL-specific and land
+  # in Phase 2; Phase 1 (substrate) does not invoke them.
+  pcmk-rhel:
+    mechanism: pacemaker-san
+    cluster_group: pcmk_rhel_a
+    verbs:
+      qm-create:  { playbook: site-pcmk-rhel-qm.yml }
+      qm-destroy: { playbook: site-pcmk-rhel-qm-down.yml }
+      qm-up:      { pcs: "resource enable mq_group" }
+      qm-down:    { pcs: "resource disable mq_group" }
+      qm-status:  { pcs: "status resources" }
 
 setups:
   pcmk_san_ha:
@@ -177,6 +214,14 @@ setups:
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }
+  pcmk_san_rhel_ha:
+    description: RHEL Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA (#244; substrate only in Phase 1)
+    arm: pcmk-rhel
+    groups: [san_a_rhel, pcmk_rhel_a]
+    provision: ansible/site-pcmk-rhel.yml
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    # vip/vip_ext declared for Phase 2/3; Phase 1 provisioning does not create them.
+    qm: { name: QMPCMK, vip: 10.10.1.201, vip_ext: 10.60.0.11 }
   pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
     arm: pcmk-ubuntu
