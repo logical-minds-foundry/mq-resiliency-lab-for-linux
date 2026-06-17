@@ -45,6 +45,17 @@
       failed_when: crtmqm.rc != 0 and 'already exists' not in (crtmqm.stderr | default(''))
       changed_when: crtmqm.rc == 0
 
+    # 1b. TLS (#250): place QMPCMK's lab-pki keystore on the shared LUN so SSLKEYR
+    #     follows the QM on failover. Registers pki_keyrpwd for the MQSC below.
+    #     Verified: GSKit (runmqakm) reads the compatibility2022 PKCS#12 cleanly.
+    - name: place QMPCMK keystore on the shared LUN (TLS)
+      ansible.builtin.include_role:
+        name: pki-distribute
+      vars:
+        pki_entity: "{{ qm_name }}"
+        pki_dest_dir: /mqshared/ssl
+      run_once: true
+
     # 2. MQSC config (lab posture, spec 1), then a clean stop.
     - name: apply MQSC config
       ansible.builtin.shell: |
@@ -54,6 +65,8 @@
         DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') HBINT(15) KAINT(15) REPLACE\n
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
         REFRESH SECURITY TYPE(CONNAUTH)\n
+        ALTER QMGR SSLKEYR('"'"'/mqshared/ssl/{{ qm_name }}'"'"') KEYRPWD('"'"'{{ pki_keyrpwd.stdout }}'"'"')\n
+        REFRESH SECURITY TYPE(SSL)\n
         DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n
         ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
         su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
