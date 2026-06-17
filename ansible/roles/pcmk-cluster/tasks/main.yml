@@ -1,11 +1,8 @@
 # Corosync/Pacemaker formation - the hand-built equivalent of rdqmadm -c.
 # Cluster comms ride the heartbeat net (the same axis the fault suite
 # severs). hacluster password is runtime-injected (PCMK_HACLUSTER_PASSWORD).
-- name: install cluster stack
-  ansible.builtin.apt:
-    name: [pacemaker, corosync, pcs, resource-agents-base, resource-agents-extra]
-    update_cache: true
-  become: true
+- name: install cluster stack (OS-adapter)
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
 - name: site hosts entries (hb addresses)
   ansible.builtin.lineinfile:

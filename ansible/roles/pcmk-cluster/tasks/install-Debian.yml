@@ -1,0 +1,6 @@
+# Cluster stack on Debian/Ubuntu (the Ubuntu arm's original package set).
+- name: install cluster stack (apt)
+  ansible.builtin.apt:
+    name: [pacemaker, corosync, pcs, resource-agents-base, resource-agents-extra]
+    update_cache: true
+  become: true
