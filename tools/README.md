@@ -30,6 +30,16 @@ build/refs/ibm-docs/<product>/<version>/<slug>/
   meta.json      # source_url, content_url, retrieved_at, sha256, title
 ```
 
+The cache always resolves to the **main worktree root** (the tool strips any
+`/.worktrees/<name>` segment), so it accumulates in one place and **survives worktree
+removal**. `build/` is host-durable but scratch-by-convention, so set **`$IBM_DOC_CACHE`**
+to relocate the cache to a permanent home without any code change — the permanent-home
+decision is backlogged in **#226**.
+
+```bash
+export IBM_DOC_CACHE=~/.cache/ibm-docs   # example permanent home
+```
+
 Cite the cached text as the primary source (it *is* the IBM page body), with the
 `source_url` from `meta.json`. Be polite: public docs, low volume, rate-limit.
 

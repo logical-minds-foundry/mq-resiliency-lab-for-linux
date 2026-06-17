@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -38,14 +39,25 @@ _CONTENT_API = "https://www.ibm.com/docs/api/v1/content/"
 
 
 def _main_root() -> Path:
-    """Repo main-worktree root, so the cache accumulates in one host-durable place
-    regardless of which worktree the tool runs from."""
+    """Repo main-worktree root, so the cache accumulates in one place regardless of
+    which worktree the tool runs from (strips any `/.worktrees/<name>` segment)."""
     root = str(Path(__file__).resolve().parent.parent)  # tools/ -> repo root
     marker = "/.worktrees/"
     return Path(root.split(marker)[0]) if marker in root else Path(root)
 
 
-_CACHE = _main_root() / "build" / "refs" / "ibm-docs"
+def _cache_root() -> Path:
+    """Where cached docs live. Defaults to the MAIN worktree's build/refs/ibm-docs/
+    (host-durable, survives worktree removal). `build/` is scratch-by-convention, so
+    set $IBM_DOC_CACHE to relocate the cache to a permanent home without code changes
+    — see the permanent-home backlog issue (#226)."""
+    override = os.environ.get("IBM_DOC_CACHE")
+    if override:
+        return Path(override).expanduser()
+    return _main_root() / "build" / "refs" / "ibm-docs"
+
+
+_CACHE = _cache_root()
 
 
 class _TextExtractor(HTMLParser):
