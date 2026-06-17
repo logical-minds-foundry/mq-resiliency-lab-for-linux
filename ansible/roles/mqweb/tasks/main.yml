@@ -10,6 +10,24 @@
     dest: /etc/systemd/system/mqweb.service
   become: true
 
+# TLS (#250): replace Liberty's default self-signed cert with the org-CA `mqweb`
+# entity cert, so REST/console is served over a CA-issued cert. No .sth stash —
+# Liberty reads the PKCS#12 password from mqwebuser.xml (keyStore element).
+- name: place the mqweb server keystore (TLS)
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: mqweb
+    pki_dest_dir: "{{ mqweb_security_dir }}"
+    pki_owner: mqm
+  when: mqweb_tls | bool
+
+- name: stash the mqweb keystore password for the XML (no_log)
+  ansible.builtin.set_fact:
+    mqweb_keyrpwd: "{{ pki_keyrpwd.stdout }}"
+  no_log: true
+  when: mqweb_tls | bool
+
 - name: mqweb basic registry (creds from env, never committed)
   ansible.builtin.template:
     src: mqwebuser.xml.j2
@@ -18,6 +36,7 @@
     group: mqm
   become: true
   no_log: true
+  register: mqwebuser_xml
 
 - name: enable mqweb (boot persistence + daemon reload)
   ansible.builtin.systemd:
@@ -43,3 +62,12 @@
   register: setmqweb
   changed_when: "'MQWB' not in setmqweb.stderr"
   failed_when: false
+
+# Liberty reads its keyStore/ssl config at startup, so a cert/config change needs
+# a restart to take effect. --no-block keeps provision from waiting on the slow
+# come-up. Only when the rendered XML actually changed.
+- name: restart mqweb to pick up the TLS cert (non-blocking)
+  ansible.builtin.command: systemctl restart mqweb.service --no-block
+  become: true
+  when: mqweb_tls | bool and mqwebuser_xml is changed
+  changed_when: true

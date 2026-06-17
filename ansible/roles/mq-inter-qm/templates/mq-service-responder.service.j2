@@ -8,7 +8,7 @@ Type=simple
 User=mqm
 Group=mqm
 Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
-ExecStart=/var/mqm/rvenv/bin/python /var/mqm/service_responder.py --qm {{ qmgr_name }} --in-queue SVC.REQUEST --channel SVC.SVRCONN --conn "localhost(1414)"
+ExecStart=/var/mqm/rvenv/bin/python /var/mqm/service_responder.py --qm {{ qmgr_name }} --in-queue SVC.REQUEST --channel SVC.SVRCONN --conn "localhost(1414)" --keyrepo /var/mqm/ssl/dtcc-responder --certlabel dtcc-responder
 Restart=always
 RestartSec=3
 

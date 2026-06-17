@@ -16,7 +16,12 @@ pki_entities:
   - { cn: QMPCMK, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org] }
   - { cn: QMRDQM, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org] }
   - { cn: app-client, org: client-org, ou: apps, kind: personal, trust: [] }
-  - { cn: mq_prometheus, org: client-org, ou: ops, kind: personal, trust: [] }
+  # Trusts dtcc-org too: one client-org ops identity, but the exporter scrapes BOTH
+  # QMs, so it must validate QMDTCC's O=dtcc-org server cert (#250 / MON.SVRCONN).
+  - { cn: mq_prometheus, org: client-org, ou: ops, kind: personal, trust: [dtcc-org] }
   - { cn: mqweb, org: client-org, ou: ops, kind: personal, trust: [] }
   - { cn: pymqrest, org: client-org, ou: ops, kind: trust_only, trust: [] }
   - { cn: QMDTCC, org: dtcc-org, ou: clearing-service, kind: personal, trust: [client-org] }
+  # The co-located DTCC service responder is a SVRCONN client (#250 / SVC.SVRCONN) —
+  # presents O=dtcc-org so QMDTCC's SVRCONN SSLPEER('O=dtcc-org') validates it.
+  - { cn: dtcc-responder, org: dtcc-org, ou: clearing-service, kind: personal, trust: [client-org] }

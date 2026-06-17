@@ -22,20 +22,37 @@ import argparse
 import pymqi
 
 
-def serve(qmgr_name: str, in_queue: str, channel: str, conn: str) -> None:
+def serve(
+    qmgr_name: str,
+    in_queue: str,
+    channel: str,
+    conn: str,
+    keyrepo: str = "",
+    certlabel: str = "",
+) -> None:
     """Get/reply/commit forever on a client connection to `qmgr_name`.
 
     Client-mode to localhost -- the QM is co-located, but pip-installed pymqi
     links the client library only, so a true bindings connect fails 2058 (#180).
     A loopback client connection is local-in-spirit and matches dr_responder.py.
+
+    TLS (#250): when `keyrepo` is given (the keystore stem, no .p12), connect with
+    mutual TLS 1.3 -- a sibling .sth stash supplies the PKCS#12 password and
+    `certlabel` selects the cert. Omit it for a plaintext connect.
     """
     cd = pymqi.CD(
         ChannelName=channel.encode(),
         ConnectionName=conn.encode(),
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
+    sco = None
+    if keyrepo:
+        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
+        sco = pymqi.SCO(KeyRepository=keyrepo.encode())
+        if certlabel:
+            sco.CertificateLabel = certlabel.encode()
     qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options(qmgr_name, cd=cd)
+    qmgr.connect_with_options(qmgr_name, cd=cd, sco=sco)
     qin = pymqi.Queue(qmgr, in_queue)
     gmo = pymqi.GMO(
         Options=(
@@ -85,8 +102,11 @@ def main() -> int:
     ap.add_argument("--in-queue", default="SVC.REQUEST")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--conn", default="localhost(1414)")
+    # TLS (#250): keystore stem + cert label; omit both for a plaintext connect.
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/dtcc-responder")
+    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args()
-    serve(args.qm, args.in_queue, args.channel, args.conn)
+    serve(args.qm, args.in_queue, args.channel, args.conn, args.keyrepo, args.certlabel)
     return 0
 
 

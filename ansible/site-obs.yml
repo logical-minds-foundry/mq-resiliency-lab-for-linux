@@ -27,7 +27,9 @@
       vars:
         mq_exporter_qm: QMDTCC
         mq_exporter_conn: "10.60.0.50(1414)"
-        mq_exporter_channel: SVC.SVRCONN
+        # Connect on the dedicated monitoring SVRCONN (#250), not the responder's
+        # SVC.SVRCONN — the exporter presents O=client-org, which MON.SVRCONN pins.
+        mq_exporter_channel: MON.SVRCONN
         mq_exporter_port: 9158
         mq_exporter_monitored_queues: "SVC.REQUEST,QMPCMK"
-        mq_exporter_monitored_channels: "SVC.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
+        mq_exporter_monitored_channels: "SVC.SVRCONN,MON.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"

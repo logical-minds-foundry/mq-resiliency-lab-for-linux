@@ -6,8 +6,19 @@ mq_exporter_qm: QMPCMK
 # Per-instance unit suffix so the probe can run one exporter per QM (#182).
 mq_exporter_instance: "{{ mq_exporter_qm | lower }}"
 mq_exporter_conn: "10.10.1.200(1414)"
-mq_exporter_channel: APP.SVRCONN
+# Dedicated monitoring SVRCONN (#250): the exporter no longer piggybacks on
+# APP.SVRCONN/SVC.SVRCONN, whose mutual-TLS SSLPEERs pin the app/responder
+# identities. MON.SVRCONN pins O=client-org (the exporter) on both QMs.
+mq_exporter_channel: MON.SVRCONN
 mq_exporter_port: 9157
+# TLS (#250): mq-metric-samples exposes no MQ-TLS CLI flags, so a client
+# connection's SSLCIPH must come from a CCDT. We render a one-channel CCDT per
+# instance and set MQSSLKEYR to the keystore stem (a sibling .sth stash supplies
+# the password). Verified-at-build: cipherSpecification alias + CCDT field names.
+mq_exporter_tls: true
+mq_exporter_certlabel: mq_prometheus
+mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus
+mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
 # gate). The app queue + our outbound xmitq + the app reply queue.
 mq_exporter_monitored_queues: "HA.TEST,QMDTCC,APP.REPLY"
