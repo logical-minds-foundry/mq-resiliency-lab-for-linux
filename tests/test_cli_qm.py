@@ -236,7 +236,8 @@ def test_qm_create_runs_rdqm_script_with_qm_and_vip(monkeypatch, tmp_path):
     argv = runner.recorded[-1].argv
     assert argv[0] == "bash"
     assert argv[1].endswith("/lab/scripts/rdqm-qm-create.sh")
-    assert argv[2:] == ["QMRDQM", "10.10.1.100"]
+    # QM, data VIP, partner VIP, counterparty CONNAME ("" when unset — #216)
+    assert argv[2:] == ["QMRDQM", "10.10.1.100", "10.60.0.30", ""]
 
 
 def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):

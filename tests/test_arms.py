@@ -85,7 +85,9 @@ def test_resolve_verb_unsupported_raises(monkeypatch, tmp_path):
 
 def test_real_rdqm_registry_has_create_and_status() -> None:
     # real topology (no seeding): rdqm-rhel verbs filled in Plan B Task 4
-    assert resolve_verb("rdqm_ha", "qm-create") == VerbImpl(kind="script", value="rdqm-qm-create.sh")
+    assert resolve_verb("rdqm_ha", "qm-create") == VerbImpl(
+        kind="script", value="rdqm-qm-create.sh"
+    )
     assert resolve_verb("rdqm_ha", "qm-status").kind == "cmd"
 
 

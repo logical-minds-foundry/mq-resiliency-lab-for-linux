@@ -899,13 +899,12 @@ def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
 
 
 def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
-    # Run a lab script with the QM name + data VIP (the rdqm-qm-create contract).
+    # Run a lab script with the rdqm-qm-create contract: QM, data VIP, partner VIP,
+    # and (when set) the counterparty CONNAME for the inter-QM MQSC (#216).
+    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.vip_ext, qm.dtcc_conn or ""]
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
-        step = CommandStep(
-            f"{setup_name} {verb}",
-            Command(["bash", str(lab_script(script)), qm.name, qm.vip]),  # noqa: S607
-        )
+        step = CommandStep(f"{setup_name} {verb}", Command(argv))  # noqa: S607
         run_steps(
             [step],
             runner=deps.runner,
