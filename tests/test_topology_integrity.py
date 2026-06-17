@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from mqlab.inventory import lab_inventory
+from mqlab.roster import lab_roster
 from mqlab.setups import lab_groups, lab_setups
 
 
@@ -8,6 +9,12 @@ def test_real_topology_renders_without_error():
     out = lab_inventory()  # raises InventoryError on any integrity problem
     assert "[all:vars]" in out
     assert out.endswith("ansible_python_interpreter=/usr/bin/python3\n")
+
+
+def test_real_topology_renders_roster():
+    out = lab_roster()  # raises RosterError on any integrity problem
+    assert out.startswith("# salt-ssh roster")
+    assert "minion_opts:" in out
 
 
 def test_every_setup_group_is_defined():

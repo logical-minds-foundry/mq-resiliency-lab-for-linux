@@ -24,6 +24,7 @@ from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import lab_network, lab_script, repo_root, reports_dir, runs_dir
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
+from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.runplan import baseline_run_plan
 from mqlab.runreport import (
@@ -719,6 +720,23 @@ def vm_inventory() -> None:
     try:
         text = lab_inventory()
         path = inventory_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        deps.renderer.command(f"render -> {path}")
+        for line in text.splitlines():
+            deps.renderer.output(line)
+            deps.transcript.write(line)
+    finally:
+        deps.transcript.close()
+
+
+@vm_app.command("roster")
+def vm_roster() -> None:
+    """Render build/salt/roster from topology and echo it (the salt-ssh map)."""
+    deps = build_deps("vm-roster", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        text = lab_roster()
+        path = roster_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
         deps.renderer.command(f"render -> {path}")
