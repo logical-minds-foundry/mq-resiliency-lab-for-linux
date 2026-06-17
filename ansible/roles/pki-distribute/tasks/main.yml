@@ -1,0 +1,33 @@
+---
+# Place one lab-pki entity's PKCS#12 keystore on the host that uses it, and
+# source its (persisted-once) password from the controller. Caller sets:
+#   pki_entity     — the entity CN (e.g. QMPCMK)
+#   pki_dest_dir   — where on the target host the keystore lands
+#   pki_owner      — file owner (default mqm)
+# Registers `pki_keyrpwd` (stdout = the keystore password; no_log).
+- name: "ensure dest dir for {{ pki_entity }}"
+  ansible.builtin.file:
+    path: "{{ pki_dest_dir }}"
+    state: directory
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0700"
+  become: true
+
+- name: "copy {{ pki_entity }} keystore to the host"
+  ansible.builtin.copy:
+    src: "{{ pki_src_dir }}/{{ pki_entity }}/{{ pki_entity }}.p12"
+    dest: "{{ pki_dest_dir }}/{{ pki_entity }}.p12"
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0600"
+  become: true
+
+- name: "source the {{ pki_entity }} keystore password (lab-secret.sh on the controller)"
+  ansible.builtin.command: "{{ pki_secret_script }} pki-keyrpwd-{{ pki_entity | lower }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: pki_keyrpwd
+  changed_when: false
+  no_log: true
