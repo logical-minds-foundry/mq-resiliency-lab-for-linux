@@ -898,17 +898,43 @@ def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
         deps.transcript.close()
 
 
+def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
+    # Run a lab script with the QM name + data VIP (the rdqm-qm-create contract).
+    deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        step = CommandStep(
+            f"{setup_name} {verb}",
+            Command(["bash", str(lab_script(script)), qm.name, qm.vip]),  # noqa: S607
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
 def _qm_dispatch(setup_name: str, verb: str) -> None:
     # Validate the setup (exists + has a QM) for clean exit-2 messages, then resolve
-    # the arm's implementation of the verb from the registry and run it (#202).
-    _setup_qm_or_exit(setup_name)
+    # the arm's implementation of the verb from the registry and run it (#202, #216).
+    qm = _setup_qm_or_exit(setup_name)
     impl = resolve_verb(setup_name, verb)
     if impl.kind == "playbook":
         _qm_playbook(setup_name, impl.value, verb)
     elif impl.kind == "pcs":
         _qm_cluster_cmd(setup_name, f"pcs {impl.value}", verb)
-    else:  # pragma: no cover - cmd/script kinds arrive in Task 3
-        typer.echo(f"qm {verb}: arm verb kind {impl.kind!r} not supported yet", err=True)
+    elif impl.kind == "cmd":
+        _qm_cluster_cmd(setup_name, impl.value.format(qm=qm.name, vip=qm.vip), verb)
+    elif impl.kind == "script":
+        _qm_script(setup_name, impl.value, qm, verb)
+    else:  # pragma: no cover - unknown kinds are a topology error
+        typer.echo(f"qm {verb}: unknown arm verb kind {impl.kind!r}", err=True)
         raise typer.Exit(code=2)
 
 
