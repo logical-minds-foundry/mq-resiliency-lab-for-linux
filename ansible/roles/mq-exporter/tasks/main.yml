@@ -38,6 +38,32 @@
     GOFLAGS: -mod=mod
   become: true
 
+# TLS (#250): one client-org ops keystore (+ .sth stash) for the exporter, shared
+# by every per-QM instance on this probe. Placed once; pki-distribute's copy/stash
+# are idempotent so the second include is a no-op.
+- name: place the mq_prometheus keystore (TLS)
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: mq_prometheus
+    pki_dest_dir: /var/mqm/ssl
+    pki_owner: mqm
+    pki_stash: true
+  when: mq_exporter_tls | bool
+
+# Per-instance CCDT: the only way to give a mq-metric-samples client connection an
+# SSLCIPH (no CLI flag exists). Carries this instance's channel/conn/QM + cipher +
+# cert label; the unit points MQCCDTURL/MQSSLKEYR at it.
+- name: render the exporter CCDT (TLS)
+  ansible.builtin.template:
+    src: exporter-ccdt.json.j2
+    dest: "{{ mq_exporter_ccdt }}"
+    owner: mqm
+    group: mqm
+    mode: "0644"
+  become: true
+  when: mq_exporter_tls | bool
+
 # Per-QM unit name so the role can stand up more than one instance on the same
 # probe (QMPCMK on :9157, QMDTCC on :9158 — #182). A static notify-handler can't
 # target a per-instance unit, so restart inline when the unit changes.
