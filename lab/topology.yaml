@@ -245,6 +245,7 @@ setups:
     arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm-dr.yml
+    secrets: [mqweb_admin_password]
   distributed-rdqm-rhel:
     description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
     arm: rdqm-rhel
