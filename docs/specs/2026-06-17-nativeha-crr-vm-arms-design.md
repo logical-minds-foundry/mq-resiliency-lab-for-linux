@@ -277,6 +277,11 @@ existing message flow so the comparison stays like-for-like.
 
 ## 5. Phasing (one unit of work; PR granularity flexible)
 
+**Gating prerequisite (decided 2026-06-17, §6): the security/PKI layer is
+finished first.** The `lab-pki` provider (#201/#210/#222) must be complete and
+able to issue Native-HA-instance certificates before this arm's build starts.
+This arm then proceeds Phase 0 → Phase 3 with no open TLS dependency.
+
 **Prerequisite (cross-cutting): time sync.** Native HA quorum, log ordering, and
 TLS-certificate validity all assume synchronized clocks across the six nodes and
 both sites. The lab already treats time-sync as first-class (#186); each setup
@@ -302,10 +307,9 @@ must include it. (Flagged as a missing item in the #208 report — §9.)
   consumes the built `lab-pki` provider** (§4.2): register the six instances as
   PKI entities, issue per-group keystores, set the `NativeHALocalInstance` TLS
   fields. Then exercise the §3.1 fault suite + DR drills on each arm; produce the
-  RHEL-vs-Ubuntu comparison from recorded harness output. **This is the gate that
-  determines the sequencing fork (§6):** if `lab-pki` is finished enough to issue
-  Native-HA-instance certs, Phase 3 proceeds; if not, the remaining `lab-pki`
-  work lands first.
+  RHEL-vs-Ubuntu comparison from recorded harness output. Per the §6 decision the
+  `lab-pki` layer is already complete by this point, so no TLS dependency is open
+  here — this phase only *consumes* it.
 
 ## 6. Sequencing vs other workstreams
 
@@ -321,15 +325,17 @@ nuanced than the first draft assumed, and splits by phase:
   designed in part *to serve this arm* (the parked OpenShift design escalated TLS
   to a hard dependency, which drove #201).
 
-**The fork (decide before Phase 3, not before Phase 0):** because DR/CRR is
-non-negotiable, TLS is on this arm's critical path. Two acceptable orderings:
+**The fork — decided 2026-06-17: finish the security/PKI layer first, then build
+this arm.** Because DR/CRR is non-negotiable and CRR requires TLS, the author
+chose to close out the `lab-pki` layer up front rather than carry a TLS loose end
+mid-build. So the build sequence below is gated behind the security layer being
+complete:
 
-1. **(Recommended) HA-first, then CRR consumes `lab-pki`.** Build HA (Phases 1–2)
-   immediately under the plaintext posture; at Phase 3, finish/apply whatever
-   `lab-pki` increment is needed to issue Native-HA-instance certs. Keeps
-   momentum; defers the only TLS dependency to the phase that actually needs it.
-2. **Finish the security layer fully first.** Conservative; front-loads all TLS
-   work. Smaller than it sounds (the provider exists), but delays first failover.
+- **Chosen:** complete `lab-pki` (already largely built — #201/#210/#222) → then
+  Phase 0 → Phase 3 with no TLS dependency left dangling.
+- *(Rejected: HA-first then CRR-consumes-`lab-pki`. Viable and faster to first
+  failover, but leaves the TLS dependency open across Phases 1–2; set aside in
+  favor of a clean, fully-secured build.)*
 
 Either way, building these comparison systems is what makes the eventual
 platform recommendation data-driven.
