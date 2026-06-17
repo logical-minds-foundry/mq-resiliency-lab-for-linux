@@ -54,3 +54,21 @@ def test_main_delegates_to_apply_spec(monkeypatch):
 
     assert apply_mod.main() == 0
     assert seen == [("spec.yaml", "https://h:9443")]
+
+
+def test_verify_tls_defaults_off_and_is_opt_in(monkeypatch):
+    """MQLAB_REST_VERIFY_TLS gates REST cert verification (#250). Default off;
+    set truthy to opt in. Reloads the module to re-evaluate the import-time flag."""
+    import importlib
+
+    monkeypatch.delenv("MQLAB_REST_VERIFY_TLS", raising=False)
+    importlib.reload(apply_mod)
+    assert apply_mod.VERIFY_TLS is False
+
+    monkeypatch.setenv("MQLAB_REST_VERIFY_TLS", "true")
+    importlib.reload(apply_mod)
+    assert apply_mod.VERIFY_TLS is True
+
+    # Restore the default-off module state for any later tests.
+    monkeypatch.delenv("MQLAB_REST_VERIFY_TLS", raising=False)
+    importlib.reload(apply_mod)
