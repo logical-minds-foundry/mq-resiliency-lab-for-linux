@@ -284,6 +284,25 @@ def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
     assert "[pcmk_san_ha:children]" in written
 
 
+def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
+        "groups:\n  san_a: [san-a]\n"
+        "setups:\n  pcmk_san_ha: {groups: [san_a]}\n"
+    )
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "roster"])
+    assert result.exit_code == 0
+    written = (tmp_path / "build" / "salt" / "roster").read_text()
+    assert "san-a:" in written
+    assert "host: 10.50.0.5" in written
+    assert "roster_groups:\n      - san_a" in written
+    assert "roster_setups:\n      - pcmk_san_ha" in written
+
+
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1", "node-a2"])  # 2 start steps -> pause after step 1
