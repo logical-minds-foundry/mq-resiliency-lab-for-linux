@@ -1,0 +1,7 @@
+# EL9 packages the open-iscsi initiator as `iscsi-initiator-utils` (BaseOS —
+# on the DVD). The iscsid service name is the same on both families.
+- name: install iscsi-initiator-utils (dnf)
+  ansible.builtin.dnf:
+    name: iscsi-initiator-utils
+    state: present
+  become: true
