@@ -78,7 +78,11 @@ deliverable, and no work is spent perfecting them here.
   Native HA direction stalls, it remains available to revisit, but it is not a
   target of this work.
 - The **container/OpenShift** Native HA arm (#198): stays parked.
-- **Security hardening / TLS** beyond defaults — deferred (§6, §7).
+- **Security *posture* / hardening** — auth policy, mTLS client-auth, `CHLAUTH`,
+  `SSLPEER`, channel exits — stays out of scope (deferred per the authoritative
+  design §1). Note the distinction: **transport TLS for the CRR replication link
+  *is* in scope** (CRR requires it, §3.2) and is satisfied by consuming the built
+  `lab-pki` provider at Phase 3 (§4.2) — that is plumbing, not posture.
 - **Performance/timing claims** — both arms are TCG-emulated x86; functional
   correctness only, qualitative RTO, no numeric cross-arm timing (consistent with
   the authoritative design §6 and the pivot non-goals).
@@ -118,16 +122,34 @@ report (§9). Separated as data, because the design rests on them.
 
 ### 3.2 CRR off-container
 
+*(Mechanics confirmed against IBM Support's step-by-step CRR-on-Linux walkthrough,
+node 7261515, 9.4.4 on RHEL 9.6 — §9.)*
+
 - CRR (introduced MQ **9.4.2 CD**) adds a second three-instance group as a
   **recovery group**; local replication is synchronous (RPO 0 within a group),
   **cross-region replication is asynchronous** (non-zero RPO).
-- **Switchover (planned) and failover (unplanned) are manual** config operations,
-  not automatic cross-region failover — the same operational shape as RDQM's
-  `rdqmdr`, mapping onto the `mqlab dr` `cutover`/`failback` verbs.
+- **Config surface (qm.ini, not a separate tool).** Each group's
+  `NativeHALocalInstance` carries `GroupName` / `GroupRole` (`live` |
+  `Recovery`) / `GroupLocalAddress=(9415)`; a `NativeHARecoveryGroup` stanza on
+  each host lists the peer group's `ReplicationAddress` endpoints + `Enabled`.
+- **Switchover (planned) and failover (unplanned) are manual** — edit `GroupRole`
+  in qm.ini on all instances and restart; the group transits via
+  `Pending live` / `Pending recovery` to the swapped roles. Same operational
+  shape as RDQM's `rdqmdr`, mapping onto the `mqlab dr` `cutover`/`failback` verbs.
+- **TLS — treat as required for CRR.** IBM's only documented CRR-on-Linux
+  procedure creates a keystore *"for securing the instance and group traffic,"*
+  distributes it to all six nodes, and configures the cross-region
+  `NativeHALocalInstance` with `CipherSpec=ANY_TLS12` + `CertificateLabel` +
+  `KeyRepository`. There is no documented plaintext CRR path (HA-alone *is*
+  plaintext — §3.1). No literal product-level "CRR refuses to run without TLS"
+  statement was found, but TLS is the only supported configuration and the
+  regulated target would use it regardless — so this design plans CRR **as
+  requiring TLS** (consumed from the built `lab-pki` provider, §4.2, §6).
 - **Licensing:** Native HA + CRR for Linux is available for production with **MQ
   Advanced** entitlement, or via separate prod/non-prod **add-on** components.
-  Whether the lab's **developer entitlement** unlocks CRR is the Phase-0 gate
-  (§5, §7).
+  Whether the lab's **developer entitlement** unlocks CRR is the **hard Phase-0
+  gate** (§5, §7) — and CRR/DR is non-negotiable (HA without DR is useless here),
+  so a negative result stops the effort outright.
 
 ### 3.3 Supported OS × architecture (MQ 9.4.5, from the SR report)
 
@@ -167,14 +189,30 @@ Failover is **automatic within the group** (raft re-election). The active
 instance is reached through a stable connectivity address (the lab's existing VIP
 / floating-address mechanism, reused from the HA-command work).
 
+**Lifecycle is systemd-driven, not `endmqm`/`strmqm`.** Native HA uses the
+`mqmonitor.py` liveness sample under systemd (`mqmonitor@<qm>.service`): it checks
+each instance every ~10 s and restarts a failed one. Stop is `systemctl stop
+mqmonitor@<qm>` — IBM warns **do not `endmqm`**, as systemd would restart it. This
+makes the arm's `qm-up`/`qm-down` verbs distinct from the RDQM (`strmqm`/`endmqm`)
+and Pacemaker (`pcs resource enable/disable`) arms (§4.4). HA-only replication is
+**plaintext** (a bare group start prints *"Plain text communication is enabled"*).
+
 ### 4.2 DR — CRR (3+3 cross-region)
 
 A second three-instance **recovery group** in the second DC, mapping onto the
 existing 3+3 two-DC topology. Cross-region replication is asynchronous; role
-swap is operator-driven and surfaced through the established `mqlab dr` verbs
-(`cutover` / `failback`), exactly as the RDQM and Pacemaker arms already are.
-CRR's cross-region link is TLS-recommended; whether it can run plaintext in the
-lab (as the HA path does) is confirmed in the Phase-0 spike (§5).
+swap is operator-driven (qm.ini `GroupRole` edit + restart, §3.2) and surfaced
+through the established `mqlab dr` verbs (`cutover` / `failback`), exactly as the
+RDQM and Pacemaker arms already are.
+
+**TLS is part of the CRR build, sourced from the existing `lab-pki` provider.**
+Per §3.2 this design treats CRR as requiring TLS. The lab already has a built PKI
+/ TLS certificate provider — `ansible/roles/lab-pki`, `ansible/site-pki.yml`,
+`ansible/vars/pki-entities.yml` (design #201, build #210/#222) — created in part
+*because* Native HA CRR needs it. So Phase 3 (§5) **consumes** that provider:
+register the six Native HA instances as PKI entities, issue per-group keystores,
+and set the `NativeHALocalInstance` TLS fields. This is integration of existing
+infrastructure, not new security work.
 
 ### 4.3 The Ansible seam — shared role + thin OS adapters
 
@@ -201,13 +239,26 @@ holds, the delta is small, and that smallness is reportable evidence.
 
 ### 4.4 Arm registration and the backend seam
 
-- Add `nativeha-rhel` and `nativeha-ubuntu` to `lab/topology.yaml`'s `arms:`
-  block (mechanism `native-ha`, OS `rhel` / `ubuntu`, substrate `vm`), updating
-  the slot the pivot reserved (which assumed `container/k8s`).
-- Implement the **`native-ha` mechanism backend** behind the existing
-  `mqlab qm` / `ha` / `dr` verb contract (pivot §3.3). HA formation and CRR
-  cutover/failback are the backend-specific operations; the `mqlab dr` Python
-  semantics (RPO / reconcile / ledger) are arm-agnostic and reused unchanged.
+The arm seam is **declarative** — built and proven by #212. An arm is a
+`lab/topology.yaml` `arms:` entry declaring a `mechanism`, a `cluster_group`, and
+a `verbs:` block whose entries dispatch to a `playbook` / `script` / `pcs` /
+`cmd` (as `rdqm-rhel` and `pcmk-ubuntu` already do). So registering Native HA is
+configuration plus roles, not a new code backend:
+
+- Add **`nativeha-rhel`** and **`nativeha-ubuntu`** `arms:` entries (mechanism
+  `native-ha`, substrate `vm`), updating the slot the pivot reserved (it assumed
+  `container/k8s`). Their `verbs:` use the **`mqmonitor@` systemd lifecycle**
+  (§4.1) — e.g. `qm-up: { cmd: "systemctl start mqmonitor@{qm}" }`,
+  `qm-down: { cmd: "systemctl stop mqmonitor@{qm}" }`, `qm-status: { cmd: "dspmq
+  -m {qm} -o nativeha -x" }` — distinct from the RDQM/pcmk verbs. (Exact verb
+  shapes pinned by a verb spike, as #216 did for RDQM.)
+- Add the **setups**, mirroring the rdqm/pcmk pattern: `nativeha_ha` (3-node),
+  `nativeha_dr` (3+3 CRR), and `distributed-nativeha-rhel` /
+  `distributed-nativeha-ubuntu` (the `QMNATIVE` ↔ `QMDTCC` mesh, §4.5).
+- The HA/CRR formation lives in the `mq-nativeha` role (§4.3); the `mqlab dr`
+  Python semantics (RPO / reconcile / ledger) are arm-agnostic and reused
+  unchanged. Confirm the seam covers the `mqmonitor@`-style verbs and the
+  qm.ini-edit role switch; extend it (not rebuild it) only where it does not.
 - **Guardrail note.** The pivot (#187 §6) gated `nativeha-*` build work behind the
   framework being proven on the `rdqm-rhel` + `pcmk-ubuntu` pair. That framework
   has since matured (the parity harness, the arm registry, the `pcmk-rhel`
@@ -226,11 +277,19 @@ existing message flow so the comparison stays like-for-like.
 
 ## 5. Phasing (one unit of work; PR granularity flexible)
 
+**Prerequisite (cross-cutting): time sync.** Native HA quorum, log ordering, and
+TLS-certificate validity all assume synchronized clocks across the six nodes and
+both sites. The lab already treats time-sync as first-class (#186); each setup
+must include it. (Flagged as a missing item in the #208 report — §9.)
+
 - **Phase 0 — CRR-entitlement spike (HARD GATE, blocking, cheapest-first).**
-  Confirm the lab's MQ dev entitlement unlocks Native HA **CRR** on Linux (and
-  confirm whether the CRR cross-region link runs plaintext in-lab). If CRR is not
-  available, the effort **stops** — Native HA without CRR is not a usable target
-  here. Expected to pass, but proven not assumed.
+  Confirm the lab's MQ **developer entitlement unlocks Native HA CRR** on Linux.
+  If it does not, the effort **stops** — CRR/DR is non-negotiable, and HA without
+  DR is not a usable target. Expected to pass, but proven not assumed. While
+  here, close the #208 report's residual open items for Architecture C: the
+  replication **port** (HA `9414`, CRR group `9415` per node 7261515 — confirm)
+  and any firewall holes the simulated WAN needs. *(The CRR-TLS question is
+  already resolved — §3.2 — so it is no longer a Phase-0 unknown.)*
 - **Phase 1 — Native HA HA-first on RHEL 9.** Build the `mq-nativeha` role +
   RedHat adapter; form a 3-node group on the existing RHEL 9.6 box; reach first
   automatic failover; slot `QMNATIVE` into the mesh. **Acceptance: a full VM cold
@@ -238,28 +297,53 @@ existing message flow so the comparison stays like-for-like.
 - **Phase 2 — Parameterize to Ubuntu 24.04.** Add the Debian adapter; form the
   group on the 24.04 base; reach first failover. This is the direct test of the
   §4.3 OS-transparency hypothesis — record the adapter-layer delta.
-- **Phase 3 — CRR (3+3) fast-follow on both arms.** Add the recovery group and
-  wire `mqlab dr` `cutover`/`failback`; exercise the §3.1 fault suite + DR drills
-  on each arm; produce the RHEL-vs-Ubuntu comparison from recorded harness output.
+- **Phase 3 — CRR (3+3) on both arms — TLS-gated.** Add the recovery group; wire
+  `mqlab dr` `cutover`/`failback`. **CRR requires TLS (§3.2), so this phase
+  consumes the built `lab-pki` provider** (§4.2): register the six instances as
+  PKI entities, issue per-group keystores, set the `NativeHALocalInstance` TLS
+  fields. Then exercise the §3.1 fault suite + DR drills on each arm; produce the
+  RHEL-vs-Ubuntu comparison from recorded harness output. **This is the gate that
+  determines the sequencing fork (§6):** if `lab-pki` is finished enough to issue
+  Native-HA-instance certs, Phase 3 proceeds; if not, the remaining `lab-pki`
+  work lands first.
 
 ## 6. Sequencing vs other workstreams
 
-This is **high-priority** work and runs **before** the lab-security layer
-(#201 PKI), the observability additions, and the Ansible→Salt migration. The
-ordering is sound because Native HA inter-instance replication is **plaintext by
-default** (§3.1) — this arm fits the lab's existing deferred-security posture and
-does **not** pull the security layer earlier (unlike the parked OpenShift arm,
-where Routes forced TLS). Building the comparison systems first is what makes the
-eventual platform recommendation data-driven.
+This is **high-priority** work, ahead of the observability additions and the
+Ansible→Salt migration. Its relationship to the **security/PKI layer** is more
+nuanced than the first draft assumed, and splits by phase:
+
+- **HA (Phases 1–2) is plaintext** (§3.1) — fits the lab's existing
+  deferred-security posture and needs no PKI. These phases run first and fast.
+- **CRR (Phase 3) requires TLS** (§3.2) — so it depends on the **PKI/TLS
+  provider, which is already built** (`lab-pki`, #201 → #210/#222). The earlier
+  framing of PKI as "future work this precedes" was wrong: PKI exists, and it was
+  designed in part *to serve this arm* (the parked OpenShift design escalated TLS
+  to a hard dependency, which drove #201).
+
+**The fork (decide before Phase 3, not before Phase 0):** because DR/CRR is
+non-negotiable, TLS is on this arm's critical path. Two acceptable orderings:
+
+1. **(Recommended) HA-first, then CRR consumes `lab-pki`.** Build HA (Phases 1–2)
+   immediately under the plaintext posture; at Phase 3, finish/apply whatever
+   `lab-pki` increment is needed to issue Native-HA-instance certs. Keeps
+   momentum; defers the only TLS dependency to the phase that actually needs it.
+2. **Finish the security layer fully first.** Conservative; front-loads all TLS
+   work. Smaller than it sounds (the provider exists), but delays first failover.
+
+Either way, building these comparison systems is what makes the eventual
+platform recommendation data-driven.
 
 ## 7. Risks & open items
 
 - **CRR dev-entitlement (headline risk).** Gated by the Phase-0 spike. If the
   developer entitlement does not unlock CRR, the whole arm is blocked.
-- **CRR cross-region TLS.** HA replication is plaintext-default and confirmed;
-  whether CRR's cross-region link can also run plaintext in-lab is confirmed in
-  Phase 0. If TLS is mandatory there, scope a minimal transport cert for the CRR
-  link only (still short of the full security layer).
+- **CRR requires TLS → critical-path dependency on `lab-pki` (resolved, not
+  open).** Settled in §3.2: HA is plaintext, CRR uses TLS, and the `lab-pki`
+  provider already exists to supply it. The residual risk is only *scheduling* —
+  the §6 fork — not a technical unknown.
+- **Time sync is a prerequisite.** Quorum, log ordering, and TLS-cert validity
+  need synced clocks across nodes/sites (#186); a missing-item flag from #208.
 - **Emulation footprint.** Full HA+CRR is **6 VMs per arm** (3+3) under TCG, on
   top of the existing arms. RAM/CPU pressure on the dev host is real; arms run
   one at a time (pivot non-goal: no concurrent multi-arm execution), which
@@ -267,8 +351,10 @@ eventual platform recommendation data-driven.
 - **Mandatory bolt-ons per arm.** Admin REST API (`mqweb`, for `pymqrest`
   content) and metrics must be brought onto each Native HA arm, as for the other
   arms — explicit build tasks, not freebies.
-- **Arm-backend seam readiness.** The `native-ha` mechanism backend is new; Phase
-  1 may need to extend the seam (pivot §3.3) rather than merely plug into it.
+- **Arm-seam fit (low risk).** The declarative arm seam is built (#212); the open
+  question is only whether it cleanly expresses the `mqmonitor@` systemd verbs and
+  the qm.ini-edit role switch (§4.4), or needs a small extension — verified by the
+  verb spike, not assumed.
 - **Newness of CRR.** CRR is ~16 months old; operational experience is earned in
   the lab, not assumed.
 
@@ -305,3 +391,20 @@ because IBM Docs 403 the default fetch bot. Pin to 9.4.
   x86-64 only") —
   <https://www.ibm.com/software/reports/compatibility/clarity-reports/report/html/softwareReqsForProduct?deliverableId=218CA2470429462EB2BC62CD566F4030>
   (cached: `build/IBM-MQ-9.4.5-SystemRequirements.pdf`)
+- **Configuring IBM MQ Native HA CRR on Linux** (IBM Support node 7261515,
+  22 Feb 2026) — the step-by-step 9.4.4/RHEL-9.6 walkthrough: `crtmqm -lr`,
+  `NativeHAInstance`/`NativeHALocalInstance`/`NativeHARecoveryGroup` stanzas, the
+  TLS keystore steps, `mqmonitor@` systemd lifecycle, and the qm.ini-edit role
+  switchover — <https://www.ibm.com/support/pages/node/7261515>
+  (cached: `build/refs/ibm-docs/mq/9.4.x/crr-linux/configuring-crr-on-linux.pdf`)
+
+### Internal prior art (this repo)
+
+- `docs/reports/2026-06-16-ha-dr-network-requirements-detailed.md` (#208) —
+  primary-sourced HA/DR network fact-check; **Architecture C** is NHA+CRR on VM
+  Linux. Open items folded into Phase 0; time-sync flagged there too.
+- `docs/specs/2026-06-16-lab-pki-design.md` (#201) + build #210/#222 — the
+  **`lab-pki`** TLS/cert provider this arm's CRR phase consumes (§4.2, §6).
+- `lab/topology.yaml` `arms:` + the arm seam (#212) — the declarative
+  registration surface (§4.4).
+- Time-sync (#186) — the cross-cutting clock prerequisite (§5, §7).
