@@ -83,6 +83,12 @@ def test_resolve_verb_unsupported_raises(monkeypatch, tmp_path):
         resolve_verb("rdqm_ha", "qm-create")  # rdqm-rhel has no verbs yet
 
 
+def test_real_rdqm_registry_has_create_and_status() -> None:
+    # real topology (no seeding): rdqm-rhel verbs filled in Plan B Task 4
+    assert resolve_verb("rdqm_ha", "qm-create") == VerbImpl(kind="script", value="rdqm-qm-create.sh")
+    assert resolve_verb("rdqm_ha", "qm-status").kind == "cmd"
+
+
 def test_registry_arms_match_the_capability_matrix() -> None:
     # the real topology registry and parity.MATRIX must agree on the arm set —
     # one source of arm truth (reads the real lab/topology.yaml, no seeding)

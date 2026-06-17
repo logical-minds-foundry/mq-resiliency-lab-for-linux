@@ -158,7 +158,13 @@ arms:
   rdqm-rhel:
     mechanism: rdqm
     cluster_group: rdqm_a
-    verbs: {}
+    verbs:
+      qm-create: { script: rdqm-qm-create.sh }
+      qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
+      # up/down: provisional — the Task-1 verb spike confirms RDQM's managed-QM
+      # behaviour (strmqm/endmqm vs rdqmadm) on a live group and corrects these.
+      qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
+      qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
 
 setups:
   pcmk_san_ha:
