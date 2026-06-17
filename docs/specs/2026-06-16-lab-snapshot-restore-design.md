@@ -62,9 +62,11 @@ timestamp and would differ after a rebuild). Goldens are immutable.
 2. Copy each golden back into the pool at its recorded path (a full copy — a few GB,
    ~1–2 min for the whole set; a qcow2-COW overlay on the golden is a future
    optimisation but couples the pool to the build mount).
-3. Rewrite the saved XML: point `vda`'s `<source>` at the restored **standalone**
-   disk and drop its `<backingStore>` (now self-contained); keep `vdb`, the cdrom
-   path, and every NIC + MAC. `virsh define` + `virsh start`. **No provision.**
+3. `virsh define` the saved `--inactive` XML verbatim, then `virsh start`. **No
+   provision.** No XML rewrite is needed: the inactive config carries no
+   `<backingStore>` (libvirt probes the backing from the qcow2 header at start) and the
+   restored golden is a standalone flattened qcow2, so defining what we captured is
+   both correct and faithful (NIC MACs, cdrom path, machine type all preserved).
 
 **Teardown** is `virsh destroy`/`undefine` of the lab domains; goldens in
 `build/snapshots/` persist, so restore is a clone-and-start.

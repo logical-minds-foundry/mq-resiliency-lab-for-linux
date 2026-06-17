@@ -39,10 +39,11 @@ for dir in "$SRC"/*/; do
     sudo cp --reflink=auto "$dir/$target.qcow2" "$source" || fail "copy $d:$target"
   done < "$dir/disks.tsv"
 
-  # rewrite the saved definition for a standalone (flattened) disk, then define+start
-  python3 "$SCRIPT_ABS/lab-restore-xml.py" "$dir/domain.xml" >"$dir/restore.xml" \
-    || fail "xml rewrite $d"
-  v define "$dir/restore.xml" >/dev/null || fail "define $d"
+  # Define the saved definition verbatim, then start. The snapshot captures
+  # `virsh dumpxml --inactive`, whose disks carry no <backingStore> (libvirt probes
+  # the backing from the qcow2 header at start), and the restored golden is a
+  # standalone flattened qcow2 — so there is nothing to rewrite: define what we saved.
+  v define "$dir/domain.xml" >/dev/null || fail "define $d"
   v start "$d" >/dev/null || fail "start $d"
   echo ">> $d defined + started"
 done
