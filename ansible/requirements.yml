@@ -1,0 +1,7 @@
+---
+# The lab's FIRST galaxy collection (otherwise ansible.builtin only — #156).
+# Provisioned declaratively + installed at bootstrap into the ansible.cfg
+# collections_path, never hand-installed. See docs/specs/2026-06-16-lab-pki-design.md §3.
+collections:
+  - name: community.crypto
+    version: ">=2.20.0"

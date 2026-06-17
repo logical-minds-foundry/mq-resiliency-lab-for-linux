@@ -756,6 +756,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "ansible-core" },
+    { name = "cryptography" },
     { name = "pymqrest" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -781,6 +782,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "ansible-core", specifier = ">=2.16" },
+    { name = "cryptography", specifier = ">=42" },
     { name = "pymqrest", specifier = ">=1.2,<2" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "rich", specifier = ">=13" },

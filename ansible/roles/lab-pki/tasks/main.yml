@@ -1,0 +1,16 @@
+---
+- name: "create org CAs"
+  ansible.builtin.include_tasks: ca.yml
+  loop: "{{ pki_cas | dict2items }}"
+  loop_control:
+    loop_var: ca_item
+  vars:
+    ca_name: "{{ ca_item.key }}"
+    ca: "{{ ca_item.value }}"
+
+- name: "issue entities"
+  ansible.builtin.include_tasks: entity.yml
+  loop: "{{ pki_entities | selectattr('cn', 'equalto', pki_only) | list if pki_only else pki_entities }}"
+  loop_control:
+    loop_var: e
+    label: "{{ e.cn }}"
