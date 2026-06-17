@@ -7,8 +7,8 @@ from mqlab.cli import _lookup_setup_or_exit
 
 
 def test_lookup_setup_returns_known_setup() -> None:
-    setup = _lookup_setup_or_exit("distributed")
-    assert setup.name == "distributed"
+    setup = _lookup_setup_or_exit("distributed-pcmk-ubuntu")
+    assert setup.name == "distributed-pcmk-ubuntu"
 
 
 def test_lookup_setup_unknown_exits() -> None:

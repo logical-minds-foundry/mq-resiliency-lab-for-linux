@@ -136,3 +136,9 @@
 
 - hosts: pcmk_a
   roles: [mq-install]
+
+# REST API on every node's QMPCMK (design §1). Stateless per-node mqweb (spec §8.3)
+# — set up at provision, where mqweb_admin_password is injected; administers the
+# local QM whenever the cluster lands it here.
+- hosts: pcmk_a
+  roles: [mqweb]

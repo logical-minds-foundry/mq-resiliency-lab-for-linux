@@ -13,6 +13,7 @@ import typer
 from rich.console import Console
 
 from mqlab import parity
+from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
@@ -809,8 +810,6 @@ def vm_ssh(guest: str) -> None:
 # create/destroy run the reproducible mq-pcmk-qmgr role (the client-reproducible
 # deliverable); up/down/status are direct, streamed pcs ops on the cluster. Pacemaker
 # is the only thing allowed to start/stop the QM (its systemd units are disabled).
-_PCMK_CLUSTER_GROUP = "pcmk_a"  # the cluster's inventory group; pcs runs on its first node
-_PCMK_RESOURCE_GROUP = "mq_group"
 
 
 def _setup_qm_or_exit(setup_name: str) -> QmConfig:
@@ -879,10 +878,12 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
         deps.transcript.close()
 
 
-def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
-    # up/down/status: a single streamed pcs op on the cluster's first node. No
-    # pre-flight — if the cluster is unreachable, ansible's own error speaks (#109).
+def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
+    # up/down/status: a single streamed shell op on the arm's cluster first node
+    # (pcs for pcmk, rdqm* for rdqm). No pre-flight — if the cluster is unreachable,
+    # ansible's own error speaks (#109).
     _setup_qm_or_exit(setup_name)
+    group = lab_arms()[arm_of(setup_name)].cluster_group
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         _render_inventory(deps)
@@ -891,12 +892,12 @@ def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
             Command(
                 [
                     "ansible",
-                    f"{_PCMK_CLUSTER_GROUP}[0]",
+                    f"{group}[0]",
                     "-b",
                     "-m",
                     "shell",
                     "-a",
-                    pcs_cmd,
+                    shell_cmd,
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
@@ -915,34 +916,109 @@ def _qm_pcs(setup_name: str, pcs_cmd: str, verb: str) -> None:
         deps.transcript.close()
 
 
+def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
+    # Run a lab script with the rdqm-qm-create contract: QM, the single data-plane
+    # floating IP (RDQM allows one FIP per QM, #216 spike), and (when set) the
+    # counterparty CONNAME for the inter-QM MQSC. The partner reaches us over net-ext
+    # by per-node CONNAME list (site-rdqm-distributed.yml our_conn), not a second VIP.
+    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.dtcc_conn or ""]
+    deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        step = CommandStep(f"{setup_name} {verb}", Command(argv))  # noqa: S607
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+def _qm_dispatch(setup_name: str, verb: str) -> None:
+    # Validate the setup (exists + has a QM) for clean exit-2 messages, then resolve
+    # the arm's implementation of the verb from the registry and run it (#202, #216).
+    qm = _setup_qm_or_exit(setup_name)
+    impl = resolve_verb(setup_name, verb)
+    if impl.kind == "playbook":
+        _qm_playbook(setup_name, impl.value, verb)
+    elif impl.kind == "pcs":
+        _qm_cluster_cmd(setup_name, f"pcs {impl.value}", verb)
+    elif impl.kind == "cmd":
+        _qm_cluster_cmd(setup_name, impl.value.format(qm=qm.name, vip=qm.vip), verb)
+    elif impl.kind == "script":
+        _qm_script(setup_name, impl.value, qm, verb)
+    else:  # pragma: no cover - unknown kinds are a topology error
+        typer.echo(f"qm {verb}: unknown arm verb kind {impl.kind!r}", err=True)
+        raise typer.Exit(code=2)
+
+
 @qm_app.command("create")
 def qm_create(setup: str) -> None:
-    """Create the queue manager + its Pacemaker HA resources (runs the role)."""
-    _qm_playbook(setup, "site-pcmk-qm.yml", "qm-create")
+    """Create the queue manager + its HA resources (arm-dispatched)."""
+    _qm_dispatch(setup, "qm-create")
 
 
 @qm_app.command("destroy")
 def qm_destroy(setup: str) -> None:
     """Remove the queue manager + its HA resources."""
-    _qm_playbook(setup, "site-pcmk-qm-down.yml", "qm-destroy")
+    _qm_dispatch(setup, "qm-destroy")
 
 
 @qm_app.command("up")
 def qm_up(setup: str) -> None:
-    """Start the cluster-managed QM — pcs resource enable mq_group."""
-    _qm_pcs(setup, f"pcs resource enable {_PCMK_RESOURCE_GROUP}", "qm-up")
+    """Start the queue manager."""
+    _qm_dispatch(setup, "qm-up")
 
 
 @qm_app.command("down")
 def qm_down(setup: str) -> None:
-    """Cleanly stop the QM without tearing down HA — pcs resource disable mq_group."""
-    _qm_pcs(setup, f"pcs resource disable {_PCMK_RESOURCE_GROUP}", "qm-down")
+    """Stop the queue manager (HA intact)."""
+    _qm_dispatch(setup, "qm-down")
 
 
 @qm_app.command("status")
 def qm_status(setup: str) -> None:
-    """Show the QM's HA resource state — pcs status resources."""
-    _qm_pcs(setup, "pcs status resources", "qm-status")
+    """Show the queue manager's HA resource state."""
+    _qm_dispatch(setup, "qm-status")
+
+
+# --- pki: the lab PKI / TLS certificate provider (#210) --------------------------
+# Wraps the connection=local site-pki.yml playbook (the provider generates CA +
+# entity material under build/secrets/pki/). Mirrors the qm command-wraps-playbook
+# shape. Cert expiry/rotation is out of scope (spec §8.2).
+pki_app = typer.Typer(help="lab PKI / TLS certificate provider", no_args_is_help=True)
+app.add_typer(pki_app, name="pki")
+
+_PKI_PLAYBOOK = ["ansible-playbook", "site-pki.yml", "-c", "local", "-i", "localhost,"]
+
+
+@pki_app.command("ensure")
+def pki_ensure(step: _StepFlag = False) -> None:
+    """Create/ensure both org CAs and every entity's certs + PKCS#12 keystores."""
+    cmd = Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible")  # noqa: S607
+    _execute("pki-ensure", [CommandStep("pki ensure", cmd)], step_mode=step)
+
+
+@pki_app.command("issue")
+def pki_issue(entity: str, step: _StepFlag = False) -> None:
+    """Issue (or re-issue) one entity's cert + keystore — runs the provider for just that CN."""
+    cmd = Command([*_PKI_PLAYBOOK, "-e", f"pki_only={entity}"], cwd=repo_root() / "ansible")  # noqa: S607
+    _execute("pki-issue", [CommandStep(f"pki issue {entity}", cmd)], step_mode=step)
+
+
+@pki_app.command("list")
+def pki_list() -> None:
+    """List the PKI entity inventory (org, OU, kind) from ansible/vars/pki-entities.yml."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load((repo_root() / "ansible" / "vars" / "pki-entities.yml").read_text())
+    for e in data.get("pki_entities", []):
+        typer.echo(f"{e['cn']:<14} org={e['org']:<11} ou={e.get('ou', '-'):<16} {e['kind']}")
 
 
 @app.command("parity")
@@ -965,7 +1041,7 @@ _Rate = Annotated[int, typer.Option("--rate", help="messages per second")]
 
 @app.command("run")
 def run_setup(  # pragma: no cover - drives the live lab; proven by the integration gate
-    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed)")],
+    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed-pcmk-ubuntu)")],
     seconds: _Seconds = 30,
     rate: _Rate = 20,
     step: _StepFlag = False,
@@ -987,7 +1063,7 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     )
     assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
     scenario = build_report(
-        "BASELINE", parity.provisional_arm(setup.name), facts, peak_exposure=peak_exposure(firm)
+        "BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(firm)
     )
     metadata = capture_metadata(
         setup.name,

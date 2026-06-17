@@ -1,0 +1,16 @@
+[Unit]
+Description=IBM MQ web/REST server
+After=network-online.target
+
+[Service]
+Type=forking
+User=mqm
+ExecStart=/opt/mqm/bin/strmqweb
+ExecStop=/opt/mqm/bin/endmqweb
+# Liberty/mqweb startup is slow; under x86 TCG emulation it is *very* slow. The
+# job timeout is generous so the background start (the role uses --no-block, so
+# provision never waits) does not get reaped before REST is listening.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

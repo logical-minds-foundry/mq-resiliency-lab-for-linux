@@ -51,19 +51,19 @@ nodes:
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.31, net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31 }
+    nics: { net-mgmt: 10.50.0.31, net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31, net-ext: 10.60.0.31 }
   rdqm-a2:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.32, net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32 }
+    nics: { net-mgmt: 10.50.0.32, net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32, net-ext: 10.60.0.32 }
   rdqm-a3:
     platform: rhel96-x86_64
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.33, net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33 }
+    nics: { net-mgmt: 10.50.0.33, net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33, net-ext: 10.60.0.33 }
   rdqm-b1:
     platform: rhel96-x86_64
     cpus: 2
@@ -142,32 +142,74 @@ groups:
 # SAN first), with the Ansible playbook that provisions it. Setup names are
 # underscore-form so they double as Ansible :children parent groups in the rendered
 # inventory. `mqlab vm`, `mqlab vm status`, and the inventory renderer all read this.
+# The arm-backend registry (RDQM-parity design §2): the catalog of HA/DR arms and
+# their per-verb implementations. mqlab qm/dr commands resolve a setup's arm here
+# and dispatch. rdqm-rhel's verbs are filled in Plan B (after the verb spike).
+arms:
+  pcmk-ubuntu:
+    mechanism: pacemaker-san
+    cluster_group: pcmk_a
+    verbs:
+      qm-create:  { playbook: site-pcmk-qm.yml }
+      qm-destroy: { playbook: site-pcmk-qm-down.yml }
+      qm-up:      { pcs: "resource enable mq_group" }
+      qm-down:    { pcs: "resource disable mq_group" }
+      qm-status:  { pcs: "status resources" }
+  rdqm-rhel:
+    mechanism: rdqm
+    cluster_group: rdqm_a
+    verbs:
+      qm-create: { script: rdqm-qm-create.sh }
+      qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
+      # up/down confirmed on a live group by the #216 verb spike
+      # (docs/reports/2026-06-16-rdqm-verb-spike.md): with mqm in haclient, a plain
+      # endmqm does a *controlled, cluster-wide* stop ("Replicated data queue manager
+      # disabled" — no rogue failover), and strmqm re-enables HA and restarts — the
+      # RDQM analogue of the pcmk arm's `pcs resource disable/enable mq_group`.
+      qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
+      qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
+
 setups:
   pcmk_san_ha:
     description: Ubuntu Pacemaker/Corosync + iSCSI SAN — site-A 3-node HA
+    arm: pcmk-ubuntu
     groups: [san_a, pcmk_a]
     provision: ansible/site-pcmk.yml
-    secrets: [pcmk_hacluster_password]
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }
   pcmk_san_dr:
     description: Pacemaker/SAN 3+3 — site-A HA plus cross-site DR (DRBD async)
+    arm: pcmk-ubuntu
     groups: [san_a, san_b, pcmk_a, pcmk_b]
     provision: ansible/site-pcmk-dr.yml
-    secrets: [pcmk_hacluster_password]
-  distributed:
-    description: Distributed MQ — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+  distributed-pcmk-ubuntu:
+    description: Distributed MQ (Pacemaker arm) — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    arm: pcmk-ubuntu
     groups: [san_a, pcmk_a, dtcc, app]
     provision: ansible/site-distributed.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }
   rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
+    arm: rdqm-rhel
     groups: [rdqm_a]
     provision: ansible/site-rdqm.yml
   rdqm_dr:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
+    arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
+  distributed-rdqm-rhel:
+    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
+    arm: rdqm-rhel
+    groups: [rdqm_a, dtcc, app]
+    provision: ansible/site-rdqm-distributed.yml
+    secrets: [mqweb_admin_password]
+    # No vip_ext: RDQM allows one floating IP per QM (#216 spike), spent on the data
+    # VIP for the app's HA path. The partner (QMDTCC) reaches QMRDQM over net-ext by
+    # per-node CONNAME list — see site-rdqm-distributed.yml (our_conn).
+    qm: { name: QMRDQM, vip: 10.10.1.100, dtcc_conn: 10.60.0.50 }
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]

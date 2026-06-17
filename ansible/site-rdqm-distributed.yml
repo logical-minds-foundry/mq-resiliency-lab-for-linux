@@ -1,0 +1,17 @@
+# Distributed MQ (#147), RDQM arm: the RDQM HA substrate (site-rdqm.yml) + the same
+# substrate-free DTCC/app/channel layer the pcmk arm uses (site-distributed-shared.yml,
+# RDQM-parity §4). Our-side inter-QM MQSC is created at
+# `mqlab qm create distributed-rdqm-rhel` (rdqm-qm-create.sh, gated on dtcc_conn).
+# site-rdqm.yml is site-A-only (rdqm_a); the cross-site DR peer (rdqm_b) belongs to
+# Plan C's site-rdqm-dr.yml, so nothing here references an uncreated site B.
+- import_playbook: site-rdqm.yml
+
+- import_playbook: site-distributed-shared.yml
+  vars:
+    our_qm: QMRDQM
+    # RDQM spends its one floating IP on the data VIP (the app's HA path), so the
+    # partner QM cannot reach us at a single net-ext VIP. Instead QMDTCC's SDR to us
+    # carries a CONNAME list of the three rdqm_a net-ext node IPs: MQ tries them in
+    # order and reconnects to whichever node currently runs QMRDQM, so the partner
+    # link rides an HA failover without a second floating IP (#216 spike).
+    our_conn: "10.60.0.31(1414),10.60.0.32(1414),10.60.0.33(1414)"

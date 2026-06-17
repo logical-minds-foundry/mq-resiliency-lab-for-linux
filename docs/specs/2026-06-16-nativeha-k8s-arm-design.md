@@ -1,6 +1,19 @@
 # IBM MQ Native HA on Kubernetes/OpenShift — Arm Design (`nativeha-ocp`)
 
+> ## ⏸️ ON HOLD (2026-06-16) — paused, not cancelled
+>
+> **The firm has decided not to pursue Kubernetes.** They are committed to a
+> **DMZ-based deployment on bare metal / VMs**, so this Native-HA-on-Kubernetes
+> arm is **paused**. The design below is complete and remains valid — revisit it
+> if the Kubernetes option reopens.
+>
+> **Its lasting value:** it forced the lab-security / PKI foundation
+> ([`2026-06-16-lab-pki-design.md`](2026-06-16-lab-pki-design.md), #201) to be
+> built properly — which was needed regardless. Active focus moves to **lab
+> security**, **platform parity** (RDQM/Pacemaker), and **testing infrastructure**.
+
 > **Status:** design, first pass — brainstormed & pushback-reviewed 2026-06-16.
+> **(ON HOLD — see banner above.)**
 > **Date:** 2026-06-16
 > **Author:** Phillip Moore (with Claude)
 > **Tracking issue:** #198

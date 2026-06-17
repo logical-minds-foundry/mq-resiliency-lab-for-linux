@@ -13,39 +13,19 @@
     dest: "/etc/systemd/system/mq-{{ qmgr_name }}.service"
   become: true
 
-- name: mqweb systemd unit
-  ansible.builtin.template:
-    src: mqweb.service.j2
-    dest: /etc/systemd/system/mqweb.service
-  become: true
+# REST API on this QM — the every-QM hard requirement (design §1), via the shared
+# mqweb role (de-duped from this role's former inline mqweb steps).
+- name: enable the admin REST API (mqweb)
+  ansible.builtin.include_role:
+    name: mqweb
 
-- name: mqweb basic registry (creds from env, never committed)
-  ansible.builtin.template:
-    src: mqwebuser.xml.j2
-    dest: /var/mqm/web/installations/Installation1/servers/mqweb/mqwebuser.xml
-    owner: mqm
-    group: mqm
-  become: true
-  no_log: true
-
-- name: enable + start services
+- name: enable + start the queue-manager service
   ansible.builtin.systemd:
-    name: "{{ item }}"
+    name: "mq-{{ qmgr_name }}.service"
     enabled: true
     state: started
     daemon_reload: true
-  loop:
-    - "mq-{{ qmgr_name }}.service"
-    - mqweb.service
   become: true
-
-- name: bind mqweb to all interfaces
-  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
-  become: true
-  become_user: mqm
-  register: setmqweb
-  changed_when: "'MQWB' not in setmqweb.stderr"
-  failed_when: false
 
 - name: relax channel security (LAB ONLY - spec 1 puts security out of scope)
   ansible.builtin.shell: |
