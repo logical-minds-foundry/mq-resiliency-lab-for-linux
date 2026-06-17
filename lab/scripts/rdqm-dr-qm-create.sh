@@ -18,10 +18,19 @@ DRPORT=7001
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
-# Site A: HA primary + DR primary on rdqm-a1; fans out to rdqm-a2/a3 as HA secondaries.
+# DR/HA create is SECONDARIES-FIRST per site (like HA RDQM) — crtmqm does NOT
+# auto-fan-out for DR/HA (confirmed: AMQ3812E "the secondary queue manager must first
+# be created on the other replicated data nodes"). So -sxs on the other two nodes,
+# THEN -sx on the primary, each site. DR role -rr p (site A) / -rr s (site B); DR
+# partners by net-wan IP (-rl local trio, -ri remote trio); DR replication port 7001.
+# Site A — HA+DR primary site:
+run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr p -rl $A_WAN -ri $B_WAN -rp $DRPORT $QM \
+  || /opt/mqm/bin/dspmq -m $QM"
 run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DRPORT -fs 3072M $QM \
   || /opt/mqm/bin/dspmq -m $QM"
-# Site B: HA primary + DR secondary on rdqm-b1; fans out to rdqm-b2/b3.
+# Site B — DR secondary site:
+run rdqm-b2,rdqm-b3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr s -rl $B_WAN -ri $A_WAN -rp $DRPORT $QM \
+  || /opt/mqm/bin/dspmq -m $QM"
 run rdqm-b1 "/opt/mqm/bin/crtmqm -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DRPORT -fs 3072M $QM \
   || /opt/mqm/bin/dspmq -m $QM"
 
