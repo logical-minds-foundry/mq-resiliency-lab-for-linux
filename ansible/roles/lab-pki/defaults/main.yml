@@ -1,0 +1,10 @@
+---
+# All PKI material lives under build/ (gitignored; survives restart, regenerated
+# on rebuild — spec §7). repo_root is passed by the playbook.
+pki_root: "{{ repo_root }}/build/secrets/pki"
+pki_ca_dir: "{{ pki_root }}/ca"
+pki_entity_dir: "{{ pki_root }}/entities"
+pki_key_size: 4096
+pki_validity_days: 730 # 1-2 yr; expiry mgmt deferred (spec §8.2)
+pki_pkcs12_encryption: compatibility2022 # GSKit-readable encoding (pushback [2])
+pki_only: "" # when set to a CN, issue just that entity

@@ -28,7 +28,7 @@ def _deps(runner):
 
 
 _ARMS = (
-    "arms:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    verbs:\n"
+    "arms:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    cluster_group: pcmk_a\n    verbs:\n"
     "      qm-create: { playbook: site-pcmk-qm.yml }\n"
     "      qm-destroy: { playbook: site-pcmk-qm-down.yml }\n"
     "      qm-up: { pcs: resource enable mq_group }\n"
@@ -197,3 +197,54 @@ def test_qm_setup_without_qm_config_exits_2(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["qm", "up", "bare"])
     assert result.exit_code == 2
     assert "no qm config" in result.output
+
+
+_RDQM_TOPO = (
+    "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+    "groups:\n  rdqm_a: [rdqm-a1]\n"
+    "arms:\n  rdqm-rhel:\n    mechanism: rdqm\n    cluster_group: rdqm_a\n    verbs:\n"
+    "      qm-status: { cmd: '/opt/mqm/bin/rdqmstatus -m {qm}' }\n"
+    "      qm-create: { script: rdqm-qm-create.sh }\n"
+    "setups:\n  rdqm_dist:\n    arm: rdqm-rhel\n    groups: [rdqm_a]\n"
+    # no vip_ext: RDQM has one floating IP per QM (#216), spent on the data VIP
+    "    qm: { name: QMRDQM, vip: 10.10.1.100 }\n"
+)
+
+
+def test_qm_status_runs_rdqm_cmd_on_cluster_node(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, _RDQM_TOPO)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "status", "rdqm_dist"])
+    assert result.exit_code == 0
+    assert runner.recorded[-1].argv == [
+        "ansible",
+        "rdqm_a[0]",
+        "-b",
+        "-m",
+        "shell",
+        "-a",
+        "/opt/mqm/bin/rdqmstatus -m QMRDQM",
+    ]
+
+
+def test_qm_create_runs_rdqm_script_with_qm_and_vip(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, _RDQM_TOPO)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "create", "rdqm_dist"])
+    assert result.exit_code == 0
+    argv = runner.recorded[-1].argv
+    assert argv[0] == "bash"
+    assert argv[1].endswith("/lab/scripts/rdqm-qm-create.sh")
+    # QM, the single data-plane floating IP, counterparty CONNAME ("" when unset).
+    # No partner VIP: RDQM allows one floating IP per QM (#216 spike).
+    assert argv[2:] == ["QMRDQM", "10.10.1.100", ""]
+
+
+def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, _RDQM_TOPO)
+    runner = RecordingRunner(results=[ScriptedResult([], exit_code=4)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "create", "rdqm_dist"])
+    assert result.exit_code == 4

@@ -23,11 +23,15 @@ from mqlab.paths import repo_root
 class QmConfig:
     """A setup's queue-manager identity (#109): the QM name, its internal data-plane
     VIP, its partner-facing (net-ext) VIP for the inter-business link (#146), and —
-    when this QM talks to a counterparty — that counterparty's CONNAME (#147)."""
+    when this QM talks to a counterparty — that counterparty's CONNAME (#147).
+
+    `vip_ext` is optional: the Pacemaker arm binds it as a second VIP on the QM
+    resource group, but RDQM allows only one floating IP per QM (#216 spike), so the
+    RDQM arm omits it and the partner reaches the QM by per-node CONNAME list."""
 
     name: str
     vip: str
-    vip_ext: str
+    vip_ext: str = ""
     dtcc_conn: str | None = None
 
 
@@ -67,7 +71,7 @@ def lab_setups() -> dict[str, Setup]:
             qm=QmConfig(
                 name=cfg["qm"]["name"],
                 vip=cfg["qm"]["vip"],
-                vip_ext=cfg["qm"]["vip_ext"],
+                vip_ext=cfg["qm"].get("vip_ext", ""),
                 dtcc_conn=cfg["qm"].get("dtcc_conn"),
             )
             if cfg.get("qm")
