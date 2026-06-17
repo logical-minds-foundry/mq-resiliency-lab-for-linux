@@ -98,22 +98,25 @@ is invoked directly — exactly as the Pacemaker arm drives DR by standalone
 scripts own the DR addresses directly (the two FIPs as args/constants; node planes via
 the §4 lab hosts names) — no `QmConfig` change.
 
-The canonical create (IBM 9.4 worked example) is **two `crtmqm` commands — one per
-site primary** — each of which *automatically* creates that site's two HA secondaries.
-So it is **six instances, two commands** (not six per-node commands). HA role = `-sx`
-(primary); DR role = `-rr p` / `-rr s`. DR partners are addressed by **net-wan IP**
-(`-rl` local trio, `-ri` remote trio); DR replication on port 7001:
+The create is **secondaries-first, per site** — `crtmqm` does **not** auto-fan-out for
+DR/HA (the IBM worked-example's "Secondary queue manager created on…" text misleads;
+the live build failed `AMQ3812E` until the secondaries were created first). So **four
+`crtmqm`** total: `-sxs` on the other two nodes of a site, then `-sx` on that site's
+primary — the same order as the HA create. HA role `-sx`/`-sxs`; DR role `-rr p` (site
+A) / `-rr s` (site B); DR partners by **net-wan IP** (`-rl` local trio, `-ri` remote
+trio); DR replication on port 7001:
 
-1. **Site A** (HA + DR primary), run on **rdqm-a1** — fans out to a2/a3 as HA
-   secondaries:
-   `crtmqm -sx -rr p -rl <a1,a2,a3 net-wan> -ri <b1,b2,b3 net-wan> -rp 7001 -fs 3072M QMRDQM`
-2. **Site B** (HA primary / DR secondary), run on **rdqm-b1** — fans out to b2/b3:
-   `crtmqm -sx -rr s -rl <b1,b2,b3 net-wan> -ri <a1,a2,a3 net-wan> -rp 7001 -fs 3072M QMRDQM`
+1. **Site A** (DR primary site): `crtmqm -fs 3072M -sxs -rr p -rl <A net-wan> -ri <B
+   net-wan> -rp 7001 QMRDQM` on **rdqm-a2, rdqm-a3**, then `crtmqm -sx -rr p …` on
+   **rdqm-a1**.
+2. **Site B** (DR secondary site): `crtmqm -fs 3072M -sxs -rr s -rl <B net-wan> -ri <A
+   net-wan> -rp 7001 QMRDQM` on **rdqm-b2, rdqm-b3**, then `crtmqm -sx -rr s …` on
+   **rdqm-b1**.
 3. One floating IP per HA group (`rdqmint`): site-A `10.10.1.100`, site-B `10.10.2.100`.
 
 The QM carries the same lab MQSC posture as Plan B (listener, `APP.SVRCONN`,
-`HA.TEST`), defined once on the site-A primary (it replicates to site B via DR). Exact
-flag semantics are from the cached canonical "Creating DR/HA RDQMs" + worked example.
+`HA.TEST`), defined once on the site-A primary (it replicates to site B via DR).
+Verified on the live 3+3 (see `docs/reports/2026-06-17-rdqm-forced-dr-findings.md`).
 
 Secondaries cannot be started while in the secondary role (canonical) — the script
 creates them in the right order and lets RDQM/Pacemaker place the active instance.
@@ -140,8 +143,12 @@ Three scripts, RDQM-native analogs of the Pacemaker DR family:
   is brought **down by a hard power-off** (not a graceful shutdown — so in-flight /
   un-replicated messages are lost = the RPO; and **not** erased — the VMs and disks
   persist, ready to power back on). With the source primary down, `rdqmdr`
-  force-promotes site B. On site-A power-up, RDQM brings it back as DR-secondary and
-  resynchronizes; failback then reverses the roles.
+  force-promotes site B and **the HA subsystem starts the QM there automatically** (a
+  manual `strmqm` is wrong — `AMQ3681E`). On site-A power-up it returns as a
+  **conflicting DR-primary** (it was killed, never demoted), so it must be reconciled
+  with `rdqmdr -m QMRDQM -s` on A (it then resyncs as secondary); a controlled
+  `b2a` cutover then fails back. *(Live-verified — see the forced-DR findings report.
+  A `rdqm-dr-reconcile` helper for the returned-primary step is a noted follow-up.)*
 - **`lab/scripts/wan-degrade.sh`** — `tc`/`netem` delay+loss applied on the **active
   site-A primary's net-wan egress** (the replication sender), so it widens the
   *cross-site DR* async window only; intra-site HA rides net-hb/net-data and is
