@@ -8,6 +8,12 @@
 
 **Tech Stack:** Python 3.12, PyYAML, Typer (CLI), pytest. Branch `feature/206-salt-roster-gen` in worktree `.worktrees/issue-206-salt-roster-gen`. Git via `vrg-git`/`vrg-commit`; validation via `vrg-container-run -- vrg-validate` (the only gate; includes 100% branch coverage).
 
+---
+
+> **⏸ PARKED 2026-06-17 — resume here.** Design (`docs/specs/2026-06-16-salt-roster-generator-design.md`) and this plan are **complete and pushback-reviewed**; **implementation has not started** (no `roster.py`, no `tests/test_roster.py`, no CLI command yet). To resume: execute this plan from **Task 1** (inline or subagent-driven). The Task 1 exact-string assertion was captured from a real `yaml.safe_dump` run, so it should go green first try. Part of the Ansible→Salt migration groundwork (evaluation #205, merged). Sibling parked threads: HADR investigations #213/#239/#240 and DR brainstorm #235 — all capture-only, not blocking #206.
+
+---
+
 **Conventions for every task:**
 - All commands run from inside the worktree: `cd /Users/pmoore/dev/projects/logical-minds-foundry/mq-cluster-tooling/.worktrees/issue-206-salt-roster-gen` first.
 - Run tests with `uv run pytest` (dev loop only). Commit with `vrg-commit --type <type> --scope salt --message <msg>`.
