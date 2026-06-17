@@ -1,0 +1,69 @@
+---
+- name: "ensure entity dir for {{ e.cn }}"
+  ansible.builtin.file:
+    path: "{{ pki_entity_dir }}/{{ e.cn }}"
+    state: directory
+    mode: "0700"
+
+# trust set = own org CA cert + any cross-org CA certs this entity must trust.
+- name: "{{ e.cn }}: compute trust cert paths"
+  ansible.builtin.set_fact:
+    pki_trust_paths: "{{ ([e.org] + (e.trust | default([]))) | map('regex_replace', '^(.+)$', pki_ca_dir ~ '/\\1/ca.crt') | list }}"
+
+# --- personal entities: key + CSR + signed cert + PKCS#12 keystore ---
+- name: "{{ e.cn }}: private key"
+  community.crypto.openssl_privatekey:
+    path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.key"
+    size: "{{ pki_key_size }}"
+    type: RSA
+    mode: "0600"
+  when: e.kind == 'personal'
+
+- name: "{{ e.cn }}: CSR"
+  community.crypto.openssl_csr:
+    path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.csr"
+    privatekey_path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.key"
+    common_name: "{{ e.cn }}"
+    organization_name: "{{ pki_cas[e.org].organization_name }}"
+    organizational_unit_name: "{{ e.ou }}"
+  when: e.kind == 'personal'
+
+- name: "{{ e.cn }}: certificate signed by {{ e.org }} CA"
+  community.crypto.x509_certificate:
+    path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.crt"
+    csr_path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.csr"
+    provider: ownca
+    ownca_path: "{{ pki_ca_dir }}/{{ e.org }}/ca.crt"
+    ownca_privatekey_path: "{{ pki_ca_dir }}/{{ e.org }}/ca.key"
+    ownca_not_after: "+{{ pki_validity_days }}d"
+    mode: "0644"
+  when: e.kind == 'personal'
+
+- name: "{{ e.cn }}: keystore password (persisted via lab-secret.sh)"
+  ansible.builtin.command: "{{ repo_root }}/lab/scripts/lab-secret.sh pki-keyrpwd-{{ e.cn | lower }}"
+  register: pki_keyrpwd
+  changed_when: false
+  when: e.kind == 'personal'
+
+- name: "{{ e.cn }}: PKCS#12 key repository (cert + key + trust chain)"
+  community.crypto.openssl_pkcs12:
+    action: export
+    path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.p12"
+    friendly_name: "{{ e.cn }}"
+    privatekey_path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.key"
+    certificate_path: "{{ pki_entity_dir }}/{{ e.cn }}/{{ e.cn }}.crt"
+    other_certificates: "{{ pki_trust_paths }}"
+    passphrase: "{{ pki_keyrpwd.stdout }}"
+    encryption_level: "{{ pki_pkcs12_encryption }}"
+    mode: "0600"
+  when: e.kind == 'personal'
+
+# --- trust_only entities: a CA trust bundle, no keypair ---
+- name: "{{ e.cn }}: CA trust bundle (PEM)"
+  ansible.builtin.copy:
+    dest: "{{ pki_entity_dir }}/{{ e.cn }}/trust-bundle.pem"
+    mode: "0644"
+    content: |
+      {% for p in pki_trust_paths %}{{ lookup('ansible.builtin.file', p) }}
+      {% endfor %}
+  when: e.kind == 'trust_only'

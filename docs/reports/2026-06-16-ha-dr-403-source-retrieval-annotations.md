@@ -105,7 +105,7 @@ automated fetch. Prefer the **9.4.x** URL where two versions are listed.
 
 ### B3 — CRR endpoint exposure on K8s/OpenShift (the "VIP" reframe)
 - <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=dcqmk-example-configuring-native-ha-cross-region-replication-in-kubernetes>
-- <https://www.ibm.com/docs/en/ibm-mq/9.2?topic=dcqmumo-configuring-route-connect-queue-manager-from-outside-red-hat-openshift-cluster> (find 9.4 equivalent)
+- <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=dcqmumo-configuring-route-connect-queue-manager-from-outside-red-hat-openshift-cluster>
 - **Claim it backs:** "Floating VIP preferred" → on K8s this is a **Service/Route**, not a VIP.
 - **Confirm:** client connection is via Route (TLS passthrough + SNI) / LoadBalancer Service.
 
@@ -138,7 +138,7 @@ automated fetch. Prefer the **9.4.x** URL where two versions are listed.
 
 ## D. Cross-cutting / "missing items" to add to the requirements list
 
-- MQ network tuning (MTU/jumbo frames, bandwidth): <https://www.ibm.com/docs/en/ibm-mq/9.3.x?topic=performance-tuning-your-mq-network>
+- MQ network tuning (MTU/jumbo frames, bandwidth): <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=performance-tuning-your-mq-network>
 - MQ listener port / firewall port selection (1414, mqweb/REST): <https://www.ibm.com/support/pages/ibm-mq-firewall-security-port-selection>
 - System requirements 9.4: <https://www.ibm.com/support/pages/system-requirements-ibm-mq-94>
 - 9.4 fix list (CD): <https://www.ibm.com/support/pages/fix-list-ibm-mq-version-94x-continuous-delivery>

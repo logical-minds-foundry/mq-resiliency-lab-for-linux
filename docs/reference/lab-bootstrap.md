@@ -16,6 +16,13 @@ The VM is ephemeral. After a `vrg-vm rebuild`, the host-mounted repo and
 uv sync          # creates .venv and puts `mqlab` on PATH (so it's `mqlab …`, not `uv run mqlab …`)
 ```
 
+Install the lab's Ansible collection (the only one — `community.crypto`, for the
+PKI provider). Declarative + reproducible; reinstalls cleanly on a fresh VM:
+
+```bash
+ansible-galaxy collection install -r ansible/requirements.yml -p build/ansible_collections
+```
+
 Run every `mqlab` command from the **repo root** (the main `develop` checkout).
 
 Secrets and the fence key are **auto-generated and persisted** under the
