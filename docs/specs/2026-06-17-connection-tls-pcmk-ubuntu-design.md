@@ -1,6 +1,6 @@
 # Connection TLS — pcmk-ubuntu Arm (Stage 1) — Design
 
-> **Status:** design, first pass — brainstormed 2026-06-17.
+> **Status:** design, first pass — brainstormed & pushback-reviewed 2026-06-17.
 > **Date:** 2026-06-17
 > **Author:** Phillip Moore (with Claude)
 > **Tracking issue:** #250
@@ -71,9 +71,13 @@ and the REST endpoint:
 
 ## 4. The recipe (applied uniformly)
 
-- **Each QM:** `ALTER QMGR SSLKEYR('<keystore path, no extension>')` +
-  `KEYRPWD('<runtime-injected>')` (via `lab-secret.sh`), then
-  `REFRESH SECURITY TYPE(SSL)`.
+- **Each QM:** `ALTER QMGR SSLKEYR('<keystore stem>')` + `KEYRPWD('<value>')`, then
+  `REFRESH SECURITY TYPE(SSL)`. **`KEYRPWD` is set *once* at QM setup** — the value
+  is sourced from `lab-secret.sh` (never in git) and MQ then **persists it
+  (obfuscated) in the QMGR config on the shared LUN**, so it follows the QM on
+  failover with no agent to re-supply it (§7). *(Path convention: for PKCS#12 the QM
+  expects `<stem>.p12` located by the extensionless `SSLKEYR` stem — verify the exact
+  naming against the licensed MQ in the §11 keystore-load gate.)*
 - **Each channel / SVRCONN:** add `SSLCIPH(<cipher>)`, `SSLCAUTH(REQUIRED)` (require
   a peer cert), `SSLPEER('<expected peer DN>')` (validate it). Applied to **both
   ends** of every channel.
@@ -122,10 +126,16 @@ They must reach the QM hosts:
   **follows the QM on failover** — no per-node copies to keep in sync. Distributed
   once at QM setup (the node that owns the LUN), like the existing inter-QM MQSC.
 - **QMDTCC** (single container/QM) gets its keystore locally.
-- **Clients** (`app-client`, exporter, responder, `pymqrest`) get their keystore /
-  CA bundle on their host.
-- **`KEYRPWD`** is runtime-injected from `lab-secret.sh` (the `pki-keyrpwd-<cn>`
-  secrets the provider already creates), never committed.
+- **Clients** get their material on the host they run on: **`app-client`** → its
+  host/container; **exporter** → where the `mq_prometheus` exporter runs; **DTCC
+  responder** → the `dtcc-sim` host; **`pymqrest`** → wherever it invokes the REST
+  API. Each presents it via the **MQI client key repository + cipher** (`pymqi` sets
+  its key repository / `MQSCO` and the channel's `SSLCIPH`); the REST clients use the
+  **org CA bundle** (trust-only) for the mqweb flip (§9).
+- **`KEYRPWD` is set once and persisted, not re-injected.** The value comes from
+  `lab-secret.sh` (`pki-keyrpwd-<cn>`, never committed) at setup; `ALTER QMGR` then
+  persists it (obfuscated) in the QMGR config **on `/mqshared`**, so an **unattended
+  Pacemaker failover** brings the QM up TLS'd with no re-supply (validated in §11).
 
 ## 8. CHLAUTH / CONNAUTH stay disabled (Stage 1)
 
@@ -139,16 +149,28 @@ arm is the proof.
 
 ## 9. Roles touched + the mqweb coupling
 
-- `mq-pcmk-qmgr` — QMPCMK `SSLKEYR`/`KEYRPWD` + our-side channel `SSLCIPH`/
-  `SSLCAUTH`/`SSLPEER` (extend `inter-qm.mqsc.j2`).
-- `mq-inter-qm` — QMDTCC keystore + their-side channel TLS (extend
-  `their-side.mqsc.j2`) + the responder's client cert/trust.
+**Arm-agnostic vs arm-specific (the #212/#227 seam).** The **channel-TLS MQSC**
+(`SSLCIPH`/`SSLCAUTH`/`SSLPEER` on the channel defs) is **identical across arms** —
+author it as a **shared snippet/variable**, not hardcoded inline, so the later
+`rdqm-rhel` extension is a "wire its keystore" delta, not a channel-TLS rewrite.
+Only the **per-QM keystore wiring** (`SSLKEYR` path, LUN-vs-local) is arm-specific.
+No new abstraction — just don't bake the shared part into the pcmk template.
+
+- `mq-pcmk-qmgr` — QMPCMK `SSLKEYR`/`KEYRPWD` + apply the shared channel-TLS MQSC to
+  the our-side channels (extend `inter-qm.mqsc.j2`).
+- `mq-inter-qm` — QMDTCC keystore + the shared channel-TLS MQSC on the their-side
+  channels (extend `their-side.mqsc.j2`) + the responder's client cert/trust.
 - `mq-client` — `app-client` SVRCONN TLS + client cert.
 - `mq-exporter` — exporter SVRCONN TLS + client cert.
-- `mqweb` — server cert from the org CA. **Coupled change:** the REST clients
-  (`pymqrest`, exporter) currently run `verify_tls=False` against self-signed
-  mqweb; they must flip to **trust the org CA bundle** *in the same change* that
-  mqweb adopts a CA cert, or they break. Sequence them together.
+- `mqweb` — **the real mechanism** (it rides MQ's *default self-signed* keystore
+  today; `mqwebuser.xml` has only `sslRef="mqDefaultSSLConfig"` and the role does no
+  cert provisioning): deploy the `mqweb`-entity PKCS#12 where Liberty can read it,
+  configure `mqwebuser.xml` with a `<keyStore>` + `<ssl>` (override/replace
+  `mqDefaultSSLConfig`) pointing at it with its password, then **`strmqweb`
+  restart**. **Coupled change:** the REST clients (`pymqrest`, exporter) currently
+  run `verify_tls=False` against the self-signed mqweb and must flip to **trust the
+  org CA bundle** *in the same change* mqweb adopts the CA cert, or they break —
+  sequence them together.
 - **Keystore-distribution step** — new (a role/task that places each entity's
   keystore on its host, shared-LUN-aware for QMPCMK).
 
@@ -164,16 +186,25 @@ decide at build (a tiny inventory change, re-run `mqlab pki ensure`).
 **Functional, by running the arm** (there is no ansible-lint; the running lab is
 the gate):
 
+0. **Keystore-load gate (FIRST, blocking — before wiring any channels).** Set
+   `SSLKEYR`/`KEYRPWD` on **one** QM, `REFRESH SECURITY TYPE(SSL)`, start a TLS
+   listener, and confirm **GSKit loads the keystore** with no parse error
+   (`AMQ9657`/`AMQ9633`). First live-MQ test of the lab-pki `compatibility2022`
+   PKCS#12 — **this discharges PKI Task 8** and confirms the PKCS#12 `SSLKEYR` path
+   convention. **If it fails:** re-encode that keystore with `runmqktool` (the
+   documented PKI fallback) *before* proceeding — surfaced on step 0, not after
+   building the arm.
 1. Bring up the `pcmk-ubuntu` distributed setup with TLS applied.
 2. Confirm all four QM↔QM channels go **RUNNING over TLS** (`DIS CHSTATUS` shows
    `SSLPEER`/`SSLCIPH`; a plaintext client is rejected).
 3. Confirm the **app trade-flow works end-to-end** (`app-client` → QMPCMK →
    QMDTCC → responder → reply) — now encrypted + cert-authenticated.
 4. Confirm `pymqrest`/exporter reach mqweb over CA-trusted TLS.
+5. **Unattended-failover gate:** trigger a Pacemaker failover and confirm QMPCMK
+   comes back up **TLS'd with no manual intervention** — it reads its shared-LUN
+   keystore with the persisted `KEYRPWD`. Proves HA-with-TLS, the whole point.
 
-This **also discharges PKI Tasks 8–9** — the real "PKCS#12 loads in MQ / GSKit"
-interop proof, which had been deferred. The **cold-rebuild acceptance gate**
-applies (must come up one-pass on a fresh VM).
+The **cold-rebuild acceptance gate** applies (must come up one-pass on a fresh VM).
 
 ## 12. Risks & open questions
 
@@ -193,6 +224,25 @@ applies (must come up one-pass on a fresh VM).
   Confirm the licensed MQ + GSKit actually negotiate TLS 1.3 in the functional run
   (9.4 supports it) — if a component can't, that surfaces immediately as a
   channel-down, not a silent downgrade (the point of requiring 1.3).
+
+### Pushback resolutions (2026-06-17)
+
+A `paad:pushback` review hardened this spec — 6 findings, all resolved:
+
+1. **`KEYRPWD` on HA failover** — set once at setup + **persisted in the QMGR config
+   on the shared LUN**, not "runtime-injected each start"; unattended-failover-TLS
+   is a validation gate (§4, §7, §11 step 5).
+2. **First live-MQ keystore load** — made the **first blocking build step** (§11
+   step 0), discharging PKI Task 8, with the `runmqktool` fallback.
+3. **mqweb mechanism** — specified the real Liberty config (keystore deploy +
+   `mqwebuser.xml` `<keyStore>`/`<ssl>` + `strmqweb` restart + client flip), not
+   just "server cert" (§9).
+4. **Arm-backend seam** — channel-TLS MQSC authored arm-agnostically; per-arm
+   keystore wiring is the only arm-specific part (§9).
+5. **`SSLKEYR` PKCS#12 convention** — `<stem>.p12` via extensionless stem, verified
+   in the §11 step-0 gate (§4).
+6. **Client-keystore distribution** — per-client placement + MQI client key
+   repository/cipher spelled out (§7).
 
 ## 13. Definition of done & next steps
 
