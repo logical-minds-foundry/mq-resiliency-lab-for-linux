@@ -72,8 +72,9 @@ story.
   and the synchronous replication by DRBD, but both are **managed by RDQM** and driven
   only through IBM's commands — `crtmqm -sx` to create the replicated QM, `rdqmadm` to
   administer the cluster, `rdqmstatus` to inspect it, and `rdqmint` to manage its
-  floating IP. The underlying Pacemaker configuration is not a surface IBM intends you
-  to edit with `pcs`. RDQM's model associates **one** floating IP with the queue
+  floating IP. You don't write the Pacemaker config at all: per IBM, you *define the
+  Pacemaker cluster by editing `/var/mqm/rdqm.ini` and running `rdqmadm`* — not by
+  `pcs resource create`. RDQM's model associates **one** floating IP with the queue
   manager (IBM's wording: the instances "can optionally share *a* floating IP
   address"), surfaced through `rdqmint` — and there is no RDQM command to add a second.
 
@@ -148,15 +149,22 @@ client/sender reconnection.
 
 ## Sources
 
+IBM links are pinned to **9.4** (the lab runs MQ 9.4.5); each was confirmed to resolve
+to the 9.4.x page.
+
 - RDQM high availability (architecture; Pacemaker for grouping, DRBD for replication;
   the instances "can optionally share a floating IP address") —
-  <https://www.ibm.com/docs/en/ibm-mq/9.3.x?topic=configurations-rdqm-high-availability>
-- `rdqmint` (add/delete the floating IP address of an RDQM) —
-  <https://www.ibm.com/docs/en/ibm-mq/9.3?topic=availability-creating-deleting-floating-ip-address>
-- `rdqmadm` (administer the replicated data queue manager cluster) —
-  <https://www.ibm.com/docs/en/ibm-mq/9.2.x?topic=reference-rdqmadm-administer-replicated-data-queue-manager-cluster>
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=configurations-rdqm-high-availability>
+- Creating and deleting a floating IP address — `rdqmint` (add/delete *the* floating IP
+  of an RDQM) —
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=availability-creating-deleting-floating-ip-address>
+- Defining the Pacemaker cluster (HA group) — the cluster is defined by editing
+  `/var/mqm/rdqm.ini` and running `rdqmadm`, **not** by direct `pcs` configuration —
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=availability-defining-pacemaker-cluster-ha-group>
+- `rdqmadm` (administer the RDQM Pacemaker cluster) —
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-rdqmadm-administer-replicated-data-queue-manager-cluster>
 - IBM MQ RDQM network interface best practices (three node IPs for replication +
-  Pacemaker/Corosync health checks) —
+  Pacemaker/Corosync health checks; version-agnostic support page) —
   <https://www.ibm.com/support/pages/ibm-mq-rdqm-network-interface-best-practices/stub>
 - Our Pacemaker arm's two-VIP resource group: `ansible/roles/mq-pcmk-qmgr/tasks/main.yml`.
 - Empirical `AMQ3877E`/`AMQ3873E` and single-FIP `rdqmstatus`: the #216 verb spike,
