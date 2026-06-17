@@ -46,7 +46,8 @@ branch, and **both are protected** — no direct commits.
 
 Secrets never enter git: no MQ entitlement/license artifacts, no credentials,
 no keystores. `.gitignore` covers `*.env`, `secrets/`, `licenses/`.
-Content-plane (`pymqrest`) credentials are runtime-injected, never committed.
+Administrative REST API (`pymqrest`) credentials — the `MQWEB_ADMIN_*` mqweb
+login — are runtime-injected, never committed.
 
 ## Memory management
 
