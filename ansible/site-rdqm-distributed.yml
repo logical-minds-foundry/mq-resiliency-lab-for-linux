@@ -1,0 +1,12 @@
+# Distributed MQ (#147), RDQM arm: the RDQM HA substrate (site-rdqm.yml) + the same
+# substrate-free DTCC/app/channel layer the pcmk arm uses (site-distributed-shared.yml,
+# RDQM-parity §4). Our-side inter-QM MQSC is created at
+# `mqlab qm create distributed-rdqm-rhel` (rdqm-qm-create.sh, gated on dtcc_conn).
+# Only site A (rdqm_a) is in this setup's groups, so site-rdqm.yml's rdqm_b plays
+# are no-ops here.
+- import_playbook: site-rdqm.yml
+
+- import_playbook: site-distributed-shared.yml
+  vars:
+    our_qm: QMRDQM
+    our_conn: "10.60.0.30(1414)"

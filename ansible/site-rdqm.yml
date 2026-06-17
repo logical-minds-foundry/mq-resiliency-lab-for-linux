@@ -9,6 +9,12 @@
 - hosts: rdqm_a:rdqm_b
   roles: [rdqm-install]
 
+# REST on every node's QMRDQM (design §1). Stateless per-node mqweb (spec §8.3),
+# set up at provision where mqweb_admin_password is injected; administers the local
+# QM whenever RDQM lands it here. Mirrors the pcmk arm's site-pcmk.yml.
+- hosts: rdqm_a:rdqm_b
+  roles: [mqweb]
+
 - hosts: rdqm_a
   vars:
     rdqm_site_nodes:

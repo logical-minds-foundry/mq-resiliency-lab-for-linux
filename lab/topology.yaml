@@ -197,6 +197,13 @@ setups:
     arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
+  distributed-rdqm-rhel:
+    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
+    arm: rdqm-rhel
+    groups: [rdqm_a, dtcc, app]
+    provision: ansible/site-rdqm-distributed.yml
+    secrets: [mqweb_admin_password]
+    qm: { name: QMRDQM, vip: 10.10.1.100, vip_ext: 10.60.0.30, dtcc_conn: 10.60.0.50 }
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]
