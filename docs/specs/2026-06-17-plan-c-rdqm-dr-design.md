@@ -59,20 +59,21 @@ Provision **both** HA groups DR-ready in one playbook (the Phase-C/D lesson: DR-
 from the start, never bolt it on). Mirrors `site-pcmk-dr.yml`'s structure:
 
 - Cold-boot SSH guard over `rdqm_a:rdqm_b` (the #151/#160 lesson).
-- **Name resolution on the instrumented cluster.** DR replicates *across* sites over
-  net-wan and DRBD identifies peers by name, but the `rdqm-ha` role's `/etc/hosts` is
-  same-site-only ("no DNS in the lab"). The mechanism is needed only on the **system
-  under test** — the 3+3 cluster (`rdqm_a:rdqm_b`) — because that is the only place
-  hostnames are *referenced* (DRBD partners, cluster config). The **surrounding lab**
-  (dtcc, app, obs) is scaffolding, hardwired by IP — names there don't matter. So Plan
-  C renders a **canonical hosts file from `topology.yaml`** (the same single source the
-  Ansible inventory comes from; the renderer is lab-generic and reusable) with
-  **per-plane name aliases** — every node IP addressable by name: `<node>`
-  (primary/mgmt) plus `<node>-mgmt` / `-data-a` / `-data-b` / `-hb-a` / `-hb-b` /
-  `-wan` / `-ext` for each NIC the node declares — and **syncs it to the six
-  instrumented nodes**. DR config then names partners on the **net-wan** plane
-  unambiguously. *Broader want, separate and NOT a Plan C dependency: real lab DNS fed
-  from the same topology source (#234).*
+- **Name resolution on the instrumented cluster (a kept lab foundation, not a DR
+  dependency).** The cross-site DR create addresses partners by **net-wan IP**
+  (`crtmqm -rl/-ri`, per the canonical worked example), and same-site HA names are
+  already handled by the `rdqm-ha` role — so DR does **not** require this. We
+  nonetheless include it (a deliberate choice) as a lab-name-resolution foundation:
+  one authoritative name↔IP map, room for future hostname-based channels, and the
+  on-ramp to real DNS. It applies only to the **system under test** — the 3+3 cluster
+  (`rdqm_a:rdqm_b`) — since the **surrounding lab** (dtcc, app, obs) is scaffolding,
+  hardwired by IP. Plan C renders a **canonical hosts file from `topology.yaml`** (the
+  same single source the Ansible inventory comes from; the renderer is lab-generic and
+  reusable) with **per-plane name aliases** — every node IP addressable by name:
+  `<node>` (primary/mgmt) plus `<node>-mgmt` / `-data-a` / `-data-b` / `-hb-a` /
+  `-hb-b` / `-wan` / `-ext` for each NIC the node declares — and **syncs it to the six
+  instrumented nodes**. *Broader want, separate: real lab DNS fed from the same
+  topology source (#234).*
 - `rdqm-install` on all six nodes (reuses the Plan B role).
 - **Firewall:** open the RDQM ports using IBM's shipped definitions —
   `rdqm-drbd` (TCP 7000–7100) and `rdqm-mq` (TCP 1414) firewalld services
@@ -97,20 +98,22 @@ is invoked directly — exactly as the Pacemaker arm drives DR by standalone
 scripts own the DR addresses directly (the two FIPs as args/constants; node planes via
 the §4 lab hosts names) — no `QmConfig` change.
 
-The canonical six-step DR/HA create (first token = HA role, second = DR role):
+The canonical create (IBM 9.4 worked example) is **two `crtmqm` commands — one per
+site primary** — each of which *automatically* creates that site's two HA secondaries.
+So it is **six instances, two commands** (not six per-node commands). HA role = `-sx`
+(primary); DR role = `-rr p` / `-rr s`. DR partners are addressed by **net-wan IP**
+(`-rl` local trio, `-ri` remote trio); DR replication on port 7001:
 
-1. **primary/primary** DR/HA RDQM on **rdqm-a1**.
-2. **primary/secondary** on **rdqm-a2**, **rdqm-a3**.
-3. site-A floating IP `10.10.1.100` (`rdqmint`).
-4. **secondary/primary** on **rdqm-b1**.
-5. **secondary/secondary** on **rdqm-b2**, **rdqm-b3**.
-6. site-B floating IP `10.10.2.100` (`rdqmint`).
+1. **Site A** (HA + DR primary), run on **rdqm-a1** — fans out to a2/a3 as HA
+   secondaries:
+   `crtmqm -sx -rr p -rl <a1,a2,a3 net-wan> -ri <b1,b2,b3 net-wan> -rp 7001 -fs 3072M QMRDQM`
+2. **Site B** (HA primary / DR secondary), run on **rdqm-b1** — fans out to b2/b3:
+   `crtmqm -sx -rr s -rl <b1,b2,b3 net-wan> -ri <a1,a2,a3 net-wan> -rp 7001 -fs 3072M QMRDQM`
+3. One floating IP per HA group (`rdqmint`): site-A `10.10.1.100`, site-B `10.10.2.100`.
 
-Each `crtmqm` names the DR partner (the peer site's node) and the replication
-addresses on **net-wan**, plus the HA group config (as in Plan B). The exact
-`crtmqm` DR/HA flag set is taken verbatim from the canonical "Creating DR/HA RDQMs"
-page during planning (cached under `build/refs/ibm-docs/`). The QM carries the same
-lab MQSC posture as Plan B (listener, `APP.SVRCONN`, `HA.TEST`).
+The QM carries the same lab MQSC posture as Plan B (listener, `APP.SVRCONN`,
+`HA.TEST`), defined once on the site-A primary (it replicates to site B via DR). Exact
+flag semantics are from the cached canonical "Creating DR/HA RDQMs" + worked example.
 
 Secondaries cannot be started while in the secondary role (canonical) — the script
 creates them in the right order and lets RDQM/Pacemaker place the active instance.
