@@ -297,10 +297,10 @@ See the companion **source-retrieval annotations** doc. Priority (★):
 ## 8. Sources
 
 **Primary (resolved):**
-- IBM MQ 9.3 — Requirements for RDQM HA solution:
-  <https://www.ibm.com/docs/en/ibm-mq/9.3?topic=availability-requirements-rdqm-ha-solution>
-- IBM MQ 9.2 — Requirements for RDQM DR solution:
-  <https://www.ibm.com/docs/en/ibm-mq/9.2?topic=recovery-requirements-rdqm-dr-solution>
+- IBM MQ 9.4 — Requirements for RDQM HA solution:
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=availability-requirements-rdqm-ha-solution>
+- IBM MQ 9.4 — Requirements for RDQM DR solution:
+  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=recovery-requirements-rdqm-dr-solution>
 - LINBIT — Impact of network latency on DRBD write performance:
   <https://linbit.com/blog/the-impact-of-network-latency-on-write-performance-when-using-drbd/>
 - IBM Community (J. Rumsey, IBM) — Native HA beyond containers (2025-10):
