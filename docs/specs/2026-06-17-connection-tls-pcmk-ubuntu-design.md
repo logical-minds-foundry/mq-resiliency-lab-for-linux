@@ -82,17 +82,20 @@ and the REST endpoint:
   already produced by the provider).
 - **Internal authority unchanged** — `MCAUSER('mqm')`, queues open (Stage 2).
 
-## 5. Cipher spec
+## 5. Cipher spec — TLS 1.3 from the start
 
-Default **`ANY_TLS12_OR_HIGHER`** — MQ's alias that negotiates TLS 1.2+ with a
-strong cipher, rather than pinning one brittle CipherSpec. Representative, not toy;
-forward-compatible with TLS 1.3.
+Default **`ANY_TLS13_OR_HIGHER`** — MQ's alias that negotiates **TLS 1.3+** and
+**rejects TLS 1.2 and below**. Start modern: no 1.2 fallback, AEAD-only suites —
+the cleanest posture for a greenfield build, and what we carry forward to the
+other arms and CRR. (MQ 9.4 and its GSKit support TLS 1.3; our RSA-4096 certs
+authenticate fine under TLS 1.3 via RSA-PSS signatures — TLS 1.3 decouples the
+cipher suite from the cert's key type.)
 
 **Fidelity note:** GOV1683-24 is DTCC's mandated channel-security standard. The
-exact CipherSpec/TLS-version mandate is **pinned at build time** (verify against
-GOV1683-24 / the licensed MQ's supported set); `ANY_TLS12_OR_HIGHER` is the
-representative default until then. Our certs are RSA-4096, compatible with
-ECDHE_RSA (TLS 1.2) and TLS 1.3 ciphers.
+exact CipherSpec is **pinned at build time** (verify against GOV1683-24 / the
+licensed MQ's supported set) — likely a specific TLS 1.3 suite such as
+`TLS_AES_256_GCM_SHA384`; `ANY_TLS13_OR_HIGHER` is the representative default until
+then.
 
 ## 6. Peer identities (`SSLPEER`) — using the partial-DN certs
 
@@ -185,8 +188,11 @@ applies (must come up one-pass on a fresh VM).
   qmgr data).
 - **mqweb coupling** (§9) — the `verify_tls=False`→CA-trust flip must land with the
   mqweb cert adoption or REST breaks; sequence atomically.
-- **Cipher fidelity** — `ANY_TLS12_OR_HIGHER` is representative; pin the
-  GOV1683-24-mandated spec at build.
+- **Cipher fidelity / TLS 1.3 support** — `ANY_TLS13_OR_HIGHER` (TLS 1.3+) is the
+  representative default; pin the GOV1683-24-mandated TLS 1.3 suite at build.
+  Confirm the licensed MQ + GSKit actually negotiate TLS 1.3 in the functional run
+  (9.4 supports it) — if a component can't, that surfaces immediately as a
+  channel-down, not a silent downgrade (the point of requiring 1.3).
 
 ## 13. Definition of done & next steps
 
