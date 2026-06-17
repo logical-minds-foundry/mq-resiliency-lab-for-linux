@@ -52,8 +52,12 @@ the standardization banner.
 
 Substrate sourcing on RHEL:
 
-- **Pacemaker / Corosync / pcs** — the **RHEL High Availability Add-On**
-  (a Red Hat–supported subscription entitlement; not in base RHEL).
+- **Pacemaker / Corosync / pcs** — free, open-source software. Not on the RHEL
+  binary DVD, so the lab host-fetches the **RHEL-compatible HighAvailability
+  RPMs** (AlmaLinux 9 / Rocky 9 / CentOS Stream 9 — binary-compatible with
+  RHEL 9) and serves them offline to the guests; **no subscription required**.
+  Red Hat's own HA Add-On is an *optional* paid support layer, not a
+  prerequisite for the software.
 - **DRBD** — **ELRepo** (`kmod-drbd` + `drbd-utils`), community-sourced, with the
   kernel module matched to the RHEL 9.6 kernel.
 
@@ -136,8 +140,10 @@ boundary sits per arm:
 
 - **`pcmk-ubuntu` / `pcmk-rhel`** — the boundary sits **at** the MQ layer. The
   cluster substrate is self-supportable: in-house expertise plus the large OSS
-  community, and on RHEL, Red Hat backs the HA Add-On. DRBD and Pacemaker
-  problems never route through IBM.
+  community. The cluster software (Pacemaker/Corosync/pcs) is free OSS
+  regardless of distro; on RHEL, vendor support is an *optional* choice — buy
+  Red Hat's HA Add-On as a backstop, or self-support — and either way it is
+  **not IBM**. DRBD and Pacemaker problems never route through IBM.
 - **`rdqm-rhel`** — the boundary sits **below** MQ. IBM owns the bundled DRBD and
   Pacemaker, which are not MQ-specific technologies, so substrate problems route
   through IBM. IBM also exposes only a subset of Pacemaker's capability (one VIP;
@@ -172,7 +178,10 @@ de-risks a large bring-up.
   regardless of accel, so it should port, but fencing an emulated guest warrants
   explicit confirmation; reuse the hypervisor-side `fence_virsh` key
   authorization established in #135.
-- **RHEL HA Add-On repo availability / entitlement** on the lab box.
+- **HighAvailability package staging** — the HA packages are free OSS but not on
+  the RHEL DVD; host-fetch them from a free EL9-compatible repo (Alma/Rocky/
+  Stream 9) into `build/`. No entitlement needed; the only task is staging them
+  once for the offline guests.
 
 ## 8. Acceptance
 

@@ -34,7 +34,7 @@ The full-parity acceptance bar (spec §8) governs when the *arm* is done; this p
 
 These are genuine choices the plan bakes in with reasoned defaults. Confirm or redirect before running.
 
-- **D1 — HA Add-On package delivery (BLOCKING).** The HA Add-On (`pacemaker`, `corosync`, `pcs`, `resource-agents`, `fence-agents-*`) is **not** on the RHEL binary DVD's BaseOS/AppStream. **Default in this plan:** host-fetch the HA Add-On RPMs once into the gitignored `build/rhel-ha/` directory and install them from a `file://` repo on the guest — mirroring how `mq-install`/`rdqm-install` deliver host-fetched artifacts to offline guests (Task 5). This requires obtaining the RPMs once on a machine with a RHEL HA Add-On entitlement (or an equivalent EL9 HighAvailability mirror). **Confirm:** does the lab host have an entitlement to fetch these, or do you want a different source? This is the spec §7 "HA Add-On availability/entitlement" risk made concrete.
+- **D1 — HighAvailability package delivery (resolved).** The HA packages (`pacemaker`, `corosync`, `pcs`, `resource-agents`, `fence-agents-*`) are **not** on the RHEL binary DVD's BaseOS/AppStream. They are free OSS, so the lab sources them from a **free, RHEL-compatible HighAvailability repo** (AlmaLinux 9 / Rocky 9 / CentOS Stream 9 — binary-compatible with RHEL 9), **no subscription**: host-fetch the RPMs once into the gitignored `build/rhel-ha/` directory and install them from a `file://` repo on the guest (Task 5) — mirroring how `mq-install`/`rdqm-install` deliver host-fetched artifacts to offline guests. Red Hat's own HA Add-On (paid support) is an optional swap-in for the same role, not a requirement.
 - **D2 — New RHEL SAN/cluster nodes & IP plan.** Phase 1 adds one RHEL iSCSI target VM (`san-a-rhel`) and three RHEL cluster nodes (`pcmk-rhel-a1..3`) on a new `net-san-rhel-a` plane, following the existing `.3x` RDQM numbering and the Ubuntu arm's SAN/hb/data layout (Task 6). The concrete IPs are specified in Task 6; confirm they don't collide with anything planned.
 
 ---
@@ -98,9 +98,10 @@ Create `ansible/roles/pcmk-cluster/tasks/install-Debian.yml`:
 Create `ansible/roles/pcmk-cluster/tasks/install-RedHat.yml`. The HA Add-On repo is established by the `rhel-ha-repo` role (Task 5) before this runs.
 
 ```yaml
-# Cluster stack on RHEL: the High Availability Add-On. resource-agents is a
-# single package on EL9 (not split base/extra). fence-agents-all pulls the
-# fence_virsh agent the pcmk-stonith role uses. Repo set up by rhel-ha-repo.
+# Cluster stack on RHEL from the free EL-compatible HighAvailability repo
+# (set up by rhel-ha-repo). resource-agents is a single package on EL9 (not
+# split base/extra). fence-agents-all pulls the fence_virsh agent the
+# pcmk-stonith role uses.
 - name: install cluster stack (dnf, HA Add-On)
   ansible.builtin.dnf:
     name: [pacemaker, corosync, pcs, resource-agents, fence-agents-all]
@@ -344,7 +345,7 @@ vrg-commit --type refactor --scope iscsi --message "iscsi-initiator: OS-adapter 
 
 ---
 
-### Task 5: `rhel-ha-repo` role — offline DVD + HA Add-On repos (resolves D1)
+### Task 5: `rhel-ha-repo` role — offline DVD + free HighAvailability repo (resolves D1)
 
 **Files:**
 - Create: `ansible/roles/rhel-ha-repo/tasks/main.yml`
@@ -353,7 +354,7 @@ vrg-commit --type refactor --scope iscsi --message "iscsi-initiator: OS-adapter 
 - Consumes: nothing (host-fetched RPMs live under `build/rhel-ha/`, gitignored, copied to the guest).
 - Produces: `dnf` repos on the guest for BaseOS, AppStream (DVD) and HighAvailability (host-fetched), so Tasks 1–2's `dnf` installs resolve offline. Runs before the cluster/stonith roles in `site-pcmk-rhel.yml`.
 
-> **D1 default (confirm before running):** the HA Add-On RPMs are fetched once on a host with an EL9 HA entitlement into `build/rhel-ha/` (gitignored). The role copies that directory to the guest and serves it as a `file://` repo with `createrepo` metadata. If you prefer guest RHSM registration or another mirror, adjust this role only — nothing else in the plan changes.
+> **Package source (D1, resolved):** the HighAvailability RPMs are fetched once from a free, RHEL-compatible repo (AlmaLinux 9 / Rocky 9 / CentOS Stream 9) into `build/rhel-ha/` (gitignored) — no subscription. The role copies that directory to the guest and serves it as a `file://` repo with `createrepo` metadata. To use Red Hat's paid HA Add-On builds instead, populate `build/rhel-ha/` from the entitled repo — nothing else in the plan changes.
 
 - [ ] **Step 1: Create the role**
 
@@ -361,10 +362,11 @@ Create `ansible/roles/rhel-ha-repo/tasks/main.yml`:
 
 ```yaml
 # Offline package sources for the RHEL pcmk substrate. BaseOS+AppStream come
-# from the attached install DVD (same as rdqm-install). The HA Add-On is NOT
-# on the binary DVD, so its RPMs are host-fetched into build/rhel-ha/ and
-# served from a local file:// repo. No RHSM registration (lab guests are
-# offline). See plan D1.
+# from the attached install DVD (same as rdqm-install). The HighAvailability
+# packages are NOT on the binary DVD; they are free OSS, host-fetched from a
+# RHEL-compatible repo (Alma/Rocky/Stream 9) into build/rhel-ha/ and served
+# from a local file:// repo. No subscription, no RHSM (guests are offline).
+# See plan D1.
 - name: mount the install DVD (fstab + mount; ansible-core has no mount module)
   ansible.builtin.shell: |
     set -e
@@ -407,7 +409,7 @@ Create `ansible/roles/rhel-ha-repo/tasks/main.yml`:
     dest: /etc/yum.repos.d/rhel-ha-local.repo
     content: |
       [ha-local]
-      name=RHEL 9.6 HA Add-On (host-fetched, local)
+      name=EL9 HighAvailability (host-fetched, local)
       baseurl=file:///opt/rhel-ha
       enabled=1
       gpgcheck=0
@@ -428,11 +430,17 @@ Create `ansible/roles/rhel-ha-repo/README.md`:
 Offline package sources for the RHEL pcmk substrate.
 
 ## One-time host prerequisite (D1)
-On a machine with an EL9 High Availability entitlement, download the HA Add-On
-RPMs and their deps into `build/rhel-ha/` (gitignored), e.g.:
+The HighAvailability packages are free OSS. Download them (and deps) from a
+free, RHEL-compatible HighAvailability repo — AlmaLinux 9, Rocky 9, or
+CentOS Stream 9 — into `build/rhel-ha/` (gitignored). No subscription. E.g. on
+an EL9-compatible host (or container) with the HighAvailability repo enabled:
 
     dnf download --resolve --downloaddir=build/rhel-ha \
+      --enablerepo=highavailability \
       pacemaker corosync pcs resource-agents fence-agents-all fence-agents-virsh
+
+(The repo id is `highavailability` on AlmaLinux/Rocky/CentOS Stream 9. These
+RPMs are binary-compatible with RHEL 9.)
 
 `build/` is host-mounted and gitignored; nothing here enters git.
 ```
@@ -698,9 +706,9 @@ vrg-commit --type feat --scope lab --message "site-pcmk-rhel: Phase 1 RHEL subst
 - Consumes: everything from Tasks 1–7.
 - Produces: a green Phase-1 substrate run report for `pcmk_san_rhel_ha`.
 
-- [ ] **Step 1: Stage the D1 HA Add-On RPMs (human)**
+- [ ] **Step 1: Stage the D1 HighAvailability RPMs (human)**
 
-On a host with an EL9 HA entitlement, populate `build/rhel-ha/` per `ansible/roles/rhel-ha-repo/README.md`. Confirm the files are present:
+From a free EL9-compatible HighAvailability repo (Alma/Rocky/Stream 9 — no subscription), populate `build/rhel-ha/` per `ansible/roles/rhel-ha-repo/README.md`. Confirm the files are present:
 Run: `ls build/rhel-ha/*.rpm | head`
 Expected: pacemaker/corosync/pcs/resource-agents/fence-agents RPMs present.
 
@@ -745,9 +753,9 @@ Expected: PR opened into `develop`, linked to #238.
 **1. Spec coverage (Phase 1 scope only):**
 - Spec §3.1 arm registration → Task 6. ✅
 - Spec §3.2 shared-role + OS-adapter seam → Tasks 1–4 (the four substrate roles; `mq-install` is Phase 2, `drbd-san` is Phase 4 — explicitly deferred). ✅
-- Spec §2 substrate sourcing (HA Add-On) → Tasks 1 + 5. ELRepo DRBD is Phase 4 (not in the HA substrate). ✅
+- Spec §2 substrate sourcing (free EL9-compatible HighAvailability repo) → Tasks 1 + 5. ELRepo DRBD is Phase 4 (not in the HA substrate). ✅
 - Spec §6 sequencing step 1 ("substrate up on RHEL 9.6; cluster forms") → Task 8. ✅ (Step "DRBD syncs" belongs to Phase 4; the HA setup has no DRBD — noted in the roadmap.)
-- Spec §7 risk "HA Add-On availability/entitlement" → D1 + Task 5. ✅
+- Spec §7 risk "HighAvailability package staging" → D1 + Task 5 (free EL9-compatible repo, no entitlement). ✅
 - Spec §7 risk "STONITH under TCG / #135 key" → Task 7 Step 1 reuses the fence-key authorization. ✅
 - Spec §8 acceptance (cold-rebuild, run-report corpus) → Task 8. ✅ (Full three-way parity spans Phases 2–4.)
 
