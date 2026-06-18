@@ -212,6 +212,10 @@ def probe(
 Run: `cd .worktrees/issue-276-x86-host-portability && uv run pytest tests/test_hostfacts.py -q`
 Expected: PASS (all cases).
 
+- [ ] **Step 4b: Refactor**
+
+Look for: the arch alias map (`_ARCH_ALIASES`) and the distro token sets (`_APT`/`_DNF`) must be the single source for those mappings — grep that no other module re-derives arch strings or distro family. Keep `probe()`'s injectable parameters (don't inline the real `/dev/kvm` / `/etc/os-release` / `/etc/vergil` paths into the body) so 100% coverage stays reachable.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -422,6 +426,10 @@ def _provider(name, spec, defaults, platform, box, facts) -> ResolvedNode:  # no
 Run: `uv run pytest tests/test_platforms.py -q`
 Expected: PASS (all cases).
 
+- [ ] **Step 4b: Refactor**
+
+Look for: hoist the firmware/cpu literals (`AAVMF_LOADER`, `q35`, `maximum`, `host-passthrough`) into named module constants rather than inline strings, so the matrix has one source of truth; verify `_provider` evaluates `guest == facts.arch` once (no duplicated arch comparisons) and that the D4 guard and the `kvm` computation read straight from the spec matrix.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -522,6 +530,10 @@ def ensure_resolved(*, facts: HostFacts | None = None, topo: dict[str, Any] | No
 Run: `uv run pytest tests/test_paths.py tests/test_platforms.py -q`
 Expected: PASS.
 
+- [ ] **Step 4b: Refactor**
+
+Look for: `resolved_topology_path()` must be the only place the resolved-file path is spelled (the Vagrantfile path string is the Ruby mirror — note it as the one intentional duplication). Confirm `render_resolved` and `ensure_resolved` both go through `resolve()` and don't re-walk `nodes` independently.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -614,6 +626,10 @@ def lab_guests(facts: HostFacts | None = None) -> dict[str, str]:
 
 Run: `uv run pytest tests/test_fleet.py tests/test_vmstatus.py -q`
 Expected: PASS. (If `test_vmstatus.py` calls `lab_guests()` with the real arm64 dev host, it still returns arm64 platforms — adjust its inline topology to drop `defaults.platform` and, if it asserts a platform, inject `HostFacts`.)
+
+- [ ] **Step 5b: Refactor**
+
+Look for: `default_platform()` is the single source for the host→Ubuntu-platform mapping — grep the test suite and modules for any independent hardcoded `ubuntu2404-arm64`/`ubuntu2404-x86_64` that should route through it instead. Confirm `lab_guests` no longer reads `defaults.platform` (now removed from topology).
 
 - [ ] **Step 6: Commit**
 
@@ -710,6 +726,10 @@ def ensure_mq_tarballs(setup, mq_version, build_mq_dir, *, fetch, facts: HostFac
 
 Run: `uv run pytest tests/test_manifest.py tests/test_artifact.py -q`
 Expected: PASS.
+
+- [ ] **Step 4b: Refactor**
+
+Look for: the Ubuntu arch suffix now lives in `manifest._ARCH_SUFFIX` (fetch side) **and** the two Ansible roles (install side, Task 9) — confirm those are the only two and add a one-line comment documenting the intentional split (build-host fetch vs in-guest install operate in different layers). If a third Ubuntu MQ consumer ever appears, that's the trigger to extract a shared source.
 
 - [ ] **Step 5: Commit**
 
@@ -812,6 +832,10 @@ end
 
 Run: `ruby -c lab/Vagrantfile`
 Expected: `Syntax OK`.
+
+- [ ] **Step 4b: Refactor**
+
+Look for: the missing-resolved-file guard message must name the exact mqlab command an operator runs (keep it in sync with the actual verb names). Confirm the field-application loop applies each `ResolvedNode` key once with no leftover arch branching, and that the two `build/*` reads (resolved + box-versions) are the only host-state inputs.
 
 - [ ] **Step 5: Commit**
 
@@ -975,6 +999,10 @@ def summarise(checks: list[Check]) -> tuple[bool, str]:
 Run: `uv run pytest tests/test_doctor.py -q`
 Expected: PASS.
 
+- [ ] **Step 4b: Refactor**
+
+Look for: `_PACKAGES`/`_INSTALLER` is the single source for install hints and `_required_tools` the single source for the tool list — confirm `run_checks` builds `Check`s from those tables rather than repeating tool names; the Vergil short-circuit and the KVM check each appear once.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -984,7 +1012,7 @@ vrg-commit --type feat --scope doctor --message "host preflight checklist with n
 
 ---
 
-### Task 8: CLI wiring — `mqlab doctor`, and gate every vagrant verb
+### Task 8: CLI wiring — `mqlab doctor`, and gate the four vagrant-loading verbs
 
 **Files:**
 - Modify: `src/mqlab/cli.py`
@@ -992,7 +1020,8 @@ vrg-commit --type feat --scope doctor --message "host preflight checklist with n
 
 **Interfaces:**
 - Consumes: `doctor.{run_checks, summarise}`, `hostfacts.probe`, `platforms.ensure_resolved`, `shutil.which`.
-- Produces: `mqlab doctor` command (exit 0 on all-pass, exit 1 otherwise, prints `summarise`); a private `_prepare_lab()` helper that runs `ensure_resolved()` (and, outside Vergil, the doctor hard-gate) — called at the start of every CLI verb that shells `vagrant` (`vm create`, `vm up`, `vm down`, `vm destroy`, `vm status`, `vm ssh`).
+- Produces: `mqlab doctor` command (exit 0 on all-pass, exit 1 otherwise, prints `summarise`); a private `_prepare_lab()` helper that runs `ensure_resolved()` (and, outside Vergil, the doctor hard-gate).
+- **Gate exactly the verbs that load the Vagrantfile (spec §4.3):** `vm create`, `vm up`, `obs up`, `vm ssh`. Do **NOT** gate `vm down` / `vm destroy` / `vm status` / `net *` — those shell `virsh`, not `vagrant`, and gating `vm status` (which would call `require_native_kvm` via `ensure_resolved`) would hard-fail read-only diagnosis on a no-KVM host.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1063,28 +1092,58 @@ def doctor() -> None:
     raise typer.Exit(code=0 if ok else 1)
 ```
 
-Then call `_prepare_lab()` as the first line of each vagrant-shelling verb body (`vm create`, `vm up`, `vm down`, `vm destroy`, `vm status`, `vm ssh`). Example for `vm up` (around `cli.py:444`):
+Then call `_prepare_lab()` as the first line of **only the four vagrant-loading
+verbs**: `vm create` (`cli.py:791`), `vm up` (`cli.py:801`), `obs up`
+(`cli.py:446` — the `vagrant up obs mon-probe` path), and `vm ssh` (`cli.py:927`).
+**Leave `vm down`/`vm destroy`/`vm status` and the `net` verbs untouched** — they
+use `virsh` and must keep working without a resolved file or KVM. Example for
+`vm up`:
 
 ```python
 @vm_app.command("up")
-def vm_up(pattern: str, ...) -> None:
+def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
     _prepare_lab()
     ...  # existing body
 ```
 
-- [ ] **Step 4: Append a gate test to `tests/test_cli_vm.py`**
+And `obs up`:
 
 ```python
-def test_vm_up_runs_prepare_lab(monkeypatch):
+@obs_app.command("up")
+def obs_up(step: _StepFlag = False) -> None:
+    _prepare_lab()
+    ...  # existing body
+```
+
+- [ ] **Step 4: Append gate tests to `tests/test_cli_vm.py` (positive AND negative)**
+
+```python
+def test_obs_up_runs_prepare_lab(monkeypatch):
     called = {}
     monkeypatch.setattr(cli, "_prepare_lab", lambda: called.setdefault("yes", True))
-    # ... invoke `vm up` with the existing fakes; assert called["yes"] is True
+    # ... invoke `obs up` with the existing fakes; assert called["yes"] is True
+
+
+def test_vm_status_does_not_gate(monkeypatch):
+    # status uses virsh and must work without KVM / a resolved file: a regression
+    # guard so _prepare_lab is never wired onto a virsh-only verb.
+    def boom() -> None:
+        raise AssertionError("_prepare_lab must not run for vm status")
+
+    monkeypatch.setattr(cli, "_prepare_lab", boom)
+    # ... invoke `vm status all` with the existing fakes; assert it succeeds
 ```
+
+(Keep a `test_vm_up_runs_prepare_lab` positive case too.)
 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `uv run pytest tests/test_cli_doctor.py tests/test_cli_vm.py -q`
 Expected: PASS.
+
+- [ ] **Step 5b: Refactor**
+
+Look for: `_prepare_lab` is defined once and *called* by the four verbs — not copy-pasted inline. `_doctor_checks()` and `_prepare_lab()` both build `run_checks(probe(), which=shutil.which)`; if that line is duplicated, extract a tiny helper. Re-confirm the negative path: no `virsh`-only verb imports `_prepare_lab`.
 
 - [ ] **Step 6: Commit**
 
@@ -1120,6 +1179,10 @@ Expected: only matches inside an `ansible_architecture` conditional (the two rol
 
 Run: `vrg-container-run -- vrg-validate` (ansible-lint runs here).
 Expected: green.
+
+- [ ] **Step 3b: Refactor**
+
+Look for: the two roles now carry identical suffix Jinja. For two consumers, inline is acceptable — but record the decision in a comment. If a third Ubuntu MQ role appears, extract the suffix into a shared `group_vars/all` var (e.g. `mq_ubuntu_suffix`) so it isn't a third source of truth alongside `manifest._ARCH_SUFFIX`.
 
 - [ ] **Step 4: Commit**
 
@@ -1176,6 +1239,10 @@ done
 
 Run: `vrg-container-run -- vrg-validate` (shellcheck runs here).
 Expected: green.
+
+- [ ] **Step 2b: Refactor**
+
+Look for: the download + checksum block runs as a single loop body over `"$UBU" "LinuxX64"` (no per-arch copy-paste). The `uname -m` → suffix `case` must agree with the Ubuntu keys in `manifest._ARCH_SUFFIX` (arm64→`UbuntuLinuxARM64`, x86_64→`UbuntuLinuxX64`); note them as the two intentional mirrors (shell downloader vs Python manifest).
 
 - [ ] **Step 3: Commit**
 

@@ -190,16 +190,19 @@ existing `box_versions[platform]` lookup still works. If the resolved file is
 absent or stale, the Vagrantfile fails loud, naming the mqlab command that
 produces it.
 
-**The resolved file is a precondition of *every* `vagrant` invocation, not just
-`up`/`create`.** The Vagrantfile is loaded by every subcommand, and `cli.py`
-shells `vagrant` from several verbs — `vagrant up …` (lines 305, 444),
-`vagrant ssh …` via `os.execvp` (line 690), plus `down`/`destroy`/`status`. So
-resolution is a guaranteed precondition, not a per-verb pre-step: a small,
-idempotent `ensure_resolved()` renders the file when absent or stale and is
-called by **every mqlab command that shells `vagrant`**. With that in place the
-Vagrantfile's loud guard is a true backstop — it fires only if a human runs raw
-`vagrant` from `lab/` without going through mqlab, which is the correct division
-of responsibility.
+**The resolved file is a precondition of exactly the verbs that load the
+Vagrantfile — and only those.** In the post-#266 `cli.py`, `vagrant` is shelled
+from precisely four places: `vm create` and `vm up` (`vagrant up <g>`, line 541),
+`obs up` (`vagrant up obs mon-probe`, line 402), and `vm ssh` (`vagrant ssh` via
+`os.execvp`, line 787). **`vm down` / `vm destroy` / `vm status` and the `net`
+verbs use `virsh`, not `vagrant`** (`virsh shutdown`/`destroy`/`undefine`/`list`,
+lines 550–559, 722) — they do **not** load the Vagrantfile and must **not** be
+gated. This is load-bearing: `vm status` calls no resolver, so it keeps working as
+a read-only diagnostic even on a host with no usable KVM (matching the
+display-safe `resolve()`); gating it would hard-fail diagnosis on exactly the
+hosts that need it. So a small, idempotent `ensure_resolved()` is called by the
+four `vagrant`-loading verbs only; the Vagrantfile's loud guard is a true backstop
+that fires only if a human runs raw `vagrant` from `lab/` outside mqlab.
 
 ## 5. Components & data flow
 
@@ -217,7 +220,7 @@ topology.yaml ──────────────────────
 | `hostfacts.py` | Probe + normalise host (arch, kvm, distro, in-Vergil via `/etc/vergil`) | OS / filesystem |
 | `platforms.py` | Pure resolver `(topo, facts) → ResolvedNode` + `default_platform(facts)` | nothing (pure) |
 | resolved-topology renderer | Write `build/lab/topology.resolved.yaml`; `ensure_resolved()` | `platforms`, `hostfacts`, `paths` |
-| `doctor` (preflight) | Checklist + suggestions; exit non-zero on hard fail | `hostfacts`, tool/artifact probes |
+| `doctor` (preflight) | Host-capability checklist + suggestions; exit non-zero on hard fail | `hostfacts`, `shutil.which` |
 | `Vagrantfile` | Apply resolved fields (+ `box-versions.json`); fail loud if resolved file missing | resolved file, box-versions.json |
 | `fetch-mq.sh` / `mq-install` / `mq-client` | Arch-correct MQ artifact | host arch / `ansible_architecture` |
 | `manifest._ARCH_SUFFIX` (#266) | platform→tarball arch | gains `ubuntu2404-x86_64` entry |
@@ -250,7 +253,10 @@ to `lab_guests`/`setup_platforms`.
 
 ## 6. Preflight — `mqlab doctor`
 
-A new command, also run automatically as the first step of `vm create` / `vm up`.
+A new command, also run (via `ensure_resolved`'s sibling gate) as the first step
+of the `vagrant`-loading verbs (`vm create`/`vm up`/`obs up`/`vm ssh` — §4.3).
+`doctor` is a **host-capability** check (arch, KVM, tools); it is deliberately
+*not* setup-aware.
 
 1. **In Vergil?** → report "Vergil-managed; prerequisites guaranteed by the
    `[vm.vergil-user]` profile" and pass. The check trusts the profile.
@@ -260,13 +266,20 @@ A new command, also run automatically as the first step of `vm create` / `vm up`
    - **Required tools**: `qemu-system-x86_64` (plus `qemu-system-aarch64` only on
      an arm64 host), `libvirtd`/`virsh`, `vagrant` + the `vagrant-libvirt` plugin,
      `ansible`, `genisoimage`, the Python/uv runtime.
-   - **Artifact prerequisites** for the *targeted* setup: the right MQ tarball(s)
-     present-or-fetchable; the RHEL box + DVD ISO present if a RHEL setup is
-     requested.
-   - **Guard**: arm64-on-x86 requested → hard fail with the explicit message (D4).
 3. **Every miss** prints a suggested install command for the detected distro
    family — suggestion only, never executed (D5).
 4. Exit non-zero on any hard failure; lifecycle verbs refuse to proceed.
+
+**Out of `doctor`'s scope, by design:**
+- *Artifact prerequisites* (MQ tarball present-or-placeable; RHEL box + DVD ISO).
+  These are **setup-specific**, and #266 already enforces them where the setup is
+  known: `artifact.ensure_mq_tarballs()` (invoked by `vm create`/`provision`)
+  fails loud on a missing tarball via the `_fetch_mq_tarball` placement stub.
+  `doctor` does not duplicate that check.
+- *The arm64-on-x86 guard* (D4) is enforced at **resolution** time
+  (`platforms.resolve` → `ensure_resolved`, hence on every gated bring-up), not as
+  a standalone `doctor` line — it is unreachable by construction, so it is a
+  resolver assertion, not a checklist item.
 
 The "Lima / nerdctl" layer is explicitly *not* a host prerequisite: those are the
 macOS→VM mechanism Vergil uses to create the base VM, invisible from inside the
@@ -314,10 +327,12 @@ host. The integration is therefore small and targeted:
 Fail loud throughout, following the existing `StepFailedError` / `InventoryError`
 idiom — no swallowed errors, no silent fallbacks:
 
-- missing native KVM → hard stop (D3);
-- arm64-on-x86 requested → hard stop (D4);
+- missing native KVM → hard stop (D3), in `require_native_kvm`/`doctor`;
+- arm64-on-x86 requested → hard stop (D4), in `platforms.resolve`;
 - missing resolved topology file → Vagrantfile hard stop naming the fix;
-- missing required tool or artifact → preflight hard stop with a suggestion;
+- missing required host tool → `doctor` hard stop with an install suggestion;
+- missing MQ artifact → `artifact.ensure_mq_tarballs` hard stop (#266), not
+  `doctor` (the setup is known there, not in the host-capability check);
 - unknown host arch from `platform.machine()` → raise.
 
 ## 9. Testing & acceptance
