@@ -59,9 +59,10 @@ def _ds(uid: str) -> dict[str, str]:
     return {"type": "prometheus", "uid": uid}
 
 
-def matrix(title: str, columns: list[Column], ds_uid: str, y: int) -> dict[str, Any]:
+def matrix(title: str, columns: list[Column], ds_uid: str, y: int, h: int = 9) -> dict[str, Any]:
     """A node×component Table panel: one normalized query per column, joined on `n`,
-    with per-column colour-background cell mappings. Rows are data-driven."""
+    with per-column colour-background cell mappings. Rows are data-driven; `h` sizes the
+    panel to its row count (e.g. the 2-row storage matrix is shorter than 6-row compute)."""
     targets: list[dict[str, Any]] = []
     rename: dict[str, str] = {"n": "node"}
     overrides: list[dict[str, Any]] = []
@@ -94,7 +95,7 @@ def matrix(title: str, columns: list[Column], ds_uid: str, y: int) -> dict[str, 
         "type": "table",
         "title": title,
         "datasource": _ds(ds_uid),
-        "gridPos": {"h": 9, "w": 24, "x": 0, "y": y},
+        "gridPos": {"h": h, "w": 24, "x": 0, "y": y},
         "targets": targets,
         "transformations": [
             {"id": "joinByField", "options": {"byField": "n", "mode": "outer"}},
@@ -495,11 +496,12 @@ def render_cluster_dashboard(
         *hero_tiles(ds_uid, y=3),
         integrity_panel(ds_uid, y=7),
         matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=10),
-        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19),
-        timeline_band(ds_uid, y=28),
-        log_row("loki", y=35),
-        *perf_section(ds_uid, y=43),
-        *net_section(ds_uid, y=50),
+        # storage has only san-a/san-b — size it to two rows, don't waste the space (#219)
+        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19, h=4),
+        timeline_band(ds_uid, y=23),
+        log_row("loki", y=30),
+        *perf_section(ds_uid, y=38),
+        *net_section(ds_uid, y=45),
     ]
     return {
         "uid": "lab-pcmk-cluster",
