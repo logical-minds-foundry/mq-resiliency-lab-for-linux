@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from mqlab.clusterboard import active_side, fold_side, matrix, render_cluster_dashboard
+from mqlab.clusterboard import (
+    active_side,
+    fold_side,
+    hero_tiles,
+    integrity_panel,
+    matrix,
+    render_cluster_dashboard,
+)
 
 DS = "promtest"
 
@@ -48,13 +55,44 @@ def test_active_side_states():
     assert active_side(["A", "B"]) == "split"  # dual owner = hazard
 
 
-def test_board_has_uid_and_the_two_matrices():
+def test_hero_tiles_are_stat_panels_across_the_top():
+    tiles = hero_tiles(DS, y=0)
+    assert [t["type"] for t in tiles] == ["stat"] * 4
+    titles = [t["title"] for t in tiles]
+    assert titles == ["Cluster health", "Nodes online", "Active QM owner", "Replication backlog"]
+    # laid out across one row (x = 0, 6, 12, 18), all at y=0
+    assert [t["gridPos"]["x"] for t in tiles] == [0, 6, 12, 18]
+    assert all(t["gridPos"]["y"] == 0 for t in tiles)
+    # replication tile reports bytes (honest under TCG — no seconds)
+    repl = tiles[3]
+    assert repl["targets"][0]["expr"] == "max(cluster_drbd_out_of_sync_bytes)"
+    assert repl["fieldConfig"]["defaults"]["unit"] == "bytes"
+
+
+def test_integrity_light_is_loud_on_hazard_and_stale_on_no_data():
+    p = integrity_panel(DS, y=4)
+    assert p["type"] == "stat"
+    assert p["title"] == "Integrity"
+    # hazard count: split-brain (StandAlone) / dual-primary / Diskless
+    expr = p["targets"][0]["expr"]
+    assert "StandAlone" in expr and "Diskless" in expr
+    maps = p["fieldConfig"]["defaults"]["mappings"]
+    # 0 hazards -> green OK; >=1 -> red loud; and NO-DATA must read STALE, never green
+    special = [m for m in maps if m["type"] == "special"]
+    assert special and special[0]["options"]["match"] == "null"
+    assert special[0]["options"]["result"]["text"] == "STALE"
+
+
+def test_board_has_uid_hero_integrity_and_the_two_matrices():
     d = render_cluster_dashboard({}, arm="pcmk")
     assert d["uid"] == "lab-pcmk-cluster"
-    titles = [p["title"] for p in d["panels"]]
-    assert titles == ["② Compute — node × component", "③ Storage — DRBD / SAN"]
-    compute = d["panels"][0]
+    by_title = {p["title"]: p for p in d["panels"]}
+    # hero band + integrity + the two matrices all present
+    assert "Cluster health" in by_title and "Integrity" in by_title
+    compute = by_title["② Compute — node × component"]
+    storage = by_title["③ Storage — DRBD / SAN"]
     cols = compute["transformations"][1]["options"]["renameByName"]
     assert {"Value #A", "Value #D"} <= set(cols)  # corosync .. fence present
-    # storage matrix sits below compute (no overlap)
-    assert d["panels"][1]["gridPos"]["y"] > compute["gridPos"]["y"]
+    # top-to-bottom: hero (y=0) → integrity → compute → storage (no overlap)
+    assert by_title["Cluster health"]["gridPos"]["y"] == 0
+    assert by_title["Integrity"]["gridPos"]["y"] < compute["gridPos"]["y"] < storage["gridPos"]["y"]

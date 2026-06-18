@@ -155,16 +155,124 @@ _STORAGE_COLS: list[Column] = [
 ]
 
 
+def _stat(
+    title: str,
+    expr: str,
+    ds_uid: str,
+    x: int,
+    y: int,
+    *,
+    mappings: list[dict[str, Any]] | None = None,
+    unit: str | None = None,
+    text_mode: str = "value",
+) -> dict[str, Any]:
+    """A single Stat tile with a sparkline (graphMode=area)."""
+    defaults: dict[str, Any] = {"mappings": mappings or []}
+    if unit is not None:
+        defaults["unit"] = unit
+    target: dict[str, Any] = {
+        "refId": "A",
+        "expr": expr,
+        "instant": True,
+        "datasource": _ds(ds_uid),
+    }
+    if text_mode == "name":
+        target["legendFormat"] = "{{holder}}"
+    return {
+        "type": "stat",
+        "title": title,
+        "datasource": _ds(ds_uid),
+        "gridPos": {"h": 4, "w": 6, "x": x, "y": y},
+        "targets": [target],
+        "fieldConfig": {"defaults": defaults, "overrides": []},
+        "options": {
+            "graphMode": "area",
+            "textMode": text_mode,
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+        },
+    }
+
+
+_STALE_MAP = {
+    "type": "special",
+    "options": {"match": "null", "result": {"color": "text", "text": "STALE", "index": 9}},
+}
+
+
+def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """The top band: cluster health, nodes online, active QM owner, replication backlog.
+    No-data reads STALE, never healthy (fail-loud)."""
+    online = "max by (member)(cluster_node_online)"
+    health_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "DOWN", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ healthy", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    return [
+        _stat("Cluster health", f"min({online})", ds_uid, 0, y, mappings=health_maps),
+        _stat("Nodes online", f"sum({online})", ds_uid, 6, y),
+        _stat(
+            "Active QM owner",
+            'cluster_resource_owner{resource="mq_qm"}',
+            ds_uid,
+            12,
+            y,
+            text_mode="name",
+        ),
+        _stat(
+            "Replication backlog",
+            "max(cluster_drbd_out_of_sync_bytes)",
+            ds_uid,
+            18,
+            y,
+            unit="bytes",
+        ),
+    ]
+
+
+def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
+    """First-class integrity light: hazard count (split-brain/dual-primary/Diskless),
+    gated on DRBD being present so no-data reads STALE (not a false green)."""
+    hazards = (
+        '(count(cluster_drbd_conn{conn="StandAlone"}) or vector(0))'
+        ' + (count(cluster_drbd_disk{disk="Diskless"}) or vector(0))'
+        ' + (count(cluster_drbd_role{role="Primary"}) > bool 1)'
+    )
+    expr = f"({hazards}) and on() (count(cluster_drbd_role) > 0)"
+    maps = [
+        {"type": "value", "options": {"0": {"color": _GREEN, "text": "✓ integrity", "index": 0}}},
+        {
+            "type": "range",
+            "options": {
+                "from": 1,
+                "to": 9999,
+                "result": {"color": _RED, "text": "⚠ HAZARD", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    panel = _stat("Integrity", expr, ds_uid, 0, y, mappings=maps)
+    panel["gridPos"]["w"] = 24  # full-width banner
+    return panel
+
+
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
     arm: str = "pcmk",
     ds_uid: str = "prometheus",
 ) -> dict[str, Any]:
-    """Assemble the cockpit board: the ② Compute + ③ Storage matrices on a dedicated
-    board with a stable uid. Hero/timeline/logs/① cards land in later PRs."""
+    """Assemble the cockpit board top-to-bottom: hero band + integrity light, then the
+    ② Compute + ③ Storage matrices. Timeline/logs land in later PRs."""
     panels = [
-        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=0),
-        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=9),
+        *hero_tiles(ds_uid, y=0),
+        integrity_panel(ds_uid, y=4),
+        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=7),
+        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=16),
     ]
     return {
         "uid": "lab-pcmk-cluster",
