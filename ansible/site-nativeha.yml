@@ -1,0 +1,23 @@
+# The Native HA arm (#246), site-A 3-node HA group (Phase 1 = HA only).
+# Site B (nha_rhel_b) is the CRR/DR peer — Phase 3 in a future site-nativeha-dr.yml
+# that imports this play set and adds nha_rhel_b + CRR. Site-A-only keeps the
+# consolidated distributed-nativeha-rhel setup provisioning cleanly without an
+# uncreated site B (mirrors site-rdqm.yml).
+- hosts: nha_rhel_a
+  become: true
+  tasks:
+    - name: acl package for unprivileged become (become_user mqm)
+      ansible.builtin.dnf:
+        name: acl
+
+- hosts: nha_rhel_a
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    # Replication on the dedicated net-hb-a NIC (so the fault suite can sever it).
+    nha_site_nodes:
+      - { name: nha-rhel-a1, hb: 172.16.1.71, data: 10.10.1.71 }
+      - { name: nha-rhel-a2, hb: 172.16.1.72, data: 10.10.1.72 }
+      - { name: nha-rhel-a3, hb: 172.16.1.73, data: 10.10.1.73 }
+  roles:
+    - mq-nativeha
