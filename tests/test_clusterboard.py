@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mqlab.clusterboard import matrix
+from mqlab.clusterboard import active_side, fold_side, matrix
 
 DS = "promtest"
 
@@ -29,3 +29,18 @@ def test_matrix_is_a_joined_colourised_table():
     assert set(ov) == {"corosync", "fence"}
     cell = next(pr for pr in ov["corosync"]["properties"] if pr["id"] == "custom.cellOptions")
     assert cell["value"] == {"type": "color-background", "mode": "basic"}
+
+
+def test_fold_side_precedence():
+    assert fold_side(["green", "green"]) == "green"
+    assert fold_side(["green", "amber"]) == "amber"
+    assert fold_side(["amber", "red"]) == "red"
+    assert fold_side(["red", "STALE"]) == "STALE"  # STALE outranks red
+    assert fold_side([]) == "STALE"  # no cells = blind = STALE
+
+
+def test_active_side_states():
+    assert active_side(["A"]) == "A"
+    assert active_side(["B"]) == "B"
+    assert active_side([]) == "none"  # nobody owns it mid-transition
+    assert active_side(["A", "B"]) == "split"  # dual owner = hazard

@@ -52,3 +52,28 @@ def matrix(title: str, columns: list[Column], ds_uid: str, y: int) -> dict[str, 
             {"id": "organize", "options": {"renameByName": rename, "excludeByName": {"Time": True}}}],
         "fieldConfig": {"defaults": {"custom": {"align": "center"}}, "overrides": overrides},
     }
+
+
+_PRECEDENCE = ("STALE", "red", "amber", "green")
+
+
+def fold_side(cells: list[str]) -> str:
+    """Fold a side's cell states to one tri-state+STALE, worst-wins with STALE first
+    (precedence STALE > red > amber > green). No cells = blind collector = STALE."""
+    if not cells:
+        return "STALE"
+    for level in _PRECEDENCE:
+        if level in cells:
+            return level
+    return "green"
+
+
+def active_side(owner_sites: list[str]) -> str:
+    """The active site from the set of sites currently holding mq_* owners:
+    one site → "A"/"B"; none → "none" (mid-transition); two → "split" (hazard)."""
+    sites = set(owner_sites)
+    if len(sites) > 1:
+        return "split"
+    if not sites:
+        return "none"
+    return sites.pop()
