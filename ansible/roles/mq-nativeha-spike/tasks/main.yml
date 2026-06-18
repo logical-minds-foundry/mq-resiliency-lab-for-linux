@@ -107,21 +107,20 @@
   become: true
   become_user: mqm
 
-- name: write the NativeHAInstance peer set into qm.ini
-  ansible.builtin.template:
-    src: qm-nativeha.ini.j2
-    dest: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini.nha"
-  become: true
-  become_user: mqm
-  register: qmini
-
-# qm.ini is created by crtmqm; we append the NativeHAInstance stanzas once
-# (idempotent: guard on the marker we add).
+# qm.ini is created by crtmqm; append the NativeHAInstance peer set once.
+# The block is rendered on the controller from inventory (hostvars are local
+# to the controller) and written to the remote qm.ini — NOT via lookup('file'),
+# which would read the controller's filesystem.
 - name: append NativeHAInstance stanzas to qm.ini (once)
   ansible.builtin.blockinfile:
     path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
     marker: "# {mark} NATIVE-HA-SPIKE (#246)"
-    block: "{{ lookup('file', '/var/mqm/qmgrs/' + nha_qm + '/qm.ini.nha') }}"
+    block: |
+      {% for h in groups[nha_group] %}
+      NativeHAInstance:
+         Name={{ h }}
+         ReplicationAddress={{ hostvars[h].ansible_host }}(9414)
+      {% endfor %}
   become: true
   become_user: mqm
 
