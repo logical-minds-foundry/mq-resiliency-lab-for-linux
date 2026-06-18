@@ -97,20 +97,42 @@ def tarball_name(mq_version: str, platform: str) -> str:
     return f"{mq_version}-IBM-MQ-Advanced-for-Developers-{suffix}.tar.gz"
 
 
+_OBS_VAR_MAP = {
+    "prometheus_version": "prometheus",
+    "node_exporter_version": "node_exporter",
+    "loki_version": "loki",
+    "alloy_version": "alloy",
+    "grafana_version": "grafana",
+    "mq_exporter_ref": "mq_metric_samples_ref",
+}
+
+
+def _obs_vars(obs: dict[str, str]) -> dict[str, str]:
+    return {var: obs[key] for var, key in _OBS_VAR_MAP.items()}
+
+
 def vars_overlay(m: Manifest) -> dict[str, str]:
     """The Ansible extra-vars the roles consume, derived from the manifest."""
-    o = m.observability
     return {
         "mq_version": m.mq_version,
         "lab_box": m.box,
         "lab_box_version": m.box_version,
-        "prometheus_version": o["prometheus"],
-        "node_exporter_version": o["node_exporter"],
-        "loki_version": o["loki"],
-        "alloy_version": o["alloy"],
-        "grafana_version": o["grafana"],
-        "mq_exporter_ref": o["mq_metric_samples_ref"],
+        **_obs_vars(m.observability),
     }
+
+
+def obs_overlay() -> dict[str, str]:
+    """The obs version vars from the shared obs manifest, for `mqlab obs up` (#266)."""
+    return _obs_vars(_load_yaml(manifests_root() / "_shared" / "observability.yaml"))
+
+
+def box_version_pins(m: Manifest) -> dict[str, str]:
+    """platform -> box_version for every topology platform using this manifest's box.
+
+    Keyed by platform because the Vagrantfile reads build/box-versions.json that way.
+    """
+    boxes = _topology().get("boxes") or {}
+    return {p: m.box_version for p, cfg in boxes.items() if (cfg or {}).get("box") == m.box}
 
 
 def record_selection(setup: str, name: str) -> None:

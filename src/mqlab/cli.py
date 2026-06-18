@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -14,14 +15,31 @@ from rich.console import Console
 
 from mqlab import parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
+from mqlab.artifact import ensure_mq_tarballs
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
+from mqlab.manifest import (
+    box_version_pins,
+    load_manifest,
+    manifest_exists,
+    obs_overlay,
+    read_selection,
+    resolve_selection,
+    vars_overlay,
+)
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
-from mqlab.paths import lab_network, lab_script, repo_root, reports_dir, runs_dir
+from mqlab.paths import (
+    lab_network,
+    lab_script,
+    repo_root,
+    reports_dir,
+    runs_dir,
+    selection_state_path,
+)
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -128,6 +146,72 @@ app.add_typer(net_app, name="net")
 
 _StepFlag = Annotated[bool, typer.Option("--step", help="pause after each step to inspect the lab")]
 _Pattern = Annotated[str, typer.Argument(help="name, regex, or 'all'")]
+_ManifestOpt = Annotated[
+    str | None, typer.Option("--manifest", help="version manifest name (default: 'default')")
+]
+
+
+# --- Version manifest wiring (#266). All gracefully optional: a setup/repo with no
+#     manifest behaves exactly as before (the helpers return None / []). -------------
+def _fetch_mq_tarball(name: str, dest: Path) -> None:  # pragma: no cover - manual/offline
+    raise RuntimeError(
+        f"MQ tarball {name} is absent and auto-download is not configured; place it "
+        f"(with its .sha256) under {dest.parent} via your IBM/Red Hat downloads (#266)."
+    )
+
+
+def _apply_manifest(
+    setup_name: str, *, requested: str | None = None, at_create: bool = False
+) -> Path | None:
+    """Render the manifest overlay for a setup (None if it has no manifest). At create,
+    also pin box_version and ensure the MQ tarball(s) are present."""
+    if not manifest_exists(setup_name):
+        return None
+    name = (
+        resolve_selection(setup_name, requested or "default")
+        if at_create
+        else resolve_selection(setup_name, requested)
+    )
+    man = load_manifest(setup_name, name)
+    op = repo_root() / "build" / "manifests" / f"{setup_name}.overlay.json"
+    op.parent.mkdir(parents=True, exist_ok=True)
+    op.write_text(json.dumps(vars_overlay(man)))
+    if at_create:
+        bvf = repo_root() / "build" / "box-versions.json"
+        pins = json.loads(bvf.read_text()) if bvf.exists() else {}
+        pins.update(box_version_pins(man))
+        bvf.write_text(json.dumps(pins))
+        ensure_mq_tarballs(
+            setup_name, man.mq_version, repo_root() / "build" / "mq", fetch=_fetch_mq_tarball
+        )
+    return op
+
+
+def _manifest_args(
+    setup_name: str, *, requested: str | None = None, at_create: bool = False
+) -> list[str]:
+    op = _apply_manifest(setup_name, requested=requested, at_create=at_create)
+    return ["-e", f"@{op}"] if op else []
+
+
+def _obs_manifest_args() -> list[str]:
+    shared = repo_root() / "manifests" / "_shared" / "observability.yaml"
+    if not shared.exists():
+        return []
+    op = repo_root() / "build" / "manifests" / "_obs.overlay.json"
+    op.parent.mkdir(parents=True, exist_ok=True)
+    op.write_text(json.dumps(obs_overlay()))
+    return ["-e", f"@{op}"]
+
+
+def _manifest_id(setup_name: str) -> str:
+    name = read_selection(setup_name)
+    return f"{setup_name}/{name}" if name else ""
+
+
+def _manifest_digest_paths(setup_name: str) -> list[Path]:
+    p = selection_state_path(setup_name)
+    return [p] if p.exists() else []
 
 
 @net_app.command("create")
@@ -322,7 +406,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
             Command(
-                ["ansible-playbook", "site-obs.yml"],  # noqa: S607
+                ["ansible-playbook", "site-obs.yml", *_obs_manifest_args()],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),
@@ -704,9 +788,12 @@ def _ssh_into(guest: str) -> None:
 
 
 @vm_app.command("create")
-def vm_create(pattern: _Pattern, step: _StepFlag = False) -> None:
+def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag = False) -> None:
     """Create + provision the selected guests (skips any that already exist)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    # Pin box_version + ensure the MQ tarball before the boxes come up (no-op if the
+    # pattern is not a manifested setup). #266
+    _apply_manifest(pattern, requested=manifest, at_create=True)
     _execute_stateful("vm-create", guests, _plan_create, step_mode=step)
 
 
@@ -779,7 +866,7 @@ def vm_roster() -> None:
         deps.transcript.close()
 
 
-def _provision(setup_name: str) -> None:
+def _provision(setup_name: str, *, requested: str | None = None) -> None:
     setup = lab_setups().get(setup_name)
     if setup is None:
         typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
@@ -807,7 +894,11 @@ def _provision(setup_name: str) -> None:
         step = CommandStep(
             f"{setup_name} provision",
             Command(
-                ["ansible-playbook", Path(setup.provision).name],  # noqa: S607
+                [
+                    "ansible-playbook",  # noqa: S607
+                    Path(setup.provision).name,
+                    *_manifest_args(setup_name, requested=requested),
+                ],
                 cwd=repo_root() / "ansible",
                 env=secret_env or None,
             ),
@@ -827,9 +918,9 @@ def _provision(setup_name: str) -> None:
 
 
 @vm_app.command("provision")
-def vm_provision(setup: str) -> None:
+def vm_provision(setup: str, manifest: _ManifestOpt = None) -> None:
     """Provision a setup — render the inventory, then run its Ansible playbook."""
-    _provision(setup)
+    _provision(setup, requested=manifest)
 
 
 @vm_app.command("ssh")
@@ -1102,9 +1193,14 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
         timestamp,
         commit_reader=read_commit,
         digest_reader=lambda: read_config_digest(
-            [repo_root() / "lab" / "topology.yaml", inventory_path()]
+            [
+                repo_root() / "lab" / "topology.yaml",
+                inventory_path(),
+                *_manifest_digest_paths(setup.name),
+            ]
         ),
         version_reader=read_versions,
+        manifest_reader=lambda: _manifest_id(setup.name),
     )
     report = RunReport(metadata=metadata, scenarios=[scenario])
     bundle = write_bundle(report, reports_dir())
