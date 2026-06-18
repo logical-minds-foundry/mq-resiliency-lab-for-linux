@@ -54,21 +54,22 @@ docs/reports/2026-06-18-nativeha-rhel-phase3-findings.md
 
 ---
 
-### Task 1: TLS keystore path — RESOLVED (diagnosed 2026-06-18)
+### Task 1: TLS keystore path — RESOLVED & VERIFIED (2026-06-18)
 
-**Finding (`lab-gotchas.md`):** `runmqakm`/`runmqckm` are **unusable** on this
-9.4.5 RHEL install — `libicuio` is absent everywhere, so the IBM-documented
-`runmqakm -keydb -create` cannot run. **So we do not use GSKit/`runmqakm` at all.**
+**Root cause (`lab-gotchas.md`):** `runmqakm` failed only because the minimal RHEL
+box lacked the **OS `libicu`** (`libicuio.so.67`). **`dnf install libicu` fixes it**
+— `runmqakm` then works. (The earlier "unusable / .p12-only" readings were wrong.)
 
-**Path:** `lab-pki` issues PKCS#12 (`.p12`) keystores via OpenSSL (no GSKit), and
-MQ 9.x consumes a **PKCS#12 `KeyRepository`** directly (proven on the pcmk arm's
-channel TLS). Task 2 issues the `.p12`; Task 4 points `NativeHALocalInstance`
-`KeyRepository` at the `.p12` stem + `CertificateLabel` = friendly name + `CipherSpec`.
-No `gskit-RedHat.yml` needed.
+**Path (verified on site A):** install `libicu`; deploy the `lab-pki` PKCS#12
+(`.p12`, OpenSSL); stash its password with `runmqakm -keydb -stashpw -type pkcs12`;
+set `NativeHALocalInstance` `CipherSpec=ANY_TLS12` / `CertificateLabel=QMNATIVE` /
+`KeyRepository=<.p12 stem>`. Codified in `mq-nativeha/tasks/tls.yml` +
+`site-nativeha-tls.yml`.
 
-- [ ] **Risk to verify in Task 4:** confirm Native HA **replication** TLS accepts a
-  PKCS#12 repository (channel TLS does). If it strictly needs a CMS `.kdb`, that's
-  blocked by the ICU gap — fall back to **plaintext CRR** (spike-proven) for the DR
+- [x] **Native HA replication TLS accepts the lab-pki `.p12` — VERIFIED.** Site-A
+  group re-formed `QUORUM(3/3) INSYNC` with replication negotiating
+  `ECDHE_RSA_AES_256_GCM_SHA384`. The Task-4 risk is cleared; CRR cross-region uses
+  the same mechanism. (Plaintext fallback no longer needed.)
   deliverable and escalate the ICU gap. (DR mechanics never wait on TLS.)
 
 ### Task 2: lab-pki certs for the six Native HA instances (first on RHEL)

@@ -109,29 +109,30 @@ exit non-zero otherwise — never trust per-step `|| true`.
 | planned move = location constraint → verify → remove | this `pcs` version's `resource move` porcelain raced our migrations and **reverted** them |
 | `fence_virsh` needs `LIBVIRT_DEFAULT_URI=qemu:///system` | STONITH SSHes to the hypervisor (`build/fence_key`); without the URI the fence exec fails |
 
-## `runmqakm`/`runmqckm` unusable on the 9.4.5 RHEL dev install — use lab-pki `.p12`
+## `runmqakm` fails (`libicuio`) on a minimal RHEL box — install `libicu`
 
-**Symptom.** `runmqakm` fails immediately with `Failed to dlopen ICU library.
-Attempted versions from libicuio.so.100 to libicuio.so.49`, at **any**
-`LD_LIBRARY_PATH` (incl. `/opt/mqm/gskit9/lib64`); `runmqckm` may not be on disk.
-So `runmqakm -keydb -create` (the IBM-documented CRR-on-Linux keystore step)
-cannot run.
+**Symptom.** `runmqakm` (and `runmqckm`) fail immediately with `Failed to dlopen
+ICU library. Attempted versions from libicuio.so.100 to libicuio.so.49`, at any
+`LD_LIBRARY_PATH`. So no TLS keystore / stash via the MQ tools, and (because most
+arms' channel TLS and Native HA CRR-over-TLS need a stashed keystore) all TLS
+work is blocked. Base QM ops (`crtmqm`/`strmqm`/`dspmq`, plaintext Native HA/CRR)
+don't touch GSKit, so it's invisible until TLS.
 
-**Cause (precise — supersedes the earlier "unextracted tarballs" reading).**
-GSKit 9's libs *are* extracted (`/opt/mqm/gskit9/lib64/libgsk9*.so`,
-`libickcs_64.so`); the `gskssl{32,64}.tar.gz` are only the **GSKit8 compat**
-layer. But **`libicuio.so.*` is absent everywhere** — not in `/opt/mqm`, not in
-the tarballs, not in `ldconfig`. `runmqakm` dlopen's `libicuio` at runtime
-(not a link dep, so `ldd` shows nothing) and finds none → it cannot start. A real
-packaging gap in this Developers build. Base QM ops (`crtmqm`/`strmqm`/`dspmq`,
-**plaintext** Native HA / CRR) don't touch GSKit, so it's invisible until TLS.
+**Cause.** `runmqakm` dlopen's the **system** `libicuio.so.*` at runtime (not a
+link dep, so `ldd` shows nothing) — and the minimal kickstart RHEL 9.6 box does
+**not** install `libicu` (it's not a hard MQ rpm dependency). GSKit 9's own libs
+*are* present (`/opt/mqm/gskit9/lib64`); the missing piece is the OS ICU. (Earlier
+readings — "unextracted tarballs", "use .p12 to avoid runmqakm" — were wrong; this
+is the real root cause.)
 
-**Fix — don't use `runmqakm`; use the `lab-pki` PKCS#12 path.** `lab-pki`
-generates keystores with **OpenSSL** (`community.crypto` → `.p12`), no GSKit
-involved, and MQ 9.x consumes a **PKCS#12 `KeyRepository`** directly (proven on
-the pcmk arm's channel TLS). So issue the entity `.p12` from `lab-pki`, deploy it
-to `/var/mqm/qmgrs/<QM>/ssl/`, and point `KeyRepository` at the `.p12` stem +
-`CertificateLabel` = the friendly name. No `libicuio`, no `runmqakm`. (Discovered
-in #246 Phase-0 spike → diagnosed in Phase 3. If a CMS `.kdb` is ever strictly
-required somewhere, that path is blocked until the ICU gap is resolved — track
-separately.)
+**Fix — `dnf install libicu`.** RHEL 9 ships ICU 67 (`/usr/lib64/libicuio.so.67`),
+squarely in runmqakm's accepted 49–100 range, so installing it makes `runmqakm`
+work immediately. It's in the DVD BaseOS repo (offline). The Native HA TLS role
+(`mq-nativeha/tasks/tls.yml`) installs `libicu` before any keystore op.
+
+**Then TLS works the proper way:** deploy the `lab-pki` PKCS#12 (`.p12`, OpenSSL,
+`compatibility2022` encoding), stash its password with the now-working
+`runmqakm -keydb -stashpw -type pkcs12`, and set `NativeHALocalInstance`
+`CipherSpec`/`CertificateLabel`/`KeyRepository`. **Verified (#246 Phase 3):** the
+site-A Native HA group re-formed `QUORUM(3/3) INSYNC` with replication negotiating
+`ECDHE_RSA_AES_256_GCM_SHA384` — TLS replication via a CA-signed lab-pki cert.

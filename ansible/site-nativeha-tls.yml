@@ -1,0 +1,13 @@
+# Apply Native HA replication TLS (lab-pki .p12) to a group + restart. Reused by
+# Phase-3 CRR and as the site-A TLS de-risk. Group/QM via --limit + vars.
+- hosts: nha_rhel_a
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    ks_cn: QMNATIVE
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
+    - name: restart mqmonitor@ to pick up TLS
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ qm_name }}"
+        state: restarted

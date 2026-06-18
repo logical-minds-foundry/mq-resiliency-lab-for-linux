@@ -15,6 +15,7 @@ pki_cas:
 pki_entities:
   - { cn: QMPCMK, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org] }
   - { cn: QMRDQM, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org] }
+  - { cn: QMNATIVE, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org] }
   - { cn: app-client, org: client-org, ou: apps, kind: personal, trust: [] }
   - { cn: mq_prometheus, org: client-org, ou: ops, kind: personal, trust: [] }
   - { cn: mqweb, org: client-org, ou: ops, kind: personal, trust: [] }
