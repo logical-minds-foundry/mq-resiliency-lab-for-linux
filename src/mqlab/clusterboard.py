@@ -199,8 +199,10 @@ def _stat(
     mappings: list[dict[str, Any]] | None = None,
     unit: str | None = None,
     text_mode: str = "value",
+    name_label: str = "holder",
 ) -> dict[str, Any]:
-    """A single Stat tile with a sparkline (graphMode=area)."""
+    """A single Stat tile with a sparkline (graphMode=area). text_mode="name" shows the
+    name_label value (e.g. the owner holder, or a group's role)."""
     defaults: dict[str, Any] = {"mappings": mappings or []}
     if unit is not None:
         defaults["unit"] = unit
@@ -211,7 +213,7 @@ def _stat(
         "datasource": _ds(ds_uid),
     }
     if text_mode == "name":
-        target["legendFormat"] = "{{holder}}"
+        target["legendFormat"] = f"{{{{{name_label}}}}}"
     return {
         "type": "stat",
         "title": title,
@@ -358,9 +360,11 @@ _TIMELINE_SIGNALS = [
 _OWNER_CHANGE_EXPR = "changes((count by (resource)(cluster_resource_owner))[5m:])"
 
 
-def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
-    """The failover-story band: a State-timeline of the key signals over the drill window.
-    The matrix is *now*; this shows the cluster moving through a cutover."""
+def _state_timeline(
+    title: str, signals: list[tuple[str, str]], ds_uid: str, y: int
+) -> dict[str, Any]:
+    """A State-timeline band of named signals over the drill window. The matrix is *now*;
+    this shows the cluster moving through a cutover. Arm-specific signals in; panel out."""
     targets = [
         {
             "refId": _REFIDS[i],
@@ -369,11 +373,11 @@ def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
             "legendFormat": name,
             "datasource": _ds(ds_uid),
         }
-        for i, (name, expr) in enumerate(_TIMELINE_SIGNALS)
+        for i, (name, expr) in enumerate(signals)
     ]
     return {
         "type": "state-timeline",
-        "title": "⟳ Failover timeline",
+        "title": title,
         "datasource": _ds(ds_uid),
         "gridPos": {"h": 7, "w": 24, "x": 0, "y": y},
         "targets": targets,
@@ -397,19 +401,22 @@ def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
     }
 
 
-def log_row(loki_uid: str, y: int) -> dict[str, Any]:
-    """The embedded live log row: cluster-node journald units, severity-filtered (WARN+).
-    The matrix shows *what* changed; this shows *why*, on one screen (§6.5)."""
+def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
+    """The PCMK failover-story band (nodes/QM/DRBD/quorum over the drill window)."""
+    return _state_timeline("⟳ Failover timeline", _TIMELINE_SIGNALS, ds_uid, y)
+
+
+def _logs_panel(title: str, selector: str, loki_uid: str, y: int) -> dict[str, Any]:
+    """An embedded live log row from Loki. The matrix shows *what* changed; this shows *why*,
+    on one screen (§6.5). The selector (hosts + units) is arm-specific; severity is the shared
+    $level toggle (see _log_level_var) injecting the line-filter regex."""
     ds = {"type": "loki", "uid": loki_uid}
-    # Severity is a dashboard toggle ($level, see _log_level_var): defaults to WARN+,
-    # flip to "All" for info-level. The variable injects the line-filter regex (#219).
-    expr = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"} |~ `${level}`'
     return {
         "type": "logs",
-        "title": "▤ Cluster logs (severity: $level)",
+        "title": title,
         "datasource": ds,
         "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
-        "targets": [{"refId": "A", "expr": expr, "datasource": ds}],
+        "targets": [{"refId": "A", "expr": selector, "datasource": ds}],
         "options": {
             "showTime": True,
             "sortOrder": "Descending",
@@ -417,6 +424,12 @@ def log_row(loki_uid: str, y: int) -> dict[str, Any]:
             "wrapLogMessage": False,
         },
     }
+
+
+def log_row(loki_uid: str, y: int) -> dict[str, Any]:
+    """The PCMK cluster-node log row (corosync/pacemaker/drbd/mq units on pcmk-/san- hosts)."""
+    sel = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"} |~ `${level}`'
+    return _logs_panel("▤ Cluster logs (severity: $level)", sel, loki_uid, y)
 
 
 def _timeseries(
@@ -521,6 +534,149 @@ def net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
+# ── Native HA: timeline · logs · CRR card · perf · network ────────────────────
+
+# collapse per-member first (each node reports every member it sees) so counts/sums are the
+# real instance count, not multiplied by the number of reporters.
+_NHA_TIMELINE_SIGNALS = [
+    ("Active instances", 'count(max by (member)(cluster_nha_role{role="Active"}))'),
+    ("quorum", "max(cluster_nha_quorum)"),
+    ("instances in-sync", "sum(max by (member)(cluster_nha_insync))"),
+    ("CRR connected", 'max(cluster_nha_connected{group="Recovery"})'),
+]
+
+
+def _nativeha_timeline(ds_uid: str, y: int) -> dict[str, Any]:
+    """The Native HA failover + CRR story: Active count, quorum, in-sync, CRR-connected."""
+    return _state_timeline("⟳ Failover & CRR timeline", _NHA_TIMELINE_SIGNALS, ds_uid, y)
+
+
+def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
+    """Native HA logs: the mqmonitor@QMNATIVE / MQ units on the nha-rhel hosts (off
+    corosync/pacemaker), severity-filtered by the shared $level toggle."""
+    sel = '{host=~"nha-rhel-.*", unit=~".*mqmonitor.*|.*mq.*"} |~ `${level}`'
+    return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y)
+
+
+def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """③ Cross-region (CRR): per-group role (Live ↔ Recovery), connected, replication
+    backlog — the DR layer, read from the `dspmq -g` group view."""
+    conn_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "disconnected", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ connected", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    return [
+        _stat(
+            "Live group role",
+            'max by (role)(cluster_nha_group_role{group="Live"})',
+            ds_uid,
+            0,
+            y,
+            text_mode="name",
+            name_label="role",
+        ),
+        _stat(
+            "Recovery group role",
+            'max by (role)(cluster_nha_group_role{group="Recovery"})',
+            ds_uid,
+            6,
+            y,
+            text_mode="name",
+            name_label="role",
+        ),
+        _stat(
+            "CRR connected",
+            'max(cluster_nha_connected{group="Recovery"})',
+            ds_uid,
+            12,
+            y,
+            mappings=conn_maps,
+        ),
+        _stat(
+            "CRR backlog",
+            'max(cluster_nha_group_backlog{group="Recovery"})',
+            ds_uid,
+            18,
+            y,
+        ),
+    ]
+
+
+def nativeha_perf_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """Perf from existing node metrics: CPU busy%, intra-site raft (net-hb) throughput, and
+    cross-region CRR (net-wan) throughput. No SAN disk — Native HA has no storage tier."""
+    cpu_busy = (
+        "100 - (avg by (host)(rate("
+        'node_cpu_seconds_total{groups=~"nha_rhel_a|nha_rhel_b", mode="idle"}[1m]'
+        ")) * 100)"
+    )
+    hb_rx = 'rate(node_network_receive_bytes_total{device=~"virbr-hb.*"}[1m])'
+    hb_tx = 'rate(node_network_transmit_bytes_total{device=~"virbr-hb.*"}[1m])'
+    wan_rx = 'rate(node_network_receive_bytes_total{device=~"virbr-wan.*"}[1m])'
+    wan_tx = 'rate(node_network_transmit_bytes_total{device=~"virbr-wan.*"}[1m])'
+    return [
+        _timeseries(
+            "CPU busy % — nha nodes",
+            [_t("A", cpu_busy, "{{host}}")],
+            ds_uid,
+            0,
+            y,
+            unit="percent",
+        ),
+        _timeseries(
+            "Raft replication (net-hb)",
+            [_t("A", hb_rx, "rx"), _t("B", hb_tx, "tx")],
+            ds_uid,
+            8,
+            y,
+            unit="Bps",
+        ),
+        _timeseries(
+            "CRR replication (net-wan)",
+            [_t("A", wan_rx, "rx"), _t("B", wan_tx, "tx")],
+            ds_uid,
+            16,
+            y,
+            unit="Bps",
+        ),
+    ]
+
+
+_NHA_PLANES = "net-hb-a|net-hb-b|net-wan|net-data-a|net-data-b|net-ext"
+
+
+def nativeha_net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """Network from existing metrics: per-plane state + throughput for the planes Native HA
+    rides — raft heartbeat (net-hb), CRR WAN (net-wan), data, and the external mesh link."""
+    state = f'lab_network_state{{network=~"{_NHA_PLANES}"}}'
+    thru = 'rate(node_network_receive_bytes_total{device=~"virbr-(hb|wan|data|ext).*"}[1m])'
+    return [
+        _timeseries(
+            "Native HA network planes — state",
+            [_t("A", state, "{{network}}")],
+            ds_uid,
+            0,
+            y,
+            w=12,
+        ),
+        _timeseries(
+            "Native HA network throughput",
+            [_t("A", thru, "{{device}}")],
+            ds_uid,
+            12,
+            y,
+            w=12,
+            unit="Bps",
+        ),
+    ]
+
+
 _WARN_REGEX = "(?i)warn|error|fail|fenc|crit|alert|emerg"
 
 
@@ -591,30 +747,36 @@ def _row_header(title: str, y: int) -> dict[str, Any]:
 
 
 def _nativeha_board(ds_uid: str) -> dict[str, Any]:
-    """The Native HA cockpit (lab-nativeha-cluster): title banner + ① hero/integrity + the two
-    ② instances matrices (Live site A / Recovery site B). CRR card + timeline (PR3), logs +
-    perf/net (PR4) land in later PRs (spec §8)."""
+    """The Native HA cockpit (lab-nativeha-cluster), top-to-bottom: title banner · ① hero +
+    integrity · ② instances matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline ·
+    logs · perf · network. No storage section — Native HA has no DRBD/SAN tier."""
     panels = [
         _title_banner("nativeha-rhel", y=0),
         _row_header("① Cluster status — active · quorum · in-sync · integrity", y=2),
         *nativeha_hero_tiles(ds_uid, y=3),
         nativeha_integrity_panel(ds_uid, y=7),
         # one matrix per group, banded Live (site A) / Recovery (site B); each is 3 rows +
-        # header (h=5). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
+        # header (h=7). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
         matrix(
             "② Instances — Live (site A)",
             _nativeha_instance_cols("nha-rhel-a.*"),
             ds_uid,
-            y=10,
-            h=7,  # 3 instance rows + header — h=5 clipped the 3rd row (a3/b3)
+            y=11,
+            h=7,
         ),
         matrix(
             "② Instances — Recovery (site B)",
             _nativeha_instance_cols("nha-rhel-b.*"),
             ds_uid,
-            y=17,
+            y=18,
             h=7,
         ),
+        _row_header("③ Cross-region (CRR) — Live ↔ Recovery", y=25),
+        *nativeha_crr_card(ds_uid, y=26),
+        _nativeha_timeline(ds_uid, y=30),
+        _nativeha_log_row("loki", y=37),
+        *nativeha_perf_section(ds_uid, y=45),
+        *nativeha_net_section(ds_uid, y=52),
     ]
     return {
         "uid": "lab-nativeha-cluster",
@@ -622,7 +784,7 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
         "schemaVersion": 39,
         "version": 0,
         "panels": panels,
-        "templating": {"list": []},
+        "templating": {"list": [_log_level_var()]},
         "annotations": _annotations(ds_uid),
         "time": {"from": "now-15m", "to": "now"},
         "refresh": "10s",

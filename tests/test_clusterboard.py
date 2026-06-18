@@ -273,3 +273,41 @@ def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
     for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
         assert "nha-rhel-" in (m.group(1) or ""), "unscoped node_online on nha board"
     assert "pcmk_a|pcmk_b" not in blob  # no PCMK scope leaks onto the nha board
+
+
+def test_nativeha_board_has_full_section_parity_minus_storage():
+    # the nha board carries everything after ② that PCMK has — CRR card, timeline, logs,
+    # perf, network — but NO storage (Native HA has no DRBD/SAN tier).
+    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    titles = [p.get("title", "") for p in d["panels"]]
+    types = {p["type"] for p in d["panels"]}
+    assert any("Cross-region (CRR)" in t for t in titles)  # ③ CRR row header
+    assert any(t == "CRR connected" for t in titles)  # CRR card tile
+    assert "state-timeline" in types  # failover + CRR timeline
+    assert "logs" in types  # native HA log row
+    assert any("CPU busy" in t for t in titles)  # perf
+    assert any("CRR replication (net-wan)" in t for t in titles)  # perf net-wan
+    assert any("network planes" in t.lower() for t in titles)  # net section
+    assert "③ Storage — DRBD / SAN" not in titles  # no storage section
+    # the log severity toggle is wired (templating var present)
+    assert d["templating"]["list"][0]["name"] == "level"
+
+
+def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
+    from mqlab.clusterboard import nativeha_perf_section
+
+    blob = json.dumps(nativeha_perf_section("promtest", y=0))
+    assert "nha_rhel_a|nha_rhel_b" in blob  # CPU scoped to nha nodes
+    assert "node_disk" not in blob  # no SAN disk I/O panel
+    assert "virbr-hb" in blob and "virbr-wan" in blob  # raft + CRR throughput
+
+
+def test_nativeha_crr_card_reports_group_roles_and_backlog():
+    from mqlab.clusterboard import nativeha_crr_card
+
+    tiles = nativeha_crr_card("promtest", y=0)
+    titles = [t["title"] for t in tiles]
+    assert titles == ["Live group role", "Recovery group role", "CRR connected", "CRR backlog"]
+    assert 'cluster_nha_group_role{group="Live"}' in tiles[0]["targets"][0]["expr"]
+    assert tiles[0]["targets"][0]["legendFormat"] == "{{role}}"  # shows the role text
+    assert "cluster_nha_group_backlog" in tiles[3]["targets"][0]["expr"]
