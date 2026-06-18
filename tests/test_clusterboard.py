@@ -234,7 +234,8 @@ def test_nativeha_board_uid_sections_and_tags():
     assert "② Instances — Recovery (site B)" in by_title
     assert "Active instance" in by_title and "Integrity" in by_title
     # the two matrices stack without overlap, below the hero/integrity band
-    live, recov = by_title["② Instances — Live (site A)"], by_title["② Instances — Recovery (site B)"]
+    live = by_title["② Instances — Live (site A)"]
+    recov = by_title["② Instances — Recovery (site B)"]
     assert live["gridPos"]["y"] < recov["gridPos"]["y"]
     assert by_title["Integrity"]["gridPos"]["y"] < live["gridPos"]["y"]
     banner = next(p for p in d["panels"] if p["type"] == "text")

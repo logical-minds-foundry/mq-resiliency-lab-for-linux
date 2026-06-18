@@ -64,6 +64,15 @@
     mode: "0644"
   notify: restart grafana
 
+- name: deploy the rendered Native HA cockpit dashboard (#279)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/grafana/dashboards/lab-nativeha-cluster.json"
+    dest: /var/lib/grafana/dashboards/lab-nativeha-cluster.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d

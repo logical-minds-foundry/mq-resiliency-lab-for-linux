@@ -131,7 +131,8 @@ def render_nativeha_state_prom(
             lines.append(_m("cluster_nha_role_code", base, _ROLE_CODE.get(st["role"], 0)))
             lines.append(_m("cluster_nha_insync", base, 1 if st["insync"] else 0))
             lines.append(_m("cluster_nha_hastatus", {**base, "status": st["hastatus"]}, 1))
-            lines.append(_m("cluster_nha_hastatus_ok", base, 1 if st["hastatus"] == "Normal" else 0))
+            ha_ok = 1 if st["hastatus"] == "Normal" else 0
+            lines.append(_m("cluster_nha_hastatus_ok", base, ha_ok))
             if st["role"] == "Active":
                 owner = {"node": node, "resource": qm, "holder": member}
                 lines.append(_m("cluster_resource_owner", owner, 1))

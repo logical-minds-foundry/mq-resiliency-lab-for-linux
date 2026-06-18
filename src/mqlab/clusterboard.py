@@ -669,3 +669,14 @@ def lab_cluster_dashboard() -> str:
     """Render the real lab/topology.yaml to cockpit dashboard JSON text."""
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     return json.dumps(render_cluster_dashboard(topo), indent=2) + "\n"
+
+
+def nativeha_dashboard_path() -> Path:
+    """Where the rendered Native HA cockpit board is written (gitignored)."""
+    return repo_root() / "build" / "grafana" / "dashboards" / "lab-nativeha-cluster.json"
+
+
+def lab_nativeha_dashboard() -> str:
+    """Render the real lab/topology.yaml to the Native HA cockpit dashboard JSON text."""
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return json.dumps(render_cluster_dashboard(topo, arm="nativeha-rhel"), indent=2) + "\n"
