@@ -1,4 +1,13 @@
 apiVersion: 1
+# Drop any pre-existing Prometheus/Loki datasource first so re-provisioning over a lab whose
+# datasource was created before the uid was pinned recreates it with the pinned uid — Grafana
+# refuses to change a provisioned datasource's uid in place and crashes on startup otherwise
+# (#279). Harmless on a fresh lab (nothing to delete).
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+  - name: Loki
+    orgId: 1
 datasources:
   - name: Prometheus
     type: prometheus
