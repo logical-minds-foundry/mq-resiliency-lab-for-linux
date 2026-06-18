@@ -7,6 +7,7 @@ from mqlab.clusterboard import (
     integrity_panel,
     matrix,
     render_cluster_dashboard,
+    timeline_band,
 )
 
 DS = "promtest"
@@ -81,6 +82,24 @@ def test_integrity_light_is_loud_on_hazard_and_stale_on_no_data():
     special = [m for m in maps if m["type"] == "special"]
     assert special and special[0]["options"]["match"] == "null"
     assert special[0]["options"]["result"]["text"] == "STALE"
+
+
+def test_timeline_band_is_a_state_timeline_with_range_queries():
+    p = timeline_band(DS, y=0)
+    assert p["type"] == "state-timeline"
+    assert p["targets"]  # has series
+    assert all(t.get("range") for t in p["targets"])  # range over time, not instant
+    legends = [t["legendFormat"] for t in p["targets"]]
+    assert "nodes online" in legends and "DRBD primary" in legends
+
+
+def test_board_annotations_are_holder_agnostic():
+    d = render_cluster_dashboard({}, arm="pcmk")
+    anns = d["annotations"]["list"]
+    owner = next(a for a in anns if "owner" in a["name"].lower())
+    # holder-agnostic: counts owners per resource, never the holder-labelled series
+    assert "count by (resource)(cluster_resource_owner)" in owner["expr"]
+    assert "holder" not in owner["expr"]
 
 
 def test_board_has_uid_hero_integrity_and_the_two_matrices():

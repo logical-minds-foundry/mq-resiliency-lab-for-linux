@@ -261,6 +261,57 @@ def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
     return panel
 
 
+_TIMELINE_SIGNALS = [
+    ("nodes online", "sum(max by (member)(cluster_node_online))"),
+    ("QM running", 'max(cluster_resource_started{resource="mq_qm"})'),
+    ("DRBD primary", 'count(cluster_drbd_role{role="Primary"})'),
+    ("quorate", "min(cluster_quorate)"),
+]
+# Holder-agnostic owner-change marker: cluster_resource_owner carries the holder in a
+# label, so an owner change spawns a NEW series — `changes()` on it won't fire. Count
+# owners per resource and watch THAT change instead (§6.4).
+_OWNER_CHANGE_EXPR = "changes((count by (resource)(cluster_resource_owner))[5m:])"
+
+
+def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
+    """The failover-story band: a State-timeline of the key signals over the drill window.
+    The matrix is *now*; this shows the cluster moving through a cutover."""
+    targets = [
+        {
+            "refId": _REFIDS[i],
+            "expr": expr,
+            "range": True,
+            "legendFormat": name,
+            "datasource": _ds(ds_uid),
+        }
+        for i, (name, expr) in enumerate(_TIMELINE_SIGNALS)
+    ]
+    return {
+        "type": "state-timeline",
+        "title": "⟳ Failover timeline",
+        "datasource": _ds(ds_uid),
+        "gridPos": {"h": 7, "w": 24, "x": 0, "y": y},
+        "targets": targets,
+        "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []},
+        "options": {"mergeValues": True, "showValue": "auto"},
+    }
+
+
+def _annotations(ds_uid: str) -> dict[str, Any]:
+    return {
+        "list": [
+            {
+                "name": "owner change",
+                "datasource": _ds(ds_uid),
+                "enable": True,
+                "iconColor": "orange",
+                "expr": _OWNER_CHANGE_EXPR,
+                "step": "10s",
+            },
+        ],
+    }
+
+
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
     arm: str = "pcmk",
@@ -273,6 +324,7 @@ def render_cluster_dashboard(
         integrity_panel(ds_uid, y=4),
         matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=7),
         matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=16),
+        timeline_band(ds_uid, y=25),
     ]
     return {
         "uid": "lab-pcmk-cluster",
@@ -280,6 +332,7 @@ def render_cluster_dashboard(
         "schemaVersion": 39,
         "version": 0,
         "panels": panels,
+        "annotations": _annotations(ds_uid),
         "time": {"from": "now-15m", "to": "now"},
         "refresh": "10s",
         "tags": ["lab", "cockpit", arm],
