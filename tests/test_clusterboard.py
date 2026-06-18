@@ -120,7 +120,15 @@ def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
     assert p["datasource"] == {"type": "loki", "uid": "loki"}
     expr = p["targets"][0]["expr"]
     assert 'host=~"pcmk-' in expr  # scoped to cluster nodes
-    assert "|~" not in expr  # severity filter relaxed for validation (#219); re-tighten later
+    assert "${level}" in expr  # severity is a dashboard toggle (#219)
+
+
+def test_log_severity_toggle_defaults_to_warn():
+    d = render_cluster_dashboard({}, arm="pcmk")
+    level = next(v for v in d["templating"]["list"] if v["name"] == "level")
+    assert level["current"]["text"] == "WARN+"  # defaults to WARN+
+    opts = {o["text"] for o in level["options"]}
+    assert opts == {"WARN+", "All (incl. info)"}  # toggle to All for info
 
 
 def test_board_annotations_are_holder_agnostic():

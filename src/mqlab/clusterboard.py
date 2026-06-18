@@ -319,13 +319,12 @@ def log_row(loki_uid: str, y: int) -> dict[str, Any]:
     """The embedded live log row: cluster-node journald units, severity-filtered (WARN+).
     The matrix shows *what* changed; this shows *why*, on one screen (§6.5)."""
     ds = {"type": "loki", "uid": loki_uid}
-    # TEMP (validation, #219 feedback): severity filter relaxed to show ALL cluster-node
-    # logs so we can confirm data is flowing; re-tighten to `|~ (?i)warn|error|fail|fenc`
-    # once verified.
-    expr = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"}'
+    # Severity is a dashboard toggle ($level, see _log_level_var): defaults to WARN+,
+    # flip to "All" for info-level. The variable injects the line-filter regex (#219).
+    expr = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"} |~ `${level}`'
     return {
         "type": "logs",
-        "title": "▤ Cluster logs (all — validating; re-tighten to WARN+)",
+        "title": "▤ Cluster logs (severity: $level)",
         "datasource": ds,
         "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
         "targets": [{"refId": "A", "expr": expr, "datasource": ds}],
@@ -440,6 +439,26 @@ def net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
+_WARN_REGEX = "(?i)warn|error|fail|fenc|crit|alert|emerg"
+
+
+def _log_level_var() -> dict[str, Any]:
+    """Dashboard toggle for the log row's severity: WARN+ (default) or All (incl. info).
+    The selected value is the line-filter regex the log query interpolates ($level)."""
+    warn = {"text": "WARN+", "value": _WARN_REGEX, "selected": True}
+    show_all = {"text": "All (incl. info)", "value": ".", "selected": False}
+    return {
+        "name": "level",
+        "type": "custom",
+        "label": "Log severity",
+        "multi": False,
+        "includeAll": False,
+        "query": f"WARN+ : {_WARN_REGEX}, All (incl. info) : .",
+        "options": [warn, show_all],
+        "current": warn,
+    }
+
+
 def _annotations(ds_uid: str) -> dict[str, Any]:
     return {
         "list": [
@@ -510,6 +529,7 @@ def render_cluster_dashboard(
         "schemaVersion": 39,
         "version": 0,
         "panels": panels,
+        "templating": {"list": [_log_level_var()]},
         "annotations": _annotations(ds_uid),
         "time": {"from": "now-15m", "to": "now"},
         "refresh": "10s",
