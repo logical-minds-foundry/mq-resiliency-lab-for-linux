@@ -238,15 +238,10 @@ def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
-def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
-    """First-class integrity light: hazard count (split-brain/dual-primary/Diskless),
-    gated on DRBD being present so no-data reads STALE (not a false green)."""
-    hazards = (
-        '(count(cluster_drbd_conn{conn="StandAlone"}) or vector(0))'
-        ' + (count(cluster_drbd_disk{disk="Diskless"}) or vector(0))'
-        ' + (count(cluster_drbd_role{role="Primary"}) > bool 1)'
-    )
-    expr = f"({hazards}) and on() (count(cluster_drbd_role) > 0)"
+def _integrity_from_expr(expr: str, ds_uid: str, y: int) -> dict[str, Any]:
+    """A first-class integrity light from a hazard expr: 0 → green, ≥1 → HAZARD, no-data →
+    STALE (full-width banner). The hazard expr is arm-specific; the colour/STALE vocabulary
+    is shared."""
     maps = [
         {"type": "value", "options": {"0": {"color": _GREEN, "text": "✓ integrity", "index": 0}}},
         {
@@ -262,6 +257,61 @@ def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
     panel = _stat("Integrity", expr, ds_uid, 0, y, mappings=maps)
     panel["gridPos"]["w"] = 24  # full-width banner
     return panel
+
+
+def nativeha_hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """The Native HA top band: Active instance · Quorum (in-sync node count) · Instances
+    in-sync · HA status. No-data reads STALE, never healthy (fail-loud)."""
+    normal = 'max by (member)(cluster_nha_hastatus{status="Normal"})'
+    health_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "DOWN", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ Normal", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    return [
+        _stat(
+            # max by (holder) collapses the per-reporter series → one tile (the Active instance)
+            "Active instance",
+            'max by (holder)(cluster_resource_owner{resource="QMNATIVE"})',
+            ds_uid,
+            0,
+            y,
+            text_mode="name",
+        ),
+        _stat("Quorum", "max(cluster_nha_quorum)", ds_uid, 6, y),
+        _stat("Instances in-sync", "sum(max by (member)(cluster_nha_insync))", ds_uid, 12, y),
+        _stat("HA status", f"min({normal})", ds_uid, 18, y, mappings=health_maps),
+    ]
+
+
+def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
+    """First-class integrity light: hazard count (split-brain/dual-primary/Diskless),
+    gated on DRBD being present so no-data reads STALE (not a false green)."""
+    hazards = (
+        '(count(cluster_drbd_conn{conn="StandAlone"}) or vector(0))'
+        ' + (count(cluster_drbd_disk{disk="Diskless"}) or vector(0))'
+        ' + (count(cluster_drbd_role{role="Primary"}) > bool 1)'
+    )
+    expr = f"({hazards}) and on() (count(cluster_drbd_role) > 0)"
+    return _integrity_from_expr(expr, ds_uid, y)
+
+
+def nativeha_integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
+    """Native HA cannot split-brain (raft quorum). The hazard reframes around availability +
+    durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
+    no-data reads STALE (spec §6)."""
+    hazards = (
+        "(min(cluster_quorate) == bool 0)"
+        ' + (absent(cluster_resource_owner{resource="QMNATIVE"}) or vector(0))'
+        " + (count(cluster_nha_insync == 0) or vector(0))"
+    )
+    expr = f"({hazards}) and on() (count(cluster_nha_role) > 0)"
+    return _integrity_from_expr(expr, ds_uid, y)
 
 
 _TIMELINE_SIGNALS = [

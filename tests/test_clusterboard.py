@@ -7,6 +7,8 @@ from mqlab.clusterboard import (
     integrity_panel,
     log_row,
     matrix,
+    nativeha_hero_tiles,
+    nativeha_integrity_panel,
     net_section,
     perf_section,
     render_cluster_dashboard,
@@ -159,3 +161,43 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
     banner = next(p for p in d["panels"] if p["type"] == "text")
     assert banner["gridPos"]["y"] == 0 and "Ubuntu" in banner["options"]["content"]
     assert any(p["type"] == "row" and p["title"].startswith("①") for p in d["panels"])
+
+
+# ── Native HA arm (#279) ──────────────────────────────────────────────────────
+
+
+def test_nativeha_integrity_is_quorum_active_insync_gated_on_data():
+    p = nativeha_integrity_panel("promtest", y=7)
+    assert p["type"] == "stat"
+    assert p["gridPos"]["w"] == 24
+    expr = p["targets"][0]["expr"]
+    assert "cluster_quorate" in expr
+    assert 'cluster_resource_owner{resource="QMNATIVE"}' in expr
+    assert "cluster_nha_insync == 0" in expr
+    assert "count(cluster_nha_role) > 0" in expr  # gated -> no-data reads STALE
+    kinds = [m["type"] for m in p["fieldConfig"]["defaults"]["mappings"]]
+    assert "special" in kinds  # the STALE special-mapping (never a false green)
+
+
+def test_pcmk_integrity_panel_unchanged():
+    # regression: the PCMK integrity panel still carries the DRBD hazard expr, full-width
+    p = integrity_panel("promtest", y=7)
+    assert 'cluster_drbd_conn{conn="StandAlone"}' in p["targets"][0]["expr"]
+    assert p["gridPos"]["w"] == 24
+
+
+def test_nativeha_hero_tiles_band():
+    tiles = nativeha_hero_tiles("promtest", y=3)
+    assert [t["title"] for t in tiles] == [
+        "Active instance",
+        "Quorum",
+        "Instances in-sync",
+        "HA status",
+    ]
+    active = tiles[0]
+    assert active["options"]["textMode"] == "name"
+    assert 'cluster_resource_owner{resource="QMNATIVE"}' in active["targets"][0]["expr"]
+    assert "cluster_nha_quorum" in tiles[1]["targets"][0]["expr"]
+    assert "cluster_nha_insync" in tiles[2]["targets"][0]["expr"]
+    assert "cluster_nha_hastatus" in tiles[3]["targets"][0]["expr"]
+    assert [t["gridPos"]["x"] for t in tiles] == [0, 6, 12, 18]  # tile left-to-right
