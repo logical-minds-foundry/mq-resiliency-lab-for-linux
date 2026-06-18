@@ -219,6 +219,9 @@ arms:
       # Live; failback = make site A Live. Replication is TLS over net-wan.
       dr-cutover:  { playbook: site-nativeha-switchover.yml }
       dr-failback: { playbook: site-nativeha-switchover.yml }
+      # diagnostics capture (read-only): runmqras bundles FFST + error logs +
+      # Native HA state into a .zip under /var/mqm. Needs OS libicu (lab-gotchas).
+      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
 
 setups:
   pcmk_san_ha:

@@ -66,3 +66,9 @@
     content: |
       mqm soft nofile 10240
       mqm hard nofile 10240
+
+# runmqakm/runmqras dlopen the OS libicuio at runtime; the minimal box lacks it
+# (lab-gotchas.md). Install it in the base so diagnostics (and TLS) always work.
+- name: libicu (runmqras / runmqakm ICU runtime dep)
+  ansible.builtin.dnf:
+    name: libicu

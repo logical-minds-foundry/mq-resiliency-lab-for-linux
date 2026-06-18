@@ -30,17 +30,13 @@ VERBS: tuple[str, ...] = (
 )
 
 # arm -> verb -> Support. pcmk-ubuntu is the reference backend (all supported);
-# rdqm-rhel is NOT_YET until its backend lands (P3/P4). nativeha-rhel (#246):
-# HA verbs proven in Phase 1 (form-group/add-node/evacuate/failover/status),
-# CRR/DR verbs in Phase 3 (dr-bootstrap/cutover/failback). diagnostics (runmqras
-# capture) not yet exercised.
+# rdqm-rhel is NOT_YET until its backend lands (P3/P4). nativeha-rhel (#246) is
+# fully supported: HA verbs (Phase 1), CRR/DR verbs (Phase 3), and diagnostics
+# (runmqras capture) all proven on the live arm.
 MATRIX: dict[str, dict[str, Support]] = {
     "pcmk-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
-    "nativeha-rhel": {
-        **dict.fromkeys(VERBS, Support.SUPPORTED),
-        "diagnostics": Support.NOT_YET,
-    },
+    "nativeha-rhel": dict.fromkeys(VERBS, Support.SUPPORTED),
 }
 
 
