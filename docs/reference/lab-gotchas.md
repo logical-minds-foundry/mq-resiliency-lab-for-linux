@@ -109,24 +109,29 @@ exit non-zero otherwise — never trust per-step `|| true`.
 | planned move = location constraint → verify → remove | this `pcs` version's `resource move` porcelain raced our migrations and **reverted** them |
 | `fence_virsh` needs `LIBVIRT_DEFAULT_URI=qemu:///system` | STONITH SSHes to the hypervisor (`build/fence_key`); without the URI the fence exec fails |
 
-## GSKit ships as un-extracted tarballs — TLS tooling fails until initialized
+## `runmqakm`/`runmqckm` unusable on the 9.4.5 RHEL dev install — use lab-pki `.p12`
 
-**Symptom.** `runmqakm` (and `runmqckm`) fail immediately with
-`Failed to dlopen ICU library. Attempted versions from libicuio.so.100 to
-libicuio.so.49`; `runmqckm` may not even exist on disk. Creating a TLS keystore
-(`runmqakm -keydb -create`) is impossible. `setmqenv -s` does **not** fix it
-(it sets an empty `LD_LIBRARY_PATH`).
+**Symptom.** `runmqakm` fails immediately with `Failed to dlopen ICU library.
+Attempted versions from libicuio.so.100 to libicuio.so.49`, at **any**
+`LD_LIBRARY_PATH` (incl. `/opt/mqm/gskit9/lib64`); `runmqckm` may not be on disk.
+So `runmqakm -keydb -create` (the IBM-documented CRR-on-Linux keystore step)
+cannot run.
 
-**Cause.** IBM MQ 9.4.5 ships **GSKit 9** as **tarballs** the base rpm install
-does not unpack: `MQSeriesGSKit` lays down only `/opt/mqm/gskit9/gskssl32.tar.gz`
-and `gskssl64.tar.gz` — there is no extracted lib tree, so no `libicuio`. Base
-queue-manager operations (`crtmqm`, `strmqm`, `dspmq`, plaintext Native HA /
-plaintext CRR) don't touch GSKit, so the gap is invisible until you do anything
-TLS (channel certs, Native HA CRR over TLS, `mqweb`).
+**Cause (precise — supersedes the earlier "unextracted tarballs" reading).**
+GSKit 9's libs *are* extracted (`/opt/mqm/gskit9/lib64/libgsk9*.so`,
+`libickcs_64.so`); the `gskssl{32,64}.tar.gz` are only the **GSKit8 compat**
+layer. But **`libicuio.so.*` is absent everywhere** — not in `/opt/mqm`, not in
+the tarballs, not in `ldconfig`. `runmqakm` dlopen's `libicuio` at runtime
+(not a link dep, so `ldd` shows nothing) and finds none → it cannot start. A real
+packaging gap in this Developers build. Base QM ops (`crtmqm`/`strmqm`/`dspmq`,
+**plaintext** Native HA / CRR) don't touch GSKit, so it's invisible until TLS.
 
-**Fix.** Initialize GSKit before any TLS work — the supported trigger is a
-GSKit-using MQ operation / the GSKit install step, not a manual `tar -x`. Treat
-"extract/initialize GSKit" as an explicit provisioning task in any role that
-configures TLS (it is a named task in the Native HA Phase-3 plan), and verify with
-`runmqakm -version` succeeding before issuing certs. Discovered in the #246
-Phase-0 spike (the entitlement probe deliberately ran plaintext to sidestep it).
+**Fix — don't use `runmqakm`; use the `lab-pki` PKCS#12 path.** `lab-pki`
+generates keystores with **OpenSSL** (`community.crypto` → `.p12`), no GSKit
+involved, and MQ 9.x consumes a **PKCS#12 `KeyRepository`** directly (proven on
+the pcmk arm's channel TLS). So issue the entity `.p12` from `lab-pki`, deploy it
+to `/var/mqm/qmgrs/<QM>/ssl/`, and point `KeyRepository` at the `.p12` stem +
+`CertificateLabel` = the friendly name. No `libicuio`, no `runmqakm`. (Discovered
+in #246 Phase-0 spike → diagnosed in Phase 3. If a CMS `.kdb` is ever strictly
+required somewhere, that path is blocked until the ICU gap is resolved — track
+separately.)

@@ -54,21 +54,22 @@ docs/reports/2026-06-18-nativeha-rhel-phase3-findings.md
 
 ---
 
-### Task 1: Resolve the GSKit-tarball gotcha (the unknown — do it first)
+### Task 1: TLS keystore path — RESOLVED (diagnosed 2026-06-18)
 
-**Files:** Create `ansible/roles/mq-nativeha/tasks/gskit-RedHat.yml`.
+**Finding (`lab-gotchas.md`):** `runmqakm`/`runmqckm` are **unusable** on this
+9.4.5 RHEL install — `libicuio` is absent everywhere, so the IBM-documented
+`runmqakm -keydb -create` cannot run. **So we do not use GSKit/`runmqakm` at all.**
 
-- [ ] **Step 1 — spike the supported extraction.** On a site-A node, find how IBM
-  intends GSKit init: inspect `/opt/mqm/gskit9/` + the MQ install scripts
-  (`/opt/mqm/bin/`), and test whether a GSKit-using op (e.g. `crtmqm` with TLS, or
-  an `setmqinst`/`-i` re-run, or `/opt/mqm/gskit9/*install*`) unpacks
-  `gskssl64.tar.gz`. **Acceptance:** `runmqakm -version` exits 0.
-- [ ] **Step 2 — codify** the working step in `gskit-RedHat.yml` (idempotent;
-  guard on `runmqakm -version`). Wire it into the `mq-nativeha` role's install
-  path (after `setmqinst`).
-- [ ] **Fallback (if Step 1 is a rabbit hole):** record it; **proceed plaintext**
-  for CRR (spike-proven) and track GSKit/TLS as a follow. The DR deliverable does
-  not wait on GSKit.
+**Path:** `lab-pki` issues PKCS#12 (`.p12`) keystores via OpenSSL (no GSKit), and
+MQ 9.x consumes a **PKCS#12 `KeyRepository`** directly (proven on the pcmk arm's
+channel TLS). Task 2 issues the `.p12`; Task 4 points `NativeHALocalInstance`
+`KeyRepository` at the `.p12` stem + `CertificateLabel` = friendly name + `CipherSpec`.
+No `gskit-RedHat.yml` needed.
+
+- [ ] **Risk to verify in Task 4:** confirm Native HA **replication** TLS accepts a
+  PKCS#12 repository (channel TLS does). If it strictly needs a CMS `.kdb`, that's
+  blocked by the ICU gap — fall back to **plaintext CRR** (spike-proven) for the DR
+  deliverable and escalate the ICU gap. (DR mechanics never wait on TLS.)
 
 ### Task 2: lab-pki certs for the six Native HA instances (first on RHEL)
 
