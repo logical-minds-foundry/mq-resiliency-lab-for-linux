@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from mqlab import nativehastate
@@ -38,8 +39,9 @@ def test_parse_nativeha_x_handles_degraded_unknown_and_not_insync():
 
 
 def test_parse_nativeha_x_without_quorum_line_leaves_summary_none():
-    # blank / unexpected output -> no quorum, no instances (fail-loud: nothing fabricated)
-    out = nativehastate.parse_nativeha_x("\n  \n")
+    # blank lines + a fields-bearing line that is neither the QUORUM summary nor an instance
+    # row (e.g. a replication footer) -> no quorum, no instances (fail-loud: nothing fabricated)
+    out = nativehastate.parse_nativeha_x("\n  \nREPLICATION(Established) PORT(9414)\n")
     assert out["quorum_current"] is None
     assert out["quorum_total"] is None
     assert out["group_role"] is None
@@ -108,9 +110,7 @@ def test_render_quorum_lost_and_unknown_leader_branches():
         "quorum_current": 1,
         "quorum_total": 3,
         "group_role": "Live",
-        "instances": {
-            "nha-rhel-a1": {"role": "Unknown", "insync": False, "hastatus": "Abnormal"}
-        },
+        "instances": {"nha-rhel-a1": {"role": "Unknown", "insync": False, "hastatus": "Abnormal"}},
     }
     out = nativehastate.render_nativeha_state_prom(
         node="nha-rhel-a1",
@@ -162,3 +162,76 @@ def test_render_emits_group_metrics():
     assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 0' in out
     assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 512' in out
     assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Live"} 1' in out
+
+
+def test_probe_returns_stdout_then_none_on_failure(monkeypatch):
+    monkeypatch.setattr(
+        nativehastate.subprocess,
+        "run",
+        lambda c, **k: subprocess.CompletedProcess(c, 0, "out\n", ""),
+    )
+    assert nativehastate.probe(["dspmq"], timeout=3) == "out\n"
+    monkeypatch.setattr(
+        nativehastate.subprocess,
+        "run",
+        lambda c, **k: subprocess.CompletedProcess(c, 1, "", "boom"),
+    )
+    assert nativehastate.probe(["dspmq"], timeout=3) is None
+    monkeypatch.setattr(
+        nativehastate.subprocess,
+        "run",
+        lambda c, **k: (_ for _ in ()).throw(subprocess.TimeoutExpired(c, k["timeout"])),
+    )
+    assert nativehastate.probe(["dspmq"], timeout=3) is None
+    monkeypatch.setattr(
+        nativehastate.subprocess,
+        "run",
+        lambda c, **k: (_ for _ in ()).throw(OSError("no dspmq")),
+    )
+    assert nativehastate.probe(["dspmq"], timeout=3) is None
+
+
+def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
+    xtext = (FIXTURES / "dspmq_nativeha_x.txt").read_text()
+    gtext = (FIXTURES / "dspmq_nativeha_g.txt").read_text()
+
+    def fake_probe(cmd, timeout):
+        return gtext if "-g" in cmd else xtext
+
+    monkeypatch.setattr(nativehastate, "probe", fake_probe)
+    out = tmp_path / "lab_nativeha_state.prom"
+    nativehastate.main(
+        ["--qm", "QMNATIVE", "--node", "nha-rhel-a1", "--out", str(out), "--now", "1781455000"]
+    )
+    text = out.read_text()
+    assert 'cluster_quorate{node="nha-rhel-a1"} 1' in text
+    assert 'cluster_nha_group_role{node="nha-rhel-a1",group="Live",role="Live"} 1' in text
+    assert 'source="nativeha_x"' in text
+    assert 'source="nativeha_g"' in text
+    assert not (tmp_path / "lab_nativeha_state.prom.tmp").exists()  # atomic move cleaned up
+
+
+def test_main_marks_sources_stale_when_probes_time_out(tmp_path, monkeypatch):
+    monkeypatch.setattr(nativehastate, "probe", lambda cmd, timeout: None)
+    out = tmp_path / "c.prom"
+    nativehastate.main(["--qm", "QMNATIVE", "--node", "nha-rhel-a1", "--out", str(out)])
+    text = out.read_text()
+    assert "cluster_quorate" not in text  # -x stale -> omitted
+    assert "last_write_timestamp" not in text  # nothing fresh
+
+
+def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
+    xtext = (FIXTURES / "dspmq_nativeha_x.txt").read_text()
+    monkeypatch.setattr(nativehastate, "probe", lambda cmd, timeout: xtext if "-x" in cmd else None)
+    monkeypatch.setattr(
+        nativehastate.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-a2"})()
+    )
+    monkeypatch.setattr(nativehastate.time, "time", lambda: 1781455999.0)
+    out = tmp_path / "c.prom"
+    nativehastate.main(["--qm", "QMNATIVE", "--out", str(out)])
+    text = out.read_text()
+    assert 'cluster_quorate{node="nha-rhel-a2"} 1' in text
+    assert (
+        'cluster_state_last_write_timestamp{node="nha-rhel-a2",source="nativeha_x"} 1781455999'
+        in text
+    )

@@ -127,3 +127,58 @@ def render_nativeha_state_prom(
         lines.append(_m("cluster_state_last_write_timestamp", ts, now))
 
     return "\n".join(lines) + "\n"
+
+
+def _commands(qm: str) -> dict[str, tuple[list[str], int]]:
+    """source -> (dspmq argv, timeout). Timeouts are well under the 5s tick."""
+    return {
+        "nativeha_x": (["dspmq", "-m", qm, "-o", "nativeha", "-x"], 3),
+        "nativeha_g": (["dspmq", "-m", qm, "-o", "nativeha", "-g"], 3),
+    }
+
+
+def probe(cmd: list[str], timeout: int) -> str | None:
+    """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE)."""
+    try:
+        cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    return cp.stdout if cp.returncode == 0 else None
+
+
+def collect(node: str, qm: str, now: int) -> str:
+    """Run both dspmq probes and render the textfile body."""
+    cmds = _commands(qm)
+    fresh: list[str] = []
+    raw_x = probe(*cmds["nativeha_x"])
+    hax = None
+    if raw_x is not None:
+        hax = parse_nativeha_x(raw_x)
+        fresh.append("nativeha_x")
+    raw_g = probe(*cmds["nativeha_g"])
+    grp = None
+    if raw_g is not None:
+        grp = parse_nativeha_g(raw_g)
+        fresh.append("nativeha_g")
+    return render_nativeha_state_prom(
+        node=node, qm=qm, hax=hax, grp=grp, now=now, fresh_sources=tuple(fresh)
+    )
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Entry point for the deployed collector: `lab-nativeha-state --qm QMNATIVE`."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--qm", required=True)
+    ap.add_argument("--node", default=os.uname().nodename)
+    ap.add_argument("--out", default="/var/lib/node_exporter/textfile/lab_nativeha_state.prom")
+    ap.add_argument("--now", type=int, default=None)
+    args = ap.parse_args(argv)
+    now = args.now if args.now is not None else int(time.time())
+    body = collect(args.node, args.qm, now)
+    tmp = Path(args.out + ".tmp")
+    tmp.write_text(body)
+    tmp.replace(args.out)
+
+
+if __name__ == "__main__":
+    main()
