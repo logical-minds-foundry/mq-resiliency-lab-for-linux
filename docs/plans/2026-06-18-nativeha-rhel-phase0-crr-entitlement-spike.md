@@ -55,10 +55,23 @@ vagrant box list | grep 'rhel/9.6-x86_64'
 virsh -c qemu:///system list --name
 ```
 
-**Substrate note (lab-operated):** the human operates the lab (provisioning,
-`vagrant up`, power). This plan's `ansible-playbook`/`vagrant` steps are run by the
-human or driven from the dev VM over `build/inventory.ini`; the agent reads results
-and records them. Do not assume the agent has direct hypervisor control.
+**Substrate note (autonomous, decided 2026-06-18):** for spikes/dev the agent runs
+the **whole thing** autonomously — it has confirmed `vagrant` + `virsh`
+(`qemu:///system`) control from the dev VM. (Human-operation is reserved for
+post-merge final verification.)
+
+**Node strategy (decided 2026-06-18): reuse the `rdqm-*` x86 RHEL slots.** The
+Ubuntu/pcmk arm is **arm64** and Native HA requires one arch (x86), so the only
+x86 substrate is the RHEL nodes. They are currently **`not created`**, so this
+spike **brings them up `--no-provision`** (skipping the RDQM provisioner) and runs
+the **base-MQ-only** `mq-nativeha-spike` role instead — Live group = `rdqm_a`
+(`rdqm-a1..3`), Recovery group = `rdqm_b` (`rdqm-b1..3`). No throwaway `nha-*`
+nodes are added.
+
+**Leave the pcmk (arm64) stack UP** — it is in active use for parallel dashboard
+dev. Consequence: no "one arm at a time" luxury here; the x86 TCG guests run
+*alongside* it, so **stage the bring-up (Live 3 first, Recovery +3 only when
+needed)** to bound CPU pressure.
 
 ## File structure
 

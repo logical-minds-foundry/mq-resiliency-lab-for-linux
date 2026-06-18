@@ -1,0 +1,7 @@
+{# Native HA peer set for the group {{ nha_group }} (#246 spike). #}
+{# One NativeHAInstance per group member; replication on the data IP (9414). #}
+{% for h in groups[nha_group] %}
+NativeHAInstance:
+  Name={{ h }}
+  ReplicationAddress={{ hostvars[h].ansible_host }}(9414)
+{% endfor %}
