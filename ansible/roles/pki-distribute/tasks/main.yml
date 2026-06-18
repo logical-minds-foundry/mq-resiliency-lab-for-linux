@@ -35,6 +35,9 @@
 # MQI clients only: stash the password next to the keystore so pymqi (no SCO
 # password field) can open the PKCS#12 non-interactively. runmqakm writes
 # <stem>.sth, which the MQI client finds automatically from sco.KeyRepository.
+# Run as root (not become_user) and chown afterwards: becoming an *unprivileged*
+# user needs setfacl/acl on the target, which not every host has (e.g. the obs
+# probe) — the root-then-own pattern is dependency-free and host-agnostic (#259).
 - name: "stash the {{ pki_entity }} keystore password for MQI clients (.sth)"
   ansible.builtin.command:
     cmd: >-
@@ -44,6 +47,14 @@
   environment:
     LD_LIBRARY_PATH: /opt/mqm/lib64
   become: true
-  become_user: "{{ pki_owner }}"
   no_log: true
+  when: pki_stash | bool
+
+- name: "own the {{ pki_entity }} stash file"
+  ansible.builtin.file:
+    path: "{{ pki_dest_dir }}/{{ pki_entity }}.sth"
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0600"
+  become: true
   when: pki_stash | bool
