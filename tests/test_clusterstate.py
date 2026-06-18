@@ -43,41 +43,40 @@ def test_parse_crm_marks_offline_node_and_unplaced_resource():
 
 
 def test_parse_drbd_extracts_role_disk_conn_and_rpo_tail():
-    out = clusterstate.parse_drbd((FIXTURES / "drbd_status.json").read_text())
-    r0 = out["r0"]
-    assert r0["role"] == "Primary"
-    assert r0["disk"] == "UpToDate"
-    assert r0["conn"] == "Connected"
-    assert r0["resync_pct"] == 100.0
-    assert r0["out_of_sync_bytes"] == 0
+    # the real `drbdsetup status --verbose --statistics` capture (healthy, in-sync)
+    out = clusterstate.parse_drbd((FIXTURES / "drbd_status.txt").read_text())
+    mqlun = out["mqlun"]
+    assert mqlun["role"] == "Primary"
+    assert mqlun["disk"] == "UpToDate"
+    assert mqlun["conn"] == "Connected"
+    assert mqlun["resync_pct"] == 100.0  # in-sync: no done: token
+    assert mqlun["out_of_sync_bytes"] == 0
 
 
-def test_parse_drbd_flags_split_brain_standalone_and_resync_tail():
-    text = """[{"name": "r0", "role": "Secondary",
-      "devices": [{"volume": 0, "disk-state": "Outdated"}],
-      "connections": [{"name": "san-b", "connection-state": "StandAlone",
-        "peer-role": "Unknown",
-        "peer_devices": [{"volume": 0, "peer-disk-state": "DUnknown",
-          "replication-state": "Off", "percent-in-sync": 42.0,
-          "out-of-sync": 2202010}]}]}]"""
-    r0 = clusterstate.parse_drbd(text)["r0"]
-    assert r0["conn"] == "StandAlone"  # split-brain / disconnected
-    assert r0["disk"] == "Outdated"
-    assert r0["resync_pct"] == 42.0
-    assert r0["out_of_sync_bytes"] == 2202010
-
-
-def test_parse_drbd_handles_no_connections():
+def test_parse_drbd_resync_tail_reads_done_and_out_of_sync():
     text = (
-        '[{"name": "r0", "role": "Secondary",'
-        ' "devices": [{"volume": 0, "disk-state": "Diskless"}],'
-        ' "connections": []}]'
+        "mqlun role:Primary suspended:no\n"
+        "  volume:0 minor:0 disk:UpToDate\n"
+        "  peer connection:Connected role:Secondary congested:no\n"
+        "    volume:0 replication:SyncSource peer-disk:Inconsistent done:42.20\n"
+        "        received:0 sent:99 out-of-sync:2202010 pending:0 unacked:0\n"
     )
-    r0 = clusterstate.parse_drbd(text)["r0"]
-    assert r0["conn"] == "Disconnected"
-    assert r0["disk"] == "Diskless"
-    assert r0["resync_pct"] is None
-    assert r0["out_of_sync_bytes"] is None
+    mqlun = clusterstate.parse_drbd(text)["mqlun"]
+    assert mqlun["resync_pct"] == 42.20
+    assert mqlun["out_of_sync_bytes"] == 2202010
+    assert mqlun["conn"] == "Connected"
+
+
+def test_parse_drbd_flags_standalone_split_brain():
+    text = (
+        "mqlun role:Secondary suspended:no\n"
+        "  volume:0 minor:0 disk:Outdated\n"
+        "  peer connection:StandAlone role:Unknown congested:no\n"
+    )
+    mqlun = clusterstate.parse_drbd(text)["mqlun"]
+    assert mqlun["conn"] == "StandAlone"  # the integrity-light trigger
+    assert mqlun["disk"] == "Outdated"
+    assert mqlun["resync_pct"] == 100.0  # no done: while disconnected
 
 
 def test_parse_stonith_counts_recent_fence_actions_per_node():
@@ -296,18 +295,18 @@ def test_probe_ignore_rc_returns_stdout_on_nonzero(monkeypatch):
 
 
 def test_main_writes_textfile_atomically_for_storage_role(tmp_path, monkeypatch):
-    drbd_json = (FIXTURES / "drbd_status.json").read_text()
+    drbd_text = (FIXTURES / "drbd_status.txt").read_text()
     monkeypatch.setattr(
         clusterstate,
         "probe",
-        lambda cmd, timeout, ignore_rc=False: drbd_json if "drbd" in cmd[0] else "active\n",
+        lambda cmd, timeout, ignore_rc=False: drbd_text if "drbd" in cmd[0] else "active\n",
     )
     out = tmp_path / "lab_cluster_state.prom"
     clusterstate.main(
         ["--role", "storage", "--node", "san-a", "--out", str(out), "--now", "1781455000"]
     )
     text = out.read_text()
-    assert 'cluster_drbd_role{node="san-a",resource="r0",role="Primary"} 1' in text
+    assert 'cluster_drbd_role{node="san-a",resource="mqlun",role="Primary"} 1' in text
     assert 'source="drbd"' in text
     assert not (tmp_path / "lab_cluster_state.prom.tmp").exists()  # atomic move cleaned up
 
@@ -350,10 +349,10 @@ def test_main_marks_source_stale_when_probe_times_out(tmp_path, monkeypatch):
 
 def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
     # no --node and no --now: exercise both default branches (os.uname, time.time)
-    drbd_json = (FIXTURES / "drbd_status.json").read_text()
+    drbd_text = (FIXTURES / "drbd_status.txt").read_text()
 
     def fake_probe(cmd, timeout, ignore_rc=False):
-        return drbd_json if cmd[0] == "drbdsetup" else "active\n"
+        return drbd_text if cmd[0] == "drbdsetup" else "active\n"
 
     monkeypatch.setattr(clusterstate, "probe", fake_probe)
     monkeypatch.setattr(clusterstate.os, "uname", lambda: type("U", (), {"nodename": "san-b"})())
