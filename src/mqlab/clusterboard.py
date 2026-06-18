@@ -65,6 +65,14 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
 }
 _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+# Shared cluster_* metrics (cluster_node_online, cluster_quorate, cluster_resource_owner) are
+# emitted by EVERY arm's collector into one Prometheus, so every board query over them MUST be
+# scoped to its own arm's ansible groups — otherwise one cluster's nodes leak into another's
+# board (#279: the nha arm's nodes showed up on the PCMK board). cluster_resource_owner is
+# additionally resource-scoped (mq_qm vs QMNATIVE), so it needs no group scope.
+_PCMK_SEL = '{groups=~"pcmk_a|pcmk_b"}'
+_NHA_SEL = '{groups=~"nha_rhel_a|nha_rhel_b"}'
+
 
 def _ds(uid: str) -> dict[str, str]:
     return {"type": "prometheus", "uid": uid}
@@ -159,7 +167,7 @@ _COMPUTE_COLS: list[Column] = [
     ("pacemaker", _norm('cluster_daemon_up{unit="pacemaker"}', "node"), "up"),
     ("iSCSI", _norm("cluster_iscsi_sessions", "node"), "sessions"),
     ("fence", _norm("cluster_fence_count", "member"), "clean0"),
-    ("online", _norm("cluster_node_online", "member"), "up"),
+    ("online", _norm(f"cluster_node_online{_PCMK_SEL}", "member"), "up"),
     ("unclean", _norm("cluster_node_unclean", "member"), "clean0"),
 ]
 _STORAGE_COLS: list[Column] = [
@@ -228,7 +236,7 @@ _STALE_MAP = {
 def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
     """The top band: cluster health, nodes online, active QM owner, replication backlog.
     No-data reads STALE, never healthy (fail-loud)."""
-    online = "max by (member)(cluster_node_online)"
+    online = f"max by (member)(cluster_node_online{_PCMK_SEL})"
     health_maps = [
         {
             "type": "value",
@@ -330,7 +338,7 @@ def nativeha_integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
     durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
     no-data reads STALE (spec §6)."""
     hazards = (
-        "(min(cluster_quorate) == bool 0)"
+        f"(min(cluster_quorate{_NHA_SEL}) == bool 0)"
         ' + (absent(cluster_resource_owner{resource="QMNATIVE"}) or vector(0))'
         " + (count(cluster_nha_insync == 0) or vector(0))"
     )
@@ -339,10 +347,10 @@ def nativeha_integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
 
 
 _TIMELINE_SIGNALS = [
-    ("nodes online", "sum(max by (member)(cluster_node_online))"),
+    ("nodes online", f"sum(max by (member)(cluster_node_online{_PCMK_SEL}))"),
     ("QM running", 'max(cluster_resource_started{resource="mq_qm"})'),
     ("DRBD primary", 'count(cluster_drbd_role{role="Primary"})'),
-    ("quorate", "min(cluster_quorate)"),
+    ("quorate", f"min(cluster_quorate{_PCMK_SEL})"),
 ]
 # Holder-agnostic owner-change marker: cluster_resource_owner carries the holder in a
 # label, so an owner change spawns a NEW series — `changes()` on it won't fire. Count

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from mqlab.clusterboard import (
     active_side,
@@ -251,3 +252,24 @@ def test_pcmk_board_still_renders_unchanged():
     titles = [p.get("title", "") for p in d["panels"]]
     assert "② Compute — node × component" in titles
     assert "③ Storage — DRBD / SAN" in titles
+
+
+def test_pcmk_board_scopes_shared_metrics_to_pcmk_groups():
+    # cluster_node_online / cluster_quorate are emitted by every arm — on the PCMK board every
+    # use must carry the pcmk group scope, else nha nodes leak in (#279).
+    blob = json.dumps(render_cluster_dashboard({}, arm="pcmk"))
+    for m in re.finditer(r"cluster_(?:node_online|quorate)(\{[^}]*\})?", blob):
+        sel = m.group(1) or ""
+        assert "pcmk_a|pcmk_b" in sel, f"unscoped shared metric on PCMK board: {m.group(0)}"
+
+
+def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
+    # the nha board's shared cluster_quorate (integrity) is scoped to nha groups; its
+    # cluster_node_online lives only in the instance matrices, scoped by member regex.
+    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    blob = json.dumps(d)
+    for m in re.finditer(r"cluster_quorate(\{[^}]*\})?", blob):
+        assert "nha_rhel_a|nha_rhel_b" in (m.group(1) or ""), "unscoped quorate on nha board"
+    for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
+        assert "nha-rhel-" in (m.group(1) or ""), "unscoped node_online on nha board"
+    assert "pcmk_a|pcmk_b" not in blob  # no PCMK scope leaks onto the nha board
