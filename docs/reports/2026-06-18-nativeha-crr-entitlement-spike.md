@@ -70,4 +70,34 @@ disk. Base QM ops (`crtmqm`/`strmqm`) don't need GSKit, so Task 1 was unaffected
 **Phase 3 (real TLS, consuming `lab-pki`) must extract/initialize GSKit first** —
 a concrete build task surfaced early, exactly what the spike is for.
 
-## Task 3 — planned switchover (message-survival proof) — in progress
+## Task 3 — planned switchover (message-survival proof) — ✅ PROVEN
+
+Flipped `GroupRole` on both groups + restarted (per node 7261515). Result:
+
+- **Roles swapped:** `rdqm_b` → `GRPROLE(Live) ROLE(Active) QUORUM(3/3)`;
+  `rdqm_a` → `GRPROLE(Recovery) CONNGRP(yes) INSYNC(yes) BACKLOG(0)`.
+- **Messages survived the cross-region switchover:** the 5 persistent messages
+  put on the original Live region are present on the **promoted** group —
+  `DISPLAY QLOCAL(SPIKE.Q) CURDEPTH` → `CURDEPTH(5)`.
+
+This is the DR guarantee demonstrated end to end: replicate → controlled cutover
+→ workload (with its persistent messages) resumes in the other region.
+
+## Verdict & what this unblocks
+
+**GO.** On MQ Advanced for Developers 9.4.5 / RHEL 9.6 x86 (TCG): Native HA forms
+quorum, CRR is entitled and replicates cross-region, and a planned switchover
+preserves persistent messages. The #246 Native HA arm proceeds to:
+
+- **Phase 1** — productionize: the real `mq-nativeha` role + RHEL OS-adapter,
+  `nativeha-rhel` arm + setups in `topology.yaml`, the `mqmonitor@` verbs,
+  `QMNATIVE` in the mesh, fault suite, cold-rebuild gate.
+- **Phase 3** — CRR/DR with **real TLS** — and the GSKit-extraction task (above)
+  lands here, consuming `lab-pki`.
+- **Phase 2** — parameterize to Ubuntu 24.04.
+
+Carry-forward lessons: base-MQ-only install is enough for Native HA; `mqmonitor@`
+systemd lifecycle (not `endmqm`); CRR is plaintext-capable (TLS is security, not
+function); **GSKit 9 tarballs must be extracted before any `runmqakm`/TLS work**;
+DVD ISO must be staged into the libvirt pool; render Ansible blocks controller-side
+(not `lookup('file')`).
