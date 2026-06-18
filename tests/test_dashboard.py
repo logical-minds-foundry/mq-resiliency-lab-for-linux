@@ -42,6 +42,17 @@ def test_has_a_row_header_per_curated_row_in_order():
     ]
 
 
+def test_pcmk_vm_rows_drill_link_to_the_cockpit():
+    panels = render_dashboard(TOPO)["panels"]
+    ups = {p["title"]: p for p in panels if p["type"] == "stat" and p["title"].endswith("— up")}
+    # the PCMK site rows link out to the dedicated cluster cockpit board (#219 §6.7)
+    for title in ("PCMK · A — up", "PCMK · B — up"):
+        links = ups[title].get("links", [])
+        assert any(link["url"] == "/d/lab-pcmk-cluster" for link in links)
+    # a non-cluster row does not carry the cockpit drill-link
+    assert not ups["App · DTCC — up"].get("links")
+
+
 def test_group_rows_filter_by_their_groups_selector():
     panels = render_dashboard(TOPO)["panels"]
     exprs = [t["expr"] for p in panels for t in p.get("targets", [])]

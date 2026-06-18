@@ -1,0 +1,374 @@
+{
+  "fieldConfig": {
+    "defaults": {
+      "custom": {
+        "align": "center"
+      }
+    },
+    "overrides": [
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "corosync"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 0,
+                    "text": "down"
+                  },
+                  "1": {
+                    "color": "green",
+                    "index": 1,
+                    "text": "up"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "pacemaker"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 0,
+                    "text": "down"
+                  },
+                  "1": {
+                    "color": "green",
+                    "index": 1,
+                    "text": "up"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "iSCSI"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 0,
+                    "text": "none"
+                  }
+                },
+                "type": "value"
+              },
+              {
+                "options": {
+                  "from": 1,
+                  "result": {
+                    "color": "green",
+                    "index": 1,
+                    "text": "ok"
+                  },
+                  "to": 9999
+                },
+                "type": "range"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "fence"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "green",
+                    "index": 0,
+                    "text": "ok"
+                  }
+                },
+                "type": "value"
+              },
+              {
+                "options": {
+                  "from": 1,
+                  "result": {
+                    "color": "red",
+                    "index": 1,
+                    "text": "FENCED"
+                  },
+                  "to": 9999
+                },
+                "type": "range"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "online"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "red",
+                    "index": 0,
+                    "text": "down"
+                  },
+                  "1": {
+                    "color": "green",
+                    "index": 1,
+                    "text": "up"
+                  }
+                },
+                "type": "value"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      },
+      {
+        "matcher": {
+          "id": "byName",
+          "options": "unclean"
+        },
+        "properties": [
+          {
+            "id": "custom.cellOptions",
+            "value": {
+              "mode": "basic",
+              "type": "color-background"
+            }
+          },
+          {
+            "id": "mappings",
+            "value": [
+              {
+                "options": {
+                  "0": {
+                    "color": "green",
+                    "index": 0,
+                    "text": "ok"
+                  }
+                },
+                "type": "value"
+              },
+              {
+                "options": {
+                  "from": 1,
+                  "result": {
+                    "color": "red",
+                    "index": 1,
+                    "text": "FENCED"
+                  },
+                  "to": 9999
+                },
+                "type": "range"
+              }
+            ]
+          },
+          {
+            "id": "color",
+            "value": {
+              "mode": "fixed"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "gridPos": {
+    "h": 10,
+    "w": 24,
+    "x": 0,
+    "y": 0
+  },
+  "targets": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_daemon_up{unit=\"corosync\"},\"n\",\"$1\",\"node\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "A"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_daemon_up{unit=\"pacemaker\"},\"n\",\"$1\",\"node\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "B"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_iscsi_sessions,\"n\",\"$1\",\"node\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "C"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_fence_count,\"n\",\"$1\",\"member\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "D"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_node_online,\"n\",\"$1\",\"member\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "E"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "expr": "max by (n)(label_replace(cluster_node_unclean,\"n\",\"$1\",\"member\",\"(.*)\"))",
+      "format": "table",
+      "instant": true,
+      "refId": "F"
+    }
+  ],
+  "title": "\u2461 Compute \u2014 node \u00d7 component (TABLE candidate)",
+  "transformations": [
+    {
+      "id": "joinByField",
+      "options": {
+        "byField": "n",
+        "mode": "outer"
+      }
+    },
+    {
+      "id": "organize",
+      "options": {
+        "excludeByName": {
+          "Time": true
+        },
+        "renameByName": {
+          "Value #A": "corosync",
+          "Value #B": "pacemaker",
+          "Value #C": "iSCSI",
+          "Value #D": "fence",
+          "Value #E": "online",
+          "Value #F": "unclean",
+          "n": "node"
+        }
+      }
+    }
+  ],
+  "type": "table"
+}

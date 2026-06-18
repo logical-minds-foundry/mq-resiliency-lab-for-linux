@@ -72,8 +72,8 @@ def _row(title: str, y: int) -> dict[str, Any]:
     }
 
 
-def _up_panel(label: str, sel: str, y: int) -> dict[str, Any]:
-    return {
+def _up_panel(label: str, sel: str, y: int, link_url: str | None = None) -> dict[str, Any]:
+    panel: dict[str, Any] = {
         "type": "stat",
         "title": f"{label} — up",
         "gridPos": {"h": 4, "w": 10, "x": 0, "y": y},
@@ -92,6 +92,10 @@ def _up_panel(label: str, sel: str, y: int) -> dict[str, Any]:
         },
         "targets": [{"expr": f'up{{job="node", groups=~"{sel}"}}', "legendFormat": "{{host}}"}],
     }
+    if link_url is not None:
+        # drill-link out to the dedicated cluster cockpit board (#219 §6.7)
+        panel["links"] = [{"title": "Cluster cockpit ↗", "url": link_url, "targetBlank": False}]
+    return panel
 
 
 def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
@@ -308,7 +312,9 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
         sel = "|".join(groups)
         panels.append(_row(f"VMs · {label}", y))
         y += 1
-        panels.append(_up_panel(label, sel, y))
+        # the PCMK site rows drill into the dedicated cluster cockpit (#219)
+        link = "/d/lab-pcmk-cluster" if label.startswith("PCMK") else None
+        panels.append(_up_panel(label, sel, y, link_url=link))
         panels.append(_cpu_panel(label, sel, y))
         y += 4
 
