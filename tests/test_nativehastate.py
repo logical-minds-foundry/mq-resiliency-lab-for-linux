@@ -48,27 +48,52 @@ def test_parse_nativeha_x_without_quorum_line_leaves_summary_none():
     assert out["instances"] == {}
 
 
-def test_parse_nativeha_g_extracts_both_groups():
-    # the nested-paren GRPADDR in the fixture must NOT corrupt the scalar fields we read
+def test_parse_nativeha_g_real_capture_live_and_recovery():
+    # real capture: the leading QMNAME summary line is skipped; the live (local) group reports
+    # role+status only (no CONNGRP/INSYNC/BACKLOG -> None); the recovery group carries the CRR
+    # facets (connected/in-sync/backlog).
     out = nativehastate.parse_nativeha_g((FIXTURES / "dspmq_nativeha_g.txt").read_text())
-    assert out["Live"] == {"role": "Live", "connected": True, "insync": True, "backlog": 0}
-    assert out["Recovery"]["role"] == "Recovery"
-    assert out["Recovery"]["connected"] is True
+    assert set(out) == {"Live", "Recovery"}  # the QMNAME summary line did NOT become a group
+    assert out["Live"] == {
+        "role": "Live",
+        "status": "Normal",
+        "connected": None,
+        "insync": None,
+        "backlog": None,
+    }
+    assert out["Recovery"] == {
+        "role": "Recovery",
+        "status": "Normal",
+        "connected": True,
+        "insync": True,
+        "backlog": 0,
+    }
 
 
-def test_parse_nativeha_g_flags_disconnected_recovery_with_backlog():
+def test_parse_nativeha_g_degraded_recovery_and_unknown_fields():
+    # the summary line (has QUORUM) is skipped; a live line missing GRPROLE/GRSTATUS reads
+    # Unknown; the recovery group is disconnected, not in-sync, with a backlog.
     text = (
-        "GRPNAME(Live) GRPROLE(Live) CONNGRP(no) INSYNC(no) BACKLOG(0)\n"
-        "GRPNAME(Recovery) GRPROLE(Recovery) CONNGRP(no) INSYNC(no) BACKLOG(4096)\n"
+        "QMNAME(QMNATIVE) ROLE(Active) QUORUM(3/3) GRPNAME(Live) GRPROLE(Live)\n"
+        " GRPNAME(Live)\n"
+        " GRPNAME(Recovery) GRPROLE(Recovery) GRSTATUS(Abnormal) CONNGRP(no) INSYNC(no) "
+        "BACKLOG(4096)\n"
     )
     out = nativehastate.parse_nativeha_g(text)
-    assert out["Live"]["connected"] is False
+    assert out["Live"]["role"] == "Unknown"  # GRPROLE absent on this synthetic live line
+    assert out["Live"]["status"] == "Unknown"  # GRSTATUS absent
+    assert out["Live"]["connected"] is None
+    assert out["Recovery"]["connected"] is False
     assert out["Recovery"]["insync"] is False
     assert out["Recovery"]["backlog"] == 4096
+    assert out["Recovery"]["status"] == "Abnormal"
 
 
-def test_parse_nativeha_g_skips_lines_without_group_name():
-    out = nativehastate.parse_nativeha_g("\nGRPROLE(Live) CONNGRP(yes)\n")  # no GRPNAME
+def test_parse_nativeha_g_skips_summary_and_non_group_lines():
+    # a line without GRPNAME, and the QMNAME summary line (GRPNAME present but QUORUM too)
+    out = nativehastate.parse_nativeha_g(
+        "\nGRPROLE(Live) CONNGRP(yes)\nQMNAME(QMNATIVE) QUORUM(3/3) GRPNAME(Live)\n"
+    )
     assert out == {}
 
 
@@ -145,10 +170,24 @@ def test_render_unknown_quorum_omits_quorate():
     assert "cluster_nha_quorum" not in out
 
 
-def test_render_emits_group_metrics():
+def test_render_group_metrics_live_omits_absent_crr_facets():
+    # the live group reports role+status only (CRR facets None -> omitted, never faked);
+    # the recovery group carries connected/in-sync/backlog.
     grp = {
-        "Live": {"role": "Live", "connected": True, "insync": True, "backlog": 0},
-        "Recovery": {"role": "Recovery", "connected": False, "insync": False, "backlog": 512},
+        "Live": {
+            "role": "Live",
+            "status": "Normal",
+            "connected": None,
+            "insync": None,
+            "backlog": None,
+        },
+        "Recovery": {
+            "role": "Recovery",
+            "status": "Normal",
+            "connected": True,
+            "insync": True,
+            "backlog": 0,
+        },
     }
     out = nativehastate.render_nativeha_state_prom(
         node="nha-rhel-a1",
@@ -159,9 +198,41 @@ def test_render_emits_group_metrics():
         fresh_sources=("nativeha_g",),
     )
     assert 'cluster_nha_group_role{node="nha-rhel-a1",group="Live",role="Live"} 1' in out
+    assert 'cluster_nha_group_status{node="nha-rhel-a1",group="Live",status="Normal"} 1' in out
+    # Live has no CRR facets -> those metrics carry no Live series
+    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Live"}' not in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Live"}' not in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Live"}' not in out
+    # Recovery carries the CRR signal
+    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 1' in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Recovery"} 1' in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 0' in out
+
+
+def test_render_group_degraded_recovery_emits_zero_and_backlog():
+    grp = {
+        "Recovery": {
+            "role": "Recovery",
+            "status": "Abnormal",
+            "connected": False,
+            "insync": False,
+            "backlog": 512,
+        },
+    }
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-a1",
+        qm="QMNATIVE",
+        hax=None,
+        grp=grp,
+        now=1,
+        fresh_sources=(),
+    )
     assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 0' in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Recovery"} 0' in out
     assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 512' in out
-    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Live"} 1' in out
+    assert (
+        'cluster_nha_group_status{node="nha-rhel-a1",group="Recovery",status="Abnormal"} 1' in out
+    )
 
 
 def test_probe_returns_stdout_then_none_on_failure(monkeypatch):

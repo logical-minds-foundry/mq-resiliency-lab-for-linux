@@ -35,8 +35,10 @@ def _fields(line: str) -> dict[str, str]:
 def parse_nativeha_x(text: str) -> dict[str, Any]:
     """Parse `dspmq -m <qm> -o nativeha -x` into quorum + group role + per-instance state.
 
-    The summary line carries QUORUM(x/y) and GRPROLE; the indented lines are one per
-    instance (INSTANCE/ROLE/INSYNC/HASTATUS). INSYNC(yes) -> True.
+    The leading QMNAME summary line carries QUORUM(x/y) + GRPNAME/GRPROLE (but no HASTATUS);
+    the indented lines are one per instance (INSTANCE/ROLE/INSYNC/HASTATUS/...). INSYNC(yes)
+    -> True. The summary line is consumed for quorum + group role only, never as an instance
+    row (the per-instance state comes from the indented lines, which carry HASTATUS).
     """
     summary: dict[str, Any] = {
         "quorum_current": None,
@@ -53,6 +55,7 @@ def parse_nativeha_x(text: str) -> dict[str, Any]:
             summary["quorum_current"] = int(cur)
             summary["quorum_total"] = int(total)
             summary["group_role"] = f.get("GRPROLE")
+            continue
         if "INSTANCE" in f and "ROLE" in f:
             instances[f["INSTANCE"]] = {
                 "role": f["ROLE"],
@@ -62,20 +65,33 @@ def parse_nativeha_x(text: str) -> dict[str, Any]:
     return {**summary, "instances": instances}
 
 
+def _yn(f: dict[str, str], key: str) -> bool | None:
+    """A yes/no field as bool, or None when the field is absent (the live group does not
+    report CONNGRP/INSYNC — those are reported only on the recovery group line)."""
+    return f[key] == "yes" if key in f else None
+
+
 def parse_nativeha_g(text: str) -> dict[str, dict[str, Any]]:
-    """Parse `dspmq -m <qm> -o nativeha -g` (CRR) into {group_name: {role,connected,insync,
-    backlog}}. One line per group, keyed by GRPNAME. BACKLOG is a message count, never seconds.
+    """Parse `dspmq -m <qm> -o nativeha -g` (CRR) into {group_name: {role,status,connected,
+    insync,backlog}}, keyed by GRPNAME.
+
+    The output is led by the same QMNAME summary line as -x (skipped here — it carries
+    QUORUM), then one line per group. Both groups report GRPROLE + GRSTATUS; only the
+    recovery group line carries CONNGRP/INSYNC/BACKLOG (the live group's cross-region facets
+    are absent, so they read None and are omitted downstream rather than faked). BACKLOG is a
+    message count, never seconds.
     """
     groups: dict[str, dict[str, Any]] = {}
     for line in text.splitlines():
         f = _fields(line)
-        if "GRPNAME" not in f:
+        if "GRPNAME" not in f or "QUORUM" in f:  # skip non-group lines + the QMNAME summary
             continue
         groups[f["GRPNAME"]] = {
             "role": f.get("GRPROLE", "Unknown"),
-            "connected": f.get("CONNGRP") == "yes",
-            "insync": f.get("INSYNC") == "yes",
-            "backlog": int(f.get("BACKLOG", 0)),
+            "status": f.get("GRSTATUS", "Unknown"),
+            "connected": _yn(f, "CONNGRP"),
+            "insync": _yn(f, "INSYNC"),
+            "backlog": int(f["BACKLOG"]) if "BACKLOG" in f else None,
         }
     return groups
 
@@ -118,9 +134,15 @@ def render_nativeha_state_prom(
         for name, g in grp.items():
             gbase = {"node": node, "group": name}
             lines.append(_m("cluster_nha_group_role", {**gbase, "role": g["role"]}, 1))
-            lines.append(_m("cluster_nha_connected", gbase, 1 if g["connected"] else 0))
-            lines.append(_m("cluster_nha_group_insync", gbase, 1 if g["insync"] else 0))
-            lines.append(_m("cluster_nha_group_backlog", gbase, g["backlog"]))
+            lines.append(_m("cluster_nha_group_status", {**gbase, "status": g["status"]}, 1))
+            # CRR facets are reported only on the recovery group line; omit (never fake)
+            # them for the live group, where dspmq does not report them.
+            if g["connected"] is not None:
+                lines.append(_m("cluster_nha_connected", gbase, 1 if g["connected"] else 0))
+            if g["insync"] is not None:
+                lines.append(_m("cluster_nha_group_insync", gbase, 1 if g["insync"] else 0))
+            if g["backlog"] is not None:
+                lines.append(_m("cluster_nha_group_backlog", gbase, g["backlog"]))
 
     for source in fresh_sources:
         ts = {"node": node, "source": source}
