@@ -294,7 +294,22 @@ def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
         "datasource": _ds(ds_uid),
         "gridPos": {"h": 7, "w": 24, "x": 0, "y": y},
         "targets": targets,
-        "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []},
+        "fieldConfig": {
+            "defaults": {
+                "custom": {"fillOpacity": 80},
+                "color": {"mode": "thresholds"},
+                # colour by value: 0 → red (down/lost), ≥1 → green (present). Without this
+                # Grafana auto-palettes the raw count (6) and picked red (#219 feedback).
+                "thresholds": {
+                    "mode": "absolute",
+                    "steps": [{"color": "red", "value": None}, {"color": "green", "value": 1}],
+                },
+                "mappings": [
+                    {"type": "value", "options": {"0": {"text": "down"}, "1": {"text": "up"}}},
+                ],
+            },
+            "overrides": [],
+        },
         "options": {"mergeValues": True, "showValue": "auto"},
     }
 
@@ -303,13 +318,13 @@ def log_row(loki_uid: str, y: int) -> dict[str, Any]:
     """The embedded live log row: cluster-node journald units, severity-filtered (WARN+).
     The matrix shows *what* changed; this shows *why*, on one screen (§6.5)."""
     ds = {"type": "loki", "uid": loki_uid}
-    expr = (
-        '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"}'
-        " |~ `(?i)warn|error|fail|fenc|split-brain`"
-    )
+    # TEMP (validation, #219 feedback): severity filter relaxed to show ALL cluster-node
+    # logs so we can confirm data is flowing; re-tighten to `|~ (?i)warn|error|fail|fenc`
+    # once verified.
+    expr = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"}'
     return {
         "type": "logs",
-        "title": "▤ Cluster logs (WARN+)",
+        "title": "▤ Cluster logs (all — validating; re-tighten to WARN+)",
         "datasource": ds,
         "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
         "targets": [{"refId": "A", "expr": expr, "datasource": ds}],
@@ -439,6 +454,34 @@ def _annotations(ds_uid: str) -> dict[str, Any]:
     }
 
 
+_ARM_NAMES = {
+    "pcmk": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
+}
+
+
+def _title_banner(arm: str, y: int) -> dict[str, Any]:
+    """A spelled-out title across the top naming this cluster (#219 feedback)."""
+    name = _ARM_NAMES.get(arm, arm)
+    return {
+        "type": "text",
+        "title": "",
+        "transparent": True,
+        "gridPos": {"h": 2, "w": 24, "x": 0, "y": y},
+        "options": {"mode": "markdown", "content": f"## PCMK Cluster · {name}"},
+    }
+
+
+def _row_header(title: str, y: int) -> dict[str, Any]:
+    """A section header row."""
+    return {
+        "type": "row",
+        "title": title,
+        "collapsed": False,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": y},
+        "panels": [],
+    }
+
+
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
     arm: str = "pcmk",
@@ -447,14 +490,16 @@ def render_cluster_dashboard(
     """Assemble the cockpit board top-to-bottom: hero band + integrity light, then the
     ② Compute + ③ Storage matrices. Timeline/logs land in later PRs."""
     panels = [
-        *hero_tiles(ds_uid, y=0),
-        integrity_panel(ds_uid, y=4),
-        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=7),
-        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=16),
-        timeline_band(ds_uid, y=25),
-        log_row("loki", y=32),
-        *perf_section(ds_uid, y=40),
-        *net_section(ds_uid, y=47),
+        _title_banner(arm, y=0),
+        _row_header("① Cluster status — health · owner · quorum · integrity", y=2),
+        *hero_tiles(ds_uid, y=3),
+        integrity_panel(ds_uid, y=7),
+        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=10),
+        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19),
+        timeline_band(ds_uid, y=28),
+        log_row("loki", y=35),
+        *perf_section(ds_uid, y=43),
+        *net_section(ds_uid, y=50),
     ]
     return {
         "uid": "lab-pcmk-cluster",

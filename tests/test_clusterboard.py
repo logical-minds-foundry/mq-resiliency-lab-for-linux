@@ -120,7 +120,7 @@ def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
     assert p["datasource"] == {"type": "loki", "uid": "loki"}
     expr = p["targets"][0]["expr"]
     assert 'host=~"pcmk-' in expr  # scoped to cluster nodes
-    assert "warn" in expr.lower()  # severity filter (WARN+)
+    assert "|~" not in expr  # severity filter relaxed for validation (#219); re-tighten later
 
 
 def test_board_annotations_are_holder_agnostic():
@@ -142,6 +142,10 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
     storage = by_title["③ Storage — DRBD / SAN"]
     cols = compute["transformations"][1]["options"]["renameByName"]
     assert {"Value #A", "Value #D"} <= set(cols)  # corosync .. fence present
-    # top-to-bottom: hero (y=0) → integrity → compute → storage (no overlap)
-    assert by_title["Cluster health"]["gridPos"]["y"] == 0
+    # top-to-bottom: banner → ① row → hero → integrity → compute → storage (no overlap)
+    assert by_title["Cluster health"]["gridPos"]["y"] > 0  # below the banner + ① row
     assert by_title["Integrity"]["gridPos"]["y"] < compute["gridPos"]["y"] < storage["gridPos"]["y"]
+    # a spelled-out title banner + a numbered ① section header at the very top (#219 feedback)
+    banner = next(p for p in d["panels"] if p["type"] == "text")
+    assert banner["gridPos"]["y"] == 0 and "Ubuntu" in banner["options"]["content"]
+    assert any(p["type"] == "row" and p["title"].startswith("①") for p in d["panels"])
