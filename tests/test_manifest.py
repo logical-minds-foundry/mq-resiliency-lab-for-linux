@@ -109,6 +109,14 @@ def test_real_path_helpers():
     assert selection_state_path("foo").parts[-2:] == ("manifests", "foo.yaml")
 
 
+@pytest.mark.parametrize("setup", ["distributed-pcmk-ubuntu", "distributed-rdqm-rhel"])
+def test_committed_default_manifests_load(setup):
+    man = m.load_manifest(setup)  # real manifests/ tree, not the fixture
+    assert man.mq_version
+    assert man.box and man.box_version
+    assert "prometheus" in man.observability
+
+
 def test_manifest_exists(manifests):
     assert m.manifest_exists("distributed-pcmk-ubuntu") is True
     assert m.manifest_exists("nope") is False

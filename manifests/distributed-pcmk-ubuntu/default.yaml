@@ -1,0 +1,7 @@
+# Per-setup SUT (MQ / HA / OS) for distributed-pcmk-ubuntu (#266).
+# HA is derived (Ubuntu apt pacemaker/corosync float today) → discovered, not pinned.
+mq:
+  version: "9.4.5.0"
+os:
+  box: cloud-image/ubuntu-24.04
+  box_version: "20260518.0.0"
