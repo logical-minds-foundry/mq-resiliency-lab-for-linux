@@ -14,6 +14,8 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from mqlab.paths import repo_root
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
@@ -28,6 +30,7 @@ class RunMetadata:
     timestamp: str  # UTC, e.g. 20260615T143000Z
     config_digest: str
     versions: dict[str, str] = field(default_factory=dict)
+    manifest: str = ""  # the pinned manifest id "<setup>/<name>" (#266); "" if unmanaged
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -40,16 +43,19 @@ def capture_metadata(
     commit_reader: Callable[[], str],
     digest_reader: Callable[[], str],
     version_reader: Callable[[], dict[str, str]],
+    manifest_reader: Callable[[], str] | None = None,
 ) -> RunMetadata:
     """Assemble RunMetadata from injectable readers (real impls shell out; tests
     inject fakes). Readers MUST raise on failure — a metadata field that silently
-    became "" would corrupt the corpus (no silent failures)."""
+    became "" would corrupt the corpus (no silent failures). `manifest_reader` is
+    optional so pre-manifest callers stay valid (#266)."""
     return RunMetadata(
         setup=setup,
         commit=commit_reader(),
         timestamp=timestamp,
         config_digest=digest_reader(),
         versions=version_reader(),
+        manifest=manifest_reader() if manifest_reader else "",
     )
 
 
@@ -73,6 +79,7 @@ class RunReport:
             f"- Setup: `{m.setup}`",
             f"- Commit: `{m.commit}`",
             f"- Config digest: `{m.config_digest}`",
+            f"- Manifest: `{m.manifest or '(none)'}`",
             f"- Versions: {versions}",
             "",
         ]
@@ -120,11 +127,16 @@ def read_config_digest(paths: list[Path]) -> str:  # pragma: no cover - reads fi
     return h.hexdigest()
 
 
-def read_versions() -> dict[str, str]:  # pragma: no cover - shells out to host tools
+def read_versions() -> dict[str, str]:  # pragma: no cover - shells out / reads build
     def _v(argv: list[str]) -> str:
         return subprocess.check_output(argv, text=True).strip().splitlines()[0]  # noqa: S603
 
-    return {
+    out = {
         "vagrant": _v(["vagrant", "--version"]),  # noqa: S607
         "ansible": _v(["ansible", "--version"]),  # noqa: S607
     }
+    # The topology-aware gather play (#266) writes the discovered SUT/obs stack here.
+    gathered = repo_root() / "build" / "versions.json"
+    if gathered.exists():
+        out.update(json.loads(gathered.read_text()))
+    return out

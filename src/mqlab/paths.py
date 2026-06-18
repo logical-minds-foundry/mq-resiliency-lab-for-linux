@@ -31,6 +31,16 @@ def reports_dir() -> Path:
     return repo_root() / "build" / "reports"
 
 
+def manifests_root() -> Path:
+    """Committed version-manifest source tree at the repo root (#266)."""
+    return repo_root() / "manifests"
+
+
+def selection_state_path(setup: str) -> Path:
+    """Where a live build's resolved manifest selection is pinned (gitignored build/)."""
+    return repo_root() / "build" / "manifests" / f"{setup}.yaml"
+
+
 def lab_script(name: str) -> Path:
     """Absolute path to a script under lab/scripts/."""
     return repo_root() / "lab" / "scripts" / name

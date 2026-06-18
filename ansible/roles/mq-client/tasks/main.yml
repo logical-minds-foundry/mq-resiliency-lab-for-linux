@@ -1,7 +1,7 @@
 # Client node: MQ client/sdk debs + a pymqi venv for the requester.
 - name: copy MQ tar to node
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+    src: "{{ playbook_dir }}/../build/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
     dest: /tmp/mqadv.tar.gz
 
 - name: unpack
