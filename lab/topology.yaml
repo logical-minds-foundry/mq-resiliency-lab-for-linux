@@ -214,6 +214,11 @@ arms:
       qm-status:  { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
       qm-up:      { cmd: "systemctl start mqmonitor@{qm}" }
       qm-down:    { cmd: "systemctl stop mqmonitor@{qm}" }
+      # CRR / DR (#246 Phase 3): planned cross-site switchover by flipping
+      # GroupRole + restart (the spike-proven procedure). cutover = make site B
+      # Live; failback = make site A Live. Replication is TLS over net-wan.
+      dr-cutover:  { playbook: site-nativeha-switchover.yml }
+      dr-failback: { playbook: site-nativeha-switchover.yml }
 
 setups:
   pcmk_san_ha:

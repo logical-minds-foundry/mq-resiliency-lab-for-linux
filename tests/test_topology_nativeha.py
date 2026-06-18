@@ -22,6 +22,9 @@ def test_nativeha_rhel_arm_uses_mqmonitor_verbs():
     # lifecycle is the mqmonitor@ systemd unit, NOT endmqm/strmqm/pcs
     assert "mqmonitor@" in arm["verbs"]["qm-up"]["cmd"]
     assert "mqmonitor@" in arm["verbs"]["qm-down"]["cmd"]
+    # CRR / DR verbs (Phase 3): planned cross-site switchover
+    assert arm["verbs"]["dr-cutover"]["playbook"] == "site-nativeha-switchover.yml"
+    assert arm["verbs"]["dr-failback"]["playbook"] == "site-nativeha-switchover.yml"
 
 
 def test_one_consolidated_distributed_hadr_setup():
