@@ -139,6 +139,30 @@ is *generated from code* and unit-tested — never the hand-loaded live JSON tha
 last cockpit evaporate. Colour vocabulary per 2026-06-14 §4.3
 (green/amber/red/grey + hatched STALE).
 
+### 4.1 Spike outcome (2026-06-18) — Table wins
+
+Run against the **live `pcmk_san_dr` cluster** (6/6 nodes quorate; real `cluster_*`
+series). **Decision: Table.**
+
+- **Code-generatability (the hard gate): Table passes cleanly.** The candidate panel was
+  *generated* from a 6-element column list — one normalized query per column
+  (`max by (n)(label_replace(... → "n"))`), a `joinByField` on `n`, an `organize` rename,
+  and per-column colour overrides. **Rows are fully data-driven** (nodes appear from the
+  data's `n` values); adding a column or the storage section needs no new structural JSON.
+  That generator *is* `matrix(rows, cols, metric_map)`.
+- **Canvas would be bespoke** — ~48 individually placed+bound cell elements, rows not
+  data-driven, ~8× the JSON, version-fragile; positional layout, which §4 rejects. (The
+  lab's Grafana image renderer is also down, so a Canvas aesthetic bake-off wasn't
+  possible.)
+- **Shine is not sacrificed** — it comes from the hero tiles + the failover timeline band
+  (both stock) above/below a clean, scannable Table matrix.
+
+**Frozen contract for the build plan:** engine = Table; proven panel JSON at
+`docs/specs/diagrams/cluster-matrix-table-contract.json`; metric→cell recipe (verified
+live) at `docs/specs/cluster-matrix-recipe.md`. `matrix()` emits a Table panel; its unit
+test asserts it reproduces that contract. The §8.1 spike is **closed** — the build plan is
+now fully concrete.
+
 ## 5. Board layout — `lab-pcmk-cluster`, top-to-bottom
 
 ```
