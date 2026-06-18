@@ -1,0 +1,41 @@
+# CRR config on one Native HA group (#246 Phase 3). Run AFTER tls.yml (keystore +
+# .sth present). Rewrites NativeHALocalInstance to the FULL stanza (TLS fields +
+# CRR group identity — one stanza, replacing tls.yml's TLS-only block via the same
+# marker) and adds NativeHARecoveryGroup pointing at the peer group over net-wan.
+# Per-instance local config (applied on every node of the group).
+#
+# Vars (per group, from the play):
+#   qm_name, ks_cn
+#   this_group       : this group's name (Live | Recovery)
+#   this_role        : this group's role (live | Recovery)
+#   peer_group_name  : the peer group's name
+#   peer_wan_addrs   : list of the peer group's net-wan IPs
+#   recovery_enabled : Yes on Live (replicate to Recovery) | No on Recovery
+
+- name: "NativeHALocalInstance — TLS + CRR group identity ({{ this_group }})"
+  ansible.builtin.blockinfile:
+    path: "/var/mqm/qmgrs/{{ qm_name }}/qm.ini"
+    marker: "# {mark} NATIVE-HA-TLS (#246)"
+    block: |
+      NativeHALocalInstance:
+         CipherSpec=ANY_TLS12
+         CertificateLabel={{ ks_cn }}
+         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}
+         GroupName={{ this_group }}
+         GroupRole={{ this_role }}
+         GroupLocalAddress=(9415)
+  become: true
+  become_user: mqm
+
+- name: "NativeHARecoveryGroup — peer {{ peer_group_name }} over net-wan"
+  ansible.builtin.blockinfile:
+    path: "/var/mqm/qmgrs/{{ qm_name }}/qm.ini"
+    marker: "# {mark} NATIVE-HA-CRR (#246)"
+    block: |
+      NativeHARecoveryGroup:
+         GroupName={{ peer_group_name }}
+         ReplicationAddress={% for a in peer_wan_addrs %}{{ a }}(9415){{ "," if not loop.last }}{% endfor %}
+
+         Enabled={{ recovery_enabled }}
+  become: true
+  become_user: mqm
