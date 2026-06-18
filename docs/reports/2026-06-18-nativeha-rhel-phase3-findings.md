@@ -55,6 +55,19 @@ flipped to SUPPORTED for the proven HA + CRR/DR verbs (diagnostics still NOT_YET
 The whole DR substrate the other arms assemble is **absent** — CRR is the queue
 manager replicating its own log across regions.
 
-## Cold-rebuild acceptance gate (3+3)
+## Cold-rebuild acceptance gate (3+3) — ✅ PASSED
 
-_(recorded after the gate runs)_
+`vagrant destroy` both groups → 6 fresh nodes → **one** `site-nativeha-dr.yml`
+run (`failed=0` ×6) → CRR re-formed **one-pass, no manual fix-ups**: Live
+`QUORUM(3/3)`; Recovery `CONNGRP(yes) INSYNC(yes) BACKLOG(0)` over `net-wan`,
+`GRPVER(9.4.5.0)`, TLS. The full distributed-HADR substrate (3+3 Native HA + CRR +
+lab-pki TLS) is reproducible from scratch — lint-green ≠ done; the cold rebuild
+proves it.
+
+## Phase 3 verdict — COMPLETE
+
+The `nativeha-rhel` arm now delivers full HADR: 3-node raft HA per site, TLS
+cross-region CRR, message-preserving cutover/failback via `mqlab dr`, all on the
+one consolidated `distributed-nativeha-rhel` setup (#267), cold-rebuild-proven.
+Remaining for the arm: distributed-mesh-across-cutover with client reconnect
+(`dr_mqi.py`, Plan 4) and `diagnostics` (runmqras). Phase 2 (Ubuntu) deferred.
