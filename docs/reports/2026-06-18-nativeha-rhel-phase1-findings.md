@@ -50,8 +50,19 @@ the active instance and **replicated to all three by raft**. The `QMNATIVE.QMDTC
 SDR channel runs.
 
 **End-to-end proof:** `app_requester.py --qm QMNATIVE --conn <3-instance list>`
-→ **5/5 round-trips OK** (`req-NNNN` → `QMDTCC` responder → `REPLY:req-NNNN` back).
+→ **40/40 round-trips OK** (`req-NNNN` → `QMDTCC` responder → `REPLY:req-NNNN` back).
 Same app contract as the other arms, new substrate.
+
+**Failover under live load — scope boundary found.** Killing the active instance
+*during* an app run: the **cluster** fails over correctly (new instance elected,
+`QUORUM(2/3)` held, QM available) — but the **happy-path `app_requester.py` does
+not ride it**: the in-flight request's reply is lost and the client errors
+(`MQRC 2033`). This is **by design** — its docstring scopes the reconnect/rebuild
+contract to `dr_mqi.py` (the DR validation, "Plan 4"), not the normal-path
+requester. So *app-level reconnect through a failover* is **DR-validation scope,
+not Phase-1 HA-first** — recorded as a deliberate boundary, not a defect. (The
+data-layer guarantee — messages committed to quorum survive — is separate and
+holds; demonstrating it through the client is the Plan-4 `dr_mqi.py` job.)
 
 ## Carry-forward
 - Cold-rebuild acceptance gate — Task 5.
