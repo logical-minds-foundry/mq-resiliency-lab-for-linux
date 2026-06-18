@@ -109,6 +109,7 @@ def matrix(title: str, columns: list[Column], ds_uid: str, y: int) -> dict[str, 
             "defaults": {"custom": {"align": "center"}},
             "overrides": overrides,
         },
+        "options": {"cellHeight": "sm"},
     }
 
 
@@ -217,8 +218,9 @@ def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
         _stat("Cluster health", f"min({online})", ds_uid, 0, y, mappings=health_maps),
         _stat("Nodes online", f"sum({online})", ds_uid, 6, y),
         _stat(
+            # max by (holder) collapses the per-reporter series → one tile, not one per node
             "Active QM owner",
-            'cluster_resource_owner{resource="mq_qm"}',
+            'max by (holder)(cluster_resource_owner{resource="mq_qm"})',
             ds_uid,
             12,
             y,
