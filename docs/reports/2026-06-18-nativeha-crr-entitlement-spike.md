@@ -1,7 +1,8 @@
 # Phase-0 CRR-entitlement spike — findings
 
 > **Issue:** #246 (Phase 0). **Date:** 2026-06-18.
-> **Verdict:** _in progress_ — Task 1 (Native HA) GO; Task 2 (CRR gate) pending.
+> **Verdict:** ✅ **GO** — Native HA **and** CRR are entitled under MQ Advanced
+> for Developers 9.4.5 on RHEL 9.6 x86. The Native HA arm is unblocked.
 > **Substrate:** reused `rdqm-*` x86 RHEL 9.6 slots (TCG), MQ 9.4.5 Advanced for
 > Developers; arm64 pcmk stack left up (parallel dashboard dev).
 
@@ -34,11 +35,39 @@ The QM defaults to `GRPROLE(Live)` before any CRR config.
   bug (`lookup('file')` reads the controller, not the remote) was fixed by
   rendering the `NativeHAInstance` block inline from inventory.
 
-## Task 2 — CRR with lab-pki TLS (THE GATE) — pending
+## Task 2 — CRR cross-region replication (THE GATE) — ✅ GO
 
-Recovery group (`rdqm-b1/b2/b3`) bring-up + base MQ, then `lab-pki` certs on the
-RHEL nodes, CRR config (`NativeHALocalInstance` group fields +
-`NativeHARecoveryGroup`), enable, and a persistent-message replication proof.
-The verdict — does the dev entitlement permit **CRR** — lands here.
+A second 3-node group (`rdqm-b1/b2/b3`, also `QUORUM(3/3)`) was paired to the
+Live group as the **Recovery** group. With CRR configured (`NativeHALocalInstance`
+group fields + `NativeHARecoveryGroup`), both sites report the cross-region link
+**up and synchronized**:
 
-## Task 3 — planned switchover — pending
+```
+# Live site (rdqm-a1):
+ GRPNAME(Live)     GRPROLE(Live)     GRSTATUS(Normal) GRPVER(9.4.5.0)
+ GRPNAME(Recovery) GRPROLE(Recovery) CONNGRP(yes) INSYNC(yes) BACKLOG(0) GRSTATUS(Normal)
+# Recovery site (rdqm-b1): mirror image, CONNGRP(yes) to the Live group
+```
+
+5 persistent messages put to `SPIKE.Q` on Live (`CURDEPTH(5)`); Recovery stays
+`INSYNC(yes) BACKLOG(0)`.
+
+**Finding (the gate):** **CRR is entitled** under MQ Advanced for Developers
+9.4.5 — no licensing rejection; the two groups connected and replicated. The
+Native HA arm (#246) is unblocked.
+
+**Bonus finding — CRR runs without TLS.** To isolate the entitlement question
+from a GSKit issue (below), CRR was configured **plaintext** (no `CipherSpec`,
+no keystore) and it **works** — cross-region groups connect, sync, and replicate.
+So TLS is *wanted for security* but is **not required for CRR to function**. (IBM's
+docs always show TLS; this proves it isn't a hard functional dependency.)
+
+**⚠️ Lesson to pre-apply to Phase 1/3 — GSKit ships un-extracted.** `runmqakm`
+(and `runmqckm`) fail with *"Failed to dlopen ICU library"* because 9.4.5 ships
+**GSKit 9 as tarballs** (`/opt/mqm/gskit9/gskssl{32,64}.tar.gz`) that the base
+rpm install does **not** unpack — so no ICU libs, and `runmqckm` isn't even on
+disk. Base QM ops (`crtmqm`/`strmqm`) don't need GSKit, so Task 1 was unaffected.
+**Phase 3 (real TLS, consuming `lab-pki`) must extract/initialize GSKit first** —
+a concrete build task surfaced early, exactly what the spike is for.
+
+## Task 3 — planned switchover (message-survival proof) — in progress

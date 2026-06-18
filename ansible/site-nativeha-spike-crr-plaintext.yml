@@ -1,0 +1,64 @@
+---
+# Phase-0 spike — CRR entitlement probe WITHOUT TLS (#246). THROWAWAY.
+# Isolates the entitlement question from the GSKit-tarball/runmqakm issue:
+# configure CRR with no CipherSpec/keystore and observe whether MQ (a) replicates
+# [GO + plaintext-CRR works], (b) demands TLS [entitled, fix GSKit next], or
+# (c) rejects as a licensed feature [STOP].
+
+- name: CRR config (plaintext) — Live group
+  hosts: rdqm_a
+  become: true
+  become_user: mqm
+  vars:
+    nha_qm: nhaspike
+    peer_group: rdqm_b
+  tasks:
+    - name: Live NativeHALocalInstance + NativeHARecoveryGroup (no TLS)
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             GroupName=Live
+             GroupRole=live
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Recovery
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=Yes
+
+- name: CRR config (plaintext) — Recovery group
+  hosts: rdqm_b
+  become: true
+  become_user: mqm
+  vars:
+    nha_qm: nhaspike
+    peer_group: rdqm_a
+  tasks:
+    - name: Recovery NativeHALocalInstance + NativeHARecoveryGroup (no TLS)
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             GroupName=Recovery
+             GroupRole=Recovery
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Live
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=No
+
+- name: restart Native HA instances (Recovery first, then Live)
+  hosts: rdqm_b:rdqm_a
+  become: true
+  order: inventory
+  vars:
+    nha_qm: nhaspike
+  tasks:
+    - name: restart mqmonitor@
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ nha_qm }}"
+        state: restarted

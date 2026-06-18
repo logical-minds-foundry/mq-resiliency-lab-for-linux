@@ -32,6 +32,7 @@
       become_user: mqm
       ansible.builtin.shell: |
         set -e
+        . /opt/mqm/bin/setmqenv -s   # GSKit/ICU lib paths for runmqakm
         cd /var/mqm/qmgrs/{{ nha_qm }}/ssl
         runmqakm -keydb -create -db keystore.kdb -pw {{ ks_pw }} -stash
         runmqakm -cert -create -db keystore.kdb -pw {{ ks_pw }} \
