@@ -10,7 +10,6 @@ source bounded + non-blocking (timeout -> no fresh sample -> the cell reads STAL
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import subprocess
 import time
@@ -60,27 +59,44 @@ def parse_crm(xml_text: str) -> dict[str, Any]:
     return {"quorate": quorate, "nodes": nodes, "resources": resources}
 
 
-def parse_drbd(json_text: str) -> dict[str, Any]:
-    """Parse drbd status JSON into {resource: {role,disk,conn,resync_pct,out_of_sync_bytes}}."""
+def parse_drbd(text: str) -> dict[str, Any]:
+    """Parse `drbdsetup status --verbose --statistics` into
+    {resource: {role,disk,conn,resync_pct,out_of_sync_bytes}}.
+
+    Output is whitespace-indented `key:value` tokens::
+
+        mqlun role:Primary suspended:no
+          volume:0 minor:0 disk:UpToDate
+          peer connection:Connected role:Secondary congested:no
+            volume:0 replication:Established peer-disk:UpToDate ... done:73.2
+                received:0 sent:65712 out-of-sync:0 ...
+
+    `--json` is NOT used: this image's drbdsetup rejects it (#272). A resource
+    block starts at column 0 (`<name> role:...`); indented lines refine it. The
+    connection state (Connected/StandAlone/...) drives the integrity light; an
+    in-sync resource has no `done:` token, so resync reads 100%.
+    """
     out: dict[str, dict[str, Any]] = {}
-    for res in json.loads(json_text):
-        dev0 = (res.get("devices") or [{}])[0]
-        conns = res.get("connections") or []
-        if conns:
-            conn0 = conns[0]
-            peerdev0 = (conn0.get("peer_devices") or [{}])[0]
-            conn = conn0.get("connection-state", "Unknown")
-            resync = peerdev0.get("percent-in-sync")
-            oos = peerdev0.get("out-of-sync")
-        else:
-            conn, resync, oos = "Disconnected", None, None
-        out[res.get("name", "")] = {
-            "role": res.get("role", "Unknown"),
-            "disk": dev0.get("disk-state", "Unknown"),
-            "conn": conn,
-            "resync_pct": resync,
-            "out_of_sync_bytes": oos,
-        }
+    cur: dict[str, Any] = {}
+    for raw in text.splitlines():
+        tokens = dict(t.split(":", 1) for t in raw.split() if ":" in t)
+        if raw[:1] not in ("", " ", "\t") and "role" in tokens:
+            cur = {
+                "role": tokens["role"],
+                "disk": "Unknown",
+                "conn": "Unknown",
+                "resync_pct": 100.0,
+                "out_of_sync_bytes": 0,
+            }
+            out[raw.split()[0]] = cur
+        if "disk" in tokens:  # local volume line (the peer line uses peer-disk:)
+            cur["disk"] = tokens["disk"]
+        if "connection" in tokens:  # peer line: Connected / StandAlone / ...
+            cur["conn"] = tokens["connection"]
+        if "done" in tokens:  # present only while resyncing
+            cur["resync_pct"] = float(tokens["done"])
+        if "out-of-sync" in tokens:
+            cur["out_of_sync_bytes"] = int(tokens["out-of-sync"])
     return out
 
 
@@ -176,7 +192,7 @@ def render_cluster_state_prom(
 DAEMON_UNITS = {"cluster": ["corosync", "pacemaker"], "storage": ["drbd"]}
 _COMMANDS = {
     "crm": (["crm_mon", "--one-shot", "--output-as=xml"], 3),
-    "drbd": (["drbdsetup", "status", "--json"], 2),
+    "drbd": (["drbdsetup", "status", "--verbose", "--statistics"], 2),
     "stonith": (["stonith_admin", "--history", "*"], 2),
     "iscsi": (["iscsiadm", "-m", "session"], 2),
 }
