@@ -51,7 +51,9 @@ def parse_domain_states(text: str) -> dict[str, str]:
 
 def fleet_rows(platforms: dict[str, str], states: dict[str, str]) -> list[FleetRow]:
     """Join topology guests with virsh state (domains are named lab_<guest>) and the
-    setups each guest belongs to. Sorted so guests cluster by setup membership."""
+    setups each guest belongs to. Rows are sorted by column left-to-right
+    (Guest, Platform, State, Setup(s)) so the leading column reads in order; Guest is
+    unique so it dominates and the rest are tie-breakers (#273)."""
     rows = [
         FleetRow(
             guest,
@@ -61,4 +63,4 @@ def fleet_rows(platforms: dict[str, str], states: dict[str, str]) -> list[FleetR
         )
         for guest, platform in platforms.items()
     ]
-    return sorted(rows, key=lambda r: (r.setups, r.guest))
+    return sorted(rows, key=lambda r: (r.guest, r.platform, r.state, r.setups))

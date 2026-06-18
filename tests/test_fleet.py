@@ -28,7 +28,7 @@ def test_lab_guests_reads_platform_with_default(monkeypatch, tmp_path):
     assert lab_guests() == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-arm64"}
 
 
-def test_fleet_rows_joins_state_and_setups_and_sorts_by_setup(monkeypatch, tmp_path):
+def test_fleet_rows_joins_state_and_setups_and_sorts_by_columns(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
@@ -48,5 +48,5 @@ def test_fleet_rows_joins_state_and_setups_and_sorts_by_setup(monkeypatch, tmp_p
     assert by_guest["rdqm-a1"].setups == "rdqm-ha"
     assert by_guest["san-a"].setups == "pcmk-san-ha"
     assert by_guest["pcmk-a1"].state == "running"
-    # sorted by (setups, guest): pcmk-san-ha guests before rdqm-ha
-    assert [r.guest for r in rows] == ["pcmk-a1", "san-a", "rdqm-a1"]
+    # sorted by column left-to-right (guest first): plain alphabetical by guest
+    assert [r.guest for r in rows] == ["pcmk-a1", "rdqm-a1", "san-a"]
