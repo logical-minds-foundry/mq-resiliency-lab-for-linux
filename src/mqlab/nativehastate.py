@@ -130,10 +130,13 @@ def render_nativeha_state_prom(
 
 
 def _commands(qm: str) -> dict[str, tuple[list[str], int]]:
-    """source -> (dspmq argv, timeout). Timeouts are well under the 5s tick."""
+    """source -> (argv, timeout). dspmq must run as the mqm user (matching the arm's
+    qm-status verb), so each probe shells through `su - mqm -c`; the absolute dspmq path
+    sidesteps any dependence on mqm's PATH. Timeouts are well under the 5s tick."""
+    dspmq = f"/opt/mqm/bin/dspmq -m {qm} -o nativeha"
     return {
-        "nativeha_x": (["dspmq", "-m", qm, "-o", "nativeha", "-x"], 3),
-        "nativeha_g": (["dspmq", "-m", qm, "-o", "nativeha", "-g"], 3),
+        "nativeha_x": (["su", "-", "mqm", "-c", f"{dspmq} -x"], 3),
+        "nativeha_g": (["su", "-", "mqm", "-c", f"{dspmq} -g"], 3),
     }
 
 

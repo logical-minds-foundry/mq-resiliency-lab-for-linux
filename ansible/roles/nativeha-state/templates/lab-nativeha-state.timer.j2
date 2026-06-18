@@ -1,0 +1,11 @@
+{# lab-nativeha-state.timer — 5s cadence (§4.2): the cockpit's latency-to-visible #}
+[Unit]
+Description=Refresh lab_nativeha_state every 5s
+
+[Timer]
+OnBootSec=5
+OnUnitActiveSec=5
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

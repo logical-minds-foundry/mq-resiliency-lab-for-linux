@@ -196,7 +196,8 @@ def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
     gtext = (FIXTURES / "dspmq_nativeha_g.txt").read_text()
 
     def fake_probe(cmd, timeout):
-        return gtext if "-g" in cmd else xtext
+        # the dspmq invocation is the last `su -c` argument; route on its -x/-g suffix
+        return gtext if cmd[-1].endswith("-g") else xtext
 
     monkeypatch.setattr(nativehastate, "probe", fake_probe)
     out = tmp_path / "lab_nativeha_state.prom"
@@ -222,7 +223,9 @@ def test_main_marks_sources_stale_when_probes_time_out(tmp_path, monkeypatch):
 
 def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
     xtext = (FIXTURES / "dspmq_nativeha_x.txt").read_text()
-    monkeypatch.setattr(nativehastate, "probe", lambda cmd, timeout: xtext if "-x" in cmd else None)
+    monkeypatch.setattr(
+        nativehastate, "probe", lambda cmd, timeout: xtext if cmd[-1].endswith("-x") else None
+    )
     monkeypatch.setattr(
         nativehastate.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-a2"})()
     )
