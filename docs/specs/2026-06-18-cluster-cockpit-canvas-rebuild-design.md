@@ -1,0 +1,246 @@
+# Cluster Cockpit — Canvas Rebuild & Elevation — Design
+
+**Date:** 2026-06-18
+**Issue:** #219
+**Builds on:** `docs/specs/2026-06-14-cluster-drill-cockpit-design.md` (the cockpit's
+problem statement, collector, role-split sections, colour vocabulary, and integrity
+alarm — all still authoritative). This document supersedes that design's **§5
+(rendering — spike-decided)** and **§8 (build split)**, and adds the visual elevations.
+
+---
+
+## 1. Why this spec exists (corrected framing)
+
+#219 was opened on the hypothesis that the PCMK cockpit was *lost in a rebase*.
+Investigation says otherwise, and the corrected framing changes the work:
+
+- **Plan 1a (collector) landed** (#195): `src/mqlab/clusterstate.py`, the `cluster-state`
+  role, and a ~5s timer emit `cluster_*` metrics (quorum, per-node online/unclean,
+  resource owner, DRBD/STONITH/iSCSI/daemons). Live-proven.
+- **The cockpit *rendering* was never built.** `git log -S` confirms `dashboard.py`
+  has **never** contained a single `cluster_*` or Loki panel; `render_cluster_dashboard`
+  does not exist. The "beautiful cockpit" was the **design + HTML mockups**
+  (`docs/specs/diagrams/cluster-drill-cockpit-*.html`) plus a **live rendering spike**
+  (hand-authored JSON loaded straight into Grafana). It evaporated on the next lab
+  rebuild because it was never productized into the renderer or provisioned durably.
+- Loki/Alloy/obslog **infrastructure** landed (#196), but no dashboard consumes it.
+
+So #219 is **"finish the interrupted build, and elevate it"** — not a regression hunt.
+The foundation (a live-proven collector, a worked-out visual design) is solid.
+
+## 2. Goals & non-goals
+
+**Goals**
+1. Build the PCMK cluster cockpit as a **dedicated, provisioned, code-generated**
+   Grafana board (`uid: lab-pcmk-cluster`) — versioned, so it survives rebuilds.
+2. Render the matrix **faithfully to the mockups** using the **Canvas** panel
+   (decided — see §4), the lab is on Grafana **v13.0.2** where Canvas is GA.
+3. **Elevate** it past a now-snapshot: **hero tiles** (instant headline read) and a
+   **failover-story timeline band** (watch the cluster move through a drill).
+4. **Embed the live Loki log row** in the board — the matrix shows *what* changed, the
+   log shows *why*, on one screen.
+5. Replace the main board's binary PCMK-A/B tiles with a **per-side roll-up + drill-link**.
+6. Build the matrix/hero/timeline/log builders **arm-agnostic** so the RDQM cockpit
+   (separate spec) reuses them.
+
+**Non-goals (this spec)**
+- The **RDQM cockpit** — its own `rdqmstatus`/`rdqmadm` collector + a board reusing this
+  framework. A focused follow-on spec, cheap because the builders are arm-agnostic.
+- **Script-emitted timeline annotations.** v1 annotations are metric-derived (§6.4);
+  cutover scripts emitting explicit event markers is a noted future nicety.
+- The per-QM **application** view (one QM's queues/channels) — already a separate board.
+
+## 3. Architecture
+
+A new, focused module of **pure, composable panel-builders** generates a **second**
+dashboard alongside the existing `lab-fleet-node` board. `src/mqlab/dashboard.py`
+(the main board) is left as-is.
+
+```
+src/mqlab/clusterboard.py
+  # pure functions: data in -> Grafana panel JSON out, no I/O
+  canvas_matrix(rows, cols, metric_map, y) -> panel        # ①②③ sections (Canvas)
+  hero_tiles(folds, y) -> [panel, ...]                     # Stat + sparkline
+  integrity_panel(y) -> panel                              # first-class alarm
+  timeline_band(signals, annotations, y) -> [panel, ...]   # State-timeline
+  log_row(loki_selector, y) -> panel                       # Loki Logs
+  perf_section(nodes, y) / net_section(planes, y)          # existing metrics
+  fold_side(cells) -> tristate                             # SHARED w/ overview roll-up
+  active_side(owner_series) -> "A" | "B"                   # SHARED
+  render_cluster_dashboard(topo, arm="pcmk") -> dict       # assembles the board
+```
+
+- **`render_cluster_dashboard(topo, arm)`** assembles the builders onto the board.
+  The arm-specific inputs — node rows, component columns, metric expressions, Loki
+  selector — live in small per-arm tables. The RDQM board (later spec) adds only those
+  tables; the builders are unchanged.
+- **Canvas is scoped to the matrix** (①②③), where faithful grouped-cell layout earns
+  the verbose JSON. **Hero, timeline, logs, perf, network are stock panel types**
+  (Stat, State-timeline, Logs, timeseries) — striking *and* low-maintenance.
+- **`fold_side` / `active_side` are shared** by the hero tiles, the timeline, and the
+  overview roll-up, so those three can never disagree about a side's health.
+- **No new Prometheus jobs, no new secrets.** Everything reads existing `cluster_*` +
+  `node_*` + Loki. Cluster tooling stays read-only.
+
+### 3.1 Provisioning
+
+The `grafana` role deploys a **second** rendered file
+(`build/grafana/dashboards/lab-pcmk-cluster.json`) to `/var/lib/grafana/dashboards/`
+beside `lab-status.json` — a new `copy` task + the dashboard rendered by
+`mqlab obs dashboard` / `obs up`. The dashboard provider (`dashboards.yml.j2`) already
+serves the whole directory, so no provider change is needed.
+
+## 4. Rendering decision: Canvas (settles 2026-06-14 §5)
+
+The 2026-06-14 spike framed the matrix as **Canvas vs Table**, with "if Canvas isn't GA
+on the lab's Grafana, Table wins by default." The lab runs **Grafana v13.0.2**
+(`/api/health`); Canvas is GA since Grafana 10. We choose **Canvas**: it reproduces the
+mockups faithfully (grouped headers, coloured cells, inline DRBD replication band, `★`
+owner, summary), which directly serves the "make it shine" goal. The cost — verbose JSON
+— is mitigated by generating it from `canvas_matrix()` (code, unit-tested), never by
+hand. Each cell's colour binds to a `cluster_*` series via the §4.3 colour vocabulary of
+the 2026-06-14 design (green/amber/red/grey + hatched STALE).
+
+## 5. Board layout — `lab-pcmk-cluster`, top-to-bottom
+
+```
+┌─ PCMK Cluster · Infrastructure View ──────────── [Site A active] ─┐
+│ HERO  [✔ CLUSTER]  [RPO 2.1s ▁▂▅▇]  [ACTIVE: A]  [QUORUM 3/3]      │  Stat + sparkline
+│       + first-class INTEGRITY light (loud banner on split-brain)  │
+├───────────────────────────────────────────────────────────────────┤
+│ ① CLUSTER STATUS   Site A card │ DRBD A⇄B card │ Site B card       │  Canvas
+├───────────────────────────────────────────────────────────────────┤
+│ ② COMPUTE (pcmk-a1..3 / b1..3)  corosync·pacemaker·iSCSI·fence     │  Canvas matrix
+│    + mq_fs·mq_vip·mq_vip_ext·mq_qm  (● on the ★ active row)        │  (the heart)
+├───────────────────────────────────────────────────────────────────┤
+│ ③ STORAGE (san-a/san-b)  role·disk·conn·resync%·out-of-sync·iSCSI  │  Canvas matrix
+├───────────────────────────────────────────────────────────────────┤
+│ ⟳ FAILOVER TIMELINE  quorum│active│DRBD role│integrity ▼fence ▼cut │  State-timeline
+├───────────────────────────────────────────────────────────────────┤
+│ ▤ CLUSTER LOGS (live, WARN+, auto-scroll, cluster nodes)           │  Loki Logs
+├───────────────────────────────────────────────────────────────────┤
+│ ▦ PERF  cpu busy% · SAN disk I/O · DRBD throughput (net-wan)       │  timeseries
+│ ▦ NETWORK  hb-a/b★ · san-a/b · wan · data-a/b (tri-state + rx/tx)  │  stock
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Read top-to-bottom, most important first — mirroring the main board's philosophy and the
+2026-06-14 §3 ordering, with the hero band and timeline added above/below the matrix.
+
+## 6. Section detail
+
+### 6.1 Hero tiles + integrity light
+A top band of **Stat panels with sparklines**, each a single headline number derived
+from existing `cluster_*` series:
+- **Cluster health** — `fold_side` over both sides → one tri-state (✔/amber/red).
+- **RPO tail** — DRBD out-of-sync seconds (see §7 collector note); the live data-loss
+  exposure during a drill.
+- **Active site** — `active_side(cluster_resource_owner)` → A or B.
+- **Quorum** — `sum(cluster_node_online by site)` / 3, with quorate state.
+
+The **first-class integrity light** (2026-06-14 §3.1) sits here as a distinct loud
+banner (treatment unlike routine green/amber/red), tripping on split-brain
+(`StandAlone`/dual-Primary), `Diskless`, or an `Outdated` secondary being promoted. It
+must be unmistakable from a routine (amber) resync.
+
+### 6.2 The three matrix sections (①②③)
+Exactly the role-split of 2026-06-14 §3.1, rendered via `canvas_matrix()`:
+- **① Cluster status** — per-site cards (quorum n/3, QM owner, active/standby) + a
+  cross-site **DRBD card** (direction, resync %, out-of-sync RPO tail).
+- **② Compute** — rows `pcmk-a1..3` + `pcmk-b1..3` banded by site; node-health columns
+  (`corosync`, `pacemaker`, `iSCSI`, `fence`) + resource-group columns (`mq_fs`,
+  `mq_vip`, `mq_vip_ext`, `mq_qm`) lighting on the `★` active row.
+- **③ Storage** — rows `san-a`/`san-b`; DRBD `role`/`disk`/`connection`/`resync %`/
+  `out-of-sync`/`iSCSI target`/`drbd` service.
+
+### 6.3 Failover-story timeline band
+**State-timeline panels** over the drill window for the signals that tell the story:
+**quorum (n/3)**, **active side (A/B)**, **DRBD role flip (P/S)**, and **integrity**.
+The matrix is *now*; this band is the *transition* — watch a cutover unfold and see
+exactly when each signal moved.
+
+### 6.4 Timeline annotations (v1: metric-derived)
+Grafana annotation queries over the same `cluster_*` series mark events on the band with
+no new plumbing: **owner change** (`changes(cluster_resource_owner[...]) > 0`),
+**quorum dip**, **integrity trip**. *Future nicety (out of scope):* cutover scripts
+emitting explicit markers for richer labels.
+
+### 6.5 Embedded Loki log row
+A **Loki Logs panel** directly below the matrix: live, auto-scrolling, severity-filtered
+(WARN+), scoped via a Loki selector to the cluster nodes' relevant units
+(corosync/pacemaker/drbd + MQ). Uses the `loki` datasource (uid pinned in
+`datasource.yml.j2`). This makes the 2026-06-14 §2 reserved slot real.
+
+### 6.6 Perf + network sections
+From existing metrics (2026-06-14 §6), no new telemetry:
+- **§3 perf** — per-node CPU busy% (`node_cpu_seconds_total`), SAN disk I/O
+  (`node_disk_*` on `san-a`/`san-b`), DRBD throughput (`net-wan` virbr rx/tx).
+- **§4 network** — per-plane tri-state (`lab_network_health`) + throughput, scoped to
+  the planes this cluster rides (heartbeat `net-hb-a/b` ★, SAN, WAN, data).
+
+### 6.7 Overview roll-up + drill-link
+The main `lab-fleet-node` board drops the binary PCMK-A/B group tiles for a **per-side
+roll-up**: one tile per site (green/amber/red) folding the matrix's worst current cell
+via the **shared `fold_side`**, each drill-linking to `lab-pcmk-cluster`.
+
+## 7. Collector note (the only possible new telemetry)
+
+The hero **RPO tile** and the DRBD **timeline row** need DRBD `out-of-sync` /
+`resync %` as series. 2026-06-14 §10 flagged the DRBD endpoint-of-record as an open
+question. **First task of the build:** confirm `clusterstate.py` already emits these; if
+not, add them as a small, additive textfile-metric touch-up (headless-verifiable via
+`promtool`/textfile inspection). No other new telemetry.
+
+## 8. Build split (each its own plan/PR, ordered)
+
+1. **Collector touch-up** *(only if §7 finds a gap)* — add DRBD out-of-sync / resync %
+   metrics. Headless-verifiable.
+2. **Canvas-matrix framework + ①②③ sections** — `clusterboard.py` +
+   `render_cluster_dashboard` + the dedicated `lab-pcmk-cluster` board, provisioned as a
+   second file. The heart; everything else hangs off it.
+3. **Hero tiles + first-class integrity light.**
+4. **Failover-story timeline band** + metric-derived annotations.
+5. **Embedded Loki log row** (the §2 slot, made real).
+6. **Perf + network sections** (existing metrics).
+7. **Overview roll-up + drill-link** on `lab-fleet-node` (uses the shared `fold_side`).
+
+## 9. Testing & acceptance
+
+- **Unit (100% branch):** every builder (`canvas_matrix`, `hero_tiles`,
+  `integrity_panel`, `timeline_band`, `log_row`, `perf_section`, `net_section`) and the
+  shared `fold_side` / `active_side` — data in, panel JSON / tri-state out. The fold is
+  shared so the overview and cockpit cannot disagree.
+- **JSON validity:** the rendered board parses and has the expected panel set + `uid`
+  (a render test mirroring the existing `lab_dashboard` tests).
+- **Cold-rebuild acceptance (load-bearing):** a full VM cold rebuild **plus a real PCMK
+  failover/cutover** must drive the matrix through the mid-cutover picture, the timeline
+  must record the transition, and the integrity light must stay clean (loud only on a
+  genuine split-brain). Lint-green ≠ done.
+- `vrg-container-run -- vrg-validate` is the only gate.
+
+## 10. Cross-cutting concerns
+
+- **Fail-loud / STALE** precedence per 2026-06-14 §4.3 + §9: a silent collector hatches
+  STALE; a fenced node reads fenced/offline; split-brain trips the integrity banner.
+- **No new Prometheus jobs / no new secrets;** read-only cluster tooling.
+- **Durability** is the headline lesson of #219: the board is **code-generated and
+  provisioned from a versioned file**, never hand-loaded into a live Grafana — so it
+  survives the next rebuild.
+- **Parallel-safe:** this work touches `clusterboard.py`, the `grafana` role, and the
+  overview board only; it does not touch the native-HA arm work in flight.
+
+## 11. Success criteria
+
+1. `lab-pcmk-cluster` renders the full stack — hero band, three canvas matrix sections,
+   timeline band, embedded log row, perf, network — from existing metrics, generated by
+   `render_cluster_dashboard` and provisioned from a versioned file.
+2. **Mid-drill the board tells the story with no log line read:** a fenced compute node
+   reads fenced/offline; quorum dips on its site; the resource-group cells relight
+   amber→green on the Site-B target row; the storage table shows DRBD flipping to
+   Primary on `san-b` with a live RPO tail; the timeline records the transition with
+   fence/cutover annotations; the integrity light stays clean.
+3. The main board's per-side roll-up agrees with the cockpit (shared fold) and
+   drill-links to it.
+4. The matrix/hero/timeline/log builders are arm-agnostic — the RDQM cockpit spec needs
+   only per-arm input tables, not new builders.
+5. Survives a cold rebuild: the board is present and correct with no manual step.
