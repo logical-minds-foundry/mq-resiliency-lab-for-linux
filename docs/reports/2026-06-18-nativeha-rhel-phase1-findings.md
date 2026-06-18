@@ -64,7 +64,23 @@ not Phase-1 HA-first** — recorded as a deliberate boundary, not a defect. (The
 data-layer guarantee — messages committed to quorum survive — is separate and
 holds; demonstrating it through the client is the Plan-4 `dr_mqi.py` job.)
 
-## Carry-forward
-- Cold-rebuild acceptance gate — Task 5.
+## Cold-rebuild acceptance gate — ✅ PASSED
+
+`vagrant destroy` site A → fresh `vagrant up --no-provision` → **one**
+`ansible-playbook site-nativeha.yml --limit nha_rhel_a` → `QMNATIVE` formed
+`QUORUM(3/3)` (Active + 2 Replica, all `INSYNC`) **one-pass, no manual fix-ups**.
+The production `mq-nativeha` role is reproducible — lint-green ≠ done; the cold
+rebuild proves it.
+
+**Gotcha noted (worktree lab-op):** the shared `build/inventory.ini` (symlinked
+to the main checkout) can be **clobbered by an inventory render from the main
+checkout's `develop` topology**, which lacks the `nha-rhel-*` nodes → `ansible`
+silently matches no hosts. Fix: re-render from the worktree
+(`mqlab.inventory.lab_inventory()` reads `repo_root()/lab/topology.yaml`). A facet
+of the interim worktree-lab convention (proper fix: shared lab-state, #69).
+
+## Carry-forward (Phase 3 / Phase 2)
 - Phase 3: site B (`nha_rhel_b`) + CRR/DR on this same consolidated setup, real TLS
-  (GSKit extraction first — `lab-gotchas.md`).
+  (GSKit extraction first — `lab-gotchas.md`); app-reconnect-through-failover via
+  `dr_mqi.py` (DR validation).
+- Phase 2: parameterize to Ubuntu 24.04 (`nativeha-ubuntu`, `install-Debian.yml`).
