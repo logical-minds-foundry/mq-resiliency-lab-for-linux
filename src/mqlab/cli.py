@@ -264,7 +264,15 @@ def obs_reach_peers() -> None:
         deps.transcript.close()
 
 
-GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port
+GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port (direct, inside the VM)
+# What the workstation actually browses: Lima auto-forwards the base VM's :3000 to
+# the Mac's localhost:3000, and the vergil-portforward relay (below) bridges :3000
+# to the obs guest — so from the Mac it's plain localhost:3000, no manual tunnel.
+WORKSTATION_GRAFANA_URL = "http://localhost:3000"
+# The systemd-socket-proxyd relay vergil-vm provisions from port_forwards in
+# vergil.toml (#170). Restarting grafana (the obs role's notify) wedges its held
+# downstream connection, so 'obs up' bounces it after provisioning (#264).
+_RELAY_UNITS = ["vergil-portforward-3000.socket", "vergil-portforward-3000.service"]
 
 
 def _obs_up_steps() -> list[CommandStep]:
@@ -321,6 +329,19 @@ def _obs_up_steps() -> list[CommandStep]:
                 cwd=repo_root() / "ansible",
             ),
         ),
+        CommandStep(
+            # provisioning above bounced grafana; clear the relay's stale downstream
+            # so the workstation forward isn't left wedged (#264).
+            "heal grafana port-forward relay",
+            Command(["sudo", "systemctl", "restart", *_RELAY_UNITS]),  # noqa: S607
+        ),
+        CommandStep(
+            # fail loud if the workstation-facing endpoint isn't actually serving —
+            # don't report success while the browser path is dead (#264). -f makes
+            # curl exit non-zero on any non-2xx or a dropped connection.
+            "verify grafana reachable (workstation forward)",
+            Command(["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]),  # noqa: S607
+        ),
     ]
 
 
@@ -347,18 +368,16 @@ def obs_status() -> None:
 @obs_app.command("open")
 def obs_open() -> None:
     """Print the Grafana URL and how to reach it from your workstation."""
-    typer.echo(f"Grafana:   {GRAFANA_URL}  (directly reachable inside the Vergil VM)")
-    typer.echo(f"Dashboard: {GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
-    typer.echo(f"Live tail: {GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
-    typer.echo('           query {unit="mqlab-requester"} and toggle Live)')
+    typer.echo(f"Workstation: {WORKSTATION_GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
+    typer.echo(f"In the VM:   {GRAFANA_URL}/d/lab-fleet-node  (direct to the obs guest)")
+    typer.echo(f"Live tail:   {WORKSTATION_GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
+    typer.echo('             query {unit="mqlab-requester"} and toggle Live)')
     typer.echo("")
-    typer.echo("obs is a guest *inside* the Vergil VM, so forward a port through the VM.")
-    typer.echo("On your workstation:")
-    typer.echo("  1. limactl list   # find the instance whose DIR is this repo, note its name")
-    typer.echo("  2. ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>")
-    typer.echo("     # the <host-alias> is the ssh.config 'Host' line — Lima turns the")
-    typer.echo("     # instance's dots into hyphens (lima-vergil-user-...-mq-cluster-tooling)")
-    typer.echo("  3. browse http://localhost:3000/d/lab-fleet-node   (admin / admin)")
+    typer.echo("The forward is automatic — no manual tunnel. Lima forwards the VM's")
+    typer.echo("port 3000 to your Mac's localhost:3000, and the vergil-portforward relay")
+    typer.echo("bridges that to the obs guest. Just browse localhost:3000 (anonymous —")
+    typer.echo("no login, #258). If it drops after an 'obs up', the relay was wedged by a")
+    typer.echo("grafana restart; 'mqlab obs up' now re-heals it as its last step (#264).")
 
 
 @obs_app.command("instrument")
