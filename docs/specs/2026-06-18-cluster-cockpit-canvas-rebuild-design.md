@@ -40,12 +40,16 @@ The foundation (a live-proven collector, a worked-out visual design) is solid.
 4. **Embed the live Loki log row** in the board — the matrix shows *what* changed, the
    log shows *why*, on one screen.
 5. Replace the main board's binary PCMK-A/B tiles with a **per-side roll-up + drill-link**.
-6. Build the matrix/hero/timeline/log builders **arm-agnostic** so the RDQM cockpit
-   (separate spec) reuses them.
+6. Build the matrix/hero/timeline/log builders **arm-agnostic** so the cockpits for the
+   **other HA/DR arms** — RDQM, **Native HA**, and **CRR** — reuse them with only per-arm
+   input tables. PCMK is the first arm and proves the framework; the others follow.
 
 **Non-goals (this spec)**
-- The **RDQM cockpit** — its own `rdqmstatus`/`rdqmadm` collector + a board reusing this
-  framework. A focused follow-on spec, cheap because the builders are arm-agnostic.
+- The **RDQM / Native HA / CRR cockpit boards** — each a focused follow-on spec: its own
+  state collector + a board reusing this framework's builders. Cheap because the builders
+  are arm-agnostic (§3.2). Native HA and CRR are **actively under construction** by other
+  agents; this spec defines the metric-shape contract (§3.2) they should target so their
+  cockpits drop in later without rework — but it does not build those boards.
 - **Script-emitted timeline annotations.** v1 annotations are metric-derived (§6.4);
   cutover scripts emitting explicit event markers is a noted future nicety.
 - The per-QM **application** view (one QM's queues/channels) — already a separate board.
@@ -89,6 +93,30 @@ The `grafana` role deploys a **second** rendered file
 beside `lab-status.json` — a new `copy` task + the dashboard rendered by
 `mqlab obs dashboard` / `obs up`. The dashboard provider (`dashboards.yml.j2`) already
 serves the whole directory, so no provider change is needed.
+
+### 3.2 Arm extensibility (the contract for RDQM / Native HA / CRR)
+
+The framework serves four HA/DR arms; PCMK is built here and proves it. **Adding an arm
+requires no new builders** — only:
+
+1. **A state collector** for that arm, emitting metrics in the **same shape** as the
+   PCMK `cluster_*` set: a per-node/per-component value with `node`/`member`/`resource`
+   (or arm-equivalent) labels, a quorum/health roll-up, an active/owner signal, and a
+   replication/RPO signal where the arm has one. Same fail-loud/STALE discipline. The
+   arm's collector source differs (PCMK: `crm_mon`/`drbdadm`; RDQM: `rdqmstatus`/
+   `rdqmadm`; **Native HA**: `dspmq`/MQ native-HA status; **CRR**: the cross-region
+   replication status), but the *projected metric shape* is the contract.
+2. **Per-arm input tables** passed to the builders — node rows, component columns,
+   metric expressions, the Loki selector, and which sections apply. (Arms differ in
+   shape: PCMK/RDQM are node×component matrices with a storage role-split; Native HA is
+   instances × {role, quorum, replication, in-sync}; CRR leans on the RPO hero + the
+   replication timeline more than a wide matrix. The builders take rows/cols/metric-map,
+   so each arm supplies its own.)
+
+`render_cluster_dashboard(topo, arm)` dispatches on `arm` to the right input tables.
+**Coordination note:** Native HA and CRR are under active construction now — their
+collectors should target this metric shape as they are built, so the cockpit is a
+drop-in rather than a retrofit.
 
 ## 4. Rendering decision: Canvas (settles 2026-06-14 §5)
 
@@ -241,6 +269,7 @@ not, add them as a small, additive textfile-metric touch-up (headless-verifiable
    fence/cutover annotations; the integrity light stays clean.
 3. The main board's per-side roll-up agrees with the cockpit (shared fold) and
    drill-links to it.
-4. The matrix/hero/timeline/log builders are arm-agnostic — the RDQM cockpit spec needs
-   only per-arm input tables, not new builders.
+4. The matrix/hero/timeline/log builders are arm-agnostic — a follow-on cockpit for any
+   other arm (RDQM, Native HA, CRR) needs only a state collector matching the §3.2 metric
+   shape plus per-arm input tables, not new builders.
 5. Survives a cold rebuild: the board is present and correct with no manual step.
