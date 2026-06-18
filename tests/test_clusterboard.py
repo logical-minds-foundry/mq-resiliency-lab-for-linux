@@ -7,8 +7,8 @@ DS = "promtest"
 
 def test_matrix_is_a_joined_colourised_table():
     cols = [
-        ("corosync", 'max by (n)(label_replace(cluster_daemon_up{unit="corosync"},"n","$1","node","(.*)"))', "up"),
-        ("fence", 'max by (n)(label_replace(cluster_fence_count,"n","$1","member","(.*)"))', "clean0"),
+        ("corosync", "max by (n)(label_replace(cluster_daemon_up...))", "up"),
+        ("fence", "max by (n)(label_replace(cluster_fence_count...))", "clean0"),
     ]
     p = matrix("② Compute", cols, DS, y=0)
     assert p["type"] == "table"
@@ -18,9 +18,11 @@ def test_matrix_is_a_joined_colourised_table():
     assert all(t["format"] == "table" and t["instant"] for t in p["targets"])
     assert all(t["datasource"] == {"type": "prometheus", "uid": DS} for t in p["targets"])
     assert p["targets"][0]["expr"].startswith("max by (n)(label_replace(cluster_daemon_up")
-    # join on n, then rename Value #<ref> -> column title, n -> node, drop Time
+    # join on n, then rename Value #<ref> -> column title, n -> node, drop Time,
+    # then sort rows by node so site A groups before site B (no interleaving)
     tids = [t["id"] for t in p["transformations"]]
-    assert tids == ["joinByField", "organize"]
+    assert tids == ["joinByField", "organize", "sortBy"]
+    assert p["transformations"][2]["options"]["sort"] == [{"field": "node"}]
     org = p["transformations"][1]["options"]
     assert org["renameByName"] == {"Value #A": "corosync", "Value #B": "fence", "n": "node"}
     assert org["excludeByName"] == {"Time": True}
