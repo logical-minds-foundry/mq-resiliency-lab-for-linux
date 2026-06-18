@@ -25,6 +25,10 @@ if TYPE_CHECKING:
 
 _FIELD = re.compile(r"(\w+)\(([^)]*)\)")
 
+# Numeric role code for the cockpit instances-matrix cell (the colour-cell machinery is
+# numeric): Active=2, Replica=1, anything else (Unknown/down)=0.
+_ROLE_CODE = {"Active": 2, "Replica": 1}
+
 
 def _fields(line: str) -> dict[str, str]:
     """All KEY(value) tokens on a line -> {KEY: value}. Values that themselves contain
@@ -124,8 +128,10 @@ def render_nativeha_state_prom(
             base = {"node": node, "member": member}
             lines.append(_m("cluster_node_online", base, 0 if st["role"] == "Unknown" else 1))
             lines.append(_m("cluster_nha_role", {**base, "role": st["role"]}, 1))
+            lines.append(_m("cluster_nha_role_code", base, _ROLE_CODE.get(st["role"], 0)))
             lines.append(_m("cluster_nha_insync", base, 1 if st["insync"] else 0))
             lines.append(_m("cluster_nha_hastatus", {**base, "status": st["hastatus"]}, 1))
+            lines.append(_m("cluster_nha_hastatus_ok", base, 1 if st["hastatus"] == "Normal" else 0))
             if st["role"] == "Active":
                 owner = {"node": node, "resource": qm, "holder": member}
                 lines.append(_m("cluster_resource_owner", owner, 1))

@@ -51,6 +51,17 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             },
         },
     ],
+    # Native-HA role code → coloured text: 2 Active (green) · 1 Replica (blue) · 0 Unknown (red)
+    "role": [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "Unknown", "index": 0},
+                "1": {"color": "blue", "text": "Replica", "index": 1},
+                "2": {"color": _GREEN, "text": "Active", "index": 2},
+            },
+        },
+    ],
 }
 _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -155,6 +166,19 @@ _STORAGE_COLS: list[Column] = [
     ("resync %", _norm("cluster_drbd_resync_pct", "node"), "sessions"),
     ("out-of-sync", _norm("cluster_drbd_out_of_sync_bytes", "node"), "clean0"),
 ]
+
+
+def _nativeha_instance_cols(site_regex: str) -> list[Column]:
+    """Native-HA instances-matrix columns for one site (member regex selects nha-rhel-a.* /
+    -b.*): online · role (coded → Active/Replica/Unknown) · in-sync · HA Normal. No
+    corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none (spec §5 ②)."""
+    member = f'member=~"{site_regex}"'
+    return [
+        ("online", _norm(f"cluster_node_online{{{member}}}", "member"), "up"),
+        ("role", _norm(f"cluster_nha_role_code{{{member}}}", "member"), "role"),
+        ("in-sync", _norm(f"cluster_nha_insync{{{member}}}", "member"), "up"),
+        ("HA Normal", _norm(f"cluster_nha_hastatus_ok{{{member}}}", "member"), "up"),
+    ]
 
 
 def _stat(

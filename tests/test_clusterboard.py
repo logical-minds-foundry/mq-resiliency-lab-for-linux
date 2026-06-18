@@ -201,3 +201,23 @@ def test_nativeha_hero_tiles_band():
     assert "cluster_nha_insync" in tiles[2]["targets"][0]["expr"]
     assert "cluster_nha_hastatus" in tiles[3]["targets"][0]["expr"]
     assert [t["gridPos"]["x"] for t in tiles] == [0, 6, 12, 18]  # tile left-to-right
+
+
+def test_role_mapping_codes_active_replica_unknown():
+    from mqlab.clusterboard import _MAPPINGS
+
+    opts = _MAPPINGS["role"][0]["options"]
+    assert opts["2"]["text"] == "Active"
+    assert opts["1"]["text"] == "Replica"
+    assert opts["0"]["text"] == "Unknown"
+
+
+def test_nativeha_instance_cols_for_a_site():
+    from mqlab.clusterboard import _nativeha_instance_cols
+
+    cols = _nativeha_instance_cols("nha-rhel-a.*")
+    assert [c[0] for c in cols] == ["online", "role", "in-sync", "HA Normal"]
+    assert cols[1][2] == "role"  # the role column uses the role mapping
+    assert "cluster_nha_role_code" in cols[1][1]
+    # every column is scoped to the site's members
+    assert all('member=~"nha-rhel-a.*"' in expr for _, expr, _ in cols)

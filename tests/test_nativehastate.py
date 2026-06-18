@@ -119,6 +119,9 @@ def test_render_emits_quorum_owner_and_per_instance_metrics():
     assert 'cluster_nha_quorum{node="nha-rhel-a1"} 3' in out
     assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 1' in out
     assert 'cluster_nha_role{node="nha-rhel-a1",member="nha-rhel-a1",role="Active"} 1' in out
+    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a1"} 2' in out  # Active
+    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a2"} 1' in out  # Replica
+    assert 'cluster_nha_hastatus_ok{node="nha-rhel-a1",member="nha-rhel-a1"} 1' in out  # Normal
     assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a2"} 1' in out
     assert (
         'cluster_resource_owner{node="nha-rhel-a1",resource="QMNATIVE",holder="nha-rhel-a1"} 1'
@@ -147,6 +150,8 @@ def test_render_quorum_lost_and_unknown_leader_branches():
     )
     assert 'cluster_quorate{node="nha-rhel-a1"} 0' in out  # 1 < majority(2)
     assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Unknown
+    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Unknown
+    assert 'cluster_nha_hastatus_ok{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Abnormal
     assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out
     assert "cluster_resource_owner" not in out  # no Active -> no owner line
     assert "last_write_timestamp" not in out  # empty fresh_sources
