@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from mqlab.clusterboard import (
     active_side,
     fold_side,
@@ -221,3 +223,30 @@ def test_nativeha_instance_cols_for_a_site():
     assert "cluster_nha_role_code" in cols[1][1]
     # every column is scoped to the site's members
     assert all('member=~"nha-rhel-a.*"' in expr for _, expr, _ in cols)
+
+
+def test_nativeha_board_uid_sections_and_tags():
+    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    assert d["uid"] == "lab-nativeha-cluster"
+    assert "nativeha-rhel" in d["tags"]
+    by_title = {p.get("title", ""): p for p in d["panels"]}
+    assert "② Instances — Live (site A)" in by_title
+    assert "② Instances — Recovery (site B)" in by_title
+    assert "Active instance" in by_title and "Integrity" in by_title
+    # the two matrices stack without overlap, below the hero/integrity band
+    live, recov = by_title["② Instances — Live (site A)"], by_title["② Instances — Recovery (site B)"]
+    assert live["gridPos"]["y"] < recov["gridPos"]["y"]
+    assert by_title["Integrity"]["gridPos"]["y"] < live["gridPos"]["y"]
+    banner = next(p for p in d["panels"] if p["type"] == "text")
+    assert "Native HA" in banner["options"]["content"]
+    # no PCMK-only plumbing leaks into the nativeha board
+    blob = json.dumps(d)
+    assert "corosync" not in blob and "cluster_drbd" not in blob and "iSCSI" not in blob
+
+
+def test_pcmk_board_still_renders_unchanged():
+    d = render_cluster_dashboard({}, arm="pcmk")
+    assert d["uid"] == "lab-pcmk-cluster"
+    titles = [p.get("title", "") for p in d["panels"]]
+    assert "② Compute — node × component" in titles
+    assert "③ Storage — DRBD / SAN" in titles

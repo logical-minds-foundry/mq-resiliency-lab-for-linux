@@ -553,18 +553,21 @@ def _annotations(ds_uid: str) -> dict[str, Any]:
 
 _ARM_NAMES = {
     "pcmk": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
+    "nativeha-rhel": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
 }
+_ARM_KIND = {"pcmk": "PCMK Cluster", "nativeha-rhel": "Native HA Cluster"}
 
 
 def _title_banner(arm: str, y: int) -> dict[str, Any]:
     """A spelled-out title across the top naming this cluster (#219 feedback)."""
     name = _ARM_NAMES.get(arm, arm)
+    kind = _ARM_KIND.get(arm, "Cluster")
     return {
         "type": "text",
         "title": "",
         "transparent": True,
         "gridPos": {"h": 2, "w": 24, "x": 0, "y": y},
-        "options": {"mode": "markdown", "content": f"## PCMK Cluster · {name}"},
+        "options": {"mode": "markdown", "content": f"## {kind} · {name}"},
     }
 
 
@@ -579,13 +582,56 @@ def _row_header(title: str, y: int) -> dict[str, Any]:
     }
 
 
+def _nativeha_board(ds_uid: str) -> dict[str, Any]:
+    """The Native HA cockpit (lab-nativeha-cluster): title banner + ① hero/integrity + the two
+    ② instances matrices (Live site A / Recovery site B). CRR card + timeline (PR3), logs +
+    perf/net (PR4) land in later PRs (spec §8)."""
+    panels = [
+        _title_banner("nativeha-rhel", y=0),
+        _row_header("① Cluster status — active · quorum · in-sync · integrity", y=2),
+        *nativeha_hero_tiles(ds_uid, y=3),
+        nativeha_integrity_panel(ds_uid, y=7),
+        # one matrix per group, banded Live (site A) / Recovery (site B); each is 3 rows +
+        # header (h=5). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
+        matrix(
+            "② Instances — Live (site A)",
+            _nativeha_instance_cols("nha-rhel-a.*"),
+            ds_uid,
+            y=10,
+            h=5,
+        ),
+        matrix(
+            "② Instances — Recovery (site B)",
+            _nativeha_instance_cols("nha-rhel-b.*"),
+            ds_uid,
+            y=15,
+            h=5,
+        ),
+    ]
+    return {
+        "uid": "lab-nativeha-cluster",
+        "title": "Native HA Cluster · Infrastructure View",
+        "schemaVersion": 39,
+        "version": 0,
+        "panels": panels,
+        "templating": {"list": []},
+        "annotations": _annotations(ds_uid),
+        "time": {"from": "now-15m", "to": "now"},
+        "refresh": "10s",
+        "tags": ["lab", "cockpit", "nativeha-rhel"],
+    }
+
+
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
     arm: str = "pcmk",
     ds_uid: str = "prometheus",
 ) -> dict[str, Any]:
-    """Assemble the cockpit board top-to-bottom: hero band + integrity light, then the
-    ② Compute + ③ Storage matrices. Timeline/logs land in later PRs."""
+    """Assemble the cockpit board for the given arm. PCMK: hero + integrity + ② Compute / ③
+    Storage matrices + timeline/logs/perf/net. Native HA dispatches to its own assembly
+    (instances matrices, the §6 integrity reframing)."""
+    if arm == "nativeha-rhel":
+        return _nativeha_board(ds_uid)
     panels = [
         _title_banner(arm, y=0),
         _row_header("① Cluster status — health · owner · quorum · integrity", y=2),
