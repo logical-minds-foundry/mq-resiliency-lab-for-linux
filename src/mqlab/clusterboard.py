@@ -496,12 +496,13 @@ def render_cluster_dashboard(
         *hero_tiles(ds_uid, y=3),
         integrity_panel(ds_uid, y=7),
         matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=10),
-        # storage has only san-a/san-b — size it to two rows, don't waste the space (#219)
-        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19, h=4),
-        timeline_band(ds_uid, y=23),
-        log_row("loki", y=30),
-        *perf_section(ds_uid, y=38),
-        *net_section(ds_uid, y=45),
+        # storage has only san-a/san-b — size it to two rows + header (h=5 so san-b
+        # isn't clipped), don't waste the space (#219)
+        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=19, h=5),
+        timeline_band(ds_uid, y=24),
+        log_row("loki", y=31),
+        *perf_section(ds_uid, y=39),
+        *net_section(ds_uid, y=46),
     ]
     return {
         "uid": "lab-pcmk-cluster",
