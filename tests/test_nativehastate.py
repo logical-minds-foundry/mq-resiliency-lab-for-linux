@@ -44,3 +44,27 @@ def test_parse_nativeha_x_without_quorum_line_leaves_summary_none():
     assert out["quorum_total"] is None
     assert out["group_role"] is None
     assert out["instances"] == {}
+
+
+def test_parse_nativeha_g_extracts_both_groups():
+    # the nested-paren GRPADDR in the fixture must NOT corrupt the scalar fields we read
+    out = nativehastate.parse_nativeha_g((FIXTURES / "dspmq_nativeha_g.txt").read_text())
+    assert out["Live"] == {"role": "Live", "connected": True, "insync": True, "backlog": 0}
+    assert out["Recovery"]["role"] == "Recovery"
+    assert out["Recovery"]["connected"] is True
+
+
+def test_parse_nativeha_g_flags_disconnected_recovery_with_backlog():
+    text = (
+        "GRPNAME(Live) GRPROLE(Live) CONNGRP(no) INSYNC(no) BACKLOG(0)\n"
+        "GRPNAME(Recovery) GRPROLE(Recovery) CONNGRP(no) INSYNC(no) BACKLOG(4096)\n"
+    )
+    out = nativehastate.parse_nativeha_g(text)
+    assert out["Live"]["connected"] is False
+    assert out["Recovery"]["insync"] is False
+    assert out["Recovery"]["backlog"] == 4096
+
+
+def test_parse_nativeha_g_skips_lines_without_group_name():
+    out = nativehastate.parse_nativeha_g("\nGRPROLE(Live) CONNGRP(yes)\n")  # no GRPNAME
+    assert out == {}

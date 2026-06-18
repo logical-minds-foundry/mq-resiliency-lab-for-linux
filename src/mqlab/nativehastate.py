@@ -60,3 +60,21 @@ def parse_nativeha_x(text: str) -> dict[str, Any]:
                 "hastatus": f.get("HASTATUS", "Unknown"),
             }
     return {**summary, "instances": instances}
+
+
+def parse_nativeha_g(text: str) -> dict[str, dict[str, Any]]:
+    """Parse `dspmq -m <qm> -o nativeha -g` (CRR) into {group_name: {role,connected,insync,
+    backlog}}. One line per group, keyed by GRPNAME. BACKLOG is a message count, never seconds.
+    """
+    groups: dict[str, dict[str, Any]] = {}
+    for line in text.splitlines():
+        f = _fields(line)
+        if "GRPNAME" not in f:
+            continue
+        groups[f["GRPNAME"]] = {
+            "role": f.get("GRPROLE", "Unknown"),
+            "connected": f.get("CONNGRP") == "yes",
+            "insync": f.get("INSYNC") == "yes",
+            "backlog": int(f.get("BACKLOG", 0)),
+        }
+    return groups
