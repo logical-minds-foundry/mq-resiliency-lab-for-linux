@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mqlab.clusterboard import active_side, fold_side, matrix
+from mqlab.clusterboard import active_side, fold_side, matrix, render_cluster_dashboard
 
 DS = "promtest"
 
@@ -44,3 +44,15 @@ def test_active_side_states():
     assert active_side(["B"]) == "B"
     assert active_side([]) == "none"  # nobody owns it mid-transition
     assert active_side(["A", "B"]) == "split"  # dual owner = hazard
+
+
+def test_board_has_uid_and_the_two_matrices():
+    d = render_cluster_dashboard({}, arm="pcmk")
+    assert d["uid"] == "lab-pcmk-cluster"
+    titles = [p["title"] for p in d["panels"]]
+    assert titles == ["② Compute — node × component", "③ Storage — DRBD / SAN"]
+    compute = d["panels"][0]
+    cols = compute["transformations"][1]["options"]["renameByName"]
+    assert {"Value #A", "Value #D"} <= set(cols)  # corosync .. fence present
+    # storage matrix sits below compute (no overlap)
+    assert d["panels"][1]["gridPos"]["y"] > compute["gridPos"]["y"]

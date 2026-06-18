@@ -77,3 +77,39 @@ def active_side(owner_sites: list[str]) -> str:
     if not sites:
         return "none"
     return sites.pop()
+
+
+def _norm(series: str, label: str) -> str:
+    """The row-key-normalized per-column query: collapse node|member|holder → `n`."""
+    return f'max by (n)(label_replace({series},"n","$1","{label}","(.*)"))'
+
+
+_COMPUTE_COLS: list[Column] = [
+    ("corosync", _norm('cluster_daemon_up{unit="corosync"}', "node"), "up"),
+    ("pacemaker", _norm('cluster_daemon_up{unit="pacemaker"}', "node"), "up"),
+    ("iSCSI", _norm("cluster_iscsi_sessions", "node"), "sessions"),
+    ("fence", _norm("cluster_fence_count", "member"), "clean0"),
+    ("online", _norm("cluster_node_online", "member"), "up"),
+    ("unclean", _norm("cluster_node_unclean", "member"), "clean0"),
+]
+_STORAGE_COLS: list[Column] = [
+    ("resync %", _norm("cluster_drbd_resync_pct", "node"), "sessions"),
+    ("out-of-sync", _norm("cluster_drbd_out_of_sync_bytes", "node"), "clean0"),
+]
+
+
+def render_cluster_dashboard(
+    topo: dict[str, Any], arm: str = "pcmk", ds_uid: str = "prometheus"
+) -> dict[str, Any]:
+    """Assemble the cockpit board: the ② Compute + ③ Storage matrices on a dedicated
+    board with a stable uid. Hero/timeline/logs/① cards land in later PRs."""
+    panels = [
+        matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=0),
+        matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=9),
+    ]
+    return {
+        "uid": "lab-pcmk-cluster", "title": "PCMK Cluster · Infrastructure View",
+        "schemaVersion": 39, "version": 0, "panels": panels,
+        "time": {"from": "now-15m", "to": "now"}, "refresh": "10s",
+        "tags": ["lab", "cockpit", arm],
+    }
