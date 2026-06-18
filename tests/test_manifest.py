@@ -83,6 +83,29 @@ def test_vars_overlay_maps_to_role_var_names(manifests):
     assert ov["mq_exporter_ref"] == "v5.6.4"
 
 
+def test_obs_overlay_reads_shared_manifest(manifests):
+    ov = m.obs_overlay()
+    assert ov["prometheus_version"] == "2.53.2"
+    assert ov["grafana_version"] == "11.1.0"
+    assert ov["mq_exporter_ref"] == "v5.6.4"
+    assert "mq_version" not in ov  # obs-only
+
+
+def test_box_version_pins_keys_by_platform(manifests, monkeypatch):
+    monkeypatch.setattr(
+        m,
+        "_topology",
+        lambda: {
+            "boxes": {
+                "ubuntu2404-arm64": {"box": "cloud-image/ubuntu-24.04"},
+                "rhel96-x86_64": {"box": "rhel/9.6-x86_64"},
+            }
+        },
+    )
+    man = m.load_manifest("distributed-pcmk-ubuntu")  # box cloud-image/ubuntu-24.04
+    assert m.box_version_pins(man) == {"ubuntu2404-arm64": "20260518.0.0"}
+
+
 def test_setup_platforms_reads_topology(manifests, monkeypatch):
     monkeypatch.setattr(
         m,
