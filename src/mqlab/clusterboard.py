@@ -322,6 +322,108 @@ def log_row(loki_uid: str, y: int) -> dict[str, Any]:
     }
 
 
+def _timeseries(
+    title: str,
+    targets: list[dict[str, Any]],
+    ds_uid: str,
+    x: int,
+    y: int,
+    *,
+    w: int = 8,
+    h: int = 7,
+    unit: str | None = None,
+) -> dict[str, Any]:
+    """A timeseries panel from existing node/host metrics (no new telemetry)."""
+    defaults: dict[str, Any] = {}
+    if unit is not None:
+        defaults["unit"] = unit
+    return {
+        "type": "timeseries",
+        "title": title,
+        "datasource": _ds(ds_uid),
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
+        "targets": [{**t, "datasource": _ds(ds_uid)} for t in targets],
+        "fieldConfig": {"defaults": defaults, "overrides": []},
+        "options": {},
+    }
+
+
+_CLUSTER_GROUPS = "pcmk_a|pcmk_b|san_a|san_b"
+
+
+def _t(ref: str, expr: str, legend: str) -> dict[str, Any]:
+    """A timeseries target (range query) with a legend."""
+    return {"refId": ref, "expr": expr, "legendFormat": legend, "range": True}
+
+
+def perf_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """§3 perf from existing metrics: CPU busy%, SAN disk I/O, DRBD (net-wan) throughput."""
+    cpu_busy = (
+        "100 - (avg by (host)(rate("
+        f'node_cpu_seconds_total{{groups=~"{_CLUSTER_GROUPS}", mode="idle"}}[1m]'
+        ")) * 100)"
+    )
+    disk_r = 'rate(node_disk_read_bytes_total{host=~"san-.*"}[1m])'
+    disk_w = 'rate(node_disk_written_bytes_total{host=~"san-.*"}[1m])'
+    wan_rx = 'rate(node_network_receive_bytes_total{device="virbr-wan"}[1m])'
+    wan_tx = 'rate(node_network_transmit_bytes_total{device="virbr-wan"}[1m])'
+    return [
+        _timeseries(
+            "CPU busy % — cluster nodes",
+            [_t("A", cpu_busy, "{{host}}")],
+            ds_uid,
+            0,
+            y,
+            unit="percent",
+        ),
+        _timeseries(
+            "SAN disk I/O",
+            [_t("A", disk_r, "{{host}} read"), _t("B", disk_w, "{{host}} write")],
+            ds_uid,
+            8,
+            y,
+            unit="Bps",
+        ),
+        _timeseries(
+            "DRBD throughput (net-wan)",
+            [_t("A", wan_rx, "rx"), _t("B", wan_tx, "tx")],
+            ds_uid,
+            16,
+            y,
+            unit="Bps",
+        ),
+    ]
+
+
+_CLUSTER_PLANES = "net-hb-a|net-hb-b|net-san-a|net-san-b|net-wan|net-data-a|net-data-b"
+
+
+def net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """§4 network from existing metrics: per-plane state + throughput, scoped to the
+    planes this cluster rides (heartbeat, SAN, WAN replication, data)."""
+    state = f'lab_network_state{{network=~"{_CLUSTER_PLANES}"}}'
+    thru = 'rate(node_network_receive_bytes_total{device=~"virbr-(hb|san|wan|data).*"}[1m])'
+    return [
+        _timeseries(
+            "Cluster network planes — state",
+            [_t("A", state, "{{network}}")],
+            ds_uid,
+            0,
+            y,
+            w=12,
+        ),
+        _timeseries(
+            "Cluster network throughput",
+            [_t("A", thru, "{{device}}")],
+            ds_uid,
+            12,
+            y,
+            w=12,
+            unit="Bps",
+        ),
+    ]
+
+
 def _annotations(ds_uid: str) -> dict[str, Any]:
     return {
         "list": [
@@ -351,6 +453,8 @@ def render_cluster_dashboard(
         matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=16),
         timeline_band(ds_uid, y=25),
         log_row("loki", y=32),
+        *perf_section(ds_uid, y=40),
+        *net_section(ds_uid, y=47),
     ]
     return {
         "uid": "lab-pcmk-cluster",

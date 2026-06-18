@@ -7,6 +7,8 @@ from mqlab.clusterboard import (
     integrity_panel,
     log_row,
     matrix,
+    net_section,
+    perf_section,
     render_cluster_dashboard,
     timeline_band,
 )
@@ -92,6 +94,24 @@ def test_timeline_band_is_a_state_timeline_with_range_queries():
     assert all(t.get("range") for t in p["targets"])  # range over time, not instant
     legends = [t["legendFormat"] for t in p["targets"]]
     assert "nodes online" in legends and "DRBD primary" in legends
+
+
+def test_perf_section_timeseries_from_existing_metrics():
+    ps = perf_section(DS, y=0)
+    assert ps and all(p["type"] == "timeseries" for p in ps)
+    titles = " ".join(p["title"] for p in ps)
+    assert "CPU" in titles and "DRBD" in titles
+    cpu = next(p for p in ps if "CPU" in p["title"])
+    assert "node_cpu_seconds_total" in cpu["targets"][0]["expr"]  # existing metric
+
+
+def test_net_section_per_plane_state_includes_the_wan_replication_plane():
+    ns = net_section(DS, y=0)
+    assert ns and all(p["type"] == "timeseries" for p in ns)
+    state = next(p for p in ns if "state" in p["title"].lower())
+    expr = state["targets"][0]["expr"]
+    assert "lab_network_state" in expr
+    assert "net-wan" in expr  # the DRBD replication plane is in scope
 
 
 def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
