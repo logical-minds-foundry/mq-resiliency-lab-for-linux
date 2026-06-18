@@ -1,0 +1,126 @@
+---
+# Phase-0 spike Task 2 (#246) — CRR config + self-signed TLS, per IBM node
+# 7261515. THROWAWAY. Run AFTER both HA groups are formed
+# (site-nativeha-spike.yml on rdqm_a and rdqm_b).
+#
+#   ansible-playbook ansible/site-nativeha-spike-crr.yml
+#
+# TLS: a single self-signed keystore is created once on cert_origin and copied
+# to all six instances (shared cert => mutual trust) — isolates the CRR
+# *entitlement* question from lab-pki-on-RHEL (a Phase-3 build concern).
+
+# --- Play 1: keystore on every instance (create once, distribute) ---
+- name: CRR TLS keystore (all six instances)
+  hosts: rdqm_a:rdqm_b
+  become: true
+  vars:
+    nha_qm: nhaspike
+    cert_origin: rdqm-a1
+    ks_pw: passw0rd
+  tasks:
+    - name: ssl dir
+      ansible.builtin.file:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/ssl"
+        state: directory
+        owner: mqm
+        group: mqm
+        mode: "0750"
+
+    - name: create the self-signed keystore on the origin (once)
+      run_once: true
+      delegate_to: "{{ cert_origin }}"
+      become_user: mqm
+      ansible.builtin.shell: |
+        set -e
+        cd /var/mqm/qmgrs/{{ nha_qm }}/ssl
+        runmqakm -keydb -create -db keystore.kdb -pw {{ ks_pw }} -stash
+        runmqakm -cert -create -db keystore.kdb -pw {{ ks_pw }} \
+          -label selfsigned -dn "CN={{ nha_qm }}" -size 2048
+      args:
+        creates: "/var/mqm/qmgrs/{{ nha_qm }}/ssl/keystore.kdb"
+
+    - name: fetch keystore files from the origin to the controller
+      run_once: true
+      delegate_to: "{{ cert_origin }}"
+      ansible.builtin.fetch:
+        src: "/var/mqm/qmgrs/{{ nha_qm }}/ssl/keystore.{{ item }}"
+        dest: "/tmp/nhaspike-ks/keystore.{{ item }}"
+        flat: true
+      loop: [kdb, sth, rdb, crl]
+
+    - name: distribute the keystore to every instance
+      ansible.builtin.copy:
+        src: "/tmp/nhaspike-ks/keystore.{{ item }}"
+        dest: "/var/mqm/qmgrs/{{ nha_qm }}/ssl/keystore.{{ item }}"
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      loop: [kdb, sth, rdb, crl]
+
+# --- Play 2: Live group CRR config (rdqm_a) ---
+- name: CRR config — Live group
+  hosts: rdqm_a
+  become: true
+  become_user: mqm
+  vars:
+    nha_qm: nhaspike
+    peer_group: rdqm_b
+  tasks:
+    - name: Live NativeHALocalInstance + NativeHARecoveryGroup
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             CipherSpec=ANY_TLS12
+             CertificateLabel=selfsigned
+             KeyRepository=/var/mqm/qmgrs/{{ nha_qm }}/ssl/keystore
+             GroupName=Live
+             GroupRole=live
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Recovery
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=Yes
+
+# --- Play 3: Recovery group CRR config (rdqm_b) ---
+- name: CRR config — Recovery group
+  hosts: rdqm_b
+  become: true
+  become_user: mqm
+  vars:
+    nha_qm: nhaspike
+    peer_group: rdqm_a
+  tasks:
+    - name: Recovery NativeHALocalInstance + NativeHARecoveryGroup
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             CipherSpec=ANY_TLS12
+             CertificateLabel=selfsigned
+             KeyRepository=/var/mqm/qmgrs/{{ nha_qm }}/ssl/keystore
+             GroupName=Recovery
+             GroupRole=Recovery
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Live
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=No
+
+# --- Play 4: restart all instances to pick up CRR + TLS ---
+- name: restart Native HA instances (Recovery first, then Live)
+  hosts: rdqm_b:rdqm_a
+  become: true
+  order: inventory
+  serial: 3
+  vars:
+    nha_qm: nhaspike
+  tasks:
+    - name: restart mqmonitor@
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ nha_qm }}"
+        state: restarted
