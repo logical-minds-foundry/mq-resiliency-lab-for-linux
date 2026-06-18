@@ -742,47 +742,83 @@ vrg-commit --type feat --scope manifest --message "mqlab: thread manifest select
 
 - [ ] **Step 1: Write the gather play**
 
-`ansible/gather-versions.yml` (one play per group; each registers a command and writes its line into a fact aggregated on localhost). Minimal shape:
+`ansible/gather-versions.yml` — one play per role-group; each host stashes a `gathered` dict, and a final localhost play merges them (builtin `combine` in a loop — no custom filter) and writes `build/versions.json`. `mqlab` runs this **limited to the active setup's groups**, so only running hosts are targeted (no unreachable-host noise) and absence-by-design is never probed. Any genuine probe failure fails the play (no silent `''`).
 ```yaml
 ---
-- hosts: pcmk_a:rdqm_a:dtcc
+- hosts: pcmk_a:rdqm_a            # QM + HA nodes (ubuntu apt OR rhel bundled — same probes)
   gather_facts: false
   tasks:
-    - name: MQ version
-      ansible.builtin.command: dspmqver -b -f 2
-      register: mqver
-      changed_when: false
-    - name: kernel
-      ansible.builtin.command: uname -r
-      register: kern
+    - { name: mq,        ansible.builtin.command: dspmqver -b -f 2,     register: p_mq,   changed_when: false }
+    - { name: pacemaker, ansible.builtin.command: pacemakerd --version, register: p_pcmk, changed_when: false }
+    - { name: corosync,  ansible.builtin.command: corosync -v,          register: p_coro, changed_when: false }
+    - { name: drbd,      ansible.builtin.command: drbdadm --version,     register: p_drbd, changed_when: false }
+    - { name: kernel,    ansible.builtin.command: uname -r,             register: p_kern, changed_when: false }
+    - name: os
+      ansible.builtin.shell: '. /etc/os-release && echo "$NAME $VERSION_ID"'
+      register: p_os
       changed_when: false
     - name: stash
       ansible.builtin.set_fact:
-        gathered: { "mq": "{{ mqver.stdout }}", "kernel": "{{ kern.stdout }}" }
+        gathered:
+          mq: "{{ p_mq.stdout }}"
+          pacemaker: "{{ p_pcmk.stdout_lines[0] }}"
+          corosync: "{{ p_coro.stdout_lines[0] }}"
+          drbd: "{{ p_drbd.stdout_lines[0] }}"
+          kernel: "{{ p_kern.stdout }}"
+          os: "{{ p_os.stdout }}"
 
-- hosts: obs_box
+- hosts: dtcc                     # counterparty QM host (no pacemaker)
   gather_facts: false
   tasks:
-    - name: grafana
-      ansible.builtin.command: grafana-server -v
-      register: gver
+    - { name: mq,     ansible.builtin.command: dspmqver -b -f 2, register: d_mq,   changed_when: false }
+    - { name: kernel, ansible.builtin.command: uname -r,        register: d_kern, changed_when: false }
+    - name: stash
+      ansible.builtin.set_fact:
+        gathered: { mq: "{{ d_mq.stdout }}", kernel: "{{ d_kern.stdout }}" }
+
+- hosts: obs_box                  # grafana/prometheus/loki/alloy
+  gather_facts: false
+  tasks:
+    - { name: grafana,    ansible.builtin.command: grafana-server -v,                   register: o_graf, changed_when: false }
+    - { name: prometheus, ansible.builtin.command: prometheus --version, register: o_prom, changed_when: false }
+    - { name: loki,       ansible.builtin.command: loki --version,       register: o_loki, changed_when: false }
+    - { name: alloy,      ansible.builtin.command: alloy --version,      register: o_allo, changed_when: false }
+    - name: stash
+      ansible.builtin.set_fact:
+        gathered:
+          grafana: "{{ o_graf.stdout_lines[0] }}"
+          prometheus: "{{ (o_prom.stdout + o_prom.stderr).split('\n')[0] }}"
+          loki: "{{ (o_loki.stdout + o_loki.stderr).split('\n')[0] }}"
+          alloy: "{{ (o_allo.stdout + o_allo.stderr).split('\n')[0] }}"
+
+- hosts: probe                    # node_exporter + mq-metric-samples exporter
+  gather_facts: false
+  tasks:
+    - { name: node_exporter, ansible.builtin.command: node_exporter --version, register: pr_ne, changed_when: false }
+    - name: mq_metric_samples build (binary + git sha)
+      ansible.builtin.shell: 'mq_prometheus --version 2>&1 | head -1; git -C /usr/local/src/mq-metric-samples rev-parse --short HEAD'
+      register: pr_mqms
       changed_when: false
     - name: stash
       ansible.builtin.set_fact:
-        gathered: { "grafana": "{{ gver.stdout }}" }
+        gathered:
+          node_exporter: "{{ (pr_ne.stdout + pr_ne.stderr).split('\n')[0] }}"
+          mq_metric_samples: "{{ pr_mqms.stdout_lines | join(' ') }}"
 
 - hosts: localhost
   gather_facts: false
   tasks:
-    - name: merge + write build/versions.json
+    - name: merge gathered facts from every probed host
+      ansible.builtin.set_fact:
+        all_versions: "{{ all_versions | default({}) | combine(hostvars[item].gathered | default({})) }}"
+      loop: "{{ groups['all'] | difference(['localhost']) }}"
+    - name: write build/versions.json
       ansible.builtin.copy:
         dest: "{{ playbook_dir }}/../build/versions.json"
-        content: "{{ hostvars | dict2items
-                      | selectattr('value.gathered', 'defined')
-                      | map(attribute='value.gathered') | list
-                      | combine_list | to_nice_json }}"
+        content: "{{ all_versions | to_nice_json }}\n"
+        mode: "0644"
 ```
-Extend the per-group tasks to cover pacemaker/corosync/drbd (`pacemakerd --version`, `corosync -v`, `drbdadm --version`), the obs OSS components, and the mq-metric-samples build on `probe`, each on its owning group. (`combine_list` = a tiny filter, or fold with a loop in the localhost play — implement with `combine` over the list.)
+Notes for the functional gate: confirm each binary is on `PATH` for the probe (the obs roles unpack to a versioned dir — adjust the command path if `--version` isn't found); several `--version` tools print to **stderr** (handled above by concatenating `stdout + stderr`); `mqlab` invokes this with `ansible-playbook gather-versions.yml --limit <active-setup-groups>` so empty/other-arm groups are simply not run.
 
 - [ ] **Step 2: Functional gate** (human-run): `ansible-playbook gather-versions.yml` against a running setup writes `build/versions.json` with MQ/HA/kernel/obs versions; a down host fails loud (not a silent blank). `vrg-validate` green.
 
@@ -820,9 +856,19 @@ def test_capture_metadata_includes_manifest() -> None:
     )
     assert md.manifest == "distributed-pcmk-ubuntu/default"
     assert md.versions == {"mq": "9.4.5.0"}
+
+
+def test_config_digest_is_manifest_sensitive(tmp_path) -> None:
+    from mqlab.runreport import read_config_digest
+
+    man = tmp_path / "sel.yaml"
+    man.write_text("manifest: default\n")
+    before = read_config_digest([man])
+    man.write_text("manifest: repro-945\n")
+    assert read_config_digest([man]) != before  # digest tracks the pinned manifest
 ```
 
-- [ ] **Step 2: Run, verify fail** — `uv run pytest tests/test_runreport.py -q` → FAIL (`manifest_reader` / `manifest` unknown).
+- [ ] **Step 2: Run, verify fail** — `uv run pytest tests/test_runreport.py -q` → FAIL (`manifest_reader` / `manifest` unknown; the digest test passes once the path is wired in step 4).
 
 - [ ] **Step 3: Implement** — in `src/mqlab/runreport.py`:
 
@@ -875,9 +921,19 @@ def read_versions() -> dict[str, str]:  # pragma: no cover - shells out / reads 
 ```
 (Add `from mqlab.paths import repo_root` and ensure `json` is imported.)
 
-Update every existing `capture_metadata(...)` call site (grep `capture_metadata(`) to pass `manifest_reader=` (real impl reads the pinned selection via `mqlab.manifest.read_selection`).
+Update the existing `capture_metadata(...)` call site at `cli.py:1087` to pass `manifest_reader=` (real impl reads the pinned selection via `mqlab.manifest.read_selection`, formatted as `<setup>/<name>`).
 
-- [ ] **Step 4: Run, verify pass** — `uv run pytest tests/test_runreport.py -q` → PASS (existing + new). `vrg-validate` green (100% branch coverage — the new `read_versions` branch is `# pragma: no cover`, consistent with the existing readers).
+**Bind the manifest into `config_digest` (§5.4 / §7).** That call site's `digest_reader` calls `read_config_digest([...])` at `cli.py:1091`. Add the pinned manifest path to the hashed list so the report's `config_digest` changes whenever the manifest changes:
+```python
+from mqlab.paths import selection_state_path  # add to cli.py imports
+
+        digest_reader=lambda: read_config_digest(
+            [*existing_config_paths, selection_state_path(setup_name)]
+        ),
+```
+`read_config_digest` hashes file bytes and is already content-sensitive (proven by `test_config_digest_is_manifest_sensitive`), so including the pinned-selection path is the whole binding — the report is now cryptographically tied to the exact pinned stack.
+
+- [ ] **Step 4: Run, verify pass** — `uv run pytest tests/test_runreport.py -q` → PASS (existing + new, incl. the digest-sensitivity test). `vrg-validate` green (100% branch coverage — the new `read_versions` branch is `# pragma: no cover`, consistent with the existing readers).
 
 - [ ] **Step 5: Commit**
 ```bash
@@ -914,7 +970,7 @@ Expected: `build/versions.json` MQ/obs versions equal the manifest pins; HA/kern
 
 ## Self-Review
 
-**Spec coverage:** §3 architecture → Tasks 1,7,9; §4 manifest (two namespaces, selection, persistence, arch) → Tasks 1,3,4,7; §5 drive wiring (overlay, box, MQ acquire, digest) → Tasks 1,2,5,6,7; §5.1 acquisition → Task 2; §6 discover (topology-aware) → Task 8; §7 reporting (versions + manifest id) → Task 9; §9 testing → per-task TDD + Task 10 gate; §10/§11 → out of scope / resolved in spec. **Gap noted:** §5.4 "manifest in `config_digest`" — the resolved overlay/selection already lives under `build/` and the report's `config_digest` hashes the generated config set; fold the overlay path into that hashed set at the `capture_metadata` call site (Task 9 step 3) — call out explicitly when wiring the real `digest_reader`.
+**Spec coverage:** §3 architecture → Tasks 1,7,9; §4 manifest (two namespaces, selection, persistence, arch) → Tasks 1,3,4,7; §5 drive wiring (overlay, box, MQ acquire, digest) → Tasks 1,2,5,6,7; §5.1 acquisition → Task 2; §5.4 / §7 `config_digest` binding → Task 9 step 3 (with `test_config_digest_is_manifest_sensitive`); §6 discover (topology-aware, full component set) → Task 8; §7 reporting (versions + manifest id) → Task 9; §9 testing → per-task TDD + Task 10 gate; §10/§11 → out of scope / resolved in spec. **Alignment (2026-06-18):** §5.1 MQ-vs-RHEL conflation corrected in the spec; `config_digest` binding promoted from a self-review note to a concrete Task 9 step + test; Task 8 fleshed out to the full §6 component set.
 
 **Placeholder scan:** the `<from …>` / `<current …>` tokens in Task 4 are *data to read from the live roles/box in step 1*, not code placeholders — each step says where to get the exact value. The `_apply_manifest` selection ternary in Task 7 is deliberately flagged for simplification at implementation (the note spells out the rule: `resolve_selection(setup, requested or "default")` at create, `requested` passed through downstream).
 

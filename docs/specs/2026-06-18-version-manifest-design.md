@@ -78,7 +78,7 @@ manifests/_shared/observability.yaml  (obs stack — read by `mqlab obs up`)
         ▼
    mqlab orchestrator ──► Ansible vars overlay (version pins)
         │              ──► Vagrant box / box_version (OS + kernel)
-        │              ──► build/mq/<tarball>: acquire (cache → download → fail-only-if-RHEL) + verify .sha256
+        │              ──► build/mq/<tarball>: acquire (cache → download → fail-if-fetch-fails) + verify .sha256
         │              ──► config_digest (manifest(s) hashed in)
         ▼
    provisioned guests
@@ -167,13 +167,16 @@ Then `mqlab`:
 ### 5.1 MQ artifact acquisition (cache → download → fail-only-if-unfetchable)
 
 A pinned `(version × arch)` is a byte-identical, immutable artifact, so it is safely
-cacheable. `mqlab` resolves `mq.version` to a present tarball by:
+cacheable. The MQ **Advanced for Developers** tarball is freely downloadable for
+**every** arch we use, so `mqlab` resolves `mq.version` to a present tarball by:
 
 - **cache hit** → use the local copy (fast, offline);
-- **miss, and downloadable** (MQ **Advanced for Developers** is freely downloadable) →
-  download it (and populate the cache if one is configured);
-- **miss, and genuinely un-fetchable** (the **RHEL box** needs a Red Hat developer
-  login) → **then** fail loud, naming the artifact and where to place it.
+- **miss** → download it (and populate the cache if one is configured); **fail loud
+  only if the download itself fails**, naming the artifact and where to place it.
+
+The genuinely un-fetchable artifact is the **RHEL OS box** (it needs a Red Hat
+developer login) — that is the *OS box* layer's concern (Vagrant + the general cache,
+#269), **not** MQ acquisition, which therefore has **no RHEL special-case**.
 
 On acquire, **verify the sibling `.sha256`** (the repo already keeps one next to the
 MQ tarball). This is *integrity*, not version-reconciliation — it catches a corrupt or
@@ -271,8 +274,9 @@ now with version coordinates.
    per-consumer table; MQ tarball, `box_version`, grafana apt-pin, and `mqlab`
    extra-vars threading are genuine work (§5).
 3. **MQ "fail loud if absent" was wrong** — MQ Advanced for Developers is freely
-   downloadable; acquisition is cache → download → fail-only-if-RHEL, with `.sha256`
-   verified on acquire (§5.1). The general artifact cache spun out as **#269**.
+   downloadable (every arch); acquisition is cache → download → fail-if-fetch-fails,
+   with `.sha256` verified on acquire (§5.1). The RHEL-box-needs-login caveat belongs
+   to the OS box layer, not MQ. The general artifact cache spun out as **#269**.
 4. **Manifest selection wasn't threaded across the build lifecycle** — pinned into lab
    state at `create`, auto-threaded, mid-lifecycle change is an explicit error (§4).
 5. **Discovery needed host-targeting** — made topology-aware, with expected-absence
