@@ -606,14 +606,14 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
             _nativeha_instance_cols("nha-rhel-a.*"),
             ds_uid,
             y=10,
-            h=5,
+            h=7,  # 3 instance rows + header — h=5 clipped the 3rd row (a3/b3)
         ),
         matrix(
             "② Instances — Recovery (site B)",
             _nativeha_instance_cols("nha-rhel-b.*"),
             ds_uid,
-            y=15,
-            h=5,
+            y=17,
+            h=7,
         ),
     ]
     return {
