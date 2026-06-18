@@ -5,6 +5,7 @@ from mqlab.clusterboard import (
     fold_side,
     hero_tiles,
     integrity_panel,
+    log_row,
     matrix,
     render_cluster_dashboard,
     timeline_band,
@@ -91,6 +92,15 @@ def test_timeline_band_is_a_state_timeline_with_range_queries():
     assert all(t.get("range") for t in p["targets"])  # range over time, not instant
     legends = [t["legendFormat"] for t in p["targets"]]
     assert "nodes online" in legends and "DRBD primary" in legends
+
+
+def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
+    p = log_row("loki", y=0)
+    assert p["type"] == "logs"
+    assert p["datasource"] == {"type": "loki", "uid": "loki"}
+    expr = p["targets"][0]["expr"]
+    assert 'host=~"pcmk-' in expr  # scoped to cluster nodes
+    assert "warn" in expr.lower()  # severity filter (WARN+)
 
 
 def test_board_annotations_are_holder_agnostic():

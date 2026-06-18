@@ -297,6 +297,29 @@ def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
     }
 
 
+def log_row(loki_uid: str, y: int) -> dict[str, Any]:
+    """The embedded live log row: cluster-node journald units, severity-filtered (WARN+).
+    The matrix shows *what* changed; this shows *why*, on one screen (§6.5)."""
+    ds = {"type": "loki", "uid": loki_uid}
+    expr = (
+        '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"}'
+        " |~ `(?i)warn|error|fail|fenc|split-brain`"
+    )
+    return {
+        "type": "logs",
+        "title": "▤ Cluster logs (WARN+)",
+        "datasource": ds,
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
+        "targets": [{"refId": "A", "expr": expr, "datasource": ds}],
+        "options": {
+            "showTime": True,
+            "sortOrder": "Descending",
+            "enableLogDetails": True,
+            "wrapLogMessage": False,
+        },
+    }
+
+
 def _annotations(ds_uid: str) -> dict[str, Any]:
     return {
         "list": [
@@ -325,6 +348,7 @@ def render_cluster_dashboard(
         matrix("② Compute — node × component", _COMPUTE_COLS, ds_uid, y=7),
         matrix("③ Storage — DRBD / SAN", _STORAGE_COLS, ds_uid, y=16),
         timeline_band(ds_uid, y=25),
+        log_row("loki", y=32),
     ]
     return {
         "uid": "lab-pcmk-cluster",
