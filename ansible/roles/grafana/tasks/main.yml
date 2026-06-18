@@ -68,11 +68,11 @@
     content: |
       [Service]
       Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
-{% if grafana_anonymous | bool %}
+      {% if grafana_anonymous | bool %}
       Environment=GF_AUTH_ANONYMOUS_ENABLED=true
       Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
-{% endif %}
+      {% endif %}
   notify: restart grafana
 
 - name: enable + start grafana
