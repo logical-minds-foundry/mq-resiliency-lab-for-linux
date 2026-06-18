@@ -61,13 +61,18 @@
     state: directory
     mode: "0755"
 
-- name: inject the admin password via a systemd env drop-in (never committed)
+- name: grafana env drop-in — admin password (+ anonymous access in the lab, #258)
   ansible.builtin.copy:
     dest: /etc/systemd/system/grafana-server.service.d/admin.conf
     mode: "0600"
     content: |
       [Service]
       Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+{% if grafana_anonymous | bool %}
+      Environment=GF_AUTH_ANONYMOUS_ENABLED=true
+      Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
+{% endif %}
   notify: restart grafana
 
 - name: enable + start grafana

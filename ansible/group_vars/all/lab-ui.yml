@@ -1,0 +1,10 @@
+# Lab web-UI convenience (#255/#258). The human-facing browser UIs are opened
+# login-free for this disposable, isolated lab — pure convenience, no real data.
+#
+# IMPORTANT: this opens ONLY the human UIs. The mqweb REST API stays AUTHENTICATED
+# (it is the tooling/code surface — mqlab, pymqrest, the instrumentation that drives
+# the queue managers — part of what we instrument about the 3+3). The roles default
+# both of these to false (secure); this lab-wide file opts in. LAB ONLY — never carry
+# these to a real deployment.
+mqweb_console_anonymous: true   # MQ Console (browser) loads with no login; REST unchanged
+grafana_anonymous: true         # Grafana grants anonymous Admin + hides the login form
