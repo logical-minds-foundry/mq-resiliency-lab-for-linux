@@ -463,9 +463,12 @@ def _annotations(ds_uid: str) -> dict[str, Any]:
     return {
         "list": [
             {
-                "name": "owner change",
+                # always-on, no top-bar toggle (enable+hide): a QM failover is always
+                # worth marking, and the toggle just confused (#219 feedback).
+                "name": "QM failover (owner change)",
                 "datasource": _ds(ds_uid),
                 "enable": True,
+                "hide": True,
                 "iconColor": "orange",
                 "expr": _OWNER_CHANGE_EXPR,
                 "step": "10s",

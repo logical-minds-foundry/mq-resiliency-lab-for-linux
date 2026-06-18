@@ -138,6 +138,8 @@ def test_board_annotations_are_holder_agnostic():
     # holder-agnostic: counts owners per resource, never the holder-labelled series
     assert "count by (resource)(cluster_resource_owner)" in owner["expr"]
     assert "holder" not in owner["expr"]
+    # always-on with no top-bar toggle (#219 feedback)
+    assert owner["enable"] is True and owner["hide"] is True
 
 
 def test_board_has_uid_hero_integrity_and_the_two_matrices():
