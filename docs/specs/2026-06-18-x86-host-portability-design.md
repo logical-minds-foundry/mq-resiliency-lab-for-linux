@@ -6,6 +6,13 @@
 - **Supersedes assumptions in:** `docs/reports/2026-06-06-phase-a-provider-spike.md`
   (the arm64-host provider mechanics it established remain correct; this spec
   generalises the *selection* of those mechanics to the actual host arch).
+- **Builds on (does not duplicate):** the version-manifest subsystem #266
+  (`docs/specs/2026-06-18-version-manifest-design.md`; commits #278/#280). That
+  work already owns *versioned MQ artifact acquisition* — `manifest._ARCH_SUFFIX`
+  (platform→tarball arch), `manifest.tarball_name()`, `manifest.setup_platforms()`,
+  and `artifact.ensure_mq_tarballs()` (per-platform cache→download→verify). This
+  spec **integrates with** that machinery (see D6 and §7) instead of building a
+  parallel fetcher. The feature branch was rebased onto #266 before planning.
 
 ## 1. Problem
 
@@ -28,22 +35,29 @@ the x86 target nothing is emulated, which is the whole reason to support x86.
 2. **Default guest arch** — `lab/topology.yaml:21` (`defaults.platform:
    ubuntu2404-arm64`) and `src/mqlab/fleet.py:19` (`DEFAULT_PLATFORM`) default
    every non-RHEL node to arm64.
-3. **MQ artifacts (three sites)** — every one of these pins the arm64 Ubuntu
-   tarball / `.deb` path:
-   - `scripts/fetch-mq.sh` — fetches only `UbuntuLinuxARM64`;
-   - `ansible/roles/mq-install/tasks/main.yml` — server set, arm64 tar;
+3. **MQ artifacts — the arch *suffix* is still arm64-pinned in three sites** even
+   after #266 templated the version (`{{ mq_version }}`):
+   - `scripts/fetch-mq.sh` — the bulk downloader; fetches only `UbuntuLinuxARM64`
+     (the code-level `cli._fetch_mq_tarball` is a manual-placement stub that
+     raises, so this script is still how `build/mq/` actually gets populated);
+   - `ansible/roles/mq-install/tasks/main.yml` — server set, `…UbuntuLinuxARM64…`;
    - `ansible/roles/mq-client/tasks/main.yml` — the `app-client` client set,
-     arm64 tar. **This one is easy to miss** and would break the app path on
-     x86. The implementation must not trust this hand list: it **greps the repo
-     for `UbuntuLinuxARM64`** (and any `Ubuntu*ARM64`) and fixes every hit, so a
-     fourth site cannot hide.
+     `…UbuntuLinuxARM64…`. **This one is easy to miss** and would break the app
+     path on x86. The implementation must not trust this hand list: it **greps the
+     repo for `UbuntuLinuxARM64`** (and any `Ubuntu*ARM64`) and fixes every hit, so
+     a fourth site cannot hide.
+
+   Note: `manifest._ARCH_SUFFIX` *maps* platform→suffix correctly per platform but
+   only knows `ubuntu2404-arm64 → UbuntuLinuxARM64`; it gains an `ubuntu2404-x86_64`
+   entry here (§7). The roles above don't consult the manifest — they pin the
+   suffix literally — so they still need the arch fix.
 
 Already arch-neutral (no change needed): the observability roles
 (Prometheus/Loki/Alloy/node-exporter) all branch on `ansible_architecture`; the
-RHEL box builder. The topology box registry's box entries are *arch-tagged*
-today (the mechanism is sound) — but the registry itself **is modified** by this
-spec (§4.2): it gains the x86_64 Ubuntu box and the logical-platform
-indirection.
+RHEL box builder; the `cloud-image/ubuntu-24.04` box itself (its Vagrant-Cloud
+entry already ships a `libvirt` provider for **both** `amd64` and `arm64`, so the
+**box name does not change** — see §4.2). The topology box *registry* is still
+modified by this spec: it gains a concrete `ubuntu2404-x86_64` platform entry.
 
 ## 2. Decisions
 
@@ -60,13 +74,23 @@ These were settled during brainstorming (2026-06-18) and bound the design:
   has no usable `/dev/kvm`, the lab refuses to run. There is **no TCG opt-in** for
   the native arch. The only remaining TCG is foreign-arch guests on the dev Mac
   (RHEL x86_64 on arm64) — intrinsic, unavoidable, and unchanged.
-- **D4 — arm64-on-x86 is unreachable and guarded.** No arch-pinned arm64 platform
-  exists, so the only arm64 platform (logical `ubuntu2404`) can never resolve to
-  arm64 on an x86 host. If that combination is ever requested, preflight fails
-  loud — we do not emulate ARM on x86.
+- **D4 — arm64-on-x86 is unreachable and guarded.** The host-dependent default
+  platform never selects `ubuntu2404-arm64` on an x86 host (it selects
+  `ubuntu2404-x86_64`), and `rhel96-x86_64` is x86_64. So no node ever resolves to
+  an arm64 guest on an x86 host. If that combination is ever requested anyway,
+  resolution fails loud — we do not emulate ARM on x86.
 - **D5 — Preflight diagnoses, it does not install.** Outside Vergil, a sanity-check
   verifies host prerequisites and *suggests* distro install commands. It never
   runs them; a `--fix` that installs is explicitly deferred.
+- **D6 — Integrate with the version-manifest subsystem (#266), don't duplicate
+  it.** Platform strings stay **arch-explicit** (`ubuntu2404-arm64`,
+  `ubuntu2404-x86_64`) so `manifest._ARCH_SUFFIX`/`setup_platforms`/
+  `artifact.ensure_mq_tarballs` keep working unchanged. Native-preferred is
+  expressed as a **host-dependent default platform**, not a logical-platform
+  sentinel — making `fleet.lab_guests()` host-aware makes the whole manifest
+  acquisition chain (`setup_platforms → tarball_name → ensure_mq_tarballs`) pick
+  the host's arch automatically. The Vagrantfile keeps reading the manifest's
+  `build/box-versions.json`; this spec only replaces its `case arch` block.
 
 ### 2.1 Non-goals
 
@@ -97,10 +121,10 @@ dataclass plus a `probe()` that fills it:
 - `kvm` — `/dev/kvm` exists and is readable+writable.
 - `distro_family` — from `/etc/os-release` `ID`/`ID_LIKE`: `apt` (ubuntu/debian) or
   `dnf` (rhel/almalinux/fedora). Used only for preflight install suggestions.
-- `in_vergil` — heuristic marker that we are inside the managed Vergil base VM.
-  **The canonical marker is to be confirmed during planning** — candidates are a
-  Vergil sentinel file or a `vrg-*` wrapper on `PATH`. We will not guess one in
-  code; the spike picks a real, documented signal.
+- `in_vergil` — whether we are inside the managed Vergil base VM. **Confirmed
+  marker: the `/etc/vergil` sentinel file exists** (corroborated in the live dev
+  VM by the Lima virtiofs mounts and the `lima-vergil-user-…` hostname; the file
+  is the stable, explicit signal we key on).
 
 `probe()` is the only function that touches the real host. Everything else takes a
 `HostFacts` value as input, so the full matrix is unit-testable with no hardware.
@@ -109,19 +133,30 @@ dataclass plus a `probe()` that fills it:
 
 Pure function `resolve(topology, facts) -> dict[str, ResolvedNode]`. This is the
 authority named in D2. `ResolvedNode` carries every field the Vagrantfile needs:
-`box, arch, driver, loader, nvram, cpu_mode, input, boot_timeout, extra_disk,
-dvd, nics`.
+`platform, box, arch, driver, machine_arch, machine_type, loader, nvram,
+input_bus, cpu_mode, boot_timeout, cpus, memory, extra_disk, dvd, nics` (it keeps
+`platform` so the Vagrantfile can still index the manifest's
+`build/box-versions.json` by platform — D6).
 
-**Logical platforms** replace hardcoded-arch ones in the topology box registry:
+**Arch-explicit platforms + a host-dependent default** (D6 — not a logical
+sentinel). The topology box registry keeps concrete, arch-tagged platforms and
+gains one entry:
 
-- `ubuntu2404` (logical) → the arm64 Ubuntu box on an arm64 host, the x86_64 Ubuntu
-  box on an x86_64 host. `defaults.platform` and `fleet.DEFAULT_PLATFORM` become
-  `ubuntu2404`.
+- `ubuntu2404-arm64` → `{box: cloud-image/ubuntu-24.04, arch: aarch64}` (today).
+- `ubuntu2404-x86_64` → `{box: cloud-image/ubuntu-24.04, arch: x86_64}` (**new**;
+  same box — that box ships both `libvirt` arch variants, **confirmed** against
+  Vagrant Cloud, so no new box and Vagrant's host-arch default already pulls the
+  matching variant).
 - `rhel96-x86_64` stays pinned x86_64 (unchanged).
 
-The box registry gains the x86_64 Ubuntu box entry. **The exact box name and the
-matching x86_64 Ubuntu MQ deb tarball name are to be verified against their
-sources during planning — they will not be assumed here.**
+Native-preferred is then a pure `default_platform(facts)` → `ubuntu2404-arm64` on
+an arm64 host, `ubuntu2404-x86_64` on an x86_64 host. `fleet.lab_guests()` applies
+it (replacing the static `defaults.platform` / `fleet.DEFAULT_PLATFORM`), so every
+node that doesn't pin a platform tracks the host — and, via D6, the manifest
+artifact chain follows automatically.
+
+The matching x86_64 Ubuntu MQ deb tarball name is **confirmed**:
+`…-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz` (HTTP 200 on the IBM CDN).
 
 **The resolution matrix** — every provider field is a function of
 `(guest_arch, host_arch, kvm)`:
@@ -145,11 +180,15 @@ needs x86-64-v2; sub-v2 models boot the kernel then hang early userspace
 ### 4.3 Handoff to the Vagrantfile
 
 Ruby cannot import the Python resolver, so mqlab renders
-`build/lab/topology.resolved.yaml` — the same pattern as `inventory.py` rendering
-`build/inventory.ini`. The Vagrantfile loads the resolved file and applies each
-node's fields verbatim; its `case platform.arch` block is **deleted**. If the
-resolved file is absent or stale, the Vagrantfile fails loud, naming the mqlab
-command that produces it.
+`build/lab/topology.resolved.yaml` — the same "mqlab renders a `build/*` file the
+Vagrantfile reads" pattern that #266 established with `build/box-versions.json`.
+The Vagrantfile loads the resolved file and applies each node's fields verbatim;
+its `case platform.arch` block (lines 42–62) is **deleted**. It **keeps** reading
+`build/box-versions.json` for the per-platform box-version pin (#266) — that
+mechanism is untouched; each `ResolvedNode` carries its concrete `platform` so the
+existing `box_versions[platform]` lookup still works. If the resolved file is
+absent or stale, the Vagrantfile fails loud, naming the mqlab command that
+produces it.
 
 **The resolved file is a precondition of *every* `vagrant` invocation, not just
 `up`/`create`.** The Vagrantfile is loaded by every subcommand, and `cli.py`
@@ -165,42 +204,49 @@ of responsibility.
 ## 5. Components & data flow
 
 ```
-hostfacts.probe() ─┐
-                   ├─► platforms.resolve(topo, facts) ─► ResolvedNode per guest
-topology.yaml ─────┘                                      │
-                                                          ├─► render build/lab/topology.resolved.yaml ─► Vagrantfile (dumb consumer)
-                                                          ├─► fleet status (shows resolved arch)
-                                                          └─► fetch-mq target set (which OS × arch artifacts)
+hostfacts.probe() ─┬─► default_platform(facts) ─► fleet.lab_guests() ─► manifest.setup_platforms ─► artifact.ensure_mq_tarballs (#266)
+                   │                                      └─► vmstatus
+                   └─► platforms.resolve(topo, facts) ─► ResolvedNode per guest
+topology.yaml ─────────────────────────────────────────────┐
+                                                            ├─► render build/lab/topology.resolved.yaml ─► Vagrantfile (+ box-versions.json, #266)
+                                                            └─► doctor preflight
 ```
 
 | Unit | Responsibility | Depends on |
 |------|----------------|------------|
-| `hostfacts.py` | Probe + normalise host (arch, kvm, distro, in-Vergil) | OS / filesystem |
-| `platforms.py` | Pure resolver: `(topo, facts) → ResolvedNode` | nothing (pure) |
-| resolved-topology renderer | Write `build/lab/topology.resolved.yaml` | `platforms`, `hostfacts`, `paths` |
+| `hostfacts.py` | Probe + normalise host (arch, kvm, distro, in-Vergil via `/etc/vergil`) | OS / filesystem |
+| `platforms.py` | Pure resolver `(topo, facts) → ResolvedNode` + `default_platform(facts)` | nothing (pure) |
+| resolved-topology renderer | Write `build/lab/topology.resolved.yaml`; `ensure_resolved()` | `platforms`, `hostfacts`, `paths` |
 | `doctor` (preflight) | Checklist + suggestions; exit non-zero on hard fail | `hostfacts`, tool/artifact probes |
-| `Vagrantfile` | Apply resolved fields; fail loud if file missing | resolved file |
-| `fetch-mq.sh` / `mq-install` / `mq-client` | Arch-correct MQ artifact | resolved arch / `ansible_architecture` |
-| `topology.yaml` | Logical platform + x86_64 Ubuntu box | — |
+| `Vagrantfile` | Apply resolved fields (+ `box-versions.json`); fail loud if resolved file missing | resolved file, box-versions.json |
+| `fetch-mq.sh` / `mq-install` / `mq-client` | Arch-correct MQ artifact | host arch / `ansible_architecture` |
+| `manifest._ARCH_SUFFIX` (#266) | platform→tarball arch | gains `ubuntu2404-x86_64` entry |
+| `fleet.lab_guests()` | name→platform, **now host-aware default** | `default_platform(facts)` |
+| `topology.yaml` | `ubuntu2404-x86_64` platform entry | — |
 
 ### 5.1 Topology-consumer audit (bounding the blast radius)
 
-Making `ubuntu2404` a *logical* platform changes the **shape** of the `boxes:`
-registry (a logical platform needs per-arch sub-entries or a resolution
-indirection) and means `defaults.platform` is no longer a concrete box key.
-Twelve modules read `lab/topology.yaml` today: `arms`, `cli`, `dashboard`,
-`fleet`, `guestsel`, `inventory`, `netstate`, `parity`, `roster`, `scrape`,
-`setups`, `vmstatus`. Most need only names / IPs / groups / setups and are
-unaffected — but the implementation **must audit all twelve** and classify each:
+The host-dependent default means `fleet.lab_guests()` is no longer a pure function
+of `topology.yaml` — it now folds in `default_platform(facts)`. Its consumers
+therefore inherit host-awareness and must be checked. Modules that read
+`lab/topology.yaml` and/or `lab_guests()`: `arms`, `cli`, `dashboard`, `fleet`,
+`guestsel`, `inventory`, `netstate`, `parity`, `roster`, `scrape`, `setups`,
+`vmstatus`, plus the #266 newcomers `manifest` and `artifact`. The implementation
+**must audit each** and record a verdict:
 
-- **name-only (unaffected)** — confirm it never reads `boxes[*].arch` and never
-  assumes `defaults.platform` is a concrete key; or
-- **arch-aware (must consume the resolved view)** — e.g. `fleet` (platform
-  column) and `roster.py` (the salt roster, #242 — a newer consumer that embeds
-  per-node connection/platform data and is **not** otherwise called out here).
+- **name-only (unaffected)** — never reads `boxes[*].arch` / `defaults.platform`
+  as a concrete key, never depends on the resolved arch; or
+- **arch-aware (intended host-awareness)** — `fleet.lab_guests()` (the injection
+  point), `vmstatus` (shows the per-guest platform), and — critically —
+  `manifest.setup_platforms()` + `artifact.ensure_mq_tarballs()` (#266), which
+  must see the host-resolved platform so the right MQ tarball is acquired on x86.
+- **must stay deterministic in tests** — `lab_guests()` and `setup_platforms()`
+  must take **injected facts** (default to `probe()`), so the unit suite and CI
+  (which runs on x86 GitHub runners) don't flip results by host arch. This is a
+  signature ripple into #266's `manifest.py`; coordinate with that owner.
 
-The deliverable of the audit is an explicit per-module verdict, so a logical
-platform string can never leak into a reader that expects a concrete arch.
+The deliverable is an explicit per-module verdict plus the facts-threading change
+to `lab_guests`/`setup_platforms`.
 
 ## 6. Preflight — `mqlab doctor`
 
@@ -237,24 +283,31 @@ arch while the RHEL one is constant:
 | arm64 (Mac dev) | `UbuntuLinuxARM64` (debs) | `LinuxX64` (rpms) |
 | x86_64 (target) | `UbuntuLinuxX64` (debs, **new**) | `LinuxX64` (rpms) |
 
-Today `scripts/fetch-mq.sh` fetches **only** `UbuntuLinuxARM64`; the `LinuxX64`
-tar that `ansible/roles/rdqm-install` consumes is **not fetched by it at all** —
-it lands out of band (manual, per `docs/development/lab-bringup-capture.md`). On a
-fresh x86 clone "clone and run" therefore needs *both* a brand-new `UbuntuLinuxX64`
-artifact and the existing `LinuxX64`, and nothing currently fetches the latter.
+**The acquisition layer already exists (#266) and mostly composes for free.**
+`artifact.ensure_mq_tarballs(setup, …)` iterates `manifest.setup_platforms(setup)`
+→ `manifest.tarball_name(version, platform)` → fetch/verify per platform. Because
+`setup_platforms` runs through `lab_guests()`, making `lab_guests()` host-aware
+(D6, §4.2) makes this whole chain select the x86_64 Ubuntu platform on an x86
+host. The integration is therefore small and targeted:
 
-- **`scripts/fetch-mq.sh` becomes the single fetch authority for the full set.**
-  Given the resolved topology, it fetches exactly the `(os, arch)` artifacts in
-  play: the Ubuntu deb tarball matching the resolved Ubuntu guest arch
-  (`UbuntuLinuxARM64` on the Mac, `UbuntuLinuxX64` on the target) **plus**
-  `LinuxX64` whenever a RHEL setup is present. The preflight's "artifact
-  prerequisites present-or-fetchable" check points at this one command. The exact
-  `UbuntuLinuxX64` filename is **verified against IBM during planning, not
-  assumed** (the arm64/`LinuxX64` names are already known from the existing roles).
-- **Install roles** — `mq-install` (server) and `mq-client` (client) drive the tar
-  filename from `ansible_architecture` (the pattern the obs roles already use).
-  The `./ibmmq-*.deb` install glob is already arch-agnostic, so the install bodies
-  are unchanged. `rdqm-install` already uses `LinuxX64` and is unchanged.
+1. **`manifest._ARCH_SUFFIX`** — add `"ubuntu2404-x86_64": "UbuntuLinuxX64"`
+   alongside the existing `ubuntu2404-arm64`/`rhel96-x86_64`/`alma9-x86_64`
+   entries. (Confirmed filename: `…-UbuntuLinuxX64.tar.gz`, HTTP 200.) After this,
+   `ensure_mq_tarballs` acquires the right Ubuntu tarball per host with no further
+   change.
+2. **Install roles** — `mq-install` and `mq-client` still pin the suffix literally
+   (`…UbuntuLinuxARM64…`); change both to derive it from `ansible_architecture`
+   (`UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}`),
+   matching the obs-role idiom. The `./ibmmq-*.deb` install glob is arch-agnostic,
+   so the install bodies are otherwise unchanged. `rdqm-install` already uses
+   `LinuxX64` and is unchanged.
+3. **`scripts/fetch-mq.sh`** (the bulk downloader that actually populates
+   `build/mq/`) — today it hardcodes `UbuntuLinuxARM64` and never fetches
+   `LinuxX64` (RDQM's tar lands manually, per `lab-bringup-capture.md`). Make it
+   fetch, by host arch (`uname -m`): the matching Ubuntu deb tarball
+   (`UbuntuLinuxARM64`|`UbuntuLinuxX64`) **plus** `LinuxX64` (always, for any RHEL
+   arm). This closes "clone and run" on a fresh host. (`cli._fetch_mq_tarball`
+   stays the manual-placement stub it is today.)
 
 ## 8. Error handling
 
@@ -296,14 +349,25 @@ idiom — no swallowed errors, no silent fallbacks:
 
 ## 10. Open items for the implementation plan
 
-- Confirm the `in_vergil` marker (real, documented signal).
-- Verify the x86_64 Ubuntu vagrant-libvirt box name.
-- Verify the x86_64 Ubuntu MQ Advanced for Developers deb tarball filename against
-  IBM (`UbuntuLinuxX64`; the arm64 / `LinuxX64` names are already known).
-- Decide the exact `ResolvedNode` schema / resolved-file shape.
-- Confirm x86_64 firmware choice (OVMF vs SeaBIOS/default q35) for the native-KVM
-  row.
-- Audit all twelve topology consumers (§5.1) and record a per-module verdict
-  (name-only vs arch-aware).
+**Resolved during planning prep (no longer open):**
+
+- `in_vergil` marker → the `/etc/vergil` sentinel file (§4.1).
+- x86_64 Ubuntu box → no new box; `cloud-image/ubuntu-24.04` ships both `libvirt`
+  arch variants (confirmed via Vagrant Cloud) (§4.2).
+- x86_64 Ubuntu MQ tarball → `…-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz`
+  (HTTP 200 confirmed) (§4.2/§7).
+- x86_64 firmware → keep the current default (q35/no explicit loader; today's TCG
+  x86_64 path uses it and boots). AAVMF stays aarch64-only.
+
+**Still open for the plan:**
+
+- Decide the exact `ResolvedNode` schema / resolved-file YAML shape (fields listed
+  in §4.2).
+- **Thread injected facts through `fleet.lab_guests()` and #266's
+  `manifest.setup_platforms()`** so host-awareness is deterministic in tests / on
+  x86 CI (§5.1) — coordinate the `manifest.py` signature change with #266's owner.
+- Execute the §5.1 consumer audit and record the per-module verdict (now incl.
+  `manifest`, `artifact`).
+- Rework `scripts/fetch-mq.sh` to fetch host-arch Ubuntu + `LinuxX64` (§7).
 - **Identify/procure the Tier-2 x86 acceptance host** (work x86 box or
   nested-virt cloud node). Blocks acceptance, not implementation.
