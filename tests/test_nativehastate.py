@@ -68,3 +68,97 @@ def test_parse_nativeha_g_flags_disconnected_recovery_with_backlog():
 def test_parse_nativeha_g_skips_lines_without_group_name():
     out = nativehastate.parse_nativeha_g("\nGRPROLE(Live) CONNGRP(yes)\n")  # no GRPNAME
     assert out == {}
+
+
+def test_render_emits_quorum_owner_and_per_instance_metrics():
+    hax = {
+        "quorum_current": 3,
+        "quorum_total": 3,
+        "group_role": "Live",
+        "instances": {
+            "nha-rhel-a1": {"role": "Active", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-a2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
+        },
+    }
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-a1",
+        qm="QMNATIVE",
+        hax=hax,
+        grp=None,
+        now=1781455000,
+        fresh_sources=("nativeha_x",),
+    )
+    assert 'cluster_quorate{node="nha-rhel-a1"} 1' in out
+    assert 'cluster_nha_quorum{node="nha-rhel-a1"} 3' in out
+    assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 1' in out
+    assert 'cluster_nha_role{node="nha-rhel-a1",member="nha-rhel-a1",role="Active"} 1' in out
+    assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a2"} 1' in out
+    assert (
+        'cluster_resource_owner{node="nha-rhel-a1",resource="QMNATIVE",holder="nha-rhel-a1"} 1'
+        in out
+    )
+    assert (
+        'cluster_state_last_write_timestamp{node="nha-rhel-a1",source="nativeha_x"} 1781455000'
+        in out
+    )
+
+
+def test_render_quorum_lost_and_unknown_leader_branches():
+    hax = {
+        "quorum_current": 1,
+        "quorum_total": 3,
+        "group_role": "Live",
+        "instances": {
+            "nha-rhel-a1": {"role": "Unknown", "insync": False, "hastatus": "Abnormal"}
+        },
+    }
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-a1",
+        qm="QMNATIVE",
+        hax=hax,
+        grp=None,
+        now=1,
+        fresh_sources=(),
+    )
+    assert 'cluster_quorate{node="nha-rhel-a1"} 0' in out  # 1 < majority(2)
+    assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Unknown
+    assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out
+    assert "cluster_resource_owner" not in out  # no Active -> no owner line
+    assert "last_write_timestamp" not in out  # empty fresh_sources
+
+
+def test_render_unknown_quorum_omits_quorate():
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-a1",
+        qm="QMNATIVE",
+        hax={
+            "quorum_current": None,
+            "quorum_total": None,
+            "group_role": None,
+            "instances": {},
+        },
+        grp=None,
+        now=1,
+        fresh_sources=(),
+    )
+    assert "cluster_quorate" not in out  # unknown -> omitted, never a false green
+    assert "cluster_nha_quorum" not in out
+
+
+def test_render_emits_group_metrics():
+    grp = {
+        "Live": {"role": "Live", "connected": True, "insync": True, "backlog": 0},
+        "Recovery": {"role": "Recovery", "connected": False, "insync": False, "backlog": 512},
+    }
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-a1",
+        qm="QMNATIVE",
+        hax=None,
+        grp=grp,
+        now=1,
+        fresh_sources=("nativeha_g",),
+    )
+    assert 'cluster_nha_group_role{node="nha-rhel-a1",group="Live",role="Live"} 1' in out
+    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 0' in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 512' in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Live"} 1' in out

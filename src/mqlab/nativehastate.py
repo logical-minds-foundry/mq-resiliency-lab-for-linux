@@ -78,3 +78,52 @@ def parse_nativeha_g(text: str) -> dict[str, dict[str, Any]]:
             "backlog": int(f.get("BACKLOG", 0)),
         }
     return groups
+
+
+def _m(name: str, labels: Mapping[str, object], value: object) -> str:
+    """Format one Prometheus sample line: name{k="v",...} value."""
+    rendered = ",".join(f'{k}="{v}"' for k, v in labels.items())
+    return f"{name}{{{rendered}}} {value}"
+
+
+def render_nativeha_state_prom(
+    *,
+    node: str,
+    qm: str,
+    hax: dict[str, Any] | None,
+    grp: dict[str, dict[str, Any]] | None,
+    now: int,
+    fresh_sources: tuple[str, ...],
+) -> str:
+    """Project parsed dspmq results into node_exporter textfile lines (label node=<self>)."""
+    lines: list[str] = []
+
+    if hax is not None:
+        cur, total = hax["quorum_current"], hax["quorum_total"]
+        if cur is not None and total is not None:
+            majority = total // 2 + 1
+            lines.append(_m("cluster_quorate", {"node": node}, 1 if cur >= majority else 0))
+            lines.append(_m("cluster_nha_quorum", {"node": node}, cur))
+        for member, st in hax["instances"].items():
+            base = {"node": node, "member": member}
+            lines.append(_m("cluster_node_online", base, 0 if st["role"] == "Unknown" else 1))
+            lines.append(_m("cluster_nha_role", {**base, "role": st["role"]}, 1))
+            lines.append(_m("cluster_nha_insync", base, 1 if st["insync"] else 0))
+            lines.append(_m("cluster_nha_hastatus", {**base, "status": st["hastatus"]}, 1))
+            if st["role"] == "Active":
+                owner = {"node": node, "resource": qm, "holder": member}
+                lines.append(_m("cluster_resource_owner", owner, 1))
+
+    if grp is not None:
+        for name, g in grp.items():
+            gbase = {"node": node, "group": name}
+            lines.append(_m("cluster_nha_group_role", {**gbase, "role": g["role"]}, 1))
+            lines.append(_m("cluster_nha_connected", gbase, 1 if g["connected"] else 0))
+            lines.append(_m("cluster_nha_group_insync", gbase, 1 if g["insync"] else 0))
+            lines.append(_m("cluster_nha_group_backlog", gbase, g["backlog"]))
+
+    for source in fresh_sources:
+        ts = {"node": node, "source": source}
+        lines.append(_m("cluster_state_last_write_timestamp", ts, now))
+
+    return "\n".join(lines) + "\n"
