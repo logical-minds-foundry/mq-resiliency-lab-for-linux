@@ -11,7 +11,7 @@ production `mq-nativeha` Ansible role, the arm + setups registered in
 `QMNATIVE` slotted into the distributed mesh, the §3.1 fault suite green, proven
 by a **cold rebuild**. **HA only — CRR/DR is Phase 3.**
 
-**Architecture:** Three RHEL 9.6 x86-64 guests (`nha-a1..3`, group `nha_a`) form
+**Architecture:** Three RHEL 9.6 x86-64 guests (`nha-rhel-a1..3`, group `nha_rhel_a`) form
 one Native HA group (raft quorum, plaintext replication). The role is split into
 shared formation tasks + an OS-adapter (`install-RedHat.yml`) so Phase 2 can add
 `install-Debian.yml` for Ubuntu with the formation logic unchanged. The arm is a
@@ -51,7 +51,7 @@ sudo ls /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso || \
 ## File structure
 
 ```text
-lab/topology.yaml                                   # + nativeha-rhel arm, nha-a1..3 nodes, nha_a group, 2 setups (modify)
+lab/topology.yaml                                   # + nativeha-rhel arm, nha-rhel-a1..3 nodes, nha_rhel_a group, 2 setups (modify)
 ansible/roles/mq-nativeha/tasks/main.yml            # shared: assert level, form group, mqmonitor@ (NEW, productionized)
 ansible/roles/mq-nativeha/tasks/install-RedHat.yml  # OS-adapter: base MQ from the DVD repo + tar (NEW)
 ansible/site-nativeha.yml                           # the nativeha-rhel provisioning playbook (NEW)
@@ -65,7 +65,7 @@ IP plan (site-A `nha-*` on the data net `.5x`, replication on the hb net):
 
 | node | data | replication (hb) |
 |---|---|---|
-| nha-a1..a3 | 10.50.2.51–53 | 172.16.3.51–53 |
+| nha-rhel-a1..a3 | 10.50.2.51–53 | 172.16.3.51–53 |
 
 (Replication on a dedicated NIC — unlike the spike's single-net shortcut — so the
 fault suite can sever it independently.)
@@ -91,21 +91,21 @@ def test_nativeha_rhel_arm_and_setups():
     assert "mqmonitor@" in arm["verbs"]["qm-down"]["cmd"]
     assert t["setups"]["nativeha_ha"]["arm"] == "nativeha-rhel"
     assert t["setups"]["distributed-nativeha-rhel"]["arm"] == "nativeha-rhel"
-    assert set(t["groups"]["nha_a"]) == {"nha-a1", "nha-a2", "nha-a3"}
+    assert set(t["groups"]["nha_rhel_a"]) == {"nha-rhel-a1", "nha-rhel-a2", "nha-rhel-a3"}
 ```
 
 - [ ] **Step 2 — run it, expect FAIL** (`KeyError: 'nativeha-rhel'`):
   `vrg-container-run -- uv run pytest tests/test_topology_nativeha.py -q`
 
-- [ ] **Step 3 — add the topology.** Nodes `nha-a1..a3` (platform
+- [ ] **Step 3 — add the topology.** Nodes `nha-rhel-a1..a3` (platform
   `rhel96-x86_64`, `cpus: 2, memory: 2048`, data + hb NICs per the IP plan — **no
-  `extra_disk`**, Native HA is shared-nothing/log-based); group `nha_a`; arm:
+  `extra_disk`**, Native HA is shared-nothing/log-based); group `nha_rhel_a`; arm:
 
 ```yaml
 arms:
   nativeha-rhel:
     mechanism: native-ha
-    cluster_group: nha_a
+    cluster_group: nha_rhel_a
     verbs:
       qm-create:  { playbook: site-nativeha.yml }
       qm-status:  { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
@@ -115,13 +115,13 @@ setups:
   nativeha_ha:
     description: Native HA (raft) — site-A 3-node HA group, plaintext (HA only)
     arm: nativeha-rhel
-    groups: [nha_a]
+    groups: [nha_rhel_a]
     provision: ansible/site-nativeha.yml
     qm: { name: QMNATIVE }
   distributed-nativeha-rhel:
     description: Distributed MQ (Native HA arm) — app -> QMNATIVE <-> QMDTCC over net-ext
     arm: nativeha-rhel
-    groups: [nha_a, dtcc, app]
+    groups: [nha_rhel_a, dtcc, app]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
     qm: { name: QMNATIVE, vip: 10.50.2.50, dtcc_conn: 10.60.0.50 }
@@ -129,7 +129,7 @@ setups:
 
 - [ ] **Step 4 — run the test, expect PASS.** Then `vrg-container-run --
   vrg-validate` (topology schema). Commit (`feat(nativeha): register nativeha-rhel
-  arm + nha_a nodes + setups`).
+  arm + nha_rhel_a nodes + setups`).
 
 ### Task 2: Production `mq-nativeha` role (shared formation + RedHat adapter)
 
@@ -156,12 +156,12 @@ setups:
     `mqmonitor@{{ qm_name }}` (daemon_reload).
 
 - [ ] **Step 3 — `site-nativeha.yml`**: one play over `cluster_group` applying
-  `mq-nativeha` with `qm_name: "{{ qm.name }}"` and `cluster_group: nha_a`.
+  `mq-nativeha` with `qm_name: "{{ qm.name }}"` and `cluster_group: nha_rhel_a`.
 
-- [ ] **Step 4 — bring up `nha_a` + provision.** Stage the DVD ISO if needed
-  (entry gate). `vagrant up nha-a1 nha-a2 nha-a3 --no-provision`; then
+- [ ] **Step 4 — bring up `nha_rhel_a` + provision.** Stage the DVD ISO if needed
+  (entry gate). `vagrant up nha-rhel-a1 nha-rhel-a2 nha-rhel-a3 --no-provision`; then
   `mqlab qm create nativeha_ha` (or `ansible-playbook site-nativeha.yml --limit
-  nha_a`). **Acceptance:** `mqlab qm status nativeha_ha` (the arm verb) →
+  nha_rhel_a`). **Acceptance:** `mqlab qm status nativeha_ha` (the arm verb) →
   `QUORUM(3/3)`, one Active + two Replica, all `INSYNC(yes)`. Commit.
 
 ### Task 3: First automatic failover (the HA guarantee)
@@ -190,7 +190,7 @@ setups:
 **Files:** Modify `ansible/site-nativeha.yml` (or a content play); reuse the
 distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 
-- [ ] **Step 1 — bring up the `distributed-nativeha-rhel` setup** (`nha_a` + `dtcc`
+- [ ] **Step 1 — bring up the `distributed-nativeha-rhel` setup** (`nha_rhel_a` + `dtcc`
   + `app`); `QMNATIVE` reached on its connectivity address; inter-QM channels
   `QMNATIVE ↔ QMDTCC` over `net-ext`. **Same app contract, new substrate.**
 - [ ] **Step 2 — end-to-end flow:** `app-client` puts a trade → `QMNATIVE` →
@@ -202,7 +202,7 @@ distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 ### Task 5: Cold-rebuild acceptance gate + wrap
 
 - [ ] **Step 1 — cold rebuild** (the acceptance gate, not lint-green):
-  `vagrant destroy -f nha-a1 nha-a2 nha-a3`; re-stage ISO; `vagrant up --no-provision`;
+  `vagrant destroy -f nha-rhel-a1 nha-rhel-a2 nha-rhel-a3`; re-stage ISO; `vagrant up --no-provision`;
   `mqlab qm create nativeha_ha`; confirm `QUORUM(3/3)` **one-pass, no manual
   fix-ups**. Any manual step needed → fold it into the role and repeat.
 - [ ] **Step 2 — finalize** `docs/reports/2026-06-18-nativeha-rhel-phase1-findings.md`
@@ -217,7 +217,13 @@ distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 - **CRR / cross-region DR** — Phase 3 (`nativeha_dr` 3+3, real TLS via `lab-pki`,
   GSKit extraction, `mqlab dr cutover/failback`). HA-only here.
 - **Real TLS** — Phase 3; HA replication runs plaintext per the lab posture.
-- **Ubuntu 24.04 arm** — Phase 2 (`install-Debian.yml`; formation unchanged).
+- **Ubuntu 24.04 arm** — Phase 2: a parallel **`nativeha-ubuntu`** arm with
+  **platform-qualified** nodes `nha-ubuntu-a1..3` (group `nha_ubuntu_a`) — distinct
+  from this arm's `nha-rhel-a*`/`nha_rhel_a` so both can coexist in `topology.yaml`
+  (mirrors the existing `pcmk-a*` vs `pcmk-rhel-a*` convention). Native HA CRR
+  forces **x86, not RHEL**, so this is x86 too; only `install-Debian.yml` differs —
+  formation logic is shared. The RHEL-vs-Ubuntu functional-equivalence comparison
+  (spec §2.1 headline) is the whole point of building both.
 - **mqweb/metrics full parity** — minimal REST proof here; full content-plane
   parity when the comparison harness needs identical operator verbs.
 - **Fault-suite storage severance** — n/a: Native HA is shared-nothing (itself a
