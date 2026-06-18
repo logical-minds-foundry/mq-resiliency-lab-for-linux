@@ -9,7 +9,11 @@
 production `mq-nativeha` Ansible role, the arm + setups registered in
 `topology.yaml`, the `mqmonitor@` systemd lifecycle verbs wired into `mqlab qm`,
 `QMNATIVE` slotted into the distributed mesh, the §3.1 fault suite green, proven
-by a **cold rebuild**. **HA only — CRR/DR is Phase 3.**
+by a **cold rebuild**. **HA only — CRR/DR is Phase 3.** Per **#267**, the arm gets
+**one consolidated `distributed-nativeha-rhel` (distributed-HADR) setup** as its
+single registry entry — *not* separate `_ha`/`_dr`/distributed-no-DR setups — and
+Phase 1 builds the HA capability against the **site-A subset** of it, so Phase 3
+extends the *same* setup rather than superseding throwaway ones.
 
 **Architecture:** Three RHEL 9.6 x86-64 guests (`nha-rhel-a1..3`, group `nha_rhel_a`) form
 one Native HA group (raft quorum, plaintext replication). The role is split into
@@ -61,14 +65,18 @@ lab/scripts/nativeha-fault-suite.sh                 # §3.1 steps against the gr
 docs/reports/2026-06-18-nativeha-rhel-phase1-findings.md   # grows per drill (NEW)
 ```
 
-IP plan (site-A `nha-*` on the data net `.5x`, replication on the hb net):
+IP plan — **both sites declared now** (the consolidated `distributed-HADR` stack,
+#267), though Phase 1 only **boots site A**:
 
-| node | data | replication (hb) |
-|---|---|---|
-| nha-rhel-a1..a3 | 10.50.2.51–53 | 172.16.3.51–53 |
+| node | data | HA replication (hb) | cross-site (wan) |
+|---|---|---|---|
+| nha-rhel-a1..a3 (site A) | 10.50.2.51–53 | 172.16.3.51–53 | 10.99.0.51–53 |
+| nha-rhel-b1..b3 (site B) | 10.50.3.51–53 | 172.16.4.51–53 | 10.99.0.61–63 |
 
-(Replication on a dedicated NIC — unlike the spike's single-net shortcut — so the
-fault suite can sever it independently.)
+HA replication on a dedicated NIC (so the fault suite can sever it
+independently); the `wan` NIC carries the **CRR cross-region link (9415)** in
+Phase 3. Site B nodes are **defined** in topology now but **not booted** until
+Phase 3 (footprint).
 
 ---
 
@@ -89,17 +97,25 @@ def test_nativeha_rhel_arm_and_setups():
     # verbs use the mqmonitor@ systemd lifecycle, not endmqm/strmqm/pcs
     assert "mqmonitor@" in arm["verbs"]["qm-up"]["cmd"]
     assert "mqmonitor@" in arm["verbs"]["qm-down"]["cmd"]
-    assert t["setups"]["nativeha_ha"]["arm"] == "nativeha-rhel"
-    assert t["setups"]["distributed-nativeha-rhel"]["arm"] == "nativeha-rhel"
+    # ONE consolidated distributed-HADR setup (#267) — full target groups,
+    # NOT separate _ha/_dr setups.
+    s = t["setups"]["distributed-nativeha-rhel"]
+    assert s["arm"] == "nativeha-rhel"
+    assert set(s["groups"]) == {"nha_rhel_a", "nha_rhel_b", "dtcc", "app"}
+    assert "nativeha_ha" not in t["setups"] and "nativeha_dr" not in t["setups"]
     assert set(t["groups"]["nha_rhel_a"]) == {"nha-rhel-a1", "nha-rhel-a2", "nha-rhel-a3"}
+    assert set(t["groups"]["nha_rhel_b"]) == {"nha-rhel-b1", "nha-rhel-b2", "nha-rhel-b3"}
 ```
 
 - [ ] **Step 2 — run it, expect FAIL** (`KeyError: 'nativeha-rhel'`):
   `vrg-container-run -- uv run pytest tests/test_topology_nativeha.py -q`
 
-- [ ] **Step 3 — add the topology.** Nodes `nha-rhel-a1..a3` (platform
-  `rhel96-x86_64`, `cpus: 2, memory: 2048`, data + hb NICs per the IP plan — **no
-  `extra_disk`**, Native HA is shared-nothing/log-based); group `nha_rhel_a`; arm:
+- [ ] **Step 3 — add the topology.** Define **both** node groups (Native HA is
+  shared-nothing/log-based — **no `extra_disk`**): `nha-rhel-a1..a3` (group
+  `nha_rhel_a`) and `nha-rhel-b1..b3` (group `nha_rhel_b`), platform
+  `rhel96-x86_64`, `cpus: 2, memory: 2048`, data + hb NICs (site B also a `wan`
+  NIC for Phase-3 CRR), per the IP plan. Then the arm + the **single consolidated
+  distributed-HADR setup** (#267):
 
 ```yaml
 arms:
@@ -112,24 +128,23 @@ arms:
       qm-up:      { cmd: "systemctl start mqmonitor@{qm}" }
       qm-down:    { cmd: "systemctl stop mqmonitor@{qm}" }   # NOT endmqm (systemd restarts it)
 setups:
-  nativeha_ha:
-    description: Native HA (raft) — site-A 3-node HA group, plaintext (HA only)
-    arm: nativeha-rhel
-    groups: [nha_rhel_a]
-    provision: ansible/site-nativeha.yml
-    qm: { name: QMNATIVE }
+  # The ONE nativeha-rhel setup: distributed + HA + DR keystone (#267).
+  # Built in phases against this single entry — Phase 1 boots/provisions the
+  # site-A subset (nha_rhel_a + dtcc + app); Phase 3 boots nha_rhel_b + enables CRR.
   distributed-nativeha-rhel:
-    description: Distributed MQ (Native HA arm) — app -> QMNATIVE <-> QMDTCC over net-ext
+    description: >
+      Distributed-HADR keystone (#267) — app -> QMNATIVE (3+3 Native HA + CRR)
+      <-> QMDTCC over net-ext, with cross-site DR. Phase 1 = HA on site A only.
     arm: nativeha-rhel
-    groups: [nha_rhel_a, dtcc, app]
+    groups: [nha_rhel_a, nha_rhel_b, dtcc, app]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
-    qm: { name: QMNATIVE, vip: 10.50.2.50, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMNATIVE, vip: 10.50.2.50, vip_dr: 10.50.3.50, dtcc_conn: 10.60.0.50 }
 ```
 
 - [ ] **Step 4 — run the test, expect PASS.** Then `vrg-container-run --
   vrg-validate` (topology schema). Commit (`feat(nativeha): register nativeha-rhel
-  arm + nha_rhel_a nodes + setups`).
+  arm + nha_rhel_{a,b} nodes + consolidated distributed-HADR setup`).
 
 ### Task 2: Production `mq-nativeha` role (shared formation + RedHat adapter)
 
@@ -158,11 +173,14 @@ setups:
 - [ ] **Step 3 — `site-nativeha.yml`**: one play over `cluster_group` applying
   `mq-nativeha` with `qm_name: "{{ qm.name }}"` and `cluster_group: nha_rhel_a`.
 
-- [ ] **Step 4 — bring up `nha_rhel_a` + provision.** Stage the DVD ISO if needed
-  (entry gate). `vagrant up nha-rhel-a1 nha-rhel-a2 nha-rhel-a3 --no-provision`; then
-  `mqlab qm create nativeha_ha` (or `ansible-playbook site-nativeha.yml --limit
-  nha_rhel_a`). **Acceptance:** `mqlab qm status nativeha_ha` (the arm verb) →
-  `QUORUM(3/3)`, one Active + two Replica, all `INSYNC(yes)`. Commit.
+- [ ] **Step 4 — bring up the site-A subset of `distributed-nativeha-rhel` +
+  provision.** Stage the DVD ISO if needed (entry gate). `vagrant up nha-rhel-a1
+  nha-rhel-a2 nha-rhel-a3 --no-provision` (site B stays down — Phase 3); then
+  `ansible-playbook site-nativeha.yml --limit nha_rhel_a`. **Acceptance:** the
+  `qm-status` verb → `QUORUM(3/3)`, one Active + two Replica, all `INSYNC(yes)`.
+  Commit. *(The consolidated setup is the registry target; Phase 1 provisions its
+  site-A slice via `--limit` rather than booting all six — #267 one-setup,
+  phased build.)*
 
 ### Task 3: First automatic failover (the HA guarantee)
 
@@ -190,9 +208,10 @@ setups:
 **Files:** Modify `ansible/site-nativeha.yml` (or a content play); reuse the
 distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 
-- [ ] **Step 1 — bring up the `distributed-nativeha-rhel` setup** (`nha_rhel_a` + `dtcc`
-  + `app`); `QMNATIVE` reached on its connectivity address; inter-QM channels
-  `QMNATIVE ↔ QMDTCC` over `net-ext`. **Same app contract, new substrate.**
+- [ ] **Step 1 — boot the rest of the site-A subset** (`dtcc` + `app`) of
+  `distributed-nativeha-rhel`; `QMNATIVE` reached on its connectivity address;
+  inter-QM channels `QMNATIVE ↔ QMDTCC` over `net-ext`. **Same app contract, new
+  substrate.** (Site B + CRR come in Phase 3 on this same setup.)
 - [ ] **Step 2 — end-to-end flow:** `app-client` puts a trade → `QMNATIVE` →
   `QMDTCC`; `dtcc-sim` replies; confirm the reply returns. Persistent messages.
 - [ ] **Step 3 — failover under load:** repeat Task 3 step 2 (kill active node)
@@ -202,8 +221,9 @@ distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 ### Task 5: Cold-rebuild acceptance gate + wrap
 
 - [ ] **Step 1 — cold rebuild** (the acceptance gate, not lint-green):
-  `vagrant destroy -f nha-rhel-a1 nha-rhel-a2 nha-rhel-a3`; re-stage ISO; `vagrant up --no-provision`;
-  `mqlab qm create nativeha_ha`; confirm `QUORUM(3/3)` **one-pass, no manual
+  `vagrant destroy -f nha-rhel-a1 nha-rhel-a2 nha-rhel-a3`; re-stage ISO; `vagrant up
+  nha-rhel-a1 nha-rhel-a2 nha-rhel-a3 --no-provision`; `ansible-playbook
+  site-nativeha.yml --limit nha_rhel_a`; confirm `QUORUM(3/3)` **one-pass, no manual
   fix-ups**. Any manual step needed → fold it into the role and repeat.
 - [ ] **Step 2 — finalize** `docs/reports/2026-06-18-nativeha-rhel-phase1-findings.md`
   (fault-suite table, the apples-to-apples ledger vs RDQM/pcmk: what Native HA gave
@@ -214,8 +234,11 @@ distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 
 ## Deliberately deferred
 
-- **CRR / cross-region DR** — Phase 3 (`nativeha_dr` 3+3, real TLS via `lab-pki`,
-  GSKit extraction, `mqlab dr cutover/failback`). HA-only here.
+- **CRR / cross-region DR** — Phase 3 extends **this same
+  `distributed-nativeha-rhel` setup** (no new setup, #267): boot `nha_rhel_b`,
+  add the CRR recovery-group config (over the `wan` NIC), real TLS via `lab-pki`
+  (GSKit extraction first — see `lab-gotchas.md`), and `mqlab dr cutover/failback`
+  moving *live distributed messaging* across sites. HA-only here.
 - **Real TLS** — Phase 3; HA replication runs plaintext per the lab posture.
 - **Ubuntu 24.04 arm** — Phase 2: a parallel **`nativeha-ubuntu`** arm with
   **platform-qualified** nodes `nha-ubuntu-a1..3` (group `nha_ubuntu_a`) — distinct
@@ -234,6 +257,12 @@ distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
 - **Spec coverage:** implements #246 spec §5 Phase 1 (HA-first on RHEL, cold-rebuild
   gate) and §4.1/§4.3/§4.4 (3-node raft, shared-role + OS-adapter seam, declarative
   arm verbs). CRR (§4.2) and Ubuntu (§4 Phase 2) explicitly deferred.
+- **#267 alignment (no redo):** the arm gets a single consolidated
+  `distributed-nativeha-rhel` (distributed-HADR) setup; both site groups are
+  declared up front; Phase 1 builds HA against the site-A subset; Phase 3 boots
+  site B + CRR on the *same* setup. No `nativeha_ha`/`nativeha_dr` throwaway
+  entries — the keystone is the target from the start. (The older pcmk/rdqm arms'
+  partial-setup consolidation is #267's separate, non-blocking cleanup.)
 - **Phase-0 lessons pre-applied:** base-MQ-only install (proven role block reused);
   `mqmonitor@` lifecycle verbs (not `endmqm`); `blockinfile` rendered controller-side
   (not `lookup('file')`); DVD ISO staged in the pool; dedicated replication NIC so

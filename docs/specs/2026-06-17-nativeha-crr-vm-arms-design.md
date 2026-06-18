@@ -252,9 +252,16 @@ configuration plus roles, not a new code backend:
   `qm-down: { cmd: "systemctl stop mqmonitor@{qm}" }`, `qm-status: { cmd: "dspmq
   -m {qm} -o nativeha -x" }` — distinct from the RDQM/pcmk verbs. (Exact verb
   shapes pinned by a verb spike, as #216 did for RDQM.)
-- Add the **setups**, mirroring the rdqm/pcmk pattern: `nativeha_ha` (3-node),
-  `nativeha_dr` (3+3 CRR), and `distributed-nativeha-rhel` /
-  `distributed-nativeha-ubuntu` (the `QMNATIVE` ↔ `QMDTCC` mesh, §4.5).
+- Add **one consolidated `distributed-HADR` setup per arm** —
+  `distributed-nativeha-rhel` / `distributed-nativeha-ubuntu` — **not** the
+  three partial setups (`*_ha`, `*_dr`, distributed-no-DR) the older arms grew
+  organically. Per **#267**, distributed + HA + DR is the keystone (the only
+  stack where a DR cutover moves *live distributed messaging* across sites), and
+  Native HA must be shaped around it **from the start, not retrofitted**. The
+  one setup declares the full target — app + `dtcc` partner + 3+3 (`nha_<os>_a`
+  + `nha_<os>_b`) with CRR — and is **built in phases against that single
+  registry entry**: Phase 1 validates HA on the site-A subset; Phase 3 boots
+  site B and enables CRR. No `nativeha_ha`/`nativeha_dr` entries are created.
 - The HA/CRR formation lives in the `mq-nativeha` role (§4.3); the `mqlab dr`
   Python semantics (RPO / reconcile / ledger) are arm-agnostic and reused
   unchanged. Confirm the seam covers the `mqmonitor@`-style verbs and the
