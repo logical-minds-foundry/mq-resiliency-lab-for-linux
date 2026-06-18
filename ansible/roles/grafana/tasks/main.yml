@@ -55,6 +55,15 @@
     mode: "0644"
   notify: restart grafana
 
+- name: deploy the rendered cluster cockpit dashboard (#219)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/grafana/dashboards/lab-pcmk-cluster.json"
+    dest: /var/lib/grafana/dashboards/lab-pcmk-cluster.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d
