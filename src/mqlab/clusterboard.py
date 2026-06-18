@@ -3,7 +3,15 @@ panel/dashboard dicts out, no I/O — mirrors dashboard.py. Engine = Table (spik
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import TYPE_CHECKING, Any
+
+import yaml
+
+from mqlab.paths import repo_root
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 Column = tuple[str, str, str]  # (title, promql, mapping_kind)
 
@@ -113,3 +121,14 @@ def render_cluster_dashboard(
         "time": {"from": "now-15m", "to": "now"}, "refresh": "10s",
         "tags": ["lab", "cockpit", arm],
     }
+
+
+def cluster_dashboard_path() -> Path:
+    """Where the rendered cockpit board is written — beside lab-status.json (gitignored)."""
+    return repo_root() / "build" / "grafana" / "dashboards" / "lab-pcmk-cluster.json"
+
+
+def lab_cluster_dashboard() -> str:
+    """Render the real lab/topology.yaml to cockpit dashboard JSON text."""
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return json.dumps(render_cluster_dashboard(topo), indent=2) + "\n"
