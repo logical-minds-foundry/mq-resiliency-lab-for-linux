@@ -28,12 +28,22 @@ the x86 target nothing is emulated, which is the whole reason to support x86.
 2. **Default guest arch** — `lab/topology.yaml:21` (`defaults.platform:
    ubuntu2404-arm64`) and `src/mqlab/fleet.py:19` (`DEFAULT_PLATFORM`) default
    every non-RHEL node to arm64.
-3. **MQ artifacts** — `scripts/fetch-mq.sh` and `ansible/roles/mq-install/tasks/
-   main.yml` are pinned to the `UbuntuLinuxARM64` tarball / arm64 `.deb` path.
+3. **MQ artifacts (three sites)** — every one of these pins the arm64 Ubuntu
+   tarball / `.deb` path:
+   - `scripts/fetch-mq.sh` — fetches only `UbuntuLinuxARM64`;
+   - `ansible/roles/mq-install/tasks/main.yml` — server set, arm64 tar;
+   - `ansible/roles/mq-client/tasks/main.yml` — the `app-client` client set,
+     arm64 tar. **This one is easy to miss** and would break the app path on
+     x86. The implementation must not trust this hand list: it **greps the repo
+     for `UbuntuLinuxARM64`** (and any `Ubuntu*ARM64`) and fixes every hit, so a
+     fourth site cannot hide.
 
 Already arch-neutral (no change needed): the observability roles
 (Prometheus/Loki/Alloy/node-exporter) all branch on `ansible_architecture`; the
-topology box registry; the RHEL box builder.
+RHEL box builder. The topology box registry's box entries are *arch-tagged*
+today (the mechanism is sound) — but the registry itself **is modified** by this
+spec (§4.2): it gains the x86_64 Ubuntu box and the logical-platform
+indirection.
 
 ## 2. Decisions
 
@@ -139,8 +149,18 @@ Ruby cannot import the Python resolver, so mqlab renders
 `build/inventory.ini`. The Vagrantfile loads the resolved file and applies each
 node's fields verbatim; its `case platform.arch` block is **deleted**. If the
 resolved file is absent or stale, the Vagrantfile fails loud, naming the mqlab
-command that produces it. `mqlab vm create` / `vm up` render it as a pre-step, so
-the common path never sees the error.
+command that produces it.
+
+**The resolved file is a precondition of *every* `vagrant` invocation, not just
+`up`/`create`.** The Vagrantfile is loaded by every subcommand, and `cli.py`
+shells `vagrant` from several verbs — `vagrant up …` (lines 305, 444),
+`vagrant ssh …` via `os.execvp` (line 690), plus `down`/`destroy`/`status`. So
+resolution is a guaranteed precondition, not a per-verb pre-step: a small,
+idempotent `ensure_resolved()` renders the file when absent or stale and is
+called by **every mqlab command that shells `vagrant`**. With that in place the
+Vagrantfile's loud guard is a true backstop — it fires only if a human runs raw
+`vagrant` from `lab/` without going through mqlab, which is the correct division
+of responsibility.
 
 ## 5. Components & data flow
 
@@ -160,8 +180,27 @@ topology.yaml ─────┘                                      │
 | resolved-topology renderer | Write `build/lab/topology.resolved.yaml` | `platforms`, `hostfacts`, `paths` |
 | `doctor` (preflight) | Checklist + suggestions; exit non-zero on hard fail | `hostfacts`, tool/artifact probes |
 | `Vagrantfile` | Apply resolved fields; fail loud if file missing | resolved file |
-| `fetch-mq.sh` / `mq-install` | Arch-correct MQ artifact | resolved arch / `ansible_architecture` |
+| `fetch-mq.sh` / `mq-install` / `mq-client` | Arch-correct MQ artifact | resolved arch / `ansible_architecture` |
 | `topology.yaml` | Logical platform + x86_64 Ubuntu box | — |
+
+### 5.1 Topology-consumer audit (bounding the blast radius)
+
+Making `ubuntu2404` a *logical* platform changes the **shape** of the `boxes:`
+registry (a logical platform needs per-arch sub-entries or a resolution
+indirection) and means `defaults.platform` is no longer a concrete box key.
+Twelve modules read `lab/topology.yaml` today: `arms`, `cli`, `dashboard`,
+`fleet`, `guestsel`, `inventory`, `netstate`, `parity`, `roster`, `scrape`,
+`setups`, `vmstatus`. Most need only names / IPs / groups / setups and are
+unaffected — but the implementation **must audit all twelve** and classify each:
+
+- **name-only (unaffected)** — confirm it never reads `boxes[*].arch` and never
+  assumes `defaults.platform` is a concrete key; or
+- **arch-aware (must consume the resolved view)** — e.g. `fleet` (platform
+  column) and `roster.py` (the salt roster, #242 — a newer consumer that embeds
+  per-node connection/platform data and is **not** otherwise called out here).
+
+The deliverable of the audit is an explicit per-module verdict, so a logical
+platform string can never leak into a reader that expects a concrete arch.
 
 ## 6. Preflight — `mqlab doctor`
 
@@ -190,14 +229,32 @@ Vergil profile would otherwise guarantee.
 
 ## 7. Artifacts (MQ)
 
-- `scripts/fetch-mq.sh` — fetch the Ubuntu deb tarball matching the resolved Ubuntu
-  guest arch (arm64 on the Mac, x86_64 on the target). The exact x86_64 Ubuntu
-  tarball filename is **verified against IBM during planning, not assumed**. RHEL's
-  x86_64 MQ artifacts are host-arch-independent and unchanged.
-- `ansible/roles/mq-install/tasks/main.yml` — drive the tar filename from
-  `ansible_architecture` (the pattern the obs roles already use). The
-  `./ibmmq-*.deb` install glob is already arch-agnostic, so the install body is
-  unchanged.
+The lab uses **two** IBM MQ tarballs, and which Ubuntu one is needed flips by host
+arch while the RHEL one is constant:
+
+| host | Ubuntu guests need | RHEL guests need |
+|------|--------------------|------------------|
+| arm64 (Mac dev) | `UbuntuLinuxARM64` (debs) | `LinuxX64` (rpms) |
+| x86_64 (target) | `UbuntuLinuxX64` (debs, **new**) | `LinuxX64` (rpms) |
+
+Today `scripts/fetch-mq.sh` fetches **only** `UbuntuLinuxARM64`; the `LinuxX64`
+tar that `ansible/roles/rdqm-install` consumes is **not fetched by it at all** —
+it lands out of band (manual, per `docs/development/lab-bringup-capture.md`). On a
+fresh x86 clone "clone and run" therefore needs *both* a brand-new `UbuntuLinuxX64`
+artifact and the existing `LinuxX64`, and nothing currently fetches the latter.
+
+- **`scripts/fetch-mq.sh` becomes the single fetch authority for the full set.**
+  Given the resolved topology, it fetches exactly the `(os, arch)` artifacts in
+  play: the Ubuntu deb tarball matching the resolved Ubuntu guest arch
+  (`UbuntuLinuxARM64` on the Mac, `UbuntuLinuxX64` on the target) **plus**
+  `LinuxX64` whenever a RHEL setup is present. The preflight's "artifact
+  prerequisites present-or-fetchable" check points at this one command. The exact
+  `UbuntuLinuxX64` filename is **verified against IBM during planning, not
+  assumed** (the arm64/`LinuxX64` names are already known from the existing roles).
+- **Install roles** — `mq-install` (server) and `mq-client` (client) drive the tar
+  filename from `ansible_architecture` (the pattern the obs roles already use).
+  The `./ibmmq-*.deb` install glob is already arch-agnostic, so the install bodies
+  are unchanged. `rdqm-install` already uses `LinuxX64` and is unchanged.
 
 ## 8. Error handling
 
@@ -219,17 +276,34 @@ idiom — no swallowed errors, no silent fallbacks:
   resolved-topology renderer; inventory/fleet regression (status shows resolved
   arch). Facts are injected, so the whole matrix is reachable under the repo's
   100%-branch-coverage gate.
-- **Acceptance** — per the repo's cold-rebuild acceptance gate, a real one-pass
-  lab bring-up on an x86 host (native KVM, nothing emulated), and a regression
-  bring-up on the arm64 Mac dev host (Ubuntu KVM + RHEL TCG, unchanged). Lint-green
-  is necessary but not sufficient.
+- **Acceptance is split into two tiers** because no x86 host is available yet
+  (development happens on the arm64 Mac for the next week or two):
+  - **Tier 1 — logic + arm64 regression (blocking, now).** The full unit matrix
+    passes, plus a resolver dry-run on the Mac proving it *would* select native
+    KVM / row 2 on an x86 host (the x86 *host* path cannot be exercised on arm64
+    — only the x86 *guest*/TCG path can). Critically, a one-pass cold bring-up on
+    the arm64 Mac proves this change **breaks nothing** that works today (Ubuntu
+    KVM + RHEL TCG, unchanged). This is the near-term bar: *do no harm to the Mac
+    path.*
+  - **Tier 2 — real x86 host bring-up (deferred, blocks "done").** A one-pass
+    cold bring-up on a real x86 host with native KVM. We **expect the first real
+    run to surface breakage** and to iterate from there. Until this passes the
+    spec is **not** "done" — Tier 1 unblocks coding, it does not close the gate.
+    The x86 host is most likely an x86 box at work where the repo is cloned and
+    run (which is the intended target use anyway), or, failing that, a
+    nested-virt-capable cloud x86 node stood up for this validation.
+  - Lint-green is necessary but not sufficient for either tier.
 
 ## 10. Open items for the implementation plan
 
 - Confirm the `in_vergil` marker (real, documented signal).
 - Verify the x86_64 Ubuntu vagrant-libvirt box name.
 - Verify the x86_64 Ubuntu MQ Advanced for Developers deb tarball filename against
-  IBM.
+  IBM (`UbuntuLinuxX64`; the arm64 / `LinuxX64` names are already known).
 - Decide the exact `ResolvedNode` schema / resolved-file shape.
 - Confirm x86_64 firmware choice (OVMF vs SeaBIOS/default q35) for the native-KVM
   row.
+- Audit all twelve topology consumers (§5.1) and record a per-module verdict
+  (name-only vs arch-aware).
+- **Identify/procure the Tier-2 x86 acceptance host** (work x86 box or
+  nested-virt cloud node). Blocks acceptance, not implementation.
