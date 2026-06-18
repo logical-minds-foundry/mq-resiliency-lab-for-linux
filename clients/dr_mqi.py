@@ -22,8 +22,11 @@ The reason codes split into two families that demand different handling:
   _RECONNECT -- the connection is GONE and MQCNO_RECONNECT did NOT transparently
       restore it. A *controlled* endmqm -w (no -r) disconnects clients
       NON-reconnectably, so a robust client cannot rely on automatic reconnect;
-      it must rebuild the connection itself (new MQCONNX to the same QM via the
-      VIP, which lands on the survivor once the failover completes).
+      it must rebuild the connection itself (new MQCONNX to the same QM via its
+      connection name, which lands on the survivor once the failover completes).
+      That connection name is the floating VIP for the RDQM/Pacemaker arms, or a
+      multi-instance CONNAME list for the Native HA arm (#246, no VIP) — the
+      client tries the list and reconnects to whichever instance is now active.
         2009 MQRC_CONNECTION_BROKEN
         2202 MQRC_CONNECTION_QUIESCING
         2059 MQRC_Q_MGR_NOT_AVAILABLE
@@ -68,7 +71,8 @@ def connect(qm, conn, channel):
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
     qmgr = pymqi.QueueManager(None)
-    # MQCNO_RECONNECT_Q_MGR: auto-reconnect to the SAME QM via the VIP. This
+    # MQCNO_RECONNECT_Q_MGR: auto-reconnect to the SAME QM via its conn name
+    # (VIP, or the Native HA multi-instance CONNAME list). This
     # covers ABRUPT breaks (crash/kill/fence) transparently; the explicit
     # rebuild loops below cover the CONTROLLED-endmqm case it does not.
     qmgr.connect_with_options(qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
