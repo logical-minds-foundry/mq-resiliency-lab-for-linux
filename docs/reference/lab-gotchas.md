@@ -108,3 +108,25 @@ exit non-zero otherwise — never trust per-step `|| true`.
 | `op monitor ... OCF_CHECK_LEVEL=20 on-fail=fence` on `mq_fs` | a real read/write probe catches a **dead SAN**; the default mount-table check is a ~12-minute blind spot (an idle QM generates no I/O to notice the dead disk) |
 | planned move = location constraint → verify → remove | this `pcs` version's `resource move` porcelain raced our migrations and **reverted** them |
 | `fence_virsh` needs `LIBVIRT_DEFAULT_URI=qemu:///system` | STONITH SSHes to the hypervisor (`build/fence_key`); without the URI the fence exec fails |
+
+## GSKit ships as un-extracted tarballs — TLS tooling fails until initialized
+
+**Symptom.** `runmqakm` (and `runmqckm`) fail immediately with
+`Failed to dlopen ICU library. Attempted versions from libicuio.so.100 to
+libicuio.so.49`; `runmqckm` may not even exist on disk. Creating a TLS keystore
+(`runmqakm -keydb -create`) is impossible. `setmqenv -s` does **not** fix it
+(it sets an empty `LD_LIBRARY_PATH`).
+
+**Cause.** IBM MQ 9.4.5 ships **GSKit 9** as **tarballs** the base rpm install
+does not unpack: `MQSeriesGSKit` lays down only `/opt/mqm/gskit9/gskssl32.tar.gz`
+and `gskssl64.tar.gz` — there is no extracted lib tree, so no `libicuio`. Base
+queue-manager operations (`crtmqm`, `strmqm`, `dspmq`, plaintext Native HA /
+plaintext CRR) don't touch GSKit, so the gap is invisible until you do anything
+TLS (channel certs, Native HA CRR over TLS, `mqweb`).
+
+**Fix.** Initialize GSKit before any TLS work — the supported trigger is a
+GSKit-using MQ operation / the GSKit install step, not a manual `tar -x`. Treat
+"extract/initialize GSKit" as an explicit provisioning task in any role that
+configures TLS (it is a named task in the Native HA Phase-3 plan), and verify with
+`runmqakm -version` succeeding before issuing certs. Discovered in the #246
+Phase-0 spike (the entitlement probe deliberately ran plaintext to sidestep it).
