@@ -1,0 +1,7 @@
+mqlun role:Primary suspended:no
+    write-ordering:flush
+  volume:0 minor:0 disk:UpToDate
+      size:8388316 read:13341 written:8519564 al-writes:45 bm-writes:0 upper-pending:0 lower-pending:0 al-suspended:no blocked:no
+  peer connection:Connected role:Secondary congested:no
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:0 sent:65712 out-of-sync:0 pending:0 unacked:0

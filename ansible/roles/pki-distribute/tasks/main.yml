@@ -1,0 +1,60 @@
+---
+# Place one lab-pki entity's PKCS#12 keystore on the host that uses it, and
+# source its (persisted-once) password from the controller. Caller sets:
+#   pki_entity     — the entity CN (e.g. QMPCMK)
+#   pki_dest_dir   — where on the target host the keystore lands
+#   pki_owner      — file owner (default mqm)
+# Registers `pki_keyrpwd` (stdout = the keystore password; no_log).
+- name: "ensure dest dir for {{ pki_entity }}"
+  ansible.builtin.file:
+    path: "{{ pki_dest_dir }}"
+    state: directory
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0700"
+  become: true
+
+- name: "copy {{ pki_entity }} keystore to the host"
+  ansible.builtin.copy:
+    src: "{{ pki_src_dir }}/{{ pki_entity }}/{{ pki_entity }}.p12"
+    dest: "{{ pki_dest_dir }}/{{ pki_entity }}.p12"
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0600"
+  become: true
+
+- name: "source the {{ pki_entity }} keystore password (lab-secret.sh on the controller)"
+  ansible.builtin.command: "{{ pki_secret_script }} pki-keyrpwd-{{ pki_entity | lower }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+  register: pki_keyrpwd
+  changed_when: false
+  no_log: true
+
+# MQI clients only: stash the password next to the keystore so pymqi (no SCO
+# password field) can open the PKCS#12 non-interactively. runmqakm writes
+# <stem>.sth, which the MQI client finds automatically from sco.KeyRepository.
+# Run as root (not become_user) and chown afterwards: becoming an *unprivileged*
+# user needs setfacl/acl on the target, which not every host has (e.g. the obs
+# probe) — the root-then-own pattern is dependency-free and host-agnostic (#259).
+- name: "stash the {{ pki_entity }} keystore password for MQI clients (.sth)"
+  ansible.builtin.command:
+    cmd: >-
+      /opt/mqm/bin/runmqakm -keydb -stashpw -type pkcs12
+      -db {{ pki_dest_dir }}/{{ pki_entity }}.p12 -pw {{ pki_keyrpwd.stdout }}
+    creates: "{{ pki_dest_dir }}/{{ pki_entity }}.sth"
+  environment:
+    LD_LIBRARY_PATH: /opt/mqm/lib64
+  become: true
+  no_log: true
+  when: pki_stash | bool
+
+- name: "own the {{ pki_entity }} stash file"
+  ansible.builtin.file:
+    path: "{{ pki_dest_dir }}/{{ pki_entity }}.sth"
+    owner: "{{ pki_owner }}"
+    group: "{{ pki_owner }}"
+    mode: "0600"
+  become: true
+  when: pki_stash | bool

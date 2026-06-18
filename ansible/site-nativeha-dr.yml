@@ -19,9 +19,9 @@
   vars:
     qm_name: QMNATIVE
     nha_site_nodes:
-      - { name: nha-rhel-b1, hb: 172.16.2.71, data: 10.10.2.71 }
-      - { name: nha-rhel-b2, hb: 172.16.2.72, data: 10.10.2.72 }
-      - { name: nha-rhel-b3, hb: 172.16.2.73, data: 10.10.2.73 }
+      - { name: nha-rhel-b1, hb: 172.16.2.91, data: 10.10.2.91 }
+      - { name: nha-rhel-b2, hb: 172.16.2.92, data: 10.10.2.92 }
+      - { name: nha-rhel-b3, hb: 172.16.2.93, data: 10.10.2.93 }
   roles:
     - mq-nativeha
 
@@ -41,7 +41,7 @@
     this_group: Live
     this_role: live
     peer_group_name: Recovery
-    peer_wan_addrs: ["10.99.0.81", "10.99.0.82", "10.99.0.83"]
+    peer_wan_addrs: ["10.99.0.94", "10.99.0.95", "10.99.0.96"]
     recovery_enabled: "Yes"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
@@ -55,7 +55,7 @@
     this_group: Recovery
     this_role: Recovery
     peer_group_name: Live
-    peer_wan_addrs: ["10.99.0.71", "10.99.0.72", "10.99.0.73"]
+    peer_wan_addrs: ["10.99.0.91", "10.99.0.92", "10.99.0.93"]
     recovery_enabled: "No"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml

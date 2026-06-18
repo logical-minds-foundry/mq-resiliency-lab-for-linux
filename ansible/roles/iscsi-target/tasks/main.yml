@@ -2,11 +2,8 @@
 # one LUN, ACLs for the site's three initiators, portal on the SAN net.
 # This VM IS the "SAN array" of this arm - deliberately a single point
 # of failure (spec 2.5 Q4); we expose it, not engineer it away.
-- name: install targetcli
-  ansible.builtin.apt:
-    name: targetcli-fb
-    update_cache: true
-  become: true
+- name: install targetcli (OS-adapter)
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
 - name: configure target (idempotent via ls probe)
   ansible.builtin.shell: |
@@ -32,6 +29,6 @@
 
 - name: target service enabled (restores config at boot)
   ansible.builtin.systemd:
-    name: rtslib-fb-targetctl
+    name: "{{ 'target' if ansible_os_family == 'RedHat' else 'rtslib-fb-targetctl' }}"
     enabled: true
   become: true

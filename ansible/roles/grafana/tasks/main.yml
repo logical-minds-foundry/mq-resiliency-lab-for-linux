@@ -15,9 +15,9 @@
     signed_by: /etc/apt/keyrings/grafana.asc
     state: present
 
-- name: install grafana
+- name: install grafana (pinned when grafana_version is set, else apt-latest) (#266)
   ansible.builtin.apt:
-    name: grafana
+    name: "{{ ('grafana=' + grafana_version) if grafana_version | default('') else 'grafana' }}"
     update_cache: true
 
 - name: provisioning dirs
@@ -55,19 +55,33 @@
     mode: "0644"
   notify: restart grafana
 
+- name: deploy the rendered cluster cockpit dashboard (#219)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/grafana/dashboards/lab-pcmk-cluster.json"
+    dest: /var/lib/grafana/dashboards/lab-pcmk-cluster.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d
     state: directory
     mode: "0755"
 
-- name: inject the admin password via a systemd env drop-in (never committed)
+- name: grafana env drop-in — admin password (+ anonymous access in the lab, #258)
   ansible.builtin.copy:
     dest: /etc/systemd/system/grafana-server.service.d/admin.conf
     mode: "0600"
     content: |
       [Service]
       Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      {% if grafana_anonymous | bool %}
+      Environment=GF_AUTH_ANONYMOUS_ENABLED=true
+      Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
+      {% endif %}
   notify: restart grafana
 
 - name: enable + start grafana

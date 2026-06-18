@@ -1,0 +1,111 @@
+# The pcmk-rhel arm (issue #238/#244), Phase 1: OSS Corosync/Pacemaker + iSCSI
+# SAN substrate on RHEL 9.6. Mirrors site-pcmk.yml but targets the RHEL groups,
+# sets up offline repos first, and stops at the substrate (no MQ until Phase 2).
+# Run: ansible-playbook site-pcmk-rhel.yml [--limit ...]
+
+# Fence keypair + hypervisor authorization (STONITH prerequisite) — identical
+# to site-pcmk.yml; the key is OS-agnostic and shared across arms.
+- name: fence keypair + hypervisor authorization (STONITH prerequisite)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fence_key: "{{ playbook_dir }}/../build/fence_key"
+  tasks:
+    - name: generate the fence keypair once (gitignored, under build/)
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -N "" -C "fence_virsh@lab" -f "{{ fence_key }}"
+        creates: "{{ fence_key }}"
+    - name: ensure the fence user's ~/.ssh exists
+      ansible.builtin.file:
+        path: ~/.ssh
+        state: directory
+        mode: "0700"
+    - name: authorize the fence public key for fence_virsh on the hypervisor
+      ansible.builtin.lineinfile:
+        path: ~/.ssh/authorized_keys
+        line: "{{ lookup('file', fence_key + '.pub') }}"
+        create: true
+        mode: "0600"
+        state: present
+
+# Cold-boot guard (#151): wait for every host to accept SSH before any work.
+- name: wait for all pcmk-rhel hosts to be SSH-ready (cold-boot guard)
+  hosts: pcmk_san_rhel_ha
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+# Offline package sources (DVD BaseOS/AppStream + host-fetched HighAvailability).
+- hosts: pcmk_san_rhel_ha
+  roles: [rhel-ha-repo]
+
+- hosts: pcmk_san_rhel_ha
+  become: true
+  tasks:
+    - name: acl package for unprivileged become (dnf)
+      ansible.builtin.dnf:
+        name: acl
+        state: present
+
+- hosts: san_a_rhel
+  vars:
+    san_backing_dev: /dev/vdb
+    san_target_iqn: iqn.2026-06.lab.mq:san-a-rhel.lun0
+    san_portal_ip: 10.40.3.5
+    san_initiator_iqns:
+      - iqn.2026-06.lab.mq:pcmk-rhel-a1
+      - iqn.2026-06.lab.mq:pcmk-rhel-a2
+      - iqn.2026-06.lab.mq:pcmk-rhel-a3
+  roles: [iscsi-target]
+
+- hosts: pcmk_rhel_a
+  vars:
+    san_target_iqn: iqn.2026-06.lab.mq:san-a-rhel.lun0
+    san_portal_ip: 10.40.3.5
+  roles: [iscsi-initiator]
+  tasks:
+    - name: one-time fs prep - format the shared LUN (run once)
+      ansible.builtin.shell: |
+        set -e
+        dev=/dev/disk/by-path/ip-{{ san_portal_ip }}:3260-iscsi-{{ san_target_iqn }}-lun-0
+        if blkid "$dev" 2>/dev/null | grep -q MQSHARED; then
+          echo already-formatted
+          exit 0
+        fi
+        mkfs.xfs -L MQSHARED "$dev"
+        echo formatted
+      args:
+        executable: /bin/bash
+      become: true
+      run_once: true
+      register: lun_mkfs
+      changed_when: "'formatted' in lun_mkfs.stdout_lines"
+    - name: refresh the iSCSI block view so MQSHARED resolves on every node
+      ansible.builtin.shell: |
+        set -e
+        iscsiadm -m session --rescan
+        udevadm trigger --action=change --subsystem-match=block
+        udevadm settle
+        test -e /dev/disk/by-label/MQSHARED
+      args:
+        executable: /bin/bash
+      become: true
+      changed_when: false
+
+- hosts: pcmk_rhel_a
+  vars: &pcmk_rhel_a_vars
+    pcmk_cluster_name: mqpcmkrhel
+    pcmk_site_nodes:
+      - { name: pcmk-rhel-a1, hb: 172.16.1.71 }
+      - { name: pcmk-rhel-a2, hb: 172.16.1.72 }
+      - { name: pcmk-rhel-a3, hb: 172.16.1.73 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+
+- hosts: pcmk_rhel_a
+  vars: *pcmk_rhel_a_vars
+  roles: [pcmk-stonith]

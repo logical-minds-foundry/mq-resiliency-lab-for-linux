@@ -14,7 +14,7 @@
     this_group: Live
     this_role: "{{ 'live' if target_live == 'a' else 'Recovery' }}"
     peer_group_name: Recovery
-    peer_wan_addrs: ["10.99.0.81", "10.99.0.82", "10.99.0.83"]
+    peer_wan_addrs: ["10.99.0.94", "10.99.0.95", "10.99.0.96"]
     recovery_enabled: "Yes"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
@@ -27,7 +27,7 @@
     this_group: Recovery
     this_role: "{{ 'live' if target_live == 'b' else 'Recovery' }}"
     peer_group_name: Live
-    peer_wan_addrs: ["10.99.0.71", "10.99.0.72", "10.99.0.73"]
+    peer_wan_addrs: ["10.99.0.91", "10.99.0.92", "10.99.0.93"]
     recovery_enabled: "Yes"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml

@@ -6,10 +6,22 @@
     <feature>appSecurity-2.0</feature>
     <feature>basicAuthenticationMQ-1.0</feature>
   </featureManager>
+  <!-- MQ Console (human browser UI, #255). When mqweb_console_anonymous is set (lab
+       convenience, #258) the admin role is granted to the Liberty special-subject
+       EVERYONE, so the console loads with NO login. The REST API (below) is
+       DELIBERATELY left authenticated — it is the tooling/code surface (mqlab,
+       pymqrest, the instrumentation that drives the QMs) and stays secured, prod-like.
+       Independent <enterpriseApplication> bindings make this split possible on one
+       mqweb server. LAB ONLY — default is the authenticated user; never open the
+       console on a real deployment. -->
   <enterpriseApplication id="com.ibm.mq.console">
     <application-bnd>
       <security-role name="MQWebAdmin">
+{% if mqweb_console_anonymous | default(false) | bool %}
+        <special-subject type="EVERYONE"/>
+{% else %}
         <user name="{{ mqweb_admin_user }}" realm="defaultRealm"/>
+{% endif %}
       </security-role>
     </application-bnd>
   </enterpriseApplication>
@@ -24,5 +36,13 @@
     <user name="{{ mqweb_admin_user }}" password="{{ mqweb_admin_password }}"/>
   </basicRegistry>
   <variable name="httpHost" value="*"/>
+{% if mqweb_tls | bool %}
+  <!-- TLS (#250): serve the org-CA `mqweb` entity cert over TLS 1.3 instead of
+       Liberty's default self-signed cert. serverKeyAlias is the cert label (CN). -->
+  <keyStore id="mqwebKeyStore" location="{{ mqweb_security_dir }}/mqweb.p12" type="PKCS12" password="{{ mqweb_keyrpwd }}"/>
+  <ssl id="mqwebSSL" keyStoreRef="mqwebKeyStore" serverKeyAlias="mqweb" sslProtocol="TLSv1.3"/>
+  <sslDefault sslRef="mqwebSSL"/>
+{% else %}
   <sslDefault sslRef="mqDefaultSSLConfig"/>
+{% endif %}
 </server>

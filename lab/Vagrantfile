@@ -7,10 +7,16 @@
 #   x86_64  (TCG):  machine_arch (not arch), q35, cpu custom/qemu64,
 #                   long boot timeout.
 require "yaml"
+require "json"
 
 topology = YAML.load_file(File.join(__dir__, "topology.yaml"))
 boxes    = topology.fetch("boxes")
 defaults = topology.fetch("defaults")
+
+# Manifest-driven box_version pins (#266), written by mqlab at create — keyed by
+# platform. Absent the file (no manifest), boxes float exactly as before.
+bvf = File.join(__dir__, "..", "build", "box-versions.json")
+box_versions = File.exist?(bvf) ? JSON.parse(File.read(bvf)) : {}
 
 Vagrant.configure("2") do |config|
   # No /vagrant synced folder anywhere: Ansible owns file transport, and
@@ -27,6 +33,8 @@ Vagrant.configure("2") do |config|
     platform = boxes.fetch(spec.fetch("platform", defaults["platform"]))
     config.vm.define name do |node|
       node.vm.box      = platform.fetch("box")
+      bv = box_versions[spec.fetch("platform", defaults["platform"])]
+      node.vm.box_version = bv if bv
       node.vm.hostname = name
       node.vm.provider :libvirt do |lv|
         lv.cpus   = spec.fetch("cpus",   defaults["cpus"])

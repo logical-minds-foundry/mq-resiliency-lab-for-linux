@@ -1,0 +1,8 @@
+# Per-setup SUT (MQ / HA / OS) for distributed-rdqm-rhel (#266).
+# The RHEL HA stack (pacemaker/drbd/kmod-drbd) ships inside the MQ Advanced package
+# → fixed by mq.version → discovered, not pinned here.
+mq:
+  version: "9.4.5.0"
+os:
+  box: rhel/9.6-x86_64
+  box_version: "0" # the lab's custom RHEL box (built from the DVD ISO) is version 0

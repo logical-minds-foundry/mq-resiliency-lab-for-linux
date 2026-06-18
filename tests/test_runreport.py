@@ -62,13 +62,14 @@ def test_capture_metadata_propagates_reader_failure() -> None:
 
 
 def test_run_metadata_to_dict_round_trips() -> None:
-    md = RunMetadata("s", "c", "t", "d", {"k": "v"})
+    md = RunMetadata("s", "c", "t", "d", {"k": "v"}, manifest="s/default")
     assert md.to_dict() == {
         "setup": "s",
         "commit": "c",
         "timestamp": "t",
         "config_digest": "d",
         "versions": {"k": "v"},
+        "manifest": "s/default",
     }
 
 
@@ -120,3 +121,43 @@ def test_append_index_writes_one_jsonl_line_per_call(tmp_path) -> None:
     assert entry["commit"] == "abc123"
     assert entry["bundle"] == "20260615T143000Z-distributed"
     assert entry["verdicts"] == {"BASELINE": True}
+
+
+def test_capture_metadata_includes_manifest() -> None:
+    md = capture_metadata(
+        "distributed-pcmk-ubuntu",
+        "20260618T000000Z",
+        commit_reader=lambda: "abc",
+        digest_reader=lambda: "def",
+        version_reader=lambda: {"mq": "9.4.5.0"},
+        manifest_reader=lambda: "distributed-pcmk-ubuntu/default",
+    )
+    assert md.manifest == "distributed-pcmk-ubuntu/default"
+    assert md.versions == {"mq": "9.4.5.0"}
+
+
+def test_capture_metadata_manifest_defaults_empty() -> None:
+    md = capture_metadata(
+        "s",
+        "t",
+        commit_reader=lambda: "c",
+        digest_reader=lambda: "d",
+        version_reader=lambda: {},
+    )
+    assert md.manifest == ""
+
+
+def test_to_markdown_shows_manifest() -> None:
+    md = RunMetadata("s", "c", "t", "d", {}, manifest="s/default")
+    report = RunReport(metadata=md, scenarios=[_confirmed_report("pcmk-ubuntu")])
+    assert "- Manifest: `s/default`" in report.to_markdown()
+
+
+def test_config_digest_is_manifest_sensitive(tmp_path) -> None:
+    from mqlab.runreport import read_config_digest
+
+    man = tmp_path / "sel.yaml"
+    man.write_text("manifest: default\n")
+    before = read_config_digest([man])
+    man.write_text("manifest: repro-945\n")
+    assert read_config_digest([man]) != before  # digest tracks the pinned manifest

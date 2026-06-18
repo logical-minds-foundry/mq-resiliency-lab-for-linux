@@ -1,0 +1,10 @@
+---
+# TLS (#250): serve the mqweb REST/console over the org-CA `mqweb` entity cert
+# instead of Liberty's default self-signed cert. The keystore lands in the server's
+# resources/security dir and is referenced by mqwebuser.xml.
+mqweb_tls: true
+mqweb_security_dir: /var/mqm/web/installations/Installation1/servers/mqweb/resources/security
+# Console-only anonymous access (#255/#258). Default false (secure): the MQ Console
+# requires login like the REST API. The lab opts in via group_vars/all to open ONLY
+# the console — the REST API stays authenticated regardless. LAB ONLY.
+mqweb_console_anonymous: false

@@ -1,0 +1,21 @@
+{
+  "channel": [
+    {
+      "name": "{{ mq_exporter_channel }}",
+      "type": "clientConnection",
+      "clientConnection": {
+        "connection": [
+          {
+            "host": "{{ mq_exporter_conn.split('(')[0] }}",
+            "port": {{ mq_exporter_conn.split('(')[1].split(')')[0] }}
+          }
+        ],
+        "queueManager": "{{ mq_exporter_qm }}"
+      },
+      "transmissionSecurity": {
+        "cipherSpecification": "{{ tls_cipher }}",
+        "certificateLabel": "{{ mq_exporter_certlabel }}"
+      }
+    }
+  ]
+}

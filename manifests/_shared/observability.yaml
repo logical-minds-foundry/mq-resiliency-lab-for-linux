@@ -1,0 +1,9 @@
+# Shared obs stack — a singleton served by `mqlab obs up` for every arm (#266).
+# Values track today's role defaults. grafana and the exporter ref still float;
+# promote them to real pins by step-function (that retires the #172 TODO).
+prometheus: "2.53.2" # ansible/roles/prometheus/defaults
+node_exporter: "1.8.2" # ansible/roles/node-exporter/defaults
+loki: "3.1.1" # ansible/roles/loki/defaults
+alloy: "1.3.1" # ansible/roles/alloy/defaults
+grafana: "" # apt-float today; "" = let apt pick (pin later by step-function)
+mq_metric_samples_ref: "master" # float today; pin to a release tag to retire #172

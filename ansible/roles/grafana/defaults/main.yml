@@ -1,2 +1,6 @@
 ---
 grafana_admin_password: "{{ lookup('ansible.builtin.env', 'GF_SECURITY_ADMIN_PASSWORD') | default('admin', true) }}"
+# Anonymous (login-free) access for the lab (#258). Default false (login required);
+# the lab opts in via group_vars/all. When true, Grafana grants anonymous Admin and
+# hides the login form — human convenience only. LAB ONLY.
+grafana_anonymous: false

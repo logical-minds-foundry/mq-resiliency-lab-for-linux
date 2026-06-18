@@ -70,8 +70,8 @@ IP plan — **both sites declared now** (the consolidated `distributed-HADR` sta
 
 | node | data | HA replication (hb) | cross-site (wan) |
 |---|---|---|---|
-| nha-rhel-a1..a3 (site A) | 10.50.2.51–53 | 172.16.3.51–53 | 10.99.0.51–53 |
-| nha-rhel-b1..b3 (site B) | 10.50.3.51–53 | 172.16.4.51–53 | 10.99.0.61–63 |
+| nha-rhel-a1..a3 (site A) | 10.10.1.91–93 | 172.16.1.91–93 | 10.99.0.91–93 |
+| nha-rhel-b1..b3 (site B) | 10.10.2.91–93 | 172.16.2.91–93 | 10.99.0.94–96 |
 
 HA replication on a dedicated NIC (so the fault suite can sever it
 independently); the `wan` NIC carries the **CRR cross-region link (9415)** in

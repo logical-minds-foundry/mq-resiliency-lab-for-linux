@@ -14,5 +14,8 @@ N="${1:-5}"
 QM="${2:-QMPCMK}"
 CONN="${3:-10.10.1.200(1414),10.10.2.200(1414)}"
 cd "$(dirname "$0")/.."
+# TLS (#250): present the app-client cert over the mutual-TLS APP.SVRCONN. The
+# keystore stem (+ sibling .sth stash) and cert label are placed by mq-client.
 vagrant ssh app-client -c \
-  "~/mqvenv/bin/python ~/app_requester.py --qm ${QM} --conn '${CONN}' --count ${N}"
+  "~/mqvenv/bin/python ~/app_requester.py --qm ${QM} --conn '${CONN}' --count ${N} \
+     --keyrepo /home/vagrant/ssl/app-client --certlabel app-client"

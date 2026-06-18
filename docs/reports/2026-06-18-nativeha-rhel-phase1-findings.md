@@ -9,7 +9,7 @@
 
 `QMNATIVE` forms `QUORUM(3/3)` via the production `mq-nativeha` role (shared
 formation + `install-RedHat.yml`): one Active + two Replica, all `INSYNC(yes)`,
-`HASTATUS(Normal)`, replication on the **dedicated `net-hb-a` NIC** (172.16.1.71-73).
+`HASTATUS(Normal)`, replication on the **dedicated `net-hb-a` NIC** (172.16.1.91-93).
 
 ## §3.1 fault suite (`lab/scripts/nativeha-fault-suite.sh`)
 

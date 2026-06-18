@@ -1,0 +1,6 @@
+# noble ships fence_virsh in fence-agents-virsh.
+- name: fence agent package (apt)
+  ansible.builtin.apt:
+    name: fence-agents-virsh
+    update_cache: false
+  become: true

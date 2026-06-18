@@ -1,10 +1,7 @@
 # open-iscsi initiator (pcmk nodes): stable IQN per node, discover and
 # log in to the site target, automatic reconnect at boot.
-- name: install open-iscsi
-  ansible.builtin.apt:
-    name: open-iscsi
-    update_cache: true
-  become: true
+- name: install iscsi initiator (OS-adapter)
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
 # Stable IQN matching the target ACLs. MUST be set on BOTH sites' nodes
 # before DR cutover - the default Ubuntu IQN fails the ACL (login error

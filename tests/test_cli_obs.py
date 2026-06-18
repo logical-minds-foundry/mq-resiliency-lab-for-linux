@@ -81,6 +81,8 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
             ScriptedResult(["up"]),
             ScriptedResult(["ok"]),
             ScriptedResult(["host ok"]),
+            ScriptedResult(["relay ok"]),
+            ScriptedResult(['{"database":"ok"}']),
         ]
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
@@ -95,10 +97,30 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert argvs[2][-1] == "site-obs.yml"
     # the host collector is provisioned via a connection=local host-obs play
     assert any("host-obs.yml" in a for a in argvs)
+    # after provisioning bounces grafana, the port-forward relay is re-healed (#264)
+    assert argvs[4] == ["sudo", "systemctl", "restart", *cli._RELAY_UNITS]
+    # ...then the workstation-facing endpoint is verified fail-loud (curl -fsS)
+    assert argvs[5][0] == "curl"
+    assert "-fsS" in argvs[5]
+    assert argvs[5][-1] == "http://localhost:3000/api/health"
     # all three artifacts rendered eagerly when the steps were built
     assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "inventory.ini").exists()
     assert (tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json").exists()
+
+
+def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+
+    assert result.exit_code == 0
+    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-pcmk-cluster.json"
+    assert board.exists()
+    assert json.loads(board.read_text())["uid"] == "lab-pcmk-cluster"
 
 
 def test_obs_up_propagates_step_failure(monkeypatch, tmp_path):
@@ -138,17 +160,24 @@ def test_obs_status_nonzero_exit_propagates(monkeypatch, tmp_path):
     assert result.exit_code == 1
 
 
-# --- open: prints the URL and the SSH tunnel one-liner ---
+# --- open: prints the workstation URL and explains the automatic forward ---
 
 
-def test_obs_open_prints_url_and_tunnel():
+def test_obs_open_prints_workstation_url_and_automatic_forward():
     result = CliRunner().invoke(cli.app, ["obs", "open"])
     assert result.exit_code == 0
-    assert "http://10.50.0.2:3000" in result.stdout
-    assert "-L 3000:10.50.0.2:3000" in result.stdout
-    assert "limactl list" in result.stdout
+    # the workstation browses plain localhost:3000 (auto-forwarded), plus the
+    # in-VM direct URL for reference
+    assert "http://localhost:3000/d/lab-fleet-node" in result.stdout
+    assert "http://10.50.0.2:3000/d/lab-fleet-node" in result.stdout
     assert "/explore" in result.stdout
     assert "mqlab-requester" in result.stdout
+    # the forward is automatic and anonymous now — the stale manual-tunnel /
+    # admin-login guidance must be gone (#264, #258)
+    assert "automatic" in result.stdout
+    assert "ssh -F" not in result.stdout
+    assert "-L 3000:" not in result.stdout
+    assert "admin / admin" not in result.stdout
 
 
 def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):

@@ -1,0 +1,9 @@
+# Cluster stack on RHEL from the free EL-compatible HighAvailability repo
+# (set up by rhel-ha-repo). resource-agents is a single package on EL9 (not
+# split base/extra). fence-agents-all pulls the fence_virsh agent the
+# pcmk-stonith role uses.
+- name: install cluster stack (dnf, HighAvailability)
+  ansible.builtin.dnf:
+    name: [pacemaker, corosync, pcs, resource-agents, fence-agents-all]
+    state: present
+  become: true
