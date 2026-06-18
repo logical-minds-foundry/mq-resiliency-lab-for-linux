@@ -1,0 +1,6 @@
+---
+# Defaults for manifest-driven versions (#266). The mqlab manifest overlay overrides
+# these at provision time; absent a manifest, these reproduce today's behavior so
+# nothing breaks before manifests exist.
+mq_version: "9.4.5.0"
+grafana_version: "" # "" = let apt pick (current float); a concrete value pins it
