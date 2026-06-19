@@ -34,6 +34,9 @@ anything MQ-side. See the flow diagram referenced above.
 - The minimal pipeline changes needed for **availability** (logs reach Loki and
   are queryable): one Alloy relabel rule, one Alloy file source, and a journald
   rate-limit drop-in so nothing is silently dropped.
+- `logcli` on the obs node and a **human debugging runbook**
+  (`docs/reference/mq-logging-debugging.md`) — the pipeline has enough stages that
+  it must be supportable without the AI.
 
 ### Out of scope (named follow-ons)
 

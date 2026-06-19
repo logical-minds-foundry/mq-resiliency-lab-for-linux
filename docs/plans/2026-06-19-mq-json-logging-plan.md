@@ -643,6 +643,88 @@ vrg-commit --type docs --scope obs --message "MQ JSON logging build verification
 
 ---
 
+### Task 10: Human debugging runbook for the logging pipeline
+
+A short, stage-by-stage runbook so a human can troubleshoot the pipeline without the
+AI ("supportable without the AI" principle). Best written after Task 9 so the
+failure-modes table reflects what actually broke during the drill.
+
+**Files:**
+- Create: `ansible/roles/... ` — none.
+- Create: `docs/reference/mq-logging-debugging.md`
+
+**Interfaces:**
+- Consumes: `logcli` (Task 8), the success criteria (Task 9), the flow diagram.
+
+- [ ] **Step 1: Write `docs/reference/mq-logging-debugging.md`**
+
+```markdown
+# Debugging the MQ JSON logging pipeline
+
+The path: **MQ Syslog service → `/dev/log` → journald → Alloy (relabel) → Loki**,
+plus a separate **mqweb `messages.log` → Alloy file tail → Loki**. Diagram:
+`../specs/diagrams/mq-json-logging-flow.html`. Walk the stages in order; the first
+one that's empty is your fault domain.
+
+## Stage 1 — is MQ producing JSON?
+- Stanza present? `grep -A5 MQ-DIAG-LOGGING /var/mqm/qmgrs/<QM>/qm.ini`
+- QM up? `dspmq -m <QM>`  ·  generate one: `echo "STOP LISTENER(L1414)
+  START LISTENER(L1414)" | runmqsc <QM>`
+- Stanza changes need a QM restart to take effect.
+
+## Stage 2 — did it reach journald?
+- `journalctl -t ibm-mq -o cat --no-pager | tail -3`
+- Empty? Check the QM emits to syslog (Service=Syslog, not File), and that
+  `Ident=ibm-mq`. Confirm journald reads `/dev/log` (default).
+
+## Stage 3 — is it valid single-line JSON?
+- `journalctl -t ibm-mq -o cat --no-pager | tail -1 | python3 -m json.tool`
+- Fails? The `MESSAGE` field isn't a clean JSON blob — revisit the Phase 0 spike
+  finding; consider the file-tail fallback.
+
+## Stage 4 — labelled correctly for Loki?
+- The Alloy relabel sets `unit=ibm-mq` only when there's no systemd unit. Inspect
+  `/etc/alloy/config.alloy`; restart: `systemctl restart alloy`.
+
+## Stage 5 — is it in Loki?
+- `logcli query '{unit="ibm-mq"} | json | ibm_messageId != ""' --limit=5`
+- mqweb: `logcli query '{unit="ibm-mqweb"} | json' --limit=5`
+- `logcli --addr=http://<obs>:3100 labels unit` to see what labels exist.
+
+## mqweb specifics
+- JSON on? `tail -1 .../servers/mqweb/logs/messages.log | python3 -m json.tool`
+- Alloy tailing it? `alloy_tail_mqweb: true` for the QM-node group; file path is
+  `/var/mqm/web/installations/Installation1/servers/mqweb/logs/messages.log`.
+
+## No silent loss
+- `journalctl -t ibm-mq --no-pager | grep -i Suppressed` → must be empty. If not,
+  the journald drop-in (`/etc/systemd/journald.conf.d/10-mq.conf`) didn't apply;
+  `systemctl restart systemd-journald`.
+
+## Common failure modes
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Nothing in `journalctl -t ibm-mq` | QM not restarted after stanza, or Service=File not Syslog | restart QM; check qm.ini stanza |
+| Entries present, `unit` empty in Loki | Alloy relabel rule missing/typo | fix `config.alloy`, restart alloy |
+| `python3 -m json.tool` fails on a line | MESSAGE not a JSON blob | revisit spike; file-tail fallback |
+| mqweb rows missing | `alloy_tail_mqweb` false, or wrong Installation path | enable on group; fix path casing |
+| "Suppressed N messages" in journal | journald drop-in not applied | reapply drop-in; restart journald |
+```
+
+- [ ] **Step 2: Validate**
+
+Run: `vrg-container-run -- vrg-validate`
+Expected: PASS (markdownlint clean).
+
+- [ ] **Step 3: Commit**
+
+```bash
+vrg-git add docs/reference/mq-logging-debugging.md
+vrg-commit --type docs --scope obs --message "human debugging runbook for the MQ logging pipeline (#282)"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
@@ -652,6 +734,7 @@ vrg-commit --type docs --scope obs --message "MQ JSON logging build verification
 - §4.3 journald drop-in → Task 1. ✓
 - §5 concrete config (all four surfaces + journald) → Tasks 1–4. ✓
 - §7 verification → Task 9 (with `logcli` installed in Task 8). ✓
+- §1 logcli + human debugging runbook → Tasks 8 & 10. ✓
 - §8 Phase 0 spike gate → Task 0 (blocks all). ✓
 - §6 pcmk shared-LUN path / native-HA per-node → Task 5 path vars. ✓
 
