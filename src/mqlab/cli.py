@@ -16,7 +16,7 @@ from rich.console import Console
 
 from mqlab import parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
-from mqlab.artifact import ensure_mq_tarballs
+from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
@@ -157,11 +157,11 @@ _ManifestOpt = Annotated[
 
 # --- Version manifest wiring (#266). All gracefully optional: a setup/repo with no
 #     manifest behaves exactly as before (the helpers return None / []). -------------
-def _fetch_mq_tarball(name: str, dest: Path) -> None:  # pragma: no cover - manual/offline
-    raise RuntimeError(
-        f"MQ tarball {name} is absent and auto-download is not configured; place it "
-        f"(with its .sha256) under {dest.parent} via your IBM/Red Hat downloads (#266)."
-    )
+def _fetch_mq_tarball(name: str, dest: Path) -> None:
+    """Acquire a missing MQ tarball from IBM's no-auth public CDN (#276/#291) — no
+    credentials, so a fresh or anonymous box bootstraps without manual placement.
+    Only the RHEL OS image stays a manual artifact (licensed, not downloadable)."""
+    download_mq_tarball(name, dest)
 
 
 def _apply_manifest(

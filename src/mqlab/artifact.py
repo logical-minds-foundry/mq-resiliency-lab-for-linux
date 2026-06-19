@@ -9,6 +9,8 @@ for every arch we use; `fetch` populates the cache on a miss. The sibling `.sha2
 from __future__ import annotations
 
 import hashlib
+import shutil
+import urllib.request
 from typing import TYPE_CHECKING
 
 from mqlab.manifest import setup_platforms, tarball_name
@@ -18,6 +20,35 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from mqlab.hostfacts import HostFacts
+
+# IBM MQ Advanced for Developers is a no-charge, NO-AUTH public download — so a
+# credential-less box (e.g. the anonymous bootstrap identity, #291) can fetch it.
+MQ_CDN_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv"
+
+
+def mq_tarball_url(name: str) -> str:
+    return f"{MQ_CDN_BASE}/{name}"
+
+
+def _stream_download(url: str, dest_part: Path) -> None:  # pragma: no cover - real network I/O
+    with urllib.request.urlopen(url) as resp, dest_part.open("wb") as fh:  # noqa: S310
+        shutil.copyfileobj(resp, fh)
+
+
+def download_mq_tarball(
+    name: str, dest: Path, *, download: Callable[[str, Path], None] = _stream_download
+) -> None:
+    """Fetch an MQ-for-Developers tarball from IBM's no-auth public CDN into `dest`,
+    atomically (via a .part), recording a sha256 sidecar for later cache-integrity
+    checks. Credential-less by design (#276) — this is what a no-git box can fetch."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    part = dest.with_name(dest.name + ".part")
+    download(mq_tarball_url(name), part)
+    part.rename(dest)
+    sidecar = dest.with_name(dest.name + ".sha256")
+    if not sidecar.exists():
+        digest = hashlib.sha256(dest.read_bytes()).hexdigest()
+        sidecar.write_text(f"{digest}  {dest.name}\n")
 
 
 def _verify_sha256(path: Path) -> None:

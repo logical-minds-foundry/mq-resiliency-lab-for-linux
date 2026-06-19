@@ -474,3 +474,14 @@ def test_vm_status_does_not_gate(monkeypatch, tmp_path, prepare_lab_calls):
     result = CliRunner().invoke(cli.app, ["vm", "status"])
     assert result.exit_code == 0
     assert prepare_lab_calls == []
+
+
+def test_fetch_mq_tarball_delegates_to_download(monkeypatch, tmp_path):
+    # the manifest fetch callback now auto-downloads (no-auth CDN) instead of raising (#276)
+    calls = {}
+    monkeypatch.setattr(
+        cli, "download_mq_tarball", lambda name, dest: calls.update(name=name, dest=dest)
+    )
+    name = "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+    cli._fetch_mq_tarball(name, tmp_path / "t")
+    assert calls == {"name": name, "dest": tmp_path / "t"}
