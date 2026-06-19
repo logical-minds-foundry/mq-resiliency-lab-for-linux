@@ -29,9 +29,13 @@ Two structural faults underlie it:
    "nuke and start over" cold rebuild can't tell what to drop (stale renders
    survive) from what to preserve (downloads, snapshots) — rebuilds are not
    reproducible.
-2. **No single authority.** `build/` subpaths are hardcoded across **8 modules**
-   (`paths`, `cli`, `dashboard`, `inventory`, `clusterboard`, `scrape`, `roster`,
-   `runreport`), so the layout grew by accretion and there is no owner.
+2. **No single authority.** `build/` subpaths are hardcoded across **~37 files** —
+   8 Python modules (`paths`, `cli`, `dashboard`, `inventory`, `clusterboard`,
+   `scrape`, `roster`, `runreport`), **`ansible/ansible.cfg`** (the inventory
+   path), ~8 ansible playbooks, several roles, and ~8 `lab/scripts/` shell scripts
+   (snapshot/restore/secret/box-build/dr). The layout grew by accretion with no
+   owner. (`grep -rl "build/" src/ ansible/ lab/ scripts/` is the authoritative
+   list the plan must work from — see §4.)
 
 A direct consequence: **operating the lab from a git worktree requires fragile,
 hand-wired symlinks** (there is one physical lab, so its state must be shared
@@ -50,12 +54,20 @@ across checkouts), and that fragility blocks the #276 cold-rebuild acceptance.
 - **D4 — `build/` stays the home for all of this** (host-mounted, survives a VM
   rebuild for free). No second host mount, no `~/.cache` (that lives in the
   ephemeral VM and dies on rebuild).
-- **D5 — `paths.py` is the single layout authority.** Python routes every
-  `build/` access through it; the three non-Python consumers (Vagrantfile,
-  ansible, `fetch-mq.sh`) follow one *documented* bucket layout.
-- **D6 — Wiring is an idempotent `mqlab build ensure`, auto-run by the lab
-  preflight** (the `_prepare_lab` seam from #276). No magic path-getter side
-  effects; no forgotten manual setup.
+- **D5 — `paths.py` is the single layout authority for Python; `mqlab build path
+  <bucket>` is the single resolver for everything else.** Python routes every
+  `build/` access through `paths.py`; the *many* non-Python consumers (Vagrantfile,
+  ansible + `ansible.cfg`, and the `lab/scripts/` + `fetch-mq.sh` shell scripts)
+  resolve bucket locations by calling `mqlab build path <bucket>` rather than
+  re-deriving paths themselves (see §5; this folds in the existing
+  `git-common-dir` main-resolution already duplicated across `lab-snapshot.sh` /
+  `lab-restore.sh` / `build-box.sh`).
+- **D6 — Wiring is an idempotent `mqlab build ensure`, hooked directly into the
+  lab-driving verbs** (`vm create`/`vm up`/`obs up`/`vm ssh`). `#286` adds this
+  hook itself and does **not** depend on #276's `_prepare_lab` (which is on an
+  unmerged branch). When #276 later rebases on top, its `_prepare_lab` simply
+  absorbs the `build ensure` call (order: `build ensure` → host/KVM checks →
+  render `work/`). No magic path-getter side effects; no forgotten manual setup.
 
 ### 2.1 Non-goals
 
@@ -70,7 +82,7 @@ across checkouts), and that fragility blocks the #276 cold-rebuild acceptance.
 build/
   cache/   # shared · re-fetchable downloads
     mq/   refs/   ansible_collections/   ibm-sysreq.pdf
-  state/   # shared · live-lab facts (irreplaceable)
+  state/   # shared · facts that must persist for the live lab's lifetime
     iso/   snapshots/   boxes/   (rhel96-box build workdir)
     secrets/   fence_key*   *.env
     manifests/<setup>.yaml          # manifest selection pins
@@ -85,7 +97,7 @@ build/
 | Bucket | Re-creatable? | On cold rebuild | Worktree |
 |--------|---------------|-----------------|----------|
 | `cache/` | yes (re-download, slow) | **keep** (drop only on `clean --cache` / ground-up) | **shared** → symlink to main |
-| `state/` | no / very expensive | **keep** (drop only on guarded `clean --state`) | **shared** → symlink to main |
+| `state/` | mixed (see below) | **keep** (drop only on guarded `clean --state`) | **shared** → symlink to main |
 | `work/` | yes (seconds) | **nuke** every rebuild | **local** |
 | `temp/` | n/a | **nuke** on explicit clean only | **local** |
 
@@ -105,6 +117,32 @@ above / disposable? → `temp/`.
 - `temp/` is the sanctioned home for the operator's screenshot→agent handoff
   (host-mounted, so a file dropped there is readable in the VM); the cleanup tool
   must **not** auto-purge `temp/` mid-session — only on an explicit `clean`.
+
+**Why `state/` is kept — two distinct rationales** (this sharpens the
+`clean --state` guard message):
+
+- *Irreplaceable* — `iso/` (licensed media, not re-downloadable) and `snapshots/`
+  (22 GB of captured lab state). Losing these is hours-to-impossible to recover.
+- *Lifecycle-coupled* — `secrets/`/`*.env`/`fence_key*`, the `manifests/<setup>.yaml`
+  selection pins, and built `boxes/`. These *regenerate* on a true ground-zero
+  wipe (`lab-secret.sh` says so explicitly), but a running lab was provisioned
+  *with these specific values*; regenerating them mid-life breaks the live
+  cluster. They must persist as long as the lab exists.
+
+The `clean --state` confirmation names what's actually at stake (irreplaceable
+snapshots/ISO vs. a running lab's coupled credentials), not a blanket
+"irreplaceable."
+
+**Correctness fix, not just a relocation:** `state/` consumers today disagree on
+where `build/` is — `lab-snapshot.sh`/`lab-restore.sh`/`build-box.sh` resolve the
+**main** worktree's `build/` (via `git-common-dir`), but `lab-secret.sh` writes the
+**local** repo-root `build/secrets`. So from a feature worktree, a lab's snapshots
+land in main while its secrets land in the worktree — a latent mismatch (a QM
+provisioned against worktree-local secrets won't line up with a main-tree restore).
+After the reorg **all `state/` consumers resolve via the one shared resolver
+(`mqlab build path state`, §5)**, so secrets and snapshots are consistently the
+single lab's. This is a bug fixed by the reorg, verified in acceptance — not a
+faithful move of the existing split.
 
 **Cold-rebuild story (now honest):** normal rebuild nukes the VM + `work/` +
 `temp/` (+ any stray non-bucket files in `build/` root), keeps `cache/`+`state/`.
@@ -136,15 +174,38 @@ The eight modules ask `paths` for a location instead of concatenating
 `repo_root()/"build"/…`. After this, moving a bucket is a one-line change and a
 write outside a bucket is obvious in review.
 
-**The ripple — artifacts physically move into buckets**, reaching three non-Python
-consumers that follow the documented layout (they cannot import `paths.py`):
+**The ripple — artifacts physically move into buckets, and EVERY consumer must be
+updated.** This is not the ~5-item hand list an earlier draft implied: **`grep -rl
+"build/" src/ ansible/ lab/ scripts/` is the authoritative work-list (~37 files)**,
+and the plan updates every one. The categories:
 
-- **Vagrantfile (Ruby)** — reads `../build/work/lab/topology.resolved.yaml` and
+- **Python (8 modules)** → via `paths.py` helpers.
+- **`ansible/ansible.cfg`** → `inventory = ../build/work/inventory.ini`. **This one
+  line is make-or-break** — miss it and every playbook loads no hosts.
+- **Ansible playbooks + roles** (`site-pcmk*.yml`, `observability.yml`,
+  `site-pki.yml`, `site-nativeha-spike.yml`, `gather-versions.yml`,
+  `mq-install`/`mq-client`/`rdqm-install`, obs roles, `pcmk-stonith`, …) → bucket
+  paths: `../build/cache/mq/…`, `../build/work/{inventory.ini,prometheus,grafana}/…`.
+- **`lab/scripts/` + `scripts/`** (`lab-snapshot.sh`, `lab-restore.sh`,
+  `lab-secret.sh`, `build-box.sh`, `dr-provision.sh`, `nativeha-fault-suite.sh`,
+  `pcmk-dr-force.sh`, `fetch-mq.sh`) → resolve buckets via `mqlab build path
+  <bucket>` (below), not hand-rolled paths.
+- **Vagrantfile (Ruby)** → reads `../build/work/lab/topology.resolved.yaml` and
   `../build/work/box-versions.json`.
-- **Ansible roles** — `mq-install`/`mq-client`/`rdqm-install` copy from
-  `../build/cache/mq/…`; obs roles read `../build/work/{prometheus,grafana}/…`;
-  inventory at `../build/work/inventory.ini`.
-- **`scripts/fetch-mq.sh`** — writes into `build/cache/mq/`.
+
+**Acceptance backstop:** after the migration, `grep -rn "build/" src/ ansible/ lab/
+scripts/` shows no bare pre-bucket path (`build/mq`, `build/inventory.ini`, …) — only
+bucket-qualified paths or `mqlab build path` calls.
+
+**The non-Python resolver — `mqlab build path <bucket>`.** The shell scripts and
+non-Python consumers must NOT each re-derive `build/`'s location. Three of them
+(`lab-snapshot.sh`, `lab-restore.sh`, `build-box.sh`) already re-implement
+`git-common-dir` main-resolution independently (citing #57) — exactly the drift this
+reorg eliminates. So the tool exposes `mqlab build path cache|state|work|temp`,
+which prints the correct absolute bucket path (main-resolved for `cache`/`state`,
+local for `work`/`temp`). Shell scripts call it; the three existing main-resolvers
+are folded into it. One authority for Python (`paths.py`) and non-Python (`build
+path`), sharing the same resolution logic in `buildenv.py`.
 
 ## 5. The tool — `mqlab build`
 
@@ -161,14 +222,19 @@ filesystem root + git-dir resolver):
   - never clobbers a correct dir/symlink;
   - **fails loud** if it is a linked worktree but main is unresolvable (rather than
     silently creating a local `cache/` that re-downloads).
-- **Auto-invoked by the lab preflight** — runs first in the lab-driving verbs (the
-  `_prepare_lab` seam from #276): `build ensure` → host/KVM checks → render
-  `work/`. Also runnable by hand.
+- **`mqlab build path cache|state|work|temp`** — prints the resolved absolute
+  bucket path (main-resolved for `cache`/`state`, local for `work`/`temp`); the
+  one resolver every non-Python consumer calls (D5).
+- **Hooked directly into the lab-driving verbs** (`vm create`/`vm up`/`obs up`/`vm
+  ssh`) — `#286` adds this call itself, independent of #276. It runs first:
+  `build ensure` → (later, after #276 rebases) host/KVM checks → render `work/`.
+  Also runnable by hand.
 - **`mqlab build clean`** — nukes `work/` + `temp/` (+ stray non-bucket files in
   `build/` root). The post-`vrg-vm rebuild` reset; `cache/`+`state/` survive.
 - **`mqlab build clean --cache`** — additionally drops `cache/` (ground-up).
 - **`mqlab build clean --state`** — guarded path to drop `state/`; requires a typed
-  confirmation (irreplaceable: snapshots, ISO, secrets).
+  confirmation whose message names what's at stake: *irreplaceable* snapshots/ISO
+  vs. a running lab's *lifecycle-coupled* secrets/pins (§3).
 - **`mqlab build status`** — per-bucket size + whether `cache/`/`state/` are real
   (main) or symlinks (worktree). Answers "what's in there, and is it shared?".
 - **`mqlab build migrate`** — one-time, idempotent, `--dry-run`. Moves existing
@@ -218,11 +284,20 @@ Fail loud, no silent fallback (existing `InventoryError`/`StepFailedError` idiom
 - **`paths.py` tests**: each helper returns its bucket-qualified path.
 - **Regression**: update fixtures/consumers that referenced `build/inventory.ini`
   etc. to the new `work/` paths; full suite green at 100% branch coverage.
+- **Grep backstop (consumer completeness)**: `grep -rn "build/" src/ ansible/ lab/
+  scripts/` shows no bare pre-bucket path (`build/mq`, `build/inventory.ini`,
+  `build/snapshots`, …) — only bucket-qualified paths or `mqlab build path` calls.
+  This is the check that proves all ~37 consumers were updated.
 - **Acceptance (cold-rebuild gate, arm64 — human-run):** `vrg-vm rebuild` →
   `mqlab build migrate` (once) → `mqlab build clean` → lab bring-up one-pass,
   proving `cache/`+`state/` survived and `work/` regenerated; plus a worktree
   `mqlab build ensure` wiring the symlinks and operating the shared lab. This
   harness is also exactly what unblocks the #276 acceptance.
+- **Acceptance (state consistency, the Issue-3 fix)**: from a feature worktree,
+  `mqlab build path state` and the secrets/snapshot scripts all resolve the **same**
+  main-tree `state/` — i.e. a lab provisioned, snapshotted, and restored from a
+  worktree keeps its credentials consistent (the latent secrets-local /
+  snapshots-main split is gone).
 
 ## 9. Open items for the implementation plan
 
@@ -231,5 +306,6 @@ Fail loud, no silent fallback (existing `InventoryError`/`StepFailedError` idiom
   (mapping in §6 assumes `state/secrets/`).
 - The `docs/` reference path for the non-Python bucket layout.
 - Decide `mqlab build` subcommand help text / confirmation UX for `--state`.
-- Confirm no consumer outside the known 8 modules + 3 non-Python consumers reads a
-  `build/` path (grep backstop, mirroring #276's audit).
+- Run the full `grep -rl "build/" src/ ansible/ lab/ scripts/` enumeration (~37
+  files) into the plan as the authoritative consumer work-list, and confirm none
+  is missed (grep backstop, §8).
