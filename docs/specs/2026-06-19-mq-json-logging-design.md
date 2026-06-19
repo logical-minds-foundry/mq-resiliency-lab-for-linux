@@ -89,17 +89,20 @@ journald drop-in, and the Alloy snippets) so it can be read and audited in one
 place. It exposes surface-specific task files included with `tasks_from:`.
 
 **Wiring is at the QM-creation seams, not the install seams.** MQ is installed and
-queue managers are created by *different roles on different arms* — `crtmqm` lives
-in five roles and MQ install in four. Hooking the install layer would miss arms
-(notably nativeha-rhel, which installs via `mq-nativeha/install-RedHat.yml` and
-creates its QM in `mq-nativeha`). So `system.yml` runs as the **first step inside
-each QM-creating role, before its `crtmqm`** — guaranteeing `mqs.ini` carries the
-template regardless of how MQ was installed.
+queue managers are created by *different roles on different arms*. Verified reality:
+real `crtmqm` invocations live in **four** roles — `mq-qmgr`, `mq-pcmk-qmgr`,
+`mq-nativeha`, `mq-nativeha-spike` — and the **RDQM arm creates its QM outside the
+shared plays** (`rdqm-install` only installs; `rdqm-ha` only forms the group via
+`rdqmadm`). Hooking the install layer alone would miss arms (notably nativeha-rhel,
+which installs via `mq-nativeha/install-RedHat.yml`). So `system.yml` runs **before
+`crtmqm`** in each crtmqm-running role, and the template-inheritance backbone makes
+RDQM correct too: seed `mqs.ini` at install and the RDQM QM inherits whenever its
+`crtmqm -sx` runs.
 
 | Task file | Wired into (seam) | Action |
 |---|---|---|
-| `system.yml` | **First step, before `crtmqm`,** in each QM-creating role: `mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-install`, and `mq-nativeha-spike` (spike arm; lower priority). | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`; install the journald rate-limit drop-in (§4.3). |
-| `qmgr.yml` | After `crtmqm` in those same roles. | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
+| `system.yml` | Before `crtmqm` in each crtmqm-running role — `mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike` — **and** at the end of `rdqm-install` (RDQM seeds at install time, inherits at `crtmqm -sx`). | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`; install the journald rate-limit drop-in (§4.3). |
+| `qmgr.yml` | After `crtmqm` in the four crtmqm-running roles. Path-parameterized via `mq_qmini_path` (pcmk's `qm.ini` is on the shared LUN, `/mqshared/qmgrs/<QM>/qm.ini`; others default to `/var/mqm/qmgrs/<QM>/qm.ini`). RDQM relies on template inheritance only. | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
 | `client.yml` | `mq-client`. | `/var/mqm/mqclient.ini` `DiagnosticSystemMessages` (marker block — coexists with the existing KeepAlive `lineinfile` in `site-distributed-shared.yml`). |
 | `web.yml` | `mqweb`. | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` to `mqwebuser.xml`. |
 
