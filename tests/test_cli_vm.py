@@ -559,3 +559,40 @@ def test_vm_create_runs_ensure_local_boxes(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["vm", "create", "rdqm-a1"])
     assert result.exit_code == 0
     assert called["guests"] == ["rdqm-a1"]
+
+
+def test_guests_need_dvd(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(
+        tmp_path,
+        "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n"
+        "  obs: {box: cloud-image/ubuntu-24.04}\n",
+    )
+    assert cli._guests_need_dvd(["rdqm-a1"]) is True
+    assert cli._guests_need_dvd(["obs"]) is False
+
+
+def test_ensure_local_boxes_stages_dvd_when_box_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
+    # box already installed -> no build; but the DVD must still be staged
+    runner = RecordingRunner(
+        results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == ["vagrant", "box", "list"]
+    assert argvs[1] == ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+
+
+def test_ensure_local_boxes_dvd_only_skips_box_probe(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # a (hypothetical) cloud box with a dvd -> no local box, but the dvd staging runs
+    _seed_resolved(tmp_path, "nodes:\n  n1: {box: cloud-image/ubuntu-24.04, dvd: /pool/x.iso}\n")
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["n1"])
+    assert [c.argv for c in runner.recorded] == [
+        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+    ]  # no `vagrant box list` probe

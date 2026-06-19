@@ -9,7 +9,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
@@ -616,14 +616,26 @@ def parse_box_list(text: str) -> dict[str, str]:
     return out
 
 
-def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
-    """Local-built boxes the given guests need -> build script, read from the rendered
-    resolved topology (build/lab/topology.resolved.yaml, #276)."""
+def _resolved_nodes() -> dict[str, Any]:
+    """The rendered resolved topology's nodes (build/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml
 
-    nodes = _yaml.safe_load(resolved_topology_path().read_text()).get("nodes", {})
+    data = _yaml.safe_load(resolved_topology_path().read_text())
+    nodes: dict[str, Any] = data.get("nodes", {})
+    return nodes
+
+
+def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
+    """Local-built boxes the given guests need -> build script."""
+    nodes = _resolved_nodes()
     boxes = {(nodes.get(g) or {}).get("box") for g in guests}
     return {box: script for box, script in _LOCAL_BOX_BUILDERS.items() if box in boxes}
+
+
+def _guests_need_dvd(guests: list[str]) -> bool:
+    """Whether any guest attaches a DVD ISO cdrom (the RHEL offline dnf repo)."""
+    nodes = _resolved_nodes()
+    return any((nodes.get(g) or {}).get("dvd") for g in guests)
 
 
 def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[CommandStep]:
@@ -635,19 +647,26 @@ def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[Co
 
 
 def _ensure_local_boxes(guests: list[str]) -> None:
-    """Build/register any local-built box a setup needs that isn't installed yet, so a
-    fresh box bootstraps without a manual build-box.sh run (#276/#291). No-op for
-    cloud-downloadable boxes (Ubuntu) and for boxes already in `vagrant box list`."""
+    """Make the RHEL substrate ready before `vagrant up`, so a fresh box bootstraps
+    without manual steps (#276/#291): build/register any local-built box not yet in
+    `vagrant box list` (REUSE from cache when present, ~minutes), and stage the DVD
+    ISO into the libvirt pool (idempotent). No-op for cloud Ubuntu boxes."""
     needed = _needed_local_boxes(guests)
-    if not needed:
+    need_dvd = _guests_need_dvd(guests)
+    if not needed and not need_dvd:
         return
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("box-build", timestamp)
     try:
-        cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
-        present = _probe(deps, cmd, parse_box_list)
+        steps: list[CommandStep] = []
+        if needed:
+            cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
+            steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list))
+        if need_dvd:
+            stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
+            steps.append(CommandStep("stage rhel dvd", stage))
         run_steps(
-            _box_build_steps(needed, present),
+            steps,
             runner=deps.runner,
             renderer=deps.renderer,
             transcript=deps.transcript,
