@@ -10,8 +10,7 @@ from mqlab.clusterboard import (
     integrity_panel,
     log_row,
     matrix,
-    nativeha_hero_tiles,
-    nativeha_integrity_panel,
+    nativeha_status_band,
     net_section,
     perf_section,
     render_cluster_dashboard,
@@ -169,19 +168,6 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
 # ── Native HA arm (#279) ──────────────────────────────────────────────────────
 
 
-def test_nativeha_integrity_is_quorum_active_insync_gated_on_data():
-    p = nativeha_integrity_panel("promtest", y=7)
-    assert p["type"] == "stat"
-    assert p["gridPos"]["w"] == 24
-    expr = p["targets"][0]["expr"]
-    assert "cluster_quorate" in expr
-    assert 'cluster_resource_owner{resource="QMNATIVE"}' in expr
-    assert "cluster_nha_insync == 0" in expr
-    assert "count(cluster_nha_role) > 0" in expr  # gated -> no-data reads STALE
-    kinds = [m["type"] for m in p["fieldConfig"]["defaults"]["mappings"]]
-    assert "special" in kinds  # the STALE special-mapping (never a false green)
-
-
 def test_pcmk_integrity_panel_unchanged():
     # regression: the PCMK integrity panel still carries the DRBD hazard expr, full-width
     p = integrity_panel("promtest", y=7)
@@ -189,21 +175,26 @@ def test_pcmk_integrity_panel_unchanged():
     assert p["gridPos"]["w"] == 24
 
 
-def test_nativeha_hero_tiles_band():
-    tiles = nativeha_hero_tiles("promtest", y=3)
+def test_nativeha_status_band_is_one_compact_full_width_row():
+    # ① is a single row of five equal compact tiles; integrity is a tile, not a banner (#279)
+    tiles = nativeha_status_band("promtest", y=3)
     assert [t["title"] for t in tiles] == [
         "Active instance",
         "Quorum",
         "Instances in-sync",
         "HA status",
+        "Integrity",
     ]
-    active = tiles[0]
-    assert active["options"]["textMode"] == "name"
-    assert 'cluster_resource_owner{resource="QMNATIVE"}' in active["targets"][0]["expr"]
-    assert "cluster_nha_quorum" in tiles[1]["targets"][0]["expr"]
-    assert "cluster_nha_insync" in tiles[2]["targets"][0]["expr"]
-    assert "cluster_nha_hastatus" in tiles[3]["targets"][0]["expr"]
-    assert [t["gridPos"]["x"] for t in tiles] == [0, 6, 12, 18]  # tile left-to-right
+    # all on one row (same y), widths fill the 24-col grid, compact value font, short height
+    assert all(t["gridPos"]["y"] == 3 for t in tiles)
+    assert sum(t["gridPos"]["w"] for t in tiles) == 24
+    assert all(t["gridPos"]["h"] == 3 for t in tiles)
+    assert all(t["options"]["text"]["valueSize"] == 22 for t in tiles)
+    # the integrity tile still carries the gated hazard expr (no false green on no-data)
+    integ = tiles[4]["targets"][0]["expr"]
+    assert "cluster_nha_insync == 0" in integ and "count(cluster_nha_role) > 0" in integ
+    assert 'cluster_resource_owner{resource="QMNATIVE"}' in integ
+    assert 'cluster_resource_owner{resource="QMNATIVE"}' in tiles[0]["targets"][0]["expr"]
 
 
 def test_role_mapping_codes_active_replica_unknown():
@@ -346,16 +337,16 @@ def test_nativeha_crr_card_is_replication_health_not_group_roles():
     assert "cluster_nha_group_backlog" in tiles[2]["targets"][0]["expr"]
 
 
-def test_nativeha_site_badges_flip_live_recovery_by_data():
-    from mqlab.clusterboard import nativeha_site_badges
+def test_site_role_chip_flips_live_recovery_by_data():
+    from mqlab.clusterboard import _site_role_badge
 
-    badges = nativeha_site_badges("promtest", y=12)
-    assert [b["title"] for b in badges] == ["Site A", "Site B"]
-    # each badge derives its role from the site's instances (max role code: 2=Active→LIVE,
+    chip = _site_role_badge("nha-rhel-a.*", "promtest", 0, 7)
+    # the chip derives its role from the site's instances (max role code: 2=Active→LIVE,
     # 3=Leader→RECOVERY) so it flips on failover; green LIVE vs yellow RECOVERY, background-lit
-    a_opts = badges[0]["fieldConfig"]["defaults"]["mappings"][0]["options"]
-    assert a_opts["2"]["text"] == "LIVE" and a_opts["2"]["color"] == "green"
-    assert a_opts["3"]["text"] == "RECOVERY" and a_opts["3"]["color"] == "yellow"
-    assert badges[0]["options"]["colorMode"] == "background"
-    assert 'member=~"nha-rhel-a.*"' in badges[0]["targets"][0]["expr"]
-    assert 'member=~"nha-rhel-b.*"' in badges[1]["targets"][0]["expr"]
+    opts = chip["fieldConfig"]["defaults"]["mappings"][0]["options"]
+    assert opts["2"]["text"] == "LIVE" and opts["2"]["color"] == "green"
+    assert opts["3"]["text"] == "RECOVERY" and opts["3"]["color"] == "yellow"
+    assert chip["options"]["colorMode"] == "background"
+    assert 'member=~"nha-rhel-a.*"' in chip["targets"][0]["expr"]
+    # it is a compact chip beside the matrix (narrow), not a full row
+    assert chip["gridPos"]["w"] == 5 and chip["gridPos"]["h"] == 7

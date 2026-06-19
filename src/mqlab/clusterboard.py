@@ -83,10 +83,13 @@ def _ds(uid: str) -> dict[str, str]:
     return {"type": "prometheus", "uid": uid}
 
 
-def matrix(title: str, columns: list[Column], ds_uid: str, y: int, h: int = 9) -> dict[str, Any]:
+def matrix(
+    title: str, columns: list[Column], ds_uid: str, y: int, h: int = 9, x: int = 0, w: int = 24
+) -> dict[str, Any]:
     """A node×component Table panel: one normalized query per column, joined on `n`,
     with per-column colour-background cell mappings. Rows are data-driven; `h` sizes the
-    panel to its row count (e.g. the 2-row storage matrix is shorter than 6-row compute)."""
+    panel to its row count. x/w default to a full-width row but can be narrowed to sit beside
+    another panel (e.g. a per-site role chip)."""
     targets: list[dict[str, Any]] = []
     rename: dict[str, str] = {"n": "node"}
     overrides: list[dict[str, Any]] = []
@@ -119,7 +122,7 @@ def matrix(title: str, columns: list[Column], ds_uid: str, y: int, h: int = 9) -
         "type": "table",
         "title": title,
         "datasource": _ds(ds_uid),
-        "gridPos": {"h": h, "w": 24, "x": 0, "y": y},
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
         "targets": targets,
         "transformations": [
             {"id": "joinByField", "options": {"byField": "n", "mode": "outer"}},
@@ -194,6 +197,11 @@ def _nativeha_instance_cols(site_regex: str) -> list[Column]:
     ]
 
 
+# Compact value-font (px) for the single-row status / CRR bands — caps Grafana's auto-fit so
+# the tiles don't waste vertical real estate with huge numbers (#279 feedback).
+_COMPACT_VALUE_SIZE = 22
+
+
 def _stat(
     title: str,
     expr: str,
@@ -205,9 +213,13 @@ def _stat(
     unit: str | None = None,
     text_mode: str = "value",
     name_label: str = "holder",
+    w: int = 6,
+    h: int = 4,
+    value_size: int | None = None,
 ) -> dict[str, Any]:
     """A single Stat tile with a sparkline (graphMode=area). text_mode="name" shows the
-    name_label value (e.g. the owner holder, or a group's role)."""
+    name_label value (e.g. the owner holder, or a group's role). w/h size the tile;
+    value_size caps the value font (px) to reclaim vertical space in compact one-row bands."""
     defaults: dict[str, Any] = {"mappings": mappings or []}
     if unit is not None:
         defaults["unit"] = unit
@@ -219,18 +231,21 @@ def _stat(
     }
     if text_mode == "name":
         target["legendFormat"] = f"{{{{{name_label}}}}}"
+    options: dict[str, Any] = {
+        "graphMode": "area",
+        "textMode": text_mode,
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+    }
+    if value_size is not None:
+        options["text"] = {"valueSize": value_size}
     return {
         "type": "stat",
         "title": title,
         "datasource": _ds(ds_uid),
-        "gridPos": {"h": 4, "w": 6, "x": x, "y": y},
+        "gridPos": {"h": h, "w": w, "x": x, "y": y},
         "targets": [target],
         "fieldConfig": {"defaults": defaults, "overrides": []},
-        "options": {
-            "graphMode": "area",
-            "textMode": text_mode,
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-        },
+        "options": options,
     }
 
 
@@ -277,30 +292,45 @@ def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
+_INTEGRITY_MAPS = [
+    {"type": "value", "options": {"0": {"color": _GREEN, "text": "✓ integrity", "index": 0}}},
+    {
+        "type": "range",
+        "options": {
+            "from": 1,
+            "to": 9999,
+            "result": {"color": _RED, "text": "⚠ HAZARD", "index": 1},
+        },
+    },
+    _STALE_MAP,
+]
+
+
 def _integrity_from_expr(expr: str, ds_uid: str, y: int) -> dict[str, Any]:
     """A first-class integrity light from a hazard expr: 0 → green, ≥1 → HAZARD, no-data →
     STALE (full-width banner). The hazard expr is arm-specific; the colour/STALE vocabulary
     is shared."""
-    maps = [
-        {"type": "value", "options": {"0": {"color": _GREEN, "text": "✓ integrity", "index": 0}}},
-        {
-            "type": "range",
-            "options": {
-                "from": 1,
-                "to": 9999,
-                "result": {"color": _RED, "text": "⚠ HAZARD", "index": 1},
-            },
-        },
-        _STALE_MAP,
-    ]
-    panel = _stat("Integrity", expr, ds_uid, 0, y, mappings=maps)
+    panel = _stat("Integrity", expr, ds_uid, 0, y, mappings=_INTEGRITY_MAPS)
     panel["gridPos"]["w"] = 24  # full-width banner
     return panel
 
 
-def nativeha_hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
-    """The Native HA top band: Active instance · Quorum (in-sync node count) · Instances
-    in-sync · HA status. No-data reads STALE, never healthy (fail-loud)."""
+def _nativeha_integrity_expr() -> str:
+    """Native HA cannot split-brain (raft quorum). The hazard reframes around availability +
+    durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
+    no-data reads STALE (spec §6)."""
+    hazards = (
+        f"(min(cluster_quorate{_NHA_SEL}) == bool 0)"
+        ' + (absent(cluster_resource_owner{resource="QMNATIVE"}) or vector(0))'
+        " + (count(cluster_nha_insync == 0) or vector(0))"
+    )
+    return f"({hazards}) and on() (count(cluster_nha_role) > 0)"
+
+
+def nativeha_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """① Cluster status as ONE compact full-width row of five equal tiles — Active instance ·
+    Quorum · Instances in-sync · HA status · Integrity. Integrity is a tile among equals (not a
+    full-width banner) and the value font is capped to reclaim vertical space (#279 feedback)."""
     normal = 'max by (member)(cluster_nha_hastatus{status="Normal"})'
     health_maps = [
         {
@@ -312,6 +342,7 @@ def nativeha_hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
         },
         _STALE_MAP,
     ]
+    vs, h = _COMPACT_VALUE_SIZE, 3
     return [
         _stat(
             # max by (holder) collapses the per-reporter series → one tile (the Active instance)
@@ -321,10 +352,43 @@ def nativeha_hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
             0,
             y,
             text_mode="name",
+            w=5,
+            h=h,
+            value_size=vs,
         ),
-        _stat("Quorum", "max(cluster_nha_quorum)", ds_uid, 6, y),
-        _stat("Instances in-sync", "sum(max by (member)(cluster_nha_insync))", ds_uid, 12, y),
-        _stat("HA status", f"min({normal})", ds_uid, 18, y, mappings=health_maps),
+        _stat("Quorum", "max(cluster_nha_quorum)", ds_uid, 5, y, w=4, h=h, value_size=vs),
+        _stat(
+            "Instances in-sync",
+            "sum(max by (member)(cluster_nha_insync))",
+            ds_uid,
+            9,
+            y,
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "HA status",
+            f"min({normal})",
+            ds_uid,
+            14,
+            y,
+            mappings=health_maps,
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "Integrity",
+            _nativeha_integrity_expr(),
+            ds_uid,
+            19,
+            y,
+            mappings=_INTEGRITY_MAPS,
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
     ]
 
 
@@ -337,19 +401,6 @@ def integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
         ' + (count(cluster_drbd_role{role="Primary"}) > bool 1)'
     )
     expr = f"({hazards}) and on() (count(cluster_drbd_role) > 0)"
-    return _integrity_from_expr(expr, ds_uid, y)
-
-
-def nativeha_integrity_panel(ds_uid: str, y: int) -> dict[str, Any]:
-    """Native HA cannot split-brain (raft quorum). The hazard reframes around availability +
-    durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
-    no-data reads STALE (spec §6)."""
-    hazards = (
-        f"(min(cluster_quorate{_NHA_SEL}) == bool 0)"
-        ' + (absent(cluster_resource_owner{resource="QMNATIVE"}) or vector(0))'
-        " + (count(cluster_nha_insync == 0) or vector(0))"
-    )
-    expr = f"({hazards}) and on() (count(cluster_nha_role) > 0)"
     return _integrity_from_expr(expr, ds_uid, y)
 
 
@@ -575,7 +626,7 @@ def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
 
 
-def _site_role_badge(label: str, site_regex: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
+def _site_role_badge(site_regex: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
     """A bold per-site header badge: LIVE (green) when the site holds the Active instance,
     RECOVERY (yellow) when it holds the standby Leader — derived from the data so it flips on
     failover, never a static site label (#279 feedback). Background-coloured so the live/standby
@@ -591,25 +642,19 @@ def _site_role_badge(label: str, site_regex: str, ds_uid: str, x: int, y: int) -
         _STALE_MAP,
     ]
     badge = _stat(
-        label,
+        "",
         f'max(cluster_nha_role_code{{member=~"{site_regex}"}})',
         ds_uid,
         x,
         y,
         mappings=maps,
+        w=5,
+        h=7,
+        value_size=_COMPACT_VALUE_SIZE,
     )
-    badge["gridPos"] = {"h": 3, "w": 12, "x": x, "y": y}
     badge["options"]["colorMode"] = "background"
     badge["options"]["graphMode"] = "none"
     return badge
-
-
-def nativeha_site_badges(ds_uid: str, y: int) -> list[dict[str, Any]]:
-    """The two side-by-side site headers (Site A | Site B), each showing LIVE/RECOVERY."""
-    return [
-        _site_role_badge("Site A", "nha-rhel-a.*", ds_uid, 0, y),
-        _site_role_badge("Site B", "nha-rhel-b.*", ds_uid, 12, y),
-    ]
 
 
 def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
@@ -636,6 +681,7 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
         },
         _STALE_MAP,
     ]
+    vs, h = _COMPACT_VALUE_SIZE, 3
     return [
         _stat(
             "CRR connected",
@@ -644,6 +690,9 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
             0,
             y,
             mappings=conn_maps,
+            w=8,
+            h=h,
+            value_size=vs,
         ),
         _stat(
             "CRR in-sync",
@@ -652,6 +701,9 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
             8,
             y,
             mappings=insync_maps,
+            w=8,
+            h=h,
+            value_size=vs,
         ),
         _stat(
             "CRR backlog",
@@ -659,6 +711,9 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
             ds_uid,
             16,
             y,
+            w=8,
+            h=h,
+            value_size=vs,
         ),
     ]
 
@@ -810,29 +865,28 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
     # it and the next row.
     panels = [
         _title_banner("nativeha-rhel", y=0),
+        # ① one compact full-width row of five equal tiles (integrity is a tile, not a banner).
         _row_header("① Cluster status — active · quorum · in-sync · integrity", y=2),
-        *nativeha_hero_tiles(ds_uid, y=3),
-        nativeha_integrity_panel(ds_uid, y=7),
-        # one matrix per group, banded Live (site A) / Recovery (site B); each is 3 rows +
-        # header (h=7). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
-        # Site A / Site B are the FIXED node groups (nha_rhel_a / nha_rhel_b). Live vs Recovery
-        # is a *role* that swaps on DR cutover/failback — never a static site label (#279
-        # feedback). Each site carries a LIVE/RECOVERY badge (green/yellow) derived from the
-        # data, so the split is obvious; the role column gives the per-instance detail.
-        _row_header("② Instances — Site A & Site B", y=11),
-        *nativeha_site_badges(ds_uid, y=12),
-        matrix("Site A", _nativeha_instance_cols("nha-rhel-a.*"), ds_uid, y=15, h=7),
-        matrix("Site B", _nativeha_instance_cols("nha-rhel-b.*"), ds_uid, y=22, h=7),
-        _row_header("③ Cross-region replication (CRR)", y=29),
-        *nativeha_crr_card(ds_uid, y=30),
-        _row_header("⟳ Failover & CRR timeline", y=34),
-        _nativeha_timeline(ds_uid, y=35),
-        _row_header("▤ Native HA logs", y=42),
-        _nativeha_log_row("loki", y=43),
-        _row_header("🖥 Performance", y=51),
-        *nativeha_perf_section(ds_uid, y=52),
-        _row_header("🌐 Network", y=59),
-        *nativeha_net_section(ds_uid, y=60),
+        *nativeha_status_band(ds_uid, y=3),
+        # ② Site A / Site B are the FIXED node groups (nha_rhel_a / nha_rhel_b). Live vs Recovery
+        # is a *role* that swaps on DR cutover/failback — never a static site label (#279). A
+        # compact LIVE/RECOVERY colour chip sits beside each site matrix (the role column gives
+        # the per-instance detail); the matrix narrows to w=19 to make room.
+        _row_header("② Instances — Site A & Site B", y=6),
+        _site_role_badge("nha-rhel-a.*", ds_uid, 0, 7),
+        matrix("Site A", _nativeha_instance_cols("nha-rhel-a.*"), ds_uid, y=7, h=7, x=5, w=19),
+        _site_role_badge("nha-rhel-b.*", ds_uid, 0, 14),
+        matrix("Site B", _nativeha_instance_cols("nha-rhel-b.*"), ds_uid, y=14, h=7, x=5, w=19),
+        _row_header("③ Cross-region replication (CRR)", y=21),
+        *nativeha_crr_card(ds_uid, y=22),
+        _row_header("⟳ Failover & CRR timeline", y=25),
+        _nativeha_timeline(ds_uid, y=26),
+        _row_header("▤ Native HA logs", y=33),
+        _nativeha_log_row("loki", y=34),
+        _row_header("🖥 Performance", y=42),
+        *nativeha_perf_section(ds_uid, y=43),
+        _row_header("🌐 Network", y=50),
+        *nativeha_net_section(ds_uid, y=51),
     ]
     return {
         "uid": "lab-nativeha-cluster",
