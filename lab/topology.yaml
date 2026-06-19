@@ -143,6 +143,42 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.73, net-data-a: 10.10.1.73, net-hb-a: 172.16.1.73, net-san-rhel-a: 10.40.3.73, net-wan: 10.99.0.73, net-ext: 10.60.0.73 }
 
+  # --- Native HA arm (#246, #267): six RHEL x86_64 TCG nodes, shared-nothing
+  # (raft log replication — NO extra_disk). Site A = nha_rhel_a (HA, Phase 1);
+  # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); an Ubuntu
+  # peer arm (nha-ubuntu-*) follows. HA replication on net-hb-a; CRR over net-wan.
+  # Host octets .9x — kept clear of the pcmk-rhel arm's .7x block (both RHEL/TCG).
+  nha-rhel-a1:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.91, net-data-a: 10.10.1.91, net-hb-a: 172.16.1.91, net-wan: 10.99.0.91, net-ext: 10.60.0.91 }
+  nha-rhel-a2:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.92, net-data-a: 10.10.1.92, net-hb-a: 172.16.1.92, net-wan: 10.99.0.92, net-ext: 10.60.0.92 }
+  nha-rhel-a3:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.93, net-data-a: 10.10.1.93, net-hb-a: 172.16.1.93, net-wan: 10.99.0.93, net-ext: 10.60.0.93 }
+  nha-rhel-b1:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.94, net-data-b: 10.10.2.91, net-hb-b: 172.16.2.91, net-wan: 10.99.0.94 }
+  nha-rhel-b2:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.95, net-data-b: 10.10.2.92, net-hb-b: 172.16.2.92, net-wan: 10.99.0.95 }
+  nha-rhel-b3:
+    platform: rhel96-x86_64
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.96, net-data-b: 10.10.2.93, net-hb-b: 172.16.2.93, net-wan: 10.99.0.96 }
+
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
 # playbooks target them; setups (below) compose them. Convention: underscores name
@@ -156,6 +192,8 @@ groups:
   pcmk_rhel_a: [pcmk-rhel-a1, pcmk-rhel-a2, pcmk-rhel-a3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
+  nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]
+  nha_rhel_b: [nha-rhel-b1, nha-rhel-b2, nha-rhel-b3]
   dtcc:   [dtcc-sim]
   app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
@@ -205,6 +243,23 @@ arms:
       qm-up:      { pcs: "resource enable mq_group" }
       qm-down:    { pcs: "resource disable mq_group" }
       qm-status:  { pcs: "status resources" }
+  nativeha-rhel:
+    mechanism: native-ha
+    cluster_group: nha_rhel_a
+    # Lifecycle is the mqmonitor@ systemd unit (NOT endmqm — systemd restarts it).
+    verbs:
+      qm-create:  { playbook: site-nativeha.yml }
+      qm-status:  { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
+      qm-up:      { cmd: "systemctl start mqmonitor@{qm}" }
+      qm-down:    { cmd: "systemctl stop mqmonitor@{qm}" }
+      # CRR / DR (#246 Phase 3): planned cross-site switchover by flipping
+      # GroupRole + restart (the spike-proven procedure). cutover = make site B
+      # Live; failback = make site A Live. Replication is TLS over net-wan.
+      dr-cutover:  { playbook: site-nativeha-switchover.yml }
+      dr-failback: { playbook: site-nativeha-switchover.yml }
+      # diagnostics capture (read-only): runmqras bundles FFST + error logs +
+      # Native HA state into a .zip under /var/mqm. Needs OS libicu (lab-gotchas).
+      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
 
 setups:
   pcmk_san_ha:
@@ -255,6 +310,18 @@ setups:
     # VIP for the app's HA path. The partner (QMDTCC) reaches QMRDQM over net-ext by
     # per-node CONNAME list — see site-rdqm-distributed.yml (our_conn).
     qm: { name: QMRDQM, vip: 10.10.1.100, dtcc_conn: 10.60.0.50 }
+  # Native HA arm (#246) — ONE consolidated distributed-HADR setup (#267), not the
+  # older _ha/_dr/distributed-no-DR triple. Phase 1 builds HA on the site-A subset
+  # (nha_rhel_a + dtcc + app); Phase 3 boots nha_rhel_b + enables CRR on this same
+  # setup. No floating VIP — Native HA clients use a multi-instance CONNAME list
+  # (built from nha_rhel_* in the content play).
+  distributed-nativeha-rhel:
+    description: Distributed-HADR keystone (#267) — app → QMNATIVE (3+3 Native HA + CRR) ⇄ QMDTCC over net-ext
+    arm: nativeha-rhel
+    groups: [nha_rhel_a, nha_rhel_b, dtcc, app]
+    provision: ansible/site-nativeha.yml
+    secrets: [mqweb_admin_password]
+    qm: { name: QMNATIVE, dtcc_conn: 10.60.0.50 }
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]

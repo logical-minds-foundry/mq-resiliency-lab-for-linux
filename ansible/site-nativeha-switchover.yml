@@ -1,0 +1,42 @@
+# CRR planned switchover (#246 Phase 3): flip Live/Recovery roles so `target_live`
+# (a|b) is the Live site, the other Recovery. Group NAMES stay fixed (Live/Recovery
+# as labels from initial setup); only GroupRole flips — the spike-proven procedure.
+# Reuses crr.yml with swapped roles + restarts both groups. The arm's
+# `mqlab dr cutover`/`failback` verbs invoke this.
+#   -e target_live=b   # cutover A -> B
+#   -e target_live=a   # failback B -> A
+
+- hosts: nha_rhel_a
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    ks_cn: QMNATIVE
+    this_group: Live
+    this_role: "{{ 'live' if target_live == 'a' else 'Recovery' }}"
+    peer_group_name: Recovery
+    peer_wan_addrs: ["10.99.0.94", "10.99.0.95", "10.99.0.96"]
+    recovery_enabled: "Yes"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+- hosts: nha_rhel_b
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    ks_cn: QMNATIVE
+    this_group: Recovery
+    this_role: "{{ 'live' if target_live == 'b' else 'Recovery' }}"
+    peer_group_name: Live
+    peer_wan_addrs: ["10.99.0.91", "10.99.0.92", "10.99.0.93"]
+    recovery_enabled: "Yes"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+- hosts: nha_rhel_b:nha_rhel_a
+  become: true
+  vars: { qm_name: QMNATIVE }
+  tasks:
+    - name: restart mqmonitor@ to apply the role swap
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ qm_name }}"
+        state: restarted

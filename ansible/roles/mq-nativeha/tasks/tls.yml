@@ -1,0 +1,56 @@
+# Native HA replication TLS (#246 Phase 3): deploy the lab-pki PKCS#12 keystore +
+# stash its password + set NativeHALocalInstance TLS. Per-instance local config.
+# Vars: qm_name; ks_cn (the lab-pki entity CN, = the cert friendly name/label).
+# Keystore source: build/secrets/pki/entities/<ks_cn>/<ks_cn>.p12 (controller).
+#
+# NOTE the real gotcha (lab-gotchas.md): runmqakm needs the OS libicu
+# (libicuio.so.*) which the minimal RHEL box lacks — install it first.
+
+- name: libicu (runmqakm ICU runtime dep)
+  ansible.builtin.dnf:
+    name: libicu
+
+- name: ssl dir
+  ansible.builtin.file:
+    path: "/var/mqm/qmgrs/{{ qm_name }}/ssl"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0750"
+
+- name: fetch the keystore password (lab-secret.sh, controller-side)
+  ansible.builtin.command: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh pki-keyrpwd-{{ ks_cn | lower }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  register: ks_pw
+  changed_when: false
+  no_log: true
+
+- name: deploy the lab-pki .p12 keystore
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
+    dest: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12"
+    owner: mqm
+    group: mqm
+    mode: "0640"
+
+- name: stash the keystore password (runmqakm; needs libicu)
+  ansible.builtin.command: >
+    /opt/mqm/bin/runmqakm -keydb -stashpw -type pkcs12
+    -db /var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12 -pw "{{ ks_pw.stdout }}"
+  args:
+    creates: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.sth"
+  become_user: mqm
+  no_log: true
+
+- name: NativeHALocalInstance TLS (per-node)
+  ansible.builtin.blockinfile:
+    path: "/var/mqm/qmgrs/{{ qm_name }}/qm.ini"
+    marker: "# {mark} NATIVE-HA-TLS (#246)"
+    block: |
+      NativeHALocalInstance:
+         CipherSpec=ANY_TLS12
+         CertificateLabel={{ ks_cn }}
+         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}
+  become_user: mqm

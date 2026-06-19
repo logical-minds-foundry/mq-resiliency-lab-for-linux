@@ -1,0 +1,27 @@
+---
+# Phase-0 CRR-entitlement spike (#246) — THROWAWAY.
+# Base MQ + a 3-node Native HA group on the reused rdqm-* x86 slots.
+# Live group  = rdqm_a (rdqm-a1..3)
+# Recovery    = rdqm_b (rdqm-b1..3)  (provisioned in Task 2, --limit rdqm_b)
+#
+# Run (from the worktree lab-op context, build/ symlinked):
+#   ansible-playbook ansible/site-nativeha-spike.yml --limit rdqm_a
+#   ansible-playbook ansible/site-nativeha-spike.yml --limit rdqm_b
+
+- name: Native HA spike — Live group (DataCenter1)
+  hosts: rdqm_a
+  become: false
+  vars:
+    nha_qm: nhaspike
+    nha_group: rdqm_a
+  roles:
+    - mq-nativeha-spike
+
+- name: Native HA spike — Recovery group (DataCenter2)
+  hosts: rdqm_b
+  become: false
+  vars:
+    nha_qm: nhaspike
+    nha_group: rdqm_b
+  roles:
+    - mq-nativeha-spike

@@ -1,0 +1,74 @@
+# Base IBM MQ install (NO RDQM stack) from the no-charge Developers LinuxX64 tar,
+# with base-OS deps from the attached install DVD (offline, unregistered guest).
+# OS-adapter for the OS-agnostic mq-nativeha role (#246) — proven in the Phase-0
+# spike. Phase 2 adds install-Debian.yml; the formation logic (main.yml) is shared.
+- name: mount the install DVD (BaseOS+AppStream)
+  ansible.builtin.shell: |
+    set -e
+    mkdir -p /media/rhel
+    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro 0 0' >> /etc/fstab
+    mountpoint -q /media/rhel || mount /media/rhel
+  changed_when: false
+
+- name: dnf repos from the DVD
+  ansible.builtin.copy:
+    dest: /etc/yum.repos.d/rhel-dvd.repo
+    content: |
+      [dvd-baseos]
+      name=RHEL 9.6 DVD BaseOS
+      baseurl=file:///media/rhel/BaseOS
+      enabled=1
+      gpgcheck=0
+      [dvd-appstream]
+      name=RHEL 9.6 DVD AppStream
+      baseurl=file:///media/rhel/AppStream
+      enabled=1
+      gpgcheck=0
+
+- name: copy MQ LinuxX64 tar to node
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    dest: /tmp/mqadv.tar.gz
+
+- name: unpack
+  ansible.builtin.unarchive:
+    src: /tmp/mqadv.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/MQServer
+
+- name: accept developer licence
+  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  args:
+    creates: /var/mqm
+
+# Base MQ only (no RDQM/DRBD). MQSeriesSamples carries the Native HA liveness
+# monitor (/opt/mqm/samp/mqmonitor@.service) used by main.yml's systemd lifecycle.
+- name: install base IBM MQ packages (no RDQM)
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp/MQServer
+    dnf install -y \
+      MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
+      MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
+      MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm
+  args:
+    creates: /opt/mqm/bin/crtmqm
+
+- name: set primary installation (loader path)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
+
+- name: mqm ulimits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-mqm.conf
+    content: |
+      mqm soft nofile 10240
+      mqm hard nofile 10240
+
+# runmqakm/runmqras dlopen the OS libicuio at runtime; the minimal box lacks it
+# (lab-gotchas.md). Install it in the base so diagnostics (and TLS) always work.
+- name: libicu (runmqras / runmqakm ICU runtime dep)
+  ansible.builtin.dnf:
+    name: libicu
