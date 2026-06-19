@@ -26,3 +26,11 @@ def _neutralize_ensure_local_boxes(monkeypatch):
     run in unit tests (#276). The real function is tested directly via the import
     captured before this stub."""
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda guests: None)
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_sweep_orphan_volumes(monkeypatch):
+    """Neutralise cli._sweep_orphan_volumes in every test — it shells `virsh vol-list`
+    / `vol-delete`, which must not run in unit tests (#276). Tested directly via the
+    import captured before this stub."""
+    monkeypatch.setattr(cli, "_sweep_orphan_volumes", lambda guests: None)

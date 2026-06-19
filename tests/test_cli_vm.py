@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from mqlab import cli
 from mqlab.cli import _ensure_local_boxes as _real_ensure_local_boxes  # captured before the stub
+from mqlab.cli import _sweep_orphan_volumes as _real_sweep_orphan_volumes
 from mqlab.pauser import NoTTYError
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
@@ -596,3 +597,69 @@ def test_ensure_local_boxes_dvd_only_skips_box_probe(monkeypatch, tmp_path):
     assert [c.argv for c in runner.recorded] == [
         ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
     ]  # no `vagrant box list` probe
+
+
+# --- destroy sweeps orphaned volumes from partial-failed creates (#276) ---
+_VOLS = """\
+ Name                      Path
+------------------------------------------
+ lab_rdqm-a1-vdb.qcow2     /var/lib/libvirt/images/lab_rdqm-a1-vdb.qcow2
+ lab_rdqm-a1.img           /var/lib/libvirt/images/lab_rdqm-a1.img
+ lab_rdqm-a10-vdb.qcow2    /var/lib/libvirt/images/lab_rdqm-a10-vdb.qcow2
+ rhel-9.6-x86_64-dvd.iso   /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
+"""
+
+
+def test_parse_vol_list_skips_chrome():
+    vols = cli.parse_vol_list(_VOLS)
+    assert "lab_rdqm-a1-vdb.qcow2" in vols
+    assert "Name" not in vols and "------" not in "".join(vols)
+
+
+def test_orphan_volumes_matches_guest_not_prefix_collision():
+    vols = cli.parse_vol_list(_VOLS)
+    # rdqm-a1 owns its .img and -vdb, but NOT rdqm-a10's volume (prefix-collision guard)
+    assert sorted(cli._orphan_volumes(["rdqm-a1"], vols)) == [
+        "lab_rdqm-a1-vdb.qcow2",
+        "lab_rdqm-a1.img",
+    ]
+
+
+def test_sweep_orphan_volumes_deletes_matches(monkeypatch):
+    # probe + two deletes (the -vdb and the .img both belong to rdqm-a1)
+    runner = RecordingRunner(
+        results=[ScriptedResult(_VOLS.splitlines()), ScriptedResult([]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_sweep_orphan_volumes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == [*_VIRSH, "vol-list", "default"]
+    assert [*_VIRSH, "vol-delete", "--pool", "default", "lab_rdqm-a1-vdb.qcow2"] in argvs
+
+
+def test_sweep_orphan_volumes_noop_when_none(monkeypatch):
+    runner = RecordingRunner(results=[ScriptedResult([" rhel-9.6-x86_64-dvd.iso  /var/x.iso"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_sweep_orphan_volumes(["rdqm-a1"])  # no lab_rdqm-a1 volumes -> only the probe
+    assert [c.argv for c in runner.recorded] == [[*_VIRSH, "vol-list", "default"]]
+
+
+def test_sweep_orphan_volumes_delete_failure_exits(monkeypatch):
+    runner = RecordingRunner(
+        results=[ScriptedResult(_VOLS.splitlines()), ScriptedResult([], exit_code=1)]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    with pytest.raises(typer.Exit):
+        _real_sweep_orphan_volumes(["rdqm-a1"])
+
+
+def test_vm_destroy_runs_sweep(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["rdqm-a1"])
+    called = {}
+    monkeypatch.setattr(cli, "_sweep_orphan_volumes", lambda guests: called.setdefault("g", guests))
+    runner = RecordingRunner(results=[_probe({})])  # absent -> no undefine steps
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "destroy", "rdqm-a1"])
+    assert result.exit_code == 0
+    assert called["g"] == ["rdqm-a1"]

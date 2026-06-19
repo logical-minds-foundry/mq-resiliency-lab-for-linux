@@ -646,6 +646,56 @@ def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[Co
     ]
 
 
+def parse_vol_list(text: str) -> dict[str, str]:
+    """Parse `virsh vol-list <pool>` -> {volume_name: path}; chrome lines skipped."""
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("Name") or set(line) <= {"-"}:
+            continue
+        parts = line.split()
+        out[parts[0]] = parts[1] if len(parts) > 1 else ""
+    return out
+
+
+def _orphan_volumes(guests: list[str], vol_names: dict[str, str]) -> list[str]:
+    """Pool volumes belonging to the given guests (lab_<g>.img / lab_<g>-*), e.g. the
+    extra-disk vdb that vagrant-libvirt leaves behind when a create fails midway."""
+    return [
+        name
+        for g in guests
+        for name in vol_names
+        if name == f"lab_{g}.img" or name.startswith(f"lab_{g}-")
+    ]
+
+
+def _vol_delete_step(name: str) -> CommandStep:
+    cmd = Command([*_VIRSH, "vol-delete", "--pool", "default", name])  # noqa: S607
+    return CommandStep(f"vol {name}", cmd)
+
+
+def _sweep_orphan_volumes(guests: list[str]) -> None:
+    """After destroy, delete any pool volumes for these guests not tied to a domain —
+    the recovery path for a partially-failed create (vagrant-libvirt doesn't clean up
+    extra-disk volumes on failure, #276). No-op when there are no orphans."""
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("vm-destroy-sweep", timestamp)
+    try:
+        vols = _probe(deps, Command([*_VIRSH, "vol-list", "default"]), parse_vol_list)  # noqa: S607
+        run_steps(
+            [_vol_delete_step(v) for v in _orphan_volumes(guests, vols)],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
 def _ensure_local_boxes(guests: list[str]) -> None:
     """Make the RHEL substrate ready before `vagrant up`, so a fresh box bootstraps
     without manual steps (#276/#291): build/register any local-built box not yet in
@@ -956,6 +1006,7 @@ def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
     """Remove the selected guests + disks (force-stops running ones; skips absent)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
     _execute_stateful("vm-destroy", guests, _plan_destroy, step_mode=step)
+    _sweep_orphan_volumes(guests)  # clean orphaned lab_<g>-* volumes from failed creates (#276)
 
 
 @vm_app.command("status")
