@@ -50,3 +50,31 @@ vagrant_plugins = ["vagrant-libvirt"]
 # Lima then auto-forwards to the workstation's localhost:3000. Records are
 # "<vm-port>|<host:port>". Takes effect on the next `vrg-vm rebuild`.
 port_forwards = ["3000|10.50.0.2:3000"]
+
+[vm.anonymous]
+# Credential-less identity for isolated lab bootstrap testing (no GitHub/Claude
+# creds), so a from-scratch bootstrap can run in parallel without touching shared
+# stacks (#291). This repo has no shared [vm] stanza — composition is [vm] ⊕
+# [vm.<identity>] and [vm] is absent — so the full run-the-lab toolchain is
+# replicated here rather than inherited. Keep in sync with [vm.vergil-user].
+# Depends on vergil-tooling #1705 (auth_type = "none") to actually build.
+cpus   = 8          # estimate (~half of vergil-user); raise toward 12 if guests OOM/slow
+memory = "32GiB"    # estimate (~half of vergil-user); raise toward 64GiB if needed
+disk   = "300GiB"   # match vergil-user — nested guest qcow2 images are the risk, not RAM
+nested = true       # REQUIRED — /dev/kvm to KVM-boot the arm64 lab guests (else slow TCG)
+packages = [
+  "qemu-system-x86", "qemu-system-arm", "qemu-utils",
+  "qemu-efi-aarch64", "ovmf",  # UEFI guest firmware (AAVMF/OVMF) — Recommends-only, so declare explicitly (#20)
+  "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
+  "dnsmasq-base", "genisoimage",
+  "libarchive-tools",  # bsdtar — vagrant box unpacking
+  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant gem + vagrant-libvirt build deps
+]
+vagrant_plugins = ["vagrant-libvirt"]
+# Grafana relay -> workstation localhost:3001 (NOT 3000). vergil-user already
+# forwards its base-VM:3000 to the workstation's localhost:3000; this box runs in
+# PARALLEL with it, so it must use a distinct workstation port. The record is
+# "<vm-port>|<host:port>" and Lima forwards <vm-port> to the same workstation port,
+# so the vm-port becomes 3001. The target stays the obs node's Grafana (10.50.0.2:3000),
+# which is internal to the lab and unchanged.
+port_forwards = ["3001|10.50.0.2:3000"]
