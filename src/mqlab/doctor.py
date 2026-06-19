@@ -53,7 +53,7 @@ def _install_hint(tool: str, family: str) -> str | None:
 
 def run_checks(facts: HostFacts, *, which: Callable[[str], str | None]) -> list[Check]:
     if facts.in_vergil:
-        return [Check("vergil", True, "Vergil-managed host; prerequisites guaranteed by the profile")]
+        return [Check("vergil", True, "Vergil-managed; prerequisites guaranteed by the profile")]
     checks = [
         Check(
             "kvm",

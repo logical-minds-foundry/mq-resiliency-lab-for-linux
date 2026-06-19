@@ -17,7 +17,7 @@ from rich.console import Console
 from mqlab import parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.artifact import ensure_mq_tarballs
-from mqlab.doctor import run_checks, summarise
+from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
@@ -35,7 +35,6 @@ from mqlab.manifest import (
 )
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
-from mqlab.platforms import PlatformError, ensure_resolved
 from mqlab.paths import (
     lab_network,
     lab_script,
@@ -45,6 +44,7 @@ from mqlab.paths import (
     selection_state_path,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
+from mqlab.platforms import PlatformError, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
@@ -193,7 +193,7 @@ def _apply_manifest(
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
 #     KVM requirement before any verb that loads the Vagrantfile. -------------------
-def _doctor_checks() -> list:
+def _doctor_checks() -> list[Check]:
     return run_checks(probe(), which=shutil.which)
 
 

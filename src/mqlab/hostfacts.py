@@ -7,10 +7,13 @@ real hardware. probe() is the only function that reads the live host.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from platform import machine as _machine
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 AARCH64 = "aarch64"
 X86_64 = "x86_64"
@@ -53,7 +56,9 @@ def distro_family(os_release_text: str) -> str:
     return "unknown"
 
 
-def from_raw(*, machine: str, kvm_usable: bool, os_release_text: str, vergil_marker: bool) -> HostFacts:
+def from_raw(
+    *, machine: str, kvm_usable: bool, os_release_text: str, vergil_marker: bool
+) -> HostFacts:
     return HostFacts(
         arch=normalize_arch(machine),
         kvm=kvm_usable,

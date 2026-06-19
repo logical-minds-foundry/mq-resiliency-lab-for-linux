@@ -19,7 +19,11 @@ TOPO = {
     "defaults": {"cpus": 1, "memory": 1024},
     "nodes": {
         "obs": {"cpus": 2, "memory": 4096, "nics": {"net-mgmt": "10.50.0.2"}},
-        "rdqm-a1": {"platform": "rhel96-x86_64", "extra_disk": 10, "nics": {"net-mgmt": "10.50.0.31"}},
+        "rdqm-a1": {
+            "platform": "rhel96-x86_64",
+            "extra_disk": 10,
+            "nics": {"net-mgmt": "10.50.0.31"},
+        },
     },
 }
 
@@ -92,6 +96,24 @@ def test_ensure_resolved_writes_file_and_requires_kvm(monkeypatch, tmp_path):
     assert yaml.safe_load(out.read_text())["nodes"]["obs"]["arch"] == X86_64
     with pytest.raises(p.PlatformError):
         p.ensure_resolved(facts=X86_NOKVM, topo=TOPO)
+
+
+def test_ensure_resolved_reads_real_topology_when_topo_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "boxes:\n  ubuntu2404-x86_64: { box: cloud-image/ubuntu-24.04, arch: x86_64 }\n"
+        "defaults: { cpus: 1, memory: 1024 }\nnodes:\n  n1: {}\n"
+    )
+    out = p.ensure_resolved(facts=X86_KVM)  # topo=None -> reads the file
+    assert yaml.safe_load(out.read_text())["nodes"]["n1"]["arch"] == X86_64
+
+
+def test_ensure_resolved_probes_when_facts_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(p, "probe", lambda: X86_KVM)  # facts=None -> probe()
+    out = p.ensure_resolved(topo=TOPO)
+    assert out.exists()
 
 
 def test_resolved_node_has_every_vagrantfile_field():

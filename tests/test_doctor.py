@@ -39,6 +39,7 @@ def test_missing_tool_yields_dnf_install_hint():
     checks = d.run_checks(X86, which=_none_present)
     virsh = next(c for c in checks if c.name == "virsh")
     assert virsh.ok is False
+    assert virsh.fix is not None
     assert "dnf install" in virsh.fix
 
 
@@ -46,6 +47,7 @@ def test_missing_tool_yields_apt_hint_on_ubuntu():
     ubuntu = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=False)
     checks = d.run_checks(ubuntu, which=_none_present)
     virsh = next(c for c in checks if c.name == "virsh")
+    assert virsh.fix is not None
     assert "apt install" in virsh.fix
 
 
