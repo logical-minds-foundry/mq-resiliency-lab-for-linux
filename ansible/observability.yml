@@ -21,3 +21,11 @@
       when: >-
         'pcmk_a' in group_names or 'pcmk_b' in group_names
         or 'san_a' in group_names or 'san_b' in group_names
+    # Native-HA state collector (#279) — only on the nativeha-rhel arm. Every nha node
+    # (Live nha_rhel_a + Recovery nha_rhel_b) reports its own dspmq view; the collector
+    # emits the same cluster_* shape as cluster-state plus cluster_nha_* facets.
+    - role: nativeha-state
+      vars:
+        nativeha_qm: "{{ qm.name | default('QMNATIVE') }}"
+      when: >-
+        'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names

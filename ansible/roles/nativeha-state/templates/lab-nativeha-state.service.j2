@@ -1,0 +1,7 @@
+{# lab-nativeha-state.service — render lab_nativeha_state textfile once per tick #}
+[Unit]
+Description=Render lab_nativeha_state textfile (Native HA / CRR)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/lab-nativeha-state --qm {{ nativeha_qm | default('QMNATIVE') }}

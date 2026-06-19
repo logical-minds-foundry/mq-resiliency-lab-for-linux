@@ -1,0 +1,31 @@
+---
+# Deploy the nativeha-state collector (the tested mqlab.nativehastate module, verbatim) and
+# run it on a 5s timer. Mirrors cluster-state (#177): textfile dir -> deploy collector ->
+# service + timer -> enable. The QM name comes from the observability overlay (nativeha_qm);
+# the collector shells through `su - mqm -c` so dspmq runs as the mqm user (the arm's
+# qm-status verb does the same), while the unit itself runs as root to write the textfile dir.
+- name: textfile dir
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    mode: "0755"
+
+- name: deploy the nativeha-state collector (the tested mqlab module, verbatim)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/mqlab/nativehastate.py"
+    dest: /usr/local/bin/lab-nativeha-state
+    mode: "0755"
+
+- name: install service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop: [lab-nativeha-state.service.j2, lab-nativeha-state.timer.j2]
+
+- name: enable + start the timer
+  ansible.builtin.systemd:
+    name: lab-nativeha-state.timer
+    enabled: true
+    state: started
+    daemon_reload: true

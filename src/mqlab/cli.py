@@ -301,12 +301,21 @@ def obs_dashboard() -> None:
         path.write_text(text)
         deps.renderer.command(f"render -> {path}")
         deps.transcript.write(f"render -> {path}")
-        from mqlab.clusterboard import cluster_dashboard_path, lab_cluster_dashboard
+        from mqlab.clusterboard import (
+            cluster_dashboard_path,
+            lab_cluster_dashboard,
+            lab_nativeha_dashboard,
+            nativeha_dashboard_path,
+        )
 
         cockpit = cluster_dashboard_path()
         cockpit.write_text(lab_cluster_dashboard())
         deps.renderer.command(f"render -> {cockpit}")
         deps.transcript.write(f"render -> {cockpit}")
+        nha_cockpit = nativeha_dashboard_path()
+        nha_cockpit.write_text(lab_nativeha_dashboard())
+        deps.renderer.command(f"render -> {nha_cockpit}")
+        deps.transcript.write(f"render -> {nha_cockpit}")
     finally:
         deps.transcript.close()
 
@@ -385,12 +394,20 @@ def _obs_up_steps() -> list[CommandStep]:
     dash.parent.mkdir(parents=True, exist_ok=True)
     dash.write_text(lab_dashboard())
 
-    # the dedicated cluster cockpit board (lab-pcmk-cluster), rendered beside lab-status (#219)
-    from mqlab.clusterboard import cluster_dashboard_path, lab_cluster_dashboard
+    # the dedicated cluster cockpit boards, rendered beside lab-status: lab-pcmk-cluster (#219)
+    # and lab-nativeha-cluster (#279)
+    from mqlab.clusterboard import (
+        cluster_dashboard_path,
+        lab_cluster_dashboard,
+        lab_nativeha_dashboard,
+        nativeha_dashboard_path,
+    )
 
     cockpit = cluster_dashboard_path()
     cockpit.parent.mkdir(parents=True, exist_ok=True)
     cockpit.write_text(lab_cluster_dashboard())
+    nha_cockpit = nativeha_dashboard_path()
+    nha_cockpit.write_text(lab_nativeha_dashboard())
 
     return [
         CommandStep(
