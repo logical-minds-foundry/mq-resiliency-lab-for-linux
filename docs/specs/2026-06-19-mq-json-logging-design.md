@@ -1,18 +1,20 @@
 # MQ JSON diagnostic logging — production infrastructure design
 
 > **Issue:** #282. **Date:** 2026-06-19. **Scope:** MQ-general (all arms).
-> **Status:** Design (approved 2026-06-19). **Depends on research:**
+> **Status:** Design — approved 2026-06-19; pushback review applied 2026-06-19.
+> **Depends on research:**
 > [`docs/reports/2026-06-19-mq-json-logging-research.md`](../reports/2026-06-19-mq-json-logging-research.md).
 > **Diagram:** [`diagrams/mq-json-logging-flow.html`](diagrams/mq-json-logging-flow.html).
+> **Portable config recipe (MQ-only):**
+> [`../reference/mq-json-logging-config.md`](../reference/mq-json-logging-config.md).
 
 ## 1. Purpose & scope
 
 Configure every IBM MQ diagnostic surface to **produce JSON-format diagnostic
-logs** and make them **available and queryable** in the lab's log store, uniformly
-across all arms (nativeha-rhel, pcmk, rdqm, …). This is the *production* half of
-the logging story — getting MQ's diagnostics into a structured, line-oriented,
-vendor-neutral form. How those logs are *consumed for display* is explicitly a
-follow-on effort.
+logs** and make them **available and queryable** in the lab's log store, across all
+arms (nativeha-rhel, pcmk, rdqm, …). This is the *production* half of the logging
+story — getting MQ's diagnostics into a structured, line-oriented, vendor-neutral
+form. How those logs are *consumed for display* is explicitly a follow-on effort.
 
 **The core deliverable is the boundary, not the dashboard:** once MQ diagnostics
 are single-line JSON in the OS journal (plus one file for mqweb), they are
@@ -28,7 +30,8 @@ anything MQ-side. See the flow diagram referenced above.
 - Client application diagnostics (`mqclient.ini`).
 - mqweb (MQ Console / REST) diagnostics (WebSphere Liberty).
 - The minimal pipeline changes needed for **availability** (logs reach Loki and
-  are queryable): one Alloy relabel rule and one Alloy file source.
+  are queryable): one Alloy relabel rule, one Alloy file source, and a journald
+  rate-limit drop-in so nothing is silently dropped.
 
 ### Out of scope (named follow-ons)
 
@@ -49,9 +52,11 @@ After a fresh provision and a fault drill, all of the following hold:
    `{unit="ibm-mqweb"} | json`.
 4. **Cold-rebuild gate:** a fresh provision yields a queue manager whose `qm.ini`
    carries the inherited diagnostic stanza with **zero manual steps**.
+5. **No silent loss:** `journalctl -t ibm-mq` shows no "Suppressed N messages"
+   rate-limit marker during the drill window.
 
 All steps fail loud — no swallowed errors. Ansible tasks fail on write errors;
-the verification step fails if a query returns empty.
+the verification step fails if a query returns empty or a suppression marker appears.
 
 ## 3. Architecture & data flow
 
@@ -79,16 +84,24 @@ does not apply).
 
 ### 4.1 New role: `mq-diag-logging`
 
-A dedicated role owns the entire logging contract (every stanza template plus the
-Alloy snippets) so it can be read and audited in one place. It exposes
-surface-specific task files included with `tasks_from:` at each integration point:
+A dedicated role owns the entire logging contract (every stanza template, the
+journald drop-in, and the Alloy snippets) so it can be read and audited in one
+place. It exposes surface-specific task files included with `tasks_from:`.
 
-| Task file | Included by | Action |
+**Wiring is at the QM-creation seams, not the install seams.** MQ is installed and
+queue managers are created by *different roles on different arms* — `crtmqm` lives
+in five roles and MQ install in four. Hooking the install layer would miss arms
+(notably nativeha-rhel, which installs via `mq-nativeha/install-RedHat.yml` and
+creates its QM in `mq-nativeha`). So `system.yml` runs as the **first step inside
+each QM-creating role, before its `crtmqm`** — guaranteeing `mqs.ini` carries the
+template regardless of how MQ was installed.
+
+| Task file | Wired into (seam) | Action |
 |---|---|---|
-| `system.yml` | `mq-install` **and** `rdqm-install` (before `crtmqm`) | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`. |
-| `qmgr.yml` | `mq-qmgr` | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
-| `client.yml` | `mq-client` | `mqclient.ini` `DiagnosticSystemMessages`. |
-| `web.yml` | `mqweb` | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` to `mqwebuser.xml`. |
+| `system.yml` | **First step, before `crtmqm`,** in each QM-creating role: `mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-install`, and `mq-nativeha-spike` (spike arm; lower priority). | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`; install the journald rate-limit drop-in (§4.3). |
+| `qmgr.yml` | After `crtmqm` in those same roles. | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
+| `client.yml` | `mq-client`. | `/var/mqm/mqclient.ini` `DiagnosticSystemMessages` (marker block — coexists with the existing KeepAlive `lineinfile` in `site-distributed-shared.yml`). |
+| `web.yml` | `mqweb`. | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` to `mqwebuser.xml`. |
 
 **MQ `.ini` format note.** MQ configuration files use a `Stanza:` header with
 indented `key = value` lines (colon, not `[section]` brackets), and stanza names
@@ -100,24 +113,37 @@ markers for idempotency.
 
 Two additions, both purely about making MQ logs *findable*:
 
-1. **Relabel rule** mapping `__journal__syslog_identifier` → `unit`. MQ's
-   syslog-sourced journal entries have no `_SYSTEMD_UNIT`, so without this they
-   ship with an empty `unit` label and are effectively unqueryable. Mapping the
-   identifier into `unit` makes MQ arrive as `unit="ibm-mq"` (and, conveniently,
-   matches the cockpit's existing `unit=~".*mq.*"` filter for the follow-on
-   dashboard work). Cardinality impact is negligible.
-2. **`loki.source.file`** for `.../mqweb/logs/messages.log`, labelled
-   `unit="ibm-mqweb"`, guarded so it is only configured on queue-manager nodes
-   (which run mqweb).
+1. **Conditional relabel** that sets `unit` from `__journal__syslog_identifier`
+   **only when `__journal__systemd_unit` is empty** — a single rule over
+   `source_labels = ["__journal__systemd_unit", "__journal__syslog_identifier"]`
+   with a regex matching the empty-unit case. This makes MQ's syslog-sourced
+   entries arrive as `unit="ibm-mq"` **without** clobbering the `unit` label of
+   systemd-unit-sourced entries (corosync/pacemaker), and without touching DRBD
+   (which logs via the kernel identifier). Negligible cardinality impact.
+2. **`loki.source.file`** for
+   `/var/mqm/web/installations/Installation1/servers/mqweb/logs/messages.log`,
+   labelled `unit="ibm-mqweb"`, guarded so it is only configured on
+   queue-manager nodes (which run mqweb). Path casing (`Installation1`) matches
+   the lab's `mqweb` role.
 
 JSON is parsed at **query time** in Grafana (`| json`), consistent with the
 existing pipeline; ingest stays low-cardinality (labels `host`, `unit`).
 
+### 4.3 journald rate-limit drop-in (no silent loss)
+
+`syslog()` lands in journald, which rate-limits per service by default
+(`RateLimitIntervalSec=30s`, `RateLimitBurst=10000`) and **silently drops** beyond
+that. With `Severities=all`, an event storm (channel cycling, a Native-HA election
+storm, exporter connection churn) could trip it and lose the very events the logs
+exist to capture — a silent failure the project forbids. The role installs an
+Ansible-managed drop-in on MQ nodes disabling the limiter for the (ephemeral,
+24h-retention) lab; verification asserts no suppression marker appears.
+
 ## 5. Concrete configuration
 
 ```ini
-# mqs.ini — seeded by mq-install / rdqm-install BEFORE crtmqm, so every new QM
-# inherits the queue-manager stanza at creation.
+# mqs.ini — seeded as the first step of each QM-creating role, BEFORE crtmqm, so
+# every new QM inherits the queue-manager stanza at creation.
 DiagnosticMessagesTemplate:
    Name=ClusterSyslog
    Service=Syslog
@@ -143,8 +169,9 @@ DiagnosticMessages:
 ```
 
 ```ini
-# mqclient.ini — client app diagnostics. NOTE: ExcludeMessage / SuppressMessage
-# are not honoured in mqclient.ini, so the client surface is severity-filtered only.
+# /var/mqm/mqclient.ini — client app diagnostics, as a marked block (coexists with
+# the existing TCP KeepAlive edit). NOTE: ExcludeMessage / SuppressMessage are not
+# honoured in mqclient.ini, so the client surface is severity-filtered only.
 DiagnosticSystemMessages:
    Name=ClusterSyslog
    Service=Syslog
@@ -157,20 +184,32 @@ DiagnosticSystemMessages:
 <logging messageFormat="json" messageSource="message,ffdc"/>
 ```
 
+```ini
+# /etc/systemd/journald.conf.d/10-mq.conf — disable rate-limiting on MQ nodes
+[Journal]
+RateLimitIntervalSec=0
+RateLimitBurst=0
+```
+
 **Severity policy.** `Severities=all` (Info and above) is deliberate: many
 HA/CRR/Native-HA state-change events are emitted at Information severity, and an
 errors-only filter would silently drop exactly the events that make the logs
 interesting. `ExcludeMessage` trims known routine chatter; the list is a starting
 point to be tuned against real drill output.
 
-## 6. Cross-arm / OS-agnostic behaviour
+## 6. Cross-arm behaviour
 
-`mq-diag-logging` only edits `/var/mqm/...` ini files and Liberty config, which
-are identical on RHEL and Ubuntu, with identical paths — so the role is
-OS-agnostic. Both install roles (`mq-install` for the Ubuntu arms, `rdqm-install`
-for the RHEL arm) include `system.yml`; the shared `mq-qmgr`, `mqweb`,
-`mq-client`, and `alloy` roles carry the rest. All arms are covered uniformly with
-no per-arm logic.
+The `mq-diag-logging` role's *logic* is OS-agnostic — it only edits `/var/mqm/...`
+ini files, a journald drop-in, and Liberty config, all identical on RHEL and
+Ubuntu with identical paths. What is **per-arm is the wiring**: the role is
+included at each of the QM-creation seams listed in §4.1, because those seams
+differ by arm. There is no per-arm *branching inside* the role; there is per-arm
+*inclusion* of it.
+
+**Native HA note.** `mqs.ini` is per-node, so `DiagnosticSystemMessages` and the
+journald drop-in are applied on every HA node; the `DiagnosticMessagesTemplate`
+must exist on whichever node runs `crtmqm`, and the resulting `qm.ini` stanza is
+then carried with the replicated QM data to the other instances.
 
 **Correctness model.** Primary mechanism is **template inheritance at `crtmqm`**
 (no QM restart needed; aligns with the cold-rebuild acceptance gate). The `qm.ini`
@@ -187,24 +226,45 @@ after provision + a fault drill:
 
 1. **Journal shape:** `journalctl -t ibm-mq -o cat | head -1` parses as JSON.
 2. **QM in Loki:** `{unit="ibm-mq"} | json | ibm_messageId != ""` returns rows.
-3. **mqweb in Loki:** `{unit="ibm-mqweb"} | json` returns rows.
+3. **mqweb in Loki:** `{unit="ibm-mqweb"} | json` returns rows (from
+   `/var/mqm/web/installations/Installation1/servers/mqweb/logs/messages.log`).
 4. **Inheritance:** a freshly created QM's `qm.ini` contains the `DiagnosticMessages`
    stanza with no manual intervention.
+5. **No silent loss:** no "Suppressed N messages" marker for the `ibm-mq`
+   identifier in the journal over the drill window.
 
-## 8. Risks & spike-validate-first items
+## 8. Phase 0 spike gate (do this first)
 
-- **Core assumption:** MQ's `syslog()` output reaches journald with
-  `SYSLOG_IDENTIFIER=ibm-mq`, and the journal `MESSAGE` field is the raw
-  single-line JSON object. Verify on one arm before building out (Step 2 of #282).
+The design rests on one load-bearing premise that **must be proven on one QM
+before any role build-out** (#282 Step 2). The implementation plan's first task is
+this spike; everything else is *blocked-by* it.
+
+Confirm, from real `journalctl -t ibm-mq -o json` output on one configured QM:
+
+1. The Syslog service actually emits to the local socket journald reads (vs.
+   requiring rsyslog) — MQ entries appear in the journal at all.
+2. journald tags them `SYSLOG_IDENTIFIER=ibm-mq` (the configured `Ident`).
+3. The `MESSAGE` field is the **whole single-line JSON object** (the research
+   wording "added to syslog … starting with the msgID and inserts" leaves room
+   for a positional/structured form instead of a JSON blob — verify it is a blob).
+4. mqweb: `messageFormat=json` in `mqwebuser.xml` produces JSON `messages.log`
+   on the bundled Liberty and does not disturb the existing TLS serving.
+
+If any sub-assumption fails, revisit the ingestion decision (e.g., fall back to
+file-tailing `AMQERR0x.json`) before building the role.
+
+## 9. Residual risks & tuning
+
 - mqweb Liberty JSON uses its own `ibm_*` field set (distinct from MQ-core's) —
   still `| json`-parseable; the follow-on dashboard must account for both schemas.
 - `ExcludeMessage` defaults are provisional; tune against observed drill volume.
 - The always-on `AMQERRnn.LOG` text files remain on disk (cannot be disabled);
   they are neither shipped nor parsed, by decision.
 
-## 9. References
+## 10. References
 
 - Research study: [`docs/reports/2026-06-19-mq-json-logging-research.md`](../reports/2026-06-19-mq-json-logging-research.md)
+- Portable MQ-only config recipe: [`docs/reference/mq-json-logging-config.md`](../reference/mq-json-logging-config.md)
 - Flow diagram: [`diagrams/mq-json-logging-flow.html`](diagrams/mq-json-logging-flow.html)
 - Primary IBM 9.4 docs (cached under `build/refs/ibm-docs/ibm-mq/9.4/`):
   Diagnostic message services (`q018795`), Diagnostic message service stanzas
