@@ -17,3 +17,12 @@ def prepare_lab_calls(monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(cli, "_prepare_lab", lambda: calls.append("prepare"))
     return calls
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_ensure_local_boxes(monkeypatch):
+    """Neutralise cli._ensure_local_boxes in every test — it reads the rendered
+    resolved topology and shells `vagrant box list` / build-box.sh, which must not
+    run in unit tests (#276). The real function is tested directly via the import
+    captured before this stub."""
+    monkeypatch.setattr(cli, "_ensure_local_boxes", lambda guests: None)

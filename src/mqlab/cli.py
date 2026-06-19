@@ -40,6 +40,7 @@ from mqlab.paths import (
     lab_script,
     repo_root,
     reports_dir,
+    resolved_topology_path,
     runs_dir,
     selection_state_path,
 )
@@ -595,6 +596,70 @@ def _create_step(g: str) -> CommandStep:
     return CommandStep(f"{g} create", cmd)
 
 
+# Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
+# REUSEs the host-durable build/boxes cache when present (a quick `vagrant box add`)
+# and only does the ~45-90min ISO build on a truly first-ever run (#276/#291).
+_LOCAL_BOX_BUILDERS = {
+    "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
+}
+
+
+def parse_box_list(text: str) -> dict[str, str]:
+    """Parse `vagrant box list` -> {box_name: trailing info}; 'no boxes' -> {}."""
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.lower().startswith("there are no"):
+            continue
+        name, _, rest = line.partition(" ")
+        out[name] = rest.strip()
+    return out
+
+
+def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
+    """Local-built boxes the given guests need -> build script, read from the rendered
+    resolved topology (build/lab/topology.resolved.yaml, #276)."""
+    import yaml as _yaml
+
+    nodes = _yaml.safe_load(resolved_topology_path().read_text()).get("nodes", {})
+    boxes = {(nodes.get(g) or {}).get("box") for g in guests}
+    return {box: script for box, script in _LOCAL_BOX_BUILDERS.items() if box in boxes}
+
+
+def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[CommandStep]:
+    return [
+        CommandStep(f"box {box}", Command(["bash", str(repo_root() / script)]))  # noqa: S607
+        for box, script in sorted(needed.items())
+        if box not in present
+    ]
+
+
+def _ensure_local_boxes(guests: list[str]) -> None:
+    """Build/register any local-built box a setup needs that isn't installed yet, so a
+    fresh box bootstraps without a manual build-box.sh run (#276/#291). No-op for
+    cloud-downloadable boxes (Ubuntu) and for boxes already in `vagrant box list`."""
+    needed = _needed_local_boxes(guests)
+    if not needed:
+        return
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("box-build", timestamp)
+    try:
+        cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
+        present = _probe(deps, cmd, parse_box_list)
+        run_steps(
+            _box_build_steps(needed, present),
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
 def _start_step(g: str) -> CommandStep:
     return CommandStep(f"{g} start", Command([*_VIRSH, "start", f"lab_{g}"]))  # noqa: S607
 
@@ -848,6 +913,7 @@ def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag 
     # Pin box_version + ensure the MQ tarball before the boxes come up (no-op if the
     # pattern is not a manifested setup). #266
     _apply_manifest(pattern, requested=manifest, at_create=True)
+    _ensure_local_boxes(guests)  # build/register the RHEL box from its cache/ISO (#276/#291)
     _execute_stateful("vm-create", guests, _plan_create, step_mode=step)
 
 

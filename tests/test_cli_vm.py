@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import io
 
+import pytest
+import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
+from mqlab.cli import _ensure_local_boxes as _real_ensure_local_boxes  # captured before the stub
 from mqlab.pauser import NoTTYError
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
@@ -485,3 +488,74 @@ def test_fetch_mq_tarball_delegates_to_download(monkeypatch, tmp_path):
     name = "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
     cli._fetch_mq_tarball(name, tmp_path / "t")
     assert calls == {"name": name, "dest": tmp_path / "t"}
+
+
+# --- local box auto-build (#276/#291): build/register the RHEL box on a fresh box ---
+def test_parse_box_list():
+    txt = "rhel/9.6-x86_64          (libvirt, 0, (arm64))\ncloud-image/ubuntu-24.04 (libvirt, 1)\n"
+    assert cli.parse_box_list(txt) == {
+        "rhel/9.6-x86_64": "(libvirt, 0, (arm64))",
+        "cloud-image/ubuntu-24.04": "(libvirt, 1)",
+    }
+
+
+def test_parse_box_list_no_boxes():
+    assert cli.parse_box_list("There are no installed boxes!\n") == {}
+
+
+def _seed_resolved(tmp_path, body):
+    (tmp_path / "build" / "lab").mkdir(parents=True)
+    (tmp_path / "build" / "lab" / "topology.resolved.yaml").write_text(body)
+
+
+def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(
+        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == ["vagrant", "box", "list"]
+    assert argvs[1] == ["bash", str(tmp_path / "lab/boxes/rhel96/build-box.sh")]
+
+
+def test_ensure_local_boxes_noop_when_box_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    assert [c.argv for c in runner.recorded] == [["vagrant", "box", "list"]]  # probe only, no build
+
+
+def test_ensure_local_boxes_noop_when_no_local_box(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  obs: {box: cloud-image/ubuntu-24.04}\n")
+    _real_ensure_local_boxes(["obs"])  # no local box needed -> returns before any command
+
+
+def test_ensure_local_boxes_build_failure_exits(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(
+        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([], exit_code=1)]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    with pytest.raises(typer.Exit):
+        _real_ensure_local_boxes(["rdqm-a1"])
+
+
+def test_vm_create_runs_ensure_local_boxes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["rdqm-a1"])
+    called = {}
+    monkeypatch.setattr(
+        cli, "_ensure_local_boxes", lambda guests: called.setdefault("guests", guests)
+    )
+    runner = RecordingRunner(results=[_probe({}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "create", "rdqm-a1"])
+    assert result.exit_code == 0
+    assert called["guests"] == ["rdqm-a1"]
