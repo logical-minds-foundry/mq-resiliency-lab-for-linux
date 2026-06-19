@@ -26,8 +26,11 @@ if TYPE_CHECKING:
 _FIELD = re.compile(r"(\w+)\(([^)]*)\)")
 
 # Numeric role code for the cockpit instances-matrix cell (the colour-cell machinery is
-# numeric): Active=2, Replica=1, anything else (Unknown/down)=0.
-_ROLE_CODE = {"Active": 2, "Replica": 1}
+# numeric). The Live group's leader reports ROLE(Active) (running the QM); the Recovery
+# group's leader reports ROLE(Leader) (applying CRR replication — healthy, NOT a problem).
+# Both are healthy leaders; Replica is a healthy follower; anything else (down/transitioning)
+# falls through to 0=Unknown.
+_ROLE_CODE = {"Active": 2, "Leader": 3, "Replica": 1}
 
 
 def _fields(line: str) -> dict[str, str]:

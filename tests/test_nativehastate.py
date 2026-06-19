@@ -48,6 +48,27 @@ def test_parse_nativeha_x_without_quorum_line_leaves_summary_none():
     assert out["instances"] == {}
 
 
+def test_render_recovery_leader_role_codes_as_healthy_not_unknown():
+    # the Recovery group's leader reports ROLE(Leader) (CRR replication target) — it must
+    # code as 3 (healthy leader), not fall through to 0/Unknown/red (#279 feedback).
+    hax = {
+        "quorum_current": 3,
+        "quorum_total": 3,
+        "group_role": "Recovery",
+        "instances": {
+            "nha-rhel-b1": {"role": "Leader", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-b2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
+        },
+    }
+    out = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-b1", qm="QMNATIVE", hax=hax, grp=None, now=1, fresh_sources=()
+    )
+    assert 'cluster_nha_role_code{node="nha-rhel-b1",member="nha-rhel-b1"} 3' in out  # Leader
+    assert 'cluster_node_online{node="nha-rhel-b1",member="nha-rhel-b1"} 1' in out  # online
+    # the Recovery leader does not run the QM, so it is not an Active owner
+    assert "cluster_resource_owner" not in out
+
+
 def test_parse_nativeha_g_real_capture_live_and_recovery():
     # real capture: the leading QMNAME summary line is skipped; the live (local) group reports
     # role+status only (no CONNGRP/INSYNC/BACKLOG -> None); the recovery group carries the CRR
