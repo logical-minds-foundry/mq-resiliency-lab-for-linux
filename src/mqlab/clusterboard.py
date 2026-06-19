@@ -51,10 +51,11 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             },
         },
     ],
-    # Native-HA role code → coloured text. Both group leaders are healthy (green): the Live
-    # group's leader is "Active" (running the QM), the Recovery group's is "Leader" (applying
-    # CRR replication). Replica is a healthy follower (blue). Only a genuinely down/unknown
-    # instance is red — so the Recovery matrix reads healthy, not alarming (#279 feedback).
+    # Native-HA role code → coloured text. The Live group's leader is "Active" (running the QM,
+    # green); the Recovery group's leader is "Leader" (the standby that applies CRR replication,
+    # yellow — healthy but not serving). Replica is a healthy follower (blue). Only a genuinely
+    # down/unknown instance is red. So a site reads green-led when live, yellow-led when standby
+    # (#279 feedback).
     "role": [
         {
             "type": "value",
@@ -62,7 +63,7 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
                 "0": {"color": _RED, "text": "Unknown", "index": 0},
                 "1": {"color": "blue", "text": "Replica", "index": 1},
                 "2": {"color": _GREEN, "text": "Active", "index": 2},
-                "3": {"color": _GREEN, "text": "Leader", "index": 3},
+                "3": {"color": "yellow", "text": "Leader", "index": 3},
             },
         },
     ],
@@ -574,9 +575,47 @@ def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
 
 
+def _site_role_badge(label: str, site_regex: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
+    """A bold per-site header badge: LIVE (green) when the site holds the Active instance,
+    RECOVERY (yellow) when it holds the standby Leader — derived from the data so it flips on
+    failover, never a static site label (#279 feedback). Background-coloured so the live/standby
+    split is obvious at a glance, without reading the role column."""
+    maps = [
+        {
+            "type": "value",
+            "options": {
+                "2": {"color": _GREEN, "text": "LIVE", "index": 0},
+                "3": {"color": "yellow", "text": "RECOVERY", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    badge = _stat(
+        label,
+        f'max(cluster_nha_role_code{{member=~"{site_regex}"}})',
+        ds_uid,
+        x,
+        y,
+        mappings=maps,
+    )
+    badge["gridPos"] = {"h": 3, "w": 12, "x": x, "y": y}
+    badge["options"]["colorMode"] = "background"
+    badge["options"]["graphMode"] = "none"
+    return badge
+
+
+def nativeha_site_badges(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """The two side-by-side site headers (Site A | Site B), each showing LIVE/RECOVERY."""
+    return [
+        _site_role_badge("Site A", "nha-rhel-a.*", ds_uid, 0, y),
+        _site_role_badge("Site B", "nha-rhel-b.*", ds_uid, 12, y),
+    ]
+
+
 def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
-    """③ Cross-region (CRR): per-group role (Live ↔ Recovery), connected, replication
-    backlog — the DR layer, read from the `dspmq -g` group view."""
+    """③ Cross-region (CRR) replication health, from the `dspmq -g` group view: is the recovery
+    group connected, in-sync, and how far behind (backlog). Which site is live/recovery is shown
+    in the instances section (the site badges + role column), so it is not repeated here."""
     conn_maps = [
         {
             "type": "value",
@@ -587,38 +626,38 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
         },
         _STALE_MAP,
     ]
+    insync_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": "yellow", "text": "catching up", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ in-sync", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
     return [
-        _stat(
-            "Live group role",
-            'max by (role)(cluster_nha_group_role{group="Live"})',
-            ds_uid,
-            0,
-            y,
-            text_mode="name",
-            name_label="role",
-        ),
-        _stat(
-            "Recovery group role",
-            'max by (role)(cluster_nha_group_role{group="Recovery"})',
-            ds_uid,
-            6,
-            y,
-            text_mode="name",
-            name_label="role",
-        ),
         _stat(
             "CRR connected",
             'max(cluster_nha_connected{group="Recovery"})',
             ds_uid,
-            12,
+            0,
             y,
             mappings=conn_maps,
+        ),
+        _stat(
+            "CRR in-sync",
+            'max(cluster_nha_group_insync{group="Recovery"})',
+            ds_uid,
+            8,
+            y,
+            mappings=insync_maps,
         ),
         _stat(
             "CRR backlog",
             'max(cluster_nha_group_backlog{group="Recovery"})',
             ds_uid,
-            18,
+            16,
             y,
         ),
     ]
@@ -778,32 +817,22 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
         # header (h=7). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
         # Site A / Site B are the FIXED node groups (nha_rhel_a / nha_rhel_b). Live vs Recovery
         # is a *role* that swaps on DR cutover/failback — never a static site label (#279
-        # feedback). Which site is live reads from the role column (Active/Leader) below.
+        # feedback). Each site carries a LIVE/RECOVERY badge (green/yellow) derived from the
+        # data, so the split is obvious; the role column gives the per-instance detail.
         _row_header("② Instances — Site A & Site B", y=11),
-        matrix(
-            "Site A",
-            _nativeha_instance_cols("nha-rhel-a.*"),
-            ds_uid,
-            y=12,
-            h=7,
-        ),
-        matrix(
-            "Site B",
-            _nativeha_instance_cols("nha-rhel-b.*"),
-            ds_uid,
-            y=19,
-            h=7,
-        ),
-        _row_header("③ Cross-region (CRR) — Live ↔ Recovery", y=26),
-        *nativeha_crr_card(ds_uid, y=27),
-        _row_header("⟳ Failover & CRR timeline", y=31),
-        _nativeha_timeline(ds_uid, y=32),
-        _row_header("▤ Native HA logs", y=39),
-        _nativeha_log_row("loki", y=40),
-        _row_header("🖥 Performance", y=48),
-        *nativeha_perf_section(ds_uid, y=49),
-        _row_header("🌐 Network", y=56),
-        *nativeha_net_section(ds_uid, y=57),
+        *nativeha_site_badges(ds_uid, y=12),
+        matrix("Site A", _nativeha_instance_cols("nha-rhel-a.*"), ds_uid, y=15, h=7),
+        matrix("Site B", _nativeha_instance_cols("nha-rhel-b.*"), ds_uid, y=22, h=7),
+        _row_header("③ Cross-region replication (CRR)", y=29),
+        *nativeha_crr_card(ds_uid, y=30),
+        _row_header("⟳ Failover & CRR timeline", y=34),
+        _nativeha_timeline(ds_uid, y=35),
+        _row_header("▤ Native HA logs", y=42),
+        _nativeha_log_row("loki", y=43),
+        _row_header("🖥 Performance", y=51),
+        *nativeha_perf_section(ds_uid, y=52),
+        _row_header("🌐 Network", y=59),
+        *nativeha_net_section(ds_uid, y=60),
     ]
     return {
         "uid": "lab-nativeha-cluster",

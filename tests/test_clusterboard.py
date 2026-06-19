@@ -213,9 +213,11 @@ def test_role_mapping_codes_active_replica_unknown():
     assert opts["2"]["text"] == "Active"
     assert opts["1"]["text"] == "Replica"
     assert opts["0"]["text"] == "Unknown"
-    # the Recovery group's leader (ROLE Leader) is a healthy state, coloured green not red
+    # the Recovery group's leader (ROLE Leader) is the healthy standby — yellow, not green
+    # (green is the live Active) and not red (red is only a genuinely down instance)
     assert opts["3"]["text"] == "Leader"
-    assert opts["3"]["color"] == "green"
+    assert opts["3"]["color"] == "yellow"
+    assert opts["2"]["color"] == "green"  # Active (live) is green
     assert opts["0"]["color"] == "red"  # only genuinely-unknown is alarming
 
 
@@ -293,8 +295,9 @@ def test_nativeha_board_has_full_section_parity_minus_storage():
     d = render_cluster_dashboard({}, arm="nativeha-rhel")
     titles = [p.get("title", "") for p in d["panels"]]
     types = {p["type"] for p in d["panels"]}
-    assert any("Cross-region (CRR)" in t for t in titles)  # ③ CRR row header
+    assert any("Cross-region replication (CRR)" in t for t in titles)  # ③ CRR row header
     assert any(t == "CRR connected" for t in titles)  # CRR card tile
+    assert any(t in ("Site A", "Site B") for t in titles)  # site role badges + matrices
     assert "state-timeline" in types  # failover + CRR timeline
     assert "logs" in types  # native HA log row
     assert any("CPU busy" in t for t in titles)  # perf
@@ -330,12 +333,29 @@ def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
     assert "virbr-hb" in blob and "virbr-wan" in blob  # raft + CRR throughput
 
 
-def test_nativeha_crr_card_reports_group_roles_and_backlog():
+def test_nativeha_crr_card_is_replication_health_not_group_roles():
     from mqlab.clusterboard import nativeha_crr_card
 
     tiles = nativeha_crr_card("promtest", y=0)
     titles = [t["title"] for t in tiles]
-    assert titles == ["Live group role", "Recovery group role", "CRR connected", "CRR backlog"]
-    assert 'cluster_nha_group_role{group="Live"}' in tiles[0]["targets"][0]["expr"]
-    assert tiles[0]["targets"][0]["legendFormat"] == "{{role}}"  # shows the role text
-    assert "cluster_nha_group_backlog" in tiles[3]["targets"][0]["expr"]
+    # the redundant Live/Recovery group-role tiles are gone (#279 feedback); the card is the
+    # cross-region replication health (which site is live is shown in the instances section).
+    assert titles == ["CRR connected", "CRR in-sync", "CRR backlog"]
+    assert not any("group role" in t.lower() for t in titles)
+    assert 'cluster_nha_connected{group="Recovery"}' in tiles[0]["targets"][0]["expr"]
+    assert "cluster_nha_group_backlog" in tiles[2]["targets"][0]["expr"]
+
+
+def test_nativeha_site_badges_flip_live_recovery_by_data():
+    from mqlab.clusterboard import nativeha_site_badges
+
+    badges = nativeha_site_badges("promtest", y=12)
+    assert [b["title"] for b in badges] == ["Site A", "Site B"]
+    # each badge derives its role from the site's instances (max role code: 2=Active→LIVE,
+    # 3=Leader→RECOVERY) so it flips on failover; green LIVE vs yellow RECOVERY, background-lit
+    a_opts = badges[0]["fieldConfig"]["defaults"]["mappings"][0]["options"]
+    assert a_opts["2"]["text"] == "LIVE" and a_opts["2"]["color"] == "green"
+    assert a_opts["3"]["text"] == "RECOVERY" and a_opts["3"]["color"] == "yellow"
+    assert badges[0]["options"]["colorMode"] == "background"
+    assert 'member=~"nha-rhel-a.*"' in badges[0]["targets"][0]["expr"]
+    assert 'member=~"nha-rhel-b.*"' in badges[1]["targets"][0]["expr"]
