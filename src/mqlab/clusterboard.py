@@ -776,16 +776,19 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
         nativeha_integrity_panel(ds_uid, y=7),
         # one matrix per group, banded Live (site A) / Recovery (site B); each is 3 rows +
         # header (h=7). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
-        _row_header("② Instances — Live & Recovery", y=11),
+        # Site A / Site B are the FIXED node groups (nha_rhel_a / nha_rhel_b). Live vs Recovery
+        # is a *role* that swaps on DR cutover/failback — never a static site label (#279
+        # feedback). Which site is live reads from the role column (Active/Leader) below.
+        _row_header("② Instances — Site A & Site B", y=11),
         matrix(
-            "② Instances — Live (site A)",
+            "Site A",
             _nativeha_instance_cols("nha-rhel-a.*"),
             ds_uid,
             y=12,
             h=7,
         ),
         matrix(
-            "② Instances — Recovery (site B)",
+            "Site B",
             _nativeha_instance_cols("nha-rhel-b.*"),
             ds_uid,
             y=19,

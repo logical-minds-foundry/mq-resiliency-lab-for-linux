@@ -235,16 +235,24 @@ def test_nativeha_board_uid_sections_and_tags():
     assert d["uid"] == "lab-nativeha-cluster"
     assert "nativeha-rhel" in d["tags"]
     by_title = {p.get("title", ""): p for p in d["panels"]}
-    assert "② Instances — Live (site A)" in by_title
-    assert "② Instances — Recovery (site B)" in by_title
+    # matrices are labelled by FIXED site (A/B), never by the dynamic live/recovery role (#279)
+    assert "Site A" in by_title
+    assert "Site B" in by_title
     assert "Active instance" in by_title and "Integrity" in by_title
     # the two matrices stack without overlap, below the hero/integrity band
-    live = by_title["② Instances — Live (site A)"]
-    recov = by_title["② Instances — Recovery (site B)"]
-    assert live["gridPos"]["y"] < recov["gridPos"]["y"]
-    assert by_title["Integrity"]["gridPos"]["y"] < live["gridPos"]["y"]
+    site_a = by_title["Site A"]
+    site_b = by_title["Site B"]
+    assert site_a["gridPos"]["y"] < site_b["gridPos"]["y"]
+    assert by_title["Integrity"]["gridPos"]["y"] < site_a["gridPos"]["y"]
     banner = next(p for p in d["panels"] if p["type"] == "text")
     assert "Native HA" in banner["options"]["content"]
+    # the instance matrices must NOT label a site with a role word — live/recovery swaps (#279)
+    for p in d["panels"]:
+        if p["type"] == "table":
+            assert "Live" not in p["title"] and "Recovery" not in p["title"]
+    # Site A scopes to a-nodes, Site B to b-nodes
+    assert any('member=~"nha-rhel-a.*"' in t["expr"] for t in site_a["targets"])
+    assert any('member=~"nha-rhel-b.*"' in t["expr"] for t in site_b["targets"])
     # no PCMK-only plumbing leaks into the nativeha board
     blob = json.dumps(d)
     assert "corosync" not in blob and "cluster_drbd" not in blob and "iSCSI" not in blob
