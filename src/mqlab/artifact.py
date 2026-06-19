@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from mqlab.hostfacts import HostFacts
+
 
 def _verify_sha256(path: Path) -> None:
     sidecar = path.with_name(path.name + ".sha256")
@@ -34,10 +36,12 @@ def ensure_mq_tarballs(
     build_mq_dir: Path,
     *,
     fetch: Callable[[str, Path], None],
+    facts: HostFacts | None = None,
 ) -> list[Path]:
-    """Ensure the MQ tarball for each distinct platform in `setup` is present + valid."""
+    """Ensure the MQ tarball for each distinct platform in `setup` is present + valid.
+    Platforms are host-resolved via `setup_platforms(setup, facts)` (#276)."""
     paths: list[Path] = []
-    for platform in sorted(setup_platforms(setup)):
+    for platform in sorted(setup_platforms(setup, facts)):
         name = tarball_name(mq_version, platform)
         dest = build_mq_dir / name
         if not dest.exists():

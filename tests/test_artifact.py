@@ -15,7 +15,7 @@ def _sha(p):
 
 @pytest.fixture
 def mqdir(tmp_path, monkeypatch):
-    monkeypatch.setattr(artifact, "setup_platforms", lambda s: {"ubuntu2404-arm64"})
+    monkeypatch.setattr(artifact, "setup_platforms", lambda s, facts=None: {"ubuntu2404-arm64"})
     d = tmp_path / "build" / "mq"
     d.mkdir(parents=True)
     return d
