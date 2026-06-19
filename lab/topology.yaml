@@ -299,7 +299,11 @@ setups:
     description: RDQM 3+3 — site-A HA plus cross-site DR (rdqmdr async)
     arm: rdqm-rhel
     groups: [rdqm_a, rdqm_b]
-    provision: ansible/site-rdqm.yml
+    provision: ansible/site-rdqm-dr.yml
+    # The QM is the DR/HA pair across both sites (rdqm-qm-create.sh auto-detects the
+    # formed site-B group and creates -rr p / -rr s, net-wan, port 7001). The single
+    # floating IP is the site-A data VIP; site B gets 10.10.2.100 on DR promotion (#288).
+    qm: { name: QMRDQM, vip: 10.10.1.100 }
   distributed-rdqm-rhel:
     description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
     arm: rdqm-rhel
