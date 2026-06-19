@@ -51,7 +51,10 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             },
         },
     ],
-    # Native-HA role code → coloured text: 2 Active (green) · 1 Replica (blue) · 0 Unknown (red)
+    # Native-HA role code → coloured text. Both group leaders are healthy (green): the Live
+    # group's leader is "Active" (running the QM), the Recovery group's is "Leader" (applying
+    # CRR replication). Replica is a healthy follower (blue). Only a genuinely down/unknown
+    # instance is red — so the Recovery matrix reads healthy, not alarming (#279 feedback).
     "role": [
         {
             "type": "value",
@@ -59,6 +62,7 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
                 "0": {"color": _RED, "text": "Unknown", "index": 0},
                 "1": {"color": "blue", "text": "Replica", "index": 1},
                 "2": {"color": _GREEN, "text": "Active", "index": 2},
+                "3": {"color": _GREEN, "text": "Leader", "index": 3},
             },
         },
     ],
@@ -406,12 +410,15 @@ def timeline_band(ds_uid: str, y: int) -> dict[str, Any]:
     return _state_timeline("⟳ Failover timeline", _TIMELINE_SIGNALS, ds_uid, y)
 
 
-def _logs_panel(title: str, selector: str, loki_uid: str, y: int) -> dict[str, Any]:
+def _logs_panel(
+    title: str, selector: str, loki_uid: str, y: int, *, description: str | None = None
+) -> dict[str, Any]:
     """An embedded live log row from Loki. The matrix shows *what* changed; this shows *why*,
     on one screen (§6.5). The selector (hosts + units) is arm-specific; severity is the shared
-    $level toggle (see _log_level_var) injecting the line-filter regex."""
+    $level toggle (see _log_level_var) injecting the line-filter regex. An optional description
+    surfaces as the panel's info tooltip (e.g. to note which log sources are/aren't wired)."""
     ds = {"type": "loki", "uid": loki_uid}
-    return {
+    panel: dict[str, Any] = {
         "type": "logs",
         "title": title,
         "datasource": ds,
@@ -424,6 +431,9 @@ def _logs_panel(title: str, selector: str, loki_uid: str, y: int) -> dict[str, A
             "wrapLogMessage": False,
         },
     }
+    if description is not None:
+        panel["description"] = description
+    return panel
 
 
 def log_row(loki_uid: str, y: int) -> dict[str, Any]:
@@ -552,10 +562,16 @@ def _nativeha_timeline(ds_uid: str, y: int) -> dict[str, Any]:
 
 
 def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
-    """Native HA logs: the mqmonitor@QMNATIVE / MQ units on the nha-rhel hosts (off
-    corosync/pacemaker), severity-filtered by the shared $level toggle."""
-    sel = '{host=~"nha-rhel-.*", unit=~".*mqmonitor.*|.*mq.*"} |~ `${level}`'
-    return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y)
+    """Native HA logs: MQ-related journald units on the nha-rhel hosts, severity-filtered by
+    the shared $level toggle. Note: MQ's own error log (AMQERR*.LOG) is file-based, not
+    journald — so the QM's HA/CRR events only appear here once Alloy tails those files."""
+    sel = '{host=~"nha-rhel-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*"} |~ `${level}`'
+    note = (
+        "Shows MQ-related journald units on the nha nodes. MQ's own error log "
+        "(/var/mqm/qmgrs/QMNATIVE/errors/AMQERR*.LOG) is file-based, not journald, so it is "
+        "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/CRR logs."
+    )
+    return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
 
 
 def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
@@ -750,6 +766,9 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
     """The Native HA cockpit (lab-nativeha-cluster), top-to-bottom: title banner · ① hero +
     integrity · ② instances matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline ·
     logs · perf · network. No storage section — Native HA has no DRBD/SAN tier."""
+    # Each named section gets its own peer-level row so they collapse independently and the
+    # board reads consistently top-to-bottom (#279 feedback). A row absorbs the panels between
+    # it and the next row.
     panels = [
         _title_banner("nativeha-rhel", y=0),
         _row_header("① Cluster status — active · quorum · in-sync · integrity", y=2),
@@ -757,26 +776,31 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
         nativeha_integrity_panel(ds_uid, y=7),
         # one matrix per group, banded Live (site A) / Recovery (site B); each is 3 rows +
         # header (h=7). No corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none.
+        _row_header("② Instances — Live & Recovery", y=11),
         matrix(
             "② Instances — Live (site A)",
             _nativeha_instance_cols("nha-rhel-a.*"),
             ds_uid,
-            y=11,
+            y=12,
             h=7,
         ),
         matrix(
             "② Instances — Recovery (site B)",
             _nativeha_instance_cols("nha-rhel-b.*"),
             ds_uid,
-            y=18,
+            y=19,
             h=7,
         ),
-        _row_header("③ Cross-region (CRR) — Live ↔ Recovery", y=25),
-        *nativeha_crr_card(ds_uid, y=26),
-        _nativeha_timeline(ds_uid, y=30),
-        _nativeha_log_row("loki", y=37),
-        *nativeha_perf_section(ds_uid, y=45),
-        *nativeha_net_section(ds_uid, y=52),
+        _row_header("③ Cross-region (CRR) — Live ↔ Recovery", y=26),
+        *nativeha_crr_card(ds_uid, y=27),
+        _row_header("⟳ Failover & CRR timeline", y=31),
+        _nativeha_timeline(ds_uid, y=32),
+        _row_header("▤ Native HA logs", y=39),
+        _nativeha_log_row("loki", y=40),
+        _row_header("🖥 Performance", y=48),
+        *nativeha_perf_section(ds_uid, y=49),
+        _row_header("🌐 Network", y=56),
+        *nativeha_net_section(ds_uid, y=57),
     ]
     return {
         "uid": "lab-nativeha-cluster",

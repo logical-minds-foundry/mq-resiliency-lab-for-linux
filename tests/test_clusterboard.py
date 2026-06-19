@@ -213,6 +213,10 @@ def test_role_mapping_codes_active_replica_unknown():
     assert opts["2"]["text"] == "Active"
     assert opts["1"]["text"] == "Replica"
     assert opts["0"]["text"] == "Unknown"
+    # the Recovery group's leader (ROLE Leader) is a healthy state, coloured green not red
+    assert opts["3"]["text"] == "Leader"
+    assert opts["3"]["color"] == "green"
+    assert opts["0"]["color"] == "red"  # only genuinely-unknown is alarming
 
 
 def test_nativeha_instance_cols_for_a_site():
@@ -291,6 +295,22 @@ def test_nativeha_board_has_full_section_parity_minus_storage():
     assert "③ Storage — DRBD / SAN" not in titles  # no storage section
     # the log severity toggle is wired (templating var present)
     assert d["templating"]["list"][0]["name"] == "level"
+    # each named section is its own peer-level collapsible row (#279 feedback): one row per
+    # section, so collapse behaves consistently top-to-bottom (not one giant ① section).
+    row_titles = [p["title"] for p in d["panels"] if p["type"] == "row"]
+    assert row_titles[0].startswith("①")
+    assert any(t.startswith("②") for t in row_titles)
+    assert any(t.startswith("③") for t in row_titles)
+    assert len(row_titles) >= 6  # ① ② ③ + timeline + logs + perf + net
+
+
+def test_nativeha_log_panel_notes_amqerr_is_file_based():
+    # the logs panel carries a description so an empty panel doesn't read as broken (#279):
+    # MQ's AMQERR error log is file-based, not journald.
+    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    logs = next(p for p in d["panels"] if p["type"] == "logs")
+    assert "AMQERR" in logs["description"]
+    assert 'host=~"nha-rhel-.*"' in logs["targets"][0]["expr"]
 
 
 def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
