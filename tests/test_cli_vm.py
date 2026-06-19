@@ -451,3 +451,26 @@ def test_vm_provision_playbook_failure_propagates_exit_code(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
     assert result.exit_code == 4
+
+
+# --- host-arch gating (#276): only the vagrant-loading verbs run _prepare_lab ---
+def test_vm_up_runs_prepare_lab(monkeypatch, tmp_path, prepare_lab_calls):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[_probe({"pcmk-a1": "shut off"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "up", "pcmk-a1"])
+    assert result.exit_code == 0
+    assert prepare_lab_calls == ["prepare"]  # the vagrant-loading verb gated
+
+
+def test_vm_status_does_not_gate(monkeypatch, tmp_path, prepare_lab_calls):
+    # status shells virsh, not vagrant: it must survive without KVM / a resolved file,
+    # so it must NOT run _prepare_lab (a regression guard, #276).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[ScriptedResult([" -  lab_pcmk-a1  shut off"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "status"])
+    assert result.exit_code == 0
+    assert prepare_lab_calls == []

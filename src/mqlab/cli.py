@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,9 +17,11 @@ from rich.console import Console
 from mqlab import parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.artifact import ensure_mq_tarballs
+from mqlab.doctor import run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
+from mqlab.hostfacts import probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.manifest import (
@@ -32,6 +35,7 @@ from mqlab.manifest import (
 )
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
+from mqlab.platforms import PlatformError, ensure_resolved
 from mqlab.paths import (
     lab_network,
     lab_script,
@@ -185,6 +189,37 @@ def _apply_manifest(
             setup_name, man.mq_version, repo_root() / "build" / "mq", fetch=_fetch_mq_tarball
         )
     return op
+
+
+# --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
+#     KVM requirement before any verb that loads the Vagrantfile. -------------------
+def _doctor_checks() -> list:
+    return run_checks(probe(), which=shutil.which)
+
+
+def _prepare_lab() -> None:
+    """Precondition of the vagrant-loading verbs: outside Vergil, hard-gate on host
+    prerequisites; then render build/lab/topology.resolved.yaml (which enforces the
+    native-KVM requirement). Fail loud (#276)."""
+    facts = probe()
+    if not facts.in_vergil:
+        ok, report = summarise(run_checks(facts, which=shutil.which))
+        if not ok:
+            typer.echo(report)
+            raise typer.Exit(code=1)
+    try:
+        ensure_resolved(facts=facts)
+    except PlatformError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("doctor")
+def doctor() -> None:
+    """Check this host can run the lab (arch, KVM, required tools)."""
+    ok, report = summarise(_doctor_checks())
+    typer.echo(report)
+    raise typer.Exit(code=0 if ok else 1)
 
 
 def _manifest_args(
@@ -462,6 +497,7 @@ def _obs_up_steps() -> list[CommandStep]:
 @obs_app.command("up")
 def obs_up(step: _StepFlag = False) -> None:
     """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
+    _prepare_lab()  # obs up shells `vagrant up obs mon-probe` — gate + render (#276)
     _execute("obs-up", _obs_up_steps(), step_mode=step)
 
 
@@ -808,6 +844,7 @@ def _ssh_into(guest: str) -> None:
 def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag = False) -> None:
     """Create + provision the selected guests (skips any that already exist)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
     # Pin box_version + ensure the MQ tarball before the boxes come up (no-op if the
     # pattern is not a manifested setup). #266
     _apply_manifest(pattern, requested=manifest, at_create=True)
@@ -818,6 +855,7 @@ def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag 
 def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
     """Start the selected guests (skips any already running)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
     _execute_stateful("vm-up", guests, _plan_up, step_mode=step)
 
 
@@ -943,6 +981,7 @@ def vm_provision(setup: str, manifest: _ManifestOpt = None) -> None:
 @vm_app.command("ssh")
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
+    _prepare_lab()  # ssh loads the Vagrantfile — ensure the resolved topology exists (#276)
     _ssh_into(guest)
 
 
