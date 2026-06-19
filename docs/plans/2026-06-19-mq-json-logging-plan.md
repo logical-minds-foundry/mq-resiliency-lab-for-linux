@@ -20,7 +20,7 @@
 - **Validation command (the only one):** `vrg-container-run -- vrg-validate`.
 - **Git:** work in the worktree `.worktrees/issue-282-mq-json-logging`; use `vrg-git` and `vrg-commit` (never raw `git`/`gh`).
 - **The human operates the lab.** Any task that provisions VMs, restarts QMs, or runs drills is executed by the human; the agent prepares the exact commands and waits.
-- **Cold-rebuild acceptance gate:** lint-green ≠ done. The effort is accepted only after a full cold rebuild of at least one arm proves it one-pass (Task 8).
+- **Cold-rebuild acceptance gate:** lint-green ≠ done. The effort is accepted only after a full cold rebuild of at least one arm proves it one-pass (Task 9).
 
 ---
 
@@ -548,7 +548,62 @@ vrg-commit --type feat --scope obs --message "enable mqweb messages.log tail on 
 
 ---
 
-### Task 8: Cold-rebuild acceptance (HUMAN-OPERATED — the real gate)
+### Task 8: Install `logcli` on the obs node (acceptance + human debugging tool)
+
+`logcli` is both the Task 9 acceptance tool and a genuinely useful tool for a human
+debugging this pipeline (MQ→syslog→journald→relabel→Loki). Install it on the obs
+node via the `loki` role so it is always present and reproducible.
+
+**Files:**
+- Modify: `ansible/roles/loki/defaults/main.yml` (add `logcli_url`)
+- Modify: `ansible/roles/loki/tasks/main.yml` (download + install `logcli`)
+
+**Interfaces:**
+- Produces: `/usr/local/bin/logcli` on the obs node, used by Task 9.
+
+- [ ] **Step 1: Add the download URL default**
+
+In `ansible/roles/loki/defaults/main.yml`, append (pin the version to match the
+deployed Loki; substitute the real version/arch at execution time):
+
+```yaml
+# logcli — Loki CLI for acceptance checks and human debugging of the log pipeline (#282).
+logcli_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/logcli-linux-amd64.zip"
+```
+
+- [ ] **Step 2: Install logcli in `loki/tasks/main.yml`**
+
+```yaml
+- name: download + unpack logcli
+  ansible.builtin.unarchive:
+    src: "{{ logcli_url }}"
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/logcli-linux-amd64
+- name: install the logcli binary
+  ansible.builtin.copy:
+    src: /tmp/logcli-linux-amd64
+    dest: /usr/local/bin/logcli
+    mode: "0755"
+    remote_src: true
+  become: true
+```
+
+- [ ] **Step 3: Validate**
+
+Run: `vrg-container-run -- vrg-validate`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+vrg-git add ansible/roles/loki/
+vrg-commit --type feat --scope obs --message "install logcli on obs node for log-pipeline checks + debugging (#282)"
+```
+
+---
+
+### Task 9: Cold-rebuild acceptance (HUMAN-OPERATED — the real gate)
 
 **Files:**
 - Record: append a "Build verification" note to `docs/reports/2026-06-19-mq-json-logging-research.md`.
@@ -596,7 +651,7 @@ vrg-commit --type docs --scope obs --message "MQ JSON logging build verification
 - §4.2 Alloy relabel + mqweb file source → Tasks 6–7. ✓
 - §4.3 journald drop-in → Task 1. ✓
 - §5 concrete config (all four surfaces + journald) → Tasks 1–4. ✓
-- §7 verification → Task 8. ✓
+- §7 verification → Task 9 (with `logcli` installed in Task 8). ✓
 - §8 Phase 0 spike gate → Task 0 (blocks all). ✓
 - §6 pcmk shared-LUN path / native-HA per-node → Task 5 path vars. ✓
 

@@ -27,7 +27,9 @@ anything MQ-side. See the flow diagram referenced above.
 
 - Queue-manager diagnostics (`qm.ini`).
 - System/installation diagnostics (`mqs.ini`).
-- Client application diagnostics (`mqclient.ini`).
+- Client application diagnostics (`mqclient.ini`) — on arms that deploy an
+  `mq-client` node (the distributed arms); the QM/system/mqweb surfaces apply on
+  every arm.
 - mqweb (MQ Console / REST) diagnostics (WebSphere Liberty).
 - The minimal pipeline changes needed for **availability** (logs reach Loki and
   are queryable): one Alloy relabel rule, one Alloy file source, and a journald
@@ -84,9 +86,13 @@ does not apply).
 
 ### 4.1 New role: `mq-diag-logging`
 
-A dedicated role owns the entire logging contract (every stanza template, the
-journald drop-in, and the Alloy snippets) so it can be read and audited in one
-place. It exposes surface-specific task files included with `tasks_from:`.
+A dedicated role owns the **MQ-core** logging contract (the `mqs.ini`/`qm.ini`/
+`mqclient.ini` stanza templates and the journald drop-in) so it can be read and
+audited in one place. It exposes surface-specific task files included with
+`tasks_from:`. The mqweb surface is the exception: because Liberty config is
+template-rendered, its JSON logging lives in the `mqweb` role's own template
+(`mqwebuser.xml.j2`), not a `mq-diag-logging` task file — editing rendered XML
+post-hoc would be fragile.
 
 **Wiring is at the QM-creation seams, not the install seams.** MQ is installed and
 queue managers are created by *different roles on different arms*. Verified reality:
@@ -104,7 +110,7 @@ RDQM correct too: seed `mqs.ini` at install and the RDQM QM inherits whenever it
 | `system.yml` | Before `crtmqm` in each crtmqm-running role — `mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike` — **and** at the end of `rdqm-install` (RDQM seeds at install time, inherits at `crtmqm -sx`). | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`; install the journald rate-limit drop-in (§4.3). |
 | `qmgr.yml` | After `crtmqm` in the four crtmqm-running roles. Path-parameterized via `mq_qmini_path` (pcmk's `qm.ini` is on the shared LUN, `/mqshared/qmgrs/<QM>/qm.ini`; others default to `/var/mqm/qmgrs/<QM>/qm.ini`). RDQM relies on template inheritance only. | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
 | `client.yml` | `mq-client`. | `/var/mqm/mqclient.ini` `DiagnosticSystemMessages` (marker block — coexists with the existing KeepAlive `lineinfile` in `site-distributed-shared.yml`). |
-| `web.yml` | `mqweb`. | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` to `mqwebuser.xml`. |
+| *(mqweb template)* | `mqweb` role's `templates/mqwebuser.xml.j2`, gated by `mqweb_json_logging`. | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` so Liberty writes single-line JSON to `messages.log`. Not a `mq-diag-logging` task file (see above). |
 
 **MQ `.ini` format note.** MQ configuration files use a `Stanza:` header with
 indented `key = value` lines (colon, not `[section]` brackets), and stanza names
