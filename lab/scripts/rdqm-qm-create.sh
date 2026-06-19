@@ -54,11 +54,17 @@ if ansible rdqm-b1 -b -m shell -a "/opt/mqm/bin/rdqmstatus -n" >/dev/null 2>&1; 
 fi
 
 if [ "$DR" = 1 ]; then
-  echo "=== HA/DR detected (site-B group formed) — creating DR/HA QMRDQM across both sites ==="
-  # Site A primary (DR primary). One command auto-creates rdqm-a2/a3 secondaries.
-  run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT -fs 3072M $QM || /opt/mqm/bin/dspmq -m $QM"
-  # Site B primary (DR secondary). Auto-creates rdqm-b2/b3 secondaries.
-  run rdqm-b1 "/opt/mqm/bin/crtmqm -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT -fs 3072M $QM || /opt/mqm/bin/dspmq -m $QM"
+  echo "=== HA/DR detected (site-B group formed) — creating DR/HA QMRDQM, secondaries first ==="
+  # RDQM requires the HA secondaries created BEFORE the primary even for DR/HA — confirmed
+  # live: `crtmqm -sx -rr p` on the primary errors "the secondary queue manager must first be
+  # created" and prints the `-sxs -rr p -rl/-ri` command. (IBM's worked example implies the
+  # primary auto-creates them; our MQ 9.4.5 build does not.) The DR flags ride on every crtmqm.
+  # Site A = DR primary (-rr p): a2/a3 secondaries, then a1 primary.
+  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
+  # Site B = DR secondary (-rr s): b2/b3 secondaries, then b1 primary.
+  run rdqm-b2,rdqm-b3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
   add_vip rdqm-a1 "$VIP"
   add_vip rdqm-b1 "$B_VIP"
   base_mqsc rdqm-a1
