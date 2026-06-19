@@ -22,6 +22,13 @@
 - **The human operates the lab.** Any task that provisions VMs, restarts QMs, or runs drills is executed by the human; the agent prepares the exact commands and waits.
 - **Cold-rebuild acceptance gate:** lint-green ≠ done. The effort is accepted only after a full cold rebuild of at least one arm proves it one-pass (Task 9).
 
+### Develop fit-check (rebased onto `6a34dbf`, 2026-06-19)
+
+- Verified unchanged on develop, so the anchors below hold: `alloy/templates/config.alloy.j2`, the four `crtmqm` seams (`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike`), and `mq-client`/`mqweb`/`loki`.
+- RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), extended by the in-flight RDQM HA/DR work (#288). We seed `mqs.ini` at `rdqm-install` and **never edit the script** — no collision.
+- `observability.yml` applies `alloy` to `hosts: all` → Task 7 gating is required (see Task 7 note).
+- **Pending #286 (build-dir reorg, design-only, not merged):** when it lands, the host-side IBM-docs cache moves `build/refs/` → `build/cache/refs/`. Docs-only touch-up; **no implementation impact** (all runtime paths are guest-side `/var/mqm/...`).
+
 ---
 
 ### Task 0: Phase 0 spike gate — prove the syslog→journald premise (HUMAN-OPERATED, BLOCKS ALL)
@@ -414,6 +421,12 @@ vrg-commit --type feat --scope obs --message "mqweb: Liberty messageFormat=json 
 
 - [ ] **Step 6: rdqm-install — system.yml as the final task**
 
+RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), which runs
+*after* `rdqm-install`. Seeding `mqs.ini` here means that script's QM inherits the
+template — we do **not** edit the script (the RDQM agent is actively extending it
+for #288 HA/DR; leave it alone to avoid a collision). **Defer this step** if the
+RDQM agent has unmerged `rdqm-install` changes; rebase it in once their branch lands.
+
 ```yaml
 - name: seed JSON diagnostic logging (mqs.ini template + journald)
   ansible.builtin.include_role:
@@ -517,14 +530,19 @@ vrg-commit --type feat --scope obs --message "alloy: conditional syslog-identifi
 ### Task 7: Enable the mqweb tail on QM-node groups
 
 **Files:**
-- Modify: the appropriate `ansible/group_vars/<qm-node-group>/…` (or the relevant `site-*.yml` play vars) to set `alloy_tail_mqweb: true` for the groups that run mqweb (pcmk, nativeha, rdqm QM nodes).
+- Modify: the appropriate `ansible/group_vars/<qm-node-group>/…` to set `alloy_tail_mqweb: true` for the groups that run mqweb (pcmk, nativeha, rdqm QM nodes).
 
 **Interfaces:**
 - Consumes: `alloy_tail_mqweb` (Task 6).
 
+**Note:** `ansible/observability.yml` applies the `alloy` role to `hosts: all`, so the
+default `alloy_tail_mqweb: false` (Task 6) reaches every node — gating it on the
+QM-node groups here is **required**, not optional, or non-QM nodes would try to tail
+a non-existent `messages.log`.
+
 - [ ] **Step 1: Identify the QM-node groups**
 
-Run: `vrg-git grep -n "alloy" ansible/site-*.yml` and inspect `ansible/group_vars/` to find where the alloy role is applied to QM nodes.
+Run: `vrg-git grep -n "alloy" ansible/site-*.yml ansible/observability.yml` and inspect `ansible/group_vars/` to find the groups whose nodes run a QM + mqweb (e.g. `pcmk_a`/`pcmk_b`, `nha_rhel_a`/`nha_rhel_b`, `rdqm_a`/`rdqm_b`).
 
 - [ ] **Step 2: Set `alloy_tail_mqweb: true` for those groups**
 
