@@ -5,20 +5,23 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
 
 from mqlab import parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
-from mqlab.artifact import ensure_mq_tarballs
+from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
+from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
+from mqlab.hostfacts import probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.manifest import (
@@ -37,10 +40,12 @@ from mqlab.paths import (
     lab_script,
     repo_root,
     reports_dir,
+    resolved_topology_path,
     runs_dir,
     selection_state_path,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
+from mqlab.platforms import PlatformError, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
@@ -153,11 +158,11 @@ _ManifestOpt = Annotated[
 
 # --- Version manifest wiring (#266). All gracefully optional: a setup/repo with no
 #     manifest behaves exactly as before (the helpers return None / []). -------------
-def _fetch_mq_tarball(name: str, dest: Path) -> None:  # pragma: no cover - manual/offline
-    raise RuntimeError(
-        f"MQ tarball {name} is absent and auto-download is not configured; place it "
-        f"(with its .sha256) under {dest.parent} via your IBM/Red Hat downloads (#266)."
-    )
+def _fetch_mq_tarball(name: str, dest: Path) -> None:
+    """Acquire a missing MQ tarball from IBM's no-auth public CDN (#276/#291) — no
+    credentials, so a fresh or anonymous box bootstraps without manual placement.
+    Only the RHEL OS image stays a manual artifact (licensed, not downloadable)."""
+    download_mq_tarball(name, dest)
 
 
 def _apply_manifest(
@@ -185,6 +190,37 @@ def _apply_manifest(
             setup_name, man.mq_version, repo_root() / "build" / "mq", fetch=_fetch_mq_tarball
         )
     return op
+
+
+# --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
+#     KVM requirement before any verb that loads the Vagrantfile. -------------------
+def _doctor_checks() -> list[Check]:
+    return run_checks(probe(), which=shutil.which)
+
+
+def _prepare_lab() -> None:
+    """Precondition of the vagrant-loading verbs: outside Vergil, hard-gate on host
+    prerequisites; then render build/lab/topology.resolved.yaml (which enforces the
+    native-KVM requirement). Fail loud (#276)."""
+    facts = probe()
+    if not facts.in_vergil:
+        ok, report = summarise(run_checks(facts, which=shutil.which))
+        if not ok:
+            typer.echo(report)
+            raise typer.Exit(code=1)
+    try:
+        ensure_resolved(facts=facts)
+    except PlatformError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("doctor")
+def doctor() -> None:
+    """Check this host can run the lab (arch, KVM, required tools)."""
+    ok, report = summarise(_doctor_checks())
+    typer.echo(report)
+    raise typer.Exit(code=0 if ok else 1)
 
 
 def _manifest_args(
@@ -462,6 +498,7 @@ def _obs_up_steps() -> list[CommandStep]:
 @obs_app.command("up")
 def obs_up(step: _StepFlag = False) -> None:
     """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
+    _prepare_lab()  # obs up shells `vagrant up obs mon-probe` — gate + render (#276)
     _execute("obs-up", _obs_up_steps(), step_mode=step)
 
 
@@ -557,6 +594,139 @@ def _create_step(g: str) -> CommandStep:
     # Create + provision via Vagrant — the one verb that needs Vagrant (#96).
     cmd = Command(["vagrant", "up", g], cwd=repo_root() / "lab")  # noqa: S607
     return CommandStep(f"{g} create", cmd)
+
+
+# Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
+# REUSEs the host-durable build/boxes cache when present (a quick `vagrant box add`)
+# and only does the ~45-90min ISO build on a truly first-ever run (#276/#291).
+_LOCAL_BOX_BUILDERS = {
+    "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
+}
+
+
+def parse_box_list(text: str) -> dict[str, str]:
+    """Parse `vagrant box list` -> {box_name: trailing info}; 'no boxes' -> {}."""
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.lower().startswith("there are no"):
+            continue
+        name, _, rest = line.partition(" ")
+        out[name] = rest.strip()
+    return out
+
+
+def _resolved_nodes() -> dict[str, Any]:
+    """The rendered resolved topology's nodes (build/lab/topology.resolved.yaml, #276)."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load(resolved_topology_path().read_text())
+    nodes: dict[str, Any] = data.get("nodes", {})
+    return nodes
+
+
+def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
+    """Local-built boxes the given guests need -> build script."""
+    nodes = _resolved_nodes()
+    boxes = {(nodes.get(g) or {}).get("box") for g in guests}
+    return {box: script for box, script in _LOCAL_BOX_BUILDERS.items() if box in boxes}
+
+
+def _guests_need_dvd(guests: list[str]) -> bool:
+    """Whether any guest attaches a DVD ISO cdrom (the RHEL offline dnf repo)."""
+    nodes = _resolved_nodes()
+    return any((nodes.get(g) or {}).get("dvd") for g in guests)
+
+
+def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[CommandStep]:
+    return [
+        CommandStep(f"box {box}", Command(["bash", str(repo_root() / script)]))  # noqa: S607
+        for box, script in sorted(needed.items())
+        if box not in present
+    ]
+
+
+def parse_vol_list(text: str) -> dict[str, str]:
+    """Parse `virsh vol-list <pool>` -> {volume_name: path}; chrome lines skipped."""
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("Name") or set(line) <= {"-"}:
+            continue
+        parts = line.split()
+        out[parts[0]] = parts[1] if len(parts) > 1 else ""
+    return out
+
+
+def _orphan_volumes(guests: list[str], vol_names: dict[str, str]) -> list[str]:
+    """Pool volumes belonging to the given guests (lab_<g>.img / lab_<g>-*), e.g. the
+    extra-disk vdb that vagrant-libvirt leaves behind when a create fails midway."""
+    return [
+        name
+        for g in guests
+        for name in vol_names
+        if name == f"lab_{g}.img" or name.startswith(f"lab_{g}-")
+    ]
+
+
+def _vol_delete_step(name: str) -> CommandStep:
+    cmd = Command([*_VIRSH, "vol-delete", "--pool", "default", name])  # noqa: S607
+    return CommandStep(f"vol {name}", cmd)
+
+
+def _sweep_orphan_volumes(guests: list[str]) -> None:
+    """After destroy, delete any pool volumes for these guests not tied to a domain —
+    the recovery path for a partially-failed create (vagrant-libvirt doesn't clean up
+    extra-disk volumes on failure, #276). No-op when there are no orphans."""
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("vm-destroy-sweep", timestamp)
+    try:
+        vols = _probe(deps, Command([*_VIRSH, "vol-list", "default"]), parse_vol_list)  # noqa: S607
+        run_steps(
+            [_vol_delete_step(v) for v in _orphan_volumes(guests, vols)],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+def _ensure_local_boxes(guests: list[str]) -> None:
+    """Make the RHEL substrate ready before `vagrant up`, so a fresh box bootstraps
+    without manual steps (#276/#291): build/register any local-built box not yet in
+    `vagrant box list` (REUSE from cache when present, ~minutes), and stage the DVD
+    ISO into the libvirt pool (idempotent). No-op for cloud Ubuntu boxes."""
+    needed = _needed_local_boxes(guests)
+    need_dvd = _guests_need_dvd(guests)
+    if not needed and not need_dvd:
+        return
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("box-build", timestamp)
+    try:
+        steps: list[CommandStep] = []
+        if needed:
+            cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
+            steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list))
+        if need_dvd:
+            stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
+            steps.append(CommandStep("stage rhel dvd", stage))
+        run_steps(
+            steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
 
 
 def _start_step(g: str) -> CommandStep:
@@ -808,9 +978,11 @@ def _ssh_into(guest: str) -> None:
 def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag = False) -> None:
     """Create + provision the selected guests (skips any that already exist)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
     # Pin box_version + ensure the MQ tarball before the boxes come up (no-op if the
     # pattern is not a manifested setup). #266
     _apply_manifest(pattern, requested=manifest, at_create=True)
+    _ensure_local_boxes(guests)  # build/register the RHEL box from its cache/ISO (#276/#291)
     _execute_stateful("vm-create", guests, _plan_create, step_mode=step)
 
 
@@ -818,6 +990,7 @@ def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag 
 def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
     """Start the selected guests (skips any already running)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
+    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
     _execute_stateful("vm-up", guests, _plan_up, step_mode=step)
 
 
@@ -833,6 +1006,7 @@ def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
     """Remove the selected guests + disks (force-stops running ones; skips absent)."""
     guests = _resolve_or_exit(pattern, resolve_guests, "guest")
     _execute_stateful("vm-destroy", guests, _plan_destroy, step_mode=step)
+    _sweep_orphan_volumes(guests)  # clean orphaned lab_<g>-* volumes from failed creates (#276)
 
 
 @vm_app.command("status")
@@ -943,6 +1117,7 @@ def vm_provision(setup: str, manifest: _ManifestOpt = None) -> None:
 @vm_app.command("ssh")
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
+    _prepare_lab()  # ssh loads the Vagrantfile — ensure the resolved topology exists (#276)
     _ssh_into(guest)
 
 

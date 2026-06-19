@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import io
 
+import pytest
+import typer
 from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
+from mqlab.cli import _ensure_local_boxes as _real_ensure_local_boxes  # captured before the stub
+from mqlab.cli import _sweep_orphan_volumes as _real_sweep_orphan_volumes
 from mqlab.pauser import NoTTYError
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
@@ -451,3 +455,211 @@ def test_vm_provision_playbook_failure_propagates_exit_code(monkeypatch, tmp_pat
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
     assert result.exit_code == 4
+
+
+# --- host-arch gating (#276): only the vagrant-loading verbs run _prepare_lab ---
+def test_vm_up_runs_prepare_lab(monkeypatch, tmp_path, prepare_lab_calls):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[_probe({"pcmk-a1": "shut off"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "up", "pcmk-a1"])
+    assert result.exit_code == 0
+    assert prepare_lab_calls == ["prepare"]  # the vagrant-loading verb gated
+
+
+def test_vm_status_does_not_gate(monkeypatch, tmp_path, prepare_lab_calls):
+    # status shells virsh, not vagrant: it must survive without KVM / a resolved file,
+    # so it must NOT run _prepare_lab (a regression guard, #276).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["pcmk-a1"])
+    runner = RecordingRunner(results=[ScriptedResult([" -  lab_pcmk-a1  shut off"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "status"])
+    assert result.exit_code == 0
+    assert prepare_lab_calls == []
+
+
+def test_fetch_mq_tarball_delegates_to_download(monkeypatch, tmp_path):
+    # the manifest fetch callback now auto-downloads (no-auth CDN) instead of raising (#276)
+    calls = {}
+    monkeypatch.setattr(
+        cli, "download_mq_tarball", lambda name, dest: calls.update(name=name, dest=dest)
+    )
+    name = "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+    cli._fetch_mq_tarball(name, tmp_path / "t")
+    assert calls == {"name": name, "dest": tmp_path / "t"}
+
+
+# --- local box auto-build (#276/#291): build/register the RHEL box on a fresh box ---
+def test_parse_box_list():
+    txt = "rhel/9.6-x86_64          (libvirt, 0, (arm64))\ncloud-image/ubuntu-24.04 (libvirt, 1)\n"
+    assert cli.parse_box_list(txt) == {
+        "rhel/9.6-x86_64": "(libvirt, 0, (arm64))",
+        "cloud-image/ubuntu-24.04": "(libvirt, 1)",
+    }
+
+
+def test_parse_box_list_no_boxes():
+    assert cli.parse_box_list("There are no installed boxes!\n") == {}
+
+
+def _seed_resolved(tmp_path, body):
+    (tmp_path / "build" / "lab").mkdir(parents=True)
+    (tmp_path / "build" / "lab" / "topology.resolved.yaml").write_text(body)
+
+
+def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(
+        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == ["vagrant", "box", "list"]
+    assert argvs[1] == ["bash", str(tmp_path / "lab/boxes/rhel96/build-box.sh")]
+
+
+def test_ensure_local_boxes_noop_when_box_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    assert [c.argv for c in runner.recorded] == [["vagrant", "box", "list"]]  # probe only, no build
+
+
+def test_ensure_local_boxes_noop_when_no_local_box(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  obs: {box: cloud-image/ubuntu-24.04}\n")
+    _real_ensure_local_boxes(["obs"])  # no local box needed -> returns before any command
+
+
+def test_ensure_local_boxes_build_failure_exits(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    runner = RecordingRunner(
+        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([], exit_code=1)]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    with pytest.raises(typer.Exit):
+        _real_ensure_local_boxes(["rdqm-a1"])
+
+
+def test_vm_create_runs_ensure_local_boxes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["rdqm-a1"])
+    called = {}
+    monkeypatch.setattr(
+        cli, "_ensure_local_boxes", lambda guests: called.setdefault("guests", guests)
+    )
+    runner = RecordingRunner(results=[_probe({}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "create", "rdqm-a1"])
+    assert result.exit_code == 0
+    assert called["guests"] == ["rdqm-a1"]
+
+
+def test_guests_need_dvd(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(
+        tmp_path,
+        "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n"
+        "  obs: {box: cloud-image/ubuntu-24.04}\n",
+    )
+    assert cli._guests_need_dvd(["rdqm-a1"]) is True
+    assert cli._guests_need_dvd(["obs"]) is False
+
+
+def test_ensure_local_boxes_stages_dvd_when_box_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
+    # box already installed -> no build; but the DVD must still be staged
+    runner = RecordingRunner(
+        results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == ["vagrant", "box", "list"]
+    assert argvs[1] == ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+
+
+def test_ensure_local_boxes_dvd_only_skips_box_probe(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # a (hypothetical) cloud box with a dvd -> no local box, but the dvd staging runs
+    _seed_resolved(tmp_path, "nodes:\n  n1: {box: cloud-image/ubuntu-24.04, dvd: /pool/x.iso}\n")
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_ensure_local_boxes(["n1"])
+    assert [c.argv for c in runner.recorded] == [
+        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+    ]  # no `vagrant box list` probe
+
+
+# --- destroy sweeps orphaned volumes from partial-failed creates (#276) ---
+_VOLS = """\
+ Name                      Path
+------------------------------------------
+ lab_rdqm-a1-vdb.qcow2     /var/lib/libvirt/images/lab_rdqm-a1-vdb.qcow2
+ lab_rdqm-a1.img           /var/lib/libvirt/images/lab_rdqm-a1.img
+ lab_rdqm-a10-vdb.qcow2    /var/lib/libvirt/images/lab_rdqm-a10-vdb.qcow2
+ rhel-9.6-x86_64-dvd.iso   /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
+"""
+
+
+def test_parse_vol_list_skips_chrome():
+    vols = cli.parse_vol_list(_VOLS)
+    assert "lab_rdqm-a1-vdb.qcow2" in vols
+    assert "Name" not in vols and "------" not in "".join(vols)
+
+
+def test_orphan_volumes_matches_guest_not_prefix_collision():
+    vols = cli.parse_vol_list(_VOLS)
+    # rdqm-a1 owns its .img and -vdb, but NOT rdqm-a10's volume (prefix-collision guard)
+    assert sorted(cli._orphan_volumes(["rdqm-a1"], vols)) == [
+        "lab_rdqm-a1-vdb.qcow2",
+        "lab_rdqm-a1.img",
+    ]
+
+
+def test_sweep_orphan_volumes_deletes_matches(monkeypatch):
+    # probe + two deletes (the -vdb and the .img both belong to rdqm-a1)
+    runner = RecordingRunner(
+        results=[ScriptedResult(_VOLS.splitlines()), ScriptedResult([]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_sweep_orphan_volumes(["rdqm-a1"])
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0] == [*_VIRSH, "vol-list", "default"]
+    assert [*_VIRSH, "vol-delete", "--pool", "default", "lab_rdqm-a1-vdb.qcow2"] in argvs
+
+
+def test_sweep_orphan_volumes_noop_when_none(monkeypatch):
+    runner = RecordingRunner(results=[ScriptedResult([" rhel-9.6-x86_64-dvd.iso  /var/x.iso"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    _real_sweep_orphan_volumes(["rdqm-a1"])  # no lab_rdqm-a1 volumes -> only the probe
+    assert [c.argv for c in runner.recorded] == [[*_VIRSH, "vol-list", "default"]]
+
+
+def test_sweep_orphan_volumes_delete_failure_exits(monkeypatch):
+    runner = RecordingRunner(
+        results=[ScriptedResult(_VOLS.splitlines()), ScriptedResult([], exit_code=1)]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    with pytest.raises(typer.Exit):
+        _real_sweep_orphan_volumes(["rdqm-a1"])
+
+
+def test_vm_destroy_runs_sweep(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["rdqm-a1"])
+    called = {}
+    monkeypatch.setattr(cli, "_sweep_orphan_volumes", lambda guests: called.setdefault("g", guests))
+    runner = RecordingRunner(results=[_probe({})])  # absent -> no undefine steps
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "destroy", "rdqm-a1"])
+    assert result.exit_code == 0
+    assert called["g"] == ["rdqm-a1"]

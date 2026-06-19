@@ -19,9 +19,13 @@ from mqlab.paths import manifests_root, repo_root, selection_state_path
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Arch suffix in the MQ-for-Developers tarball name, per VM platform.
+    from mqlab.hostfacts import HostFacts
+
+# Arch suffix in the MQ-for-Developers tarball name, per VM platform. The Ubuntu
+# platform a node uses is host-resolved (#276), so both arches map here.
 _ARCH_SUFFIX = {
     "ubuntu2404-arm64": "UbuntuLinuxARM64",
+    "ubuntu2404-x86_64": "UbuntuLinuxX64",
     "rhel96-x86_64": "LinuxX64",
     "alma9-x86_64": "LinuxX64",
 }
@@ -79,11 +83,12 @@ def manifest_exists(setup: str, name: str = "default") -> bool:
     return (manifests_root() / setup / f"{name}.yaml").exists()
 
 
-def setup_platforms(setup: str) -> set[str]:
-    """Distinct guest platforms in a setup — the MQ tarballs it needs."""
+def setup_platforms(setup: str, facts: HostFacts | None = None) -> set[str]:
+    """Distinct guest platforms in a setup — the MQ tarballs it needs. The Ubuntu
+    platform is host-resolved via lab_guests(facts) (native-preferred, #276)."""
     topo = _topology()
     groups = topo.get("groups") or {}
-    platforms = lab_guests()  # name -> platform
+    platforms = lab_guests(facts)  # name -> platform
     setup_groups = (topo.get("setups") or {}).get(setup, {}).get("groups") or []
     nodes = {n for g in setup_groups for n in (groups.get(g) or [])}
     return {platforms[n] for n in nodes if n in platforms}

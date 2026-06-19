@@ -1,77 +1,60 @@
-# lab/Vagrantfile — multi-machine lab, driven entirely by topology.yaml.
+# lab/Vagrantfile — multi-machine lab driven by mqlab's host-resolved topology (#276).
 #
-# Arch-specific provider settings were established by the Phase A provider
-# spike (docs/reports/2026-06-06-phase-a-provider-spike.md):
-#   aarch64 (KVM):  UEFI loader+nvram mandatory (pflash needs BOTH set),
-#                   virtio input (no PS/2/USB), cpu host-passthrough.
-#   x86_64  (TCG):  machine_arch (not arch), q35, cpu custom/qemu64,
-#                   long boot timeout.
+# Provider mechanics (driver/firmware/cpu_mode) are chosen by mqlab's resolver from
+# the host architecture and rendered to build/lab/topology.resolved.yaml. This file
+# is a dumb consumer: it applies fields verbatim. Box-version pins still come from
+# build/box-versions.json (#266).
 require "yaml"
 require "json"
 
-topology = YAML.load_file(File.join(__dir__, "topology.yaml"))
-boxes    = topology.fetch("boxes")
-defaults = topology.fetch("defaults")
+resolved = File.join(__dir__, "..", "build", "lab", "topology.resolved.yaml")
+unless File.exist?(resolved)
+  raise "resolved topology missing: #{resolved}\n" \
+        "Run `mqlab vm up` / `mqlab vm create` (or `mqlab vm render`) first — they " \
+        "render it from lab/topology.yaml + host facts."
+end
+nodes = YAML.load_file(resolved).fetch("nodes")
 
-# Manifest-driven box_version pins (#266), written by mqlab at create — keyed by
-# platform. Absent the file (no manifest), boxes float exactly as before.
+# Manifest-driven box_version pins (#266), keyed by platform. Absent the file
+# (no manifest), boxes float exactly as before.
 bvf = File.join(__dir__, "..", "build", "box-versions.json")
 box_versions = File.exist?(bvf) ? JSON.parse(File.read(bvf)) : {}
 
 Vagrant.configure("2") do |config|
-  # No /vagrant synced folder anywhere: Ansible owns file transport, and
-  # the rsync fallback needs guest-side package installs that the
-  # repo-less (unregistered, offline) RHEL box cannot perform.
+  # No /vagrant synced folder anywhere: Ansible owns file transport, and the rsync
+  # fallback needs guest-side package installs the offline RHEL box cannot perform.
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
-  # All guests share Vagrant's well-known insecure key so the rendered inventory
-  # carries one constant key path instead of N scraped per-machine paths (#101).
+  # All guests share Vagrant's insecure key so the rendered inventory carries one
+  # constant key path instead of N scraped per-machine paths (#101).
   config.ssh.insert_key = false
 
-  topology.fetch("nodes").each do |name, spec|
-    spec ||= {}
-    platform = boxes.fetch(spec.fetch("platform", defaults["platform"]))
+  nodes.each do |name, n|
     config.vm.define name do |node|
-      node.vm.box      = platform.fetch("box")
-      bv = box_versions[spec.fetch("platform", defaults["platform"])]
+      node.vm.box      = n.fetch("box")
+      bv = box_versions[n.fetch("platform")]
       node.vm.box_version = bv if bv
       node.vm.hostname = name
+      node.vm.boot_timeout = n["boot_timeout"] if n["boot_timeout"]
       node.vm.provider :libvirt do |lv|
-        lv.cpus   = spec.fetch("cpus",   defaults["cpus"])
-        lv.memory = spec.fetch("memory", defaults["memory"])
-        case platform.fetch("arch")
-        when "aarch64"
-          lv.driver   = "kvm"
-          lv.loader   = "/usr/share/AAVMF/AAVMF_CODE.fd"
-          lv.nvram    = "/var/lib/libvirt/qemu/nvram/lab-#{name}_VARS.fd"
-          lv.input :type => "mouse", :bus => "virtio"
-          lv.cpu_mode = "host-passthrough"
-        when "x86_64"
-          lv.driver       = "qemu"
-          lv.machine_arch = "x86_64"
-          lv.machine_type = "q35"
-          # cpu_mode maximum (= qemu -cpu max) is REQUIRED, not an
-          # optimization: EL9 needs x86-64-v2, and sub-v2 models like
-          # qemu64 boot the kernel but kill early userspace (glibc HWCAP)
-          # in an invisible loop. Diagnosed in #24: same alma9 image,
-          # qemu64 = 40min silent spin; maximum = DHCP lease in 47s.
-          lv.cpu_mode     = "maximum"
-          node.vm.boot_timeout = 1800
-        else
-          raise "unknown arch for platform: #{platform}"
-        end
-        # Optional extra data disk (GiB) - e.g. the RDQM drbdpool PV.
-        if spec["extra_disk"]
-          lv.storage :file, :size => "#{spec['extra_disk']}G"
-        end
+        lv.cpus     = n.fetch("cpus")
+        lv.memory   = n.fetch("memory")
+        lv.driver   = n.fetch("driver")
+        lv.cpu_mode = n.fetch("cpu_mode")
+        lv.machine_arch = n["machine_arch"] if n["machine_arch"]
+        lv.machine_type = n["machine_type"] if n["machine_type"]
+        lv.loader   = n["loader"] if n["loader"]
+        lv.nvram    = n["nvram"]  if n["nvram"]
+        lv.input(:type => "mouse", :bus => n["input_bus"]) if n["input_bus"]
+        # Optional extra data disk (GiB) — e.g. the RDQM drbdpool PV.
+        lv.storage(:file, :size => "#{n['extra_disk']}G") if n["extra_disk"]
         # Optional platform DVD (offline dnf repo for repo-less guests).
         # bus sata: q35 machines have no IDE controller (plugin default).
-        if platform["dvd"]
-          lv.storage :file, :device => :cdrom, :path => platform["dvd"],
-                     :bus => "sata"
+        if n["dvd"]
+          lv.storage :file, :device => :cdrom, :path => n["dvd"], :bus => "sata"
         end
       end
-      spec.fetch("nics", {}).each do |net, ip|
+      (n["nics"] || {}).each do |net, ip|
         node.vm.network :private_network,
           :libvirt__network_name => net,
           :ip => ip,

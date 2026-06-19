@@ -22,3 +22,10 @@ def test_lab_script_points_at_lab_scripts_dir():
 
 def test_lab_network_points_at_lab_networks_xml():
     assert lab_network("net-data-a") == repo_root() / "lab" / "networks" / "net-data-a.xml"
+
+
+def test_resolved_topology_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    from mqlab.paths import resolved_topology_path
+
+    assert resolved_topology_path() == tmp_path / "build" / "lab" / "topology.resolved.yaml"

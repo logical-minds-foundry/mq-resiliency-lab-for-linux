@@ -41,6 +41,11 @@ def selection_state_path(setup: str) -> Path:
     return repo_root() / "build" / "manifests" / f"{setup}.yaml"
 
 
+def resolved_topology_path() -> Path:
+    """Where the host-resolved topology is rendered for the Vagrantfile (#276)."""
+    return repo_root() / "build" / "lab" / "topology.resolved.yaml"
+
+
 def lab_script(name: str) -> Path:
     """Absolute path to a script under lab/scripts/."""
     return repo_root() / "lab" / "scripts" / name

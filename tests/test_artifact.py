@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+from typing import TYPE_CHECKING
 
 import pytest
 
 from mqlab import artifact
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _NAME = "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
 
@@ -15,7 +19,7 @@ def _sha(p):
 
 @pytest.fixture
 def mqdir(tmp_path, monkeypatch):
-    monkeypatch.setattr(artifact, "setup_platforms", lambda s: {"ubuntu2404-arm64"})
+    monkeypatch.setattr(artifact, "setup_platforms", lambda s, facts=None: {"ubuntu2404-arm64"})
     d = tmp_path / "build" / "mq"
     d.mkdir(parents=True)
     return d
@@ -52,3 +56,34 @@ def test_fetch_failure_propagates(mqdir):
 
     with pytest.raises(RuntimeError, match="network down"):
         artifact.ensure_mq_tarballs("s", "9.4.5.0", mqdir, fetch=boom)
+
+
+def test_mq_tarball_url():
+    name = "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+    assert artifact.mq_tarball_url(name) == f"{artifact.MQ_CDN_BASE}/{name}"
+
+
+def test_download_mq_tarball_writes_dest_and_records_sidecar(tmp_path):
+    seen = {}
+
+    def fake_download(url: str, part: Path) -> None:
+        seen["url"] = url
+        part.write_bytes(b"TARBALL")
+
+    dest = tmp_path / "mq" / "x.tar.gz"
+    artifact.download_mq_tarball("x.tar.gz", dest, download=fake_download)
+    assert dest.read_bytes() == b"TARBALL"
+    assert seen["url"].endswith("/x.tar.gz")
+    sidecar = dest.with_name("x.tar.gz.sha256")
+    assert hashlib.sha256(b"TARBALL").hexdigest() in sidecar.read_text()
+
+
+def test_download_mq_tarball_keeps_existing_sidecar(tmp_path):
+    dest = tmp_path / "x.tar.gz"
+    (tmp_path / "x.tar.gz.sha256").write_text("preexisting  x.tar.gz\n")
+
+    def fake_download(url: str, part: Path) -> None:
+        part.write_bytes(b"NEW")
+
+    artifact.download_mq_tarball("x.tar.gz", dest, download=fake_download)
+    assert (tmp_path / "x.tar.gz.sha256").read_text() == "preexisting  x.tar.gz\n"
