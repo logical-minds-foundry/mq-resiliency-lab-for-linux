@@ -9,8 +9,12 @@
 # management plane Ansible connects over, kept off the modeled data/hb/san
 # planes. The inventory is rendered from this file (mqlab vm inventory, #101).
 boxes:
-  ubuntu2404-arm64: { box: cloud-image/ubuntu-24.04, arch: aarch64 }
-  alma9-x86_64:     { box: almalinux/9,               arch: x86_64 }
+  # cloud-image/ubuntu-24.04 ships libvirt boxes for both arches; the Ubuntu
+  # platform a node uses is host-resolved (default_platform, #276), so guests
+  # track the host arch (native-preferred).
+  ubuntu2404-arm64:  { box: cloud-image/ubuntu-24.04, arch: aarch64 }
+  ubuntu2404-x86_64: { box: cloud-image/ubuntu-24.04, arch: x86_64 }
+  alma9-x86_64:      { box: almalinux/9,               arch: x86_64 }
   # dvd: attached as a cdrom; the install DVD doubles as a complete
   # offline BaseOS+AppStream dnf repo for the unregistered guests.
   rhel96-x86_64:
@@ -18,7 +22,9 @@ boxes:
     arch: x86_64
     dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 
-defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
+# No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
+# (default_platform(facts)) so guests track the host arch (native-preferred, #276).
+defaults: { cpus: 1, memory: 1024 }
 
 nodes:
   # --- DTCC service VM + app client (the distributed message path) ---
