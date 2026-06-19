@@ -1,0 +1,59 @@
+# mq-nativeha (#246) — OS-agnostic Native HA group formation. Install is the
+# per-OS adapter (install-RedHat.yml now; install-Debian.yml in Phase 2); the
+# formation below is shared verbatim across platforms — that thinness is the
+# RHEL-vs-Ubuntu OS-transparency finding the lab is built to measure.
+#
+# Vars (from the play): qm_name; nha_site_nodes = [{name, hb, data}, ...] for the
+# instances in this group (replication on the dedicated net-hb NIC).
+- name: install base IBM MQ (OS adapter)
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+
+- name: read MQ level
+  ansible.builtin.command: dspmqver -b -f 2
+  register: mqver
+  changed_when: false
+  become_user: mqm
+
+- name: assert MQ >= 9.4.4 CD (Native HA off-container floor)
+  ansible.builtin.assert:
+    that:
+      - "'9.4.4' in mqver.stdout or '9.4.5' in mqver.stdout or '9.4.6' in mqver.stdout"
+    fail_msg: "MQ level {{ mqver.stdout }} is below the 9.4.4 Native HA floor"
+    success_msg: "MQ level OK for Native HA: {{ mqver.stdout }}"
+
+- name: create the Native HA instance (this node)
+  ansible.builtin.command: >
+    crtmqm -lr {{ inventory_hostname }} -lf 8192 -lp 10 -ls 10 -p 1414 {{ qm_name }}
+  args:
+    creates: "/var/mqm/qmgrs/{{ qm_name }}"
+  become_user: mqm
+
+# Append the NativeHAInstance peer set once. Rendered inline from nha_site_nodes
+# (controller-side) — never lookup('file'), which reads the controller's disk
+# (Phase-0 bug). Replication on the dedicated net-hb NIC (9414).
+- name: append the NativeHAInstance peer set to qm.ini
+  ansible.builtin.blockinfile:
+    path: "/var/mqm/qmgrs/{{ qm_name }}/qm.ini"
+    marker: "# {mark} NATIVE-HA (#246)"
+    block: |
+      {% for n in nha_site_nodes %}
+      NativeHAInstance:
+         Name={{ n.name }}
+         ReplicationAddress={{ n.hb }}(9414)
+      {% endfor %}
+  become_user: mqm
+
+# Lifecycle is the mqmonitor.py liveness sample under systemd (NOT endmqm —
+# systemd would restart it). The @ template unit ships in MQSeriesSamples.
+- name: link the mqmonitor@ systemd template unit
+  ansible.builtin.file:
+    src: /opt/mqm/samp/mqmonitor@.service
+    dest: /etc/systemd/system/mqmonitor@.service
+    state: link
+
+- name: enable + start the Native HA instance via systemd
+  ansible.builtin.systemd:
+    name: "mqmonitor@{{ qm_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

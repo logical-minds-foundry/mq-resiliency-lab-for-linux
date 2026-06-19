@@ -27,10 +27,14 @@ class QmConfig:
 
     `vip_ext` is optional: the Pacemaker arm binds it as a second VIP on the QM
     resource group, but RDQM allows only one floating IP per QM (#216 spike), so the
-    RDQM arm omits it and the partner reaches the QM by per-node CONNAME list."""
+    RDQM arm omits it and the partner reaches the QM by per-node CONNAME list.
+
+    `vip` is optional too: Native HA (#246) has no floating IP at all — clients
+    reach the active instance via a multi-instance CONNAME list — so its setups
+    omit `vip` entirely."""
 
     name: str
-    vip: str
+    vip: str = ""
     vip_ext: str = ""
     dtcc_conn: str | None = None
 
@@ -70,7 +74,7 @@ def lab_setups() -> dict[str, Setup]:
             secrets=list(cfg.get("secrets", [])),
             qm=QmConfig(
                 name=cfg["qm"]["name"],
-                vip=cfg["qm"]["vip"],
+                vip=cfg["qm"].get("vip", ""),
                 vip_ext=cfg["qm"].get("vip_ext", ""),
                 dtcc_conn=cfg["qm"].get("dtcc_conn"),
             )

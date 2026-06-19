@@ -1,0 +1,142 @@
+# Phase-0 spike role (#246): base IBM MQ install (NO RDQM stack) + a 3-node
+# Native HA group, on the reused rdqm-* x86 RHEL slots. THROWAWAY — proves the
+# CRR entitlement; the production mq-nativeha role is written post-spike.
+#
+# Vars (set per play in site-nativeha-spike.yml):
+#   nha_qm     : queue manager name (e.g. nhaspike)
+#   nha_group  : inventory group whose members form this Native HA group
+#                (rdqm_a = Live, rdqm_b = Recovery)
+#
+# Install steps forked from roles/rdqm-install (base MQ only): DVD repo, unpack
+# the Developers tar, license, the MQSeries base rpms, setmqinst, ulimits.
+# Dropped vs rdqm-install: pacemaker/drbd-utils/kmod-drbd, MQSeriesRDQM,
+# drbdpool VG, modprobe drbd, haclient membership.
+
+- name: mount the install DVD (BaseOS+AppStream; keeps the guest offline)
+  ansible.builtin.shell: |
+    set -e
+    mkdir -p /media/rhel
+    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro 0 0' >> /etc/fstab
+    mountpoint -q /media/rhel || mount /media/rhel
+  become: true
+  changed_when: false
+
+- name: dnf repos from the DVD
+  ansible.builtin.copy:
+    dest: /etc/yum.repos.d/rhel-dvd.repo
+    content: |
+      [dvd-baseos]
+      name=RHEL 9.6 DVD BaseOS
+      baseurl=file:///media/rhel/BaseOS
+      enabled=1
+      gpgcheck=0
+      [dvd-appstream]
+      name=RHEL 9.6 DVD AppStream
+      baseurl=file:///media/rhel/AppStream
+      enabled=1
+      gpgcheck=0
+  become: true
+
+- name: copy MQ LinuxX64 tar to node
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    dest: /tmp/mqadv.tar.gz
+
+- name: unpack
+  ansible.builtin.unarchive:
+    src: /tmp/mqadv.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/MQServer
+
+- name: accept developer licence
+  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  args:
+    creates: /var/mqm
+  become: true
+
+# Base MQ only. MQSeriesSamples carries the Native HA liveness monitor
+# (/opt/mqm/samp/mqmonitor@.service) used in the systemd lifecycle below.
+- name: install base IBM MQ packages (no RDQM)
+  ansible.builtin.shell: |
+    set -e
+    cd /tmp/MQServer
+    dnf install -y \
+      MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
+      MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
+      MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm
+  args:
+    creates: /opt/mqm/bin/crtmqm
+  become: true
+
+- name: set primary installation (loader path)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
+  become: true
+
+- name: mqm ulimits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-mqm.conf
+    content: |
+      mqm soft nofile 10240
+      mqm hard nofile 10240
+  become: true
+
+- name: confirm MQ level is >= 9.4.4 and CD (CRR floor)
+  ansible.builtin.command: dspmqver -b -f 2
+  register: mqver
+  changed_when: false
+  become: true
+  become_user: mqm
+
+- name: assert CD >= 9.4.4
+  ansible.builtin.assert:
+    that:
+      - "'9.4.4' in mqver.stdout or '9.4.5' in mqver.stdout or '9.4.6' in mqver.stdout"
+    fail_msg: "MQ level {{ mqver.stdout }} is below the 9.4.4 CRR floor"
+    success_msg: "MQ level OK for Native HA CRR: {{ mqver.stdout }}"
+
+# --- Native HA group formation (per node 7261515 walkthrough) ---
+# Each instance's name is its hostname; the queue manager name is shared.
+- name: create the Native HA instance (this node)
+  ansible.builtin.command: >
+    crtmqm -lr {{ inventory_hostname }} -lf 8192 -lp 10 -ls 10 -p 1414 {{ nha_qm }}
+  args:
+    creates: "/var/mqm/qmgrs/{{ nha_qm }}"
+  become: true
+  become_user: mqm
+
+# qm.ini is created by crtmqm; append the NativeHAInstance peer set once.
+# The block is rendered on the controller from inventory (hostvars are local
+# to the controller) and written to the remote qm.ini — NOT via lookup('file'),
+# which would read the controller's filesystem.
+- name: append NativeHAInstance stanzas to qm.ini (once)
+  ansible.builtin.blockinfile:
+    path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+    marker: "# {mark} NATIVE-HA-SPIKE (#246)"
+    block: |
+      {% for h in groups[nha_group] %}
+      NativeHAInstance:
+         Name={{ h }}
+         ReplicationAddress={{ hostvars[h].ansible_host }}(9414)
+      {% endfor %}
+  become: true
+  become_user: mqm
+
+# Liveness monitor under systemd (NOT endmqm/strmqm — IBM: do not endmqm,
+# systemd restarts it). The @ template unit ships in MQSeriesSamples.
+- name: link the mqmonitor@ systemd template unit
+  ansible.builtin.file:
+    src: /opt/mqm/samp/mqmonitor@.service
+    dest: /etc/systemd/system/mqmonitor@.service
+    state: link
+  become: true
+
+- name: enable + start the Native HA instance via systemd
+  ansible.builtin.systemd:
+    name: "mqmonitor@{{ nha_qm }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

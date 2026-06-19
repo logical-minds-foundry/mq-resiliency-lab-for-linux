@@ -1,0 +1,71 @@
+# Native HA CRR / full HADR (#246 Phase 3): site-A Live group + site-B Recovery
+# group + TLS (lab-pki .p12) + Cross-Region Replication over net-wan. The #267
+# keystone — distributed + HA + DR on the one consolidated setup. Run after the
+# distributed mesh (site-nativeha-distributed.yml) so QMNATIVE has the app/DTCC
+# objects; the recovery group inherits them by CRR.
+
+# 1. Site-A Live HA group (idempotent fast-forward if already formed).
+- import_playbook: site-nativeha.yml
+
+# 2. Site-B Recovery HA group (same role; its own net-hb-b replication set).
+- hosts: nha_rhel_b
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.dnf:
+        name: acl
+- hosts: nha_rhel_b
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    nha_site_nodes:
+      - { name: nha-rhel-b1, hb: 172.16.2.91, data: 10.10.2.91 }
+      - { name: nha-rhel-b2, hb: 172.16.2.92, data: 10.10.2.92 }
+      - { name: nha-rhel-b3, hb: 172.16.2.93, data: 10.10.2.93 }
+  roles:
+    - mq-nativeha
+
+# 3. TLS (lab-pki .p12) on every instance of both groups.
+- hosts: nha_rhel_a:nha_rhel_b
+  become: true
+  vars: { qm_name: QMNATIVE, ks_cn: QMNATIVE }
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
+
+# 4. CRR — Live group (site A): replicate to the Recovery group (site B) over net-wan.
+- hosts: nha_rhel_a
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    ks_cn: QMNATIVE
+    this_group: Live
+    this_role: live
+    peer_group_name: Recovery
+    peer_wan_addrs: ["10.99.0.94", "10.99.0.95", "10.99.0.96"]
+    recovery_enabled: "Yes"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+# 5. CRR — Recovery group (site B): knows the Live group (site A); Enabled=No.
+- hosts: nha_rhel_b
+  become: true
+  vars:
+    qm_name: QMNATIVE
+    ks_cn: QMNATIVE
+    this_group: Recovery
+    this_role: Recovery
+    peer_group_name: Live
+    peer_wan_addrs: ["10.99.0.91", "10.99.0.92", "10.99.0.93"]
+    recovery_enabled: "No"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+# 6. Restart both groups to apply TLS + CRR (Recovery first, then Live).
+- hosts: nha_rhel_b:nha_rhel_a
+  become: true
+  vars: { qm_name: QMNATIVE }
+  tasks:
+    - name: restart mqmonitor@
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ qm_name }}"
+        state: restarted

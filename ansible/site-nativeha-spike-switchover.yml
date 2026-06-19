@@ -1,0 +1,58 @@
+---
+# Phase-0 spike Task 3 (#246) — planned CRR switchover, per IBM node 7261515.
+# Flip GroupRole on both groups (Live<->Recovery), both NativeHARecoveryGroup
+# Enabled=Yes, restart all. Proof: SPIKE.Q (5 persistent msgs) appears on the
+# promoted group (rdqm_b). Group NAMES stay fixed (Live/Recovery as labels);
+# only the ROLE flips. THROWAWAY.
+
+- name: switchover — group "Live" (rdqm_a) becomes Recovery role
+  hosts: rdqm_a
+  become: true
+  become_user: mqm
+  vars: { nha_qm: nhaspike, peer_group: rdqm_b }
+  tasks:
+    - name: rewrite CRR block — GroupRole=Recovery
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             GroupName=Live
+             GroupRole=Recovery
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Recovery
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=Yes
+
+- name: switchover — group "Recovery" (rdqm_b) becomes Live role
+  hosts: rdqm_b
+  become: true
+  become_user: mqm
+  vars: { nha_qm: nhaspike, peer_group: rdqm_a }
+  tasks:
+    - name: rewrite CRR block — GroupRole=live
+      ansible.builtin.blockinfile:
+        path: "/var/mqm/qmgrs/{{ nha_qm }}/qm.ini"
+        marker: "# {mark} NATIVE-HA-CRR-SPIKE (#246)"
+        block: |
+          NativeHALocalInstance:
+             GroupName=Recovery
+             GroupRole=live
+             GroupLocalAddress=(9415)
+          NativeHARecoveryGroup:
+             GroupName=Live
+             ReplicationAddress={% for h in groups[peer_group] %}{{ hostvars[h].ansible_host }}(9415){{ "," if not loop.last }}{% endfor %}
+
+             Enabled=Yes
+
+- name: restart all instances to apply the role swap
+  hosts: rdqm_a:rdqm_b
+  become: true
+  vars: { nha_qm: nhaspike }
+  tasks:
+    - name: restart mqmonitor@
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ nha_qm }}"
+        state: restarted

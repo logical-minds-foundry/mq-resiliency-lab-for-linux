@@ -108,3 +108,31 @@ exit non-zero otherwise — never trust per-step `|| true`.
 | `op monitor ... OCF_CHECK_LEVEL=20 on-fail=fence` on `mq_fs` | a real read/write probe catches a **dead SAN**; the default mount-table check is a ~12-minute blind spot (an idle QM generates no I/O to notice the dead disk) |
 | planned move = location constraint → verify → remove | this `pcs` version's `resource move` porcelain raced our migrations and **reverted** them |
 | `fence_virsh` needs `LIBVIRT_DEFAULT_URI=qemu:///system` | STONITH SSHes to the hypervisor (`build/fence_key`); without the URI the fence exec fails |
+
+## `runmqakm` fails (`libicuio`) on a minimal RHEL box — install `libicu`
+
+**Symptom.** `runmqakm` (and `runmqckm`) fail immediately with `Failed to dlopen
+ICU library. Attempted versions from libicuio.so.100 to libicuio.so.49`, at any
+`LD_LIBRARY_PATH`. So no TLS keystore / stash via the MQ tools, and (because most
+arms' channel TLS and Native HA CRR-over-TLS need a stashed keystore) all TLS
+work is blocked. Base QM ops (`crtmqm`/`strmqm`/`dspmq`, plaintext Native HA/CRR)
+don't touch GSKit, so it's invisible until TLS.
+
+**Cause.** `runmqakm` dlopen's the **system** `libicuio.so.*` at runtime (not a
+link dep, so `ldd` shows nothing) — and the minimal kickstart RHEL 9.6 box does
+**not** install `libicu` (it's not a hard MQ rpm dependency). GSKit 9's own libs
+*are* present (`/opt/mqm/gskit9/lib64`); the missing piece is the OS ICU. (Earlier
+readings — "unextracted tarballs", "use .p12 to avoid runmqakm" — were wrong; this
+is the real root cause.)
+
+**Fix — `dnf install libicu`.** RHEL 9 ships ICU 67 (`/usr/lib64/libicuio.so.67`),
+squarely in runmqakm's accepted 49–100 range, so installing it makes `runmqakm`
+work immediately. It's in the DVD BaseOS repo (offline). The Native HA TLS role
+(`mq-nativeha/tasks/tls.yml`) installs `libicu` before any keystore op.
+
+**Then TLS works the proper way:** deploy the `lab-pki` PKCS#12 (`.p12`, OpenSSL,
+`compatibility2022` encoding), stash its password with the now-working
+`runmqakm -keydb -stashpw -type pkcs12`, and set `NativeHALocalInstance`
+`CipherSpec`/`CertificateLabel`/`KeyRepository`. **Verified (#246 Phase 3):** the
+site-A Native HA group re-formed `QUORUM(3/3) INSYNC` with replication negotiating
+`ECDHE_RSA_AES_256_GCM_SHA384` — TLS replication via a CA-signed lab-pki cert.
