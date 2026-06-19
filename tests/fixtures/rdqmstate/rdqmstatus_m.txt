@@ -1,0 +1,28 @@
+Node:                                   rdqm-a1
+Queue manager status:                   Running
+CPU:                                    0.13%
+Memory:                                 138MB
+Queue manager file system:              235MB used, 2.9GB allocated [8%]
+HA role:                                Primary
+HA status:                              Normal
+HA control:                             Enabled
+HA current location:                    This node
+HA preferred location:                  This node
+HA blocked location:                    None
+HA floating IP interface:               enp7s0
+HA floating IP address:                 10.10.1.100
+DR role:                                Primary
+DR status:                              Normal
+DR port:                                7001
+DR local IP address:                    10.99.0.31
+DR remote IP address list:              10.99.0.41,10.99.0.42,10.99.0.43
+DR current remote IP address:           10.99.0.42
+DR TLS encryption:                      Not configured
+
+Node:                                   rdqm-a2
+HA status:                              Normal
+HA TLS encryption:                      Not configured
+
+Node:                                   rdqm-a3
+HA status:                              Normal
+HA TLS encryption:                      Not configured

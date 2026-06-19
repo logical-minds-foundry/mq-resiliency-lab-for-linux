@@ -1,0 +1,20 @@
+qmrdqm node-id:0 role:Primary suspended:no force-io-failures:no
+    write-ordering:flush
+  volume:0 minor:100 disk:UpToDate backing_dev:/dev/drbdpool/qmrdqm_00 quorum:yes
+      open:yes
+      size:3145500 read:3649479 written:3330724 al-writes:26 bm-writes:147
+      upper-pending:0 lower-pending:0 al-suspended:no blocked:no
+  rdqm-a2 node-id:1 connection:Connected role:Secondary tls:no congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:0 sent:317260 out-of-sync:0 pending:0 unacked:0
+  rdqm-a3 node-id:2 connection:Connected role:Secondary tls:no congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:0 sent:325452 out-of-sync:0 pending:0 unacked:0
+
+qmrdqm.dr node-id:0 role:Primary suspended:no force-io-failures:no
+    write-ordering:flush
+  volume:0 minor:7001 disk:UpToDate backing_dev:/dev/drbd100 quorum:yes open:yes
+      size:3145368 read:3147491 written:3330068 al-writes:13 bm-writes:81
+      upper-pending:0 lower-pending:0 al-suspended:no blocked:no
