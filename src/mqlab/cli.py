@@ -200,9 +200,10 @@ def _doctor_checks() -> list[Check]:
 
 
 def _prepare_lab() -> None:
-    """Precondition of the vagrant-loading verbs: outside Vergil, hard-gate on host
-    prerequisites; then render build/lab/topology.resolved.yaml (which enforces the
-    native-KVM requirement). Fail loud (#276)."""
+    """Precondition of the vagrant-loading verbs: wire the build/ buckets (#286),
+    then outside Vergil hard-gate on host prerequisites, then render the resolved
+    topology into work/ (which enforces the native-KVM requirement). Fail loud."""
+    _build_ensure()  # cache/state symlinks + work/temp dirs before anything writes build/ (#286)
     facts = probe()
     if not facts.in_vergil:
         ok, report = summarise(run_checks(facts, which=shutil.which))

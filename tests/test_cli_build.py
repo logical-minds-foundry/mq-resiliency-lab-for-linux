@@ -4,6 +4,7 @@ from typer.testing import CliRunner
 
 from mqlab import cli
 from mqlab.buildenv import BuildEnvError
+from mqlab.cli import _build_ensure as _real_build_ensure  # captured before the autouse stub
 
 runner = CliRunner()
 
@@ -92,7 +93,7 @@ def test_build_ensure_seam(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     seen = {}
     monkeypatch.setattr(cli.buildenv, "ensure", lambda repo: seen.setdefault("repo", repo))
-    cli._build_ensure()
+    _real_build_ensure()  # the autouse stub neutralises cli._build_ensure; use the real one
     assert seen["repo"] == tmp_path
 
 
