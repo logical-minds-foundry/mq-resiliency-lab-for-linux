@@ -14,7 +14,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from mqlab.paths import repo_root
+from mqlab.paths import work
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -136,7 +136,7 @@ def read_versions() -> dict[str, str]:  # pragma: no cover - shells out / reads 
         "ansible": _v(["ansible", "--version"]),  # noqa: S607
     }
     # The topology-aware gather play (#266) writes the discovered SUT/obs stack here.
-    gathered = repo_root() / "build" / "versions.json"
+    gathered = work("versions.json")
     if gathered.exists():
         out.update(json.loads(gathered.read_text()))
     return out

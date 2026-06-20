@@ -37,13 +37,16 @@ from mqlab.manifest import (
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import (
+    box_versions_path,
     lab_network,
     lab_script,
+    mq_cache_dir,
     repo_root,
     reports_dir,
     resolved_topology_path,
     runs_dir,
     selection_state_path,
+    work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.platforms import PlatformError, ensure_resolved
@@ -179,16 +182,16 @@ def _apply_manifest(
         else resolve_selection(setup_name, requested)
     )
     man = load_manifest(setup_name, name)
-    op = repo_root() / "build" / "manifests" / f"{setup_name}.overlay.json"
+    op = work("manifests", f"{setup_name}.overlay.json")
     op.parent.mkdir(parents=True, exist_ok=True)
     op.write_text(json.dumps(vars_overlay(man)))
     if at_create:
-        bvf = repo_root() / "build" / "box-versions.json"
+        bvf = box_versions_path()
         pins = json.loads(bvf.read_text()) if bvf.exists() else {}
         pins.update(box_version_pins(man))
         bvf.write_text(json.dumps(pins))
         ensure_mq_tarballs(
-            setup_name, man.mq_version, repo_root() / "build" / "mq", fetch=_fetch_mq_tarball
+            setup_name, man.mq_version, mq_cache_dir(), fetch=_fetch_mq_tarball
         )
     return op
 
@@ -302,7 +305,7 @@ def _obs_manifest_args() -> list[str]:
     shared = repo_root() / "manifests" / "_shared" / "observability.yaml"
     if not shared.exists():
         return []
-    op = repo_root() / "build" / "manifests" / "_obs.overlay.json"
+    op = work("manifests", "_obs.overlay.json")
     op.parent.mkdir(parents=True, exist_ok=True)
     op.write_text(json.dumps(obs_overlay()))
     return ["-e", f"@{op}"]
@@ -375,7 +378,7 @@ app.add_typer(qm_app, name="qm")
 
 @obs_app.command("targets")
 def obs_targets() -> None:
-    """Render build/prometheus/targets/node.json from topology and echo it."""
+    """Render build/work/prometheus/targets/node.json from topology and echo it."""
     from mqlab.scrape import lab_scrape_targets, scrape_targets_path
 
     deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -394,7 +397,7 @@ def obs_targets() -> None:
 
 @obs_app.command("dashboard")
 def obs_dashboard() -> None:
-    """Render build/grafana/dashboards/lab-status.json from topology and echo it."""
+    """Render build/work/grafana/dashboards/lab-status.json from topology and echo it."""
     from mqlab.dashboard import dashboard_path, lab_dashboard
 
     deps = build_deps("obs-dashboard", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -447,7 +450,7 @@ def obs_net_state() -> None:
 
 
 def _render_reach_peers() -> Path:
-    """Write build/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
+    """Write build/work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json
 
     import yaml as _yaml
@@ -455,7 +458,7 @@ def _render_reach_peers() -> Path:
     from mqlab.netstate import net_peers
 
     topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    path = repo_root() / "build" / "obs" / "reach-peers.json"
+    path = work("obs", "reach-peers.json")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
     return path
@@ -463,7 +466,7 @@ def _render_reach_peers() -> Path:
 
 @obs_app.command("reach-peers")
 def obs_reach_peers() -> None:
-    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
+    """Render build/work/obs/reach-peers.json (host -> net -> peers) from topology."""
     deps = build_deps("obs-reach-peers", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         path = _render_reach_peers()
@@ -675,7 +678,7 @@ def _create_step(g: str) -> CommandStep:
 
 
 # Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
-# REUSEs the host-durable build/boxes cache when present (a quick `vagrant box add`)
+# REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box add`)
 # and only does the ~45-90min ISO build on a truly first-ever run (#276/#291).
 _LOCAL_BOX_BUILDERS = {
     "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
@@ -695,7 +698,7 @@ def parse_box_list(text: str) -> dict[str, str]:
 
 
 def _resolved_nodes() -> dict[str, Any]:
-    """The rendered resolved topology's nodes (build/lab/topology.resolved.yaml, #276)."""
+    """The rendered resolved topology's nodes (build/work/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml
 
     data = _yaml.safe_load(resolved_topology_path().read_text())
@@ -1103,7 +1106,7 @@ def vm_status(selector: _Pattern = "all") -> None:
 
 @vm_app.command("inventory")
 def vm_inventory() -> None:
-    """Render build/inventory.ini from topology and echo it (the static map)."""
+    """Render build/work/inventory.ini from topology and echo it (the static map)."""
     deps = build_deps("vm-inventory", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         text = lab_inventory()
@@ -1120,7 +1123,7 @@ def vm_inventory() -> None:
 
 @vm_app.command("roster")
 def vm_roster() -> None:
-    """Render build/salt/roster from topology and echo it (the salt-ssh map)."""
+    """Render build/work/salt/roster from topology and echo it (the salt-ssh map)."""
     deps = build_deps("vm-roster", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         text = lab_roster()
@@ -1382,7 +1385,7 @@ def qm_status(setup: str) -> None:
 
 # --- pki: the lab PKI / TLS certificate provider (#210) --------------------------
 # Wraps the connection=local site-pki.yml playbook (the provider generates CA +
-# entity material under build/secrets/pki/). Mirrors the qm command-wraps-playbook
+# entity material under build/state/secrets/pki/). Mirrors the qm command-wraps-playbook
 # shape. Cert expiry/rotation is out of scope (spec §8.2).
 pki_app = typer.Typer(help="lab PKI / TLS certificate provider", no_args_is_help=True)
 app.add_typer(pki_app, name="pki")
@@ -1440,7 +1443,7 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     step: _StepFlag = False,
 ) -> None:
     """Drive one no-fault baseline run of a setup and write a timestamped report
-    bundle stamped with (setup x config x commit) under build/reports/."""
+    bundle stamped with (setup x config x commit) under build/state/reports/."""
     setup = _lookup_setup_or_exit(setup_name)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     run_dir = runs_dir() / f"{timestamp}-{setup.name}"

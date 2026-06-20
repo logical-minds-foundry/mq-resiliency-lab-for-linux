@@ -130,6 +130,7 @@ MIGRATION = {
     "boxes": "state",
     "rhel96-box": "state",
     "secrets": "state",
+    "rhel-ha": "state",  # operator-curated HA package repo (entitlement-gated on RHEL)
     "fence_key": "state",
     "fence_key.pub": "state",
     "runs": "state",

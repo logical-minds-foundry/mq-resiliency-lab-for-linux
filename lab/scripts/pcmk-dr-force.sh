@@ -50,7 +50,7 @@ run "$FIRST" "pcs status resources | tail -4"
 # Fail loud: the cutover is complete ONLY if the QM is actually Running on the
 # peer. The first version masked every step with `|| true` and printed success
 # unconditionally -- so an empty ansible inventory (the worktree had no
-# build/inventory.ini) silently did nothing yet still reported "complete".
+# build/work/inventory.ini) silently did nothing yet still reported "complete".
 if run "$TO_PCMK" "su mqm -c '/opt/mqm/bin/dspmq -m QMPCMK'" 2>/dev/null | grep -q 'STATUS(Running)'; then
   echo "=== forced cutover $DIR complete; DR site is now $TO_PCMK, VIP $TO_VIP (QMPCMK Running) ==="
 else

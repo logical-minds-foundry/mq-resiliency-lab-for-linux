@@ -3,7 +3,7 @@
 # domains as host-durable, standalone qcow2 goldens, so the lab can be restored
 # without re-running the ~2h RHEL-TCG build + provision (#218).
 #
-# Goldens are written under the MAIN worktree's host-mounted build/snapshots/ (durable
+# Goldens are written under the MAIN worktree's host-mounted build/state/snapshots/ (durable
 # across an ephemeral Vergil-VM rebuild, unlike /var/lib/libvirt/images). The domains
 # are cleanly shut down for a consistent capture, then restarted (the lab is left
 # running). See docs/specs/2026-06-16-lab-snapshot-restore-design.md.
@@ -24,7 +24,7 @@ case "$SCRIPT_ABS" in
   */.worktrees/*) MAIN_ROOT="${SCRIPT_ABS%%/.worktrees/*}" ;;
   *)              MAIN_ROOT="${SCRIPT_ABS%/lab/scripts}" ;;
 esac
-SNAP_ROOT="${SNAP_ROOT:-$MAIN_ROOT/build/snapshots}"
+SNAP_ROOT="${SNAP_ROOT:-$MAIN_ROOT/build/state/snapshots}"
 DEST="$SNAP_ROOT/$KEY"
 echo ">> snapshot key '$KEY' -> $DEST"
 echo ">> domains: ${DOMAINS[*]}"

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.paths import repo_root
+from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -66,7 +66,7 @@ def render_inventory(topo: dict[str, Any]) -> str:
 
 def inventory_path() -> Path:
     """Where the rendered inventory is written — under the gitignored build/ tree."""
-    return repo_root() / "build" / "inventory.ini"
+    return work("inventory.ini")
 
 
 def lab_inventory() -> str:

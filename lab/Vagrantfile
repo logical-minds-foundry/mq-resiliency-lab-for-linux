@@ -1,13 +1,13 @@
 # lab/Vagrantfile — multi-machine lab driven by mqlab's host-resolved topology (#276).
 #
 # Provider mechanics (driver/firmware/cpu_mode) are chosen by mqlab's resolver from
-# the host architecture and rendered to build/lab/topology.resolved.yaml. This file
+# the host architecture and rendered to build/work/lab/topology.resolved.yaml. This file
 # is a dumb consumer: it applies fields verbatim. Box-version pins still come from
-# build/box-versions.json (#266).
+# build/work/box-versions.json (#266).
 require "yaml"
 require "json"
 
-resolved = File.join(__dir__, "..", "build", "lab", "topology.resolved.yaml")
+resolved = File.join(__dir__, "..", "build", "work", "lab", "topology.resolved.yaml")
 unless File.exist?(resolved)
   raise "resolved topology missing: #{resolved}\n" \
         "Run `mqlab vm up` / `mqlab vm create` (or `mqlab vm render`) first — they " \
@@ -17,7 +17,7 @@ nodes = YAML.load_file(resolved).fetch("nodes")
 
 # Manifest-driven box_version pins (#266), keyed by platform. Absent the file
 # (no manifest), boxes float exactly as before.
-bvf = File.join(__dir__, "..", "build", "box-versions.json")
+bvf = File.join(__dir__, "..", "build", "work", "box-versions.json")
 box_versions = File.exist?(bvf) ? JSON.parse(File.read(bvf)) : {}
 
 Vagrant.configure("2") do |config|

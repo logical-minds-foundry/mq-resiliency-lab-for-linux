@@ -41,7 +41,7 @@ def test_apply_manifest_drives_overlay_box_versions_and_id(tmp_path, monkeypatch
     op = cli._apply_manifest("s", at_create=True)  # bvf absent -> {} branch
     assert op is not None
     assert json.loads(op.read_text())["mq_version"] == "9.4.5.0"
-    assert json.loads((tmp_path / "build" / "box-versions.json").read_text()) == {"plat": "1"}
+    assert json.loads((tmp_path / "build" / "work" / "box-versions.json").read_text()) == {"plat": "1"}
 
     cli._apply_manifest("s", at_create=True)  # bvf exists -> merge branch
 

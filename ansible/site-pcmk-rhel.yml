@@ -10,7 +10,7 @@
   connection: local
   gather_facts: false
   vars:
-    fence_key: "{{ playbook_dir }}/../build/fence_key"
+    fence_key: "{{ playbook_dir }}/../build/state/fence_key"
   tasks:
     - name: generate the fence keypair once (gitignored, under build/)
       ansible.builtin.command:

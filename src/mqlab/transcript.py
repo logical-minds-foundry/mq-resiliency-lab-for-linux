@@ -1,4 +1,4 @@
-"""Run transcripts — tee everything to build/runs/, never outside build/ (spec §4.3)."""
+"""Run transcripts — tee everything to build/state/runs/, never outside build/ (spec §4.3)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class TranscriptError(RuntimeError):
 
 
 def transcript_path(verb: str, timestamp: str) -> Path:
-    """build/runs/<timestamp>-<verb>.log."""
+    """build/state/runs/<timestamp>-<verb>.log."""
     return runs_dir() / f"{timestamp}-{verb}.log"
 
 

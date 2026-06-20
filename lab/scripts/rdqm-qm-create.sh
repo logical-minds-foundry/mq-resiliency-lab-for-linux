@@ -5,7 +5,7 @@
 # IP via rdqmint -f <addr> -l <interface>. Lab channel posture per spec 1.
 #
 # HA/DR (3+3, #288): auto-detected when the site-B HA group (rdqm_b) is formed. Per IBM's
-# 9.4 worked example (build/refs/ibm-docs/.../availability-drha-rdqm-worked-example), a
+# 9.4 worked example (build/cache/refs/ibm-docs/.../availability-drha-rdqm-worked-example), a
 # single `crtmqm -sx -rr p` on each site's primary auto-creates that site's secondaries and
 # the DR IPs go on the command line (net-wan, port 7001, async), so no rdqm.ini DR stanza is
 # needed. Site A is DR primary (-rr p); site B is DR secondary (-rr s). The QM's objects +

@@ -84,7 +84,7 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
         "qm_vip_ext=10.60.0.10",
     ]
     assert str(play.cwd).endswith("/ansible")
-    assert (tmp_path / "build" / "inventory.ini").exists()
+    assert (tmp_path / "build" / "work" / "inventory.ini").exists()
     assert not any(a.startswith("dtcc_conn=") for a in play.argv)  # not set -> not passed
 
 

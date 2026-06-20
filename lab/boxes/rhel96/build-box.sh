@@ -9,7 +9,7 @@
 #   --rebuild-box / LAB_REBUILD_BOX=1   force a fresh build (overwrite the cache)
 #   --dry-run                           print the decision and exit, do nothing
 #   STALE_DAYS=N (default 30)           age past which a NON-blocking notice prints
-#   RHEL_ISO=/path                      override ISO location (else build/)
+#   RHEL_ISO=/path                      override ISO location (else build/state/)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -31,8 +31,8 @@ done
 common_dir="$(git rev-parse --git-common-dir)"
 MAIN_ROOT="$(cd "$(dirname "$common_dir")" && pwd)"
 BUILD_DIR="$MAIN_ROOT/build"
-CACHE="$BUILD_DIR/boxes/rhel-9.6-x86_64-libvirt.box"
-mkdir -p "$BUILD_DIR/boxes"
+CACHE="$BUILD_DIR/state/boxes/rhel-9.6-x86_64-libvirt.box"
+mkdir -p "$BUILD_DIR/state/boxes"
 
 # Decide the action up front (the testable surface, exercised via --dry-run).
 if [ "$FORCE" = 1 ]; then
@@ -68,14 +68,14 @@ fi
 # --- Expensive path (BUILD / FORCE-BUILD): the ~45-90 min TCG install. ---
 ISO="${RHEL_ISO:-}"
 if [ -z "$ISO" ]; then
-  c="$BUILD_DIR/rhel-9.6-x86_64-dvd.iso"
+  c="$BUILD_DIR/state/rhel-9.6-x86_64-dvd.iso"
   [ -f "$c" ] && ISO="$c"
 fi
 test -n "$ISO" || {
-  echo "ERROR: rhel-9.6-x86_64-dvd.iso not found in $BUILD_DIR (set RHEL_ISO)" >&2
+  echo "ERROR: rhel-9.6-x86_64-dvd.iso not found in $BUILD_DIR/state (set RHEL_ISO)" >&2
   exit 1
 }
-WORK="$BUILD_DIR/rhel96-box"; mkdir -p "$WORK"
+WORK="$BUILD_DIR/state/rhel96-box"; mkdir -p "$WORK"
 
 # 1. OEMDRV volume: anaconda auto-loads ks.cfg from a volume so labeled.
 genisoimage -quiet -V OEMDRV -o "$WORK/oemdrv.iso" ks.cfg

@@ -15,7 +15,7 @@ case "$SCRIPT_ABS" in
   */.worktrees/*) MAIN_ROOT="${SCRIPT_ABS%%/.worktrees/*}" ;;
   *)              MAIN_ROOT="${SCRIPT_ABS%/lab/scripts}" ;;
 esac
-SNAP_ROOT="${SNAP_ROOT:-$MAIN_ROOT/build/snapshots}"
+SNAP_ROOT="${SNAP_ROOT:-$MAIN_ROOT/build/state/snapshots}"
 SRC="$SNAP_ROOT/$KEY"
 echo ">> restore key '$KEY' from $SRC"
 

@@ -4,7 +4,7 @@
 #
 # Run via the wrapper, which auto-sources the persisted hacluster secret
 # (PCMK_HACLUSTER_PASSWORD) instead of requiring a human to inject it -- the
-# secret is auto-generated once and saved in build/secrets/, so it survives
+# secret is auto-generated once and saved in build/state/secrets/, so it survives
 # rebuilds and is never lost:
 #   lab/scripts/dr-provision.sh
 # (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is

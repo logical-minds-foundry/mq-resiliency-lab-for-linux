@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.paths import repo_root
+from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -1481,7 +1481,7 @@ def render_cluster_dashboard(
 
 def cluster_dashboard_path() -> Path:
     """Where the rendered cockpit board is written — beside lab-status.json (gitignored)."""
-    return repo_root() / "build" / "grafana" / "dashboards" / "lab-pcmk-cluster.json"
+    return work("grafana", "dashboards", "lab-pcmk-cluster.json")
 
 
 def lab_cluster_dashboard() -> str:
@@ -1492,7 +1492,7 @@ def lab_cluster_dashboard() -> str:
 
 def nativeha_dashboard_path() -> Path:
     """Where the rendered Native HA cockpit board is written (gitignored)."""
-    return repo_root() / "build" / "grafana" / "dashboards" / "lab-nativeha-cluster.json"
+    return work("grafana", "dashboards", "lab-nativeha-cluster.json")
 
 
 def lab_nativeha_dashboard() -> str:

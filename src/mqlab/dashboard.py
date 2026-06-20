@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.paths import repo_root
+from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -340,7 +340,7 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
 
 def dashboard_path() -> Path:
     """Where the rendered dashboard is written — under the gitignored build/ tree."""
-    return repo_root() / "build" / "grafana" / "dashboards" / "lab-status.json"
+    return work("grafana", "dashboards", "lab-status.json")
 
 
 def lab_dashboard() -> str:

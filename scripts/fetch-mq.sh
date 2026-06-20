@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # scripts/fetch-mq.sh - download IBM MQ Advanced for Developers (no-charge) into
-# gitignored build/mq/. Fetches the host-arch Ubuntu deb tarball AND the x86_64
+# gitignored build/cache/mq/. Fetches the host-arch Ubuntu deb tarball AND the x86_64
 # RHEL/RDQM tarball (LinuxX64), so a fresh clone has both arms' artifacts (#276).
 # Never commit these binaries.
 set -euo pipefail
 VER="9.4.5.0"
 BASE="https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv"
-DEST="$(cd "$(dirname "$0")/.." && pwd)/build/mq"
+DEST="$(cd "$(dirname "$0")/.." && pwd)/build/cache/mq"
 mkdir -p "$DEST"
 
 # The Ubuntu suffix tracks the host arch (= the native Ubuntu guest arch); LinuxX64

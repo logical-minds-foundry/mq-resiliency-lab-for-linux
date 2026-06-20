@@ -1,7 +1,7 @@
 # Native HA replication TLS (#246 Phase 3): deploy the lab-pki PKCS#12 keystore +
 # stash its password + set NativeHALocalInstance TLS. Per-instance local config.
 # Vars: qm_name; ks_cn (the lab-pki entity CN, = the cert friendly name/label).
-# Keystore source: build/secrets/pki/entities/<ks_cn>/<ks_cn>.p12 (controller).
+# Keystore source: build/state/secrets/pki/entities/<ks_cn>/<ks_cn>.p12 (controller).
 #
 # NOTE the real gotcha (lab-gotchas.md): runmqakm needs the OS libicu
 # (libicuio.so.*) which the minimal RHEL box lacks — install it first.
@@ -29,7 +29,7 @@
 
 - name: deploy the lab-pki .p12 keystore
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
+    src: "{{ playbook_dir }}/../build/state/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
     dest: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12"
     owner: mqm
     group: mqm

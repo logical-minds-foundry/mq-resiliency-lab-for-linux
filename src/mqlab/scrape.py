@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.paths import repo_root
+from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -59,7 +59,7 @@ def render_scrape_targets(topo: dict[str, Any]) -> str:
 
 def scrape_targets_path() -> Path:
     """Where the rendered node target list is written — under the gitignored build/ tree."""
-    return repo_root() / "build" / "prometheus" / "targets" / "node.json"
+    return work("prometheus", "targets", "node.json")
 
 
 def lab_scrape_targets() -> str:

@@ -5,7 +5,7 @@
 - hosts: all
   become: true
   vars:
-    reach_all: "{{ lookup('file', playbook_dir + '/../build/obs/reach-peers.json') | from_json }}"
+    reach_all: "{{ lookup('file', playbook_dir + '/../build/work/obs/reach-peers.json') | from_json }}"
     reach_peers: "{{ reach_all[inventory_hostname] | default({}) }}"
   roles:
     - node-exporter

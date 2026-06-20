@@ -3,7 +3,7 @@
 # dev path, X64 on an x86 host. (The host-side fetch/manifest map mirrors this.)
 - name: copy MQ tar to node
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
+    src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
     dest: /tmp/mqadv.tar.gz
 
 - name: unpack
