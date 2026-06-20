@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Annotated, Any
 import typer
 from rich.console import Console
 
-from mqlab import parity
+from mqlab import buildenv, parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
+from mqlab.buildenv import BuildEnvError
 from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
@@ -221,6 +222,72 @@ def doctor() -> None:
     ok, report = summarise(_doctor_checks())
     typer.echo(report)
     raise typer.Exit(code=0 if ok else 1)
+
+
+# --- build/ bucket lifecycle (#286): cache/state shared, work/temp local ----------
+build_app = typer.Typer(help="build/ bucket lifecycle (cache/state/work/temp)", no_args_is_help=True)
+app.add_typer(build_app, name="build")
+
+
+# thin seams so tests monkeypatch without real git/fs:
+def _build_bucket_path(bucket: str) -> Path:
+    return buildenv.bucket_path(bucket, repo_root())
+
+
+def _build_ensure() -> None:
+    buildenv.ensure(repo_root())
+
+
+def _build_clean(*, drop_cache: bool = False, drop_state: bool = False) -> list[str]:
+    return buildenv.clean(repo_root(), drop_cache=drop_cache, drop_state=drop_state)
+
+
+@build_app.command("path")
+def build_path(bucket: str) -> None:
+    """Print the resolved absolute path of a bucket (cache|state|work|temp)."""
+    try:
+        typer.echo(str(_build_bucket_path(bucket)))
+    except BuildEnvError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@build_app.command("ensure")
+def build_ensure() -> None:
+    """Create the four buckets; in a worktree, symlink cache/+state/ back to main."""
+    _build_ensure()
+
+
+@build_app.command("clean")
+def build_clean(
+    cache: bool = False,
+    state: bool = False,
+    yes_destroy_state: Annotated[bool, typer.Option("--yes-destroy-state")] = False,
+) -> None:
+    """Nuke work/+temp/ (+stray). --cache also drops downloads; --state needs --yes-destroy-state."""
+    if state and not yes_destroy_state:
+        typer.echo(
+            "refusing to drop state/ (snapshots, ISO, a running lab's secrets). "
+            "Re-run with --state --yes-destroy-state if you really mean it.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    typer.echo("removed: " + ", ".join(_build_clean(drop_cache=cache, drop_state=state)))
+
+
+@build_app.command("status")
+def build_status() -> None:
+    """Show each bucket: path, real-or-symlink."""
+    for bucket in buildenv.BUCKETS:
+        kind = "symlink->main" if (repo_root() / "build" / bucket).is_symlink() else "local"
+        typer.echo(f"{bucket:6} {kind:14} {_build_bucket_path(bucket)}")
+
+
+@build_app.command("migrate")
+def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -> None:
+    """Move existing top-level build/ contents into buckets (idempotent)."""
+    for src, dst in buildenv.migrate(repo_root(), dry_run=dry_run):
+        typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
 
 
 def _manifest_args(
