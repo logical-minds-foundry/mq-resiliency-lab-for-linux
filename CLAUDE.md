@@ -17,8 +17,14 @@ profile in [`vergil.toml`](vergil.toml) — there is no separate spec file.
 - The VM is **ephemeral and 100% reproducible**. Do not hand-customize it.
   Re-provision freely to stay fresh:
   `vrg-vm rebuild logical-minds-foundry/mq-cluster-tooling --identity vergil-user`.
-- All working state lives in the gitignored `build/` directory (mounted from
-  the host). Nothing in the VM outside `build/` is precious.
+- All working state lives in the gitignored, host-mounted `build/` directory.
+  Nothing in the VM outside `build/` is precious. `build/` is split into four
+  buckets with fixed keep/nuke/share semantics — `cache/` (shared, re-fetchable
+  downloads), `state/` (shared, irreplaceable live-lab facts), `work/` (local,
+  regenerated renders), `temp/` (local, scratch + screenshot handoff). Manage
+  them with `mqlab build` (`ensure` / `status` / `clean` / `migrate` / `path`);
+  never hardcode a `build/<X>` path. See
+  [`docs/development/build-layout.md`](docs/development/build-layout.md).
 - Change tooling by editing the `[vm.vergil-user]` profile in `vergil.toml` and
   rebuilding — never by `apt install` inside a live VM.
 

@@ -1,0 +1,48 @@
+# The `build/` directory layout
+
+`build/` is the gitignored, host-mounted tree that holds every piece of working
+state the lab produces or consumes. It is split into four buckets, each with
+fixed **keep / nuke / share** semantics. The split exists so a routine cleanup
+can reclaim derived junk without ever touching irreplaceable lab state, and so
+parallel git worktrees share one lab instead of forking it.
+
+`src/mqlab/paths.py` is the authority for bucket paths in Python; `mqlab build
+path <bucket>` is the same authority for shell and other non-Python consumers.
+**Never hardcode a `build/<name>` path** — go through a bucket.
+
+## The four buckets
+
+| Bucket   | Scope  | Lifecycle (when `clean` removes it)        | Holds |
+|----------|--------|---------------------------------------------|-------|
+| `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), doc refs (`refs/`), `ansible_collections/` |
+| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/`, `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the operator-curated `rhel-ha/` package repo, manifest selection pins |
+| `work/`  | local  | **every** `mqlab build clean`               | deterministic renders — `inventory.ini`, `lab/topology.resolved.yaml`, `box-versions.json`, `versions.json`, `grafana/`, `prometheus/`, `obs/`, `salt/`, manifest overlays |
+| `temp/`  | local  | **every** `mqlab build clean`               | scratch, junk, and the screenshot handoff dir |
+
+**Keep vs nuke.** `work/` and `temp/` are pure derivations — every `mqlab build
+clean` recreates them empty, and a VM rebuild re-renders them. `cache/` and
+`state/` survive a routine clean: `cache/` because re-downloading is slow,
+`state/` because it cannot be re-fetched at all (the RHEL ISO and RHEL-HA repo
+are entitlement-gated; snapshots and secrets are the live lab). Dropping
+`state/` therefore demands the explicit `--yes-destroy-state` confirmation.
+
+**Shared vs local.** `cache/` and `state/` are *shared*: in a git worktree they
+are symlinks back to the main checkout's `build/`, so every worktree drives the
+**one** lab and reuses the **one** download cache. `work/` and `temp/` are
+*local*: each checkout renders its own, so parallel branches never fight over an
+inventory or a resolved topology.
+
+## The `mqlab build` commands
+
+| Command | What it does |
+|---------|--------------|
+| `mqlab build ensure`  | Create the buckets; in a worktree, symlink `cache/`+`state/` to main. Idempotent. Runs automatically before any lab-loading verb. |
+| `mqlab build status`  | List the buckets and whether each is `local` or a `symlink->main`. |
+| `mqlab build path <cache\|state\|work\|temp>` | Print a bucket's absolute path — the seam shell/Ansible/Ruby consumers use. |
+| `mqlab build clean [--cache] [--state --yes-destroy-state]` | Nuke `work/`+`temp/` (and any stray non-bucket entry at the `build/` root). `--cache` also drops downloads; `--state` (guarded) drops live lab state. |
+| `mqlab build migrate [--dry-run]` | One-time: move an existing pre-bucket `build/` into the buckets (rename, so instant even for multi-gigabyte snapshots). |
+
+> **Stray entries are disposable.** `mqlab build clean` removes anything at the
+> `build/` root that is not one of the four buckets. Any artifact worth keeping
+> must live inside a bucket — that is why, e.g., the operator-curated RHEL-HA
+> package repo is `build/state/rhel-ha/`, not `build/rhel-ha/`.
