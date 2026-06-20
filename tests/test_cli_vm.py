@@ -505,8 +505,8 @@ def test_parse_box_list_no_boxes():
 
 
 def _seed_resolved(tmp_path, body):
-    (tmp_path / "build" / "lab").mkdir(parents=True)
-    (tmp_path / "build" / "lab" / "topology.resolved.yaml").write_text(body)
+    (tmp_path / "build" / "work" / "lab").mkdir(parents=True)
+    (tmp_path / "build" / "work" / "lab" / "topology.resolved.yaml").write_text(body)
 
 
 def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
