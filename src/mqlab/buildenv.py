@@ -95,10 +95,12 @@ def clean(
     *,
     drop_cache: bool = False,
     drop_state: bool = False,
-    run: Callable[[list[str]], str] = _git,
 ) -> list[str]:
     """Nuke work/+temp/ (+ any stray non-bucket entries at build/ root). --cache also
-    drops re-fetchable downloads; --state the irreplaceable lab state (caller guards)."""
+    drops re-fetchable downloads; --state the irreplaceable lab state (caller guards).
+
+    Operates on repo/build/ directly (worktree shared buckets are symlinks resolved
+    in _reset_bucket), so it never shells git — no `run` seam needed."""
     build = repo / "build"
     removed: list[str] = []
     targets = ["work", "temp"]
@@ -147,11 +149,10 @@ MIGRATION = {
 }
 
 
-def migrate(
-    repo: Path, *, dry_run: bool = False, run: Callable[[list[str]], str] = _git
-) -> list[tuple[str, str]]:
+def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
     """Move existing top-level build/ entries into their bucket (rename = instant, even
-    for the 22G snapshots). Idempotent; raises on a destination collision."""
+    for the 22G snapshots). Idempotent; raises on a destination collision. Run from the
+    main checkout; renames within repo/build/, so it never shells git."""
     build = repo / "build"
     planned: list[tuple[str, str]] = []
     for name, bucket in MIGRATION.items():

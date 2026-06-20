@@ -18,7 +18,10 @@ def _git(mapping):
 
 def test_is_worktree_true_when_dirs_differ():
     run = _git(
-        {"rev-parse --git-dir": "/repo/.git/worktrees/wt", "rev-parse --git-common-dir": "/repo/.git"}
+        {
+            "rev-parse --git-dir": "/repo/.git/worktrees/wt",
+            "rev-parse --git-common-dir": "/repo/.git",
+        }
     )
     assert b.is_worktree(run=run) is True
 
@@ -41,7 +44,10 @@ def test_main_build_root_relative_common_dir():
 
 def test_bucket_path_shared_resolves_to_main():
     run = _git(
-        {"rev-parse --git-dir": "/repo/.git/worktrees/wt", "rev-parse --git-common-dir": "/repo/.git"}
+        {
+            "rev-parse --git-dir": "/repo/.git/worktrees/wt",
+            "rev-parse --git-common-dir": "/repo/.git",
+        }
     )
     wt = Path("/repo/.worktrees/wt")
     assert b.bucket_path("cache", wt, run=run) == Path("/repo/build/cache")
@@ -50,7 +56,10 @@ def test_bucket_path_shared_resolves_to_main():
 
 def test_bucket_path_local_for_work_and_temp():
     run = _git(
-        {"rev-parse --git-dir": "/repo/.worktrees/wt/.git", "rev-parse --git-common-dir": "/repo/.git"}
+        {
+            "rev-parse --git-dir": "/repo/.worktrees/wt/.git",
+            "rev-parse --git-common-dir": "/repo/.git",
+        }
     )
     wt = Path("/repo/.worktrees/wt")
     assert b.bucket_path("work", wt, run=run) == wt / "build" / "work"
@@ -133,7 +142,7 @@ def test_clean_nukes_work_temp_and_stray_keeps_cache_state(tmp_path):
     (build / "state" / "snapshots").mkdir(parents=True)
     (build / "Stray.png").write_text("x")  # stray file
     (build / "straydir").mkdir()  # stray dir
-    removed = b.clean(main, run=run)
+    removed = b.clean(main)
     assert not (build / "work" / "inv.ini").exists()
     assert not (build / "temp" / "shot.png").exists()
     assert not (build / "Stray.png").exists() and not (build / "straydir").exists()
@@ -147,7 +156,7 @@ def test_clean_drop_cache(tmp_path):
     run = _real_git(main, main)
     b.ensure(main, run=run)
     (main / "build" / "cache" / "mq").mkdir(parents=True)
-    b.clean(main, drop_cache=True, run=run)
+    b.clean(main, drop_cache=True)
     assert not (main / "build" / "cache" / "mq").exists()
     assert (main / "build" / "state").exists()
 
@@ -157,7 +166,7 @@ def test_clean_recreates_missing_bucket(tmp_path):
     main = tmp_path / "main"
     (main / ".git").mkdir(parents=True)
     (main / "build").mkdir()
-    b.clean(main, run=_real_git(main, main))
+    b.clean(main)
     assert (main / "build" / "work" / ".gitkeep").exists()
     assert (main / "build" / "temp" / ".gitkeep").exists()
 
@@ -168,7 +177,7 @@ def test_clean_drop_state(tmp_path):
     run = _real_git(main, main)
     b.ensure(main, run=run)
     (main / "build" / "state" / "snapshots").mkdir(parents=True)
-    b.clean(main, drop_state=True, run=run)
+    b.clean(main, drop_state=True)
     assert not (main / "build" / "state" / "snapshots").exists()
 
 
@@ -180,7 +189,7 @@ def test_clean_worktree_clears_symlinked_shared_through_link(tmp_path):
     run = _real_git(wt, main)
     b.ensure(wt, run=run)
     (main / "build" / "cache" / "mq").mkdir(parents=True)  # content via the symlink target
-    b.clean(wt, drop_cache=True, run=run)
+    b.clean(wt, drop_cache=True)
     assert (wt / "build" / "cache").is_symlink()  # link kept
     assert not (main / "build" / "cache" / "mq").exists()  # target cleared
 
@@ -196,7 +205,7 @@ def test_migrate_moves_known_entries(tmp_path):
     (build / "snapshots").mkdir(parents=True)
     (build / "rhel-ha").mkdir(parents=True)  # operator-curated HA repo -> state (not stray)
     b.ensure(main, run=run)
-    b.migrate(main, run=run)
+    b.migrate(main)
     assert (build / "cache" / "mq").is_dir()
     assert (build / "work" / "inventory.ini").exists()
     assert (build / "state" / "snapshots").is_dir()
@@ -210,7 +219,7 @@ def test_migrate_dry_run_moves_nothing(tmp_path):
     run = _real_git(main, main)
     (main / "build" / "mq").mkdir(parents=True)
     b.ensure(main, run=run)
-    planned = b.migrate(main, dry_run=True, run=run)
+    planned = b.migrate(main, dry_run=True)
     assert any(src.endswith("/mq") for src, _ in planned)
     assert (main / "build" / "mq").exists()  # untouched
 
@@ -221,8 +230,8 @@ def test_migrate_is_idempotent(tmp_path):
     run = _real_git(main, main)
     (main / "build" / "mq").mkdir(parents=True)
     b.ensure(main, run=run)
-    b.migrate(main, run=run)
-    assert b.migrate(main, run=run) == []  # nothing left to move
+    b.migrate(main)
+    assert b.migrate(main) == []  # nothing left to move
 
 
 def test_migrate_collision_raises(tmp_path):
@@ -234,4 +243,4 @@ def test_migrate_collision_raises(tmp_path):
     b.ensure(main, run=run)
     (build / "cache" / "mq").mkdir(parents=True)  # destination already exists
     with pytest.raises(b.BuildEnvError, match="collision"):
-        b.migrate(main, run=run)
+        b.migrate(main)

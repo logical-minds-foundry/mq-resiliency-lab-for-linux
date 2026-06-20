@@ -16,8 +16,8 @@ from rich.console import Console
 
 from mqlab import buildenv, parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
-from mqlab.buildenv import BuildEnvError
 from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
+from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
@@ -190,9 +190,7 @@ def _apply_manifest(
         pins = json.loads(bvf.read_text()) if bvf.exists() else {}
         pins.update(box_version_pins(man))
         bvf.write_text(json.dumps(pins))
-        ensure_mq_tarballs(
-            setup_name, man.mq_version, mq_cache_dir(), fetch=_fetch_mq_tarball
-        )
+        ensure_mq_tarballs(setup_name, man.mq_version, mq_cache_dir(), fetch=_fetch_mq_tarball)
     return op
 
 
@@ -229,7 +227,9 @@ def doctor() -> None:
 
 
 # --- build/ bucket lifecycle (#286): cache/state shared, work/temp local ----------
-build_app = typer.Typer(help="build/ bucket lifecycle (cache/state/work/temp)", no_args_is_help=True)
+build_app = typer.Typer(
+    help="build/ bucket lifecycle (cache/state/work/temp)", no_args_is_help=True
+)
 app.add_typer(build_app, name="build")
 
 
@@ -268,7 +268,7 @@ def build_clean(
     state: bool = False,
     yes_destroy_state: Annotated[bool, typer.Option("--yes-destroy-state")] = False,
 ) -> None:
-    """Nuke work/+temp/ (+stray). --cache also drops downloads; --state needs --yes-destroy-state."""
+    """Nuke work/+temp/ (+stray). --cache also drops downloads; --state needs confirmation."""
     if state and not yes_destroy_state:
         typer.echo(
             "refusing to drop state/ (snapshots, ISO, a running lab's secrets). "
@@ -450,7 +450,7 @@ def obs_net_state() -> None:
 
 
 def _render_reach_peers() -> Path:
-    """Write build/work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
+    """Write work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json
 
     import yaml as _yaml

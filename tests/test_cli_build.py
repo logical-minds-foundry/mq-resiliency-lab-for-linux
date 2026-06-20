@@ -103,7 +103,9 @@ def test_build_clean_seam(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli.buildenv,
         "clean",
-        lambda repo, *, drop_cache, drop_state: seen.update(dc=drop_cache, ds=drop_state) or ["work"],
+        lambda repo, *, drop_cache, drop_state: (
+            seen.update(dc=drop_cache, ds=drop_state) or ["work"]
+        ),
     )
     assert cli._build_clean(drop_cache=True) == ["work"]
     assert seen == {"dc": True, "ds": False}
