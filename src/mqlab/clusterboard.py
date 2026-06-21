@@ -67,6 +67,89 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             },
         },
     ],
+    # RDQM HA role code → coloured text. Primary runs the QM (green leader); Secondary is the
+    # healthy DRBD standby (blue); only a genuinely down/unknown instance is red (#287).
+    "rdqm_role": [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "Unknown", "index": 0},
+                "1": {"color": "blue", "text": "Secondary", "index": 1},
+                "2": {"color": _GREEN, "text": "Primary", "index": 2},
+            },
+        },
+    ],
+    # QM-running: 1 → green "running"; 0 → a healthy STANDBY node (the QM is only ever live on
+    # one node), shown neutral blue — NOT red "down", which would falsely read as a failure
+    # across every standby (#287 feedback).
+    "qm_running": [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": "blue", "text": "standby", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ running", "index": 1},
+            },
+        },
+    ],
+    # Node ready: 1 = pacemaker-online AND able to run the QM → green "ready"; 0 = online-but-
+    # banned (or offline) → red "blocked". A node that can host nothing must not read green "up"
+    # even though pacemaker membership is fine (#287 feedback).
+    "node_ready": [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "blocked", "index": 0},
+                "1": {"color": _GREEN, "text": "ready", "index": 1},
+            },
+        },
+    ],
+    # Pacemaker resource state code → text. 2 = Started/Promoted (active, green); 1 = Unpromoted
+    # (healthy replica, blue); 0 = Stopped/absent — NEUTRAL grey, not an alarm (a resource being
+    # stopped on a standby is normal; the fail-count column is what flags a real ban) (#287).
+    "pm_state": [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": "#5a6168", "text": "stopped", "index": 0},
+                "1": {"color": "blue", "text": "replica", "index": 1},
+                "2": {"color": _GREEN, "text": "active", "index": 2},
+            },
+        },
+    ],
+    # Pacemaker fail-count → 0 green "ok"; a soft failure (1..<INFINITY) amber "failing"; the
+    # pacemaker INFINITY sentinel (1000000 = migration threshold reached) → red "BANNED" (#287).
+    "failcount": [
+        {"type": "value", "options": {"0": {"color": _GREEN, "text": "ok", "index": 0}}},
+        {
+            "type": "range",
+            "options": {
+                "from": 1,
+                "to": 999999,
+                "result": {"color": "orange", "text": "failing", "index": 1},
+            },
+        },
+        {
+            "type": "range",
+            "options": {
+                "from": 1000000,
+                "to": 1e12,
+                "result": {"color": _RED, "text": "BANNED", "index": 2},
+            },
+        },
+    ],
+    # DRBD out-of-sync bytes, tolerant: 0..one 4 KiB extent → green (a benign sub-extent
+    # secondary↔secondary delta is a normal, expected state and must read green); a real backlog
+    # (≥ one extent) → red. The honest byte value stays visible in both ranges (#287 feedback).
+    "drbd_oos": [
+        {
+            "type": "range",
+            "options": {"from": 0, "to": 4095, "result": {"color": _GREEN, "index": 0}},
+        },
+        {
+            "type": "range",
+            "options": {"from": 4096, "to": 1e12, "result": {"color": _RED, "index": 1}},
+        },
+    ],
 }
 _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -77,6 +160,8 @@ _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # additionally resource-scoped (mq_qm vs QMNATIVE), so it needs no group scope.
 _PCMK_SEL = '{groups=~"pcmk_a|pcmk_b"}'
 _NHA_SEL = '{groups=~"nha_rhel_a|nha_rhel_b"}'
+_RDQM_SEL = '{groups=~"rdqm_a|rdqm_b"}'
+_RDQM_GROUPS = 'groups=~"rdqm_a|rdqm_b"'  # bare matcher for injecting into a wider selector
 
 
 def _ds(uid: str) -> dict[str, str]:
@@ -825,11 +910,463 @@ def _annotations(ds_uid: str) -> dict[str, Any]:
     }
 
 
+# ── RDQM: status band · instances · DRBD storage · DR card · timeline · logs · perf/net ──
+
+
+def _fit_table(panel: dict[str, Any]) -> dict[str, Any]:
+    """Keep a matrix() table to exactly its real columns (#287 feedback).
+
+    `joinByField` can carry a leftover Time field per instant query that organize doesn't fully
+    exclude; append a filterFieldsByName that keeps ONLY node + the real value columns. Scoped to
+    the rdqm matrices so the PCMK/NHA boards are untouched. (Horizontal-scrollbar elimination also
+    needs each panel tall enough that no vertical scrollbar steals width — see _rdqm_board's
+    matrix heights.)"""
+    org = next(t for t in panel["transformations"] if t["id"] == "organize")
+    keep = list(org["options"]["renameByName"].values())  # ["node", <column titles…>]
+    panel["transformations"].append(
+        {"id": "filterFieldsByName", "options": {"include": {"names": keep}}}
+    )
+    return panel
+
+
+def _rdqm_instance_cols(site_regex: str) -> list[Column]:
+    """RDQM instances-matrix columns for one site (rdqm-a.* / rdqm-b.*): HA status (online if
+    Normal) · role (Primary/Secondary, coded) · QM-running · a single Pacemaker summary cell ·
+    DRBD in-sync. The Pacemaker cell (node_ready = online AND able to run the QM) sits between
+    QM-running and DRBD so a NOT-READY site shows its cause inline; the per-resource pacemaker
+    detail lives one section down in ③ (#287). The per-member columns key on `member`; the DRBD
+    column keys on `node` and pins the HA resource (qmrdqm) so the cross-site DR resource
+    (qmrdqm.dr) never bleeds into the in-sync cell (spec §5 ②)."""
+    member = f'member=~"{site_regex}"'
+    node = f'node=~"{site_regex}"'
+    return [
+        ("HA status", _norm(f"cluster_node_online{{{member}}}", "member"), "up"),
+        ("role", _norm(f"cluster_rdqm_role_code{{{member}}}", "member"), "rdqm_role"),
+        ("QM running", _norm(f"cluster_rdqm_qm_running{{{member}}}", "member"), "qm_running"),
+        ("Pacemaker", _norm(f"cluster_rdqm_node_ready{{{member}}}", "member"), "node_ready"),
+        (
+            "DRBD in-sync",
+            _norm(f'cluster_drbd_disk{{resource="qmrdqm",disk="UpToDate",{node}}}', "node"),
+            "up",
+        ),
+    ]
+
+
+def _rdqm_site_badge(group: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
+    """A bold per-site header badge derived from the site's DR role AND pacemaker startability,
+    so it flips on an rdqmdr cutover and goes loud when the side can't fail over (#287 feedback):
+
+    - LIVE (green, code 2) when the site is the DR primary (holds the running QM),
+    - RECOVERY (blue, code 1) when it is the DR standby and a node there can run the QM — blue is
+      our standby colour; yellow (warning) was wrong for a healthy standby,
+    - NOT READY (red, code 0) when a RECOVERY site is banned and can't take over.
+
+    Selected by the site's FIXED group (rdqm_a / rdqm_b). The startable term is `or vector(0)`-
+    guarded so the LIVE side and a not-yet-instrumented RECOVERY side never read a false red.
+    """
+    sel = f'{{groups=~"{group}"}}'
+    role = f"max(cluster_rdqm_dr_role_code{sel})"
+    banned = f"(max(cluster_rdqm_qm_startable{sel}) == bool 0 or vector(0))"
+    # 2 if DR primary; else (DR secondary) 1 when ready, 0 when banned.
+    expr = f"(2 * ({role} == bool 2)) + (({role} == bool 3) * (1 - {banned}))"
+    maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "⚠ NOT READY", "index": 0},
+                "1": {"color": "blue", "text": "RECOVERY", "index": 1},
+                "2": {"color": _GREEN, "text": "LIVE", "index": 2},
+            },
+        },
+        _STALE_MAP,
+    ]
+    badge = _stat("", expr, ds_uid, x, y, mappings=maps, w=4, h=8, value_size=_COMPACT_VALUE_SIZE)
+    badge["options"]["colorMode"] = "background"
+    badge["options"]["graphMode"] = "none"
+    return badge
+
+
+def _rdqm_integrity_expr() -> str:
+    """RDQM is DRBD under Pacemaker, so it CAN split-brain — the integrity light is PCMK-style.
+    It goes loud on the DRBD storage hazards (StandAlone / per-resource dual-primary / Diskless)
+    PLUS the RDQM HA status ≠ Normal, gated on data present so no-data reads STALE (spec §6).
+    DRBD hazards are scoped to rdqm groups so another arm's DRBD can't trip this light."""
+    g = _RDQM_GROUPS
+    # dual-primary is counted per resource AND per site (groups): a DR pair legitimately runs one
+    # qmrdqm primary on each side, so a global per-resource count of 2 is normal, not split-brain.
+    hazards = (
+        f'(count(cluster_drbd_conn{{conn="StandAlone",{g}}}) or vector(0))'
+        f' + (count(cluster_drbd_disk{{disk="Diskless",{g}}}) or vector(0))'
+        f' + (sum(count by (resource, groups)(cluster_drbd_role{{role="Primary",{g}}}) > bool 1)'
+        " or vector(0))"
+        " + (count(cluster_rdqm_ha_status_ok == 0) or vector(0))"
+        # pacemaker layer: a whole site (group) with no startable node = the QM can't run there
+        # (a live-side outage, or a non-viable DR recovery side) (#287).
+        " + (count(max by (groups)(cluster_rdqm_qm_startable) == 0) or vector(0))"
+    )
+    return f"({hazards}) and on() (count(cluster_rdqm_ha_status_ok) > 0)"
+
+
+def rdqm_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """① Cluster status as ONE compact full-width row of five equal tiles — Running-on node ·
+    HA status · Nodes online · Floating IP (the single VIP) · Integrity. The floating IP is
+    first-class (spec §5 ①); integrity is a tile among equals, value font capped to reclaim
+    vertical space (the #279 compaction)."""
+    online = f"max by (member)(cluster_node_online{_RDQM_SEL})"
+    health_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "DOWN", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ Normal", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    vs, h = _COMPACT_VALUE_SIZE, 3
+    return [
+        _stat(
+            "Running on",
+            'max by (holder)(cluster_resource_owner{resource="QMRDQM"})',
+            ds_uid,
+            0,
+            y,
+            text_mode="name",
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "HA status",
+            "min(cluster_rdqm_ha_status_ok)",
+            ds_uid,
+            5,
+            y,
+            mappings=health_maps,
+            w=4,
+            h=h,
+            value_size=vs,
+        ),
+        _stat("Nodes online", f"sum({online})", ds_uid, 9, y, w=5, h=h, value_size=vs),
+        _stat(
+            "Floating IP",
+            "max by (ip)(cluster_rdqm_floating_ip)",
+            ds_uid,
+            14,
+            y,
+            text_mode="name",
+            name_label="ip",
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "Integrity",
+            _rdqm_integrity_expr(),
+            ds_uid,
+            19,
+            y,
+            mappings=_INTEGRITY_MAPS,
+            w=5,
+            h=h,
+            value_size=vs,
+        ),
+    ]
+
+
+def _rdqm_storage_cols() -> list[Column]:
+    """③ Storage — DRBD: per-node resync % · out-of-sync for the HA resource (qmrdqm), scoped
+    to rdqm nodes. The cross-site DR resource (qmrdqm.dr) is surfaced as the ④ DR backlog, not
+    here, so this matrix is the intra-site HA replication health (spec §5 ③)."""
+    res = 'resource="qmrdqm",node=~"rdqm-.*"'
+    return [
+        ("resync %", _norm(f"cluster_drbd_resync_pct{{{res}}}", "node"), "sessions"),
+        # tolerant mapping: a benign sub-extent (~1KB) secondary↔secondary delta reads green
+        ("out-of-sync", _norm(f"cluster_drbd_out_of_sync_bytes{{{res}}}", "node"), "drbd_oos"),
+    ]
+
+
+def _rdqm_pacemaker_cols(site_regex: str) -> list[Column]:
+    """⑤ Pacemaker resources for one site (the technology layer rdqmadm wraps, exposed exactly
+    like the PCMK board's compute matrix): per node — online · the QM resource · the HA + DR
+    DRBD clones · the floating-IP resource (each as a pm_state cell) · the QM fail-count. The
+    fail-count cell is the one that turns RED when pacemaker has banned the QM from a node — the
+    failure that rdqmstatus reports as HA-Normal and the board was previously blind to (#287)."""
+    member = f'member=~"{site_regex}"'
+
+    def state(resource: str) -> str:
+        return _norm(f'cluster_rdqm_pm_state{{resource="{resource}",{member}}}', "member")
+
+    return [
+        # "ready" = online AND startable, so a banned-but-online node reads red, not green "up"
+        ("ready", _norm(f"cluster_rdqm_node_ready{{{member}}}", "member"), "node_ready"),
+        ("QM", state("qmrdqm"), "pm_state"),
+        ("DRBD HA", state("p_drbd_qmrdqm"), "pm_state"),
+        ("DR repl", state("p_drbd_dr_qmrdqm"), "pm_state"),
+        ("float-IP", state("p_ip_qmrdqm"), "pm_state"),
+        ("fail-count", _norm(f"cluster_rdqm_failcount{{{member}}}", "member"), "failcount"),
+    ]
+
+
+def rdqm_dr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """④ Cross-site DR (rdqmdr): DR status · which node/site is DR primary · replication
+    backlog. rdqmstatus reports no backlog field, so the honest backlog is the DR DRBD
+    resource's (qmrdqm.dr) out-of-sync bytes (spec §4/§5 ④)."""
+    status_maps = [
+        {
+            "type": "value",
+            "options": {
+                "0": {"color": _RED, "text": "DEGRADED", "index": 0},
+                "1": {"color": _GREEN, "text": "✓ Normal", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    ready_maps = [
+        {"type": "value", "options": {"0": {"color": _GREEN, "text": "✓ Ready", "index": 0}}},
+        {
+            "type": "range",
+            "options": {
+                "from": 1,
+                "to": 9999,
+                "result": {"color": _RED, "text": "⚠ NOT READY", "index": 1},
+            },
+        },
+        _STALE_MAP,
+    ]
+    # 0 (a site banned) gated on data present: no startable data → STALE, not a false "Ready".
+    failover_ready = (
+        "(count(max by (groups)(cluster_rdqm_qm_startable) == 0) or vector(0))"
+        " and on() (count(cluster_rdqm_qm_startable) > 0)"
+    )
+    vs, h = _COMPACT_VALUE_SIZE, 3
+    return [
+        _stat(
+            "DR status",
+            "min(cluster_rdqm_dr_status_ok)",
+            ds_uid,
+            0,
+            y,
+            mappings=status_maps,
+            w=6,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "DR primary",
+            # name the SIDE that is DR-primary, not its three hosts: collapse the side's nodes
+            # with `max by (groups)`, then relabel the group to a friendly site name.
+            "label_replace(label_replace("
+            'max by (groups)(cluster_rdqm_dr_role{role="Primary"}),'
+            '"site","Site A","groups","rdqm_a"),'
+            '"site","Site B","groups","rdqm_b")',
+            ds_uid,
+            6,
+            y,
+            text_mode="name",
+            name_label="site",
+            w=6,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            # the recovery site can actually take over only if a node there can start the QM —
+            # the pacemaker-derived signal that exposes a banned/non-viable DR side (#287).
+            "Failover ready",
+            failover_ready,
+            ds_uid,
+            12,
+            y,
+            mappings=ready_maps,
+            w=6,
+            h=h,
+            value_size=vs,
+        ),
+        _stat(
+            "DR backlog",
+            'max(cluster_drbd_out_of_sync_bytes{resource="qmrdqm.dr"})',
+            ds_uid,
+            18,
+            y,
+            unit="bytes",
+            w=6,
+            h=h,
+            value_size=vs,
+        ),
+    ]
+
+
+_RDQM_TIMELINE_SIGNALS = [
+    ("QM running", "max(cluster_rdqm_qm_running)"),
+    ("HA Normal", "min(cluster_rdqm_ha_status_ok)"),
+    ("DRBD primary", 'count(cluster_drbd_role{resource="qmrdqm",role="Primary"})'),
+    ("DR connected", "min(cluster_rdqm_dr_status_ok)"),
+]
+
+
+def _rdqm_timeline(ds_uid: str, y: int) -> dict[str, Any]:
+    """The RDQM failover story: QM running, HA Normal, DRBD primary present, DR connected."""
+    return _state_timeline("⟳ Failover timeline", _RDQM_TIMELINE_SIGNALS, ds_uid, y)
+
+
+def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
+    """RDQM logs: the Pacemaker/DRBD/MQ journald units on the rdqm-* hosts, severity-filtered
+    by the shared $level toggle. Note: MQ's AMQERR error log is file-based, not journald, so
+    the QM's own HA/DR events only appear once Alloy tails those files (same as the other arms)."""
+    sel = (
+        '{host=~"rdqm-.*", unit=~"pacemaker.*|corosync.*|drbd.*|.*mqmonitor.*|.*amq.*'
+        '|.*ibmmq.*|mq-.*"} |~ `${level}`'
+    )
+    note = (
+        "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes. MQ's own error log "
+        "(/var/mqm/qmgrs/QMRDQM/errors/AMQERR*.LOG) is file-based, not journald, so it is "
+        "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/DR logs."
+    )
+    return _logs_panel("▤ RDQM logs (severity: $level)", sel, loki_uid, y, description=note)
+
+
+def rdqm_perf_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """Perf from existing node metrics: CPU busy%, intra-site DRBD HA (net-hb) throughput, and
+    cross-site DR (net-wan) throughput."""
+    cpu_busy = (
+        "100 - (avg by (host)(rate("
+        'node_cpu_seconds_total{groups=~"rdqm_a|rdqm_b", mode="idle"}[1m]'
+        ")) * 100)"
+    )
+    hb_rx = 'rate(node_network_receive_bytes_total{device=~"virbr-hb.*"}[1m])'
+    hb_tx = 'rate(node_network_transmit_bytes_total{device=~"virbr-hb.*"}[1m])'
+    wan_rx = 'rate(node_network_receive_bytes_total{device=~"virbr-wan.*"}[1m])'
+    wan_tx = 'rate(node_network_transmit_bytes_total{device=~"virbr-wan.*"}[1m])'
+    return [
+        _timeseries(
+            "CPU busy % — rdqm nodes",
+            [_t("A", cpu_busy, "{{host}}")],
+            ds_uid,
+            0,
+            y,
+            unit="percent",
+        ),
+        _timeseries(
+            "DRBD HA replication (net-hb)",
+            [_t("A", hb_rx, "rx"), _t("B", hb_tx, "tx")],
+            ds_uid,
+            8,
+            y,
+            unit="Bps",
+        ),
+        _timeseries(
+            "DR replication (net-wan)",
+            [_t("A", wan_rx, "rx"), _t("B", wan_tx, "tx")],
+            ds_uid,
+            16,
+            y,
+            unit="Bps",
+        ),
+    ]
+
+
+_RDQM_PLANES = "net-hb-a|net-hb-b|net-wan|net-data-a|net-data-b|net-ext"
+
+
+def rdqm_net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+    """Network from existing metrics: per-plane state + throughput for the planes RDQM rides —
+    intra-site DRBD heartbeat (net-hb), cross-site DR (net-wan), data, and the external mesh."""
+    state = f'lab_network_state{{network=~"{_RDQM_PLANES}"}}'
+    thru = 'rate(node_network_receive_bytes_total{device=~"virbr-(hb|wan|data|ext).*"}[1m])'
+    return [
+        _timeseries(
+            "RDQM network planes — state",
+            [_t("A", state, "{{network}}")],
+            ds_uid,
+            0,
+            y,
+            w=12,
+        ),
+        _timeseries(
+            "RDQM network throughput",
+            [_t("A", thru, "{{device}}")],
+            ds_uid,
+            12,
+            y,
+            w=12,
+            unit="Bps",
+        ),
+    ]
+
+
+def _rdqm_board(ds_uid: str) -> dict[str, Any]:
+    """The RDQM cockpit (lab-rdqm-cluster), top-to-bottom: title banner · ① status band ·
+    ② Site A/B instance matrices (with LIVE/RECOVERY chips) · ③ DRBD storage · ④ cross-site DR ·
+    failover timeline · logs · perf · network. RDQM is the richest arm — Native-HA-style HA
+    roles + cross-site DR AND a real DRBD storage section (#287). Each named section is its own
+    peer-level collapsible row, as in the nha board."""
+    panels = [
+        _title_banner("rdqm-rhel", y=0),
+        _row_header("① Cluster status — running-on · HA · floating IP · integrity", y=2),
+        *rdqm_status_band(ds_uid, y=3),
+        # ② Site A / Site B are the FIXED node groups (rdqm_a / rdqm_b). LIVE vs RECOVERY is a
+        # *role* that swaps on rdqmdr cutover/failback — a compact chip beside each site matrix.
+        # The matrix is widened to w=20 so its five columns clear Grafana's per-column min width
+        # on a narrow window (else a hair of horizontal scroll appears).
+        _row_header("② Instances — Site A & Site B", y=6),
+        # Each matrix is sized one row TALLER than its node count needs, so a vertical scrollbar
+        # never appears to steal width and force a hairline horizontal scrollbar (#287 feedback).
+        _rdqm_site_badge("rdqm_a", ds_uid, 0, 7),
+        _fit_table(matrix("Site A", _rdqm_instance_cols("rdqm-a.*"), ds_uid, y=7, h=8, x=4, w=20)),
+        _rdqm_site_badge("rdqm_b", ds_uid, 0, 15),
+        _fit_table(matrix("Site B", _rdqm_instance_cols("rdqm-b.*"), ds_uid, y=15, h=8, x=4, w=20)),
+        # ③ The pacemaker resource layer rdqmadm wraps, exposed like the PCMK board's compute
+        # matrix and placed in the SAME position (above storage) so an RDQM board and an Ubuntu
+        # pacemaker board read top-to-bottom the same way — both ride pacemaker + DRBD. This is
+        # the layer rdqmstatus is blind to: a QM pacemaker can't start (fail-count → BANNED)
+        # shows here even while HA status reads Normal (#287).
+        _row_header("③ Pacemaker resources — Site A & Site B", y=23),
+        _fit_table(
+            matrix("Pacemaker — Site A", _rdqm_pacemaker_cols("rdqm-a.*"), ds_uid, y=24, h=8)
+        ),
+        _fit_table(
+            matrix("Pacemaker — Site B", _rdqm_pacemaker_cols("rdqm-b.*"), ds_uid, y=32, h=8)
+        ),
+        # ④ Storage spans all six nodes (site-A HA group + site-B DR group both run qmrdqm), so
+        # it needs height for six rows + header with margin — h=13 keeps all six rows visible AND
+        # keeps the vertical scrollbar (and the hairline horizontal one) from appearing.
+        _row_header("④ Storage — DRBD (qmrdqm)", y=40),
+        _fit_table(matrix("Storage — DRBD", _rdqm_storage_cols(), ds_uid, y=41, h=13)),
+        _row_header("⑤ Cross-site DR (rdqmdr)", y=54),
+        *rdqm_dr_card(ds_uid, y=55),
+        _row_header("⟳ Failover timeline", y=58),
+        _rdqm_timeline(ds_uid, y=59),
+        _row_header("▤ RDQM logs", y=66),
+        _rdqm_log_row("loki", y=67),
+        _row_header("🖥 Performance", y=75),
+        *rdqm_perf_section(ds_uid, y=76),
+        _row_header("🌐 Network", y=83),
+        *rdqm_net_section(ds_uid, y=84),
+    ]
+    return {
+        "uid": "lab-rdqm-cluster",
+        "title": "RDQM Cluster · Infrastructure View",
+        "schemaVersion": 39,
+        "version": 0,
+        "panels": panels,
+        "templating": {"list": [_log_level_var()]},
+        "annotations": _annotations(ds_uid),
+        "time": {"from": "now-15m", "to": "now"},
+        "refresh": "10s",
+        "tags": ["lab", "cockpit", "rdqm-rhel"],
+    }
+
+
 _ARM_NAMES = {
     "pcmk": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
     "nativeha-rhel": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
+    "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr) · RHEL 9 (x86_64)",
 }
-_ARM_KIND = {"pcmk": "PCMK Cluster", "nativeha-rhel": "Native HA Cluster"}
+_ARM_KIND = {
+    "pcmk": "PCMK Cluster",
+    "nativeha-rhel": "Native HA Cluster",
+    "rdqm-rhel": "RDQM Cluster",
+}
 
 
 def _title_banner(arm: str, y: int) -> dict[str, Any]:
@@ -912,6 +1449,8 @@ def render_cluster_dashboard(
     (instances matrices, the §6 integrity reframing)."""
     if arm == "nativeha-rhel":
         return _nativeha_board(ds_uid)
+    if arm == "rdqm-rhel":
+        return _rdqm_board(ds_uid)
     panels = [
         _title_banner(arm, y=0),
         _row_header("① Cluster status — health · owner · quorum · integrity", y=2),
@@ -960,3 +1499,14 @@ def lab_nativeha_dashboard() -> str:
     """Render the real lab/topology.yaml to the Native HA cockpit dashboard JSON text."""
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     return json.dumps(render_cluster_dashboard(topo, arm="nativeha-rhel"), indent=2) + "\n"
+
+
+def rdqm_dashboard_path() -> Path:
+    """Where the rendered RDQM cockpit board is written (gitignored)."""
+    return repo_root() / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+
+
+def lab_rdqm_dashboard() -> str:
+    """Render the real lab/topology.yaml to the RDQM cockpit dashboard JSON text."""
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return json.dumps(render_cluster_dashboard(topo, arm="rdqm-rhel"), indent=2) + "\n"
