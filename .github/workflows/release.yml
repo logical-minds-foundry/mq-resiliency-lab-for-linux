@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout at the tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Guard — tag matches pyproject.toml and VERSION
+        run: python tools/release_version_guard.py "${GITHUB_REF_NAME}"
+
+      - name: Build curated tarball
+        run: |
+          set -euo pipefail
+          PKG="mq-cluster-tooling-${GITHUB_REF_NAME}"
+          git archive --prefix="${PKG}/" -o "${PKG}.tar.gz" "${GITHUB_REF_NAME}"
+          sha256sum "${PKG}.tar.gz" > SHA256SUMS
+          echo "PKG=${PKG}" >> "${GITHUB_ENV}"
+
+      - name: Import signing key
+        run: |
+          set -euo pipefail
+          echo "${{ secrets.RELEASE_GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Sign tarball and checksums
+        env:
+          PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${PASSPHRASE}" \
+            --detach-sign --armor "${PKG}.tar.gz"
+          gpg --batch --yes --pinentry-mode loopback --passphrase "${PASSPHRASE}" \
+            --detach-sign --armor SHA256SUMS
+
+      - name: Publish GitHub Release (idempotent — §6 convergence)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Create the release only if absent, then upload with --clobber so a
+          # re-run of the tag's workflow converges to the same four assets
+          # instead of erroring on an already-existing release (design §6).
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" \
+                 --title "${GITHUB_REF_NAME}" \
+                 --notes "Signed release ${GITHUB_REF_NAME}. Verify with RELEASE-KEY.asc (see README — fetch the key out-of-band)."
+          gh release upload --clobber "${GITHUB_REF_NAME}" \
+            "${PKG}.tar.gz" "${PKG}.tar.gz.asc" SHA256SUMS SHA256SUMS.asc
