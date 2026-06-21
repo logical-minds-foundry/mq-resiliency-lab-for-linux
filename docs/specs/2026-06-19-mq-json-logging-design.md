@@ -278,7 +278,7 @@ file-tailing `AMQERR0x.json`) before building the role.
 - Research study: [`docs/reports/2026-06-19-mq-json-logging-research.md`](../reports/2026-06-19-mq-json-logging-research.md)
 - Portable MQ-only config recipe: [`docs/reference/mq-json-logging-config.md`](../reference/mq-json-logging-config.md)
 - Flow diagram: [`diagrams/mq-json-logging-flow.html`](diagrams/mq-json-logging-flow.html)
-- Primary IBM 9.4 docs (cached under `build/refs/ibm-docs/ibm-mq/9.4/`):
+- Primary IBM 9.4 docs (cached under `build/cache/refs/ibm-docs/ibm-mq/9.4/`):
   Diagnostic message services (`q018795`), Diagnostic message service stanzas
   (`q130440`), JSON format diagnostic messages (`q130430`), QMErrorLog stanza
   (`q019020`).

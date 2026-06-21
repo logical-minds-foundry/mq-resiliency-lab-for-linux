@@ -16,7 +16,7 @@ deliberately choosing *not* to parse.
 Every IBM-MQ claim is quoted from **primary IBM 9.4 canonical documentation**
 (retrieved via the content-API route, since the bot `WebFetch` is 403-blocked).
 Cited topics are cached gitignored under
-`build/refs/ibm-docs/ibm-mq/9.4/` (`manifest.md` lists each). Claims tagged
+`build/cache/refs/ibm-docs/ibm-mq/9.4/` (`manifest.md` lists each). Claims tagged
 **[doc]** come directly from IBM text; **[judgment]** marks our inference for the
 lab; version-floor facts that lean on community/APAR sources are flagged inline.
 
@@ -288,7 +288,7 @@ supported path.
 
 ## 10. Sources
 
-Primary IBM MQ 9.4 docs (cached under `build/refs/ibm-docs/ibm-mq/9.4/`; verify
+Primary IBM MQ 9.4 docs (cached under `build/cache/refs/ibm-docs/ibm-mq/9.4/`; verify
 any via `https://www.ibm.com/docs/api/v1/content/SSFKSJ_9.4.0/<path>`):
 
 - Diagnostic message logging — `configure/q018792_.html`

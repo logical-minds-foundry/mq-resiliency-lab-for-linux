@@ -22,12 +22,12 @@
 - **The human operates the lab.** Any task that provisions VMs, restarts QMs, or runs drills is executed by the human; the agent prepares the exact commands and waits.
 - **Cold-rebuild acceptance gate:** lint-green ≠ done. The effort is accepted only after a full cold rebuild of at least one arm proves it one-pass (Task 9).
 
-### Develop fit-check (rebased onto `6a34dbf`, 2026-06-19)
+### Develop fit-check (rebased onto `4164bc4`, 2026-06-21)
 
 - Verified unchanged on develop, so the anchors below hold: `alloy/templates/config.alloy.j2`, the four `crtmqm` seams (`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike`), and `mq-client`/`mqweb`/`loki`.
-- RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), extended by the in-flight RDQM HA/DR work (#288). We seed `mqs.ini` at `rdqm-install` and **never edit the script** — no collision.
-- `observability.yml` applies `alloy` to `hosts: all` → Task 7 gating is required (see Task 7 note).
-- **Pending #286 (build-dir reorg, design-only, not merged):** when it lands, the host-side IBM-docs cache moves `build/refs/` → `build/cache/refs/`. Docs-only touch-up; **no implementation impact** (all runtime paths are guest-side `/var/mqm/...`).
+- RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), extended by the in-flight RDQM HA/DR work (#288). We seed `mqs.ini` at `rdqm-install` and **never edit the script** — no collision. (`rdqm-install` is actively churned by RDQM work → keep the Task 5 RDQM include deferred until that settles.)
+- `observability.yml` applies `alloy` to `hosts: all` (now with the cluster-state, nativeha-state, and rdqm-state collectors) → Task 7 gating is required (see Task 7 note).
+- **#286 (build-dir reorg) has landed.** The re-fetchable IBM-docs cache now lives under the `cache/` bucket: `build/cache/refs/ibm-docs/...` (resolve via `mqlab build path cache`). Docs updated; **no implementation impact** — all runtime paths are guest-side `/var/mqm/...`, and `build/*` is gitignored regardless.
 
 ---
 
