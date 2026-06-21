@@ -242,6 +242,18 @@ def _build_ensure() -> None:
     buildenv.ensure(repo_root())
 
 
+@app.callback()
+def _root(ctx: typer.Context) -> None:
+    """Wire the build/ buckets before *any* lab command runs (#304).
+
+    Most verbs touch buckets only as a side effect (e.g. every command writes a transcript to
+    build/state/runs/), so wiring must happen before the body — otherwise the first command in a
+    fresh worktree creates a real local build/state and poisons the cache/state symlinks. Skip the
+    `build` group: it manages bucket lifecycle explicitly, and `build path` is a shell hot-path."""
+    if ctx.invoked_subcommand and ctx.invoked_subcommand != "build":
+        _build_ensure()
+
+
 def _build_clean(*, drop_cache: bool = False, drop_state: bool = False) -> list[str]:
     return buildenv.clean(repo_root(), drop_cache=drop_cache, drop_state=drop_state)
 

@@ -109,3 +109,29 @@ def test_build_clean_seam(monkeypatch, tmp_path):
     )
     assert cli._build_clean(drop_cache=True) == ["work"]
     assert seen == {"dc": True, "ds": False}
+
+
+# --- root callback: wire the buckets before any non-build command runs (#304) ---
+def test_root_callback_runs_build_ensure_for_lab_commands(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_build_ensure", lambda: calls.append("ensure"))
+    monkeypatch.setattr(cli, "_execute", lambda *a, **k: None)  # neutralise the command body
+    result = runner.invoke(cli.app, ["net", "status"])
+    assert result.exit_code == 0
+    assert calls == ["ensure"]  # the callback wired the buckets before the command's transcript
+
+
+def test_root_callback_skips_the_build_group(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(cli, "_build_ensure", lambda: calls.append("ensure"))
+    monkeypatch.setattr(cli, "_build_bucket_path", lambda bucket: tmp_path / "build" / bucket)
+    result = runner.invoke(cli.app, ["build", "path", "cache"])
+    assert result.exit_code == 0
+    assert calls == []  # build manages buckets explicitly; `build path` stays a cheap lookup
+
+
+def test_root_callback_noop_without_subcommand(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_build_ensure", lambda: calls.append("ensure"))
+    runner.invoke(cli.app, [])  # bare `mqlab` -> help; no subcommand to wire for
+    assert calls == []
