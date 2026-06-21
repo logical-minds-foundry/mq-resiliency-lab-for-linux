@@ -36,10 +36,25 @@ GitHub Release, produced automatically by CI on a tag push.
 - A CI release pipeline that, on a `vX.Y.Z` tag push, builds → version-guards →
   checksums → PGP-signs → publishes a GitHub Release with the tarball and its
   verification artifacts.
-- A static `scripts/bootstrap` onboarding script (prereq/dependency checks →
+- A static `scripts/setup` onboarding script (prereq/dependency checks →
   `uv sync` → print the next command).
-- A users-first README rewrite (Intro → Getting Started → Development).
-- A shipped public key (`RELEASE-KEY.asc`) and documented `gpg --verify` flow.
+- A users-first README rewrite (Intro → Getting Started → Development), including
+  a **Prerequisites** note (§7.1) and out-of-band signature-verification steps.
+- A shipped public key (`RELEASE-KEY.asc`) as a convenience copy, with the trust
+  root being the **fingerprint + out-of-band key fetch** (§5).
+
+**Hard dependency (in or before this work):**
+
+- **A single-command lab bring-up verb — `mqlab bootstrap <setup>`.** The
+  consumer happy path is `./scripts/setup` → `mqlab bootstrap <setup>` → sit
+  back. No such one-command bring-up exists today: bring-up is a multi-step
+  sequence across `mqlab net`/`vm`/`obs` (what #211 calls *"lab bootstrap"*), and
+  `mqlab run <setup>` is the **post-bring-up baseline test driver**, not bring-up.
+  This release spec depends on that verb existing. It is either scoped into this
+  work or tracked as a blocking dependency (a natural sibling of #211). Naming:
+  "bootstrap" is reserved for **lab** bring-up; the environment-setup script is
+  therefore named `scripts/setup`, not `scripts/bootstrap`, to avoid overloading
+  the term.
 
 **Out of scope / deferred:**
 
@@ -48,10 +63,11 @@ GitHub Release, produced automatically by CI on a tag push.
   module. That is a different product with a different (PyPI) channel and is not
   addressed here.
 - **PyPI publication of `mqlab`.** We deliberately do not publish to PyPI.
-- **Windows support in `bootstrap`.** macOS + Linux are the targets; Windows is
-  a maybe-someday.
-- **Host/MQ-entitlement validation inside `bootstrap`.** Kept lean; deep host
-  validation stays a documented `mqlab doctor` follow-up (§7).
+- **Windows support in `scripts/setup`.** macOS + Linux are the targets; Windows
+  is a maybe-someday.
+- **Host validation inside `scripts/setup`.** Kept lean; deep host validation is
+  the job of `mqlab doctor` / `_prepare_lab()`, which already hard-gate on host
+  prerequisites outside Vergil (§7).
 
 ## 3. Architecture — three committed pieces + one CI job
 
@@ -61,9 +77,9 @@ either a tracked file or is excluded by a tracked attribute. The version is
 **asserted**, never stamped.
 
 1. **`.gitattributes`** — declares the curation boundary via `export-ignore`.
-2. **`scripts/bootstrap`** — the static consumer onboarding entrypoint.
-3. **`README.md`** — rewritten users-first; carries the Getting Started and the
-   `gpg --verify` instructions.
+2. **`scripts/setup`** — the static consumer environment-setup entrypoint.
+3. **`README.md`** — rewritten users-first; carries the Getting Started, the
+   Prerequisites note, and the out-of-band `gpg --verify` instructions.
 4. **A CI release job** — orchestrates archive → guard → checksum → sign →
    publish. Thin plumbing, not a packaging layer.
 
@@ -86,8 +102,13 @@ CI release job (on push: tags ['v*'])
 GitHub Release vX.Y.Z with four assets
         │
         ▼
-consumer: download → (gpg --verify) → tar xzf → ./scripts/bootstrap → mqlab run <setup>
+consumer: download → (verify: out-of-band key + fingerprint) → tar xzf
+          → ./scripts/setup → mqlab bootstrap <setup> → sit back
 ```
+
+`mqlab bootstrap <setup>` is the single-command lab bring-up verb this spec
+depends on (§2, Hard dependency). `mqlab run <setup>` is a separate,
+post-bring-up baseline test driver and is **not** part of the happy path.
 
 ## 4. Curation — what ships, what does not
 
@@ -129,18 +150,33 @@ conversation on exactly the people we are trying to make this easy for.)
 - The **private key lives in a GitHub Actions secret**; CI imports it for the
   signing step. Mitigations for the long-lived-key risk: release-only subkey,
   fingerprint published in the README, rotate if ever compromised.
-- The **public key ships in-repo as `RELEASE-KEY.asc`** and is uploaded to a
-  keyserver. The README documents the fingerprint and the verify one-liner:
 
-  ```
-  gpg --import RELEASE-KEY.asc        # first time, or fetch from keyserver
-  gpg --verify SHA256SUMS.asc SHA256SUMS
-  sha256sum -c SHA256SUMS             # checks the tarball
-  # (or directly) gpg --verify mq-cluster-tooling-vX.Y.Z.tar.gz.asc mq-cluster-tooling-vX.Y.Z.tar.gz
-  ```
+**Trust root — the fingerprint + an out-of-band key, never the bundled copy.**
+A copy of the public key also rides *inside* the signed tarball; verifying the
+tarball against that copy proves nothing (an attacker who tampers the tarball
+swaps the key and re-signs). So the **root of trust** is the **full fingerprint
+published in the README** plus the key fetched from a channel **independent of
+the tarball**:
+
+- **keyserver by fingerprint** — `gpg --recv-keys <FULL-FINGERPRINT>`; and/or
+- **the key file from the GitHub repo/release page over HTTPS**.
+
+The in-tree `RELEASE-KEY.asc` is a **convenience copy** (useful once the key is
+already trusted, e.g. air-gapped re-verification) — explicitly **not** the trust
+root. The README's verify steps therefore read:
+
+```
+# 1. obtain the key out-of-band, then confirm its fingerprint matches the README
+gpg --recv-keys <FULL-FINGERPRINT>          # or import the HTTPS-fetched key file
+gpg --fingerprint <FULL-FINGERPRINT>        # cross-check against the README
+# 2. verify
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum -c SHA256SUMS                       # checks the tarball
+# (or directly) gpg --verify mq-cluster-tooling-vX.Y.Z.tar.gz.asc mq-cluster-tooling-vX.Y.Z.tar.gz
+```
 
 Verification is an **optional extra step** on the consumer's happy path — the
-download → unpack → bootstrap flow is identical whether or not they verify.
+download → unpack → setup flow is identical whether or not they verify.
 
 ## 6. Release workflow & versioning
 
@@ -159,35 +195,62 @@ download → unpack → bootstrap flow is identical whether or not they verify.
   upload --clobber` on an existing Release). The plan specifies the exact `gh`
   invocation.
 
-## 7. Consumer onboarding — `scripts/bootstrap`
+## 7. Consumer onboarding — `scripts/setup`
 
-A static, committed script (sibling of `scripts/fetch-mq.sh`). Responsibilities:
+A static, committed script (sibling of `scripts/fetch-mq.sh`). It sets up the
+**Python environment** so `mqlab` runs; it does **not** bring up the lab (that is
+`mqlab bootstrap <setup>`). Responsibilities:
 
 1. **Prereq / dependency checks** — `uv` present; Python 3.12 available; report
    actionable, fail-loud messages on anything missing (no silent fallback).
 2. **`uv sync`** — materialize the environment.
-3. **Print the exact next command** — e.g. `uv run mqlab run <setup>` (or how to
-   activate the venv and call `mqlab`).
+3. **Print the exact next command** — `mqlab bootstrap <setup>` (and, for the
+   curious, `mqlab doctor` to pre-flight the host).
 
 Design constraints:
 
 - **Cross-platform aspiration:** works on macOS and Linux. Windows is out of
   scope for now.
-- **Lean:** deep host validation (libvirt, nested virt, MQ entitlement
-  artifacts) is **not** in `bootstrap`; it is a documented `mqlab doctor`
-  follow-up so the consumer can validate the host before bringing the lab up.
-- **Glass-box:** the README documents precisely what `bootstrap` does so a
+- **Lean — env only:** `scripts/setup` does **not** validate the virtualization
+  host. That is already owned by `mqlab doctor` / `_prepare_lab()`
+  (`src/mqlab/cli.py`), which hard-gate on host prerequisites (arch, KVM,
+  required tools) outside Vergil and **fail loud** naming what's missing (#276).
+  `scripts/setup` simply points the consumer at `mqlab doctor`.
+- **Glass-box:** the README documents precisely what `scripts/setup` does so a
   consumer can run the steps by hand and understand them.
+
+### 7.1 Prerequisites (Getting Started note)
+
+Almost everything the lab needs is fetched automatically — IBM **MQ Advanced for
+Developers** (no-charge) is pulled by `scripts/fetch-mq.sh` into `build/mq/` for
+both arms; the virtualization stack is checked (not installed) by `mqlab doctor`.
+The README's Getting Started states the small, honest set of things the consumer
+must provide:
+
+- **A virtualization-capable host with root/sudo** — the lab creates nested
+  libvirt/QEMU/Vagrant guests and needs a beefy host (cf. `vergil.toml`'s dev
+  profile: ~12 vCPU / 64 GiB, nested virt). `mqlab doctor` is the pre-flight gate
+  that reports any missing host bits.
+- **A RHEL box/subscription** — the **only** genuinely manual artifact, required
+  by the RHEL-based arms (pcmk-rhel, RDQM). Ubuntu arms need nothing extra.
+
+Getting Started routes the consumer through `mqlab doctor` **before**
+`mqlab bootstrap <setup>`, so missing prerequisites fail loud up front.
 
 ## 8. README rewrite (users-first)
 
 Users will vastly outnumber developers, so the README leads with them:
 
 1. **Intro** — a paragraph or two: what this is and what it is for.
-2. **Getting Started** — the happy path: *(optionally) verify the signature →
-   `./scripts/bootstrap` → `mqlab run <setup>` → sit back*, immediately followed
-   by a **"What `bootstrap` does"** subsection enumerating the steps for manual
-   execution and understanding.
+2. **Getting Started** — in order:
+   - **Prerequisites** (§7.1) — virtualization host + root; RHEL box/subscription
+     for the RHEL arms; everything else is fetched automatically.
+   - **(Optional) verify the signature** — using the out-of-band key + fingerprint
+     (§5), not the bundled key copy.
+   - **The happy path** — `./scripts/setup` → `mqlab doctor` → `mqlab bootstrap
+     <setup>` → sit back — immediately followed by a **"What `scripts/setup`
+     does"** subsection enumerating the steps for manual execution and
+     understanding.
 3. **Development** — the current Vergil-VM development workflow (today's README
    body), relocated to the bottom for the rare contributor.
 
@@ -209,13 +272,16 @@ actual `vergil-actions` v2.1 capabilities.
 
 - **Version-guard test:** a tag/version mismatch fails the job; a match passes.
 - **Curation test:** assert the produced tarball **excludes** every dev-only
-  path (§4) and **includes** the product paths + `scripts/bootstrap` +
+  path (§4) and **includes** the product paths + `scripts/setup` +
   `RELEASE-KEY.asc`. Drives the `export-ignore` list to correctness.
 - **Signature test:** `gpg --verify` of the produced `.asc` against the tarball
-  succeeds with the published public key; `sha256sum -c` passes.
-- **Bootstrap smoke:** on a clean macOS and Linux host with `uv` present,
-  `./scripts/bootstrap` reaches a working `mqlab --help`.
+  succeeds with the published public key (obtained out-of-band); `sha256sum -c`
+  passes.
+- **Setup smoke:** on a clean macOS and Linux host with `uv` present,
+  `./scripts/setup` reaches a working `mqlab --help`.
 - **Acceptance (end-to-end):** pushing a `vX.Y.Z` tag produces a GitHub Release
-  whose tarball a fresh consumer can verify, unpack, `./scripts/bootstrap`, and
-  reach `mqlab run <setup>` — with no clone and no new tooling beyond `gpg`,
-  `uv`, and `tar`.
+  whose tarball a fresh consumer can verify (via the out-of-band key +
+  fingerprint), unpack, `./scripts/setup`, pass `mqlab doctor`, and bring the lab
+  up with `mqlab bootstrap <setup>` — with no clone and no new tooling beyond
+  `gpg`, `uv`, and `tar` (plus a RHEL box for the RHEL arms). Depends on the
+  `mqlab bootstrap` verb (§2, Hard dependency).
