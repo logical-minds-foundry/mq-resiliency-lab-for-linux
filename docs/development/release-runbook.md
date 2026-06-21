@@ -6,8 +6,11 @@ Releases are published by `.github/workflows/release.yml` on a `vX.Y.Z` tag push
 
 1. Generate the dedicated release signing subkey (see commands in the
    signed-tarball plan, Task 5 Step 1) and record its full fingerprint.
-2. Store `RELEASE_GPG_PRIVATE_KEY` and `RELEASE_GPG_PASSPHRASE` as GitHub Actions
-   secrets. Commit only the public `RELEASE-KEY.asc`.
+2. Store `RELEASE_GPG_PRIVATE_KEY` (the ASCII-armored private key) as a GitHub
+   Actions secret. Commit only the public `RELEASE-KEY.asc`.
+   `RELEASE_GPG_PASSPHRASE` is OPTIONAL — set it only if the signing key has a
+   passphrase. The current release key has none, so it is intentionally unset;
+   the workflow tolerates its absence (the secret expands to an empty passphrase).
 3. Publish the fingerprint in the README and upload the public key to a keyserver.
 
 ## Cutting a release

@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           PKG="mq-cluster-tooling-${GITHUB_REF_NAME}"
-          git archive --prefix="${PKG}/" -o "${PKG}.tar.gz" "${GITHUB_REF_NAME}"
+          git archive --worktree-attributes --prefix="${PKG}/" -o "${PKG}.tar.gz" "${GITHUB_REF_NAME}"
           sha256sum "${PKG}.tar.gz" > SHA256SUMS
           echo "PKG=${PKG}" >> "${GITHUB_ENV}"
 
