@@ -73,6 +73,15 @@
     mode: "0644"
   notify: restart grafana
 
+- name: deploy the rendered RDQM cockpit dashboard (#287)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/grafana/dashboards/lab-rdqm-cluster.json"
+    dest: /var/lib/grafana/dashboards/lab-rdqm-cluster.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d

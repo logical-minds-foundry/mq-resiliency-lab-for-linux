@@ -1,0 +1,42 @@
+---
+# Deploy the rdqm-state collector (the tested mqlab.rdqmstate module, verbatim) and run it on
+# a 5s timer. Mirrors cluster-state (#177) / nativeha-state (#279): textfile dir -> deploy
+# collector -> service + timer -> enable. RDQM owns Pacemaker + DRBD behind rdqmadm, so the
+# collector reuses clusterstate.parse_drbd verbatim. Unlike the single-file collectors, this
+# one therefore deploys as a minimal `mqlab` package (rdqmstate.py + clusterstate.py + an empty
+# __init__.py) under /usr/local/lib, run as `python3 -m mqlab.rdqmstate` — so the import
+# `from mqlab.clusterstate import parse_drbd` resolves identically in-repo and on the node.
+# rdqmstatus + drbdsetup both run as root, so the unit runs as root (no `su - mqm`, unlike the
+# dspmq-based nativeha-state). The QM name comes from the observability overlay (rdqm_qm).
+- name: textfile dir
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile
+    state: directory
+    mode: "0755"
+
+- name: collector package dir
+  ansible.builtin.file:
+    path: /usr/local/lib/lab-rdqm-state/mqlab
+    state: directory
+    mode: "0755"
+
+- name: deploy the collector package (rdqmstate + its parse_drbd dependency, verbatim)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/mqlab/{{ item }}"
+    dest: "/usr/local/lib/lab-rdqm-state/mqlab/{{ item }}"
+    mode: "0644"
+  loop: [__init__.py, clusterstate.py, rdqmstate.py]
+
+- name: install service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop: [lab-rdqm-state.service.j2, lab-rdqm-state.timer.j2]
+
+- name: enable + start the timer
+  ansible.builtin.systemd:
+    name: lab-rdqm-state.timer
+    enabled: true
+    state: started
+    daemon_reload: true

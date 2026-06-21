@@ -29,3 +29,11 @@
         nativeha_qm: "{{ qm.name | default('QMNATIVE') }}"
       when: >-
         'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names
+    # RDQM state collector (#287) — only on the rdqm-rhel arm. Every rdqm node (site-A HA
+    # rdqm_a + site-B DR rdqm_b) reports its own rdqmstatus + drbdsetup view; the collector
+    # emits the same cluster_* shape as cluster-state plus cluster_rdqm_* HA/DR facets.
+    - role: rdqm-state
+      vars:
+        rdqm_qm: "{{ qm.name | default('QMRDQM') }}"
+      when: >-
+        'rdqm_a' in group_names or 'rdqm_b' in group_names
