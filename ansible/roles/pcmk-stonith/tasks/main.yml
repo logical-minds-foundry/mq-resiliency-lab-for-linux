@@ -6,7 +6,7 @@
 
 - name: fence ssh private key
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/fence_key"
+    src: "{{ playbook_dir }}/../build/state/fence_key"
     dest: /etc/pacemaker/fence_key
     owner: root
     mode: "0600"

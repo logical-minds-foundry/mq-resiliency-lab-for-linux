@@ -34,3 +34,11 @@ def _neutralize_sweep_orphan_volumes(monkeypatch):
     / `vol-delete`, which must not run in unit tests (#276). Tested directly via the
     import captured before this stub."""
     monkeypatch.setattr(cli, "_sweep_orphan_volumes", lambda guests: None)
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_build_ensure(monkeypatch):
+    """Neutralise cli._build_ensure in every test — it shells git + makes symlinks
+    (#286), which must not run in unit tests. The build commands test it via their own
+    seams; _prepare_lab's call is covered with this stub in place."""
+    monkeypatch.setattr(cli, "_build_ensure", lambda: None)

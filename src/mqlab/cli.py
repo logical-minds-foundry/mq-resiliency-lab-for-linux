@@ -14,9 +14,10 @@ from typing import TYPE_CHECKING, Annotated, Any
 import typer
 from rich.console import Console
 
-from mqlab import parity
+from mqlab import buildenv, parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
 from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
+from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
@@ -36,13 +37,16 @@ from mqlab.manifest import (
 from mqlab.netsel import parse_net_states, resolve_nets
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import (
+    box_versions_path,
     lab_network,
     lab_script,
+    mq_cache_dir,
     repo_root,
     reports_dir,
     resolved_topology_path,
     runs_dir,
     selection_state_path,
+    work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.platforms import PlatformError, ensure_resolved
@@ -178,17 +182,15 @@ def _apply_manifest(
         else resolve_selection(setup_name, requested)
     )
     man = load_manifest(setup_name, name)
-    op = repo_root() / "build" / "manifests" / f"{setup_name}.overlay.json"
+    op = work("manifests", f"{setup_name}.overlay.json")
     op.parent.mkdir(parents=True, exist_ok=True)
     op.write_text(json.dumps(vars_overlay(man)))
     if at_create:
-        bvf = repo_root() / "build" / "box-versions.json"
+        bvf = box_versions_path()
         pins = json.loads(bvf.read_text()) if bvf.exists() else {}
         pins.update(box_version_pins(man))
         bvf.write_text(json.dumps(pins))
-        ensure_mq_tarballs(
-            setup_name, man.mq_version, repo_root() / "build" / "mq", fetch=_fetch_mq_tarball
-        )
+        ensure_mq_tarballs(setup_name, man.mq_version, mq_cache_dir(), fetch=_fetch_mq_tarball)
     return op
 
 
@@ -199,9 +201,10 @@ def _doctor_checks() -> list[Check]:
 
 
 def _prepare_lab() -> None:
-    """Precondition of the vagrant-loading verbs: outside Vergil, hard-gate on host
-    prerequisites; then render build/lab/topology.resolved.yaml (which enforces the
-    native-KVM requirement). Fail loud (#276)."""
+    """Precondition of the vagrant-loading verbs: wire the build/ buckets (#286),
+    then outside Vergil hard-gate on host prerequisites, then render the resolved
+    topology into work/ (which enforces the native-KVM requirement). Fail loud."""
+    _build_ensure()  # cache/state symlinks + work/temp dirs before anything writes build/ (#286)
     facts = probe()
     if not facts.in_vergil:
         ok, report = summarise(run_checks(facts, which=shutil.which))
@@ -223,6 +226,74 @@ def doctor() -> None:
     raise typer.Exit(code=0 if ok else 1)
 
 
+# --- build/ bucket lifecycle (#286): cache/state shared, work/temp local ----------
+build_app = typer.Typer(
+    help="build/ bucket lifecycle (cache/state/work/temp)", no_args_is_help=True
+)
+app.add_typer(build_app, name="build")
+
+
+# thin seams so tests monkeypatch without real git/fs:
+def _build_bucket_path(bucket: str) -> Path:
+    return buildenv.bucket_path(bucket, repo_root())
+
+
+def _build_ensure() -> None:
+    buildenv.ensure(repo_root())
+
+
+def _build_clean(*, drop_cache: bool = False, drop_state: bool = False) -> list[str]:
+    return buildenv.clean(repo_root(), drop_cache=drop_cache, drop_state=drop_state)
+
+
+@build_app.command("path")
+def build_path(bucket: str) -> None:
+    """Print the resolved absolute path of a bucket (cache|state|work|temp)."""
+    try:
+        typer.echo(str(_build_bucket_path(bucket)))
+    except BuildEnvError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+
+@build_app.command("ensure")
+def build_ensure() -> None:
+    """Create the four buckets; in a worktree, symlink cache/+state/ back to main."""
+    _build_ensure()
+
+
+@build_app.command("clean")
+def build_clean(
+    cache: bool = False,
+    state: bool = False,
+    yes_destroy_state: Annotated[bool, typer.Option("--yes-destroy-state")] = False,
+) -> None:
+    """Nuke work/+temp/ (+stray). --cache also drops downloads; --state needs confirmation."""
+    if state and not yes_destroy_state:
+        typer.echo(
+            "refusing to drop state/ (snapshots, ISO, a running lab's secrets). "
+            "Re-run with --state --yes-destroy-state if you really mean it.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    typer.echo("removed: " + ", ".join(_build_clean(drop_cache=cache, drop_state=state)))
+
+
+@build_app.command("status")
+def build_status() -> None:
+    """Show each bucket: path, real-or-symlink."""
+    for bucket in buildenv.BUCKETS:
+        kind = "symlink->main" if (repo_root() / "build" / bucket).is_symlink() else "local"
+        typer.echo(f"{bucket:6} {kind:14} {_build_bucket_path(bucket)}")
+
+
+@build_app.command("migrate")
+def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -> None:
+    """Move existing top-level build/ contents into buckets (idempotent)."""
+    for src, dst in buildenv.migrate(repo_root(), dry_run=dry_run):
+        typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
+
+
 def _manifest_args(
     setup_name: str, *, requested: str | None = None, at_create: bool = False
 ) -> list[str]:
@@ -234,7 +305,7 @@ def _obs_manifest_args() -> list[str]:
     shared = repo_root() / "manifests" / "_shared" / "observability.yaml"
     if not shared.exists():
         return []
-    op = repo_root() / "build" / "manifests" / "_obs.overlay.json"
+    op = work("manifests", "_obs.overlay.json")
     op.parent.mkdir(parents=True, exist_ok=True)
     op.write_text(json.dumps(obs_overlay()))
     return ["-e", f"@{op}"]
@@ -307,7 +378,7 @@ app.add_typer(qm_app, name="qm")
 
 @obs_app.command("targets")
 def obs_targets() -> None:
-    """Render build/prometheus/targets/node.json from topology and echo it."""
+    """Render build/work/prometheus/targets/node.json from topology and echo it."""
     from mqlab.scrape import lab_scrape_targets, scrape_targets_path
 
     deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -326,7 +397,7 @@ def obs_targets() -> None:
 
 @obs_app.command("dashboard")
 def obs_dashboard() -> None:
-    """Render build/grafana/dashboards/lab-status.json from topology and echo it."""
+    """Render build/work/grafana/dashboards/lab-status.json from topology and echo it."""
     from mqlab.dashboard import dashboard_path, lab_dashboard
 
     deps = build_deps("obs-dashboard", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -379,7 +450,7 @@ def obs_net_state() -> None:
 
 
 def _render_reach_peers() -> Path:
-    """Write build/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
+    """Write work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json
 
     import yaml as _yaml
@@ -387,7 +458,7 @@ def _render_reach_peers() -> Path:
     from mqlab.netstate import net_peers
 
     topo = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    path = repo_root() / "build" / "obs" / "reach-peers.json"
+    path = work("obs", "reach-peers.json")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_json.dumps(net_peers(topo), indent=2) + "\n")
     return path
@@ -395,7 +466,7 @@ def _render_reach_peers() -> Path:
 
 @obs_app.command("reach-peers")
 def obs_reach_peers() -> None:
-    """Render build/obs/reach-peers.json (host -> net -> peers) from topology."""
+    """Render build/work/obs/reach-peers.json (host -> net -> peers) from topology."""
     deps = build_deps("obs-reach-peers", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         path = _render_reach_peers()
@@ -607,7 +678,7 @@ def _create_step(g: str) -> CommandStep:
 
 
 # Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
-# REUSEs the host-durable build/boxes cache when present (a quick `vagrant box add`)
+# REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box add`)
 # and only does the ~45-90min ISO build on a truly first-ever run (#276/#291).
 _LOCAL_BOX_BUILDERS = {
     "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
@@ -627,7 +698,7 @@ def parse_box_list(text: str) -> dict[str, str]:
 
 
 def _resolved_nodes() -> dict[str, Any]:
-    """The rendered resolved topology's nodes (build/lab/topology.resolved.yaml, #276)."""
+    """The rendered resolved topology's nodes (build/work/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml
 
     data = _yaml.safe_load(resolved_topology_path().read_text())
@@ -1035,7 +1106,7 @@ def vm_status(selector: _Pattern = "all") -> None:
 
 @vm_app.command("inventory")
 def vm_inventory() -> None:
-    """Render build/inventory.ini from topology and echo it (the static map)."""
+    """Render build/work/inventory.ini from topology and echo it (the static map)."""
     deps = build_deps("vm-inventory", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         text = lab_inventory()
@@ -1052,7 +1123,7 @@ def vm_inventory() -> None:
 
 @vm_app.command("roster")
 def vm_roster() -> None:
-    """Render build/salt/roster from topology and echo it (the salt-ssh map)."""
+    """Render build/work/salt/roster from topology and echo it (the salt-ssh map)."""
     deps = build_deps("vm-roster", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         text = lab_roster()
@@ -1314,7 +1385,7 @@ def qm_status(setup: str) -> None:
 
 # --- pki: the lab PKI / TLS certificate provider (#210) --------------------------
 # Wraps the connection=local site-pki.yml playbook (the provider generates CA +
-# entity material under build/secrets/pki/). Mirrors the qm command-wraps-playbook
+# entity material under build/state/secrets/pki/). Mirrors the qm command-wraps-playbook
 # shape. Cert expiry/rotation is out of scope (spec §8.2).
 pki_app = typer.Typer(help="lab PKI / TLS certificate provider", no_args_is_help=True)
 app.add_typer(pki_app, name="pki")
@@ -1372,7 +1443,7 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     step: _StepFlag = False,
 ) -> None:
     """Drive one no-fault baseline run of a setup and write a timestamped report
-    bundle stamped with (setup x config x commit) under build/reports/."""
+    bundle stamped with (setup x config x commit) under build/state/reports/."""
     setup = _lookup_setup_or_exit(setup_name)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     run_dir = runs_dir() / f"{timestamp}-{setup.name}"

@@ -19,7 +19,7 @@ set -euo pipefail
 NAME="${1:?usage: lab-secret.sh <name>}"
 case "$NAME" in *[!a-z0-9_-]*) echo "bad secret name: $NAME" >&2; exit 1 ;; esac
 
-DIR="$(cd "$(dirname "$0")/../.." && pwd)/build/secrets"
+DIR="$(cd "$(dirname "$0")/../.." && pwd)/build/state/secrets"
 mkdir -p "$DIR"; chmod 700 "$DIR"
 F="$DIR/$NAME"
 if [ ! -s "$F" ]; then

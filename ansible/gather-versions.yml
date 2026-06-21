@@ -4,7 +4,7 @@
 # active setup's groups (ansible-playbook gather-versions.yml --limit <groups>), so
 # only running hosts are targeted. Any genuine probe failure fails the play — a
 # silently-blank version would corrupt the report corpus (no silent failures).
-# A final localhost play merges every host's `gathered` dict into build/versions.json.
+# A final localhost play merges every host's `gathered` dict into build/work/versions.json.
 
 - hosts: pcmk_a:rdqm_a # QM + HA nodes (ubuntu apt OR rhel bundled — same probes)
   gather_facts: false
@@ -113,8 +113,8 @@
       ansible.builtin.set_fact:
         all_versions: "{{ all_versions | default({}) | combine(hostvars[item].gathered | default({})) }}"
       loop: "{{ groups['all'] | difference(['localhost']) }}"
-    - name: write build/versions.json
+    - name: write build/work/versions.json
       ansible.builtin.copy:
-        dest: "{{ playbook_dir }}/../build/versions.json"
+        dest: "{{ playbook_dir }}/../build/work/versions.json"
         content: "{{ all_versions | to_nice_json }}\n"
         mode: "0644"

@@ -17,11 +17,11 @@ SRC="${MQLAB_RHEL_ISO:-${RHEL_ISO:-}}"
 if [ -z "$SRC" ]; then
   common_dir="$(git rev-parse --git-common-dir)"
   main_root="$(cd "$(dirname "$common_dir")" && pwd)"
-  SRC="$main_root/build/rhel-9.6-x86_64-dvd.iso"
+  SRC="$main_root/build/state/rhel-9.6-x86_64-dvd.iso"
 fi
 test -f "$SRC" || {
   echo "ERROR: RHEL DVD ISO not found at $SRC" >&2
-  echo "       set MQLAB_RHEL_ISO=/path/to/rhel-9.6-x86_64-dvd.iso, or drop it in build/." >&2
+  echo "       set MQLAB_RHEL_ISO=/path/to/rhel-9.6-x86_64-dvd.iso, or drop it in build/state/." >&2
   exit 1
 }
 echo "staging RHEL DVD ISO into the storage pool (~12.7G copy)..."

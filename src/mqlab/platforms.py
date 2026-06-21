@@ -118,7 +118,7 @@ def render_resolved(topo: dict[str, Any], facts: HostFacts) -> str:
 
 
 def ensure_resolved(*, facts: HostFacts | None = None, topo: dict[str, Any] | None = None) -> Path:
-    """Render build/lab/topology.resolved.yaml. Enforces the native-KVM gate (D3)."""
+    """Render build/work/lab/topology.resolved.yaml. Enforces the native-KVM gate (D3)."""
     facts = facts if facts is not None else probe()
     require_native_kvm(facts)
     if topo is None:

@@ -134,7 +134,7 @@ def obs_overlay() -> dict[str, str]:
 def box_version_pins(m: Manifest) -> dict[str, str]:
     """platform -> box_version for every topology platform using this manifest's box.
 
-    Keyed by platform because the Vagrantfile reads build/box-versions.json that way.
+    Keyed by platform because the Vagrantfile reads build/work/box-versions.json that way.
     """
     boxes = _topology().get("boxes") or {}
     return {p: m.box_version for p, cfg in boxes.items() if (cfg or {}).get("box") == m.box}

@@ -282,7 +282,7 @@ def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "inventory"])
     assert result.exit_code == 0
-    written = (tmp_path / "build" / "inventory.ini").read_text()
+    written = (tmp_path / "build" / "work" / "inventory.ini").read_text()
     assert "[san_a]" in written
     assert "san-a ansible_host=10.50.0.5" in written
     assert "[pcmk_san_ha:children]" in written
@@ -300,7 +300,7 @@ def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "roster"])
     assert result.exit_code == 0
-    written = (tmp_path / "build" / "salt" / "roster").read_text()
+    written = (tmp_path / "build" / "work" / "salt" / "roster").read_text()
     assert "san-a:" in written
     assert "host: 10.50.0.5" in written
     assert "roster_groups:\n      - san_a" in written
@@ -375,7 +375,7 @@ def test_vm_provision_sources_secret_renders_inventory_runs_playbook(monkeypatch
     assert play.argv == ["ansible-playbook", "site-pcmk.yml"]
     assert str(play.cwd).endswith("/ansible")
     assert play.env == {"PCMK_HACLUSTER_PASSWORD": "s3cr3t"}  # secret injected on the subprocess
-    assert (tmp_path / "build" / "inventory.ini").read_text().startswith("[san_a]")
+    assert (tmp_path / "build" / "work" / "inventory.ini").read_text().startswith("[san_a]")
 
 
 def test_vm_provision_members_down_advises_and_exits_3(monkeypatch, tmp_path):
@@ -505,8 +505,8 @@ def test_parse_box_list_no_boxes():
 
 
 def _seed_resolved(tmp_path, body):
-    (tmp_path / "build" / "lab").mkdir(parents=True)
-    (tmp_path / "build" / "lab" / "topology.resolved.yaml").write_text(body)
+    (tmp_path / "build" / "work" / "lab").mkdir(parents=True)
+    (tmp_path / "build" / "work" / "lab" / "topology.resolved.yaml").write_text(body)
 
 
 def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):

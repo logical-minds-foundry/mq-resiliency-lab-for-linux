@@ -1,7 +1,7 @@
 ---
 # All PKI material lives under build/ (gitignored; survives restart, regenerated
 # on rebuild — spec §7). repo_root is passed by the playbook.
-pki_root: "{{ repo_root }}/build/secrets/pki"
+pki_root: "{{ repo_root }}/build/state/secrets/pki"
 pki_ca_dir: "{{ pki_root }}/ca"
 pki_entity_dir: "{{ pki_root }}/entities"
 pki_key_size: 4096

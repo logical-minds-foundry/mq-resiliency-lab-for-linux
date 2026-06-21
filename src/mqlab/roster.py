@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 from mqlab.inventory import INSECURE_KEY
-from mqlab.paths import repo_root
+from mqlab.paths import repo_root, work
 
 _HEADER = "# salt-ssh roster — generated from lab/topology.yaml. Do not edit by hand.\n"
 
@@ -80,7 +80,7 @@ def render_roster(topo: dict[str, Any]) -> str:
 
 def roster_path() -> Path:
     """Where the rendered roster is written — under the gitignored build/ tree."""
-    return repo_root() / "build" / "salt" / "roster"
+    return work("salt", "roster")
 
 
 def lab_roster() -> str:

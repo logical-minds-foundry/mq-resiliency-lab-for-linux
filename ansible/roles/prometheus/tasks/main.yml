@@ -51,7 +51,7 @@
 
 - name: deploy the topology-rendered node targets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/prometheus/targets/node.json"
+    src: "{{ playbook_dir }}/../build/work/prometheus/targets/node.json"
     dest: /etc/prometheus/targets/node.json
     owner: prometheus
     group: prometheus

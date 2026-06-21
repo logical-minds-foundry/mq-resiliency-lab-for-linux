@@ -64,7 +64,7 @@ def test_obs_targets_writes_file_from_topology(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "targets"])
 
     assert result.exit_code == 0
-    written = tmp_path / "build" / "prometheus" / "targets" / "node.json"
+    written = tmp_path / "build" / "work" / "prometheus" / "targets" / "node.json"
     hosts = {e["labels"]["host"] for e in json.loads(written.read_text())}
     assert {"obs", "mon-probe"} <= hosts
 
@@ -104,9 +104,9 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert "-fsS" in argvs[5]
     assert argvs[5][-1] == "http://localhost:3000/api/health"
     # all three artifacts rendered eagerly when the steps were built
-    assert (tmp_path / "build" / "prometheus" / "targets" / "node.json").exists()
-    assert (tmp_path / "build" / "inventory.ini").exists()
-    assert (tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json").exists()
+    assert (tmp_path / "build" / "work" / "prometheus" / "targets" / "node.json").exists()
+    assert (tmp_path / "build" / "work" / "inventory.ini").exists()
+    assert (tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-status.json").exists()
 
 
 def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
@@ -118,7 +118,7 @@ def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-pcmk-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-pcmk-cluster.json"
     assert board.exists()
     assert json.loads(board.read_text())["uid"] == "lab-pcmk-cluster"
 
@@ -132,7 +132,7 @@ def test_obs_up_also_renders_the_nativeha_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-nativeha-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-nativeha-cluster.json"
     assert board.exists()
     assert json.loads(board.read_text())["uid"] == "lab-nativeha-cluster"
 
@@ -146,7 +146,7 @@ def test_obs_up_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
     assert board.exists()
     assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
 
@@ -159,7 +159,7 @@ def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
     assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
 
 
@@ -228,7 +228,7 @@ def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
 
     assert result.exit_code == 0
-    written = tmp_path / "build" / "grafana" / "dashboards" / "lab-status.json"
+    written = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-status.json"
     assert json.loads(written.read_text())["uid"] == "lab-fleet-node"
 
 
@@ -268,7 +268,7 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "reach-peers"])
 
     assert result.exit_code == 0
-    data = json.loads((tmp_path / "build" / "obs" / "reach-peers.json").read_text())
+    data = json.loads((tmp_path / "build" / "work" / "obs" / "reach-peers.json").read_text())
     assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"
 
 
@@ -322,8 +322,8 @@ def test_obs_instrument_renders_then_runs_observability_playbook(monkeypatch, tm
     ]
     assert str(play.cwd).endswith("/ansible")
     # renders the inventory the play resolves through + the reach-peers map net-reach reads
-    assert (tmp_path / "build" / "inventory.ini").exists()
-    assert (tmp_path / "build" / "obs" / "reach-peers.json").exists()
+    assert (tmp_path / "build" / "work" / "inventory.ini").exists()
+    assert (tmp_path / "build" / "work" / "obs" / "reach-peers.json").exists()
 
 
 def test_obs_instrument_unknown_setup_exits_2(monkeypatch, tmp_path):

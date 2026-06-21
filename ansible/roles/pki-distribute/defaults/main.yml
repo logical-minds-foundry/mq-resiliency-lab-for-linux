@@ -3,7 +3,7 @@
 # (ansible/), matching the {{ playbook_dir }}/../build convention used by mq-client
 # and the obs roles. (repo_root is only defined inside the PKI provider's own
 # site-pki.yml, not the distributed playbooks that consume this role — #250.)
-pki_src_dir: "{{ playbook_dir }}/../build/secrets/pki/entities"
+pki_src_dir: "{{ playbook_dir }}/../build/state/secrets/pki/entities"
 pki_secret_script: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh"
 pki_owner: mqm
 # MQI *clients* (pymqi app/responder, the exporter) read a PKCS#12 keystore's
