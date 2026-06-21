@@ -1503,7 +1503,7 @@ def lab_nativeha_dashboard() -> str:
 
 def rdqm_dashboard_path() -> Path:
     """Where the rendered RDQM cockpit board is written (gitignored)."""
-    return repo_root() / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    return work("grafana", "dashboards", "lab-rdqm-cluster.json")
 
 
 def lab_rdqm_dashboard() -> str:

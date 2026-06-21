@@ -146,7 +146,7 @@ def test_obs_up_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
     assert board.exists()
     assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
 
@@ -159,7 +159,7 @@ def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
     assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
 
 

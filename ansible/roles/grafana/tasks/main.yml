@@ -75,7 +75,7 @@
 
 - name: deploy the rendered RDQM cockpit dashboard (#287)
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/grafana/dashboards/lab-rdqm-cluster.json"
+    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-rdqm-cluster.json"
     dest: /var/lib/grafana/dashboards/lab-rdqm-cluster.json
     owner: grafana
     group: grafana
