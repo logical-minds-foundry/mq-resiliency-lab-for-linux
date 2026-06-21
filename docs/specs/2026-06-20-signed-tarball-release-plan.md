@@ -629,7 +629,8 @@ Record the full fingerprint — Task 6 (README) needs it.
 
 In the GitHub repo settings → Secrets and variables → Actions, add:
 - `RELEASE_GPG_PRIVATE_KEY` — contents of `/tmp/release-private.asc`.
-- `RELEASE_GPG_PASSPHRASE` — the key passphrase (if one was set).
+- `RELEASE_GPG_PASSPHRASE` — the key passphrase (OPTIONAL: only needed if the signing key has a
+  passphrase; leave it unset if the key has no passphrase — the workflow tolerates an empty value).
 
 Then securely delete `/tmp/release-private.asc`.
 

@@ -1498,8 +1498,8 @@ def _bootstrap_run(setup_name: str, *, manifest: str | None, step: bool) -> None
     provision) → observability. A thin sequencing wrapper over the existing
     verbs; each phase fails loud (raises typer.Exit) and halts the rest."""
     _lookup_setup_or_exit(setup_name)  # validate the setup name early (exit 2 if unknown)
-    _prepare_lab()  # host-arch / KVM / tools gate — fail loud before touching anything
-    net_create("all", step=step)
+    _prepare_lab()  # host gate up front — fail loud; vm_create re-gates (idempotent double-gate)
+    net_create("all", step=step)  # all lab nets: small shared set, no per-setup filter, idempotent
     vm_create(setup_name, manifest=manifest, step=step)
     obs_up(step=step)
 
