@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# scripts/setup — prepare the Python environment so `mqlab` runs, then point the
+# operator at lab bring-up. This sets up the ENVIRONMENT only; it does NOT bring
+# the lab up (that is `mqlab bootstrap <setup>`).
+#
+# Targets macOS and Linux. Assumes you can install host packages (root/sudo) on a
+# virtualization-capable host; `mqlab doctor` checks the host itself.
+set -euo pipefail
+
+die() { echo "setup: $*" >&2; exit 1; }
+
+# 1. Prerequisite checks (fail loud, no silent fallback).
+command -v uv >/dev/null 2>&1 || die "uv not found — install it: https://docs.astral.sh/uv/getting-started/installation/"
+
+PYTHON_OK=$(uv python find 3.12 >/dev/null 2>&1 && echo yes || echo no)
+[ "$PYTHON_OK" = "yes" ] || die "Python 3.12 not available to uv — install it (e.g. 'uv python install 3.12')"
+
+# 2. Materialize the environment.
+echo "setup: syncing the Python environment (uv sync)…"
+uv sync
+
+# 3. Point the operator at the next steps.
+cat <<'NEXT'
+
+setup: environment ready.
+
+Next steps:
+  1. Pre-flight the host:      mqlab doctor
+  2. Bring up a setup:         mqlab bootstrap <setup>     (e.g. distributed-pcmk-ubuntu)
+
+Run mqlab via the synced environment, e.g.:
+  uv run mqlab doctor
+  uv run mqlab bootstrap distributed-pcmk-ubuntu
+
+(Or activate the venv: '. .venv/bin/activate' then 'mqlab ...'.)
+NEXT
