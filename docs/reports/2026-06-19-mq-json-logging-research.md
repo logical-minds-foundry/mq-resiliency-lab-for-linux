@@ -286,6 +286,40 @@ supported path.
 
 ---
 
+## Spike validation (Step 2) — 2026-06-21: **GO**
+
+Run on the live `distributed-nativeha-rhel` lab against **QMNATIVE**, on the
+**replica** `nha-rhel-a2` (non-disruptive: the active stayed on `nha-rhel-a1` and
+QUORUM held 3/3 throughout). Added a `DiagnosticMessages` Syslog stanza
+(`Ident=ibm-mq`, `Severities=all`) to that node's `qm.ini` and restarted its
+instance.
+
+**The Syslog→journald premise holds on RHEL 9 / MQ 9.4.5:**
+
+- MQ emits to journald — `journalctl -t ibm-mq` returned records after the restart.
+- `SYSLOG_IDENTIFIER=ibm-mq` (the configured `Ident`) — matches the planned Alloy
+  relabel target `unit="ibm-mq"`.
+- The journald `MESSAGE` field **is the raw single-line JSON object** — the decisive
+  sub-assumption. `| json` parses it directly, so **no `Service=File` file-tail
+  fallback is needed**.
+- Schema matches §5 exactly. Captured sample:
+
+  ```json
+  {"ibm_messageId":"AMQ9722W","ibm_datetime":"2026-06-21T18:38:42.402Z","ibm_serverName":"QMNATIVE","type":"mq_log","host":"nha-rhel-a2","loglevel":"WARNING","module":"amqzslqa.c:2019","ibm_version":"9.4.5.0","ibm_processName":"strmqm","ibm_userName":"mqm","message":"AMQ9722W: Plain text communication is enabled."}
+  ```
+
+- **mqweb:** `messageFormat="json"` was added to `mqwebuser.xml`, but the Liberty
+  server was slow to (re)start under x86 TCG, so JSON `messages.log` output was not
+  captured within the spike window. Low risk (documented Liberty feature) — confirm
+  during implementation / cold-rebuild.
+
+**Decision: GO** on `Service=Syslog` → journald (the design's primary path).
+Proceed to implement Tasks 1–8 + 10; the `Service=File` fallback is not required.
+
+**Spike residue:** the `qm.ini` stanza and the `mqwebuser.xml` edit remain on
+`nha-rhel-a2` only (harmless, pre-rebuild) — revert or leave per the upcoming
+setup rationalization.
+
 ## 10. Sources
 
 Primary IBM MQ 9.4 docs (cached under `build/cache/refs/ibm-docs/ibm-mq/9.4/`; verify
