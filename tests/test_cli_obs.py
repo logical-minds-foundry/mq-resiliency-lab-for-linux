@@ -137,6 +137,32 @@ def test_obs_up_also_renders_the_nativeha_board(monkeypatch, tmp_path):
     assert json.loads(board.read_text())["uid"] == "lab-nativeha-cluster"
 
 
+def test_obs_up_also_renders_the_rdqm_board(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+
+    assert result.exit_code == 0
+    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    assert board.exists()
+    assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
+
+
+def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
+
+    assert result.exit_code == 0
+    board = tmp_path / "build" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
+    assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
+
+
 def test_obs_up_propagates_step_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)

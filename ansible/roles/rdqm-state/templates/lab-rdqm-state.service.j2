@@ -1,0 +1,8 @@
+{# lab-rdqm-state.service — render lab_rdqm_state textfile once per tick (HA + DR + DRBD) #}
+[Unit]
+Description=Render lab_rdqm_state textfile (RDQM HA / DR / DRBD)
+
+[Service]
+Type=oneshot
+Environment=PYTHONPATH=/usr/local/lib/lab-rdqm-state
+ExecStart=/usr/bin/python3 -m mqlab.rdqmstate --qm {{ rdqm_qm | default('QMRDQM') }}

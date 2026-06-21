@@ -13,6 +13,8 @@ from mqlab.clusterboard import (
     nativeha_status_band,
     net_section,
     perf_section,
+    rdqm_dr_card,
+    rdqm_status_band,
     render_cluster_dashboard,
     timeline_band,
 )
@@ -350,3 +352,318 @@ def test_site_role_chip_flips_live_recovery_by_data():
     assert 'member=~"nha-rhel-a.*"' in chip["targets"][0]["expr"]
     # it is a compact chip beside the matrix (narrow), not a full row
     assert chip["gridPos"]["w"] == 5 and chip["gridPos"]["h"] == 7
+
+
+# ── RDQM arm (#287) ───────────────────────────────────────────────────────────
+
+
+def test_rdqm_role_mapping_codes_primary_secondary_unknown():
+    from mqlab.clusterboard import _MAPPINGS
+
+    opts = _MAPPINGS["rdqm_role"][0]["options"]
+    # Primary (runs the QM) is the live green leader; Secondary is the healthy standby (blue);
+    # only a genuinely unknown/down instance is red.
+    assert opts["2"]["text"] == "Primary" and opts["2"]["color"] == "green"
+    assert opts["1"]["text"] == "Secondary" and opts["1"]["color"] == "blue"
+    assert opts["0"]["text"] == "Unknown" and opts["0"]["color"] == "red"
+
+
+def test_rdqm_instance_cols_for_a_site():
+    from mqlab.clusterboard import _rdqm_instance_cols
+
+    cols = _rdqm_instance_cols("rdqm-a.*")
+    # a single "Pacemaker" summary cell sits between QM-running and DRBD-in-sync so the
+    # drill-down reads left-to-right: a NOT-READY site shows WHY (pacemaker) inline, with the
+    # per-resource detail one section down in ③ (#287 feedback).
+    assert [c[0] for c in cols] == ["HA status", "role", "QM running", "Pacemaker", "DRBD in-sync"]
+    assert cols[1][2] == "rdqm_role"  # role column uses the RDQM role mapping
+    assert "cluster_rdqm_role_code" in cols[1][1]
+    # the QM-running column uses a NON-alarming mapping: a standby reads neutral, not red "down"
+    assert cols[2][2] == "qm_running"
+    assert "cluster_rdqm_qm_running" in cols[2][1]
+    # the Pacemaker summary cell = node_ready (online AND able to run the QM); banned -> red
+    assert cols[3][0] == "Pacemaker" and cols[3][2] == "node_ready"
+    assert "cluster_rdqm_node_ready" in cols[3][1]
+    # "DRBD in-sync" keys off the DRBD disk state (UpToDate), not the raw out-of-sync byte
+    # counter — DRBD's activity-log granularity leaves a benign ~1KB out-of-sync on a fully
+    # UpToDate node, which must NOT read as out-of-sync here (the honest byte count lives in ③)
+    assert cols[4][2] == "up"
+    assert "cluster_drbd_disk" in cols[4][1] and 'disk="UpToDate"' in cols[4][1]
+    # the per-member columns scope to the site's members; the DRBD column scopes by node +
+    # the HA resource so the DR resource (qmrdqm.dr) doesn't leak into the in-sync cell
+    assert 'member=~"rdqm-a.*"' in cols[0][1]
+    assert 'resource="qmrdqm"' in cols[4][1] and 'node=~"rdqm-a.*"' in cols[4][1]
+    assert "qmrdqm.dr" not in cols[4][1]
+
+
+def test_rdqm_qm_running_mapping_is_neutral_for_standby():
+    from mqlab.clusterboard import _MAPPINGS
+
+    opts = _MAPPINGS["qm_running"][0]["options"]
+    # 1 = running (green); 0 = standby — a healthy non-serving node, NOT a red failure (#287)
+    assert opts["1"]["color"] == "green"
+    assert opts["0"]["color"] != "red"
+    assert "standby" in opts["0"]["text"].lower()
+
+
+def test_rdqm_site_badge_flips_live_recovery_by_dr_role():
+    from mqlab.clusterboard import _rdqm_site_badge
+
+    chip = _rdqm_site_badge("rdqm_a", "promtest", 0, 7)
+    # LIVE (DR primary) = green; RECOVERY (DR secondary, standby & ready) = BLUE — our standby
+    # colour, NOT yellow (yellow means warning); a RECOVERY site that is banned (can't fail over)
+    # = RED, matching the integrity hazard (#287 feedback).
+    opts = chip["fieldConfig"]["defaults"]["mappings"][0]["options"]
+    assert opts["2"]["text"] == "LIVE" and opts["2"]["color"] == "green"
+    assert opts["1"]["text"] == "RECOVERY" and opts["1"]["color"] == "blue"
+    assert opts["0"]["color"] == "red"  # recovery site that cannot run the QM
+    assert chip["options"]["colorMode"] == "background"
+    expr = chip["targets"][0]["expr"]
+    # the chip combines the DR role with pacemaker startability so it goes red when banned
+    assert "cluster_rdqm_dr_role_code" in expr and "cluster_rdqm_qm_startable" in expr
+    assert 'groups=~"rdqm_a"' in expr
+    # a compact chip beside the (widened) matrix, not a full row
+    assert chip["gridPos"]["w"] == 4 and chip["gridPos"]["h"] == 8
+
+
+def test_rdqm_status_band_is_one_compact_full_width_row():
+    tiles = rdqm_status_band("promtest", y=3)
+    assert [t["title"] for t in tiles] == [
+        "Running on",
+        "HA status",
+        "Nodes online",
+        "Floating IP",
+        "Integrity",
+    ]
+    assert all(t["gridPos"]["y"] == 3 for t in tiles)
+    assert sum(t["gridPos"]["w"] for t in tiles) == 24
+    assert all(t["gridPos"]["h"] == 3 for t in tiles)
+    assert all(t["options"]["text"]["valueSize"] == 22 for t in tiles)
+    # running-on is the resolved QM owner; the floating-IP tile is first-class (the single VIP)
+    assert 'cluster_resource_owner{resource="QMRDQM"}' in tiles[0]["targets"][0]["expr"]
+    assert "cluster_rdqm_floating_ip" in tiles[3]["targets"][0]["expr"]
+    # the integrity tile carries the gated hazard expr (no false green on no-data)
+    integ = tiles[4]["targets"][0]["expr"]
+    assert "count(cluster_rdqm_ha_status_ok) > 0" in integ
+
+
+def test_rdqm_integrity_is_pcmk_style_drbd_plus_ha_not_normal():
+    from mqlab.clusterboard import _rdqm_integrity_expr
+
+    expr = _rdqm_integrity_expr()
+    # PCMK-style DRBD hazards: split-brain (StandAlone), Diskless, dual-primary
+    assert "StandAlone" in expr and "Diskless" in expr
+    # dual-primary must be counted PER RESOURCE *AND PER SITE*: a DR pair legitimately has one
+    # qmrdqm primary on each side (2 globally), which must NOT read as split-brain (#287)
+    assert "count by (resource, groups)(cluster_drbd_role" in expr
+    # plus the RDQM HA-not-Normal hazard, gated on data present so no-data reads STALE
+    assert "cluster_rdqm_ha_status_ok == 0" in expr
+    assert "and on() (count(cluster_rdqm_ha_status_ok) > 0)" in expr
+    # DRBD hazards are scoped to rdqm groups so another arm's DRBD can't trip this light
+    assert 'groups=~"rdqm_a|rdqm_b"' in expr
+
+
+def test_rdqm_storage_matrix_is_the_ha_drbd_resource():
+    from mqlab.clusterboard import _rdqm_storage_cols
+
+    cols = _rdqm_storage_cols()
+    assert [c[0] for c in cols] == ["resync %", "out-of-sync"]
+    assert all('resource="qmrdqm"' in expr for _, expr, _ in cols)
+    assert all('node=~"rdqm-.*"' in expr for _, expr, _ in cols)
+    assert "cluster_drbd_resync_pct" in cols[0][1]
+    assert "cluster_drbd_out_of_sync_bytes" in cols[1][1]
+
+
+def test_rdqm_dr_card_is_status_primary_failover_ready_and_backlog():
+    tiles = rdqm_dr_card("promtest", y=0)
+    assert [t["title"] for t in tiles] == [
+        "DR status",
+        "DR primary",
+        "Failover ready",
+        "DR backlog",
+    ]
+    assert "cluster_rdqm_dr_status_ok" in tiles[0]["targets"][0]["expr"]
+    # "DR primary" names the SIDE (Site A/B), not the three individual hosts on that side (#287)
+    dr_primary = tiles[1]["targets"][0]["expr"]
+    assert 'cluster_rdqm_dr_role{role="Primary"}' in dr_primary
+    assert "max by (groups)" in dr_primary  # collapse the side's hosts to one value
+    assert "Site A" in dr_primary and "Site B" in dr_primary  # relabelled to the side name
+    assert tiles[1]["targets"][0]["legendFormat"] == "{{site}}"
+    # "Failover ready": red when a whole site can't start the QM (pacemaker view), STALE on
+    # no data — this is the panel that turns a banned recovery site loud (#287)
+    fr = tiles[2]
+    assert "cluster_rdqm_qm_startable" in fr["targets"][0]["expr"]
+    fr_maps = fr["fieldConfig"]["defaults"]["mappings"]
+    assert any(m.get("options", {}).get("0", {}).get("color") == "green" for m in fr_maps)
+    assert any(m["type"] == "special" for m in fr_maps)  # STALE on no-data
+    # the backlog tile reads the DR DRBD resource's out-of-sync bytes (no rdqmstatus field)
+    assert 'cluster_drbd_out_of_sync_bytes{resource="qmrdqm.dr"}' in tiles[3]["targets"][0]["expr"]
+    assert tiles[3]["fieldConfig"]["defaults"]["unit"] == "bytes"
+
+
+def test_rdqm_pm_state_and_failcount_mappings():
+    from mqlab.clusterboard import _MAPPINGS
+
+    pm = _MAPPINGS["pm_state"][0]["options"]
+    assert pm["2"]["color"] == "green"  # Started/Promoted = active
+    assert pm["1"]["color"] == "blue"  # Unpromoted replica
+    assert pm["0"]["color"] != "red"  # Stopped is neutral, not an alarm
+    fc = _MAPPINGS["failcount"]
+    # fail-count 0 = green ok; pacemaker INFINITY (1000000) = red BANNED
+    assert fc[0]["options"]["0"]["color"] == "green"
+    assert any(
+        m["type"] == "range"
+        and m["options"]["from"] >= 1000000
+        and m["options"]["result"]["color"] == "red"
+        for m in fc
+    )
+
+
+def test_rdqm_pacemaker_cols_expose_the_resource_stack():
+    from mqlab.clusterboard import _rdqm_pacemaker_cols
+
+    cols = _rdqm_pacemaker_cols("rdqm-b.*")
+    assert [c[0] for c in cols] == ["ready", "QM", "DRBD HA", "DR repl", "float-IP", "fail-count"]
+    # "ready" = online AND able to run the QM (banned node reads red "blocked", not green up)
+    assert "cluster_rdqm_node_ready" in cols[0][1] and cols[0][2] == "node_ready"
+    # the QM / DRBD / IP cells read pacemaker resource state; the fail-count cell is the alarm
+    assert 'resource="qmrdqm"' in cols[1][1] and cols[1][2] == "pm_state"
+    assert 'resource="p_drbd_qmrdqm"' in cols[2][1]
+    assert "cluster_rdqm_failcount" in cols[5][1] and cols[5][2] == "failcount"
+    assert all('member=~"rdqm-b.*"' in expr for _, expr, _ in cols)
+
+
+def test_rdqm_wide_matrices_drop_phantom_join_columns():
+    # joinByField leaves a Time column per instant query (Time, Time 1, Time 2, …); the organize
+    # transform only excludes "Time", so the rest survive as hidden columns that widen the table
+    # into a horizontal scrollbar. The rdqm matrices must filter down to node + their real
+    # columns so a 3-col storage table (and the 6/7-col matrices) don't scroll horizontally (#287).
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    for title in ("Site A", "Pacemaker — Site A", "Storage — DRBD"):
+        p = next(x for x in d["panels"] if x.get("title") == title)
+        flt = next((t for t in p["transformations"] if t["id"] == "filterFieldsByName"), None)
+        assert flt is not None, f"{title} keeps phantom join columns -> horizontal scrollbar"
+        kept = flt["options"]["include"]["names"]
+        assert "node" in kept and not any(k.startswith("Time") for k in kept)
+
+
+def test_rdqm_node_ready_mapping_is_green_ready_red_blocked():
+    from mqlab.clusterboard import _MAPPINGS
+
+    opts = _MAPPINGS["node_ready"][0]["options"]
+    assert opts["1"]["color"] == "green"  # online + startable = a usable host
+    assert opts["0"]["color"] == "red"  # online-but-banned (or offline) = blocked, not green
+
+
+def test_rdqm_integrity_flags_a_site_that_cannot_run_the_qm():
+    from mqlab.clusterboard import _rdqm_integrity_expr
+
+    expr = _rdqm_integrity_expr()
+    # a site (group) with no startable node = the QM can't run there (live outage, or DR not
+    # viable) → a first-class hazard, derived from the pacemaker fail-counts (#287)
+    assert "cluster_rdqm_qm_startable" in expr
+    assert "max by (groups)(cluster_rdqm_qm_startable) == 0" in expr
+
+
+def test_rdqm_storage_out_of_sync_tolerates_a_sub_extent_delta():
+    from mqlab.clusterboard import _rdqm_storage_cols
+
+    cols = _rdqm_storage_cols()
+    oos = cols[1]  # ("out-of-sync", expr, kind)
+    assert oos[0] == "out-of-sync"
+    assert oos[2] == "drbd_oos"  # tolerant mapping, not the hard clean0
+    from mqlab.clusterboard import _MAPPINGS
+
+    maps = _MAPPINGS["drbd_oos"]
+    # a benign sub-extent delta (e.g. 1024 B secondary↔secondary) is GREEN, not red; a real
+    # backlog (≥ one 4 KiB extent) is red. A completely-normal state must read green (#287).
+    green = next(m for m in maps if m["options"].get("result", {}).get("color") == "green")
+    assert green["options"]["to"] >= 1024
+    assert any(m["options"].get("result", {}).get("color") == "red" for m in maps)
+
+
+def test_rdqm_board_has_a_pacemaker_resource_section():
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    row_titles = [p["title"] for p in d["panels"] if p["type"] == "row"]
+    assert any("Pacemaker" in t for t in row_titles)  # ⑤ pacemaker section
+    by_title = {p.get("title", ""): p for p in d["panels"]}
+    assert "Pacemaker — Site A" in by_title and "Pacemaker — Site B" in by_title
+    # the pacemaker matrices carry the fail-count column (what exposes a banned QM)
+    blob = json.dumps(by_title["Pacemaker — Site B"])
+    assert "cluster_rdqm_failcount" in blob and "cluster_rdqm_pm_state" in blob
+
+
+def test_rdqm_board_uid_sections_and_fixed_site_labels():
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    assert d["uid"] == "lab-rdqm-cluster"
+    assert "rdqm-rhel" in d["tags"]
+    by_title = {p.get("title", ""): p for p in d["panels"]}
+    # matrices labelled by FIXED site (A/B), never by the dynamic live/recovery role
+    assert "Site A" in by_title and "Site B" in by_title
+    assert "Running on" in by_title and "Integrity" in by_title
+    site_a, site_b = by_title["Site A"], by_title["Site B"]
+    assert site_a["gridPos"]["y"] < site_b["gridPos"]["y"]
+    banner = next(p for p in d["panels"] if p["type"] == "text")
+    assert "RDQM" in banner["options"]["content"]
+    for p in d["panels"]:
+        if p["type"] == "table" and p["title"] in ("Site A", "Site B"):
+            assert "Live" not in p["title"] and "Recovery" not in p["title"]
+    assert any('member=~"rdqm-a.*"' in t["expr"] for t in site_a["targets"])
+    assert any('member=~"rdqm-b.*"' in t["expr"] for t in site_b["targets"])
+
+
+def test_rdqm_board_has_storage_dr_timeline_logs_perf_net():
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    titles = [p.get("title", "") for p in d["panels"]]
+    types = {p["type"] for p in d["panels"]}
+    row_titles = [p["title"] for p in d["panels"] if p["type"] == "row"]
+    assert any(t.startswith("①") for t in row_titles)
+    assert any(t.startswith("②") for t in row_titles)
+    # pacemaker rides above storage (mirrors the PCMK/Ubuntu hierarchy), then DRBD storage, then DR
+    assert any("③" in t and "Pacemaker" in t for t in row_titles)  # ③ pacemaker (above storage)
+    assert any("④" in t and "Storage" in t for t in row_titles)  # ④ DRBD storage section
+    assert any("⑤" in t and "DR" in t for t in row_titles)  # ⑤ cross-site DR
+    assert "DR status" in titles and "DR backlog" in titles
+    assert "state-timeline" in types  # failover timeline
+    assert "logs" in types  # rdqm log row
+    assert any("CPU busy" in t for t in titles)  # perf
+    assert any("net-wan" in json.dumps(p) for p in d["panels"])  # DR replication plane
+    assert d["templating"]["list"][0]["name"] == "level"  # severity toggle wired
+    assert len(row_titles) >= 6
+
+
+def test_rdqm_board_scopes_shared_metrics_to_rdqm_groups():
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    blob = json.dumps(d)
+    # cluster_quorate / cluster_node_online are emitted by every arm — every use on the rdqm
+    # board must be rdqm-scoped (by group or by rdqm node regex), else another arm leaks in
+    for m in re.finditer(r"cluster_quorate(\{[^}]*\})?", blob):
+        assert "rdqm_a|rdqm_b" in (m.group(1) or ""), "unscoped quorate on rdqm board"
+    for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
+        assert "rdqm-" in (m.group(1) or "") or "rdqm_a|rdqm_b" in (m.group(1) or "")
+    assert "pcmk_a|pcmk_b" not in blob and "nha_rhel" not in blob  # no other arm's scope
+
+
+def test_rdqm_log_panel_notes_amqerr_is_file_based():
+    d = render_cluster_dashboard({}, arm="rdqm-rhel")
+    logs = next(p for p in d["panels"] if p["type"] == "logs")
+    assert "AMQERR" in logs["description"]
+    assert 'host=~"rdqm-.*"' in logs["targets"][0]["expr"]
+
+
+def test_rdqm_perf_uses_rdqm_groups_with_hb_and_wan():
+    from mqlab.clusterboard import rdqm_perf_section
+
+    blob = json.dumps(rdqm_perf_section("promtest", y=0))
+    assert "rdqm_a|rdqm_b" in blob  # CPU scoped to rdqm nodes
+    assert "virbr-hb" in blob and "virbr-wan" in blob  # HA (heartbeat) + DR (wan) throughput
+
+
+def test_pcmk_and_nativeha_boards_unchanged_by_rdqm_arm():
+    # regression: adding the rdqm arm must not alter the PCMK / Native HA boards
+    pcmk = render_cluster_dashboard({}, arm="pcmk")
+    assert pcmk["uid"] == "lab-pcmk-cluster"
+    assert "③ Storage — DRBD / SAN" in [p.get("title", "") for p in pcmk["panels"]]
+    nha = render_cluster_dashboard({}, arm="nativeha-rhel")
+    assert nha["uid"] == "lab-nativeha-cluster"
+    assert "rdqm" not in json.dumps(nha)  # no rdqm plumbing leaked onto the nha board
