@@ -42,19 +42,12 @@ GitHub Release, produced automatically by CI on a tag push.
   a **Prerequisites** note (§7.1) and out-of-band signature-verification steps.
 - A shipped public key (`RELEASE-KEY.asc`) as a convenience copy, with the trust
   root being the **fingerprint + out-of-band key fetch** (§5).
-
-**Hard dependency (in or before this work):**
-
-- **A single-command lab bring-up verb — `mqlab bootstrap <setup>`.** The
-  consumer happy path is `./scripts/setup` → `mqlab bootstrap <setup>` → sit
-  back. No such one-command bring-up exists today: bring-up is a multi-step
-  sequence across `mqlab net`/`vm`/`obs` (what #211 calls *"lab bootstrap"*), and
-  `mqlab run <setup>` is the **post-bring-up baseline test driver**, not bring-up.
-  This release spec depends on that verb existing. It is either scoped into this
-  work or tracked as a blocking dependency (a natural sibling of #211). Naming:
-  "bootstrap" is reserved for **lab** bring-up; the environment-setup script is
-  therefore named `scripts/setup`, not `scripts/bootstrap`, to avoid overloading
-  the term.
+- **A single-command lab bring-up verb — `mqlab bootstrap <setup>`** (§7.2). The
+  consumer happy path is `./scripts/setup` → `mqlab doctor` → `mqlab bootstrap
+  <setup>` → sit back. No such one-command bring-up exists today; this work adds
+  it as a thin orchestration wrapper over the existing verbs. "bootstrap" is
+  reserved for **lab** bring-up; the environment-setup script is therefore named
+  `scripts/setup`, not `scripts/bootstrap`, to avoid overloading the term.
 
 **Out of scope / deferred:**
 
@@ -106,9 +99,9 @@ consumer: download → (verify: out-of-band key + fingerprint) → tar xzf
           → ./scripts/setup → mqlab bootstrap <setup> → sit back
 ```
 
-`mqlab bootstrap <setup>` is the single-command lab bring-up verb this spec
-depends on (§2, Hard dependency). `mqlab run <setup>` is a separate,
-post-bring-up baseline test driver and is **not** part of the happy path.
+`mqlab bootstrap <setup>` is the single-command lab bring-up verb added by this
+work (§7.2). `mqlab run <setup>` is a separate, post-bring-up baseline test
+driver and is **not** part of the happy path.
 
 ## 4. Curation — what ships, what does not
 
@@ -237,6 +230,31 @@ must provide:
 Getting Started routes the consumer through `mqlab doctor` **before**
 `mqlab bootstrap <setup>`, so missing prerequisites fail loud up front.
 
+### 7.2 The bring-up verb — `mqlab bootstrap <setup>`
+
+A new top-level command that gives the consumer the "one command, then sit back"
+experience. It is a **thin orchestration wrapper** over verbs that already exist;
+it adds sequencing, not new bring-up logic.
+
+- **What it wraps.** For the named setup, in order: resolve/apply the manifest
+  selection (#266) → `net create` (the setup's networks) → `vm create` (which
+  already *creates + provisions* the guests, including QM/HA bring-up via Ansible)
+  → `obs up` (the shared observability stack). The exact verb list per arm is
+  finalized in the plan from `setups.py` / `topology.yaml`.
+- **How it's built.** It assembles `CommandStep`s from the existing per-verb step
+  builders and runs them through the existing `run_steps` orchestrator
+  (`src/mqlab/orchestrator.py`) — same fail-loud-on-non-zero, same `--step`
+  semantics. No new execution machinery.
+- **Pre-flight.** It runs (or instructs the consumer to run) `mqlab doctor` first
+  so host prerequisites fail loud before any guest is created.
+- **Relationship to `mqlab run`.** `bootstrap` brings the lab *up*; `mqlab run
+  <setup>` is the separate, post-bring-up baseline test driver. They are distinct
+  verbs and must stay distinct.
+- **Scope note.** This is deliberately a sequencing wrapper. Parallelizing the
+  bring-up (concurrent VM boots) is the separate concern of #211 and is **not**
+  pulled into this verb; `bootstrap` can adopt that speed-up later without an
+  interface change.
+
 ## 8. README rewrite (users-first)
 
 Users will vastly outnumber developers, so the README leads with them:
@@ -283,5 +301,7 @@ actual `vergil-actions` v2.1 capabilities.
   whose tarball a fresh consumer can verify (via the out-of-band key +
   fingerprint), unpack, `./scripts/setup`, pass `mqlab doctor`, and bring the lab
   up with `mqlab bootstrap <setup>` — with no clone and no new tooling beyond
-  `gpg`, `uv`, and `tar` (plus a RHEL box for the RHEL arms). Depends on the
-  `mqlab bootstrap` verb (§2, Hard dependency).
+  `gpg`, `uv`, and `tar` (plus a RHEL box for the RHEL arms).
+- **Bring-up verb test:** `mqlab bootstrap <setup>` issues the expected verb
+  sequence (manifest → `net create` → `vm create` → `obs up`) and halts loud if
+  any step exits non-zero (§7.2).
