@@ -48,6 +48,9 @@ GitHub Release, produced automatically by CI on a tag push.
   it as a thin orchestration wrapper over the existing verbs. "bootstrap" is
   reserved for **lab** bring-up; the environment-setup script is therefore named
   `scripts/setup`, not `scripts/bootstrap`, to avoid overloading the term.
+- **An operator release runbook** (`docs/development/release-runbook.md`) — the
+  durable home for the operator-only steps §5 implies: signing-key generation, CI
+  secret setup, and the cut-a-release procedure.
 
 **Out of scope / deferred:**
 
@@ -272,19 +275,17 @@ Users will vastly outnumber developers, so the README leads with them:
 3. **Development** — the current Vergil-VM development workflow (today's README
    body), relocated to the bottom for the rare contributor.
 
-## 9. Open integration point (resolve in the plan)
+## 9. Publish-mechanism decision
 
-`vergil.toml` currently sets `[publish] release = false`, and CD delegates to the
-shared `vergil-project/vergil-actions` `cd-docs.yml`. The plan must verify
-**one** of:
+`vergil.toml` keeps `[publish] release = false`; CD continues to delegate docs to
+the shared `vergil-project/vergil-actions` `cd-docs.yml`, untouched. The signed
+tarball is published by a **bespoke** `release.yml` job (§6), not a vergil-actions
+release path.
 
-- keep `release = false` and add a **bespoke** release job (this design's
-  default assumption); or
-- hook into a **vergil-actions custom-artifact release path** if one exists and
-  fits.
-
-This is a verification task, not a guess — chosen during planning against the
-actual `vergil-actions` v2.1 capabilities.
+Rationale: the bespoke job is self-contained and correct independent of whatever
+vergil-actions offers, so it is the safe default. If vergil-actions later exposes
+a custom-artifact release path that fits, migrating to it is a follow-up — not a
+blocker for this work.
 
 ## 10. Testing & acceptance
 

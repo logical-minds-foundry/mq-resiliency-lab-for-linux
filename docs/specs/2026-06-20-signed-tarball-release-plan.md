@@ -63,6 +63,7 @@ takes effect — keeping the red→green cycle honest.
 ```python
 from __future__ import annotations
 
+import io
 import subprocess
 import tarfile
 from pathlib import Path
@@ -98,21 +99,18 @@ def test_gitattributes_declares_every_exclusion() -> None:
 
 def _archived_names() -> set[str]:
     """Names in `git archive` of the worktree, prefix stripped. Honors the
-    working-tree .gitattributes via --worktree-attributes. Raises on any git
-    failure so the caller can skip in git-less environments."""
+    working-tree .gitattributes via --worktree-attributes. Decodes the archive
+    in-memory — writes no file (the build/ layout is managed via `mqlab build`,
+    never hardcoded). Raises on any git failure so the caller can skip in
+    git-less environments."""
     out = subprocess.run(
         ["git", "archive", "--worktree-attributes", "--prefix=pkg/", "HEAD"],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,
     )
-    archive = REPO_ROOT / "build" / "test-archive.tar"
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    archive.write_bytes(out.stdout)
-    with tarfile.open(archive) as tar:
-        names = {m.name.removeprefix("pkg/") for m in tar.getmembers()}
-    archive.unlink()
-    return names
+    with tarfile.open(fileobj=io.BytesIO(out.stdout)) as tar:
+        return {m.name.removeprefix("pkg/") for m in tar.getmembers()}
 
 
 def _archive_or_skip() -> set[str]:
@@ -696,14 +694,19 @@ jobs:
           gpg --batch --yes --pinentry-mode loopback --passphrase "${PASSPHRASE}" \
             --detach-sign --armor SHA256SUMS
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release (idempotent — §6 convergence)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
-            --notes "Signed release ${GITHUB_REF_NAME}. Verify with RELEASE-KEY.asc (see README — fetch the key out-of-band)." \
+          # Create the release only if absent, then upload with --clobber so a
+          # re-run of the tag's workflow converges to the same four assets
+          # instead of erroring on an already-existing release (design §6).
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" \
+                 --title "${GITHUB_REF_NAME}" \
+                 --notes "Signed release ${GITHUB_REF_NAME}. Verify with RELEASE-KEY.asc (see README — fetch the key out-of-band)."
+          gh release upload --clobber "${GITHUB_REF_NAME}" \
             "${PKG}.tar.gz" "${PKG}.tar.gz.asc" SHA256SUMS SHA256SUMS.asc
 ```
 
@@ -716,12 +719,17 @@ Run (verifies archive + checksum + the guard against a real tag string):
 ```bash
 cd .worktrees/issue-299-signed-tarball-release
 python tools/release_version_guard.py "v$(cat VERSION)"
-git archive --prefix="mq-cluster-tooling-test/" -o build/dryrun.tar.gz HEAD
-sha256sum build/dryrun.tar.gz
-tar tzf build/dryrun.tar.gz | grep -E 'mq-cluster-tooling-test/(scripts/setup|RELEASE-KEY.asc|src/mqlab/cli.py)$'
+# File-free: pipe the archive listing straight to grep (no hardcoded build/ path).
+git archive --worktree-attributes --prefix="mq-cluster-tooling-test/" HEAD \
+  | tar tzf - \
+  | grep -E 'mq-cluster-tooling-test/(scripts/setup|RELEASE-KEY.asc|src/mqlab/cli.py)$'
+# And confirm dev-only paths are absent:
+git archive --worktree-attributes --prefix="mq-cluster-tooling-test/" HEAD \
+  | tar tzf - \
+  | grep -E 'mq-cluster-tooling-test/(vergil.toml|tests/|.github/)' && echo "LEAK" || echo "clean"
 ```
 
-Expected: guard prints `ok: release version <X.Y.Z>`; the `grep` lists `scripts/setup`, `RELEASE-KEY.asc`, and `src/mqlab/cli.py` (proving the curated tree carries the consumer entrypoints). Remove `build/dryrun.tar.gz` after.
+Expected: guard prints `ok: release version <X.Y.Z>`; the first `grep` lists `scripts/setup`, `RELEASE-KEY.asc`, and `src/mqlab/cli.py` (the curated tree carries the consumer entrypoints); the second prints `clean` (no dev-only paths leaked). No files written.
 
 - [ ] **Step 6: Create the operator runbook**
 
@@ -864,8 +872,16 @@ vrg-commit --type docs --scope readme --message "rewrite README users-first (int
 ## Final verification
 
 - [ ] **Full validation:** `cd .worktrees/issue-299-signed-tarball-release && vrg-container-run -- vrg-validate` — ruff, mypy strict, 100% branch coverage, markdownlint all green.
-- [ ] **Curation dry-run:** Task 5 Step 5 lists `scripts/setup`, `RELEASE-KEY.asc`, `src/mqlab/cli.py` in the archived tree and excludes `vergil.toml`/`tests/`/`.github/`.
+- [ ] **Curation dry-run:** Task 5 Step 5 lists `scripts/setup`, `RELEASE-KEY.asc`, `src/mqlab/cli.py` in the archived tree and prints `clean` for dev-only paths.
 - [ ] **Open the PR** into `develop` with `vrg-submit-pr` (or `vrg-gh pr create --base develop`), linking #299.
+
+### Manual acceptance (post-merge — real environment)
+
+These spec §10 criteria can only be exercised outside the validate container; they
+are deferred but must not be forgotten:
+
+- [ ] **Setup smoke (host):** on a clean **Linux** host and a clean **macOS** host with `uv` present, run `./scripts/setup` and confirm it reaches a working `mqlab --help` (then `mqlab doctor`).
+- [ ] **End-to-end release (post-merge):** after this lands on `main` and a `vX.Y.Z` tag is pushed, confirm the GitHub Release publishes all four assets, and that a fresh consumer can fetch the key out-of-band, `gpg --verify`, unpack, `./scripts/setup`, pass `mqlab doctor`, and `mqlab bootstrap <setup>`.
 
 ## Spec coverage check
 
