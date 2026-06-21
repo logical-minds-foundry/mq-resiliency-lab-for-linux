@@ -1,0 +1,154 @@
+<pacemaker-result api-version="2.15" request="crm_mon --one-shot --output-as=xml">
+  <summary>
+    <stack type="corosync"/>
+    <current_dc present="true" version="2.1.2.linbit-4.el9-ada5c3b36e2" name="rdqm-b1" id="1" with_quorum="true"/>
+    <last_update time="Sat Jun 20 10:44:13 2026"/>
+    <last_change time="Fri Jun 19 18:44:46 2026" user="root" client="crm_resource" origin="rdqm-b2"/>
+    <nodes_configured number="3"/>
+    <resources_configured number="8" disabled="1" blocked="0"/>
+    <cluster_options stonith-enabled="false" symmetric-cluster="true" no-quorum-policy="stop" maintenance-mode="false" stop-all-resources="false" stonith-timeout-ms="60000" priority-fencing-delay-ms="0"/>
+  </summary>
+  <nodes>
+    <node name="rdqm-b1" id="1" online="true" standby="false" standby_onfail="false" maintenance="false" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="true" resources_running="1" type="member"/>
+    <node name="rdqm-b2" id="2" online="true" standby="false" standby_onfail="false" maintenance="false" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="false" resources_running="2" type="member"/>
+    <node name="rdqm-b3" id="3" online="true" standby="false" standby_onfail="false" maintenance="false" pending="false" unclean="false" shutdown="false" expected_up="true" is_dc="false" resources_running="1" type="member"/>
+  </nodes>
+  <resources>
+    <resource id="p_fs_qmrdqm" resource_agent="ocf:heartbeat:Filesystem" role="Stopped" active="false" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="0"/>
+    <resource id="p_rdqmx_qmrdqm" resource_agent="ocf:ibm:rdqmx" role="Stopped" active="false" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="0"/>
+    <resource id="qmrdqm" resource_agent="ocf:ibm:rdqm" role="Stopped" active="false" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="0"/>
+    <clone id="ms_drbd_qmrdqm" multi_state="true" unique="false" managed="true" disabled="false" failed="false" failure_ignored="false">
+      <resource id="p_drbd_qmrdqm" resource_agent="ocf:linbit:drbd" role="Unpromoted" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="rdqm-b3" id="3" cached="true"/>
+      </resource>
+      <resource id="p_drbd_qmrdqm" resource_agent="ocf:linbit:drbd" role="Unpromoted" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="rdqm-b1" id="1" cached="true"/>
+      </resource>
+      <resource id="p_drbd_qmrdqm" resource_agent="ocf:linbit:drbd" role="Promoted" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="rdqm-b2" id="2" cached="true"/>
+      </resource>
+    </clone>
+    <clone id="ms_drbd_dr_qmrdqm" multi_state="true" unique="false" managed="true" disabled="true" failed="false" failure_ignored="false" target_role="Slave">
+      <resource id="p_drbd_dr_qmrdqm" resource_agent="ocf:linbit:drbd" role="Unpromoted" target_role="Slave" active="true" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="1">
+        <node name="rdqm-b2" id="2" cached="true"/>
+      </resource>
+    </clone>
+    <resource id="p_ip_qmrdqm" resource_agent="ocf:heartbeat:IPaddr2" role="Stopped" active="false" orphaned="false" blocked="false" managed="true" failed="false" failure_ignored="false" nodes_running_on="0"/>
+  </resources>
+  <node_attributes>
+    <node name="rdqm-b1">
+      <attribute name="drbd-replication" value="172.16.2.41"/>
+      <attribute name="master-p_drbd_qmrdqm" value="10000"/>
+      <attribute name="mqm-gid" value="1001"/>
+      <attribute name="mqm-uid" value="995"/>
+      <attribute name="mqvrmf" value="9.4.5.0"/>
+      <attribute name="qmrdqm-name" value="QMRDQM"/>
+      <attribute name="rdqm-transient-attribute" value="1"/>
+    </node>
+    <node name="rdqm-b2">
+      <attribute name="drbd-replication" value="172.16.2.42"/>
+      <attribute name="master-p_drbd_dr_qmrdqm" value="10000"/>
+      <attribute name="master-p_drbd_qmrdqm" value="10000"/>
+      <attribute name="mqm-gid" value="1001"/>
+      <attribute name="mqm-uid" value="995"/>
+      <attribute name="mqvrmf" value="9.4.5.0"/>
+      <attribute name="qmrdqm-dr-replication" value="10.99.0.42"/>
+      <attribute name="qmrdqm-name" value="QMRDQM"/>
+      <attribute name="rdqm-transient-attribute" value="1"/>
+    </node>
+    <node name="rdqm-b3">
+      <attribute name="drbd-replication" value="172.16.2.43"/>
+      <attribute name="master-p_drbd_qmrdqm" value="10000"/>
+      <attribute name="mqm-gid" value="1001"/>
+      <attribute name="mqm-uid" value="995"/>
+      <attribute name="mqvrmf" value="9.4.5.0"/>
+      <attribute name="qmrdqm-dr-replication" value="10.99.0.43"/>
+      <attribute name="qmrdqm-name" value="QMRDQM"/>
+      <attribute name="rdqm-transient-attribute" value="1"/>
+    </node>
+  </node_attributes>
+  <node_history>
+    <node name="rdqm-b3">
+      <resource_history id="p_fs_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="84" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:34 2026" exec-time="8156ms" queue-time="14ms"/>
+      </resource_history>
+      <resource_history id="p_rdqmx_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="82" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:33 2026" exec-time="347ms" queue-time="0ms"/>
+      </resource_history>
+      <resource_history id="qmrdqm" orphan="false" migration-threshold="1000000" fail-count="1000000" last-failure="Fri Jun 19 18:22:30 2026">
+        <operation_history call="66" task="start" rc="1" rc_text="error" last-rc-change="Fri Jun 19 18:22:29 2026" exec-time="1028ms" queue-time="0ms"/>
+        <operation_history call="70" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:31 2026" exec-time="937ms" queue-time="0ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="19" task="probe" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:14:13 2026" exec-time="1130ms" queue-time="1ms"/>
+        <operation_history call="98" task="demote" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:47 2026" exec-time="733ms" queue-time="0ms"/>
+        <operation_history call="106" task="monitor" rc="0" rc_text="ok" interval="20000ms" last-rc-change="Fri Jun 19 18:22:52 2026" exec-time="1021ms" queue-time="1ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_dr_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="59" task="monitor" rc="8" rc_text="promoted" interval="10000ms" last-rc-change="Fri Jun 19 18:22:23 2026" exec-time="1371ms" queue-time="0ms"/>
+        <operation_history call="94" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:44 2026" exec-time="1651ms" queue-time="3ms"/>
+      </resource_history>
+      <resource_history id="p_ip_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="67" task="monitor" rc="0" rc_text="ok" interval="30000ms" last-rc-change="Fri Jun 19 18:22:29 2026" exec-time="1396ms" queue-time="0ms"/>
+        <operation_history call="77" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:32 2026" exec-time="1432ms" queue-time="0ms"/>
+      </resource_history>
+    </node>
+    <node name="rdqm-b1">
+      <resource_history id="p_fs_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="68" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:21:52 2026" exec-time="7205ms" queue-time="8ms"/>
+      </resource_history>
+      <resource_history id="p_rdqmx_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="66" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:21:51 2026" exec-time="342ms" queue-time="3ms"/>
+      </resource_history>
+      <resource_history id="qmrdqm" orphan="false" migration-threshold="1000000" fail-count="1000000" last-failure="Fri Jun 19 18:21:46 2026">
+        <operation_history call="50" task="start" rc="1" rc_text="error" last-rc-change="Fri Jun 19 18:21:45 2026" exec-time="1111ms" queue-time="2ms"/>
+        <operation_history call="54" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:21:47 2026" exec-time="1231ms" queue-time="0ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="18" task="probe" rc="8" rc_text="promoted" last-rc-change="Fri Jun 19 18:14:10 2026" exec-time="866ms" queue-time="1ms"/>
+        <operation_history call="82" task="demote" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:07 2026" exec-time="867ms" queue-time="2ms"/>
+        <operation_history call="90" task="monitor" rc="0" rc_text="ok" interval="20000ms" last-rc-change="Fri Jun 19 18:22:13 2026" exec-time="1343ms" queue-time="2ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_dr_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="26" task="probe" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:14:18 2026" exec-time="842ms" queue-time="0ms"/>
+        <operation_history call="43" task="monitor" rc="8" rc_text="promoted" interval="10000ms" last-rc-change="Fri Jun 19 18:21:38 2026" exec-time="1398ms" queue-time="5ms"/>
+        <operation_history call="78" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:03 2026" exec-time="2800ms" queue-time="5ms"/>
+      </resource_history>
+      <resource_history id="p_ip_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="51" task="monitor" rc="0" rc_text="ok" interval="30000ms" last-rc-change="Fri Jun 19 18:21:45 2026" exec-time="1548ms" queue-time="0ms"/>
+        <operation_history call="61" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:21:48 2026" exec-time="2904ms" queue-time="15ms"/>
+      </resource_history>
+    </node>
+    <node name="rdqm-b2">
+      <resource_history id="p_fs_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="91" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:44:49 2026" exec-time="7931ms" queue-time="2ms"/>
+      </resource_history>
+      <resource_history id="p_rdqmx_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="89" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:44:49 2026" exec-time="303ms" queue-time="0ms"/>
+      </resource_history>
+      <resource_history id="qmrdqm" orphan="false" migration-threshold="1000000" fail-count="1000000" last-failure="Fri Jun 19 18:23:08 2026">
+        <operation_history call="75" task="start" rc="1" rc_text="error" last-rc-change="Fri Jun 19 18:23:06 2026" exec-time="1024ms" queue-time="1ms"/>
+        <operation_history call="79" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:23:08 2026" exec-time="516ms" queue-time="2ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="18" task="probe" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:14:12 2026" exec-time="805ms" queue-time="0ms"/>
+        <operation_history call="51" task="promote" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:22:50 2026" exec-time="1116ms" queue-time="4ms"/>
+        <operation_history call="55" task="monitor" rc="8" rc_text="promoted" interval="10000ms" last-rc-change="Fri Jun 19 18:22:53 2026" exec-time="1223ms" queue-time="9ms"/>
+      </resource_history>
+      <resource_history id="p_drbd_dr_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="93" task="demote" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:44:57 2026" exec-time="764ms" queue-time="0ms"/>
+        <operation_history call="97" task="monitor" rc="0" rc_text="ok" interval="20000ms" last-rc-change="Fri Jun 19 18:44:59 2026" exec-time="1139ms" queue-time="7ms"/>
+      </resource_history>
+      <resource_history id="p_ip_qmrdqm" orphan="false" migration-threshold="1000000">
+        <operation_history call="76" task="monitor" rc="0" rc_text="ok" interval="30000ms" last-rc-change="Fri Jun 19 18:23:06 2026" exec-time="1317ms" queue-time="0ms"/>
+        <operation_history call="84" task="stop" rc="0" rc_text="ok" last-rc-change="Fri Jun 19 18:44:46 2026" exec-time="2266ms" queue-time="0ms"/>
+      </resource_history>
+    </node>
+  </node_history>
+  <failures>
+    <failure op_key="qmrdqm_start_0" node="rdqm-b3" exitstatus="error" exitreason="" exitcode="1" call="66" status="complete" last-rc-change="2026-06-19 18:22:29Z" queued="0" exec="1028" interval="0" task="start"/>
+    <failure op_key="qmrdqm_start_0" node="rdqm-b1" exitstatus="error" exitreason="" exitcode="1" call="50" status="complete" last-rc-change="2026-06-19 18:21:45Z" queued="2" exec="1111" interval="0" task="start"/>
+    <failure op_key="qmrdqm_start_0" node="rdqm-b2" exitstatus="error" exitreason="" exitcode="1" call="75" status="complete" last-rc-change="2026-06-19 18:23:06Z" queued="1" exec="1024" interval="0" task="start"/>
+  </failures>
+  <status code="0" message="OK"/>
+</pacemaker-result>
