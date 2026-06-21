@@ -21,7 +21,16 @@ EXCLUDED = [
     "vergil.toml",
     "tests/",
 ]
-INCLUDED = ["src/mqlab/", "ansible/", "lab/", "manifests/", "pyproject.toml", "VERSION"]
+INCLUDED = [
+    "src/mqlab/",
+    "ansible/",
+    "lab/",
+    "manifests/",
+    "pyproject.toml",
+    "VERSION",
+    "scripts/setup",
+    "RELEASE-KEY.asc",
+]
 
 
 def test_gitattributes_declares_every_exclusion() -> None:
