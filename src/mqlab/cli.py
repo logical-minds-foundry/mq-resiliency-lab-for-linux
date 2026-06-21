@@ -1493,5 +1493,31 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     typer.echo(f"run report written: {bundle}")
 
 
+def _bootstrap_run(setup_name: str, *, manifest: str | None, step: bool) -> None:
+    """Bring a setup all the way up: host gate → networks → guests (create +
+    provision) → observability. A thin sequencing wrapper over the existing
+    verbs; each phase fails loud (raises typer.Exit) and halts the rest."""
+    _lookup_setup_or_exit(setup_name)  # validate the setup name early (exit 2 if unknown)
+    _prepare_lab()  # host-arch / KVM / tools gate — fail loud before touching anything
+    net_create("all", step=step)
+    vm_create(setup_name, manifest=manifest, step=step)
+    obs_up(step=step)
+
+
+@app.command("bootstrap")
+def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstrap_run
+    setup_name: Annotated[
+        str, typer.Argument(help="setup to bring up (e.g. distributed-pcmk-ubuntu)")
+    ],
+    manifest: _ManifestOpt = None,
+    step: _StepFlag = False,
+) -> None:
+    """Bring up a whole setup in one command: networks → guests → observability.
+
+    This is the consumer happy path. Run `mqlab doctor` first to pre-flight the
+    host. (`mqlab run` is the separate post-bring-up baseline test driver.)"""
+    _bootstrap_run(setup_name, manifest=manifest, step=step)
+
+
 def main() -> None:
     app()
