@@ -51,7 +51,7 @@ sha256sum -c SHA256SUMS
 ```bash
 ./scripts/setup                         # checks prereqs, runs uv sync
 uv run mqlab doctor                     # pre-flight the host
-uv run mqlab bootstrap <setup>          # bring the lab up, then sit back
+uv run mqlab bootstrap distributed-pcmk-ubuntu   # one of the lab setups; bring it up, sit back
 ```
 
 #### What `scripts/setup` does
@@ -60,10 +60,10 @@ It sets up the **environment**, not the lab:
 
 1. Checks `uv` and Python 3.12 are available (fails loud if not).
 2. Runs `uv sync` to materialize the virtual environment.
-3. Prints the next commands (`mqlab doctor`, `mqlab bootstrap <setup>`).
+3. Prints the next commands (`mqlab doctor`, `mqlab bootstrap <setup-name>`).
 
-You can do these by hand instead. `mqlab bootstrap <setup>` then sequences the
-lab bring-up: networks → guests (create + provision) → observability.
+You can do these by hand instead. `mqlab bootstrap` (e.g. `distributed-pcmk-ubuntu`) then
+sequences the lab bring-up: networks → guests (create + provision) → observability.
 
 ## Development
 
