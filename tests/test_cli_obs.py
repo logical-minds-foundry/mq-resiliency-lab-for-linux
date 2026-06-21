@@ -367,3 +367,14 @@ def test_obs_instrument_playbook_failure_propagates_exit_code(monkeypatch, tmp_p
     result = CliRunner().invoke(cli.app, ["obs", "instrument", "pcmk_san_ha"])
 
     assert result.exit_code == 4
+
+
+def test_obs_up_runs_prepare_lab(monkeypatch, tmp_path, prepare_lab_calls):
+    # obs up shells `vagrant up obs mon-probe`, so it must gate (#276).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["x"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+    assert result.exit_code == 0
+    assert prepare_lab_calls == ["prepare"]

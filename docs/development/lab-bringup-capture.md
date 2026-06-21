@@ -25,8 +25,8 @@ Capturing provenance is the priority of this draft.
 
 | Artifact | `build/` path | Size | Auto-fetch? | Source / archive |
 |---|---|---|---|---|
-| MQ 9.4.5 arm64 (Phase B/D) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz` | 467 MB | **Yes** | `scripts/fetch-mq.sh` → IBM public developer CDN, **no auth**. SHA256 recorded first fetch, verified after. |
-| MQ 9.4.5 x86-64 (Phase C/RDQM) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz` | 520 MB | **Yes** | `scripts/fetch-mq.sh` (same CDN, no auth). |
+| MQ 9.4.5 Ubuntu (host arch) | `mq/9.4.5.0-…-UbuntuLinux{ARM64\|X64}.tar.gz` | ~467 MB | **Yes** | `scripts/fetch-mq.sh` picks the suffix from `uname -m` (`ARM64` on the Mac dev path, `X64` on an x86 host) — native-preferred (#276). IBM developer CDN, no auth. SHA256 recorded first fetch, verified after. |
+| MQ 9.4.5 x86-64 (RHEL/RDQM) | `mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz` | 520 MB | **Yes** | `scripts/fetch-mq.sh` fetches this on **every** host (RHEL is x86_64-only). Same CDN, no auth. |
 | RHEL 9.6 DVD ISO (Phase C box build) | operator-supplied (see §1.1) | 12 GB | **NO** | **Not downloadable by script** (licensed media). The **only** artifact an operator must acquire by hand; located via the artifact-resolution mechanism (§1.1). Implementation tracked in #54. |
 
 **Rule captured:** if an artifact *can* be fetched, a `scripts/` helper should

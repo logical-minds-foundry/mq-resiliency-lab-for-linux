@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from mqlab.fleet import fleet_rows, lab_guests, parse_domain_states
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
+
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
 
 VIRSH = """\
  Id   Name             State
@@ -18,14 +22,14 @@ def test_parse_domain_states_skips_chrome_and_short_lines():
     assert parse_domain_states("\n   \nId Name State\n----\n bad\n") == {}
 
 
-def test_lab_guests_reads_platform_with_default(monkeypatch, tmp_path):
+def test_lab_guests_default_tracks_host(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "defaults: { platform: ubuntu2404-arm64 }\nnodes:\n"
-        "  rdqm-a1: { platform: rhel96-x86_64 }\n  pcmk-a1: {}\n"
+        "defaults: { cpus: 1 }\nnodes:\n  rdqm-a1: { platform: rhel96-x86_64 }\n  pcmk-a1: {}\n"
     )
-    assert lab_guests() == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-arm64"}
+    assert lab_guests(ARM) == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-arm64"}
+    assert lab_guests(X86) == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-x86_64"}
 
 
 def test_fleet_rows_joins_state_and_setups_and_sorts_by_columns(monkeypatch, tmp_path):

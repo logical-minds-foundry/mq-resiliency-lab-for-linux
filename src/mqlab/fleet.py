@@ -13,10 +13,10 @@ from dataclasses import dataclass
 
 import yaml
 
+from mqlab.hostfacts import HostFacts, probe
 from mqlab.paths import repo_root
+from mqlab.platforms import default_platform
 from mqlab.setups import setups_of
-
-DEFAULT_PLATFORM = "ubuntu2404-arm64"
 
 
 @dataclass(frozen=True)
@@ -27,10 +27,12 @@ class FleetRow:
     setups: str
 
 
-def lab_guests() -> dict[str, str]:
-    """guest name -> platform, from topology.yaml (applying the default platform)."""
+def lab_guests(facts: HostFacts | None = None) -> dict[str, str]:
+    """guest name -> platform, from topology.yaml. The default Ubuntu platform is
+    host-resolved (native-preferred, #276) for any node that doesn't pin one."""
+    facts = facts if facts is not None else probe()
     data = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    default = data.get("defaults", {}).get("platform", DEFAULT_PLATFORM)
+    default = default_platform(facts)
     nodes = data.get("nodes", {})
     return {name: (cfg or {}).get("platform", default) for name, cfg in nodes.items()}
 

@@ -64,6 +64,10 @@ def test_tarball_name_maps_version_and_arch():
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
     )
     assert (
+        m.tarball_name("9.4.5.0", "ubuntu2404-x86_64")
+        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
+    )
+    assert (
         m.tarball_name("9.4.5.0", "rhel96-x86_64")
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
@@ -115,8 +119,28 @@ def test_setup_platforms_reads_topology(manifests, monkeypatch):
             "groups": {"g1": ["n1"], "g2": ["n2"]},
         },
     )
-    monkeypatch.setattr(m, "lab_guests", lambda: {"n1": "ubuntu2404-arm64", "n2": "rhel96-x86_64"})
+    monkeypatch.setattr(
+        m, "lab_guests", lambda facts=None: {"n1": "ubuntu2404-arm64", "n2": "rhel96-x86_64"}
+    )
     assert m.setup_platforms("s") == {"ubuntu2404-arm64", "rhel96-x86_64"}
+
+
+def test_setup_platforms_threads_facts(monkeypatch):
+    from mqlab.hostfacts import X86_64, HostFacts
+
+    x86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
+    seen: dict[str, object] = {}
+
+    def fake_lab_guests(facts=None):
+        seen["facts"] = facts
+        return {"n1": "ubuntu2404-x86_64"}
+
+    monkeypatch.setattr(m, "lab_guests", fake_lab_guests)
+    monkeypatch.setattr(
+        m, "_topology", lambda: {"groups": {"g": ["n1"]}, "setups": {"s": {"groups": ["g"]}}}
+    )
+    assert m.setup_platforms("s", x86) == {"ubuntu2404-x86_64"}
+    assert seen["facts"] is x86
 
 
 def test_topology_reads_the_real_file():
