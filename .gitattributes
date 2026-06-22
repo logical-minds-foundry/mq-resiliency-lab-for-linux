@@ -1,0 +1,12 @@
+# Curation boundary for the release tarball (docs/specs/2026-06-20-signed-tarball-release-design.md §4).
+# `git archive` omits these paths so the published tree carries only the product,
+# not developer-only scaffolding. (.git and gitignored paths like build/ are
+# already excluded by git archive and need no entry here.)
+.gitattributes        export-ignore
+.github/              export-ignore
+.claude/              export-ignore
+.vergil/              export-ignore
+.worktrees/           export-ignore
+.superpowers/         export-ignore
+vergil.toml           export-ignore
+tests/                export-ignore
