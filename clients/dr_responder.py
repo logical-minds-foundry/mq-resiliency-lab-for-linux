@@ -65,7 +65,7 @@ def _serve(qmgr, args, ledger, deadline):
         msg = parse_body(raw[idx:])
         reply = (
             pack_header(
-                password="pw", sender="SVC", receiver="APP01", session_date=msg.busdate
+                password="pw", sender="SVC", receiver="APP01", session_date=msg.session_date
             ).encode()
             + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
         )

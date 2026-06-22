@@ -68,7 +68,7 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
         if pending is None:
             seq += 1
             u = uuidlib.uuid4().hex
-            body = build_body(seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}")
+            body = build_body(seq=seq, uuid=u, session_date="20260608", payload=f"MSG-{seq}")
             header = pack_header(
                 password="pw", sender="APP01", receiver="SVC", session_date="20260608"
             ).encode()
