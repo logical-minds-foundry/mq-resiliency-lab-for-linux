@@ -111,7 +111,7 @@ RDQM correct too: seed `mqs.ini` at install and the RDQM QM inherits whenever it
 | Task file | Wired into (seam) | Action |
 |---|---|---|
 | `system.yml` | Before `crtmqm` in each crtmqm-running role — `mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike` — **and** at the end of `rdqm-install` (RDQM creates its QM via the bash script `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), so seeding `mqs.ini` at install time means that script's QM inherits the template; the script itself is not modified — no collision with the in-flight RDQM HA/DR work). | Write `mqs.ini` `DiagnosticMessagesTemplate` (inherited by each new QM at creation) + `DiagnosticSystemMessages`; install the journald rate-limit drop-in (§4.3). |
-| `qmgr.yml` | After `crtmqm` in the four crtmqm-running roles. Path-parameterized via `mq_qmini_path` (pcmk's `qm.ini` is on the shared LUN, `/mqshared/qmgrs/<QM>/qm.ini`; others default to `/var/mqm/qmgrs/<QM>/qm.ini`). RDQM relies on template inheritance only. | Idempotent `qm.ini` ensure-block (belt-and-suspenders for re-provisioned QMs). |
+| *(no `qmgr.yml`)* | — | **Dropped during implementation — template-only.** `crtmqm` copies the `DiagnosticMessagesTemplate` into `qm.ini` and it's active on first start; a separate marked `qm.ini` ensure-block would add a **duplicate** `DiagnosticMessages` stanza on every fresh build *and* wouldn't take effect without a QM restart. The template is the single source for the QM surface (covers all arms, incl. pcmk's shared-LUN `qm.ini` and per-node Native HA, since each `crtmqm` inherits). |
 | `client.yml` | `mq-client`. | `/var/mqm/mqclient.ini` `DiagnosticSystemMessages` (marker block — coexists with the existing KeepAlive `lineinfile` in `site-distributed-shared.yml`). |
 | *(mqweb template)* | `mqweb` role's `templates/mqwebuser.xml.j2`, gated by `mqweb_json_logging`. | Add `<logging messageFormat="json" messageSource="message,ffdc"/>` so Liberty writes single-line JSON to `messages.log`. Not a `mq-diag-logging` task file (see above). |
 
@@ -170,8 +170,8 @@ DiagnosticSystemMessages:
 ```
 
 ```ini
-# qm.ini — idempotent ensure-block (mirrors the inherited template); covers
-# re-provisioned QMs that pre-date the template.
+# qm.ini — NOT written directly. crtmqm copies the template above into qm.ini as
+# this DiagnosticMessages stanza, active on first start (shown for reference):
 DiagnosticMessages:
    Name=ClusterSyslog
    Service=Syslog
@@ -223,13 +223,14 @@ journald drop-in are applied on every HA node; the `DiagnosticMessagesTemplate`
 must exist on whichever node runs `crtmqm`, and the resulting `qm.ini` stanza is
 then carried with the replicated QM data to the other instances.
 
-**Correctness model.** Primary mechanism is **template inheritance at `crtmqm`**
-(no QM restart needed; aligns with the cold-rebuild acceptance gate). The `qm.ini`
-ensure-block exists for drift-correction and documentation; because MQ only reads
-diagnostic stanza changes at QM start, any live change it makes would require a QM
-restart — which on the HA arms must be done via cold rebuild, not mid-provision.
-The implementation therefore treats the template path as authoritative and the
-`qm.ini` block as a no-op on freshly built QMs.
+**Correctness model.** The **sole** mechanism for the QM surface is **template
+inheritance at `crtmqm`**: `system.yml` seeds the `mqs.ini`
+`DiagnosticMessagesTemplate` *before* each role's `crtmqm`, so the new QM's `qm.ini`
+carries the `DiagnosticMessages` stanza and it is active on first start — no QM
+restart, aligned with the cold-rebuild acceptance gate. There is intentionally no
+separate `qm.ini` ensure-block: it would duplicate the inherited stanza and would
+not activate without a restart. To change the policy on an existing QM, cold-rebuild
+it (the lab's model).
 
 ## 7. Verification (availability acceptance)
 

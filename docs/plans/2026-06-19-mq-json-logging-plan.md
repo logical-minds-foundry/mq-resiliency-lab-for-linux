@@ -186,7 +186,16 @@ vrg-commit --type feat --scope obs --message "mq-diag-logging role: system.yml (
 
 ---
 
-### Task 2: `qmgr.yml` — idempotent `qm.ini` ensure-block
+### Task 2: ~~`qmgr.yml` — idempotent `qm.ini` ensure-block~~ — DROPPED (template-only)
+
+> **Implementation note (#282):** Dropped during inline execution. The
+> `crtmqm`-copied `DiagnosticMessagesTemplate` (Task 1) already writes the `qm.ini`
+> `DiagnosticMessages` stanza and activates it on first start; a marked ensure-block
+> here would add a **duplicate** stanza on every fresh build and wouldn't take effect
+> without a QM restart. The QM surface is **template-only**. Consequently the
+> `qmgr.yml` include steps in Task 5 (Steps 2, 3-after, 4-after) are also dropped —
+> only `system.yml` is wired, *before* each `crtmqm`. The text below is retained for
+> historical context.
 
 **Files:**
 - Create: `ansible/roles/mq-diag-logging/tasks/qmgr.yml`
