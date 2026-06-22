@@ -33,9 +33,11 @@ jobs:
           echo "PKG=${PKG}" >> "${GITHUB_ENV}"
 
       - name: Import signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          echo "${{ secrets.RELEASE_GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "${GPG_PRIVATE_KEY}" | gpg --batch --import
 
       - name: Sign tarball and checksums
         env:
