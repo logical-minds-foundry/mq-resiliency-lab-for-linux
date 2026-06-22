@@ -7,13 +7,13 @@ detail lives in the design spec and (later) the Operations section.
 ## 1. Build and enter the lab VM
 
 The lab runs inside an ephemeral Vergil VM declared by
-[`vergil.toml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/vergil.toml)
+[`vergil.toml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/vergil.toml)
 (the `[vm.vergil-user]` profile). It is 100% reproducible — rebuild it
 freely.
 
 ```bash
-vrg-vm create logical-minds-foundry/mq-cluster-tooling --identity vergil-user
-vrg-vm session logical-minds-foundry/mq-cluster-tooling --identity vergil-user
+vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
+vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
 ```
 
 All working state lives under the gitignored `build/` directory, mounted
@@ -67,7 +67,7 @@ combined create+up / down+destroy in one shot.) Break something and
 because the lab is a disposable, reproducible illusion.
 
 The lab's shape is a single source of truth:
-[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml)
+[`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml)
 — the libvirt networks (data, heartbeat, WAN, client, SVC, SAN) and every
 guest's NICs and platform. See the [Architecture](architecture/index.md)
 walkthrough for what each network is for.

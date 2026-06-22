@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code when working in this repository.
 
-**Project name**: mq-cluster-tooling
+**Project name**: mq-resiliency-lab-for-linux
 
 ## Development environment
 
@@ -11,12 +11,12 @@ The VM's footprint and installed packages are declared as the `[vm.vergil-user]`
 profile in [`vergil.toml`](vergil.toml) — there is no separate spec file.
 
 - Build the VM once:
-  `vrg-vm create logical-minds-foundry/mq-cluster-tooling --identity vergil-user`
+  `vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user`
 - Work in it:
-  `vrg-vm session logical-minds-foundry/mq-cluster-tooling --identity vergil-user`
+  `vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user`
 - The VM is **ephemeral and 100% reproducible**. Do not hand-customize it.
   Re-provision freely to stay fresh:
-  `vrg-vm rebuild logical-minds-foundry/mq-cluster-tooling --identity vergil-user`.
+  `vrg-vm rebuild logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user`.
 - All working state lives in the gitignored, host-mounted `build/` directory.
   Nothing in the VM outside `build/` is precious. `build/` is split into four
   buckets with fixed keep/nuke/share semantics — `cache/` (shared, re-fetchable

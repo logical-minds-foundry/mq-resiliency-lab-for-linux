@@ -1,6 +1,6 @@
-# mq-cluster-tooling
+# MQ Resiliency Lab for Linux
 
-A reproducible, **nested-virtualization IBM MQ cluster lab** for exercising
+A reproducible, **nested-virtualization IBM MQ resiliency lab** for exercising
 high-availability (HA) and disaster-recovery (DR) topologies end to end —
 from the host machine down to running queue managers and a live message
 path.

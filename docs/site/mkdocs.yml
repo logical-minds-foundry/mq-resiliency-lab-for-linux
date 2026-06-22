@@ -1,7 +1,7 @@
-site_name: "mq-cluster-tooling"
-site_description: "Reproducible nested-virtualization IBM MQ cluster lab for exercising HA and DR topologies"
-repo_url: https://github.com/logical-minds-foundry/mq-cluster-tooling
-repo_name: logical-minds-foundry/mq-cluster-tooling
+site_name: "MQ Resiliency Lab for Linux"
+site_description: "Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux"
+repo_url: https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux
+repo_name: logical-minds-foundry/mq-resiliency-lab-for-linux
 docs_dir: docs
 strict: true
 edit_uri: ""
