@@ -1,0 +1,197 @@
+# Genericize the Message-Domain Model — de-brand for public release
+
+**Issue:** #85 (reconciles #73, which folds in here)
+**Date:** 2026-06-22
+**Status:** Design — awaiting review
+**Scope:** Replace every domain- and vendor-specific identifier in the **active
+working tree** (code, lab/ansible config, living + dated docs, unimplemented
+plans, and open issue text) with a generic request/reply vocabulary, so the
+repository reads as a generic HA/DR messaging lab with no traceable relation to
+the originating use case. This spec defines the **canonical vocabulary, the exact
+rename mapping, the docs de-identification policy, and the execution sequencing**.
+It does *not* cover the repository rename (`mq-cluster-tooling` →
+`mq-resilience-lab`, #84) — that is a separate human-driven operation. Git
+history is explicitly out of scope.
+
+## 1. Goal
+
+The lab models a **generic, reusable HA/DR pattern**: a highly-available,
+DR-capable messaging service that an organization operates for an internal
+application, which exchanges request/reply messages with an external service
+across an inter-business WAN. A specific real-world clearing/payments resilience
+scenario got us started, but almost nothing in the design turned out to be
+specific to it — and we expect to adapt the lab to numerous external
+counterparties over time, each with its own quirks.
+
+The originating entity's name (`DTCC`) and a recognizable real protocol name
+(`EPN`) are still woven through identifiers, config, and docs. They overstate the
+specificity, hide the generality, and tie a would-be open-source lab to a
+particular engagement.
+
+**Deliverable:** after this change, `git clone` followed by a recursive
+case-insensitive search for the originating names returns **zero hits in tracked
+files**. The lab's behavior is unchanged; only the names change.
+
+This spec reconciles two older, overlapping issues — #73 (anonymize DTCC in
+object names) and #85 (genericize the domain model) — whose work surfaces
+intersect and which were written before recent distributed-architecture work
+*grew* the brand surface (`QMDTCC` alone reached 58 occurrences). #85 is retained
+as the single tracking issue; #73 folds into it and is closed as superseded.
+
+## 2. The model — three tiers, named by role
+
+The system has three actors. Naming them by **role** keeps the lab vendor- and
+domain-neutral.
+
+1. **Tier 1 — the application (`APP`).** The internal MQ *application* that
+   produces request messages. It is an MQ **client**. (Was `FIRM` / `FIRM01` /
+   partially `app-client`.)
+2. **Tier 2 — our queue manager.** The HA/DR queue manager we operate. It
+   *serves* the tier-1 MQ clients and forwards their traffic outward. Named by
+   **HA substrate**, which is already generic and stays: `QMPCMK` (Pacemaker),
+   `QMNATIVE` (Native HA), `QMRDQM` (RDQM), `QMAIN` (standalone baseline).
+3. **Tier 3 — the external service (`SVC`).** The external request/reply
+   responder our queue manager exchanges messages with across the WAN — "service"
+   in the web-service / REST-endpoint sense (something waiting to respond to a
+   request). (Was `DTCC` / `QMDTCC` / partially `SVC`.)
+
+### 2.1 The "service" discipline rule
+
+The English word *service* is overloaded across tiers 2 and 3: our queue manager
+is "a service" to its MQ clients, and the external responder is "a service" we
+call. To prevent the confusion this overload causes, **the word "service" (and
+the token `SVC`) names tier 3 only.** Tier 2 is referred to as "the queue
+manager," "the broker," or by its substrate name — never "the service." A
+one-line glossary note in the architecture doc states this explicitly.
+
+## 3. Canonical vocabulary
+
+| Concept | Old (inconsistent) | **Canonical** |
+|---|---|---|
+| Tier-1 application (requester) | `FIRM`, `FIRM01`, `app-client` | **`APP`** / `app-client` |
+| Tier-2 queue manager(s) | — | **substrate names kept:** `QMPCMK` / `QMNATIVE` / `QMRDQM` / `QMAIN` |
+| Tier-3 external service (responder) | `DTCC`, `QMDTCC`, `SVC`, `QDTCC` | **`SVC`** / `svc-sim` / `QMSVC` |
+| Header pattern | `EPN` (Electronic Payments Network — a real protocol) | **fixed-format header (FFH)** |
+| Payload type | `TRADE` | *folded away* → `SVC.REQUEST` / `APP.REPLY` |
+| Date field | `busdate` | **`session_date`** |
+
+Three naming schemes currently coexist for the same concepts (`DTCC.*`, `SVC.*`,
+`TRADE.*` for requests; `FIRM.*`, `APP.*` for our app side). This spec collapses
+each concept to its single canonical token and eliminates the stragglers.
+
+## 4. Rename surface & exact mapping (code + lab + ansible)
+
+A single atomic find/replace pass across `src/`, `clients/`, `lab/`, `ansible/`,
+`content/`.
+
+### 4.1 MQ objects
+
+- Queue manager: `QMDTCC` → `QMSVC`.
+- Transmission/remote queue to the external QM: `QDTCC` → the xmit/remote queue
+  targeting `QMSVC` (`QSVC` / `SVC.XMITQ` per existing MQSC role).
+- Inter-QM channels: `QM*.QMDTCC` / `QMDTCC.QM*` → `QM*.QMSVC` / `QMSVC.QM*`
+  (e.g. `QMPCMK.QMDTCC` → `QMPCMK.QMSVC`).
+- Request queue: `DTCC.REQUEST`, `TRADE.REQUEST` → `SVC.REQUEST`.
+- Reply queue: `TRADE.REPLY`, `FIRM.REPLY` → `APP.REPLY`.
+- Connection/object names: `DTCC_CONN` → `SVC_CONN`; `DTCCSVC` → `SVC`.
+- Already canonical, unchanged: `APP.SVRCONN`, `SVC.SVRCONN`, `MON.SVRCONN`.
+- `QMAIN` is kept — it names the standalone baseline queue manager, not a brand.
+
+### 4.2 Guests / topology
+
+- Guest: `dtcc-sim` → `svc-sim`; content file `content/dtcc-sim.yaml` →
+  `content/svc-sim.yaml`; the `nodes:` entry and all topology references.
+- Networks: `net-ext` (inter-business WAN) is already generic — unchanged. The
+  `net-*.xml` glob in `net-up.sh` requires no code change.
+
+### 4.3 DR framework, fields & ledgers
+
+- Field names: `dtcc_received` → `svc_received`; `dtcc_replied` → `svc_replied`;
+  `dtcc_receive_counts` → `svc_receive_counts`; `dtcc_path` → `svc_path`.
+- Ledgers: `dtcc_ledger` → `svc_ledger`; `firm_ledger` → `app_ledger`; ledger
+  files `dtcc.jsonl` → `svc.jsonl` (gitignored `build/` ledgers regenerate under
+  the new names).
+
+### 4.4 Header module & clients
+
+- `src/mqlab/epn.py` → `src/mqlab/header.py`. The `Header` dataclass and ACK
+  constants are unchanged; the field `busdate` → `session_date`.
+- Clients: `clients/epn_requester.py` → `clients/app_requester.py`;
+  `clients/epn_responder.py` → `clients/svc_responder.py`. Imports
+  (`from mqlab.epn import pack_header`) updated to `from mqlab.header import ...`.
+- Tests: `tests/test_epn.py` → `tests/test_header.py`; DR tests referencing
+  `dtcc_*` fields updated to `svc_*`.
+
+In docs and code comments, the header is described as "a fixed-format positional
+header (FFH)" — blank-padded, left-justified fields — with no reference to EPN or
+any real protocol.
+
+## 5. Docs de-identification policy
+
+**Target gate:** in the tracked working tree, a recursive case-insensitive
+search for the unambiguous originating names — `dtcc`, `ficc`, `epn` — returns
+**zero hits**. The common-English tokens `firm` and `trade` cannot be grepped to
+literal zero (they appear inside `confirm`, `platform`, `trade-off`, etc.), so
+their gate is narrower: zero remaining *domain identifiers* — whole-word `FIRM` /
+`TRADE` / `FIRM01` and the `firm_*` / `trade_*` / `*.TRADE` / `TRADE.*` forms.
+Git history is *not* touched.
+
+- **Anonymize in place** — all ~51 tracked `.md` files (specs, plans, reports,
+  reference, `docs/site/`) get the §3/§4 mapping applied. Dated specs/plans/
+  reports included: these are content edits to tracked files, not history
+  rewrites. The vast majority of current DTCC mentions are *identifier* mentions
+  (`QMDTCC`, `dtcc-sim`, `dtcc_received`), which the mapping already covers.
+- **Delete** — only documents (or sections) that are *substantially* about the
+  originating entity rather than the lab: deep-dive vendor research, the
+  EPN-MQ-implementation-guide notes, and the five `dtcc.com` citation URLs. These
+  are not load-bearing; the design is not specific to them.
+- **Generic sourcing note** — where rationale referenced the originating entity,
+  it is reworded to an unnamed generic form: "derived from a real-world
+  clearing/payments resilience scenario." No entity is named.
+- **Untouched** — non-DTCC reference URLs (IBM MQ docs, DRBD, etc.) and all
+  technical content.
+
+## 6. Plans & issue tracker
+
+The rename extends beyond files to forward-looking work, so unimplemented plans
+do not reintroduce the old vocabulary:
+
+- **Rewrite unimplemented plan docs** to the canonical vocabulary — notably
+  `docs/plans/2026-06-13-plan-2-dtcc-qm-inter-qm-channels.md`,
+  `…plan-3-app-requester-end-to-end.md`, `…2026-06-17-vendor-two-site-dr.md`, and
+  the RDQM / Native-HA distributed plans that name `QMDTCC` / `QMAIN` / `EPN`.
+- **Update open issue titles/bodies** that bake in old names: #147 (`QMDTCC`),
+  #148 (`QMAIN`/`EPN`), #237 (vendor/DTCC two-site DR), #267 (converge),
+  #145 / #146 / #149, #182.
+- **Close #73** as superseded, folded into #85 with a back-link; #85 remains the
+  tracking issue for this spec.
+
+## 7. Execution & validation
+
+- **Sequencing.** Execution is held until the remaining in-flight PRs merge and
+  `develop` is clean with no pending work. The rename then runs as the next
+  change — there is deliberately no concurrent branch work to serialize against.
+- **One atomic branch** `feature/85-genericize-domain-model`, branched off clean
+  `develop`, rebased and sanity-checked immediately before execution. The rename
+  lands in a single coordinated pass so the tree is never left half-renamed (the
+  current inconsistent state is exactly the cost of *not* doing this atomically).
+- **Re-provision** the renamed `svc-sim` guest and re-render the `QMSVC` object
+  set (`mqlab` re-render; libvirt `net-*` globbing needs no change).
+- **Gate.** `vrg-container-run -- vrg-validate` green at 100% branch coverage,
+  **and** a cold-rebuild acceptance of the message path per the repo's
+  cold-rebuild gate — lint-green alone is not "done" for provisioning-affecting
+  changes.
+- **Post-conditions.** Working-tree grep for the originating names is empty;
+  end-to-end `APP → our QM → SVC → reply` flow passes; the HA/DR drills line up
+  (queue names and client `--*-queue` args renamed together).
+
+## 8. Out of scope
+
+- **Repository rename** (`mq-cluster-tooling` → `mq-resilience-lab`, #84) — a
+  separate human-driven GitHub + filesystem + Vergil-VM operation with its own
+  `.claude` carry-forward gotcha. Lands before public release but is not coupled
+  to this spec.
+- **Git history** — no rewriting, no `filter-branch`. The gate is the working
+  tree only.
+- **CLI command-interface reorg** — a separate concern; this spec touches object
+  and entity names, not the `mqlab` command surface.
