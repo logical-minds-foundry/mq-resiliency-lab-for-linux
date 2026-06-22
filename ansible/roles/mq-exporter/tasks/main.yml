@@ -38,7 +38,7 @@
     GOFLAGS: -mod=mod
   become: true
 
-# TLS (#250): one client-org ops keystore (+ .sth stash) for the exporter, shared
+# TLS (#250): one app-org ops keystore (+ .sth stash) for the exporter, shared
 # by every per-QM instance on this probe. Placed once; pki-distribute's copy/stash
 # are idempotent so the second include is a no-op.
 - name: place the mq_prometheus keystore (TLS)

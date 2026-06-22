@@ -1,9 +1,9 @@
 ---
 # Two independent org CAs (spec §4). Each CA: name -> subject.
 pki_cas:
-  client-org:
-    common_name: "client-org Root CA"
-    organization_name: "client-org"
+  app-org:
+    common_name: "app-org Root CA"
+    organization_name: "app-org"
   svc-org:
     common_name: "svc-org Root CA"
     organization_name: "svc-org"
@@ -13,16 +13,16 @@ pki_cas:
 # kind = personal (gets key+cert+keystore) | trust_only (gets a CA bundle only).
 # In-house QMs share O/OU with distinct CNs (spec §5, partial-DN identity).
 pki_entities:
-  - { cn: QMPCMK, org: client-org, ou: clearing-service, kind: personal, trust: [svc-org] }
-  - { cn: QMRDQM, org: client-org, ou: clearing-service, kind: personal, trust: [svc-org] }
-  - { cn: QMNATIVE, org: client-org, ou: clearing-service, kind: personal, trust: [svc-org] }
-  - { cn: app-client, org: client-org, ou: apps, kind: personal, trust: [] }
-  # Trusts svc-org too: one client-org ops identity, but the exporter scrapes BOTH
+  - { cn: QMPCMK, org: app-org, ou: messaging, kind: personal, trust: [svc-org] }
+  - { cn: QMRDQM, org: app-org, ou: messaging, kind: personal, trust: [svc-org] }
+  - { cn: QMNATIVE, org: app-org, ou: messaging, kind: personal, trust: [svc-org] }
+  - { cn: app-client, org: app-org, ou: apps, kind: personal, trust: [] }
+  # Trusts svc-org too: one app-org ops identity, but the exporter scrapes BOTH
   # QMs, so it must validate QMSVC's O=svc-org server cert (#250 / MON.SVRCONN).
-  - { cn: mq_prometheus, org: client-org, ou: ops, kind: personal, trust: [svc-org] }
-  - { cn: mqweb, org: client-org, ou: ops, kind: personal, trust: [] }
-  - { cn: pymqrest, org: client-org, ou: ops, kind: trust_only, trust: [] }
-  - { cn: QMSVC, org: svc-org, ou: clearing-service, kind: personal, trust: [client-org] }
+  - { cn: mq_prometheus, org: app-org, ou: ops, kind: personal, trust: [svc-org] }
+  - { cn: mqweb, org: app-org, ou: ops, kind: personal, trust: [] }
+  - { cn: pymqrest, org: app-org, ou: ops, kind: trust_only, trust: [] }
+  - { cn: QMSVC, org: svc-org, ou: messaging, kind: personal, trust: [app-org] }
   # The co-located SVC service responder is a SVRCONN client (#250 / SVC.SVRCONN) —
   # presents O=svc-org so QMSVC's SVRCONN SSLPEER('O=svc-org') validates it.
-  - { cn: svc-responder, org: svc-org, ou: clearing-service, kind: personal, trust: [client-org] }
+  - { cn: svc-responder, org: svc-org, ou: messaging, kind: personal, trust: [app-org] }

@@ -5,6 +5,6 @@
 # (TLS_CHACHA20_POLY1305_SHA256 negotiated from ANY_TLS13_OR_HIGHER), mutual auth
 # enforced with CHLAUTH disabled.
 tls_cipher: "ANY_TLS13_OR_HIGHER"
-tls_peer_inhouse: "O=client-org,OU=clearing-service" # QM-to-QM: the in-house clearing QM (O+OU)
+tls_peer_app: "O=app-org,OU=messaging" # QM-to-QM: the app QM (O+OU)
 tls_peer_svc: "O=svc-org"                            # the SVC side, org-only
-tls_peer_client: "O=client-org"                        # in-house SVRCONN clients, org-only
+tls_peer_client: "O=app-org"                        # app SVRCONN clients, org-only

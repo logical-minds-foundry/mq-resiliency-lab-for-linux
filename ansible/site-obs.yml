@@ -28,7 +28,7 @@
         mq_exporter_qm: QMSVC
         mq_exporter_conn: "10.60.0.50(1414)"
         # Connect on the dedicated monitoring SVRCONN (#250), not the responder's
-        # SVC.SVRCONN — the exporter presents O=client-org, which MON.SVRCONN pins.
+        # SVC.SVRCONN — the exporter presents O=app-org, which MON.SVRCONN pins.
         mq_exporter_channel: MON.SVRCONN
         mq_exporter_port: 9158
         mq_exporter_monitored_queues: "SVC.REQUEST,QMPCMK"

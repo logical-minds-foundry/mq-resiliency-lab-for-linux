@@ -66,9 +66,9 @@ def test_pki_list_prints_entities_from_vars(monkeypatch, tmp_path):
     (tmp_path / "ansible" / "vars" / "pki-entities.yml").write_text(
         "pki_cas: {}\n"
         "pki_entities:\n"
-        "  - {cn: QMPCMK, org: client-org, ou: clearing-service, kind: personal}\n"
+        "  - {cn: QMPCMK, org: app-org, ou: messaging, kind: personal}\n"
     )
     result = CliRunner().invoke(cli.app, ["pki", "list"])
     assert result.exit_code == 0
     assert "QMPCMK" in result.output
-    assert "client-org" in result.output
+    assert "app-org" in result.output

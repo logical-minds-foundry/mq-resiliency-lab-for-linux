@@ -8,11 +8,11 @@ DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
 * pip's pymqi is client-only, so a true bindings connect fails 2058. MCAUSER(mqm)
 * gives it admin authority; CHLAUTH is already disabled on this QM.
 DEFINE CHANNEL(SVC.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
-* Monitoring SVRCONN for our client-org ops exporter (#250/#182). QMSVC trusts the
-* client-org CA (QM-link), so it validates the exporter's O=client-org cert; SSLPEER
+* Monitoring SVRCONN for our app-org ops exporter (#250/#182). QMSVC trusts the
+* app-org CA (QM-link), so it validates the exporter's O=app-org cert; SSLPEER
 * pins it. Distinct from SVC.SVRCONN (the O=svc-org responder) so each client's peer
 * identity stays exact.
 DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
-DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_inhouse }}') REPLACE
+DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_app }}') REPLACE
 DEFINE QLOCAL({{ our_qm }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qmgr_name }}.{{ our_qm }}) REPLACE
-DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_inhouse }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_app }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE

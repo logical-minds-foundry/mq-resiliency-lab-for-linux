@@ -8,7 +8,7 @@ mq_exporter_instance: "{{ mq_exporter_qm | lower }}"
 mq_exporter_conn: "10.10.1.200(1414)"
 # Dedicated monitoring SVRCONN (#250): the exporter no longer piggybacks on
 # APP.SVRCONN/SVC.SVRCONN, whose mutual-TLS SSLPEERs pin the app/responder
-# identities. MON.SVRCONN pins O=client-org (the exporter) on both QMs.
+# identities. MON.SVRCONN pins O=app-org (the exporter) on both QMs.
 mq_exporter_channel: MON.SVRCONN
 mq_exporter_port: 9157
 # TLS (#250): mq-metric-samples exposes no MQ-TLS CLI flags, so a client
