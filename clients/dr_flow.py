@@ -34,14 +34,14 @@ import dr_mqi
 import pymqi
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import build_body, parse_body
-from mqlab.epn import pack_header
+from mqlab.header import pack_header
 
 STOP = threading.Event()
 DRAIN_SECONDS = 4.0
 
 
 def _parse_reply(raw):
-    # the reply echoes the DRv1 body after the EPN header; slice from the marker
+    # the reply echoes the DRv1 body after the FFH header; slice from the marker
     idx = raw.find(b"DRv1|")
     return parse_body(raw[idx:])
 
@@ -70,7 +70,7 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
             u = uuidlib.uuid4().hex
             body = build_body(seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}")
             header = pack_header(
-                password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
+                password="pw", sender="APP01", receiver="SVC", session_date="20260608"
             ).encode()
             pending = (seq, u, header + body)
         pseq, puuid, payload = pending

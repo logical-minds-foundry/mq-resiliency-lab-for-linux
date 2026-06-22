@@ -1,5 +1,5 @@
-"""EPN-pattern fixed-format header (spec 9.1): blank-padded, left-justified
-8-char fields - Password, Sender, Receiver, BusDate - then payload. Field
+"""Fixed-format header (FFH) pattern (spec 9.1): blank-padded, left-justified
+8-char fields - Password, Sender, Receiver, SessionDate - then payload. Field
 layouts are per-service and arrive at onboarding; this models the PATTERN."""
 
 from dataclasses import dataclass
@@ -16,20 +16,20 @@ class Header:
     password: str
     sender: str
     receiver: str
-    busdate: str
+    session_date: str
     payload: str
 
 
-def pack_header(*, password: str, sender: str, receiver: str, busdate: str) -> str:
+def pack_header(*, password: str, sender: str, receiver: str, session_date: str) -> str:
     for name, value in (
         ("password", password),
         ("sender", sender),
         ("receiver", receiver),
-        ("busdate", busdate),
+        ("session_date", session_date),
     ):
         if len(value) > FIELD:
             raise ValueError(f"{name} exceeds {FIELD} chars")
-    return f"{password:<8}{sender:<8}{receiver:<8}{busdate:<8}"
+    return f"{password:<8}{sender:<8}{receiver:<8}{session_date:<8}"
 
 
 def parse_header(msg: str) -> Header:
@@ -39,7 +39,7 @@ def parse_header(msg: str) -> Header:
         password=msg[0:8].rstrip(),
         sender=msg[8:16].rstrip(),
         receiver=msg[16:24].rstrip(),
-        busdate=msg[24:32].rstrip(),
+        session_date=msg[24:32].rstrip(),
         payload=msg[32:],
     )
 
@@ -51,6 +51,6 @@ def validate_header(msg: str, *, today: str) -> str:
         return ACK_BAD_HEADER
     if not (header.password and header.sender and header.receiver):
         return ACK_BAD_HEADER
-    if header.busdate != today:
+    if header.session_date != today:
         return ACK_STALE_DATE
     return ACK_OK

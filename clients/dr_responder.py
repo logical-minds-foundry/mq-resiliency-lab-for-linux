@@ -26,7 +26,7 @@ import dr_mqi
 import pymqi
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import parse_body
-from mqlab.epn import pack_header
+from mqlab.header import pack_header
 
 
 def _serve(qmgr, args, ledger, deadline):
@@ -65,7 +65,7 @@ def _serve(qmgr, args, ledger, deadline):
         msg = parse_body(raw[idx:])
         reply = (
             pack_header(
-                password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=msg.busdate
+                password="pw", sender="SVC", receiver="APP01", session_date=msg.busdate
             ).encode()
             + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
         )
