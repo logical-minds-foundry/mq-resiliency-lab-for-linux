@@ -66,8 +66,8 @@
 
 - name: deploy the service responder
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../clients/service_responder.py"
-    dest: /var/mqm/service_responder.py
+    src: "{{ playbook_dir }}/../clients/svc_responder.py"
+    dest: /var/mqm/svc_responder.py
     owner: mqm
     group: mqm
     mode: "0644"
@@ -75,14 +75,14 @@
 
 - name: responder systemd unit
   ansible.builtin.template:
-    src: mq-service-responder.service.j2
-    dest: /etc/systemd/system/mq-service-responder.service
+    src: mq-svc-responder.service.j2
+    dest: /etc/systemd/system/mq-svc-responder.service
     mode: "0644"
   become: true
 
 - name: enable + start the responder
   ansible.builtin.systemd:
-    name: mq-service-responder
+    name: mq-svc-responder
     enabled: true
     state: started
     daemon_reload: true
