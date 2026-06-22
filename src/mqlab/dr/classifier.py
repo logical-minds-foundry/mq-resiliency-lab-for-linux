@@ -12,13 +12,13 @@ from .model import Bucket, MessageFacts
 
 
 def classify(f: MessageFacts) -> Bucket:
-    if f.dtcc_received >= 2:
+    if f.svc_received >= 2:
         return Bucket.DUPLICATED
-    if f.firm_confirmed:
+    if f.app_confirmed:
         return Bucket.CONFIRMED
     if f.on_secondary:
         return Bucket.CONTINUED
-    if f.dtcc_received == 1:
+    if f.svc_received == 1:
         return Bucket.AMBIGUOUS
     if f.on_primary_disk:
         return Bucket.STRANDED

@@ -20,9 +20,9 @@ def _confirmed_report(arm: str) -> ScenarioReport:
         MessageFacts(
             seq=1,
             uuid="u1",
-            firm_confirmed=True,
-            dtcc_received=1,
-            dtcc_replied=True,
+            app_confirmed=True,
+            svc_received=1,
+            svc_replied=True,
             on_secondary=False,
             on_primary_disk=False,
         )

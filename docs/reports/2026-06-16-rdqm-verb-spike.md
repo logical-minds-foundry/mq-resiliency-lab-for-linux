@@ -109,7 +109,7 @@ cannot.
 The distributed setup has **two** consumers on **two isolated L2 networks**:
 
 - the **app** (Business A) on `net-data-a` (10.10.1.0/24), and
-- the **partner** QM (QMDTCC) on `net-ext` (10.60.0.0/24, the inter-business WAN).
+- the **partner** QM (QMSVC) on `net-ext` (10.60.0.0/24, the inter-business WAN).
 
 With one floating IP, only one consumer can ride an HA failover via a floating
 address. The other needs a different failover-tolerant mechanism.
@@ -119,7 +119,7 @@ address. The other needs a different failover-tolerant mechanism.
 Spend the single FIP on the **data VIP** (`10.10.1.100`, net-data-a) so the **app**
 rides HA exactly as in the Pacemaker arm (same headline "client follows the QM
 across nodes" story). Give the **partner** a failover-tolerant reach-back **without
-a second FIP**: QMDTCC's SDR channel to QMRDQM carries a **CONNAME list of the three
+a second FIP**: QMSVC's SDR channel to QMRDQM carries a **CONNAME list of the three
 `rdqm_a` net-ext node IPs**:
 
 ```
@@ -128,13 +128,13 @@ CONNAME('10.60.0.31(1414),10.60.0.32(1414),10.60.0.33(1414)')
 
 MQ tries the list in order and reconnects to whichever node currently runs QMRDQM,
 so the inter-business link survives an HA failover too. Our outbound SDR
-(QMRDQM→QMDTCC) is unaffected: it originates from the active node and targets
-QMDTCC's static net-ext IP (10.60.0.50).
+(QMRDQM→QMSVC) is unaffected: it originates from the active node and targets
+QMSVC's static net-ext IP (10.60.0.50).
 
 Code changes (all on `feature/216-plan-b-rdqm-distributed`):
 
 - `lab/scripts/rdqm-qm-create.sh` — dropped the second `rdqmint`; now a 3-arg
-  contract `(QM, data-VIP, DTCC_CONN)`; documents the single-FIP rationale.
+  contract `(QM, data-VIP, SVC_CONN)`; documents the single-FIP rationale.
 - `ansible/site-rdqm-distributed.yml` — `our_conn` is the 3-node net-ext CONNAME
   list (was the single, unbindable partner VIP 10.60.0.30).
 - `lab/topology.yaml` — `distributed-rdqm-rhel` QM drops `vip_ext`; `vip_ext` is now
@@ -153,7 +153,7 @@ Code changes (all on `feature/216-plan-b-rdqm-distributed`):
 3/3 round-trips OK
 ```
 
-app → QMRDQM (data VIP) → SDR → QMDTCC → responder → reply → SDR (node-list CONNAME)
+app → QMRDQM (data VIP) → SDR → QMSVC → responder → reply → SDR (node-list CONNAME)
 → QMRDQM → app.
 
 ## For the user's review

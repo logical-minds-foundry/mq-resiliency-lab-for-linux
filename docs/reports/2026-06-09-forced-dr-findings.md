@@ -25,7 +25,7 @@ at site A on the DRBD-backed LUN.
 The drill (`DR-FORCE-1`, "primary unrecoverable, flow continues through
 cutover"):
 
-1. Drive the continuous persistent+syncpoint firm flow + god's-eye responder
+1. Drive the continuous persistent+syncpoint app flow + god's-eye responder
    against site A's VIP.
 2. **Break the cross-site DRBD link** mid-flow (`drbdadm disconnect` on `san-a`)
    — a WAN partition. The QM keeps committing locally; nothing reaches `san-b`.
@@ -34,13 +34,13 @@ cutover"):
 4. **Force-promote `san-b`** (`drbdadm primary --force`) from whatever it had
    received, re-export the LUN, start the QM on cluster B.
 
-Loss is then quantified by the framework: messages the firm committed at A
+Loss is then quantified by the framework: messages the app committed at A
 *after* the replication break never reached `san-b`, so the forced promote
 loses exactly that tail.
 
 ## Result
 
-The definitive run gives the firm **both** site VIPs in its connection list, so
+The definitive run gives the app **both** site VIPs in its connection list, so
 the reconnectable client rides the cutover and keeps producing on the survivor:
 
 ```
@@ -68,8 +68,8 @@ during the WAN-partition window before the site died.
 
 The 179 messages are classified **`ambiguous`**, not merely "lost" — and that
 distinction is the entire point of the framework. The god's-eye responder
-**received and replied to** those messages at site A, so the firm's ledger shows
-them as in-flight/processed; the firm believes the work happened. But the forced
+**received and replied to** those messages at site A, so the app's ledger shows
+them as in-flight/processed; the app believes the work happened. But the forced
 promote of `san-b` has **no record of them**. On recovery:
 
 - **Resending** them risks **duplicates** (the originals may have been acted on

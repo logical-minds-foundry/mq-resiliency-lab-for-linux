@@ -22,8 +22,8 @@
 - `lab/scripts/e2e-test.sh` — the launch harness to wrap in `systemd-run`.
 
 **The unit-name contract (used in three places, keep identical):**
-- `mqlab-requester` — firm-side requester (`epn_requester.py`, runs on `app-client`).
-- `mqlab-responder` — DTCC-side responder (`epn_responder.py`, runs on `dtcc-sim`).
+- `mqlab-requester` — app-side requester (`epn_requester.py`, runs on `app-client`).
+- `mqlab-responder` — SVC-side responder (`epn_responder.py`, runs on `svc-sim`).
 These exact strings appear in `e2e-test.sh` (the `systemd-run --unit=` flag) and in `dashboard.py` (`LOG_SOURCES` selectors). If you change one, change all.
 
 ---
@@ -205,7 +205,7 @@ def test_application_messages_row_is_first():
 def test_log_panels_query_loki_for_the_two_sim_app_units():
     panels = render_dashboard(TOPO)["panels"]
     logs = [p for p in panels if p["type"] == "logs"]
-    assert [p["title"] for p in logs] == ["Firm app — requester", "DTCC app — responder"]
+    assert [p["title"] for p in logs] == ["App app — requester", "SVC app — responder"]
     for p in logs:
         assert p["datasource"] == {"type": "loki", "uid": "loki"}
         target = p["targets"][0]
@@ -233,8 +233,8 @@ LOKI_DS = {"type": "loki", "uid": "loki"}
 # The selector keys off the systemd unit the launch wrapper uses (mqlab-*);
 # adding a source later (cluster daemons, AMQERR) is one more entry here.
 LOG_SOURCES: list[tuple[str, str]] = [
-    ("Firm app — requester", '{unit="mqlab-requester"}'),
-    ("DTCC app — responder", '{unit="mqlab-responder"}'),
+    ("App app — requester", '{unit="mqlab-requester"}'),
+    ("SVC app — responder", '{unit="mqlab-responder"}'),
 ]
 ```
 
@@ -725,13 +725,13 @@ vrg-commit --type feat --scope obs --message "wire Loki (obs) + Alloy (fleet) in
 Ship the emitter to the nodes and make both apps emit through it. MQ logic is unchanged — only logging is added/replaced.
 
 **Files:**
-- Modify: `ansible/site.yml` (the "deploy EPN codec + clients" loop)
+- Modify: `ansible/site.yml` (the "deploy FFH codec + clients" loop)
 - Modify: `clients/epn_requester.py`
 - Modify: `clients/epn_responder.py`
 
 - [ ] **Step 1: Ship `obslog.py` next to the clients**
 
-In `ansible/site.yml`, add one line to the deploy loop (after the `epn.py` entry, around line 42):
+In `ansible/site.yml`, add one line to the deploy loop (after the `header.py` entry, around line 42):
 
 ```yaml
         - { src: "{{ playbook_dir }}/../src/mqlab/obslog.py", dest: obslog.py }
@@ -750,8 +750,8 @@ Replace the per-ack `print` and the summary `print`, and add a connect line. The
 ```python
     for i in range(count):
         body = pack_header(
-            password="pw", sender="FIRM01", receiver="DTCCSVC", busdate=today
-        ) + f"TRADE-{i:04d}"
+            password="pw", sender="APP01", receiver="SVC", session_date=today
+        ) + f"MSG-{i:04d}"
         qreq.put(body.encode())
     gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_WAIT, WaitInterval=60_000)
     acks = 0
@@ -768,13 +768,13 @@ Replace the per-ack `print` and the summary `print`, and add a connect line. The
 to:
 
 ```python
-    emit("info", f"connected to QMAIN; putting {count} trades to DTCC.REQUEST")
+    emit("info", f"connected to QMAIN; putting {count} trades to SVC.REQUEST")
     for i in range(count):
         body = pack_header(
-            password="pw", sender="FIRM01", receiver="DTCCSVC", busdate=today
-        ) + f"TRADE-{i:04d}"
+            password="pw", sender="APP01", receiver="SVC", session_date=today
+        ) + f"MSG-{i:04d}"
         qreq.put(body.encode())
-        emit("info", f"sent trade seq={i:04d} to DTCC.REQUEST")
+        emit("info", f"sent trade seq={i:04d} to SVC.REQUEST")
     gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_WAIT, WaitInterval=60_000)
     acks = 0
     for _ in range(count):
@@ -804,7 +804,7 @@ Replace the body of `main` from the `gmo = ...` line through `qmgr.disconnect()`
         ack = validate_header(msg, today=today)
         seq = parse_header(msg).payload if ack == ACK_OK else "?"
         reply = pack_header(
-            password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=today
+            password="pw", sender="SVC", receiver="APP01", session_date=today
         ) + f"{ack}:{seq}"
         qout.put(reply.encode())
     qmgr.disconnect()
@@ -815,14 +815,14 @@ with:
 
 ```python
     gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_WAIT, WaitInterval=30_000)
-    emit("info", f"responder up on QDTCC; awaiting {count} trades")
+    emit("info", f"responder up on QMSVC; awaiting {count} trades")
     for _ in range(count):
         msg = qin.get(None, pymqi.MD(), gmo).decode()
         ack = validate_header(msg, today=today)
         seq = parse_header(msg).payload if ack == ACK_OK else "?"
         emit("info" if ack == ACK_OK else "warn", f"recv trade seq={seq} -> ack {ack}")
         reply = pack_header(
-            password="pw", sender="DTCCSVC", receiver="FIRM01", busdate=today
+            password="pw", sender="SVC", receiver="APP01", session_date=today
         ) + f"{ack}:{seq}"
         qout.put(reply.encode())
     qmgr.disconnect()
@@ -833,7 +833,7 @@ with:
 - [ ] **Step 4: Validate**
 
 Run: `vrg-container-run -- vrg-validate`
-Expected: PASS. The `clients/` scripts import `pymqi` / flat `epn` / `obslog` that only resolve on the node — the repo's gate already tolerates this for the existing clients (they import `pymqi` and `from epn import ...` today). If `vrg-validate` surfaces a *new* ruff/mypy error specifically from these edits, fix it in keeping with the existing file style; do not introduce new ignores.
+Expected: PASS. The `clients/` scripts import `pymqi` / flat `header` / `obslog` that only resolve on the node — the repo's gate already tolerates this for the existing clients (they import `pymqi` and `from header import ...` today). If `vrg-validate` surfaces a *new* ruff/mypy error specifically from these edits, fix it in keeping with the existing file style; do not introduce new ignores.
 
 - [ ] **Step 5: Commit**
 
@@ -856,7 +856,7 @@ So journald tags every app line with `unit=mqlab-*` and Alloy can select it. `--
 Change the responder launch line from:
 
 ```bash
-vagrant ssh dtcc-sim -c "~/mqvenv/bin/python ~/epn_responder.py $N" &
+vagrant ssh svc-sim -c "~/mqvenv/bin/python ~/epn_responder.py $N" &
 ```
 
 to:
@@ -864,7 +864,7 @@ to:
 ```bash
 # systemd-run --unit pins the journald `unit` label (mqlab-responder) for Alloy;
 # --wait preserves the exit code; --collect frees the unit name for re-runs.
-vagrant ssh dtcc-sim -c "sudo systemd-run --unit=mqlab-responder --collect --wait ~/mqvenv/bin/python ~/epn_responder.py $N" &
+vagrant ssh svc-sim -c "sudo systemd-run --unit=mqlab-responder --collect --wait ~/mqvenv/bin/python ~/epn_responder.py $N" &
 ```
 
 Change the requester launch line from:
@@ -988,7 +988,7 @@ Ansible roles and the live pipeline can't be unit-tested; this is the real integ
   uv run mqlab obs instrument standalone
   ```
 - [ ] **Verify Loki is healthy on obs:** `curl -s http://10.50.0.2:3100/ready` → `ready`.
-- [ ] **Verify Alloy is shipping:** on `app-client`/`dtcc-sim`, `systemctl status alloy` is active.
+- [ ] **Verify Alloy is shipping:** on `app-client`/`svc-sim`, `systemctl status alloy` is active.
 - [ ] **Run a test and watch the logs land:**
   ```bash
   ./lab/scripts/e2e-test.sh 5

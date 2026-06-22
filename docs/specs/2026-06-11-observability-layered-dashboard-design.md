@@ -171,11 +171,11 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
 ║  PCMK-B  │ b1 │ b2 │ b3 │            CPU% │ …                            ║
 ║  RDQM-A  │ a1 │ a2 │ a3 │            CPU% │ …                            ║
 ║  RDQM-B  │ b1 │ b2 │ b3 │            CPU% │ …                            ║
-║  STDALONE│ qm-main │ dtcc-sim │ app-client │   CPU% │ …                  ║
+║  STDALONE│ qm-main │ svc-sim │ app-client │   CPU% │ …                  ║
 ║  OBS     │ obs │ mon-probe │                   CPU% │ …                  ║
 ╟──────────────────────────────────────────────────────────────────────────╢
 ║ ▌NETWORKS (green=active+reachable, amber=active-unreachable, red=down, grey=absent)║
-║  data-a│data-b│ hb-a │ hb-b │san-a│san-b│ wan │client│ dtcc │ mgmt        ║
+║  data-a│data-b│ hb-a │ hb-b │san-a│san-b│ wan │client│ svc │ mgmt        ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -196,7 +196,7 @@ Top-to-bottom, so the operator's eye lands on the most important layer first:
   Adding/reordering a row is a one-line change to `ROWS`.
 - **Networks (bottom):** **one row per network**, grouped into three
   **collapsible section rows** in curated order — **Message path**
-  (client, dtcc, data-a, data-b) → **Cluster + storage** (hb-a, san-a, hb-b,
+  (client, svc, data-a, data-b) → **Cluster + storage** (hb-a, san-a, hb-b,
   san-b) → **Cross-site + mgmt** (wan, mgmt). Names are shorthand (`data-a`, not
   `net-data-a`). Each net row = a **folded-health tile** + its own **receive**
   and **transmit** throughput graphs:

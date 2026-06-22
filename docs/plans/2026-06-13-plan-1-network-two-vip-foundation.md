@@ -4,7 +4,7 @@
 >
 > **Issue:** #146 (sub-issue of epic #145). **Spec:** `docs/specs/2026-06-13-distributed-mq-architecture-design.md` §7–§8.
 
-**Goal:** Give our HA/DR queue manager a second, partner-facing floating VIP on a dedicated inter-business WAN segment (`net-ext`), so a later DTCC counterparty can reach it across both HA (in-site VIP float) and DR (cross-site VIP change).
+**Goal:** Give our HA/DR queue manager a second, partner-facing floating VIP on a dedicated inter-business WAN segment (`net-ext`), so a later SVC counterparty can reach it across both HA (in-site VIP float) and DR (cross-site VIP change).
 
 **Architecture:** Add an isolated libvirt network `net-ext` (10.60.0.0/24); attach the Pacemaker nodes (both sites) to it; manage a second `IPaddr2` resource `mq_vip_ext` in the existing `mq_group` (ordered `mq_fs → mq_vip → mq_vip_ext → mq_qm`), sourced from a new per-setup `vip_ext`; and extend the DR cutover script to bring the partner VIP up at the target site. The internal-app data-plane VIP is unchanged.
 
@@ -17,8 +17,8 @@
 **In scope:** the `net-ext` network; `net-ext` NICs on `pcmk-a1..3` / `pcmk-b1..3`; `mq_vip_ext` in the role's resource group; `vip_ext` on the `pcmk_san_ha` setup's QM config, plumbed through `QmConfig` → `mqlab qm` → the playbook; the partner VIP in `pcmk-dr-cutover.sh`; the `dashboard.py` `NET_SECTIONS` update the exact-match test forces.
 
 **Out of scope (deferred):**
-- **DTCC VM's `net-ext` NIC + dropping `net-dtcc`** → Plan 2 (repurposing `dtcc-sim` into the DTCC service VM; dropping `net-dtcc` now would break the still-live `standalone` setup, retired in Plan 3).
-- All MQSC / channels / QMDTCC → Plans 2–3.
+- **SVC VM's `net-ext` NIC + dropping `net-svc`** → Plan 2 (repurposing `svc-sim` into the SVC service VM; dropping `net-svc` now would break the still-live `standalone` setup, retired in Plan 3).
+- All MQSC / channels / QMSVC → Plans 2–3.
 
 **Verified facts (this branch):**
 - Networks auto-discover from `lab/networks/net-*.xml` via `netsel.lab_net_names()`; a new XML is picked up with no registration.
@@ -47,7 +47,7 @@
 | Partner VIP — site B | `10.60.0.20` | `net-ext`, floats on `pcmk_b` |
 | `pcmk-a1..3` net-ext NIC | `10.60.0.51/52/53` | `net-ext` |
 | `pcmk-b1..3` net-ext NIC | `10.60.0.61/62/63` | `net-ext` |
-| (Plan 2) DTCC service VM | `10.60.0.50` | `net-ext` |
+| (Plan 2) SVC service VM | `10.60.0.50` | `net-ext` |
 
 ---
 
@@ -62,7 +62,7 @@
 
 ```xml
 <!-- lab/networks/net-ext.xml — inter-business WAN ("the internet") between
-     Business A (our HA/DR QM) and Business B (DTCC). Isolated: no <forward>,
+     Business A (our HA/DR QM) and Business B (SVC). Isolated: no <forward>,
      no DHCP. Traffic-shaping (tc netem) is a future enhancement (#145 §7.3). -->
 <network>
   <name>net-ext</name>
@@ -302,5 +302,5 @@ vrg-commit --type feat --scope pcmk --message "bring the partner VIP across on D
 
 ## Acceptance (this plan)
 
-- Spec §13.4 (partial, pre-DTCC): after a DR cutover **both** VIPs are live at the target site (DTCC-reconnect half lands in Plan 2/4).
+- Spec §13.4 (partial, pre-SVC): after a DR cutover **both** VIPs are live at the target site (SVC-reconnect half lands in Plan 2/4).
 - `vrg-validate` green; `net-ext` declared and covered by `NET_SECTIONS`; `pcmk` nodes on `net-ext`; `mq_vip_ext` in the group and in the cutover path.

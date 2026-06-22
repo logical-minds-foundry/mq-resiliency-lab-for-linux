@@ -1,27 +1,27 @@
-# Declarative MQ objects for QDTCC - the DTCC-side reciprocal of qm-main.
-qmgr: QDTCC
+# Declarative MQ objects for QMSVC - the SVC-side reciprocal of qm-main.
+qmgr: QMSVC
 objects:
   - kind: qlocal
-    name: TRADE.REQUEST
+    name: SVC.REQUEST
     attrs: { default_persistence: "yes" }
   - kind: qlocal
     name: QMAIN
     attrs:
       usage: XMITQ
-      # Triggered xmitq - see qm-main.yaml QDTCC note (spec 8.3).
+      # Triggered xmitq - see qm-main.yaml QMSVC note (spec 8.3).
       trigger_control: "YES"
       trigger_type: FIRST
       initiation_queue_name: SYSTEM.CHANNEL.INITQ
-      trigger_data: QDTCC.QMAIN
+      trigger_data: QMSVC.QMAIN
   - kind: qremote
-    name: FIRM.REPLY
+    name: APP.REPLY
     attrs:
       default_persistence: "yes"
-      remote_queue_name: TRADE.REPLY
+      remote_queue_name: APP.REPLY
       remote_queue_manager_name: QMAIN
       transmission_queue_name: QMAIN
   - kind: channel
-    name: QDTCC.QMAIN
+    name: QMSVC.QMAIN
     attrs:
       channel_type: SDR
       transport_type: TCP
@@ -31,10 +31,10 @@ objects:
       connection_name: 10.20.0.10(1414)
       transmission_queue_name: QMAIN
   - kind: channel
-    name: QMAIN.QDTCC
+    name: QMAIN.QMSVC
     attrs: { channel_type: RCVR, transport_type: TCP }
   - kind: channel
-    name: SIM.SVRCONN
+    name: SVC.SVRCONN
     attrs:
       channel_type: SVRCONN
       transport_type: TCP

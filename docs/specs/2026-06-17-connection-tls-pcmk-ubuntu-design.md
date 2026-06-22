@@ -62,9 +62,9 @@ and the REST endpoint:
 
 | Connection | Where defined | Secured by |
 |---|---|---|
-| `QMPCMK.QMDTCC` (SDR on QMPCMK, RCVR on QMDTCC) | `mq-pcmk-qmgr` / `mq-inter-qm` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` |
-| `QMDTCC.QMPCMK` (SDR on QMDTCC, RCVR on QMPCMK) | `mq-inter-qm` / `mq-pcmk-qmgr` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` |
-| `SVC.SVRCONN` (DTCC service responder, client-mode) | `mq-inter-qm` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` + responder client cert |
+| `QMPCMK.QMSVC` (SDR on QMPCMK, RCVR on QMSVC) | `mq-pcmk-qmgr` / `mq-inter-qm` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` |
+| `QMSVC.QMPCMK` (SDR on QMSVC, RCVR on QMPCMK) | `mq-inter-qm` / `mq-pcmk-qmgr` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` |
+| `SVC.SVRCONN` (SVC service responder, client-mode) | `mq-inter-qm` | `SSLCIPH`+`SSLCAUTH`+`SSLPEER` + responder client cert |
 | `app-client` → QMPCMK SVRCONN | `mq-client` | TLS SVRCONN + `app-client` cert |
 | exporter → QM SVRCONN | `mq-exporter` | TLS SVRCONN + `mq_prometheus` cert |
 | `pymqrest` → mqweb (admin REST) | `mqweb` | server cert + client CA-trust flip |
@@ -88,7 +88,7 @@ and the REST endpoint:
 - **Each channel / SVRCONN:** add `SSLCIPH(<cipher>)`, `SSLCAUTH(REQUIRED)` (require
   a peer cert), `SSLPEER('<expected peer DN>')` (validate it). Applied to **both
   ends** of every channel.
-- **Each client** (`app-client`, exporter, the DTCC responder, `pymqrest`): present
+- **Each client** (`app-client`, exporter, the SVC responder, `pymqrest`): present
   its own cert + cipher, and trust the CA(s) it must (its keystore / CA bundle —
   already produced by the provider).
 - **Internal authority unchanged** — `MCAUSER('mqm')`, queues open (Stage 2).
@@ -102,8 +102,8 @@ other arms and CRR. (MQ 9.4 and its GSKit support TLS 1.3; our RSA-4096 certs
 authenticate fine under TLS 1.3 via RSA-PSS signatures — TLS 1.3 decouples the
 cipher suite from the cert's key type.)
 
-**Fidelity note:** GOV1683-24 is DTCC's mandated channel-security standard. The
-exact CipherSpec is **pinned at build time** (verify against GOV1683-24 / the
+**Fidelity note:** those security standards is SVC's mandated channel-security standard. The
+exact CipherSpec is **pinned at build time** (verify against those security standards / the
 licensed MQ's supported set) — likely a specific TLS 1.3 suite such as
 `TLS_AES_256_GCM_SHA384`; `ANY_TLS13_OR_HIGHER` is the representative default until
 then.
@@ -115,12 +115,12 @@ counterparty pins one rule per org. Stage-1 `SSLPEER` values:
 
 | Validating end | Channel/SVRCONN | `SSLPEER` |
 |---|---|---|
-| QMPCMK | RCVR `QMDTCC.QMPCMK`, SDR `QMPCMK.QMDTCC` | `O=dtcc-org` |
-| QMDTCC | RCVR `QMPCMK.QMDTCC`, SDR `QMDTCC.QMPCMK` | `O=client-org, OU=clearing-service` |
-| QMDTCC | `SVC.SVRCONN` (local DTCC responder) | `O=dtcc-org` (the `dtcc-responder` cert) |
-| QMPCMK | `app-client` / exporter SVRCONN | `O=client-org` (**org-only** — these clients are `OU=apps`/`OU=ops`, not `clearing-service`) |
+| QMPCMK | RCVR `QMSVC.QMPCMK`, SDR `QMPCMK.QMSVC` | `O=svc-org` |
+| QMSVC | RCVR `QMPCMK.QMSVC`, SDR `QMSVC.QMPCMK` | `O=app-org, OU=messaging` |
+| QMSVC | `SVC.SVRCONN` (local SVC responder) | `O=svc-org` (the `svc-responder` cert) |
+| QMPCMK | `app-client` / exporter SVRCONN | `O=app-org` (**org-only** — these clients are `OU=apps`/`OU=ops`, not `messaging`) |
 
-The in-house `SSLPEER` matches on **`O`/`OU`** only — so it holds across arms
+The app `SSLPEER` matches on **`O`/`OU`** only — so it holds across arms
 (QMPCMK today, QMRDQM/others later) without a rule change, exactly the partial-DN
 property the PKI was built for.
 
@@ -133,10 +133,10 @@ They must reach the QM hosts:
   (`/mqshared`, alongside the qmgr/log data), so `SSLKEYR` points at a path that
   **follows the QM on failover** — no per-node copies to keep in sync. Distributed
   once at QM setup (the node that owns the LUN), like the existing inter-QM MQSC.
-- **QMDTCC** (single container/QM) gets its keystore locally.
+- **QMSVC** (single container/QM) gets its keystore locally.
 - **Clients** get their material on the host they run on: **`app-client`** → its
-  host/container; **exporter** → where the `mq_prometheus` exporter runs; **DTCC
-  responder** → the `dtcc-sim` host; **`pymqrest`** → wherever it invokes the REST
+  host/container; **exporter** → where the `mq_prometheus` exporter runs; **SVC
+  responder** → the `svc-sim` host; **`pymqrest`** → wherever it invokes the REST
   API. Each presents it via the **MQI client key repository + cipher** (`pymqi` sets
   its key repository / `MQSCO` and the channel's `SSLCIPH`); the REST clients use the
   **org CA bundle** (trust-only) for the mqweb flip (§9).
@@ -166,7 +166,7 @@ No new abstraction — just don't bake the shared part into the pcmk template.
 
 - `mq-pcmk-qmgr` — QMPCMK `SSLKEYR`/`KEYRPWD` + apply the shared channel-TLS MQSC to
   the our-side channels (extend `inter-qm.mqsc.j2`).
-- `mq-inter-qm` — QMDTCC keystore + the shared channel-TLS MQSC on the their-side
+- `mq-inter-qm` — QMSVC keystore + the shared channel-TLS MQSC on the their-side
   channels (extend `their-side.mqsc.j2`) + the responder's client cert/trust.
 - `mq-client` — `app-client` SVRCONN TLS + client cert.
 - `mq-exporter` — exporter SVRCONN TLS + client cert.
@@ -184,9 +184,9 @@ No new abstraction — just don't bake the shared part into the pcmk template.
 
 ## 10. Inventory addition
 
-The DTCC service responder is a SVRCONN **client**, so it needs a client cert. Add
-a `dtcc-org` responder entity to `ansible/vars/pki-entities.yml` (e.g.
-`CN=dtcc-responder, O=dtcc-org`), or reuse `QMDTCC`'s cert for the local client —
+The SVC service responder is a SVRCONN **client**, so it needs a client cert. Add
+a `svc-org` responder entity to `ansible/vars/pki-entities.yml` (e.g.
+`CN=svc-responder, O=svc-org`), or reuse `QMSVC`'s cert for the local client —
 decide at build (a tiny inventory change, re-run `mqlab pki ensure`).
 
 ## 11. Validation
@@ -206,7 +206,7 @@ the gate):
 2. Confirm all four QM↔QM channels go **RUNNING over TLS** (`DIS CHSTATUS` shows
    `SSLPEER`/`SSLCIPH`; a plaintext client is rejected).
 3. Confirm the **app trade-flow works end-to-end** (`app-client` → QMPCMK →
-   QMDTCC → responder → reply) — now encrypted + cert-authenticated.
+   QMSVC → responder → reply) — now encrypted + cert-authenticated.
 4. Confirm `pymqrest`/exporter reach mqweb over CA-trusted TLS.
 5. **Unattended-failover gate:** trigger a Pacemaker failover and confirm QMPCMK
    comes back up **TLS'd with no manual intervention** — it reads its shared-LUN
@@ -228,7 +228,7 @@ The **cold-rebuild acceptance gate** applies (must come up one-pass on a fresh V
 - **mqweb coupling** (§9) — the `verify_tls=False`→CA-trust flip must land with the
   mqweb cert adoption or REST breaks; sequence atomically.
 - **Cipher fidelity / TLS 1.3 support** — `ANY_TLS13_OR_HIGHER` (TLS 1.3+) is the
-  representative default; pin the GOV1683-24-mandated TLS 1.3 suite at build.
+  representative default; pin the those security standards-mandated TLS 1.3 suite at build.
   Confirm the licensed MQ + GSKit actually negotiate TLS 1.3 in the functional run
   (9.4 supports it) — if a component can't, that surfaces immediately as a
   channel-down, not a silent downgrade (the point of requiring 1.3).

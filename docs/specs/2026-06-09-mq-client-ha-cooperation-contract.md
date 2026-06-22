@@ -129,7 +129,7 @@ subnet (site A `10.10.1.200` → site B `10.10.2.200`). Auto-reconnect to a sing
 VIP cannot follow it. The reference client connects with a comma-separated list,
 `"10.10.1.200(1414),10.10.2.200(1414)"`, so it tries A and on A's loss fails over
 to B — exactly how the "flow continues through cutover" result was achieved (the
-firm kept producing on the survivor). Production equivalents: a CCDT listing both
+app kept producing on the survivor). Production equivalents: a CCDT listing both
 sites, or connection-list configuration.
 
 *Discovered by:* the first DR drill, where the client could only reach site A —
@@ -160,9 +160,9 @@ notes.)
 
 - `clients/dr_mqi.py` — the shared contract: reason-code families and the
   `connect`/`connect_retry` helpers.
-- `clients/dr_flow.py` — the firm-side continuous flow (producer + consumer,
+- `clients/dr_flow.py` — the app-side continuous flow (producer + consumer,
   separate connections, each with its own rebuild loop).
-- `clients/dr_responder.py` — the DTCC god's-eye responder (single connection,
+- `clients/dr_responder.py` — the SVC god's-eye responder (single connection,
   outer rebuild loop).
 
 These are the oracle for the multi-language matrix: a candidate client in any

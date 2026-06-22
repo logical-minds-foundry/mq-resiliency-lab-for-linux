@@ -428,7 +428,7 @@ Expected: PASS (all cases).
 
 - [ ] **Step 4b: Refactor**
 
-Look for: hoist the firmware/cpu literals (`AAVMF_LOADER`, `q35`, `maximum`, `host-passthrough`) into named module constants rather than inline strings, so the matrix has one source of truth; verify `_provider` evaluates `guest == facts.arch` once (no duplicated arch comparisons) and that the D4 guard and the `kvm` computation read straight from the spec matrix.
+Look for: hoist the appware/cpu literals (`AAVMF_LOADER`, `q35`, `maximum`, `host-passthrough`) into named module constants rather than inline strings, so the matrix has one source of truth; verify `_provider` evaluates `guest == facts.arch` once (no duplicated arch comparisons) and that the D4 guard and the `kvm` computation read straight from the spec matrix.
 
 - [ ] **Step 5: Commit**
 
@@ -775,7 +775,7 @@ Expected: PASS (ResolvedNode already carries these from Task 2). This locks the 
 ```ruby
 # lab/Vagrantfile — multi-machine lab driven by mqlab's host-resolved topology (#276).
 #
-# Provider mechanics (driver/firmware/cpu_mode) are chosen by mqlab's resolver from
+# Provider mechanics (driver/appware/cpu_mode) are chosen by mqlab's resolver from
 # the host architecture and rendered to build/lab/topology.resolved.yaml. This file
 # is a dumb consumer: it applies fields verbatim. Box-version pins still come from
 # build/box-versions.json (#266).

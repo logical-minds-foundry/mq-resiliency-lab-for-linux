@@ -12,7 +12,7 @@ TOPO = {
         "pcmk_b": ["pcmk-b1"],
         "rdqm_a": ["rdqm-a1"],
         "rdqm_b": ["rdqm-b1"],
-        "dtcc": ["dtcc-sim"],
+        "svc": ["svc-sim"],
         "app": ["app-client"],
         "obs_box": ["obs"],
         "probe": ["mon-probe"],
@@ -29,12 +29,12 @@ def test_has_a_row_header_per_curated_row_in_order():
     row_titles = [p["title"] for p in panels if p["type"] == "row"]
     assert row_titles == [
         "MQ Service · QMPCMK · service · Ubuntu HA/DR",
-        "MQ Service · QMDTCC · counterparty · DTCC service",
+        "MQ Service · QMSVC · counterparty · SVC service",
         "VMs · PCMK · A",
         "VMs · PCMK · B",
         "VMs · RDQM · A",
         "VMs · RDQM · B",
-        "VMs · App · DTCC",
+        "VMs · App · SVC",
         "VMs · Observability",
         "Networks · Message path",
         "Networks · Cluster + storage",
@@ -50,7 +50,7 @@ def test_pcmk_vm_rows_drill_link_to_the_cockpit():
         links = ups[title].get("links", [])
         assert any(link["url"] == "/d/lab-pcmk-cluster" for link in links)
     # a non-cluster row does not carry the cockpit drill-link
-    assert not ups["App · DTCC — up"].get("links")
+    assert not ups["App · SVC — up"].get("links")
 
 
 def test_group_rows_filter_by_their_groups_selector():
@@ -75,15 +75,15 @@ def test_mq_service_rows_use_confirmed_ibmmq_metrics():
     assert "ibmmq_qmgr_interval_mqput_mqput1_total_count" in rate
     assert "ibmmq_qmgr_interval_destructive_get_total_count" in rate
     # queues table — depth, instant, name + depth only
-    qd = by_title["QMDTCC — queues"]["targets"][0]
-    assert qd["expr"] == 'ibmmq_queue_depth{qmgr="QMDTCC"}' and qd["instant"] is True
+    qd = by_title["QMSVC — queues"]["targets"][0]
+    assert qd["expr"] == 'ibmmq_queue_depth{qmgr="QMSVC"}' and qd["instant"] is True
 
 
 def test_channels_are_object_driven_tiles_always_rendered():
     by_title = {p.get("title"): p for p in render_dashboard(TOPO)["panels"]}
     # A tile per curated channel exists regardless of whether status flows — the
     # object always exists, only its status comes and goes.
-    for channel in ("APP.SVRCONN", "QMPCMK.QMDTCC", "QMDTCC.QMPCMK"):
+    for channel in ("APP.SVRCONN", "QMPCMK.QMSVC", "QMSVC.QMPCMK"):
         tile = by_title[f"QMPCMK · {channel}"]
         expr = tile["targets"][0]["expr"]
         assert f'ibmmq_channel_status_squash{{qmgr="QMPCMK",channel="{channel}"}}' in expr
@@ -96,7 +96,7 @@ def test_channels_are_object_driven_tiles_always_rendered():
         }
         assert {"No status", "Stopped", "Transitioning", "Running"} == texts
     # the counterparty's own SVRCONN gets a tile too
-    assert "QMDTCC · SVC.SVRCONN" in by_title
+    assert "QMSVC · SVC.SVRCONN" in by_title
 
 
 def test_status_tiles_map_to_coloured_strings():

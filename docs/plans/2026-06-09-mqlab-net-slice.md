@@ -1412,7 +1412,7 @@ rebuild, because the lab is a disposable, reproducible illusion.
 
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/develop/lab/topology.yaml)
-— the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN) and every
+— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN) and every
 guest's NICs and platform. See the [Architecture](architecture/index.md)
 walkthrough for what each network is for.
 

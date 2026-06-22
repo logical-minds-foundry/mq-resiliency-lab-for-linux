@@ -1,9 +1,9 @@
-* Our-side inter-QM objects (#147): {{ qm_name }} -> QMDTCC across net-ext.
+* Our-side inter-QM objects (#147): {{ qm_name }} -> QMSVC across net-ext.
 * Applied once at QM creation, persisted to the shared LUN so it follows the QM
 * on failover. Retry timers are tuned for lab snappiness, not production
 * (spec 2026-06-13-distributed-mq-architecture-design.md §5.2).
 DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
-DEFINE QREMOTE(DTCC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMDTCC) XMITQ(QMDTCC) REPLACE
-DEFINE QLOCAL(QMDTCC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.QMDTCC) REPLACE
-DEFINE CHANNEL({{ qm_name }}.QMDTCC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ dtcc_conn }}(1414)') XMITQ(QMDTCC) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_dtcc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-DEFINE CHANNEL(QMDTCC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_dtcc }}') REPLACE
+DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE
+DEFINE QLOCAL(QMSVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.QMSVC) REPLACE
+DEFINE CHANNEL({{ qm_name }}.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ(QMSVC) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL(QMSVC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE

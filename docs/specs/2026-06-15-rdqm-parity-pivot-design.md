@@ -13,10 +13,10 @@
 
 ## 1. Why this exists
 
-The platform decision is made: the firm standardizes on **RHEL + RDQM**, for
+The platform decision is made: the app standardizes on **RHEL + RDQM**, for
 **IBM-supportability** reasons — the criterion the authoritative design already
 weighted heaviest (§2.7, §3). The R&D comparison did its job and pointed where
-the firm independently landed.
+the app independently landed.
 
 But the lab's history left RDQM in an awkward place. The **RDQM substrate was
 built and proven first** (PR #36 / issue #31): a RHEL 9.6 kickstart box, the
@@ -25,7 +25,7 @@ fault suite at 4/4, and the full 3+3 `rdqmdr` cutover/failback with RPO 0 in bot
 directions. Then it **froze**. Every piece of tooling sophistication since — the
 `mqlab` orchestrator CLI, the net/vm lifecycle, the observability stack
 (Grafana/Prometheus/`mq_prometheus`), the distributed QM-to-QM architecture
-(`QMPCMK` ↔ `QMDTCC`), declarative `pymqrest` content, the MQ Service panel —
+(`QMPCMK` ↔ `QMSVC`), declarative `pymqrest` content, the MQ Service panel —
 grew against the **Pacemaker/Ubuntu** arm. #169 even explicitly "set RDQM-DR
 aside" and scoped the new `mqlab dr`/`ha` command groups to Pacemaker only.
 
@@ -38,8 +38,8 @@ substrate** and making RDQM the fully-tooled, primary arm.
 ### Goals
 
 - **G1 — RDQM at full parity** with what the Pacemaker arm demonstrates today:
-  the distributed architecture with **`QMRDQM` as the in-house HA substrate**
-  (`QMRDQM` ↔ `QMDTCC` across the simulated WAN), the app trade flow,
+  the distributed architecture with **`QMRDQM` as the app HA substrate**
+  (`QMRDQM` ↔ `QMSVC` across the simulated WAN), the app trade flow,
   observability, declarative `pymqrest` content, and the §3.1 fault + DR drills —
   all on RHEL.
 - **G2 — Parity as a standing property, not a snapshot.** Both arms are
@@ -99,7 +99,7 @@ The registry names the *valid* combinations (not a full cross-product):
 - `mqlab vm` / `net` / `obs` command groups, the renderer, transcript, state
 - The observability stack (Grafana/Prometheus/`mq_prometheus`), the MQ Service
   panel, log streaming (#143), time-sync (#186)
-- Declarative `pymqrest` content, the `dtcc-sim` fixture, the `app-client`, the
+- Declarative `pymqrest` content, the `svc-sim` fixture, the `app-client`, the
   distributed QM-to-QM architecture model
 - The `mqlab dr` **Python** module (RPO / exposure / reconcile / ledger /
   classifier accounting — message-loss-window *semantics*, not cluster mechanics)
@@ -156,7 +156,7 @@ as its argument and records it in the report.
 
 ### 3.4 Sequential operation & arm-namespaced identity
 
-**Operating model: one arm at a time — sequential, firm.** The lab runs a single
+**Operating model: one arm at a time — sequential, app.** The lab runs a single
 arm's setup at a time. The host cannot TCG-emulate two full RDQM fleets, the
 machine is shared with other work, and — decisively — **running arms concurrently
 buys little and costs much**: it complicates the dashboards, the report, and every
@@ -177,13 +177,13 @@ clobbering another's. The refactor (P2/P3) gives every arm a disjoint namespace:
 - **Disjoint per-arm:** node names (already arm-prefixed: `pcmk-*`, `rdqm-*`);
   networks and VIP/data subnets (breaking the shared `net-data-a` / `.100` VIP so
   each arm owns its space); QM names (`QMPCMK` vs `QMRDQM`); container/fixture names.
-- **Shared fixtures stay shared only by explicit intent** (e.g. one `dtcc-sim`
+- **Shared fixtures stay shared only by explicit intent** (e.g. one `svc-sim`
   counterparty) — never by namespace accident.
 
 **Supporting VMs ride the fastest base; only the core-under-test pays the slow
 tax.** The instrumented core is the **3+3 HA/DR group** (plus a few support VMs as
 the tooling grows). Everything *outside* that core — `obs`, `mon-probe`,
-`dtcc-sim`, `app-client` — should use the cheapest/fastest-to-build platform, which
+`svc-sim`, `app-client` — should use the cheapest/fastest-to-build platform, which
 today is **Ubuntu arm64 (KVM-accelerated)**. *Verified 2026-06-15:* only the six
 `rdqm-*` nodes carry the `rhel96-x86_64` (TCG) override; every other node —
 including the Pacemaker arm's own nodes — already inherits the Ubuntu arm64
@@ -221,7 +221,7 @@ and the secrets policy forbids committing any MQ entitlement/license artifact. F
 the RDQM arm these are the **RHEL DVD ISO** (~12.7 GB) and the **IBM MQ Advanced
 for Developers tar** (~520 MB). The lab is built **from the outside, by a developer
 with their own entitlements** — the author is a contractor with deliberately
-limited access at the firm and leans on this personal laptop lab to prove concepts
+limited access at the app and leans on this personal laptop lab to prove concepts
 — so artifact provisioning is the developer's responsibility, **by design**.
 
 **Mechanism — a machine-local user config, never committed.** A user-level config
@@ -293,7 +293,7 @@ beating heart — the thing you invoke after a rebuild and walk away from.
 
 **One invocation, full sweep.** Post-rebuild, the `run` operation drives the entire
 pipeline for one arm: bootstrap → `net` + `vm` bring-up → provision → setup (form
-the 3+3 group, wire the distributed `QM*` ↔ `QMDTCC` mesh, bring up obs and
+the 3+3 group, wire the distributed `QM*` ↔ `QMSVC` mesh, bring up obs and
 declarative content) → drive the §4.1 fault + DR drills → tear down. It promotes
 the existing end-to-end test script and the HA/DR experiment-runner idea (#119)
 into a first-class, named, repeatable operation.
@@ -323,7 +323,7 @@ addressing coordinates with the per-arm state cache (§3.5).
 | **P0 — Wrap-up** | In-flight worktrees finished and landed; clean `develop`. | The genuine in-flight set (verified ahead of `develop` 2026-06-15): **#143 log-streaming, #169 dr-commands, #175 ha-commands, #177 cluster-cockpit, #186 time-sync**. Treated as the **shared tooling layer**; where they touch HA/DR surfaces, land arm-generic where cheap, Pacemaker-backed for now. **Cleanup:** remove the stale worktrees `#141` mq-prometheus-spike (0 commits ahead — spike concluded) and confirm `#62` pcmk-flow is already merged (PR #63, 2026-06-09). Docs reframe (this spec + the superseding section) runs concurrently. |
 | **P1 — Parity harness vs. Pacemaker** | Cross-arm harness + capability matrix **green on the Pacemaker backend**; the single-invocation `run` driver (§4.4) emits the timestamped report. | Approach C first, as the regression net. RDQM rows = `not-yet`. The `run` operation drives the Pacemaker arm end to end and writes the first reports. |
 | **P2 — Extract the arm-backend interface** | Pacemaker logic refactored behind the §3.3 contract; P1 harness stays green. Arm-namespacing (§3.4) and per-arm state cache (§3.5 / #167) land here. | Approach A. No behavior change; the seam now exists with one conforming backend. Registry written **open** (N backends, N OS platforms, VM-or-container substrate). The `distributed` setup is renamed `distributed-pcmk-ubuntu` and its nets/VIPs de-collided. |
-| **P3 — RDQM backend to parity** | `rdqm-install`/`rdqm-ha`/`rdqmdr` ported into the seam; `QMRDQM` wired as the in-house HA substrate of the distributed architecture (`QMRDQM` ↔ `QMDTCC`); observability + declarative content online for RDQM. | **Entry gate (§3.6):** the RHEL ISO and MQ dev tar must be present and path-configured in the user config. Subject to the **cold-rebuild acceptance gate** — done only after a full cold rebuild proves it one-pass, not just lint-green. The frozen RDQM roles predate the tooling era; treat as "proven concept, re-validate," not "known-good." |
+| **P3 — RDQM backend to parity** | `rdqm-install`/`rdqm-ha`/`rdqmdr` ported into the seam; `QMRDQM` wired as the app HA substrate of the distributed architecture (`QMRDQM` ↔ `QMSVC`); observability + declarative content online for RDQM. | **Entry gate (§3.6):** the RHEL ISO and MQ dev tar must be present and path-configured in the user config. Subject to the **cold-rebuild acceptance gate** — done only after a full cold rebuild proves it one-pass, not just lint-green. The frozen RDQM roles predate the tooling era; treat as "proven concept, re-validate," not "known-good." |
 | **P4 — Drive RDQM rows green = full parity** | The harness's RDQM rows go green: same capabilities + correctness as Pacemaker. | This green state **is** the first deliverable (G1). |
 | **P5 — Continuous parity** | Both arms co-tested **serially**; the `run` → report corpus (§4.4) is the standing mechanism, re-runnable per arm on demand. | Cadence bounded by the CPU/offline constraints (§7) and sequential operation (§3.4). Phase E recast: re-assert the comparison from accumulated report output, never from live co-residency. |
 
@@ -332,7 +332,7 @@ addressing coordinates with the per-arm state cache (§3.5).
 Two more arms are coming; the abstraction must accommodate them now, but **no
 build effort is spent on them in this pivot** (non-goal, §2).
 
-- **`nativeha-rhel` — IBM MQ Native HA on RHEL/Linux.** The firm already runs
+- **`nativeha-rhel` — IBM MQ Native HA on RHEL/Linux.** The app already runs
   this; it is un-parked from §2.3 arm 3. **Architecturally the odd one out:** it
   is **container/Kubernetes-based log-replication quorum**, *not* the bare-VM +
   DRBD + multi-NIC substrate the other three share. Leaving the slot honest means
@@ -341,7 +341,7 @@ build effort is spent on them in this pivot** (non-goal, §2).
   the node" → "kill the pod / evict the node"). It also carries a **research/
   learning cost** (new to us) that we deliberately do not pay now. Its replication
   model is conceptually closest to RDQM's "data layer owns replication" virtue.
-- **`pcmk-debian` — Pacemaker/SAN on Debian (Trixie / 13).** The firm's actual
+- **`pcmk-debian` — Pacemaker/SAN on Debian (Trixie / 13).** The app's actual
   base OS is **Debian, not Ubuntu**. This is the *same mechanism* as the built
   `pcmk-ubuntu` arm with a different L0; because Ubuntu is Debian-derived, the
   `apt`/`.deb`/systemd host-prep carries over with near-trivial change. Mostly an

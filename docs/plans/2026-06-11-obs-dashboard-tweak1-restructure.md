@@ -45,7 +45,7 @@ TOPO = {
         "san_a": ["san-a"], "san_b": ["san-b"],
         "pcmk_a": ["pcmk-a1"], "pcmk_b": ["pcmk-b1"],
         "rdqm_a": ["rdqm-a1"], "rdqm_b": ["rdqm-b1"],
-        "qm": ["qm-main"], "dtcc": ["dtcc-sim"], "client": ["app-client"],
+        "qm": ["qm-main"], "svc": ["svc-sim"], "client": ["app-client"],
         "obs_box": ["obs"], "probe": ["mon-probe"],
     }
 }
@@ -123,7 +123,7 @@ ROWS: list[tuple[str, list[str]]] = [
     ("PCMK · B", ["pcmk_b"]),
     ("RDQM · A", ["rdqm_a"]),
     ("RDQM · B", ["rdqm_b"]),
-    ("Standalone", ["qm", "dtcc", "client"]),
+    ("Standalone", ["qm", "svc", "client"]),
     ("Observability", ["obs_box", "probe"]),
 ]
 
@@ -301,7 +301,7 @@ def _seed_monitoring(tmp_path):
         "  san_a: [san-a]\n  san_b: [san-b]\n"
         "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
-        "  qm: [qm-main]\n  dtcc: [dtcc-sim]\n  client: [app-client]\n"
+        "  qm: [qm-main]\n  svc: [svc-sim]\n  client: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
         "setups:\n"
         "  monitoring:\n    groups: [obs_box, probe]\n"

@@ -1,7 +1,7 @@
 # Distributed MQ (#147), Native HA arm: the QMNATIVE HA substrate (site-nativeha.yml)
-# + the shared, substrate-free DTCC/app/channel layer (site-distributed-shared.yml),
+# + the shared, substrate-free SVC/app/channel layer (site-distributed-shared.yml),
 # identical to the pcmk/rdqm arms. Native HA has no floating VIP, so — like the RDQM
-# arm — the partner (QMDTCC) reaches QMNATIVE by a CONNAME list of the three
+# arm — the partner (QMSVC) reaches QMNATIVE by a CONNAME list of the three
 # nha_rhel_a net-ext IPs; MQ tries them and connects to whichever instance is active,
 # so the partner link rides a failover with no second IP. Site-A only (Phase 1);
 # site B + CRR is Phase 3 on the same consolidated setup.
@@ -19,7 +19,7 @@
   become: true
   vars:
     qm_name: QMNATIVE
-    dtcc_conn: "10.60.0.50"
+    svc_conn: "10.60.0.50"
   tasks:
     - name: find the active Native HA instance
       ansible.builtin.shell: >
@@ -45,11 +45,11 @@
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')
         REFRESH SECURITY TYPE(CONNAUTH)
         DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
-        DEFINE QREMOTE(DTCC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMDTCC) XMITQ(QMDTCC) REPLACE
-        DEFINE QLOCAL(QMDTCC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.QMDTCC) REPLACE
-        DEFINE CHANNEL({{ qm_name }}.QMDTCC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ dtcc_conn }}(1414)') XMITQ(QMDTCC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-        DEFINE CHANNEL(QMDTCC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
-        START CHANNEL({{ qm_name }}.QMDTCC)
+        DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE
+        DEFINE QLOCAL(QMSVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.QMSVC) REPLACE
+        DEFINE CHANNEL({{ qm_name }}.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ(QMSVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+        DEFINE CHANNEL(QMSVC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+        START CHANNEL({{ qm_name }}.QMSVC)
         MQSC
       register: mqsc
       changed_when: true

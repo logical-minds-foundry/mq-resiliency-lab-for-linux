@@ -7,7 +7,7 @@
 
 **Goal:** Complete the `distributed-nativeha-rhel` HADR keystone (#267): add the
 site-B Recovery group + Cross-Region Replication so a **controlled cutover moves
-live distributed messaging (app ↔ QMNATIVE ↔ QMDTCC) across sites**, with TLS on
+live distributed messaging (app ↔ QMNATIVE ↔ QMSVC) across sites**, with TLS on
 the CRR link and the `mqlab dr` `cutover`/`failback` verbs driving it.
 
 **Architecture:** A second 3-node Native HA group on `nha_rhel_b` (site B) pairs
@@ -123,10 +123,10 @@ set `NativeHALocalInstance` `CipherSpec=ANY_TLS12` / `CertificateLabel=QMNATIVE`
 **Files:** `lab/scripts/nativeha-dr-drills.sh`; findings report.
 
 - [ ] **Step 1 — bring up the full distributed-HADR stack:** `nha_rhel_a` +
-  `nha_rhel_b` + `dtcc` + `app` + CRR; the our-side mesh MQSC + the app's CONNAME
+  `nha_rhel_b` + `svc` + `app` + CRR; the our-side mesh MQSC + the app's CONNAME
   list spanning **both sites'** net-data IPs (so the app follows a cutover).
 - [ ] **Step 2 — planned switchover under the mesh:** put persistent trades
-  (app → QMNATIVE → QMDTCC); `mqlab dr cutover` (Live A → Recovery B); confirm
+  (app → QMNATIVE → QMSVC); `mqlab dr cutover` (Live A → Recovery B); confirm
   Live now runs at site B, **the trades' state survived** (queue depths / a drain
   on the promoted side), and the app — reconnect-aware (`dr_mqi.py` if the
   happy-path client can't ride it; see Phase-1 finding) — resumes against site B.

@@ -7,23 +7,23 @@
 
 **Goal:** One solid standalone queue manager (Ubuntu arm64) brought up by the
 Ansible plane with its REST API enabled, configured declaratively via
-`pymqrest`, exchanging EPN-pattern trade messages with a `dtcc-sim` queue
+`pymqrest`, exchanging FFH-pattern trade messages with a `svc-sim` queue
 manager over real sender/receiver channels — proven by an end-to-end test
 that survives a node reboot.
 
 **Architecture:** Three new arm64 VM nodes join `lab/topology.yaml`
-(`qm-main`, `dtcc-sim`, `app-client`). The bring-up plane is Ansible over
+(`qm-main`, `svc-sim`, `app-client`). The bring-up plane is Ansible over
 the vagrant management net (roles: `mq-install`, `mq-qmgr`, `mq-client`);
 the boundary is "QM + REST online" (design §8.1); above it, all object
 content is `pymqrest` `ensure_*` calls from the dev VM against each node's
 REST endpoint. The trade path is native MQI (`pymqi`): a requester on
-`app-client` (client connection) and a responder on `dtcc-sim` (bindings).
+`app-client` (client connection) and a responder on `svc-sim` (bindings).
 
 **Tech stack:** IBM MQ Advanced for Developers **9.4.5.0** arm64 Ubuntu
 .debs (no-charge), Ansible (uv-managed), `pymqrest` 1.2.2 (PyPI),
 `pymqi` (on nodes only), pytest for the pure-Python units.
 
-**Design references:** spec §8 (two planes, layers L0–L4), §9 (DTCC sim
+**Design references:** spec §8 (two planes, layers L0–L4), §9 (SVC sim
 model), §10-B. **Spec §5 amendment (decided 2026-06-06):** fixtures run as
 **VM nodes via the same Ansible roles**, not containers — `icr.io`
 publishes no arm64 MQ image (verified against the registry manifest), and
@@ -65,9 +65,9 @@ Plus: internet access for the one-time MQ tar download (~1 GB), and the
 pyproject.toml                 # Python enters the repo (uv-managed)
 uv.lock
 src/mqlab/__init__.py          # package home for lab tooling
-src/mqlab/epn.py               # EPN-pattern header codec (pure python)
+src/mqlab/header.py               # FFH-pattern header codec (pure python)
 src/mqlab/apply.py             # pymqrest declarative applier CLI
-tests/test_epn.py              # TDD'd codec tests (run in CI)
+tests/test_header.py              # TDD'd codec tests (run in CI)
 scripts/fetch-mq.sh            # download+verify MQ tar into build/mq/
 ansible/
   ansible.cfg
@@ -81,9 +81,9 @@ ansible/
   roles/mq-qmgr/templates/mqwebuser.xml.j2
   roles/mq-client/tasks/main.yml       # client/sdk debs + pymqi venv
 content/qm-main.yaml           # declarative MQ objects (content plane)
-content/dtcc-sim.yaml
+content/svc-sim.yaml
 clients/epn_requester.py       # pymqi client-mode requester (app-client)
-clients/epn_responder.py       # pymqi bindings-mode responder (dtcc-sim)
+clients/epn_responder.py       # pymqi bindings-mode responder (svc-sim)
 lab/topology.yaml              # +3 phase-b nodes (modify)
 lab/scripts/e2e-test.sh        # the proof
 vergil.toml                    # primary-language returns (modify)
@@ -98,31 +98,31 @@ Never committed: `build/mq/**` (IBM binaries), any mqweb credentials
 ### Task 1: Python toolchain enters the repo (closes #9's loose end)
 
 **Files:** Create `pyproject.toml`, `src/mqlab/__init__.py`,
-`tests/test_epn.py` (first test), `src/mqlab/epn.py`; Modify `vergil.toml`,
+`tests/test_header.py` (first test), `src/mqlab/header.py`; Modify `vergil.toml`,
 `.github/workflows/ci.yml`.
 
-- [ ] **Step 1: Write the failing codec test** (the EPN header is spec
+- [ ] **Step 1: Write the failing codec test** (the FFH header is spec
   §9.1's fixed-format, blank-padded, left-justified fields)
 
 ```python
-# tests/test_epn.py
-from mqlab.epn import pack_header, parse_header, validate_header, ACK_OK, ACK_BAD_HEADER, ACK_STALE_DATE
+# tests/test_header.py
+from mqlab.header import pack_header, parse_header, validate_header, ACK_OK, ACK_BAD_HEADER, ACK_STALE_DATE
 
 def test_pack_header_fixed_width():
-    h = pack_header(password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260606")
+    h = pack_header(password="pw", sender="APP01", receiver="SVC", session_date="20260606")
     assert len(h) == 32
-    assert h == "pw      FIRM01  DTCCSVC 20260606"
+    assert h == "pw      APP01  SVC 20260606"
 
 def test_roundtrip():
-    h = pack_header(password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260606")
+    h = pack_header(password="pw", sender="APP01", receiver="SVC", session_date="20260606")
     f = parse_header(h + "PAYLOAD")
-    assert (f.sender, f.receiver, f.busdate, f.payload) == ("FIRM01", "DTCCSVC", "20260606", "PAYLOAD")
+    assert (f.sender, f.receiver, f.session_date, f.payload) == ("APP01", "SVC", "20260606", "PAYLOAD")
 
 def test_validate_ack_codes():
-    good = pack_header(password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260606")
+    good = pack_header(password="pw", sender="APP01", receiver="SVC", session_date="20260606")
     assert validate_header(good, today="20260606") == ACK_OK
     assert validate_header("short", today="20260606") == ACK_BAD_HEADER
-    stale = pack_header(password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20250101")
+    stale = pack_header(password="pw", sender="APP01", receiver="SVC", session_date="20250101")
     assert validate_header(stale, today="20260606") == ACK_STALE_DATE
 ```
 
@@ -149,12 +149,12 @@ packages = ["src/mqlab"]
 testpaths = ["tests"]
 ```
 
-Run: `uv sync && uv run pytest` — expected: FAIL (no `mqlab.epn`).
+Run: `uv sync && uv run pytest` — expected: FAIL (no `mqlab.header`).
 
-- [ ] **Step 3: Implement `src/mqlab/epn.py` minimally**
+- [ ] **Step 3: Implement `src/mqlab/header.py` minimally**
 
 ```python
-"""EPN-pattern fixed-format header (spec 9.1): blank-padded, left-justified
+"""FFH-pattern fixed-format header (spec 9.1): blank-padded, left-justified
 8-char fields - Password, Sender, Receiver, BusDate - then payload. Field
 layouts are per-service and arrive at onboarding; this models the PATTERN."""
 from dataclasses import dataclass
@@ -170,15 +170,15 @@ class Header:
     password: str
     sender: str
     receiver: str
-    busdate: str
+    session_date: str
     payload: str
 
-def pack_header(*, password: str, sender: str, receiver: str, busdate: str) -> str:
+def pack_header(*, password: str, sender: str, receiver: str, session_date: str) -> str:
     for name, v in (("password", password), ("sender", sender),
-                    ("receiver", receiver), ("busdate", busdate)):
+                    ("receiver", receiver), ("session_date", session_date)):
         if len(v) > FIELD:
             raise ValueError(f"{name} exceeds {FIELD} chars")
-    return f"{password:<8}{sender:<8}{receiver:<8}{busdate:<8}"
+    return f"{password:<8}{sender:<8}{receiver:<8}{session_date:<8}"
 
 def parse_header(msg: str) -> Header:
     if len(msg) < HEADER_LEN:
@@ -193,7 +193,7 @@ def validate_header(msg: str, *, today: str) -> str:
         return ACK_BAD_HEADER
     if not (h.password and h.sender and h.receiver):
         return ACK_BAD_HEADER
-    if h.busdate != today:
+    if h.session_date != today:
         return ACK_STALE_DATE
     return ACK_OK
 ```
@@ -218,8 +218,8 @@ flow anyway.**
 vrg-container-run -- vrg-validate     # now includes uv sync + pytest
 vrg-git add pyproject.toml uv.lock src/ tests/ vergil.toml .github/
 vrg-commit --type feat --scope tooling \
-  --message "python toolchain + EPN header codec (#<N>)" \
-  --body "pyproject/uv with pymqrest+ansible; TDD'd EPN fixed-format codec; primary-language restored per #9. Ref #<N>"
+  --message "python toolchain + FFH header codec (#<N>)" \
+  --body "pyproject/uv with pymqrest+ansible; TDD'd FFH fixed-format codec; primary-language restored per #9. Ref #<N>"
 ```
 
 ### Task 2: MQ acquisition (no IBM binaries in git)
@@ -278,11 +278,11 @@ vrg-commit --type feat --scope lab --message "MQ 9.4.5.0 arm64 fetch script (#<N
   qm-main:
     cpus: 2
     memory: 2048
-    nics: { net-client: 10.30.0.10, net-dtcc: 10.20.0.10 }
-  dtcc-sim:
+    nics: { net-client: 10.30.0.10, net-svc: 10.20.0.10 }
+  svc-sim:
     cpus: 2
     memory: 2048
-    nics: { net-dtcc: 10.20.0.50 }
+    nics: { net-svc: 10.20.0.50 }
   app-client:
     nics: { net-client: 10.30.0.60 }
 ```
@@ -291,11 +291,11 @@ vrg-commit --type feat --scope lab --message "MQ 9.4.5.0 arm64 fetch script (#<N
 
 ```bash
 lab/scripts/net-up.sh
-cd lab && vagrant up qm-main dtcc-sim app-client --provider=libvirt
+cd lab && vagrant up qm-main svc-sim app-client --provider=libvirt
 vagrant ssh qm-main -c 'ip -br addr | grep -c 10\.'   # expect 2 topology IPs
 ```
 
-- [ ] **Step 3: Commit** (`feat(lab): phase-b nodes qm-main/dtcc-sim/app-client`)
+- [ ] **Step 3: Commit** (`feat(lab): phase-b nodes qm-main/svc-sim/app-client`)
 
 ### Task 4: Ansible plane — scaffolding + L1 install role
 
@@ -313,13 +313,13 @@ vagrant ssh qm-main -c 'ip -br addr | grep -c 10\.'   # expect 2 topology IPs
 set -euo pipefail
 cd "$(dirname "$0")/../lab"
 {
-  echo "[qm_hosts]"; echo "qm-main"; echo "dtcc-sim"
+  echo "[qm_hosts]"; echo "qm-main"; echo "svc-sim"
   echo "[client_hosts]"; echo "app-client"
   echo "[all:vars]"
   echo "ansible_user=vagrant"
   echo "ansible_python_interpreter=/usr/bin/python3"
 } > ../build/inventory.ini
-for h in qm-main dtcc-sim app-client; do
+for h in qm-main svc-sim app-client; do
   cfg=$(vagrant ssh-config "$h")
   hn=$(awk '/HostName/{print $2}' <<<"$cfg")
   port=$(awk '/Port/{print $2}' <<<"$cfg")
@@ -550,8 +550,8 @@ WantedBy=multi-user.target
 - hosts: qm-main
   vars: { qmgr_name: QMAIN }
   roles: [mq-qmgr]
-- hosts: dtcc-sim
-  vars: { qmgr_name: QDTCC }
+- hosts: svc-sim
+  vars: { qmgr_name: QMSVC }
   roles: [mq-qmgr]
 ```
 
@@ -566,7 +566,7 @@ curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" \
   https://10.20.0.50:9443/ibmmq/rest/v2/admin/qmgr | head -3
 ```
 
-Expected: JSON listing `QMAIN` / `QDTCC` running. *(The mqwebuser.xml
+Expected: JSON listing `QMAIN` / `QMSVC` running. *(The mqwebuser.xml
 template is validated here; if the 9.4.5 sample schema differs, reconcile
 against `/opt/mqm/web/mq/samp/configuration/basic_registry.xml` on the
 node — one file, one place.)*
@@ -576,7 +576,7 @@ node — one file, one place.)*
 ### Task 6: Content plane — declarative objects via pymqrest
 
 **Files:** Create `src/mqlab/apply.py`, `content/qm-main.yaml`,
-`content/dtcc-sim.yaml`, `tests/test_apply.py`.
+`content/svc-sim.yaml`, `tests/test_apply.py`.
 
 - [ ] **Step 1: Confirm the exact `ensure_*` surface** (verification, not
   guesswork — the README documents the pattern but not every name)
@@ -595,27 +595,27 @@ Record the names; the applier's `KIND_TO_METHOD` map (below) uses them.
 # content/qm-main.yaml — objects on QMAIN
 qmgr: QMAIN
 objects:
-  - { kind: local_queue,        name: TRADE.REPLY }
-  - { kind: local_queue,        name: QDTCC,            attrs: { usage: transmission } }
-  - { kind: remote_queue,       name: DTCC.REQUEST,
-      attrs: { remote_qmgr: QDTCC, remote_queue: TRADE.REQUEST, transmission_queue: QDTCC } }
-  - { kind: sender_channel,     name: QMAIN.QDTCC,
-      attrs: { connection_name: "10.20.0.50(1414)", transmission_queue: QDTCC } }
-  - { kind: receiver_channel,   name: QDTCC.QMAIN }
+  - { kind: local_queue,        name: APP.REPLY }
+  - { kind: local_queue,        name: QMSVC,            attrs: { usage: transmission } }
+  - { kind: remote_queue,       name: SVC.REQUEST,
+      attrs: { remote_qmgr: QMSVC, remote_queue: SVC.REQUEST, transmission_queue: QMSVC } }
+  - { kind: sender_channel,     name: QMAIN.QMSVC,
+      attrs: { connection_name: "10.20.0.50(1414)", transmission_queue: QMSVC } }
+  - { kind: receiver_channel,   name: QMSVC.QMAIN }
   - { kind: server_conn_channel, name: APP.SVRCONN }
 ```
 
 ```yaml
-# content/dtcc-sim.yaml — objects on QDTCC
-qmgr: QDTCC
+# content/svc-sim.yaml — objects on QMSVC
+qmgr: QMSVC
 objects:
-  - { kind: local_queue,        name: TRADE.REQUEST }
+  - { kind: local_queue,        name: SVC.REQUEST }
   - { kind: local_queue,        name: QMAIN,            attrs: { usage: transmission } }
-  - { kind: remote_queue,       name: FIRM.REPLY,
-      attrs: { remote_qmgr: QMAIN, remote_queue: TRADE.REPLY, transmission_queue: QMAIN } }
-  - { kind: sender_channel,     name: QDTCC.QMAIN,
+  - { kind: remote_queue,       name: APP.REPLY,
+      attrs: { remote_qmgr: QMAIN, remote_queue: APP.REPLY, transmission_queue: QMAIN } }
+  - { kind: sender_channel,     name: QMSVC.QMAIN,
       attrs: { connection_name: "10.20.0.10(1414)", transmission_queue: QMAIN } }
-  - { kind: receiver_channel,   name: QMAIN.QDTCC }
+  - { kind: receiver_channel,   name: QMAIN.QMSVC }
 ```
 
 - [ ] **Step 3: The applier** (attribute names mapped per the Step-1
@@ -662,13 +662,13 @@ used in `content/*.yaml` (pure file parse — no live QM in CI).
 
 ```bash
 python -m mqlab.apply content/qm-main.yaml  https://10.30.0.10:9443
-python -m mqlab.apply content/dtcc-sim.yaml https://10.20.0.50:9443
+python -m mqlab.apply content/svc-sim.yaml https://10.20.0.50:9443
 # second run: every line UNCHANGED (the pymqrest drift-detection showcase)
 # then start senders once (runmqsc via ansible ad-hoc or REST) and check:
 cd ansible && ansible qm-main -b --become-user=mqm -m shell \
-  -a 'echo "START CHANNEL(QMAIN.QDTCC)" | /opt/mqm/bin/runmqsc QMAIN'
-ansible dtcc-sim -b --become-user=mqm -m shell \
-  -a 'echo "START CHANNEL(QDTCC.QMAIN)" | /opt/mqm/bin/runmqsc QDTCC'
+  -a 'echo "START CHANNEL(QMAIN.QMSVC)" | /opt/mqm/bin/runmqsc QMAIN'
+ansible svc-sim -b --become-user=mqm -m shell \
+  -a 'echo "START CHANNEL(QMSVC.QMAIN)" | /opt/mqm/bin/runmqsc QMSVC'
 ```
 
 Expected: both sender channels reach RUNNING (verify via pymqrest channel
@@ -678,20 +678,20 @@ objects via pymqrest`).
 ### Task 7: The message path — requester + responder
 
 **Files:** Create `clients/epn_requester.py`, `clients/epn_responder.py`;
-Modify `ansible/site.yml` (deploy clients + `src/mqlab/epn.py` to nodes).
+Modify `ansible/site.yml` (deploy clients + `src/mqlab/header.py` to nodes).
 
-- [ ] **Step 1: Responder (bindings mode, runs on dtcc-sim)**
+- [ ] **Step 1: Responder (bindings mode, runs on svc-sim)**
 
 ```python
-# clients/epn_responder.py — DTCC-side: get TRADE.REQUEST, validate the
-# EPN header, reply with ACK code via FIRM.REPLY. Bindings mode (local QM).
+# clients/epn_responder.py — SVC-side: get SVC.REQUEST, validate the
+# FFH header, reply with ACK code via APP.REPLY. Bindings mode (local QM).
 import sys, datetime, pymqi
-from epn import validate_header, parse_header, pack_header, ACK_OK
+from header import validate_header, parse_header, pack_header, ACK_OK
 
 def main(count: int) -> int:
-    qmgr = pymqi.connect("QDTCC")          # bindings: no channel/conninfo
-    qin = pymqi.Queue(qmgr, "TRADE.REQUEST")
-    qout = pymqi.Queue(qmgr, "FIRM.REPLY")
+    qmgr = pymqi.connect("QMSVC")          # bindings: no channel/conninfo
+    qin = pymqi.Queue(qmgr, "SVC.REQUEST")
+    qout = pymqi.Queue(qmgr, "APP.REPLY")
     today = datetime.date.today().strftime("%Y%m%d")
     gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_WAIT, WaitInterval=30_000)
     for _ in range(count):
@@ -699,8 +699,8 @@ def main(count: int) -> int:
         ack = validate_header(msg, today=today)
         h = parse_header(msg) if ack == ACK_OK else None
         seq = h.payload if h else "?"
-        reply = pack_header(password="pw", sender="DTCCSVC",
-                            receiver="FIRM01", busdate=today) + f"{ack}:{seq}"
+        reply = pack_header(password="pw", sender="SVC",
+                            receiver="APP01", session_date=today) + f"{ack}:{seq}"
         qout.put(reply.encode())
     qmgr.disconnect()
     return 0
@@ -712,10 +712,10 @@ if __name__ == "__main__":
 - [ ] **Step 2: Requester (client mode from app-client via APP.SVRCONN)**
 
 ```python
-# clients/epn_requester.py — firm-side: put N trades to DTCC.REQUEST on
-# QMAIN over a client connection, then get N ACKs from TRADE.REPLY.
+# clients/epn_requester.py — app-side: put N trades to SVC.REQUEST on
+# QMAIN over a client connection, then get N ACKs from APP.REPLY.
 import sys, datetime, pymqi
-from epn import pack_header, parse_header
+from header import pack_header, parse_header
 
 def main(count: int) -> int:
     today = datetime.date.today().strftime("%Y%m%d")
@@ -724,11 +724,11 @@ def main(count: int) -> int:
                   TransportType=pymqi.CMQC.MQXPT_TCP)
     qmgr = pymqi.QueueManager(None)
     qmgr.connect_with_options("QMAIN", cd=cd)
-    qreq = pymqi.Queue(qmgr, "DTCC.REQUEST")
-    qrep = pymqi.Queue(qmgr, "TRADE.REPLY")
+    qreq = pymqi.Queue(qmgr, "SVC.REQUEST")
+    qrep = pymqi.Queue(qmgr, "APP.REPLY")
     for i in range(count):
-        qreq.put((pack_header(password="pw", sender="FIRM01",
-                              receiver="DTCCSVC", busdate=today) + f"TRADE-{i:04d}").encode())
+        qreq.put((pack_header(password="pw", sender="APP01",
+                              receiver="SVC", session_date=today) + f"MSG-{i:04d}").encode())
     gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_WAIT, WaitInterval=60_000)
     acks = 0
     for _ in range(count):
@@ -753,20 +753,20 @@ if QMAIN rejects the connection, disable CHLAUTH for the lab:
 explicitly out of scope, spec §1.)*
 
 - [ ] **Step 3: Deploy via ansible** — add a `copy` task pushing
-  `clients/*.py` + `src/mqlab/epn.py` (as `epn.py`) to `dtcc-sim` and
+  `clients/*.py` + `src/mqlab/header.py` (as `header.py`) to `svc-sim` and
   `app-client` home dirs; re-run `site.yml`.
 
 - [ ] **Step 4: Manual first pass**
 
 ```bash
 cd lab
-vagrant ssh dtcc-sim  -c '~/mqvenv/bin/python ~/epn_responder.py 3' &
+vagrant ssh svc-sim  -c '~/mqvenv/bin/python ~/epn_responder.py 3' &
 sleep 2
 vagrant ssh app-client -c '~/mqvenv/bin/python ~/epn_requester.py 3'
 ```
 
 Expected: `3/3 clean ACKs`, requester exit 0. Commit
-(`feat(clients): EPN requester/responder over the trade path`).
+(`feat(clients): FFH requester/responder over the trade path`).
 
 ### Task 8: End-to-end test + reboot survival (the Phase B proof)
 
@@ -777,12 +777,12 @@ Expected: `3/3 clean ACKs`, requester exit 0. Commit
 ```bash
 #!/usr/bin/env bash
 # lab/scripts/e2e-test.sh — N trades through app-client -> QMAIN ->
-# channel -> QDTCC -> responder -> back. Exits non-zero unless every
+# channel -> QMSVC -> responder -> back. Exits non-zero unless every
 # trade round-trips with a clean ACK.
 set -euo pipefail
 N="${1:-5}"
 cd "$(dirname "$0")/.."
-vagrant ssh dtcc-sim -c "~/mqvenv/bin/python ~/epn_responder.py $N" &
+vagrant ssh svc-sim -c "~/mqvenv/bin/python ~/epn_responder.py $N" &
 RESP=$!
 sleep 3
 vagrant ssh app-client -c "~/mqvenv/bin/python ~/epn_requester.py $N"
@@ -821,9 +821,9 @@ correctly on reboot" requirement, tested.
 
 ## Deliberately deferred
 
-- TLS on channels / REST hardening — out of scope (spec §1); GOV1683-24
+- TLS on channels / REST hardening — out of scope (spec §1); those security standards
   onboarding-ready TLS config is a later, requirements-driven task.
-- DTCC multi-queue inbound delivery modeling (spec §9.1) — Phase C/DR
+- SVC multi-queue inbound delivery modeling (spec §9.1) — Phase C/DR
   testing territory.
 - Guest service-surface minimization — with Phase C's cluster nodes.
 - `pymqrest` MIT relicense — tracked for Phase F packaging (spec §11).
@@ -840,8 +840,8 @@ correctly on reboot" requirement, tested.
   Step 1 introspection), the 9.4.5 mqwebuser.xml schema (Task 5 Step 4),
   CHLAUTH behavior (Task 7 note) — each has a named, single-file
   reconciliation point.
-- **Consistency:** QM names (QMAIN/QDTCC), channel names (QMAIN.QDTCC /
-  QDTCC.QMAIN), queue names (TRADE.REQUEST/TRADE.REPLY, xmitqs named for
+- **Consistency:** QM names (QMAIN/QMSVC), channel names (QMAIN.QMSVC /
+  QMSVC.QMAIN), queue names (SVC.REQUEST/APP.REPLY, xmitqs named for
   the remote QM), IPs (10.30.0.10, 10.20.0.50, 10.30.0.60) match across
   topology, content YAML, clients, and curl checks.
 - **Secrets:** IBM binaries stay in gitignored `build/mq/`; mqweb creds

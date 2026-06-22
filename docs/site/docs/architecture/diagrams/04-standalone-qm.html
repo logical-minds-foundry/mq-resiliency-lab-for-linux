@@ -24,17 +24,17 @@
         <h4>qm-main</h4>
         <div class="sub">the queue manager</div>
         <span class="net net-data">net-client · 10.30.0.10</span>
-        <span class="net net-data">net-dtcc · 10.20.0.10</span>
+        <span class="net net-data">net-svc · 10.20.0.10</span>
       </div>
       <div class="wanlink">
-        <span class="net net-data">net-dtcc</span>
+        <span class="net net-data">net-svc</span>
         <div class="arrow">⇄</div>
         <small>10.20.0.0/24</small>
       </div>
       <div class="box">
-        <h4>dtcc-sim</h4>
+        <h4>svc-sim</h4>
         <div class="sub">simulated upstream</div>
-        <span class="net net-data">net-dtcc · 10.20.0.50</span>
+        <span class="net net-data">net-svc · 10.20.0.50</span>
       </div>
     </div>
     <div class="ok" style="margin-top:10px;">Bring it up, send a message, reboot a guest: the message path <b>survives the reboot</b> (persistent messages, durable subscriptions). This is the foundation the HA/DR arms build on.</div>

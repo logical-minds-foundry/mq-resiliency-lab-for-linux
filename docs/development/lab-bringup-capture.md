@@ -15,7 +15,7 @@
 
 - [1. Required data artifacts](#1-required-data-artifacts-must-exist-in-build-before-any-bring-up)
 - [2. Prerequisites verified this run (2026-06-08)](#2-prerequisites-verified-this-run-2026-06-08)
-- [3. Bring-up log — minimal message path](#3-bring-up-log--minimal-message-path-phase-b-qm-main--dtcc-sim--app-client)
+- [3. Bring-up log — minimal message path](#3-bring-up-log--minimal-message-path-phase-b-qm-main--svc-sim--app-client)
 - [4. Tooling-improvement notes](#4-tooling-improvement-notes-reduce-scripts--a-few-reusable-commands)
 
 ## 1. Required data artifacts (must exist in `build/` before any bring-up)
@@ -71,7 +71,7 @@ tracked in **#54**.
 - ⚠️ Host `.venv` was stale (`uv run` warned: interpreter `.venv/bin/python3` →
   non-existent). Fix: `uv sync` at repo root before running ansible.
 
-## 3. Bring-up log — minimal message path (Phase B: qm-main + dtcc-sim + app-client)
+## 3. Bring-up log — minimal message path (Phase B: qm-main + svc-sim + app-client)
 
 Smallest functional system; prerequisite for the DR framework's first live
 milestone (Plan 2 Tasks 4–7).
@@ -79,13 +79,13 @@ milestone (Plan 2 Tasks 4–7).
 | # | Step | Command | Result |
 |---|---|---|---|
 | 0 | Fix host venv | `uv sync` (repo root) | ✅ host `.venv` was stale (interpreter gone); `uv sync` rebuilt it → `ansible-playbook core 2.21.0`. |
-| 1 | Networks | `lab/scripts/net-up.sh` | ✅ defined+started 10 libvirt nets (default + net-client/data-a/data-b/dtcc/hb-a/hb-b/san-a/san-b/wan); all active + autostart. |
-| 2 | Boot trio | `cd lab && vagrant up qm-main dtcc-sim app-client --provider=libvirt` | ✅ 3 running, ~2 min (KVM arm64, box `cloud-image/ubuntu-24.04` already present). Static IPs correct: qm-main 10.30.0.10+10.20.0.10, dtcc-sim 10.20.0.50, app-client 10.30.0.60. **node-a1 NOT required** (the old quickstart over-specified it). |
-| 3 | Inventory | `ansible/inventory.sh` | ✅ wrote `build/inventory.ini` (3 hosts: qm_hosts=qm-main,dtcc-sim; client_hosts=app-client). Harmless `[fog][WARNING] Unrecognized arguments: libvirt_ip_command` noise. `ansible.cfg` already points `inventory = ../build/inventory.ini`. |
+| 1 | Networks | `lab/scripts/net-up.sh` | ✅ defined+started 10 libvirt nets (default + net-client/data-a/data-b/svc/hb-a/hb-b/san-a/san-b/wan); all active + autostart. |
+| 2 | Boot trio | `cd lab && vagrant up qm-main svc-sim app-client --provider=libvirt` | ✅ 3 running, ~2 min (KVM arm64, box `cloud-image/ubuntu-24.04` already present). Static IPs correct: qm-main 10.30.0.10+10.20.0.10, svc-sim 10.20.0.50, app-client 10.30.0.60. **node-a1 NOT required** (the old quickstart over-specified it). |
+| 3 | Inventory | `ansible/inventory.sh` | ✅ wrote `build/inventory.ini` (3 hosts: qm_hosts=qm-main,svc-sim; client_hosts=app-client). Harmless `[fog][WARNING] Unrecognized arguments: libvirt_ip_command` noise. `ansible.cfg` already points `inventory = ../build/inventory.ini`. |
 | 4 | Provision | `MQWEB_ADMIN_USER/PASSWORD` env + `cd ansible && ansible-playbook site.yml` | ⏳ running (background). Creds generated and saved to `build/mqweb.env` (gitignored) for reuse by steps 5+. |
-| 5 | QM objects | `source build/mqweb.env && python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443` (and `content/dtcc-sim.yaml https://10.20.0.50:9443`) | ✅ 6 objects CREATED each (QMAIN: TRADE.REPLY, QDTCC xmit, DTCC.REQUEST remote, QMAIN.QDTCC/QDTCC.QMAIN/APP.SVRCONN; QDTCC mirror + SIM.SVRCONN). `mqlab.apply` reads `MQWEB_ADMIN_USER/PASSWORD` from env. |
-| 6 | Start channels | `cd ansible && ansible qm-main -b --become-user=mqm -m shell -a 'echo "START CHANNEL(QMAIN.QDTCC)" \| runmqsc QMAIN'` (+ QDTCC.QMAIN on dtcc-sim) | ✅ `AMQ8018I: Start IBM MQ channel accepted` both sides. |
-| 7 | E2E proof | `lab/scripts/e2e-test.sh 5` | ✅ **5/5 clean ACKs, exit 0.** Message path live: app-client → QMAIN → channel → QDTCC → responder → reply. |
+| 5 | QM objects | `source build/mqweb.env && python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443` (and `content/svc-sim.yaml https://10.20.0.50:9443`) | ✅ 6 objects CREATED each (QMAIN: APP.REPLY, QMSVC xmit, SVC.REQUEST remote, QMAIN.QMSVC/QMSVC.QMAIN/APP.SVRCONN; QMSVC mirror + SVC.SVRCONN). `mqlab.apply` reads `MQWEB_ADMIN_USER/PASSWORD` from env. |
+| 6 | Start channels | `cd ansible && ansible qm-main -b --become-user=mqm -m shell -a 'echo "START CHANNEL(QMAIN.QMSVC)" \| runmqsc QMAIN'` (+ QMSVC.QMAIN on svc-sim) | ✅ `AMQ8018I: Start IBM MQ channel accepted` both sides. |
+| 7 | E2E proof | `lab/scripts/e2e-test.sh 5` | ✅ **5/5 clean ACKs, exit 0.** Message path live: app-client → QMAIN → channel → QMSVC → responder → reply. |
 
 **Result: the Phase B message path is GREEN.** Total wall-clock from cold (all
 artifacts present): ~12 min, the bulk being MQ install in step 4. This is the

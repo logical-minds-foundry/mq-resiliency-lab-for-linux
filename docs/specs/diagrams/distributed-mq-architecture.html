@@ -46,7 +46,7 @@
 
 <section id="overview">
 <h2>① The architecture — two businesses across a WAN</h2>
-<p class="subtitle">Service side cheats: one VM runs the DTCC queue manager <i>and</i> the responder (bindings, local). App side can't collapse — apps are remote clients, never on our HA/DR cluster.</p>
+<p class="subtitle">Service side cheats: one VM runs the SVC queue manager <i>and</i> the responder (bindings, local). App side can't collapse — apps are remote clients, never on our HA/DR cluster.</p>
 <div class="mockup">
   <div class="mockup-header">app → our HA/DR QM  ⇄ (WAN) ⇄  their service QM (+responder, bindings)</div>
   <div class="mockup-body">
@@ -84,13 +84,13 @@
         <div style="border-left:3px dashed #c0c0c0; height:50px;"></div>
       </div>
       <div style="flex:.9; border:2px dashed #999; border-radius:10px; padding:14px; background:rgba(255,255,255,0.03);">
-        <div class="label" style="color:#bbb;">BUSINESS B · DTCC — black box (NOT our HA/DR)</div>
+        <div class="label" style="color:#bbb;">BUSINESS B · SVC — black box (NOT our HA/DR)</div>
         <div style="margin-top:12px;">
           <div style="border:2px solid #999; border-radius:8px; padding:12px; text-align:center;">
-            <div style="font-weight:700; letter-spacing:.5px;">DTCC SERVICE VM &nbsp;<span style="font-size:10px; opacity:.6;">(one box)</span></div>
+            <div style="font-weight:700; letter-spacing:.5px;">SVC SERVICE VM &nbsp;<span style="font-size:10px; opacity:.6;">(one box)</span></div>
             <div style="margin-top:10px; border:1px solid #999; border-radius:6px; padding:8px; background:#33342f;">
               <div style="font-weight:700;">SERVICE QUEUE MANAGER</div>
-              <div style="font-size:11px; opacity:.8;">QMDTCC — standalone, no HA/DR</div>
+              <div style="font-size:11px; opacity:.8;">QMSVC — standalone, no HA/DR</div>
             </div>
             <div style="margin:6px 0; opacity:.8; font-size:11px;">▲ bindings (local, no client)</div>
             <div style="border:1px solid #888; border-radius:6px; padding:8px;">
@@ -102,7 +102,7 @@
       </div>
     </div>
     <div style="margin-top:14px; padding:10px; border-top:1px solid #444; font-size:12px; opacity:.85;">
-      <b>Linear flow:</b>&nbsp; APP VM → <span style="color:#4ea1ff;">our HA/DR QM</span> → <span style="color:#ffcf6b;">sender + xmitq</span> ⇢ WAN ⇢ <span style="color:#ffcf6b;">receiver</span> → DTCC QM → responder (bindings) → reply travels back the same path.
+      <b>Linear flow:</b>&nbsp; APP VM → <span style="color:#4ea1ff;">our HA/DR QM</span> → <span style="color:#ffcf6b;">sender + xmitq</span> ⇢ WAN ⇢ <span style="color:#ffcf6b;">receiver</span> → SVC QM → responder (bindings) → reply travels back the same path.
       <br><b>The real HA/DR test:</b> our QM fails over (node, then site) <i>while the cross-WAN channel is live</i> — channel re-establishes, staged xmitq messages survive &amp; flush, no loss / no dupes.
     </div>
   </div>
@@ -129,7 +129,7 @@
   </div>
 </div>
 <div class="mockup">
-  <div class="mockup-header">topology — app · our two-site HA/DR QM · WAN · DTCC</div>
+  <div class="mockup-header">topology — app · our two-site HA/DR QM · WAN · SVC</div>
   <div class="mockup-body" style="font-size:11.5px;">
     <div style="display:flex; align-items:stretch; gap:0;">
       <div style="flex:1.5; border:2px solid #4ea1ff; border-radius:10px; padding:10px; background:rgba(78,161,255,0.06);">
@@ -179,11 +179,11 @@
         <div style="border-left:3px dashed #ff6b6b; height:30px;"></div>
       </div>
       <div style="flex:.85; border:2px dashed #999; border-radius:10px; padding:10px; background:rgba(255,255,255,0.03);">
-        <div class="label" style="color:#bbb;">BUSINESS B · DTCC</div>
+        <div class="label" style="color:#bbb;">BUSINESS B · SVC</div>
         <div style="border:2px solid #999; border-radius:8px; padding:9px; margin-top:6px; text-align:center;">
-          <div style="font-weight:700;">DTCC SERVICE VM</div>
+          <div style="font-weight:700;">SVC SERVICE VM</div>
           <div style="font-size:10px; color:#9cd; margin-top:3px;">on net-ext <code>10.60.0.50</code></div>
-          <div style="margin-top:7px; border:1px solid #999; border-radius:5px; padding:5px; background:#33342f; font-size:11px;"><b>QMDTCC</b> <span style="opacity:.6; font-size:10px;">standalone</span></div>
+          <div style="margin-top:7px; border:1px solid #999; border-radius:5px; padding:5px; background:#33342f; font-size:11px;"><b>QMSVC</b> <span style="opacity:.6; font-size:10px;">standalone</span></div>
           <div style="font-size:10px; opacity:.8; margin:4px 0;">▲ bindings</div>
           <div style="border:1px solid #888; border-radius:5px; padding:5px; font-size:11px;"><b>service</b> <span style="opacity:.6; font-size:10px;">responder</span></div>
         </div>
@@ -194,7 +194,7 @@
       net-mgmt 10.50.0.0/24 — out-of-band lab control plane (Ansible reaches every VM here) · models no real data path
     </div>
     <div style="margin-top:10px; padding-top:8px; border-top:1px solid #444; font-size:11px;">
-      <b>Reads as:</b> the app and DTCC both connect <i>to our QM</i>, but over <b>different</b> networks — the app over our internal <span style="color:#9cd;">net-data</span> VIP, DTCC over the <span style="color:#7ee0a0;">net-ext</span> partner VIP. Each site owns one of each VIP; they float with the QM and only the active site's are live. <b style="color:#ff6b6b;">net-ext</b> is the only business-boundary crossing; <b style="color:#ffcf6b;">net-wan</b> is the only site-boundary crossing.
+      <b>Reads as:</b> the app and SVC both connect <i>to our QM</i>, but over <b>different</b> networks — the app over our internal <span style="color:#9cd;">net-data</span> VIP, SVC over the <span style="color:#7ee0a0;">net-ext</span> partner VIP. Each site owns one of each VIP; they float with the QM and only the active site's are live. <b style="color:#ff6b6b;">net-ext</b> is the only business-boundary crossing; <b style="color:#ffcf6b;">net-wan</b> is the only site-boundary crossing.
     </div>
   </div>
 </div>
@@ -204,9 +204,9 @@
 
 <section id="twovip">
 <h2>③ Two sites, two VIPs — the resilience model</h2>
-<p class="subtitle">Our HA/DR QM exists across TWO data centers with TWO different VIPs. HA floats the VIP <i>within</i> a site; DR moves the QM to the <i>other</i> site's VIP. Everything that connects to it — the app AND the DTCC sender channel — must carry a CONNAME list of <b>both</b> VIPs.</p>
+<p class="subtitle">Our HA/DR QM exists across TWO data centers with TWO different VIPs. HA floats the VIP <i>within</i> a site; DR moves the QM to the <i>other</i> site's VIP. Everything that connects to it — the app AND the SVC sender channel — must carry a CONNAME list of <b>both</b> VIPs.</p>
 <div class="mockup">
-  <div class="mockup-header">app &amp; DTCC-channel both use CONNAME(siteA-VIP, siteB-VIP) → follow the QM across HA and DR</div>
+  <div class="mockup-header">app &amp; SVC-channel both use CONNAME(siteA-VIP, siteB-VIP) → follow the QM across HA and DR</div>
   <div class="mockup-body">
     <div style="display:flex; align-items:stretch; gap:0; font-size:12.5px;">
       <div style="flex:1.25; border:2px solid #4ea1ff; border-radius:10px; padding:12px; background:rgba(78,161,255,0.07);">
@@ -238,17 +238,17 @@
           <div style="font-weight:700;">~ WAN ~</div>
           <div style="opacity:.7;">dedicated net (net-ext)</div>
           <div style="margin-top:5px; color:#ffcf6b;">SENDER/RECEIVER<br>channels</div>
-          <div style="margin-top:5px; font-size:10px; color:#7ee0a0;">DTCC sender →<br>CONNAME(<br>10.60.0.10,<br>10.60.0.20)</div>
+          <div style="margin-top:5px; font-size:10px; color:#7ee0a0;">SVC sender →<br>CONNAME(<br>10.60.0.10,<br>10.60.0.20)</div>
           <div style="margin-top:5px; font-size:9px; opacity:.55;">future: throttle/drop</div>
         </div>
         <div style="border-left:3px dashed #c0c0c0; height:55px;"></div>
       </div>
       <div style="flex:.8; border:2px dashed #999; border-radius:10px; padding:12px; background:rgba(255,255,255,0.03);">
-        <div class="label" style="color:#bbb;">BUSINESS B · DTCC — black box, one VM, no HA/DR</div>
+        <div class="label" style="color:#bbb;">BUSINESS B · SVC — black box, one VM, no HA/DR</div>
         <div style="margin-top:10px; border:2px solid #999; border-radius:8px; padding:10px; text-align:center;">
-          <div style="font-weight:700;">DTCC SERVICE VM</div>
+          <div style="font-weight:700;">SVC SERVICE VM</div>
           <div style="margin-top:8px; border:1px solid #999; border-radius:6px; padding:7px; background:#33342f;">
-            <div style="font-weight:700;">SERVICE QM (QMDTCC)</div>
+            <div style="font-weight:700;">SERVICE QM (QMSVC)</div>
             <div style="font-size:10px; opacity:.7;">single VIP (no failover)</div>
           </div>
           <div style="margin:5px 0; opacity:.8; font-size:11px;">▲ bindings</div>
@@ -259,7 +259,7 @@
       </div>
     </div>
     <div style="margin-top:12px; padding:9px; border-top:1px solid #444; font-size:11.5px; opacity:.88;">
-      <b>Why this matters:</b> HA failover (node→node) keeps the same VIP — <code>MQCNO_RECONNECT</code> rides it. <b>DR cutover (site→site) changes the VIP</b> — only a <span style="color:#7ee0a0;">CONNAME list of both VIPs</span> lets the app AND the DTCC channel follow the QM to the other DC. Enforced underneath by DRBD single-primary + Pacemaker: the QM only starts where storage is promoted, so the two sites are never both live.
+      <b>Why this matters:</b> HA failover (node→node) keeps the same VIP — <code>MQCNO_RECONNECT</code> rides it. <b>DR cutover (site→site) changes the VIP</b> — only a <span style="color:#7ee0a0;">CONNAME list of both VIPs</span> lets the app AND the SVC channel follow the QM to the other DC. Enforced underneath by DRBD single-primary + Pacemaker: the QM only starts where storage is promoted, so the two sites are never both live.
     </div>
   </div>
 </div>
@@ -316,7 +316,7 @@
 <h2>⑤ The MQ object plumbing — message flow</h2>
 <p class="subtitle">Request/reply across two queue managers: two one-way channel pairs, one xmitq per direction, a remote-queue definition outbound, automatic xmitq resolution on the reply. Follow the numbers.</p>
 <div class="mockup">
-  <div class="mockup-header">app → QMPCMK ⇢ WAN ⇢ QMDTCC → service, reply returns the mirror path</div>
+  <div class="mockup-header">app → QMPCMK ⇢ WAN ⇢ QMSVC → service, reply returns the mirror path</div>
   <div class="mockup-body" style="font-size:12px;">
     <div style="display:flex; align-items:stretch; gap:0;">
       <div style="flex:1.15; border:2px solid #4ea1ff; border-radius:10px; padding:11px; background:rgba(78,161,255,0.07);">
@@ -325,19 +325,19 @@
           <b>APP.SVRCONN</b> <span style="opacity:.6; font-size:10px;">(app connects client-mode here)</span>
         </div>
         <div style="margin-top:8px; border:1px solid #4ea1ff; border-radius:6px; padding:6px; background:rgba(78,161,255,0.1);">
-          <span style="color:#7ee0a0;">②</span> <b>QREMOTE DTCC.REQUEST</b><br>
-          <span style="font-size:10px; opacity:.75;">RNAME=SVC.REQUEST · RQMNAME=QMDTCC · XMITQ=QMDTCC</span>
+          <span style="color:#7ee0a0;">②</span> <b>QREMOTE SVC.REQUEST</b><br>
+          <span style="font-size:10px; opacity:.75;">RNAME=SVC.REQUEST · RQMNAME=QMSVC · XMITQ=QMSVC</span>
         </div>
         <div style="margin-top:6px; border:1px solid #ffcf6b; border-radius:6px; padding:6px;">
-          <span style="color:#7ee0a0;">③</span> <b>QLOCAL QMDTCC</b> <span style="font-size:10px; opacity:.7;">(xmitq, outbound)</span>
+          <span style="color:#7ee0a0;">③</span> <b>QLOCAL QMSVC</b> <span style="font-size:10px; opacity:.7;">(xmitq, outbound)</span>
         </div>
         <div style="margin-top:6px; border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
-          <span style="color:#7ee0a0;">④</span> <b>SENDER QMPCMK.QMDTCC</b><br>
-          <span style="font-size:10px; opacity:.75;">XMITQ=QMDTCC · CONNAME=<b>10.60.0.50</b>(1414) <i>(DTCC, single static)</i></span>
+          <span style="color:#7ee0a0;">④</span> <b>SENDER QMPCMK.QMSVC</b><br>
+          <span style="font-size:10px; opacity:.75;">XMITQ=QMSVC · CONNAME=<b>10.60.0.50</b>(1414) <i>(SVC, single static)</i></span>
         </div>
         <div style="margin-top:10px; border-top:1px dotted #555; padding-top:8px;">
           <div style="border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
-            <span style="color:#ff9d6b;">⑦</span> <b>RECEIVER QMDTCC.QMPCMK</b> <span style="font-size:10px; opacity:.7;">(replies inbound)</span>
+            <span style="color:#ff9d6b;">⑦</span> <b>RECEIVER QMSVC.QMPCMK</b> <span style="font-size:10px; opacity:.7;">(replies inbound)</span>
           </div>
           <div style="margin-top:6px; border:1px solid #888; border-radius:6px; padding:6px;">
             <span style="color:#ff9d6b;">⑧</span> <b>QLOCAL APP.REPLY</b> <span style="font-size:10px; opacity:.7;">(app GETs reply by CorrelId)</span>
@@ -354,9 +354,9 @@
         <div style="border-left:3px dashed #c0c0c0; height:40px;"></div>
       </div>
       <div style="flex:1; border:2px dashed #999; border-radius:10px; padding:11px; background:rgba(255,255,255,0.03);">
-        <div class="label" style="color:#bbb;">QMDTCC — standalone, transparent single endpoint (black box)</div>
+        <div class="label" style="color:#bbb;">QMSVC — standalone, transparent single endpoint (black box)</div>
         <div style="margin-top:8px; border:1px dashed #ffcf6b; border-radius:6px; padding:6px;">
-          <span style="color:#7ee0a0;">⑤</span> <b>RECEIVER QMPCMK.QMDTCC</b>
+          <span style="color:#7ee0a0;">⑤</span> <b>RECEIVER QMPCMK.QMSVC</b>
         </div>
         <div style="margin-top:6px; border:1px solid #888; border-radius:6px; padding:6px;">
           <b>QLOCAL SVC.REQUEST</b> <span style="font-size:10px; opacity:.7;">(service GETs)</span>
@@ -370,20 +370,20 @@
             <span style="color:#ff9d6b;">⑥</span> <b>QLOCAL QMPCMK</b> <span style="font-size:10px; opacity:.7;">(xmitq — name = remote QM ⇒ auto-resolves, no remote qdef)</span>
           </div>
           <div style="margin-top:6px; border:1px dashed #ff9d6b; border-radius:6px; padding:6px;">
-            <b>SENDER QMDTCC.QMPCMK</b><br>
+            <b>SENDER QMSVC.QMPCMK</b><br>
             <span style="font-size:10px; opacity:.75;">XMITQ=QMPCMK · CONNAME=<b>(10.60.0.10, 10.60.0.20)</b> <i>← chases our QM across sites</i></span>
           </div>
         </div>
       </div>
     </div>
     <div style="margin-top:12px; padding:8px; border-top:1px solid #444; font-size:11px;">
-      <b>① </b>app PUTs to <code>DTCC.REQUEST</code> (ReplyToQ=<code>APP.REPLY</code>, ReplyToQMgr=<code>QMPCMK</code>) ·
-      <b>②</b> qdef resolves to SVC.REQUEST@QMDTCC via xmitq ·
-      <b>③④⑤</b> sender drains xmitq across WAN to DTCC's receiver ·
+      <b>① </b>app PUTs to <code>SVC.REQUEST</code> (ReplyToQ=<code>APP.REPLY</code>, ReplyToQMgr=<code>QMPCMK</code>) ·
+      <b>②</b> qdef resolves to SVC.REQUEST@QMSVC via xmitq ·
+      <b>③④⑤</b> sender drains xmitq across WAN to SVC's receiver ·
       lands on <b>SVC.REQUEST</b> · service replies ·
       <b>⑥</b> reply routed via xmitq <code>QMPCMK</code> (auto-resolved by name) ·
-      <b>⑦⑧</b> back through DTCC's sender → our receiver → <code>APP.REPLY</code> · app GETs by CorrelId.
-      <br><b style="color:#4ea1ff;">The HA/DR test:</b> trigger HA (then DR) on QMPCMK <i>mid-flow</i> — sender link to DTCC retries, staged xmitq messages survive &amp; flush after recovery, DTCC's sender re-finds us at the new VIP. No loss, no dupes.
+      <b>⑦⑧</b> back through SVC's sender → our receiver → <code>APP.REPLY</code> · app GETs by CorrelId.
+      <br><b style="color:#4ea1ff;">The HA/DR test:</b> trigger HA (then DR) on QMPCMK <i>mid-flow</i> — sender link to SVC retries, staged xmitq messages survive &amp; flush after recovery, SVC's sender re-finds us at the new VIP. No loss, no dupes.
     </div>
   </div>
 </div>

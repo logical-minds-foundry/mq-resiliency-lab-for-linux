@@ -1,14 +1,14 @@
-# Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to QMDTCC and
+# Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to QMSVC and
 # run the bindings responder as a systemd service. Expects (set by the caller):
-#   qmgr_name  — the counterparty QM (QMDTCC)
+#   qmgr_name  — the counterparty QM (QMSVC)
 #   our_qm     — our HA QM name (QMPCMK)
 #   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
-# QMDTCC must already be created + started (mq-qmgr role runs first).
+# QMSVC must already be created + started (mq-qmgr role runs first).
 
-# TLS (#250): wire QMDTCC's keystore before the channel MQSC (which now defines
+# TLS (#250): wire QMSVC's keystore before the channel MQSC (which now defines
 # the channels with SSLCIPH/SSLPEER) — else the RCVR/SDR have no cert. Verified
 # live: channels run TLS 1.3, SSLPEER enforced with CHLAUTH disabled.
-- name: place QMDTCC keystore on its host
+- name: place QMSVC keystore on its host
   ansible.builtin.include_role:
     name: pki-distribute
   vars:
@@ -53,21 +53,21 @@
   become_user: mqm
 
 # TLS (#250): the responder is a SVRCONN *client* (client-mode to localhost), so
-# it needs its own cert + a .sth stash, distinct from QMDTCC's server keystore
-# above. SSLPEER on SVC.SVRCONN matches O=dtcc-org (dtcc-responder is dtcc-org).
-- name: place the dtcc-responder keystore (TLS)
+# it needs its own cert + a .sth stash, distinct from QMSVC's server keystore
+# above. SSLPEER on SVC.SVRCONN matches O=svc-org (svc-responder is svc-org).
+- name: place the svc-responder keystore (TLS)
   ansible.builtin.include_role:
     name: pki-distribute
   vars:
-    pki_entity: dtcc-responder
+    pki_entity: svc-responder
     pki_dest_dir: /var/mqm/ssl
     pki_owner: mqm
     pki_stash: true
 
 - name: deploy the service responder
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../clients/service_responder.py"
-    dest: /var/mqm/service_responder.py
+    src: "{{ playbook_dir }}/../clients/svc_responder.py"
+    dest: /var/mqm/svc_responder.py
     owner: mqm
     group: mqm
     mode: "0644"
@@ -75,14 +75,14 @@
 
 - name: responder systemd unit
   ansible.builtin.template:
-    src: mq-service-responder.service.j2
-    dest: /etc/systemd/system/mq-service-responder.service
+    src: mq-svc-responder.service.j2
+    dest: /etc/systemd/system/mq-svc-responder.service
     mode: "0644"
   become: true
 
 - name: enable + start the responder
   ansible.builtin.systemd:
-    name: mq-service-responder
+    name: mq-svc-responder
     enabled: true
     state: started
     daemon_reload: true

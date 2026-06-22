@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - remove premature Python language assumption (#9)
 - add missing Vergil 2.1 baseline entries to .gitignore (#11)
 - enable nested virtualization and add libarchive-tools (#14)
-- add UEFI guest firmware packages (#20)
+- add UEFI guest appware packages (#20)
 - TCG x86 root cause was CPU model, not speed - use cpu_mode maximum (#24)
 - grant actions: read and disable SARIF upload on this private repo
 
@@ -30,14 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
-- ground DR mandate and DTCC MQ connectivity model in public references
+- ground DR mandate and SVC MQ connectivity model in public references
 - add Appendix C — MQ version strategy (9.4 baseline, 9->10 gap analysis, upgrade window)
 - correct go-live framing — 2026-06-15 is the contract start, not a production go-live
 - confirm RDQM runs on VMs (no bare-metal requirement) in section 6.1
 - capture scale boundary condition (§1) and RDQM/RHEL-vs-Ubuntu tradeoff ledger (§2.7)
 - add symmetric peer-sites design constraint (§4.7) and planned role-rotation test (§3.1)
 - add table of contents with anchor links to design doc
-- note DTCC-constrained role rotation in §4.7, orthogonal to the 3+3 requirement
+- note SVC-constrained role rotation in §4.7, orthogonal to the 3+3 requirement
 - expand §7 — choose Vagrant for the lab harness, surface Apple-Silicon provider bind
 - make nested vagrant-libvirt the leading §7.2 harness hypothesis
 - rework §7.4 — develop inside one large persistent dev+lab VM, collapsing the macOS/Linux boundary
@@ -73,12 +73,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - provider spike: KVM arm64 + severability proven; TCG x86 capped by plugin IP-wait (#19)
 - 3+3 skeleton boots; connectivity-matrix smoke test green (#19)
 - harness reproducibility proven; spike scaffolding removed (#19)
-- python toolchain + EPN header codec; language restored (#27)
-- phase-b topology nodes: qm-main, dtcc-sim, app-client (#27)
+- python toolchain + FFH header codec; language restored (#27)
+- phase-b topology nodes: qm-main, svc-sim, app-client (#27)
 - MQ 9.4.5.0 arm64 fetch script (#27)
 - bring-up plane: install roles + QM/REST/boot services (#27)
 - declarative QM objects via pymqrest ensure_* (#27)
-- EPN trade path live: 3/3 clean ACKs end-to-end (#27)
+- FFH trade path live: 3/3 clean ACKs end-to-end (#27)
 - e2e trade test green incl. unattended reboot survival (#27)
 - Phase B convergence proven; apply CLI fully covered (#27)
 - RHEL 9.6 kickstart box build + six RDQM topology nodes (#31)

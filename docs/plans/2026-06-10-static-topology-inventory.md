@@ -547,7 +547,7 @@ vrg-commit --type feat --scope mqlab --message "add mqlab vm inventory command" 
 - [ ] **Step 1: Add a `net-mgmt` NIC to every node**
 
 To each node's `nics:` map, add `net-mgmt: 10.50.0.N` per the spec §5.2 table
-(qm-main .10, dtcc-sim .50, app-client .60, rdqm-a1/2/3 .31/.32/.33,
+(qm-main .10, svc-sim .50, app-client .60, rdqm-a1/2/3 .31/.32/.33,
 rdqm-b1/2/3 .41/.42/.43, san-a .5, pcmk-a1/2/3 .51/.52/.53, san-b .6,
 pcmk-b1/2/3 .61/.62/.63).
 
@@ -562,7 +562,7 @@ groups:                       # atomic role × site groups — the shared namesp
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   qm:     [qm-main]
-  dtcc:   [dtcc-sim]
+  svc:   [svc-sim]
   client: [app-client]
 ```
 
@@ -587,8 +587,8 @@ setups:
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
   standalone:
-    description: Phase-B standalone QM + DTCC sim + client (message path)
-    groups: [qm, dtcc, client]
+    description: Phase-B standalone QM + SVC sim + client (message path)
+    groups: [qm, svc, client]
     provision: ansible/site.yml
 ```
 
@@ -662,7 +662,7 @@ vrg-commit --type test --scope lab --message "guard real topology renders to a v
 - [ ] **Step 1: Apply the `hosts:` rewrites** per spec §7:
   - `site-pcmk.yml`: `pcmk_a:san_hosts` → `pcmk_san_ha`; `san-a` → `san_a`.
   - `site-pcmk-dr.yml`: `pcmk_a:pcmk_b:san_hosts` → `pcmk_san_dr`; `san-a`/`san-b` → `san_a`/`san_b`.
-  - `site.yml`: `all` → `standalone`; `qm_hosts`/`client_hosts` → `qm`/`client`; `qm-main`/`dtcc-sim` → `qm`/`dtcc`; `dtcc-sim:app-client` → `dtcc:client`.
+  - `site.yml`: `all` → `standalone`; `qm_hosts`/`client_hosts` → `qm`/`client`; `qm-main`/`svc-sim` → `qm`/`svc`; `svc-sim:app-client` → `svc:client`.
 
 - [ ] **Step 2: Grep roles for stale group names (correctness-critical)**
 

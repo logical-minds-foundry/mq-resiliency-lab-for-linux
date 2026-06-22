@@ -9,14 +9,14 @@
 # running). See docs/specs/2026-06-16-lab-snapshot-restore-design.md.
 #
 # Usage: lab-snapshot.sh [KEY=distributed-rdqm-rhel] [domain ...]
-#   default domains = the RDQM distributed set (rdqm-a1/2/3, dtcc-sim, app-client)
+#   default domains = the RDQM distributed set (rdqm-a1/2/3, svc-sim, app-client)
 set -euo pipefail
 v() { virsh -c qemu:///system "$@"; }
 KEY="${1:-distributed-rdqm-rhel}"
 shift || true
 DOMAINS=("$@")
 if [ "${#DOMAINS[@]}" -eq 0 ]; then
-  DOMAINS=(lab_rdqm-a1 lab_rdqm-a2 lab_rdqm-a3 lab_dtcc-sim lab_app-client)
+  DOMAINS=(lab_rdqm-a1 lab_rdqm-a2 lab_rdqm-a3 lab_svc-sim lab_app-client)
 fi
 
 SCRIPT_ABS=$(cd "$(dirname "$0")" && pwd)

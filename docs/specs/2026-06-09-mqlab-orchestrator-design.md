@@ -273,7 +273,7 @@ incrementally; each group past the first slice is its own spec→plan→build.
 - **Command tree:** **Typer** — clean grouped subcommands, good `--help`.
 - **Rendering:** **Rich** — treatment-A annotated transcript (§4.4). Both are new
   dependencies added to `pyproject.toml`.
-- **Likely module shape** (to be firmed in the plan):
+- **Likely module shape** (to be apped in the plan):
   - `mqlab.cli` — Typer app, the domain groups, global `--step`.
   - `mqlab.runner` — the `CommandRunner` protocol and its real + fake/recording
     implementations; the only code that touches `subprocess` (§4.1). The

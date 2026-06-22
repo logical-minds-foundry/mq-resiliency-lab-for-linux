@@ -12,9 +12,9 @@
 
 ## Global Constraints
 
-- **TLS 1.3 only** — `SSLCIPH(ANY_TLS13_OR_HIGHER)` on every channel; `sslProtocol="TLSv1.3"` for mqweb. No TLS 1.2 fallback. (Pin the GOV1683-24 suite, e.g. `TLS_AES_256_GCM_SHA384`, only if the load gate demands a concrete spec.)
+- **TLS 1.3 only** — `SSLCIPH(ANY_TLS13_OR_HIGHER)` on every channel; `sslProtocol="TLSv1.3"` for mqweb. No TLS 1.2 fallback. (Pin the those security standards suite, e.g. `TLS_AES_256_GCM_SHA384`, only if the load gate demands a concrete spec.)
 - **Mutual TLS** — `SSLCAUTH(REQUIRED)` + `SSLPEER` on every channel/SVRCONN; clients present certs.
-- **Keystores come from lab-pki** — `build/secrets/pki/entities/<cn>/<cn>.p12`; the in-house `SSLPEER` matches **`O=client-org, OU=clearing-service`** (partial-DN), DTCC side matches **`O=dtcc-org`**.
+- **Keystores come from lab-pki** — `build/secrets/pki/entities/<cn>/<cn>.p12`; the app `SSLPEER` matches **`O=app-org, OU=messaging`** (partial-DN), SVC side matches **`O=svc-org`**.
 - **`KEYRPWD` set once + persisted** — sourced from `lab/scripts/lab-secret.sh pki-keyrpwd-<cn>`, set via `ALTER QMGR`, persisted in the QMGR config; QMPCMK's keystore lives on `/mqshared` so it follows the QM on failover. Never committed.
 - **No internal authorization** — leave `MCAUSER('mqm')`, `CHLAUTH(DISABLED)`, `CONNAUTH(' ')` (Stage 2 / #249).
 - **Validation is functional** — `vrg-validate` has no ansible-lint; the running arm is the gate. Cold-rebuild acceptance gate applies.
@@ -37,9 +37,9 @@ cold-rebuild gate.
   loadable keystore (spec §4). Wired into the QM-setup MQSC.
 - **Exporter (Task 6) uses a CCDT, not flags** — `mq-metric-samples` exposes *no*
   MQ-TLS CLI flags, so a client TLS connection's `SSLCIPH` must come from a JSON
-  CCDT. Also added a dedicated `MON.SVRCONN` (the exporter's `O=client-org` identity
+  CCDT. Also added a dedicated `MON.SVRCONN` (the exporter's `O=app-org` identity
   can't pass the app/responder SVRCONN `SSLPEER`s), and gave the exporter entity
-  `trust: [dtcc-org]` so it can validate QMDTCC's server cert.
+  `trust: [svc-org]` so it can validate QMSVC's server cert.
 - **mqweb REST flip (Task 7) is partial by necessity** — `pymqrest.verify_tls` is a
   strict bool (no CA-path → upstream epic `mq-rest-admin-common#215` /
   `mq-rest-admin-python#518`), and the `mqweb` cert has no IP SANs, so full
@@ -48,30 +48,30 @@ cold-rebuild gate.
 
 ---
 
-## Task 1: Add the DTCC responder entity to the PKI inventory
+## Task 1: Add the SVC responder entity to the PKI inventory
 
-The SVC.SVRCONN service responder is a SVRCONN **client** and needs a client cert. Add a `dtcc-org` responder entity (spec §10).
+The SVC.SVRCONN service responder is a SVRCONN **client** and needs a client cert. Add a `svc-org` responder entity (spec §10).
 
 **Files:**
 - Modify: `ansible/vars/pki-entities.yml`
 
 **Interfaces:**
-- Produces: keystore `build/secrets/pki/entities/dtcc-responder/dtcc-responder.p12` (personal `O=dtcc-org, CN=dtcc-responder` + the dtcc-org CA) after `mqlab pki ensure`.
+- Produces: keystore `build/secrets/pki/entities/svc-responder/svc-responder.p12` (personal `O=svc-org, CN=svc-responder` + the svc-org CA) after `mqlab pki ensure`.
 
 - [ ] **Step 1: Add the entity**
 
 In `ansible/vars/pki-entities.yml`, append to `pki_entities`:
 
 ```yaml
-  - { cn: dtcc-responder, org: dtcc-org, ou: clearing-service, kind: personal, trust: [client-org] }
+  - { cn: svc-responder, org: svc-org, ou: messaging, kind: personal, trust: [app-org] }
 ```
 
 - [ ] **Step 2: Re-run the provider, confirm the keystore**
 
 Run:
 ```bash
-uv run mqlab pki issue dtcc-responder
-ls build/secrets/pki/entities/dtcc-responder/dtcc-responder.p12
+uv run mqlab pki issue svc-responder
+ls build/secrets/pki/entities/svc-responder/svc-responder.p12
 ```
 Expected: the `.p12` exists.
 
@@ -79,7 +79,7 @@ Expected: the `.p12` exists.
 
 ```bash
 vrg-git add ansible/vars/pki-entities.yml
-vrg-commit --type feat --scope tls --message "PKI: add dtcc-responder client entity (#250)"
+vrg-commit --type feat --scope tls --message "PKI: add svc-responder client entity (#250)"
 ```
 
 ---
@@ -211,11 +211,11 @@ Add `SSLCIPH`/`SSLCAUTH`/`SSLPEER` to both ends of both channels, authored as a 
 - Create: `ansible/group_vars/all/tls.yml` (the shared channel-TLS attrs)
 - Modify: `ansible/roles/mq-pcmk-qmgr/templates/inter-qm.mqsc.j2` (our-side channels)
 - Modify: `ansible/roles/mq-inter-qm/templates/their-side.mqsc.j2` (their-side channels)
-- Modify: `ansible/roles/mq-inter-qm/tasks/main.yml` (QMDTCC keystore + KEYRPWD, like Task 3)
+- Modify: `ansible/roles/mq-inter-qm/tasks/main.yml` (QMSVC keystore + KEYRPWD, like Task 3)
 
 **Interfaces:**
-- Consumes: the keystores (Task 2/3); `tls_cipher`, `tls_peer_inhouse`, `tls_peer_dtcc` (from `group_vars/all/tls.yml`).
-- Produces: the four channels with TLS attrs; QMDTCC with `SSLKEYR`.
+- Consumes: the keystores (Task 2/3); `tls_cipher`, `tls_peer_app`, `tls_peer_svc` (from `group_vars/all/tls.yml`).
+- Produces: the four channels with TLS attrs; QMSVC with `SSLKEYR`.
 
 - [ ] **Step 1: Shared TLS vars**
 
@@ -224,35 +224,35 @@ Add `SSLCIPH`/`SSLCAUTH`/`SSLPEER` to both ends of both channels, authored as a 
 ---
 # Shared channel-TLS attributes — identical across arms (#212 seam).
 tls_cipher: "ANY_TLS13_OR_HIGHER"
-tls_peer_inhouse: "O=client-org,OU=clearing-service" # QM-to-QM: the in-house clearing QM (O+OU)
-tls_peer_dtcc: "O=dtcc-org"                            # the DTCC side, org-only (matches QMDTCC + dtcc-responder)
-tls_peer_client: "O=client-org"                        # in-house SVRCONN clients, org-only (app-client OU=apps, exporter OU=ops)
+tls_peer_app: "O=app-org,OU=messaging" # QM-to-QM: the app messaging QM (O+OU)
+tls_peer_svc: "O=svc-org"                            # the SVC side, org-only (matches QMSVC + svc-responder)
+tls_peer_client: "O=app-org"                        # app SVRCONN clients, org-only (app-client OU=apps, exporter OU=ops)
 ```
 
 - [ ] **Step 2: Our-side channel TLS (QMPCMK)**
 
 In `mq-pcmk-qmgr/templates/inter-qm.mqsc.j2`, add `SSLCIPH`/`SSLCAUTH`/`SSLPEER` to the SDR and RCVR:
 ```
-DEFINE CHANNEL({{ qm_name }}.QMDTCC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ dtcc_conn }}(1414)') XMITQ(QMDTCC) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_dtcc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-DEFINE CHANNEL(QMDTCC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_dtcc }}') REPLACE
+DEFINE CHANNEL({{ qm_name }}.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ(QMSVC) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL(QMSVC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
 ```
 
-- [ ] **Step 3: Their-side channel TLS (QMDTCC) + QMDTCC keystore**
+- [ ] **Step 3: Their-side channel TLS (QMSVC) + QMSVC keystore**
 
 In `mq-inter-qm/templates/their-side.mqsc.j2`, add to the SDR/RCVR (and `SVC.SVRCONN` in Task 5):
 ```
-DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_inhouse }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_inhouse }}') REPLACE
+DEFINE CHANNEL({{ qmgr_name }}.{{ our_qm }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ our_conn }}') XMITQ({{ our_qm }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_app }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_app }}') REPLACE
 ```
-In `mq-inter-qm/tasks/main.yml`, before applying the their-side MQSC, distribute QMDTCC's keystore (reuse `pki-distribute`, `pki_entity: QMDTCC`, `pki_dest_dir: /var/mqm/qmgrs/QMDTCC/ssl`) and set `ALTER QMGR SSLKEYR(...) KEYRPWD(...) ; REFRESH SECURITY TYPE(SSL)` on QMDTCC (same pattern as Task 3).
+In `mq-inter-qm/tasks/main.yml`, before applying the their-side MQSC, distribute QMSVC's keystore (reuse `pki-distribute`, `pki_entity: QMSVC`, `pki_dest_dir: /var/mqm/qmgrs/QMSVC/ssl`) and set `ALTER QMGR SSLKEYR(...) KEYRPWD(...) ; REFRESH SECURITY TYPE(SSL)` on QMSVC (same pattern as Task 3).
 
 - [ ] **Step 4: GATE — channels go RUNNING over TLS**
 
 Bring the distributed setup up; on QMPCMK:
 ```bash
-su mqm -c 'echo "DIS CHSTATUS(QMPCMK.QMDTCC) SSLPEER SSLCIPH" | runmqsc QMPCMK'
+su mqm -c 'echo "DIS CHSTATUS(QMPCMK.QMSVC) SSLPEER SSLCIPH" | runmqsc QMPCMK'
 ```
-Expected: STATUS(RUNNING), `SSLCIPH(ANY_TLS13_OR_HIGHER)`, `SSLPEER` shows the DTCC DN. Repeat for `QMDTCC.QMPCMK`. A plaintext SDR (no SSLCIPH) is rejected.
+Expected: STATUS(RUNNING), `SSLCIPH(ANY_TLS13_OR_HIGHER)`, `SSLPEER` shows the SVC DN. Repeat for `QMSVC.QMPCMK`. A plaintext SDR (no SSLCIPH) is rejected.
 **Confirms the [pushback §8] question:** `SSLCAUTH`/`SSLPEER` enforce with `CHLAUTH(DISABLED)`. If they don't, add a minimal `SET CHLAUTH(...) TYPE(SSLPEERMAP) SSLPEER(...) USERSRC(CHANNEL)` + `ALTER QMGR CHLAUTH(ENABLED)` (a sliver of Stage 2) — record it.
 
 - [ ] **Step 5: Commit**
@@ -266,7 +266,7 @@ vrg-commit --type feat --scope tls --message "QM-to-QM channel TLS (TLS1.3, mutu
 
 ## Task 5: SVRCONN client TLS — app-client + service responder
 
-TLS the `APP.SVRCONN` (app-client → QMPCMK) and `SVC.SVRCONN` (responder → QMDTCC), and the pymqi clients that use them.
+TLS the `APP.SVRCONN` (app-client → QMPCMK) and `SVC.SVRCONN` (responder → QMSVC), and the pymqi clients that use them.
 
 **Files:**
 - Modify: `ansible/roles/mq-pcmk-qmgr/tasks/main.yml` (`APP.SVRCONN` def — add TLS)
@@ -275,20 +275,20 @@ TLS the `APP.SVRCONN` (app-client → QMPCMK) and `SVC.SVRCONN` (responder → Q
 - Modify: `clients/app_requester.py`, `clients/service_responder.py` (pymqi TLS)
 
 **Interfaces:**
-- Consumes: client keystores (`app-client.p12`, `dtcc-responder.p12`) on their hosts (Task 2).
+- Consumes: client keystores (`app-client.p12`, `svc-responder.p12`) on their hosts (Task 2).
 - Produces: TLS'd SVRCONNs + TLS pymqi connections.
 
 - [ ] **Step 1: TLS the SVRCONN defs (per-SVRCONN `SSLPEER` — match the client that uses each)**
 
 Add `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED)` to each SVRCONN, `SSLPEER` matching the client that connects on it:
-- `APP.SVRCONN` (in `mq-pcmk-qmgr` base MQSC) — `app-client` (`O=client-org, OU=apps`): `SSLPEER('{{ tls_peer_client }}')` (org-only).
-- `SVC.SVRCONN` (their-side, on QMDTCC) — the local DTCC responder (`O=dtcc-org`): `SSLPEER('{{ tls_peer_dtcc }}')`.
+- `APP.SVRCONN` (in `mq-pcmk-qmgr` base MQSC) — `app-client` (`O=app-org, OU=apps`): `SSLPEER('{{ tls_peer_client }}')` (org-only).
+- `SVC.SVRCONN` (their-side, on QMSVC) — the local SVC responder (`O=svc-org`): `SSLPEER('{{ tls_peer_svc }}')`.
 
-**Do not** use `tls_peer_inhouse` here — that is the `OU=clearing-service` *channel* identity, which the `OU=apps` app-client cert would fail.
+**Do not** use `tls_peer_app` here — that is the `OU=messaging` *channel* identity, which the `OU=apps` app-client cert would fail.
 
 - [ ] **Step 2: Distribute client keystores**
 
-In `mq-client/tasks/main.yml`, include `pki-distribute` (`pki_entity: app-client`, `pki_dest_dir: /home/vagrant/ssl`, `pki_owner: vagrant`). The responder host gets `dtcc-responder` via `mq-inter-qm`.
+In `mq-client/tasks/main.yml`, include `pki-distribute` (`pki_entity: app-client`, `pki_dest_dir: /home/vagrant/ssl`, `pki_owner: vagrant`). The responder host gets `svc-responder` via `mq-inter-qm`.
 
 - [ ] **Step 3: pymqi TLS on the connect calls**
 
@@ -335,7 +335,7 @@ Run: `cat ansible/roles/mq-exporter/tasks/main.yml ansible/roles/mq-exporter/def
 
 - [ ] **Step 2: Add TLS to the exporter config**
 
-Add to the exporter's config (the mq-metric-samples `mq_prometheus` ini/yaml): `ibmmq.sslKeyRepository = <stem>`, `ibmmq.sslCipherSpec = ANY_TLS13_OR_HIGHER`. Distribute `mq_prometheus.p12` via `pki-distribute`. TLS the exporter's SVRCONN def with `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}')` (`mq_prometheus` is `O=client-org, OU=ops` → org-only `SSLPEER`).
+Add to the exporter's config (the mq-metric-samples `mq_prometheus` ini/yaml): `ibmmq.sslKeyRepository = <stem>`, `ibmmq.sslCipherSpec = ANY_TLS13_OR_HIGHER`. Distribute `mq_prometheus.p12` via `pki-distribute`. TLS the exporter's SVRCONN def with `SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}')` (`mq_prometheus` is `O=app-org, OU=ops` → org-only `SSLPEER`).
 
 - [ ] **Step 3: GATE — exporter scrapes over TLS**
 
@@ -379,7 +379,7 @@ In `mqwebuser.xml.j2`, replace `<sslDefault sslRef="mqDefaultSSLConfig"/>` with:
 
 - [ ] **Step 3: Flip the REST clients to CA-trust (same change)**
 
-Grep `verify_tls=False` and the `pymqrest(...)` / exporter REST construction; replace `verify_tls=False` with the org CA bundle path (`verify=<ca-bundle>` or the client's trust). Distribute the `client-org` CA bundle to those hosts.
+Grep `verify_tls=False` and the `pymqrest(...)` / exporter REST construction; replace `verify_tls=False` with the org CA bundle path (`verify=<ca-bundle>` or the client's trust). Distribute the `app-org` CA bundle to those hosts.
 
 - [ ] **Step 4: GATE — REST over CA-trusted TLS**
 
@@ -419,7 +419,7 @@ Trigger a Pacemaker failover and confirm QMPCMK comes back TLS'd with **no** man
 ssh pcmk-a1 'sudo pcs resource move mq_group pcmk-a2'
 # after it lands on pcmk-a2:
 ssh pcmk-a2 "su mqm -c 'echo \"DIS QMSTATUS\" | runmqsc QMPCMK'"   # RUNNING
-ssh pcmk-a2 "su mqm -c 'echo \"DIS CHSTATUS(QMPCMK.QMDTCC) SSLCIPH\" | runmqsc QMPCMK'"   # RUNNING + TLS
+ssh pcmk-a2 "su mqm -c 'echo \"DIS CHSTATUS(QMPCMK.QMSVC) SSLCIPH\" | runmqsc QMPCMK'"   # RUNNING + TLS
 ```
 Expected: QMPCMK reads its `/mqshared` keystore with the persisted `KEYRPWD` and channels resume over TLS — **no human supplied a password.** This proves [pushback 1].
 

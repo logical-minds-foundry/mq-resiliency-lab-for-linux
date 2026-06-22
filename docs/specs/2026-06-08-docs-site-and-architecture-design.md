@@ -127,9 +127,9 @@ only** — no aspirational topology):
 | # | Diagram | Depicts |
 |---|---------|---------|
 | 1 | **Host & identity VMs** | The macOS host → the `vergil-user` VM, the `vergil-audit` VM, and the lab VM ("the big special one"). The Vergil identity model at the outermost layer. |
-| 2 | **Inside the lab VM** | The nested-virtualization stack (M-series → macOS `vz` → Lima → KVM/TCG) and the network fabric — the libvirt networks (`net-data-a/b`, `net-hb-a/b`, `net-wan`, `net-dtcc`, `net-client`, `net-san-a/b`) with their isolation/severability roles — plus the node fleet on them. |
+| 2 | **Inside the lab VM** | The nested-virtualization stack (M-series → macOS `vz` → Lima → KVM/TCG) and the network fabric — the libvirt networks (`net-data-a/b`, `net-hb-a/b`, `net-wan`, `net-svc`, `net-client`, `net-san-a/b`) with their isolation/severability roles — plus the node fleet on them. |
 | 3 | **RDQM arm (Phase C)** | The canonical 3+3: `rdqm-a1..3` (synchronous HA in DC-A) + `rdqm-b1..3` (DC-B), asynchronous DR across `net-wan`. A refresh of the existing `topology-rdqm-ha-dr.html`, **with the active/active vision panel removed** (as-built only). |
-| 4 | **Standalone QM arm (Phase B)** | `qm-main` + `dtcc-sim` + `app-client` on `net-client`/`net-dtcc` — the single-QM message path. |
+| 4 | **Standalone QM arm (Phase B)** | `qm-main` + `svc-sim` + `app-client` on `net-client`/`net-svc` — the single-QM message path. |
 | 5 | **Pacemaker/SAN arm (Phase D)** | `san-a` + `pcmk-a1..3` with the shared-SAN (`net-san-a`) HA model — the contrast to RDQM's replicated-storage approach. |
 
 ### Embedding

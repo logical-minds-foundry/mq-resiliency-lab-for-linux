@@ -4,7 +4,7 @@
 
 **Goal:** Build the pure-Python "brain" of the DR/HA validation framework — the ledger, the six-bucket classifier, the exposure gauge, and the reporting/self-correctness layer — fully unit-tested against synthetic fixtures, with no `pymqi` and no live lab.
 
-**Architecture:** A small package `mqlab.dr` of focused, single-responsibility modules. Raw observations (firm ledger, DTCC god's-eye ledger, post-cutover survivor/primary-disk snapshots) are *reconciled* into per-message `MessageFacts`, which a deterministic `classify()` sorts into one of six buckets. Reporting turns a list of facts into a census, a clock-free loss window, and a `ScenarioReport`. The self-correctness check (god's-eye must equal the app ledger on a no-fault run) fails loud. This is the §10 "load-bearing wall" the spec says to build and prove first; Plan 2 (live execution) feeds it real observations later.
+**Architecture:** A small package `mqlab.dr` of focused, single-responsibility modules. Raw observations (app ledger, SVC god's-eye ledger, post-cutover survivor/primary-disk snapshots) are *reconciled* into per-message `MessageFacts`, which a deterministic `classify()` sorts into one of six buckets. Reporting turns a list of facts into a census, a clock-free loss window, and a `ScenarioReport`. The self-correctness check (god's-eye must equal the app ledger on a no-fault run) fails loud. This is the §10 "load-bearing wall" the spec says to build and prove first; Plan 2 (live execution) feeds it real observations later.
 
 **Tech Stack:** Python ≥3.12 standard library only (dataclasses, enum, json, pathlib, collections). Tests: `pytest`. Package lives under the existing `src/mqlab/` (src layout, already importable as `mqlab`).
 
@@ -16,7 +16,7 @@
 - [File structure](#file-structure-created-by-this-plan)
 - [Task 1: Package skeleton + core model](#task-1-package-skeleton--core-model)
 - [Task 2: Ledger — append-only JSONL roundtrip](#task-2-ledger--append-only-jsonl-roundtrip)
-- [Task 3: Ledger fold helpers (firm states + DTCC counts)](#task-3-ledger-fold-helpers-firm-states--dtcc-counts)
+- [Task 3: Ledger fold helpers (app states + SVC counts)](#task-3-ledger-fold-helpers-app-states--svc-counts)
 - [Task 4: Exposure gauge](#task-4-exposure-gauge)
 - [Task 5: The classifier (the load-bearing wall)](#task-5-the-classifier-the-load-bearing-wall)
 - [Task 6: Reconcile ledgers + snapshots into facts](#task-6-reconcile-ledgers--snapshots-into-facts)
@@ -101,8 +101,8 @@ def test_message_state_tristate():
 
 def test_message_facts_is_frozen_and_carries_identity():
     f = MessageFacts(
-        seq=7, uuid="u7", firm_confirmed=False, dtcc_received=1,
-        dtcc_replied=True, on_secondary=False, on_primary_disk=True,
+        seq=7, uuid="u7", app_confirmed=False, svc_received=1,
+        svc_replied=True, on_secondary=False, on_primary_disk=True,
     )
     assert f.seq == 7 and f.uuid == "u7"
     import dataclasses
@@ -134,15 +134,15 @@ class Bucket(StrEnum):
     CONFIRMED = "confirmed"          # reply received at/before cutover
     CONTINUED = "continued"          # replicated + processed on the secondary
     STRANDED = "stranded"            # sent, unreplicated, still on the dead primary
-    LOST_UNPROCESSED = "lost_unprocessed"  # sent, never reached DTCC, gone
-    AMBIGUOUS = "ambiguous"          # DTCC processed it, reply lost — resend = dup risk
-    DUPLICATED = "duplicated"        # DTCC received it more than once
+    LOST_UNPROCESSED = "lost_unprocessed"  # sent, never reached SVC, gone
+    AMBIGUOUS = "ambiguous"          # SVC processed it, reply lost — resend = dup risk
+    DUPLICATED = "duplicated"        # SVC received it more than once
 
 
 class MessageState(StrEnum):
     NEVER_SENT = "never_sent"
-    IN_PIPELINE = "in_pipeline"      # firm: local QM ACKed, no reply yet
-    CONFIRMED = "confirmed"          # firm: reply matched
+    IN_PIPELINE = "in_pipeline"      # app: local QM ACKed, no reply yet
+    CONFIRMED = "confirmed"          # app: reply matched
 
 
 @dataclass(frozen=True)
@@ -155,9 +155,9 @@ class MessageFacts:
 
     seq: int
     uuid: str
-    firm_confirmed: bool   # firm received its reply at/before cutover
-    dtcc_received: int     # god's-eye: number of times DTCC received this message
-    dtcc_replied: bool     # god's-eye: DTCC produced a reply
+    app_confirmed: bool   # app received its reply at/before cutover
+    svc_received: int     # god's-eye: number of times SVC received this message
+    svc_replied: bool     # god's-eye: SVC produced a reply
     on_secondary: bool     # present/processable on the secondary after cutover
     on_primary_disk: bool  # physically present on the failed primary (post-mortem)
 ```
@@ -194,7 +194,7 @@ def test_append_and_roundtrip_jsonl(tmp_path):
     lg = Ledger()
     lg.append(LedgerEntry(event=Event.SENT, seq=1, uuid="u1", ts=1.0))
     lg.append(LedgerEntry(event=Event.CONFIRMED, seq=1, uuid="u1", ts=2.0))
-    path = tmp_path / "firm.jsonl"
+    path = tmp_path / "app.jsonl"
     lg.write_jsonl(path)
 
     # one JSON object per line, append-only
@@ -221,8 +221,8 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.ledger'`
 # src/mqlab/dr/ledger.py
 """Append-only ledger of message events, persisted as JSONL.
 
-The FIRM ledger records SENT (MQPUT+commit OK) and CONFIRMED (reply matched).
-The DTCC god's-eye ledger records RECEIVED (per receive, counting duplicates)
+The APP ledger records SENT (MQPUT+commit OK) and CONFIRMED (reply matched).
+The SVC god's-eye ledger records RECEIVED (per receive, counting duplicates)
 and REPLIED.
 """
 from __future__ import annotations
@@ -298,7 +298,7 @@ vrg-commit --type feat --scope dr --message "ledger: append-only JSONL persisten
 
 ---
 
-## Task 3: Ledger fold helpers (firm states + DTCC counts)
+## Task 3: Ledger fold helpers (app states + SVC counts)
 
 **Files:**
 - Modify: `src/mqlab/dr/ledger.py` (add methods to `Ledger`)
@@ -311,26 +311,26 @@ vrg-commit --type feat --scope dr --message "ledger: append-only JSONL persisten
 from mqlab.dr.model import MessageState
 
 
-def test_firm_states_folds_events():
+def test_app_states_folds_events():
     lg = Ledger([
         LedgerEntry(Event.SENT, 1, "u1", 1.0),
         LedgerEntry(Event.CONFIRMED, 1, "u1", 2.0),
         LedgerEntry(Event.SENT, 2, "u2", 3.0),  # no reply -> in pipeline
     ])
-    states = lg.firm_states()
+    states = lg.app_states()
     assert states[1] == MessageState.CONFIRMED
     assert states[2] == MessageState.IN_PIPELINE
 
 
-def test_dtcc_receive_counts_count_duplicates():
+def test_svc_receive_counts_count_duplicates():
     lg = Ledger([
         LedgerEntry(Event.RECEIVED, 1, "u1", 1.0),
         LedgerEntry(Event.REPLIED, 1, "u1", 1.5),
         LedgerEntry(Event.RECEIVED, 1, "u1", 9.0),  # a second receive of the same msg
         LedgerEntry(Event.RECEIVED, 2, "u2", 2.0),
     ])
-    assert lg.dtcc_receive_counts() == {1: 2, 2: 1}
-    assert lg.dtcc_replied() == {1}
+    assert lg.svc_receive_counts() == {1: 2, 2: 1}
+    assert lg.svc_replied() == {1}
 
 
 def test_sent_seqs_and_confirmed_seqs():
@@ -346,7 +346,7 @@ def test_sent_seqs_and_confirmed_seqs():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `vrg-container-run -- uv run pytest tests/test_dr_ledger.py -v`
-Expected: FAIL — `AttributeError: 'Ledger' object has no attribute 'firm_states'`
+Expected: FAIL — `AttributeError: 'Ledger' object has no attribute 'app_states'`
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -369,7 +369,7 @@ from .model import MessageState
     def uuid_of(self) -> dict[int, str]:
         return {e.seq: e.uuid for e in self.entries}
 
-    def firm_states(self) -> dict[int, MessageState]:
+    def app_states(self) -> dict[int, MessageState]:
         sent = self.sent_seqs()
         confirmed = self.confirmed_seqs()
         states: dict[int, MessageState] = {}
@@ -380,14 +380,14 @@ from .model import MessageState
             )
         return states
 
-    def dtcc_receive_counts(self) -> dict[int, int]:
+    def svc_receive_counts(self) -> dict[int, int]:
         counts: dict[int, int] = {}
         for e in self.entries:
             if e.event is Event.RECEIVED:
                 counts[e.seq] = counts.get(e.seq, 0) + 1
         return counts
 
-    def dtcc_replied(self) -> set[int]:
+    def svc_replied(self) -> set[int]:
         return {e.seq for e in self.entries if e.event is Event.REPLIED}
 ```
 
@@ -401,7 +401,7 @@ Expected: PASS (5 passed)
 ```bash
 vrg-container-run -- vrg-validate
 vrg-git add src/mqlab/dr/ledger.py tests/test_dr_ledger.py
-vrg-commit --type feat --scope dr --message "ledger: fold helpers for firm states and DTCC receive counts"
+vrg-commit --type feat --scope dr --message "ledger: fold helpers for app states and SVC receive counts"
 ```
 
 ---
@@ -420,7 +420,7 @@ from mqlab.dr.ledger import Event, LedgerEntry, Ledger
 from mqlab.dr.exposure import unresolved_seqs, exposure, peak_exposure
 
 
-def _firm():
+def _app():
     return Ledger([
         LedgerEntry(Event.SENT, 1, "u1", 1.0),
         LedgerEntry(Event.CONFIRMED, 1, "u1", 2.0),
@@ -432,19 +432,19 @@ def _firm():
 
 def test_exposure_now_counts_unresolved():
     # final state: only seq 2 never confirmed
-    assert unresolved_seqs(_firm()) == {2}
-    assert exposure(_firm()) == 1
+    assert unresolved_seqs(_app()) == {2}
+    assert exposure(_app()) == 1
 
 
 def test_exposure_at_instant_uses_only_events_up_to_ts():
     # at ts=4: sent {1,2,3}, confirmed {1} -> unresolved {2,3}
-    assert unresolved_seqs(_firm(), at_ts=4.0) == {2, 3}
-    assert exposure(_firm(), at_ts=4.0) == 2
+    assert unresolved_seqs(_app(), at_ts=4.0) == {2, 3}
+    assert exposure(_app(), at_ts=4.0) == 2
 
 
 def test_peak_exposure_is_max_concurrent_in_flight():
-    # replay of _firm(): SENT1->1, CONF1->0, SENT2->1, SENT3->2 (peak), CONF3->1
-    assert peak_exposure(_firm()) == 2
+    # replay of _app(): SENT1->1, CONF1->0, SENT2->1, SENT3->2 (peak), CONF3->1
+    assert peak_exposure(_app()) == 2
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -458,7 +458,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.exposure'`
 # src/mqlab/dr/exposure.py
 """Exposure gauge — the exact app-layer at-risk count.
 
-exposure(T) = count of messages the firm has SENT (local QM ACKed) but not yet
+exposure(T) = count of messages the app has SENT (local QM ACKed) but not yet
 had reply-CONFIRMED, as of time T. This is the ONLY exposure number we claim;
 the spec (§4.4) is explicit that the replication gap is NOT message-attributable
 from block-level replication, so we never estimate it.
@@ -468,26 +468,26 @@ from __future__ import annotations
 from .ledger import Ledger
 
 
-def unresolved_seqs(firm: Ledger, at_ts: float | None = None) -> set[int]:
+def unresolved_seqs(app: Ledger, at_ts: float | None = None) -> set[int]:
     sent = {
-        e.seq for e in firm.entries
+        e.seq for e in app.entries
         if e.event.value == "sent" and (at_ts is None or e.ts <= at_ts)
     }
-    confirmed = firm.confirmed_seqs(at_ts=at_ts)
+    confirmed = app.confirmed_seqs(at_ts=at_ts)
     return sent - confirmed
 
 
-def exposure(firm: Ledger, at_ts: float | None = None) -> int:
-    return len(unresolved_seqs(firm, at_ts=at_ts))
+def exposure(app: Ledger, at_ts: float | None = None) -> int:
+    return len(unresolved_seqs(app, at_ts=at_ts))
 
 
-def peak_exposure(firm: Ledger) -> int:
+def peak_exposure(app: Ledger) -> int:
     """Max concurrent in-flight (SENT but not yet CONFIRMED) over the whole run,
     by replaying the timestamped ledger. At equal timestamps a SENT is counted
     before a CONFIRMED (conservative — never under-reports the peak).
     """
     events: list[tuple[float, int]] = []
-    for e in firm.entries:
+    for e in app.entries:
         if e.event.value == "sent":
             events.append((e.ts, +1))
         elif e.event.value == "confirmed":
@@ -533,29 +533,29 @@ from mqlab.dr.classifier import classify
 
 def _facts(**kw):
     base = dict(
-        seq=1, uuid="u", firm_confirmed=False, dtcc_received=0,
-        dtcc_replied=False, on_secondary=False, on_primary_disk=False,
+        seq=1, uuid="u", app_confirmed=False, svc_received=0,
+        svc_replied=False, on_secondary=False, on_primary_disk=False,
     )
     base.update(kw)
     return MessageFacts(**base)
 
 
-def test_duplicated_when_dtcc_received_twice():
-    assert classify(_facts(dtcc_received=2, dtcc_replied=True)) is Bucket.DUPLICATED
+def test_duplicated_when_svc_received_twice():
+    assert classify(_facts(svc_received=2, svc_replied=True)) is Bucket.DUPLICATED
 
 
-def test_confirmed_when_firm_got_reply():
-    assert classify(_facts(firm_confirmed=True, dtcc_received=1,
-                           dtcc_replied=True, on_secondary=True)) is Bucket.CONFIRMED
+def test_confirmed_when_app_got_reply():
+    assert classify(_facts(app_confirmed=True, svc_received=1,
+                           svc_replied=True, on_secondary=True)) is Bucket.CONFIRMED
 
 
 def test_continued_when_replicated_to_secondary():
-    assert classify(_facts(on_secondary=True, dtcc_received=1,
-                           dtcc_replied=True)) is Bucket.CONTINUED
+    assert classify(_facts(on_secondary=True, svc_received=1,
+                           svc_replied=True)) is Bucket.CONTINUED
 
 
-def test_ambiguous_when_dtcc_processed_but_not_replicated_or_confirmed():
-    assert classify(_facts(dtcc_received=1, dtcc_replied=True)) is Bucket.AMBIGUOUS
+def test_ambiguous_when_svc_processed_but_not_replicated_or_confirmed():
+    assert classify(_facts(svc_received=1, svc_replied=True)) is Bucket.AMBIGUOUS
 
 
 def test_stranded_when_on_dead_primary_only():
@@ -567,18 +567,18 @@ def test_lost_when_gone_everywhere():
 
 
 def test_precedence_duplicated_beats_confirmed():
-    # a duplicate is a duplicate even if the firm also got a reply
-    assert classify(_facts(firm_confirmed=True, dtcc_received=2)) is Bucket.DUPLICATED
+    # a duplicate is a duplicate even if the app also got a reply
+    assert classify(_facts(app_confirmed=True, svc_received=2)) is Bucket.DUPLICATED
 
 
 def test_precedence_confirmed_beats_continued():
-    assert classify(_facts(firm_confirmed=True, on_secondary=True,
-                           dtcc_received=1)) is Bucket.CONFIRMED
+    assert classify(_facts(app_confirmed=True, on_secondary=True,
+                           svc_received=1)) is Bucket.CONFIRMED
 
 
 def test_precedence_ambiguous_beats_stranded():
-    # reached DTCC once AND still on the primary disk -> Ambiguous (resend = dup)
-    assert classify(_facts(dtcc_received=1, on_primary_disk=True)) is Bucket.AMBIGUOUS
+    # reached SVC once AND still on the primary disk -> Ambiguous (resend = dup)
+    assert classify(_facts(svc_received=1, on_primary_disk=True)) is Bucket.AMBIGUOUS
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -603,13 +603,13 @@ from .model import Bucket, MessageFacts
 
 
 def classify(f: MessageFacts) -> Bucket:
-    if f.dtcc_received >= 2:
+    if f.svc_received >= 2:
         return Bucket.DUPLICATED
-    if f.firm_confirmed:
+    if f.app_confirmed:
         return Bucket.CONFIRMED
     if f.on_secondary:
         return Bucket.CONTINUED
-    if f.dtcc_received == 1:
+    if f.svc_received == 1:
         return Bucket.AMBIGUOUS
     if f.on_primary_disk:
         return Bucket.STRANDED
@@ -650,20 +650,20 @@ from mqlab.dr.reconcile import reconcile
 
 
 def test_reconcile_builds_one_fact_per_sent_message():
-    firm = Ledger([
+    app = Ledger([
         LedgerEntry(Event.SENT, 1, "u1", 1.0),
         LedgerEntry(Event.CONFIRMED, 1, "u1", 2.0),   # confirmed pre-cutover
         LedgerEntry(Event.SENT, 2, "u2", 3.0),        # in pipeline at cutover
         LedgerEntry(Event.SENT, 3, "u3", 4.0),        # stranded
     ])
-    dtcc = Ledger([
+    svc = Ledger([
         LedgerEntry(Event.RECEIVED, 1, "u1", 1.5),
         LedgerEntry(Event.REPLIED, 1, "u1", 1.8),
-        LedgerEntry(Event.RECEIVED, 2, "u2", 3.5),    # DTCC got it, reply lost
+        LedgerEntry(Event.RECEIVED, 2, "u2", 3.5),    # SVC got it, reply lost
         LedgerEntry(Event.REPLIED, 2, "u2", 3.8),
     ])
     facts = reconcile(
-        firm, dtcc,
+        app, svc,
         secondary_present=set(),     # nothing replicated
         primary_disk_present={3},    # seq 3 still on the dead box
         cutover_ts=2.5,
@@ -671,19 +671,19 @@ def test_reconcile_builds_one_fact_per_sent_message():
     by_seq = {f.seq: f for f in facts}
     assert set(by_seq) == {1, 2, 3}
 
-    assert by_seq[1].firm_confirmed is True and by_seq[1].dtcc_received == 1
-    assert by_seq[2].firm_confirmed is False and by_seq[2].dtcc_received == 1
-    assert by_seq[3].dtcc_received == 0 and by_seq[3].on_primary_disk is True
+    assert by_seq[1].app_confirmed is True and by_seq[1].svc_received == 1
+    assert by_seq[2].app_confirmed is False and by_seq[2].svc_received == 1
+    assert by_seq[3].svc_received == 0 and by_seq[3].on_primary_disk is True
 
 
 def test_confirm_after_cutover_is_not_pre_cutover_confirmed():
-    firm = Ledger([
+    app = Ledger([
         LedgerEntry(Event.SENT, 1, "u1", 1.0),
         LedgerEntry(Event.CONFIRMED, 1, "u1", 9.0),   # reply arrived AFTER cutover
     ])
-    facts = reconcile(firm, Ledger(), secondary_present={1},
+    facts = reconcile(app, Ledger(), secondary_present={1},
                       primary_disk_present=set(), cutover_ts=5.0)
-    assert facts[0].firm_confirmed is False   # not confirmed at cutover
+    assert facts[0].app_confirmed is False   # not confirmed at cutover
     assert facts[0].on_secondary is True      # but it did replicate
 ```
 
@@ -699,8 +699,8 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.reconcile'`
 """Turn raw observations into per-message MessageFacts.
 
 Inputs the live harness (Plan 2) supplies; in Plan 1 they come from fixtures:
-  - firm ledger (SENT / CONFIRMED)
-  - dtcc god's-eye ledger (RECEIVED counts / REPLIED)
+  - app ledger (SENT / CONFIRMED)
+  - svc god's-eye ledger (RECEIVED counts / REPLIED)
   - secondary_present: seqs present/processable on the secondary post-cutover
   - primary_disk_present: seqs physically on the failed primary (post-mortem)
   - cutover_ts: the instant of the fault; a reply CONFIRMED after this did not
@@ -713,27 +713,27 @@ from .model import MessageFacts
 
 
 def reconcile(
-    firm: Ledger,
-    dtcc: Ledger,
+    app: Ledger,
+    svc: Ledger,
     *,
     secondary_present: set[int],
     primary_disk_present: set[int],
     cutover_ts: float,
 ) -> list[MessageFacts]:
-    uuid_of = firm.uuid_of()
-    confirmed_pre = firm.confirmed_seqs(at_ts=cutover_ts)
-    dtcc_counts = dtcc.dtcc_receive_counts()
-    dtcc_repl = dtcc.dtcc_replied()
+    uuid_of = app.uuid_of()
+    confirmed_pre = app.confirmed_seqs(at_ts=cutover_ts)
+    svc_counts = svc.svc_receive_counts()
+    svc_repl = svc.svc_replied()
 
     facts: list[MessageFacts] = []
-    for seq in sorted(firm.sent_seqs()):
+    for seq in sorted(app.sent_seqs()):
         facts.append(
             MessageFacts(
                 seq=seq,
                 uuid=uuid_of.get(seq, ""),
-                firm_confirmed=seq in confirmed_pre,
-                dtcc_received=dtcc_counts.get(seq, 0),
-                dtcc_replied=seq in dtcc_repl,
+                app_confirmed=seq in confirmed_pre,
+                svc_received=svc_counts.get(seq, 0),
+                svc_replied=seq in svc_repl,
                 on_secondary=seq in secondary_present,
                 on_primary_disk=seq in primary_disk_present,
             )
@@ -772,8 +772,8 @@ from mqlab.dr.report import census, loss_window
 
 def _f(seq, **kw):
     base = dict(
-        seq=seq, uuid=f"u{seq}", firm_confirmed=False, dtcc_received=0,
-        dtcc_replied=False, on_secondary=False, on_primary_disk=False,
+        seq=seq, uuid=f"u{seq}", app_confirmed=False, svc_received=0,
+        svc_replied=False, on_secondary=False, on_primary_disk=False,
     )
     base.update(kw)
     return MessageFacts(**base)
@@ -781,10 +781,10 @@ def _f(seq, **kw):
 
 def _mixed():
     return [
-        _f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),   # Confirmed
-        _f(2, on_secondary=True, dtcc_received=1, dtcc_replied=True),     # Continued
+        _f(1, app_confirmed=True, svc_received=1, svc_replied=True),   # Confirmed
+        _f(2, on_secondary=True, svc_received=1, svc_replied=True),     # Continued
         _f(3, on_primary_disk=True),                                      # Stranded
-        _f(4, dtcc_received=1, dtcc_replied=True),                        # Ambiguous
+        _f(4, svc_received=1, svc_replied=True),                        # Ambiguous
         _f(5),                                                            # Lost
     ]
 
@@ -805,7 +805,7 @@ def test_loss_window_spans_non_safe_buckets_by_sequence():
 
 
 def test_loss_window_none_when_clean():
-    clean = [_f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True)]
+    clean = [_f(1, app_confirmed=True, svc_received=1, svc_replied=True)]
     assert loss_window(clean) is None
 ```
 
@@ -879,16 +879,16 @@ from mqlab.dr.report import assert_self_correct, SelfCorrectnessError
 
 def test_self_correct_passes_when_all_confirmed():
     clean = [
-        _f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
-        _f(2, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
+        _f(1, app_confirmed=True, svc_received=1, svc_replied=True),
+        _f(2, app_confirmed=True, svc_received=1, svc_replied=True),
     ]
     assert_self_correct(clean)  # must not raise
 
 
 def test_self_correct_raises_on_any_non_confirmed():
     dirty = [
-        _f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True),
-        _f(2, dtcc_received=1, dtcc_replied=True),  # Ambiguous in a no-fault run!
+        _f(1, app_confirmed=True, svc_received=1, svc_replied=True),
+        _f(2, svc_received=1, svc_replied=True),  # Ambiguous in a no-fault run!
     ]
     with pytest.raises(SelfCorrectnessError) as exc:
         assert_self_correct(dirty)
@@ -896,7 +896,7 @@ def test_self_correct_raises_on_any_non_confirmed():
 
 
 def test_self_correct_raises_on_duplicate():
-    dirty = [_f(1, firm_confirmed=True, dtcc_received=2, dtcc_replied=True)]
+    dirty = [_f(1, app_confirmed=True, svc_received=2, svc_replied=True)]
     with pytest.raises(SelfCorrectnessError):
         assert_self_correct(dirty)
 ```
@@ -975,7 +975,7 @@ def test_build_report_carries_identity_census_window_and_verdict():
 
 
 def test_build_report_rpo_zero_when_clean():
-    clean = [_f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True)]
+    clean = [_f(1, app_confirmed=True, svc_received=1, svc_replied=True)]
     rep = build_report("HA-1", "C", clean, peak_exposure=0)
     assert rep.rpo_zero is True
     assert rep.window is None
@@ -1012,7 +1012,7 @@ def test_report_carries_section7_honesty_fields():
 
 def test_report_honesty_fields_default_sensibly():
     rep = build_report("HA-1", "C",
-                       [_f(1, firm_confirmed=True, dtcc_received=1, dtcc_replied=True)],
+                       [_f(1, app_confirmed=True, svc_received=1, svc_replied=True)],
                        peak_exposure=0)
     assert rep.rto_seconds is None
     assert rep.exposure_at_fault is None
@@ -1157,7 +1157,7 @@ from mqlab.dr.ledger import Event, LedgerEntry, Ledger
 from mqlab.dr.floor import FLOOR, FloorResult, meets_floor
 
 
-def _firm_with(n, rate):
+def _app_with(n, rate):
     # n SENT messages, one every 1/rate s, starting at t=0
     lg = Ledger()
     for i in range(1, n + 1):
@@ -1166,16 +1166,16 @@ def _firm_with(n, rate):
 
 
 def test_meets_floor_true_when_rate_duration_volume_satisfied():
-    firm = _firm_with(n=7000, rate=20.0)   # 7000 msgs over ~350 s at 20/s
-    res = meets_floor(firm, FLOOR)
+    app = _app_with(n=7000, rate=20.0)   # 7000 msgs over ~350 s at 20/s
+    res = meets_floor(app, FLOOR)
     assert isinstance(res, FloorResult)
     assert res.ok is True
     assert res.total == 7000
 
 
 def test_meets_floor_false_when_too_few_messages():
-    firm = _firm_with(n=100, rate=20.0)
-    res = meets_floor(firm, FLOOR)
+    app = _app_with(n=100, rate=20.0)
+    res = meets_floor(app, FLOOR)
     assert res.ok is False
     assert "total" in res.reason
 
@@ -1227,8 +1227,8 @@ class FloorResult:
     reason: str
 
 
-def meets_floor(firm: Ledger, floor: Floor) -> FloorResult:
-    sent = sorted(e.ts for e in firm.entries if e.event is Event.SENT)
+def meets_floor(app: Ledger, floor: Floor) -> FloorResult:
+    sent = sorted(e.ts for e in app.entries if e.event is Event.SENT)
     total = len(sent)
     seconds = (sent[-1] - sent[0]) if total >= 2 else 0.0
     rate = (total / seconds) if seconds > 0 else 0.0
@@ -1274,38 +1274,38 @@ from mqlab.dr import (
 from mqlab.dr.model import Bucket
 
 
-def _round_trip(firm, dtcc, seq, t):
+def _round_trip(app, svc, seq, t):
     """Helper: a clean confirmed round trip for one message at time base t."""
     uuid = f"u{seq}"
-    firm.append(LedgerEntry(Event.SENT, seq, uuid, t))
-    dtcc.append(LedgerEntry(Event.RECEIVED, seq, uuid, t + 0.1))
-    dtcc.append(LedgerEntry(Event.REPLIED, seq, uuid, t + 0.2))
-    firm.append(LedgerEntry(Event.CONFIRMED, seq, uuid, t + 0.3))
+    app.append(LedgerEntry(Event.SENT, seq, uuid, t))
+    svc.append(LedgerEntry(Event.RECEIVED, seq, uuid, t + 0.1))
+    svc.append(LedgerEntry(Event.REPLIED, seq, uuid, t + 0.2))
+    app.append(LedgerEntry(Event.CONFIRMED, seq, uuid, t + 0.3))
 
 
 def test_no_fault_run_is_self_correct():
-    firm, dtcc = Ledger(), Ledger()
+    app, svc = Ledger(), Ledger()
     for seq in range(1, 51):
-        _round_trip(firm, dtcc, seq, float(seq))
-    facts = reconcile(firm, dtcc, secondary_present=set(range(1, 51)),
+        _round_trip(app, svc, seq, float(seq))
+    facts = reconcile(app, svc, secondary_present=set(range(1, 51)),
                       primary_disk_present=set(), cutover_ts=1_000.0)
     assert_self_correct(facts)  # the instrument agrees with itself
 
 
 def test_forced_dr_produces_classified_loss():
-    firm, dtcc = Ledger(), Ledger()
+    app, svc = Ledger(), Ledger()
     # seqs 1..40 complete cleanly before cutover
     for seq in range(1, 41):
-        _round_trip(firm, dtcc, seq, float(seq))
-    # seq 41: DTCC processed it, reply lost (Ambiguous)
-    firm.append(LedgerEntry(Event.SENT, 41, "u41", 41.0))
-    dtcc.append(LedgerEntry(Event.RECEIVED, 41, "u41", 41.1))
-    dtcc.append(LedgerEntry(Event.REPLIED, 41, "u41", 41.2))
-    # seq 42: stranded on the dead primary, never reached DTCC
-    firm.append(LedgerEntry(Event.SENT, 42, "u42", 42.0))
+        _round_trip(app, svc, seq, float(seq))
+    # seq 41: SVC processed it, reply lost (Ambiguous)
+    app.append(LedgerEntry(Event.SENT, 41, "u41", 41.0))
+    svc.append(LedgerEntry(Event.RECEIVED, 41, "u41", 41.1))
+    svc.append(LedgerEntry(Event.REPLIED, 41, "u41", 41.2))
+    # seq 42: stranded on the dead primary, never reached SVC
+    app.append(LedgerEntry(Event.SENT, 42, "u42", 42.0))
 
     facts = reconcile(
-        firm, dtcc,
+        app, svc,
         secondary_present=set(range(1, 41)),  # only the completed ones replicated
         primary_disk_present={42},
         cutover_ts=41.5,

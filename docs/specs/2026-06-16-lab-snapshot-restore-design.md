@@ -100,7 +100,7 @@ QM. It recovers unattended; a future `restore --wait` could poll `rdqmstatus` un
 
 - **MVP (this issue):** shell spike (`lab/scripts/lab-snapshot.sh` /
   `lab-restore.sh`) proving the mechanism on the RDQM distributed set
-  (`rdqm-a1/2/3`, `dtcc-sim`, `app-client`). Captures the exact working state reached
+  (`rdqm-a1/2/3`, `svc-sim`, `app-client`). Captures the exact working state reached
   by the #216 run.
 - **Productionise:** fold into `mqlab lab snapshot|restore <setup>` (Typer command,
   vrg-validate'd, 100% coverage) so it's glass-box and arm-keyed; the disk/XML

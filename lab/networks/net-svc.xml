@@ -1,0 +1,7 @@
+<!-- lab/networks/net-svc.xml — external-service-facing net (svc-sim + cluster
+     nodes). Isolated: no <forward>, no DHCP. -->
+<network>
+  <name>net-svc</name>
+  <bridge name="virbr-svc"/>
+  <ip address="10.20.0.1" netmask="255.255.255.0"/>
+</network>

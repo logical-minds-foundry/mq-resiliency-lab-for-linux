@@ -1,8 +1,8 @@
-"""Firm-side continuous flow generator (persistent + syncpoint, HA-aware).
+"""App-side continuous flow generator (persistent + syncpoint, HA-aware).
 
 Producer: build_body() -> MQPUT (PERSISTENT, FAIL_IF_QUIESCING) under syncpoint
-          -> commit -> firm ledger SENT.
-Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit -> firm
+          -> commit -> app ledger SENT.
+Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit -> app
           ledger CONFIRMED.
 
 Producer and consumer run on SEPARATE MQ connections (a single Hconn is not safe
@@ -19,7 +19,7 @@ Target QM / connection / queues are parameterized so the same client drives any
 arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
     ~/mqvenv/bin/python ~/dr_flow.py --qm QMPCMK --conn "10.10.1.200(1414)" \
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
-        --rate 20 --seconds 30 --ledger ~/dr-ledgers/firm.jsonl
+        --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 
 Deployed to lab nodes by ansible alongside mqlab/ and dr_mqi.py.
 """
@@ -34,14 +34,14 @@ import dr_mqi
 import pymqi
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import build_body, parse_body
-from mqlab.epn import pack_header
+from mqlab.header import pack_header
 
 STOP = threading.Event()
 DRAIN_SECONDS = 4.0
 
 
 def _parse_reply(raw):
-    # the reply echoes the DRv1 body after the EPN header; slice from the marker
+    # the reply echoes the DRv1 body after the FFH header; slice from the marker
     idx = raw.find(b"DRv1|")
     return parse_body(raw[idx:])
 
@@ -68,9 +68,9 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
         if pending is None:
             seq += 1
             u = uuidlib.uuid4().hex
-            body = build_body(seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}")
+            body = build_body(seq=seq, uuid=u, session_date="20260608", payload=f"MSG-{seq}")
             header = pack_header(
-                password="pw", sender="FIRM01", receiver="DTCCSVC", busdate="20260608"
+                password="pw", sender="APP01", receiver="SVC", session_date="20260608"
             ).encode()
             pending = (seq, u, header + body)
         pseq, puuid, payload = pending
@@ -202,8 +202,8 @@ def main():
     ap.add_argument("--qm", default="QMAIN")
     ap.add_argument("--conn", default="10.30.0.10(1414)")
     ap.add_argument("--channel", default="APP.SVRCONN")
-    ap.add_argument("--req-queue", default="DTCC.REQUEST")
-    ap.add_argument("--reply-queue", default="TRADE.REPLY")
+    ap.add_argument("--req-queue", default="SVC.REQUEST")
+    ap.add_argument("--reply-queue", default="APP.REPLY")
     ap.add_argument("--rate", type=float, default=20.0)
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument(

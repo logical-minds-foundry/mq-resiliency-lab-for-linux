@@ -13,7 +13,7 @@
 # steps are idempotent (`creates:` guards), so the second include reuses the one
 # binary and just adds a per-QM systemd unit.
 #   - QMPCMK on :9157 — our HA QM via its data-plane VIP (role defaults).
-#   - QMDTCC on :9158 — the DTCC counterparty via net-ext, its SVC.SVRCONN.
+#   - QMSVC on :9158 — the SVC counterparty via net-ext, its SVC.SVRCONN.
 - hosts: probe
   become: true
   tasks:
@@ -21,15 +21,15 @@
       ansible.builtin.include_role:
         name: mq-exporter
 
-    - name: QMDTCC exporter (DTCC counterparty, across net-ext)
+    - name: QMSVC exporter (SVC counterparty, across net-ext)
       ansible.builtin.include_role:
         name: mq-exporter
       vars:
-        mq_exporter_qm: QMDTCC
+        mq_exporter_qm: QMSVC
         mq_exporter_conn: "10.60.0.50(1414)"
         # Connect on the dedicated monitoring SVRCONN (#250), not the responder's
-        # SVC.SVRCONN — the exporter presents O=client-org, which MON.SVRCONN pins.
+        # SVC.SVRCONN — the exporter presents O=app-org, which MON.SVRCONN pins.
         mq_exporter_channel: MON.SVRCONN
         mq_exporter_port: 9158
         mq_exporter_monitored_queues: "SVC.REQUEST,QMPCMK"
-        mq_exporter_monitored_channels: "SVC.SVRCONN,MON.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
+        mq_exporter_monitored_channels: "SVC.SVRCONN,MON.SVRCONN,QMPCMK.QMSVC,QMSVC.QMPCMK"

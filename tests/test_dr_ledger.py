@@ -6,7 +6,7 @@ def test_append_and_roundtrip_jsonl(tmp_path):
     lg = Ledger()
     lg.append(LedgerEntry(event=Event.SENT, seq=1, uuid="u1", ts=1.0))
     lg.append(LedgerEntry(event=Event.CONFIRMED, seq=1, uuid="u1", ts=2.0))
-    path = tmp_path / "firm.jsonl"
+    path = tmp_path / "app.jsonl"
     lg.write_jsonl(path)
 
     # one JSON object per line, append-only
@@ -23,7 +23,7 @@ def test_read_jsonl_missing_file_is_empty(tmp_path):
 
 
 def test_read_jsonl_skips_blank_lines(tmp_path):
-    path = tmp_path / "firm.jsonl"
+    path = tmp_path / "app.jsonl"
     lg = Ledger([LedgerEntry(Event.SENT, 1, "u1", 1.0)])
     lg.write_jsonl(path)
     # inject a trailing blank line that read_jsonl must skip
@@ -32,7 +32,7 @@ def test_read_jsonl_skips_blank_lines(tmp_path):
     assert back.entries == lg.entries
 
 
-def test_firm_states_folds_events():
+def test_app_states_folds_events():
     lg = Ledger(
         [
             LedgerEntry(Event.SENT, 1, "u1", 1.0),
@@ -40,12 +40,12 @@ def test_firm_states_folds_events():
             LedgerEntry(Event.SENT, 2, "u2", 3.0),  # no reply -> in pipeline
         ]
     )
-    states = lg.firm_states()
+    states = lg.app_states()
     assert states[1] == MessageState.CONFIRMED
     assert states[2] == MessageState.IN_PIPELINE
 
 
-def test_dtcc_receive_counts_count_duplicates():
+def test_svc_receive_counts_count_duplicates():
     lg = Ledger(
         [
             LedgerEntry(Event.RECEIVED, 1, "u1", 1.0),
@@ -54,8 +54,8 @@ def test_dtcc_receive_counts_count_duplicates():
             LedgerEntry(Event.RECEIVED, 2, "u2", 2.0),
         ]
     )
-    assert lg.dtcc_receive_counts() == {1: 2, 2: 1}
-    assert lg.dtcc_replied() == {1}
+    assert lg.svc_receive_counts() == {1: 2, 2: 1}
+    assert lg.svc_replied() == {1}
 
 
 def test_sent_seqs_and_confirmed_seqs():

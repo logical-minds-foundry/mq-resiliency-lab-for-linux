@@ -72,7 +72,7 @@ boundary needs a real x86 host.
 Apple Silicon Mac (arm64, Apple hypervisor)
 └─ Lima / Vergil dev VM  ── aarch64, 12 vCPU, 62 GiB     ← this is the "host" below
    └─ libvirt / QEMU
-      ├─ aarch64 guests  → -accel kvm  -cpu host         ← NATIVE, cheap (obs, mon-probe, app, dtcc)
+      ├─ aarch64 guests  → -accel kvm  -cpu host         ← NATIVE, cheap (obs, mon-probe, app, svc)
       └─ x86_64  guests  → -accel tcg  -cpu max          ← EMULATED, expensive (all RHEL arms)
 ```
 
@@ -171,7 +171,7 @@ and the host move together, rather than guessing.
   10.5%  rdqm-b3          <- NO running QM
   10.5%  obs              <- aarch64, native KVM
    1.7%  mon-probe
-   1.0%  dtcc-sim
+   1.0%  svc-sim
    0.2%  app-client
 ```
 

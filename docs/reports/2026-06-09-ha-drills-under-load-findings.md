@@ -21,7 +21,7 @@
 Each drill runs a **continuous persistent + syncpoint flow** through the
 cluster VIP (`10.10.1.200`) while a single fault is injected mid-flight:
 
-- **Firm flow** (`clients/dr_flow.py`, on `app-client`) — a producer puts
+- **App flow** (`clients/dr_flow.py`, on `app-client`) — a producer puts
   requests at 20 msg/s and a consumer confirms replies, on separate
   reconnectable connections, writing a SENT/CONFIRMED ledger.
 - **God's-eye responder** (`clients/dr_responder.py`) — consumes each request
@@ -30,7 +30,7 @@ cluster VIP (`10.10.1.200`) while a single fault is injected mid-flight:
   the `mqlab.dr` six-bucket classifier and asserts self-correctness
   (god's-eye == app ledger ⇒ RPO 0).
 
-"RPO 0 under load" therefore means: every message the firm sent was confirmed,
+"RPO 0 under load" therefore means: every message the app sent was confirmed,
 with zero stranded / lost / ambiguous / duplicated, across the fault — not a
 static before/after check on a handful of messages.
 

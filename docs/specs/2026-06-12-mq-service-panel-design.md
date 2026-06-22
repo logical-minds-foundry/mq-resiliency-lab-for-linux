@@ -24,7 +24,7 @@ labels normalize for free when those land.
 | `QMPCMK` | Service QM (Ubuntu Pacemaker HA/DR), VIP `10.10.1.200` | `pcmk_san_ha` / `_dr` |
 | `QMRDQM` | Service QM (RHEL RDQM) — **assert this name in the rdqm role** (currently unset) | `rdqm_ha` / `_dr` |
 | `QMAIN` | Service QM (standalone, Phase-B) | `standalone` |
-| `QDTCC` | DTCC counterparty (simulated) | `standalone` |
+| `QMSVC` | SVC counterparty (simulated) | `standalone` |
 
 ## Structure
 
@@ -108,4 +108,4 @@ objects is a deliberate config choice.
 - Is **channel status** available via the exporter, or does it need a side path
   (e.g. a small `runmqsc DIS CHSTATUS` collector)?
 - The concrete list of channels and queues to enumerate per QM (the message-path
-  objects between `QMPCMK` ↔ `QDTCC` and the client SVRCONN).
+  objects between `QMPCMK` ↔ `QMSVC` and the client SVRCONN).

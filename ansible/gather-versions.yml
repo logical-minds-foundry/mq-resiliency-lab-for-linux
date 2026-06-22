@@ -43,7 +43,7 @@
           kernel: "{{ p_kern.stdout }}"
           os: "{{ p_os.stdout }}"
 
-- hosts: dtcc # counterparty QM host (no pacemaker)
+- hosts: svc # counterparty QM host (no pacemaker)
   gather_facts: false
   tasks:
     - name: mq

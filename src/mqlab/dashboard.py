@@ -38,7 +38,7 @@ ROWS: list[tuple[str, list[str]]] = [
     ("PCMK · B", ["pcmk_b", "san_b"]),
     ("RDQM · A", ["rdqm_a"]),
     ("RDQM · B", ["rdqm_b"]),
-    ("App · DTCC", ["app", "dtcc"]),
+    ("App · SVC", ["app", "svc"]),
     ("Observability", ["obs_box", "probe"]),
 ]
 
@@ -113,16 +113,16 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 
 # --- MQ Service (Layer 2) ---------------------------------------------------
 # One curated row per queue manager we actually run today: our HA QM (QMPCMK)
-# and the DTCC counterparty (QMDTCC, #153). Each entry also names the channels we
+# and the SVC counterparty (QMSVC, #153). Each entry also names the channels we
 # care about (the client SVRCONN + the inter-QM SENDER/RECEIVER pair, named
 # identically on both ends), so the panel draws a tile per channel object even
 # when it has no live status. Queue rows are driven by the exporter's curated
 # monitoredQueues, so the depth table + rate graphs need no per-QM list here.
-# QMDTCC reads "No status" until its exporter lands (#182); QMRDQM / QMAIN return
+# QMSVC reads "No status" until its exporter lands (#182); QMRDQM / QMAIN return
 # if/when those arms are in play.
 QMS: list[tuple[str, str, list[str]]] = [
-    ("QMPCMK", "service · Ubuntu HA/DR", ["APP.SVRCONN", "QMPCMK.QMDTCC", "QMDTCC.QMPCMK"]),
-    ("QMDTCC", "counterparty · DTCC service", ["SVC.SVRCONN", "QMDTCC.QMPCMK", "QMPCMK.QMDTCC"]),
+    ("QMPCMK", "service · Ubuntu HA/DR", ["APP.SVRCONN", "QMPCMK.QMSVC", "QMSVC.QMPCMK"]),
+    ("QMSVC", "counterparty · SVC service", ["SVC.SVRCONN", "QMSVC.QMPCMK", "QMPCMK.QMSVC"]),
 ]
 
 
@@ -241,7 +241,7 @@ def _queue_rates_panel(qm: str, y: int) -> dict[str, Any]:
 # nets become per-net rows under a collapsible section header. A net `net-X` maps
 # to host bridge `virbr-X` (throughput) and shorthand `X` (display).
 NET_SECTIONS: list[tuple[str, list[str]]] = [
-    ("Message path", ["net-client", "net-dtcc", "net-ext", "net-data-a", "net-data-b"]),
+    ("Message path", ["net-client", "net-svc", "net-ext", "net-data-a", "net-data-b"]),
     ("Cluster + storage", ["net-hb-a", "net-san-a", "net-hb-b", "net-san-b"]),
     ("Cross-site + mgmt", ["net-wan", "net-mgmt"]),
 ]

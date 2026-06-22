@@ -101,7 +101,7 @@ def test_nativeha_rhel_arm_and_setups():
     # NOT separate _ha/_dr setups.
     s = t["setups"]["distributed-nativeha-rhel"]
     assert s["arm"] == "nativeha-rhel"
-    assert set(s["groups"]) == {"nha_rhel_a", "nha_rhel_b", "dtcc", "app"}
+    assert set(s["groups"]) == {"nha_rhel_a", "nha_rhel_b", "svc", "app"}
     assert "nativeha_ha" not in t["setups"] and "nativeha_dr" not in t["setups"]
     assert set(t["groups"]["nha_rhel_a"]) == {"nha-rhel-a1", "nha-rhel-a2", "nha-rhel-a3"}
     assert set(t["groups"]["nha_rhel_b"]) == {"nha-rhel-b1", "nha-rhel-b2", "nha-rhel-b3"}
@@ -130,16 +130,16 @@ arms:
 setups:
   # The ONE nativeha-rhel setup: distributed + HA + DR keystone (#267).
   # Built in phases against this single entry — Phase 1 boots/provisions the
-  # site-A subset (nha_rhel_a + dtcc + app); Phase 3 boots nha_rhel_b + enables CRR.
+  # site-A subset (nha_rhel_a + svc + app); Phase 3 boots nha_rhel_b + enables CRR.
   distributed-nativeha-rhel:
     description: >
       Distributed-HADR keystone (#267) — app -> QMNATIVE (3+3 Native HA + CRR)
-      <-> QMDTCC over net-ext, with cross-site DR. Phase 1 = HA on site A only.
+      <-> QMSVC over net-ext, with cross-site DR. Phase 1 = HA on site A only.
     arm: nativeha-rhel
-    groups: [nha_rhel_a, nha_rhel_b, dtcc, app]
+    groups: [nha_rhel_a, nha_rhel_b, svc, app]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
-    qm: { name: QMNATIVE, vip: 10.50.2.50, vip_dr: 10.50.3.50, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMNATIVE, vip: 10.50.2.50, vip_dr: 10.50.3.50, svc_conn: 10.60.0.50 }
 ```
 
 - [ ] **Step 4 — run the test, expect PASS.** Then `vrg-container-run --
@@ -206,14 +206,14 @@ setups:
 ### Task 4: `QMNATIVE` in the distributed mesh
 
 **Files:** Modify `ansible/site-nativeha.yml` (or a content play); reuse the
-distributed `pymqrest`/`dtcc-sim`/`app-client` content from the existing arms.
+distributed `pymqrest`/`svc-sim`/`app-client` content from the existing arms.
 
-- [ ] **Step 1 — boot the rest of the site-A subset** (`dtcc` + `app`) of
+- [ ] **Step 1 — boot the rest of the site-A subset** (`svc` + `app`) of
   `distributed-nativeha-rhel`; `QMNATIVE` reached on its connectivity address;
-  inter-QM channels `QMNATIVE ↔ QMDTCC` over `net-ext`. **Same app contract, new
+  inter-QM channels `QMNATIVE ↔ QMSVC` over `net-ext`. **Same app contract, new
   substrate.** (Site B + CRR come in Phase 3 on this same setup.)
 - [ ] **Step 2 — end-to-end flow:** `app-client` puts a trade → `QMNATIVE` →
-  `QMDTCC`; `dtcc-sim` replies; confirm the reply returns. Persistent messages.
+  `QMSVC`; `svc-sim` replies; confirm the reply returns. Persistent messages.
 - [ ] **Step 3 — failover under load:** repeat Task 3 step 2 (kill active node)
   while the app flow runs; confirm the flow resumes after re-election (client
   auto-reconnect). Record. Commit.

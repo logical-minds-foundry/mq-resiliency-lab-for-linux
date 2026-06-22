@@ -8,7 +8,7 @@ mq_exporter_instance: "{{ mq_exporter_qm | lower }}"
 mq_exporter_conn: "10.10.1.200(1414)"
 # Dedicated monitoring SVRCONN (#250): the exporter no longer piggybacks on
 # APP.SVRCONN/SVC.SVRCONN, whose mutual-TLS SSLPEERs pin the app/responder
-# identities. MON.SVRCONN pins O=client-org (the exporter) on both QMs.
+# identities. MON.SVRCONN pins O=app-org (the exporter) on both QMs.
 mq_exporter_channel: MON.SVRCONN
 mq_exporter_port: 9157
 # TLS (#250): mq-metric-samples exposes no MQ-TLS CLI flags, so a client
@@ -21,8 +21,8 @@ mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
 # gate). The app queue + our outbound xmitq + the app reply queue.
-mq_exporter_monitored_queues: "HA.TEST,QMDTCC,APP.REPLY"
-mq_exporter_monitored_channels: "APP.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
+mq_exporter_monitored_queues: "HA.TEST,QMSVC,APP.REPLY"
+mq_exporter_monitored_channels: "APP.SVRCONN,QMPCMK.QMSVC,QMSVC.QMPCMK"
 # mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
 # cold boot confirms the build — master is a placeholder for reproducibility.
 mq_exporter_ref: master

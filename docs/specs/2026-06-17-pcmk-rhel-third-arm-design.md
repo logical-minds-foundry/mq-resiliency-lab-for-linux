@@ -19,12 +19,12 @@ The HA/DR parity work currently compares two arms, registered in
    exposes them only through the `crtmqm -sx` / `rdqmadm` / `rdqmint` command
    set. Built from `rdqm-install` and `rdqm-ha`.
 
-The pivot spec records a standardization decision: "the firm standardizes on
+The pivot spec records a standardization decision: "the app standardizes on
 RHEL + RDQM, for IBM-supportability reasons."
 
 This design challenges the premise behind that decision. What forced the move to
 RHEL was never RDQM — it was that IBM supports MQ only on current RHEL or on
-Ubuntu 22 (which the firm has rejected). RHEL does not *require* RDQM. The same
+Ubuntu 22 (which the app has rejected). RHEL does not *require* RDQM. The same
 open-source substrate already proven on the Ubuntu arm can run directly on RHEL,
 with the IBM-supported RHEL MQ build on top and no RDQM involved.
 
@@ -46,7 +46,7 @@ x86_64 RDQM arm; we choose to be clean against RDQM, the more important axis.)
 ## 2. Decision
 
 Add **`pcmk-rhel`** as a first-class third arm, peer to the existing two. The
-RDQM arm stays as live contrast data. The firm-standard decision is **deferred
+RDQM arm stays as live contrast data. The app-standard decision is **deferred
 to the evidence** produced by the parity harness; this design does not rewrite
 the standardization banner.
 
@@ -139,7 +139,7 @@ The design records, as analysis the pivot spec omitted, where the IBM support
 boundary sits per arm:
 
 - **`pcmk-ubuntu` / `pcmk-rhel`** — the boundary sits **at** the MQ layer. The
-  cluster substrate is self-supportable: in-house expertise plus the large OSS
+  cluster substrate is self-supportable: app expertise plus the large OSS
   community. The cluster software (Pacemaker/Corosync/pcs) is free OSS
   regardless of distro; on RHEL, vendor support is an *optional* choice — buy
   Red Hat's HA Add-On as a backstop, or self-support — and either way it is
@@ -150,7 +150,7 @@ boundary sits per arm:
   DR-at-creation-only) — evidence of the cost of that lower boundary.
 
 `pcmk-rhel` is the hypothesized "sweet spot": IBM-supported MQ on IBM-supported
-RHEL, over a self-supportable substrate. Whether it becomes the firm standard is
+RHEL, over a self-supportable substrate. Whether it becomes the app standard is
 **deferred to the evidence**.
 
 ## 6. Build sequencing
