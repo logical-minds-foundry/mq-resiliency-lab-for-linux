@@ -1,9 +1,9 @@
-"""DTCC-side Watcher responder (syncpoint, HA-reconnect-aware).
+"""SVC-side Watcher responder (syncpoint, HA-reconnect-aware).
 
 Records RECEIVED for EVERY get (so a redelivered message counts as a duplicate,
 spec §5) and REPLIED for every reply, into the Watcher ledger -- but only
 AFTER a clean commit, so a failover rollback never logs a phantom receive.
-Runs on the dtcc-sim node (outside both DC sites, so the oracle survives a full
+Runs on the svc-sim node (outside both DC sites, so the oracle survives a full
 site loss).
 
 Connection handling embodies the client HA requirements (see dr_mqi.py): cooperate
@@ -11,11 +11,11 @@ with a controlled endmqm via FAIL_IF_QUIESCING, retry in-doubt operations, and -
 crucially -- rebuild the connection ourselves when a controlled endmqm -w
 disconnects us non-reconnectably (auto-reconnect only covers abrupt breaks).
 
-Run on dtcc-sim:
+Run on svc-sim:
     ~/mqvenv/bin/python ~/dr_responder.py --seconds 40 --ledger ~/dr-ledgers/svc.jsonl
 
 Deployed by ansible alongside mqlab/ and dr_mqi.py. Echoes the DRv1 body back so
-the firm can match seq/uuid.
+the app can match seq/uuid.
 """
 
 import argparse
@@ -67,7 +67,7 @@ def _serve(qmgr, args, ledger, deadline):
             pack_header(
                 password="pw", sender="SVC", receiver="APP01", session_date=msg.session_date
             ).encode()
-            + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
+            + raw[idx:]  # echo the DRv1 body so the app can match seq/uuid
         )
         try:
             qout.put(reply, md_persist, pmo)
@@ -94,11 +94,11 @@ def _serve(qmgr, args, ledger, deadline):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default="QDTCC")
+    ap.add_argument("--qm", default="QMSVC")
     ap.add_argument("--conn", default="localhost(1414)")
-    ap.add_argument("--channel", default="SIM.SVRCONN")
-    ap.add_argument("--in-queue", default="TRADE.REQUEST")
-    ap.add_argument("--out-queue", default="FIRM.REPLY")
+    ap.add_argument("--channel", default="SVC.SVRCONN")
+    ap.add_argument("--in-queue", default="SVC.REQUEST")
+    ap.add_argument("--out-queue", default="APP.REPLY")
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--ledger", required=True)
     args = ap.parse_args()

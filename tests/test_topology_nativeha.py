@@ -34,7 +34,7 @@ def test_one_consolidated_distributed_hadr_setup():
     s = t["setups"]["distributed-nativeha-rhel"]
     assert s["arm"] == "nativeha-rhel"
     # the keystone: distributed + both sites (HA + DR) in one stack (#267)
-    assert set(s["groups"]) == {"nha_rhel_a", "nha_rhel_b", "dtcc", "app"}
+    assert set(s["groups"]) == {"nha_rhel_a", "nha_rhel_b", "svc", "app"}
     # no partial throwaway setups
     assert "nativeha_ha" not in t["setups"]
     assert "nativeha_dr" not in t["setups"]

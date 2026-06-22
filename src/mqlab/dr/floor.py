@@ -35,8 +35,8 @@ class FloorResult:
     reason: str
 
 
-def meets_floor(firm: Ledger, floor: Floor) -> FloorResult:
-    sent = sorted(e.ts for e in firm.entries if e.event is Event.SENT)
+def meets_floor(app: Ledger, floor: Floor) -> FloorResult:
+    sent = sorted(e.ts for e in app.entries if e.event is Event.SENT)
     total = len(sent)
     seconds = (sent[-1] - sent[0]) if total >= 2 else 0.0
     rate = (total / seconds) if seconds > 0 else 0.0

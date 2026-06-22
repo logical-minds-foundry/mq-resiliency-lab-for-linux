@@ -88,7 +88,7 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
     assert not any(a.startswith("svc_conn=") for a in play.argv)  # not set -> not passed
 
 
-def test_qm_create_passes_dtcc_conn_when_set(monkeypatch, tmp_path):
+def test_qm_create_passes_svc_conn_when_set(monkeypatch, tmp_path):
     topo = (
         "nodes:\n"
         "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"

@@ -32,7 +32,7 @@ def test_read_jsonl_skips_blank_lines(tmp_path):
     assert back.entries == lg.entries
 
 
-def test_firm_states_folds_events():
+def test_app_states_folds_events():
     lg = Ledger(
         [
             LedgerEntry(Event.SENT, 1, "u1", 1.0),
@@ -45,7 +45,7 @@ def test_firm_states_folds_events():
     assert states[2] == MessageState.IN_PIPELINE
 
 
-def test_dtcc_receive_counts_count_duplicates():
+def test_svc_receive_counts_count_duplicates():
     lg = Ledger(
         [
             LedgerEntry(Event.RECEIVED, 1, "u1", 1.0),

@@ -2,7 +2,7 @@ from mqlab.dr.floor import FLOOR, FloorResult, meets_floor
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 
 
-def _firm_with(n, rate):
+def _app_with(n, rate):
     # n SENT messages, one every 1/rate s, starting at t=0
     lg = Ledger()
     for i in range(1, n + 1):
@@ -11,16 +11,16 @@ def _firm_with(n, rate):
 
 
 def test_meets_floor_true_when_rate_duration_volume_satisfied():
-    firm = _firm_with(n=7000, rate=20.0)  # 7000 msgs over ~350 s at 20/s
-    res = meets_floor(firm, FLOOR)
+    app = _app_with(n=7000, rate=20.0)  # 7000 msgs over ~350 s at 20/s
+    res = meets_floor(app, FLOOR)
     assert isinstance(res, FloorResult)
     assert res.ok is True
     assert res.total == 7000
 
 
 def test_meets_floor_false_when_too_few_messages():
-    firm = _firm_with(n=100, rate=20.0)
-    res = meets_floor(firm, FLOOR)
+    app = _app_with(n=100, rate=20.0)
+    res = meets_floor(app, FLOOR)
     assert res.ok is False
     assert "total" in res.reason
 

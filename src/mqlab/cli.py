@@ -1464,15 +1464,13 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     steps = baseline_run_plan(setup, run_dir, seconds=seconds, rate=rate)
     _execute("run", steps, step_mode=step)  # raises typer.Exit on any step failure
 
-    firm = Ledger.read_jsonl(run_dir / "app.jsonl")
-    dtcc = Ledger.read_jsonl(run_dir / "svc.jsonl")
+    app = Ledger.read_jsonl(run_dir / "app.jsonl")
+    svc = Ledger.read_jsonl(run_dir / "svc.jsonl")
     facts = reconcile(
-        firm, dtcc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
+        app, svc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
     )
     assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
-    scenario = build_report(
-        "BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(firm)
-    )
+    scenario = build_report("BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(app))
     metadata = capture_metadata(
         setup.name,
         timestamp,

@@ -4,7 +4,7 @@ Connect to a QM with reconnect, put under syncpoint in a loop. While it runs,
 restart the QM externally. If reconnect engages, the puts pause during the
 outage and resume (no fatal error). If not, we see MQRC_CONNECTION_BROKEN/2009.
 
-    ~/mqvenv/bin/python ~/reconnect_probe.py QMAIN "10.30.0.10(1414)" DTCC.REQUEST
+    ~/mqvenv/bin/python ~/reconnect_probe.py QMAIN "10.30.0.10(1414)" SVC.REQUEST
 """
 
 import sys

@@ -55,7 +55,7 @@ CATALOG: tuple[Scenario, ...] = (
     Scenario(
         "DR-FORCE-2",
         Kind.DR_FORCED,
-        "primary isolated from both DTCC and secondary, app keeps producing",
+        "primary isolated from both SVC and secondary, app keeps producing",
         False,
         (Bucket.STRANDED,),
     ),

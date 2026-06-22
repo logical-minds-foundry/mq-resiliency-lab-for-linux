@@ -1,8 +1,8 @@
-"""Firm-side continuous flow generator (persistent + syncpoint, HA-aware).
+"""App-side continuous flow generator (persistent + syncpoint, HA-aware).
 
 Producer: build_body() -> MQPUT (PERSISTENT, FAIL_IF_QUIESCING) under syncpoint
-          -> commit -> firm ledger SENT.
-Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit -> firm
+          -> commit -> app ledger SENT.
+Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit -> app
           ledger CONFIRMED.
 
 Producer and consumer run on SEPARATE MQ connections (a single Hconn is not safe
@@ -202,8 +202,8 @@ def main():
     ap.add_argument("--qm", default="QMAIN")
     ap.add_argument("--conn", default="10.30.0.10(1414)")
     ap.add_argument("--channel", default="APP.SVRCONN")
-    ap.add_argument("--req-queue", default="DTCC.REQUEST")
-    ap.add_argument("--reply-queue", default="TRADE.REPLY")
+    ap.add_argument("--req-queue", default="SVC.REQUEST")
+    ap.add_argument("--reply-queue", default="APP.REPLY")
     ap.add_argument("--rate", type=float, default=20.0)
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument(

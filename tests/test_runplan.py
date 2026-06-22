@@ -10,7 +10,7 @@ def _setup(qm: QmConfig | None) -> Setup:
     return Setup(
         name="distributed",
         description="d",
-        groups=["san_a", "pcmk_a", "dtcc", "app"],
+        groups=["san_a", "pcmk_a", "svc", "app"],
         provision="ansible/site-distributed.yml",
         secrets=[],
         qm=qm,

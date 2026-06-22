@@ -88,23 +88,23 @@ def test_pcmk_nodes_attach_to_net_ext():
         assert nodes[host]["nics"].get("net-ext") == ip, f"{host} missing net-ext {ip}"
 
 
-def test_dtcc_sim_on_net_ext():
-    """The DTCC service VM joins net-ext so its QM can reach our partner VIP and be
+def test_svc_sim_on_net_ext():
+    """The SVC service VM joins net-ext so its QM can reach our partner VIP and be
     reached across the inter-business WAN (#147)."""
     import yaml
 
     from mqlab.paths import repo_root
 
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    assert topo["nodes"]["dtcc-sim"]["nics"].get("net-ext") == "10.60.0.50"
+    assert topo["nodes"]["svc-sim"]["nics"].get("net-ext") == "10.60.0.50"
 
 
 def test_distributed_setup_composed():
-    """The distributed setup wires our HA QM (site A) to the DTCC service VM (#147)."""
+    """The distributed setup wires our HA QM (site A) to the SVC service VM (#147)."""
     from mqlab.setups import lab_setups
 
     dist = lab_setups()["distributed-pcmk-ubuntu"]
-    assert dist.groups == ["san_a", "pcmk_a", "dtcc", "app"]
+    assert dist.groups == ["san_a", "pcmk_a", "svc", "app"]
     assert dist.provision == "ansible/site-distributed.yml"
     assert dist.qm is not None and dist.qm.name == "QMPCMK"
     assert dist.qm.svc_conn == "10.60.0.50"
@@ -116,7 +116,7 @@ def test_distributed_rdqm_setup_composed():
 
     s = lab_setups()["distributed-rdqm-rhel"]
     assert s.arm == "rdqm-rhel"
-    assert s.groups == ["rdqm_a", "dtcc", "app"]
+    assert s.groups == ["rdqm_a", "svc", "app"]
     assert s.provision == "ansible/site-rdqm-distributed.yml"
     assert s.qm is not None and s.qm.name == "QMRDQM"
     assert s.qm.svc_conn == "10.60.0.50"

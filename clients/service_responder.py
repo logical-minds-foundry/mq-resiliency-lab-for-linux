@@ -1,6 +1,6 @@
-"""DTCC service responder -- the counterparty (Business B) side of the QM-to-QM flow.
+"""SVC service responder -- the counterparty (Business B) side of the QM-to-QM flow.
 
-Runs co-located with QMDTCC on the DTCC service VM in BINDINGS mode (a local
+Runs co-located with QMSVC on the SVC service VM in BINDINGS mode (a local
 connection, no client channel). Reads each request from SVC.REQUEST, sends a reply
 to the request's ReplyToQ / ReplyToQMgr, and honours the request/reply correlation
 contract so the requesting app on QMPCMK can match it:
@@ -98,12 +98,12 @@ def serve(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default="QMDTCC")
+    ap.add_argument("--qm", default="QMSVC")
     ap.add_argument("--in-queue", default="SVC.REQUEST")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--conn", default="localhost(1414)")
     # TLS (#250): keystore stem + cert label; omit both for a plaintext connect.
-    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/dtcc-responder")
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder")
     ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args()
     serve(args.qm, args.in_queue, args.channel, args.conn, args.keyrepo, args.certlabel)

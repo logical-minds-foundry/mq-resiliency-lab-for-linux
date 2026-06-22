@@ -1,7 +1,7 @@
 """Append-only ledger of message events, persisted as JSONL.
 
-The FIRM ledger records SENT (MQPUT+commit OK) and CONFIRMED (reply matched).
-The DTCC Watcher ledger records RECEIVED (per receive, counting duplicates)
+The APP ledger records SENT (MQPUT+commit OK) and CONFIRMED (reply matched).
+The SVC Watcher ledger records RECEIVED (per receive, counting duplicates)
 and REPLIED.
 """
 

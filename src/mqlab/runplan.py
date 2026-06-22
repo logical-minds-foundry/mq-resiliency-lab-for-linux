@@ -38,9 +38,9 @@ def baseline_run_plan(setup: Setup, run_dir: Path, *, seconds: int, rate: int) -
             str(seconds),
             "--rate",
             str(rate),
-            "--firm-ledger",
+            "--app-ledger",
             str(app_ledger),
-            "--dtcc-ledger",
+            "--svc-ledger",
             str(svc_ledger),
         ]
     )

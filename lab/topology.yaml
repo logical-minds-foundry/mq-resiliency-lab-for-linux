@@ -27,8 +27,8 @@ boxes:
 defaults: { cpus: 1, memory: 1024 }
 
 nodes:
-  # --- DTCC service VM + app client (the distributed message path) ---
-  dtcc-sim:
+  # --- SVC service VM + app client (the distributed message path) ---
+  svc-sim:
     cpus: 2
     memory: 2048
     # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP (#147).
@@ -41,7 +41,7 @@ nodes:
 
   # --- Observability (#103): obs runs Prometheus+Grafana on the mgmt plane only;
   # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters, plus
-  # net-ext to reach the DTCC counterparty QM across the inter-business WAN (#182). ---
+  # net-ext to reach the SVC counterparty QM across the inter-business WAN (#182). ---
   obs:
     cpus: 2
     memory: 4096
@@ -200,7 +200,7 @@ groups:
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]
   nha_rhel_b: [nha-rhel-b1, nha-rhel-b2, nha-rhel-b3]
-  dtcc:   [dtcc-sim]
+  svc:   [svc-sim]
   app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
   # (Ansible warns on group==host); probe/mon-probe already differ.
@@ -290,9 +290,9 @@ setups:
     provision: ansible/site-pcmk-dr.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
   distributed-pcmk-ubuntu:
-    description: Distributed MQ (Pacemaker arm) — app → site-A HA QM (QMPCMK) ⇄ DTCC service QM (QMDTCC) over net-ext (#147)
+    description: Distributed MQ (Pacemaker arm) — app → site-A HA QM (QMPCMK) ⇄ SVC service QM (QMSVC) over net-ext (#147)
     arm: pcmk-ubuntu
-    groups: [san_a, pcmk_a, dtcc, app]
+    groups: [san_a, pcmk_a, svc, app]
     provision: ansible/site-distributed.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }
@@ -311,24 +311,24 @@ setups:
     # floating IP is the site-A data VIP; site B gets 10.10.2.100 on DR promotion (#288).
     qm: { name: QMRDQM, vip: 10.10.1.100 }
   distributed-rdqm-rhel:
-    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
+    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ SVC service QM (QMSVC) over net-ext
     arm: rdqm-rhel
-    groups: [rdqm_a, dtcc, app]
+    groups: [rdqm_a, svc, app]
     provision: ansible/site-rdqm-distributed.yml
     secrets: [mqweb_admin_password]
     # No vip_ext: RDQM allows one floating IP per QM (#216 spike), spent on the data
-    # VIP for the app's HA path. The partner (QMDTCC) reaches QMRDQM over net-ext by
+    # VIP for the app's HA path. The partner (QMSVC) reaches QMRDQM over net-ext by
     # per-node CONNAME list — see site-rdqm-distributed.yml (our_conn).
     qm: { name: QMRDQM, vip: 10.10.1.100, svc_conn: 10.60.0.50 }
   # Native HA arm (#246) — ONE consolidated distributed-HADR setup (#267), not the
   # older _ha/_dr/distributed-no-DR triple. Phase 1 builds HA on the site-A subset
-  # (nha_rhel_a + dtcc + app); Phase 3 boots nha_rhel_b + enables CRR on this same
+  # (nha_rhel_a + svc + app); Phase 3 boots nha_rhel_b + enables CRR on this same
   # setup. No floating VIP — Native HA clients use a multi-instance CONNAME list
   # (built from nha_rhel_* in the content play).
   distributed-nativeha-rhel:
-    description: Distributed-HADR keystone (#267) — app → QMNATIVE (3+3 Native HA + CRR) ⇄ QMDTCC over net-ext
+    description: Distributed-HADR keystone (#267) — app → QMNATIVE (3+3 Native HA + CRR) ⇄ QMSVC over net-ext
     arm: nativeha-rhel
-    groups: [nha_rhel_a, nha_rhel_b, dtcc, app]
+    groups: [nha_rhel_a, nha_rhel_b, svc, app]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
     qm: { name: QMNATIVE, svc_conn: 10.60.0.50 }
