@@ -41,12 +41,12 @@ so a per-machine path would leak into git and break other operators). Instead, a
 small resolver finds the artifact by a fixed precedence (highest first):
 
 1. **`MQLAB_RHEL_ISO` env var** — CI / one-off override.
-2. **`~/.config/mq-cluster-tooling/config.toml` → `[artifacts] rhel_9_6_iso`** —
+2. **`~/.config/mq-resiliency-lab-for-linux/config.toml` → `[artifacts] rhel_9_6_iso`** —
    the durable per-operator setting (XDG, same pattern as Vergil's identity
    config). Example:
 
    ```toml
-   # ~/.config/mq-cluster-tooling/config.toml
+   # ~/.config/mq-resiliency-lab-for-linux/config.toml
    [artifacts]
    rhel_9_6_iso = "~/dev/software/rhel-9.6-x86_64-dvd.iso"
    ```

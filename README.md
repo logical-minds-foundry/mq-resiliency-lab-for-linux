@@ -1,4 +1,4 @@
-# mq-cluster-tooling
+# MQ Resiliency Lab for Linux
 
 Tooling, lab, and operating standards for running IBM MQ high-availability
 queue managers on Linux clusters — packaged as a downloadable, signed release
@@ -70,8 +70,8 @@ sequences the lab bring-up: networks → guests (create + provision) → observa
 This repo is developed inside an ephemeral, reproducible Vergil VM, not on the
 host directly. Footprint and tooling are declared as the `[vm.vergil-user]`
 profile in `vergil.toml`; build and enter the box with
-`vrg-vm create logical-minds-foundry/mq-cluster-tooling --identity vergil-user`
+`vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user`
 then
-`vrg-vm session logical-minds-foundry/mq-cluster-tooling --identity vergil-user`.
+`vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user`.
 See `CLAUDE.md` for the workflow and `docs/development/release-runbook.md` for
 cutting a release.
