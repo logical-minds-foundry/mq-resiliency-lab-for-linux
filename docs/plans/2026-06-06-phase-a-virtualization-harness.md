@@ -65,7 +65,7 @@ lab/
   Vagrantfile               # multi-machine, reads topology.yaml
   topology.yaml             # boxes, defaults, sites, nodes, NIC/IP map
   networks/
-    net-dtcc.xml            # DTCC-facing net          10.20.0.0/24
+    net-svc.xml            # SVC-facing net          10.20.0.0/24
     net-client.xml          # client/app net           10.30.0.0/24
     net-wan.xml             # inter-site WAN           10.99.0.0/24
     net-data-a.xml          # DC-A data/VIP net        10.10.1.0/24
@@ -282,7 +282,7 @@ vrg-commit --type feat --scope lab \
 ### Task 5: Network fabric — the full topology net set
 
 **Files:**
-- Create: `lab/networks/net-{dtcc,client,wan,data-a,data-b,hb-b}.xml`
+- Create: `lab/networks/net-{svc,client,wan,data-a,data-b,hb-b}.xml`
 - Create: `lab/scripts/net-up.sh`, `lab/scripts/net-down.sh`
 
 - [ ] **Step 1: Write the six remaining network XMLs**
@@ -292,7 +292,7 @@ each:
 
 | file | name | bridge | ip/netmask |
 |---|---|---|---|
-| net-dtcc.xml | net-dtcc | virbr-dtcc | 10.20.0.1 / 255.255.255.0 |
+| net-svc.xml | net-svc | virbr-svc | 10.20.0.1 / 255.255.255.0 |
 | net-client.xml | net-client | virbr-client | 10.30.0.1 / 255.255.255.0 |
 | net-wan.xml | net-wan | virbr-wan | 10.99.0.1 / 255.255.255.0 |
 | net-data-a.xml | net-data-a | virbr-data-a | 10.10.1.1 / 255.255.255.0 |
@@ -346,7 +346,7 @@ Expected: all seven networks active+autostart; re-run is a no-op.
 vrg-git add lab/networks lab/scripts
 vrg-commit --type feat --scope lab \
   --message "multi-site network fabric: seven severable libvirt nets (#15)" \
-  --body "Per spec section 5: DTCC, client, WAN, per-DC data and heartbeat nets. Isolated (no forward, no DHCP), idempotent net-up/net-down scripts. Ref #15"
+  --body "Per spec section 5: SVC, client, WAN, per-DC data and heartbeat nets. Isolated (no forward, no DHCP), idempotent net-up/net-down scripts. Ref #15"
 ```
 
 ### Task 6: Topology config + parameterized Vagrantfile
@@ -371,22 +371,22 @@ defaults: { platform: ubuntu2404-arm64, cpus: 1, memory: 1024 }
 nodes:
   node-a1:
     nics: { net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11,
-            net-wan: 10.99.0.11, net-dtcc: 10.20.0.11 }
+            net-wan: 10.99.0.11, net-svc: 10.20.0.11 }
   node-a2:
     nics: { net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12,
-            net-wan: 10.99.0.12, net-dtcc: 10.20.0.12 }
+            net-wan: 10.99.0.12, net-svc: 10.20.0.12 }
   node-a3:
     nics: { net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13,
-            net-wan: 10.99.0.13, net-dtcc: 10.20.0.13 }
+            net-wan: 10.99.0.13, net-svc: 10.20.0.13 }
   node-b1:
     nics: { net-data-b: 10.10.2.21, net-hb-b: 172.16.2.21,
-            net-wan: 10.99.0.21, net-dtcc: 10.20.0.21 }
+            net-wan: 10.99.0.21, net-svc: 10.20.0.21 }
   node-b2:
     nics: { net-data-b: 10.10.2.22, net-hb-b: 172.16.2.22,
-            net-wan: 10.99.0.22, net-dtcc: 10.20.0.22 }
+            net-wan: 10.99.0.22, net-svc: 10.20.0.22 }
   node-b3:
     nics: { net-data-b: 10.10.2.23, net-hb-b: 172.16.2.23,
-            net-wan: 10.99.0.23, net-dtcc: 10.20.0.23 }
+            net-wan: 10.99.0.23, net-svc: 10.20.0.23 }
 ```
 
 (`net-client` carries fixtures/containers in Phase B; no Phase A nodes.)

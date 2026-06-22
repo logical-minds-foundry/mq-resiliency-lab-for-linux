@@ -1,17 +1,17 @@
-# Two-site vendor (DTCC) DR model — design
+# Two-site vendor (SVC) DR model — design
 
 - **Issue:** #237
 - **Date:** 2026-06-17
 - **Status:** Proposed (revised after pushback, 2026-06-17)
-- **Scope:** Re-model the service/counterparty (DTCC) side as a two-site DR pair
+- **Scope:** Re-model the service/counterparty (SVC) side as a two-site DR pair
   with 2×2 connectivity to our DR pair, so that surviving a *vendor* DR failover
   and surviving *our own* DR failover are separately exercisable. Vendor HA is
   transparent and out of scope.
 
 ## 1. Problem
 
-The service side is modeled today as a **single standalone `QMDTCC`** on one VM
-(`dtcc-sim`, `10.60.0.50`), explicitly "no HA/DR". Our side is a 2-site DR pair
+The service side is modeled today as a **single standalone `QMSVC`** on one VM
+(`svc-sim`, `10.60.0.50`), explicitly "no HA/DR". Our side is a 2-site DR pair
 (`QMPCMK` / `QMRDQM`). The asymmetry means we cannot validate the most important
 operational property: that **our infrastructure survives the vendor performing a
 DR failover** — a distinct event from surviving **our own** DR failover.
@@ -63,20 +63,20 @@ address block** `10.60.0.40–.49` (clear of our nodes; room for future profiles
 ```
                       net-ext (inter-business WAN, 10.60.0.0/24)
    OUR SIDE                                           VENDOR SIDE
-   QMPCMK / QMRDQM                                    QMDTCC  (one name, two sites)
+   QMPCMK / QMRDQM                                    QMSVC  (one name, two sites)
    ┌──────────────┐  active VIP                       ┌──────────────────────────┐
-   │ site A (live) │ 10.60.0.10 ───────┐        ┌──── │ dtcc-sim-a  10.60.0.40    │ LISTENER UP  (primary)
+   │ site A (live) │ 10.60.0.10 ───────┐        ┌──── │ svc-sim-a  10.60.0.40    │ LISTENER UP  (primary)
    ├──────────────┤                    │  2×2   │     ├──────────────────────────┤
-   │ site B (std)  │ 10.60.0.20 ───────┘  reach └──── │ dtcc-sim-b  10.60.0.41    │ listener DOWN (cold std)
+   │ site B (std)  │ 10.60.0.20 ───────┘  reach └──── │ svc-sim-b  10.60.0.41    │ listener DOWN (cold std)
    └──────────────┘                                   └──────────────────────────┘
 ```
 
-- `dtcc-sim` → **`dtcc-sim-a` (renumbered `10.60.0.50` → `10.60.0.40`) +
-  `dtcc-sim-b` (`10.60.0.41`)**, both on `net-ext`, identical `QMDTCC` on both.
-- The renumber requires a **reference sweep**: `dtcc_conn` in both distributed
+- `svc-sim` → **`svc-sim-a` (renumbered `10.60.0.50` → `10.60.0.40`) +
+  `svc-sim-b` (`10.60.0.41`)**, both on `net-ext`, identical `QMSVC` on both.
+- The renumber requires a **reference sweep**: `svc_conn` in both distributed
   setups, the their-side channel CONNAME, the `topology.yaml` comments (#147/#182),
   and the lab-bootstrap runbook.
-- **Cold standby:** `dtcc-sim-b`'s machine is up and stable, but its **listener is
+- **Cold standby:** `svc-sim-b`'s machine is up and stable, but its **listener is
   stopped** until a vendor DR is enacted, so it reads as unavailable until then.
 - **Single-active invariant — the core safety property:** at most one of A/B is
   reachable at any instant. This is "HA scaled up": the at-most-one-node guarantee
@@ -91,8 +91,8 @@ address block** `10.60.0.40–.49` (clear of our nodes; room for future profiles
 
 | Direction | Channel | CONNAME | Failover style |
 |---|---|---|---|
-| them → us (reply) | `QMDTCC.QMPCMK` (SDR on vendor) | static list of our VIPs `10.60.0.10,10.60.0.20` | **transparent / automatic** — our DR replicates channel state, so their retry just reconnects (§5.2) |
-| us → them (request) | `QMPCMK.QMDTCC` (SDR on ours) | single endpoint, **managed by the failover utility** | **deliberate** — a vendor DR requires the utility (repoint + reset + restart) |
+| them → us (reply) | `QMSVC.QMPCMK` (SDR on vendor) | static list of our VIPs `10.60.0.10,10.60.0.20` | **transparent / automatic** — our DR replicates channel state, so their retry just reconnects (§5.2) |
+| us → them (request) | `QMPCMK.QMSVC` (SDR on ours) | single endpoint, **managed by the failover utility** | **deliberate** — a vendor DR requires the utility (repoint + reset + restart) |
 
 ### 5.2 Why our DR is transparent to them, but their DR is a utility for us
 
@@ -130,12 +130,12 @@ PRE-FLIGHT (guard — refuse unless satisfied or --force)
       ── if c2/c3 unmet and not --force → FAIL LOUD, change nothing
 
 SWITCH (deterministic, ordered — _sync variants)
-  s1  stop_channel_sync(QMPCMK.QMDTCC, QUIESCE)   # in-flight finishes; persistent
+  s1  stop_channel_sync(QMPCMK.QMSVC, QUIESCE)   # in-flight finishes; persistent
                                                   # messages remain safe on the xmitq
-  s2  ensure_channel(QMPCMK.QMDTCC, CONNAME=<target endpoint>)   # repoint
-  s3  reset_channel(QMPCMK.QMDTCC)                # MANDATORY — stale vendor seqno (§5.2)
+  s2  ensure_channel(QMPCMK.QMSVC, CONNAME=<target endpoint>)   # repoint
+  s3  reset_channel(QMPCMK.QMSVC)                # MANDATORY — stale vendor seqno (§5.2)
   s4  resolve_channel(...) if in-doubt            # surface/resolve in-doubt batches
-  s5  start_channel_sync(QMPCMK.QMDTCC)
+  s5  start_channel_sync(QMPCMK.QMSVC)
 
 VERIFY (fail-loud — never claim success unverified)
   v1  DISPLAY CHSTATUS → RUNNING (not RETRYING / sequence error)
@@ -210,11 +210,11 @@ spellings confirmed at spec review.
 No existing setup can run the 2×2 (the distributed setups are *our*-site-A only;
 the DR setups have no vendor/app). Add a **combined setup**:
 
-- **`distributed-pcmk-dr`** — groups `[san_a, san_b, pcmk_a, pcmk_b, dtcc, app]`,
+- **`distributed-pcmk-dr`** — groups `[san_a, san_b, pcmk_a, pcmk_b, svc, app]`,
   provisioned by a playbook composing the existing DR (`site-pcmk-dr.yml`) and
   distributed (`site-distributed*.yml`) plays; `secrets` include
   `mqweb_admin_password`. The analogous **RDQM** combined setup follows for that arm.
-- It provisions `QMDTCC` **identically on both vendor sites**, with site B's
+- It provisions `QMSVC` **identically on both vendor sites**, with site B's
   listener stopped (cold standby).
 - **Bring-up weight:** ~10 VMs for the Pacemaker arm; the cold-rebuild gate boots
   all of them — precisely the long bring-up the #211 parallel-bootstrap work
@@ -265,7 +265,7 @@ of risk from our vantage, with less visibility, and can produce:
   second is duplicate noise to detect, log, and investigate. App-layer idempotency.
 - **Missing reply** (request sent, no reply): **the dangerous one** — irreconcilable
   unilaterally; needs an app-dev + ops + vendor **reconciliation process** (one a
-  counterparty such as DTCC very likely already has).
+  counterparty such as SVC very likely already has).
 
 First cut provides the *trigger* (a clean vendor DR). Fault injection and
 detection/reconciliation need app-dev coordination and app-side logic the lab does
@@ -313,7 +313,7 @@ hard-code assumptions that block additional profiles.
 
 ## 12. Coordination
 
-Touches `lab/topology.yaml` (renumber + `dtcc-sim-b` + combined setup), a new
+Touches `lab/topology.yaml` (renumber + `svc-sim-b` + combined setup), a new
 combined-setup provisioning playbook, the inter-QM role/templates, and adds the
 `mqlab vendor` commands + Python module. Several DR-adjacent branches are in flight
 (`feature/233-plan-c-rdqm-dr`, RDQM parity work). The implementation plan should

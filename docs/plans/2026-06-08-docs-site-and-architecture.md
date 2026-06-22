@@ -419,7 +419,7 @@ from the host. Nothing else in the VM is precious.
 
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-cluster-tooling/blob/main/lab/topology.yaml).
-It defines the libvirt networks (data, heartbeat, WAN, client, DTCC, SAN)
+It defines the libvirt networks (data, heartbeat, WAN, client, SVC, SAN)
 and every guest's NICs and platform. The Vagrant/libvirt harness reads it
 to create networks and boot nodes.
 
@@ -430,7 +430,7 @@ network is for and why the fleet is shaped the way it is.
 
 The **standalone queue manager** path (Phase B) is the simplest proof that
 the stack works: a single queue manager, a simulated upstream
-(`dtcc-sim`), and an application client exchanging messages over the client
+(`svc-sim`), and an application client exchanging messages over the client
 network. Bring it up, send a message, and confirm it survives a guest
 reboot.
 
@@ -548,7 +548,7 @@ Inside the lab VM the lab is itself virtualized — nested virtualization
 (Apple silicon → macOS Virtualization → Lima → KVM/TCG) runs the guest
 fleet. Those guests sit on a fabric of isolated libvirt networks: per-site
 data and heartbeat networks, a WAN that links the two sites, the
-client/DTCC application networks, and the SAN networks. The networks are
+client/SVC application networks, and the SAN networks. The networks are
 designed to be **severable** so failures can be injected cleanly.
 
 <iframe src="diagrams/02-inside-lab-vm.html" style="width:100%;height:520px;border:0;border-radius:8px;" title="Inside the lab VM"></iframe>
@@ -568,7 +568,7 @@ always a separate, asynchronous DR relationship with a manual cutover.
 ## Layer 3 — The standalone QM arm (the message path)
 
 The simplest arm proves the message path itself: a single queue manager
-(`qm-main`) exchanging messages with a simulated upstream (`dtcc-sim`) and
+(`qm-main`) exchanging messages with a simulated upstream (`svc-sim`) and
 an application client over the client network. This is the foundation the
 HA/DR arms build on.
 
@@ -670,11 +670,11 @@ vrg-commit --type docs --scope docs --message "add diagram 1 — host & identity
   - `net-data-a` (10.10.1.0/24) / `net-data-b` (10.10.2.0/24) — per-site data
   - `net-hb-a` (172.16.1.0/24) / `net-hb-b` (172.16.2.0/24) — per-site heartbeat
   - `net-wan` (10.99.0.0/24) — cross-site WAN (DR + severable link)
-  - `net-dtcc` (10.20.0.0/24) — upstream/DTCC application net
+  - `net-svc` (10.20.0.0/24) — upstream/SVC application net
   - `net-client` (10.30.0.0/24) — application client net
   - `net-san-a` (10.40.1.0/24) / `net-san-b` — shared-SAN nets (Phase D)
 - Node fleet grouped by arm (names only, IPs optional): Phase A placeholders
-  `node-a1..3` / `node-b1..3`; Phase B `qm-main`, `dtcc-sim`, `app-client`;
+  `node-a1..3` / `node-b1..3`; Phase B `qm-main`, `svc-sim`, `app-client`;
   Phase C `rdqm-a1..3` / `rdqm-b1..3`; Phase D `san-a`, `pcmk-a1..3`.
 
 - [ ] **Step 1: Author the diagram** — self-contained HTML linking
@@ -761,14 +761,14 @@ vrg-commit --type docs --scope docs --message "add diagram 3 — RDQM 3+3 HA/DR 
 - Create: `docs/site/docs/architecture/diagrams/04-standalone-qm.html`
 
 **Data to encode (from `topology.yaml`, Phase B):** `qm-main`
-(net-client 10.30.0.10, net-dtcc 10.20.0.10) ↔ `dtcc-sim`
-(net-dtcc 10.20.0.50) and `app-client` (net-client 10.30.0.60). Show the
-message path: app-client → qm-main → dtcc-sim, labelling the two networks.
+(net-client 10.30.0.10, net-svc 10.20.0.10) ↔ `svc-sim`
+(net-svc 10.20.0.50) and `app-client` (net-client 10.30.0.60). Show the
+message path: app-client → qm-main → svc-sim, labelling the two networks.
 
 - [ ] **Step 1: Author the diagram** — self-contained HTML linking
 `_diagram.css`. One `.panel` titled "Standalone QM message path" with three
-`.box`/`.node` elements (`app-client`, `qm-main`, `dtcc-sim`) connected
-left-to-right, `.net` tags for `net-client` and `net-dtcc`, and a short
+`.box`/`.node` elements (`app-client`, `qm-main`, `svc-sim`) connected
+left-to-right, `.net` tags for `net-client` and `net-svc`, and a short
 `.ok` caption noting this proves reboot-survival of the message path.
 
 - [ ] **Step 2: Visually verify** — open in browser; cross-check names/IPs

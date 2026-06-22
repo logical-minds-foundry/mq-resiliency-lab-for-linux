@@ -177,7 +177,7 @@ the shared topology cluster resolver; the `pcs status` parser; tests.
 
 ## 10. Open questions & expected iteration
 
-This is explicitly a first pass; the following will firm up once we *operate* it:
+This is explicitly a first pass; the following will app up once we *operate* it:
 
 - **`failover` target selection** — let Pacemaker choose (ban-current) vs always
   requiring `--to`? Lean: ban-current by default (let the cluster decide), `--to`

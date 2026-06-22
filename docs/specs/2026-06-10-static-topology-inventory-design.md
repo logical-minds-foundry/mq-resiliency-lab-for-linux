@@ -70,7 +70,7 @@ groups:                       # atomic role × site groups — the shared namesp
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   qm:     [qm-main]
-  dtcc:   [dtcc-sim]
+  svc:   [svc-sim]
   client: [app-client]
 
 setups:                       # compositions of groups (provision unchanged)
@@ -78,7 +78,7 @@ setups:                       # compositions of groups (provision unchanged)
   pcmk_san_dr: { groups: [san_a, san_b, pcmk_a, pcmk_b], provision: ansible/site-pcmk-dr.yml }
   rdqm_ha:     { groups: [rdqm_a],                       provision: ansible/site-rdqm.yml }
   rdqm_dr:     { groups: [rdqm_a, rdqm_b],               provision: ansible/site-rdqm.yml }
-  standalone:  { groups: [qm, dtcc, client],             provision: ansible/site.yml }
+  standalone:  { groups: [qm, svc, client],             provision: ansible/site.yml }
 ```
 
 `description:` is retained on each setup (used by `mqlab vm status`).
@@ -136,7 +136,7 @@ mirrors each host's existing per-node numbering for predictability:
 | host | mgmt IP | host | mgmt IP |
 |------|---------|------|---------|
 | qm-main | 10.50.0.10 | san-a | 10.50.0.5 |
-| dtcc-sim | 10.50.0.50 | pcmk-a1/2/3 | 10.50.0.51/52/53 |
+| svc-sim | 10.50.0.50 | pcmk-a1/2/3 | 10.50.0.51/52/53 |
 | app-client | 10.50.0.60 | san-b | 10.50.0.6 |
 | rdqm-a1/2/3 | 10.50.0.31/32/33 | pcmk-b1/2/3 | 10.50.0.61/62/63 |
 | rdqm-b1/2/3 | 10.50.0.41/42/43 | | |
@@ -183,8 +183,8 @@ one; #101 ships the standalone command.)
 | site-pcmk-dr.yml | `san-a` / `san-b` | `san_a` / `san_b` |
 | site.yml | `all` | `standalone` |
 | site.yml | `qm_hosts` / `client_hosts` | `qm` / `client` |
-| site.yml | `qm-main` / `dtcc-sim` | `qm` / `dtcc` |
-| site.yml | `dtcc-sim:app-client` | `dtcc:client` |
+| site.yml | `qm-main` / `svc-sim` | `qm` / `svc` |
+| site.yml | `svc-sim:app-client` | `svc:client` |
 
 `pcmk_a`, `pcmk_b`, `rdqm_a`, `rdqm_b` are unchanged (already underscore role
 groups). Sub-setup cuts (`pcmk_a` alone, etc.) stay — the two-level model

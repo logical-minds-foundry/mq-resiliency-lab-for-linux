@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the data-driven arm-backend seam — an `arms:` registry in `topology.yaml` + a `src/mqlab/arms.py` resolver — refactor the Pacemaker `mqlab qm` commands to dispatch through it, retire P1's `provisional_arm`/`parity.MATRIX` stopgaps, extract the shared distributed playbook, add the `mqweb` role to the in-house pcmk QM, and rename `distributed`→`distributed-pcmk-ubuntu`. Foundation for the RDQM backend (Plans B/C).
+**Goal:** Build the data-driven arm-backend seam — an `arms:` registry in `topology.yaml` + a `src/mqlab/arms.py` resolver — refactor the Pacemaker `mqlab qm` commands to dispatch through it, retire P1's `provisional_arm`/`parity.MATRIX` stopgaps, extract the shared distributed playbook, add the `mqweb` role to the app pcmk QM, and rename `distributed`→`distributed-pcmk-ubuntu`. Foundation for the RDQM backend (Plans B/C).
 
 **Architecture:** The registry is the single source of arm truth (catalog). A pure-Python resolver answers "for setup X, verb V, what runs?" The `qm` commands stop hardcoding `pcs`/playbooks and dispatch via the resolver. Mechanics stay in Ansible/scripts. No behavior change to the pcmk arm — proven by `mqlab run distributed-pcmk-ubuntu` green (regression net) + a pcmk cold boot.
 
@@ -20,7 +20,7 @@
 ## File Structure
 
 - Create: `src/mqlab/arms.py` — `Arm`, `lab_arms()`, `arm_of()`, `resolve_verb()`, `VerbImpl`.
-- Create: `ansible/site-distributed-shared.yml` — the shared dtcc/app/channel plays (extracted).
+- Create: `ansible/site-distributed-shared.yml` — the shared svc/app/channel plays (extracted).
 - Create: `ansible/roles/mqweb/` — reusable REST-enablement role (factored from `mq-qmgr`).
 - Modify: `lab/topology.yaml` — add `arms:` block; add `arm:` to each QM setup; rename `distributed`.
 - Modify: `src/mqlab/setups.py` — `Setup` gains `arm: str | None`.
@@ -91,7 +91,7 @@ In `lab_setups()`, set it from the topology cfg:
                 name=cfg["qm"]["name"],
                 vip=cfg["qm"]["vip"],
                 vip_ext=cfg["qm"]["vip_ext"],
-                dtcc_conn=cfg["qm"].get("dtcc_conn"),
+                svc_conn=cfg["qm"].get("svc_conn"),
             )
             if cfg.get("qm")
             else None,
@@ -305,7 +305,7 @@ In `src/mqlab/cli.py`, change the import and the call. Remove `parity.provisiona
 from mqlab.arms import arm_of
 # ...
     scenario = build_report(
-        "BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(firm)
+        "BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(app)
     )
 ```
 
@@ -420,13 +420,13 @@ vrg-commit --type refactor --scope qm --message "qm commands dispatch via the ar
 - Create: `ansible/site-distributed-shared.yml`
 - Modify: `ansible/site-distributed.yml`
 
-- [ ] **Step 1: Move the shared plays out.** Copy the `dtcc`/`app`/`mq-inter-qm` plays (everything after the `import_playbook: site-pcmk.yml` line — the cold-boot wait, the `dtcc` mq-install/mq-qmgr/mq-inter-qm plays, the `app` mq-client/app-requester plays) from `ansible/site-distributed.yml` into a new `ansible/site-distributed-shared.yml`. These plays already reference `our_qm` as a var — keep that.
+- [ ] **Step 1: Move the shared plays out.** Copy the `svc`/`app`/`mq-inter-qm` plays (everything after the `import_playbook: site-pcmk.yml` line — the cold-boot wait, the `svc` mq-install/mq-qmgr/mq-inter-qm plays, the `app` mq-client/app-requester plays) from `ansible/site-distributed.yml` into a new `ansible/site-distributed-shared.yml`. These plays already reference `our_qm` as a var — keep that.
 
 - [ ] **Step 2: Reduce `site-distributed.yml` to two imports:**
 
 ```yaml
 # Distributed MQ (#147), pcmk arm: the Pacemaker substrate + the shared
-# DTCC/app/channel layer. The shared layer lives in site-distributed-shared.yml so
+# SVC/app/channel layer. The shared layer lives in site-distributed-shared.yml so
 # the RDQM arm can import the same plays over its own substrate (RDQM-parity §4).
 - import_playbook: site-pcmk.yml
 - import_playbook: site-distributed-shared.yml
@@ -444,12 +444,12 @@ Expected: ansible syntax-check passes for both playbooks; full pipeline green.
 - [ ] **Step 4: Commit**
 
 ```bash
-vrg-commit --type refactor --scope ansible --message "extract site-distributed-shared.yml (substrate-free DTCC/app/channel plays) (#<plan-a-issue>)"
+vrg-commit --type refactor --scope ansible --message "extract site-distributed-shared.yml (substrate-free SVC/app/channel plays) (#<plan-a-issue>)"
 ```
 
 ---
 
-### Task 6: Reusable `mqweb` role; apply to the in-house pcmk QM
+### Task 6: Reusable `mqweb` role; apply to the app pcmk QM
 
 **Files:**
 - Create: `ansible/roles/mqweb/` (tasks/main.yml, templates/ — factored from `mq-qmgr`)
@@ -458,15 +458,15 @@ vrg-commit --type refactor --scope ansible --message "extract site-distributed-s
 
 - [ ] **Step 1: Factor the `mqweb` role.** Create `ansible/roles/mqweb/` containing the mqweb enablement currently inlined in `mq-qmgr` (the `mqweb.service` systemd unit from `templates/mqweb.service.j2`, the `mqwebuser.xml` from `templates/mqwebuser.xml.j2`, `strmqweb`, and the `mqweb_admin_user`/`mqweb_admin_password` wiring). Move those templates into `ansible/roles/mqweb/templates/`. The role takes the QM/user/password vars it already uses.
 
-- [ ] **Step 2: Apply `mqweb` to the in-house pcmk QM.** In `ansible/roles/mq-pcmk-qmgr/tasks/main.yml`, add (after the QM is created):
+- [ ] **Step 2: Apply `mqweb` to the app pcmk QM.** In `ansible/roles/mq-pcmk-qmgr/tasks/main.yml`, add (after the QM is created):
 
 ```yaml
-- name: enable the admin REST API on the in-house QM (every QM must expose REST — design §1)
+- name: enable the admin REST API on the app QM (every QM must expose REST — design §1)
   ansible.builtin.include_role:
     name: mqweb
 ```
 
-- [ ] **Step 3: De-dupe `mq-qmgr`** (optional but DRY): replace `mq-qmgr`'s inline mqweb tasks with `include_role: name: mqweb`, so QMDTCC and the in-house QMs share one mqweb implementation.
+- [ ] **Step 3: De-dupe `mq-qmgr`** (optional but DRY): replace `mq-qmgr`'s inline mqweb tasks with `include_role: name: mqweb`, so QMSVC and the app QMs share one mqweb implementation.
 
 - [ ] **Step 4: Validate** (syntax + the lab gate is Task 8):
 
@@ -476,7 +476,7 @@ Expected: ansible syntax-check green.
 - [ ] **Step 5: Commit**
 
 ```bash
-vrg-commit --type feat --scope mqweb --message "factor reusable mqweb role; enable REST on the in-house pcmk QM (design §1) (#<plan-a-issue>)"
+vrg-commit --type feat --scope mqweb --message "factor reusable mqweb role; enable REST on the app pcmk QM (design §1) (#<plan-a-issue>)"
 ```
 
 ---
@@ -531,7 +531,7 @@ mqlab qm create distributed-pcmk-ubuntu     # now arm-dispatched via the registr
 mqlab run distributed-pcmk-ubuntu           # the P1 baseline run — MUST go green
 ```
 
-Expected: `mqlab run distributed-pcmk-ubuntu` exits 0, baseline all-Confirmed, a report bundle under `build/reports/`. This proves the seam refactor + playbook extraction + rename didn't change pcmk behavior. Also confirm the in-house QM now answers REST (Task 6): `curl -sk https://<QMPCMK-vip>:9443/ibmmq/rest/v2/ ...` returns (auth per `mqweb_admin_user`).
+Expected: `mqlab run distributed-pcmk-ubuntu` exits 0, baseline all-Confirmed, a report bundle under `build/reports/`. This proves the seam refactor + playbook extraction + rename didn't change pcmk behavior. Also confirm the app QM now answers REST (Task 6): `curl -sk https://<QMPCMK-vip>:9443/ibmmq/rest/v2/ ...` returns (auth per `mqweb_admin_user`).
 
 - [ ] **Step 3: Record the cold-rebuild acceptance** per the lab's gate (the run from a clean state, one pass). Note any deviation as a finding.
 

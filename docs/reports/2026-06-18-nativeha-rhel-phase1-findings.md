@@ -36,21 +36,21 @@ disruptive move-back) — good HA hygiene, contrast the Pacemaker arm's
 - **OS-adapter thinness:** install is the only OS-specific surface
   (`install-RedHat.yml`); formation is shared — Phase 2 (Ubuntu) measures how thin.
 
-## Distributed mesh (`QMNATIVE` ↔ `QMDTCC` + app) — ✅
+## Distributed mesh (`QMNATIVE` ↔ `QMSVC` + app) — ✅
 
-`site-nativeha-distributed.yml` imports the shared, substrate-free DTCC/app layer
+`site-nativeha-distributed.yml` imports the shared, substrate-free SVC/app layer
 (identical to the rdqm/pcmk arms) over the Native HA substrate. **No floating VIP:**
-- QMDTCC's their-side channels reach `QMNATIVE` via a CONNAME list of the three
+- QMSVC's their-side channels reach `QMNATIVE` via a CONNAME list of the three
   `nha_rhel_a` **net-ext** IPs (mirrors RDQM's per-node CONNAME approach);
 - the app reaches `QMNATIVE` via a CONNAME list of the three **net-data-a** IPs,
   `MQCNO_RECONNECT` — connecting to whichever instance is active.
 
-Our-side MQSC (`APP.SVRCONN` + `DTCC.REQUEST` QREMOTE/XMITQ + SDR/RCVR) applied on
-the active instance and **replicated to all three by raft**. The `QMNATIVE.QMDTCC`
+Our-side MQSC (`APP.SVRCONN` + `SVC.REQUEST` QREMOTE/XMITQ + SDR/RCVR) applied on
+the active instance and **replicated to all three by raft**. The `QMNATIVE.QMSVC`
 SDR channel runs.
 
 **End-to-end proof:** `app_requester.py --qm QMNATIVE --conn <3-instance list>`
-→ **40/40 round-trips OK** (`req-NNNN` → `QMDTCC` responder → `REPLY:req-NNNN` back).
+→ **40/40 round-trips OK** (`req-NNNN` → `QMSVC` responder → `REPLY:req-NNNN` back).
 Same app contract as the other arms, new substrate.
 
 **Failover under live load — scope boundary found.** Killing the active instance

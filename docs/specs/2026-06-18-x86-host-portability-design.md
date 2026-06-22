@@ -161,7 +161,7 @@ The matching x86_64 Ubuntu MQ deb tarball name is **confirmed**:
 **The resolution matrix** — every provider field is a function of
 `(guest_arch, host_arch, kvm)`:
 
-| guest arch | host arch | KVM? | driver      | firmware            | cpu_mode          | boot_timeout | when                          |
+| guest arch | host arch | KVM? | driver      | appware            | cpu_mode          | boot_timeout | when                          |
 |------------|-----------|------|-------------|---------------------|-------------------|--------------|-------------------------------|
 | aarch64    | aarch64   | yes  | `kvm`       | AAVMF (loader+nvram)| host-passthrough  | default      | Mac dev — Ubuntu guests       |
 | x86_64     | x86_64    | yes  | `kvm`       | OVMF / default q35  | host-passthrough  | default      | x86 target — everything       |
@@ -371,7 +371,7 @@ idiom — no swallowed errors, no silent fallbacks:
   arch variants (confirmed via Vagrant Cloud) (§4.2).
 - x86_64 Ubuntu MQ tarball → `…-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz`
   (HTTP 200 confirmed) (§4.2/§7).
-- x86_64 firmware → keep the current default (q35/no explicit loader; today's TCG
+- x86_64 appware → keep the current default (q35/no explicit loader; today's TCG
   x86_64 path uses it and boots). AAVMF stays aarch64-only.
 
 **Still open for the plan:**

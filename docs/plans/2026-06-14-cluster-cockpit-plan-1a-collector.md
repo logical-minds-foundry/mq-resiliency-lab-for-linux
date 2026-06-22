@@ -907,7 +907,7 @@ In that play's `roles:` list, after the `net-reach` line, add:
 ```
 
 This runs the collector only on the cluster + SAN nodes, with the right `--role`, and
-skips obs/app/dtcc — matching how `net-reach` is conditionally applied. The role's
+skips obs/app/svc — matching how `net-reach` is conditionally applied. The role's
 `copy` src `{{ playbook_dir }}/../src/mqlab/clusterstate.py` resolves correctly because
 `observability.yml` lives in `ansible/`.
 

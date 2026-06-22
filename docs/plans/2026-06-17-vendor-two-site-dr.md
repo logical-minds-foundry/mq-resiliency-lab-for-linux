@@ -1,8 +1,8 @@
-# Two-site Vendor (DTCC) DR Model — Implementation Plan
+# Two-site Vendor (SVC) DR Model — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Model the DTCC/service side as a two-site DR pair and add a deliberate, operator-run failover utility so we can validate that our infrastructure survives both our own DR and the vendor's DR.
+**Goal:** Model the SVC/service side as a two-site DR pair and add a deliberate, operator-run failover utility so we can validate that our infrastructure survives both our own DR and the vendor's DR.
 
 **Architecture:** A new combined lab setup unions our full 2-site DR topology with a two-site vendor pair (same QM name, cold standby). Vendor DR is **not** automatic: because the vendor's DR site is a separate same-name QM instance with stale channel sequence numbers, a `RESET CHANNEL` is always required, so failover is an integration-tested Python utility over `pymqrest` (the admin REST wrapper) that the operator runs when the vendor declares DR. A 2×2 validation matrix proves zero message loss.
 
@@ -17,7 +17,7 @@
 - **Fail loud, never mask:** no swallowed exceptions, no silent fallbacks; verification failures exit non-zero with the actual state.
 - **Admin REST only + network probes** for the operational utility — it touches *our* QM via `pymqrest` and TCP-probes vendor endpoints; it never assumes vendor admin access. (The *sim* may drive vendor QMs because the lab owns them.)
 - **Creds:** `MQWEB_ADMIN_USER` / `MQWEB_ADMIN_PASSWORD`, runtime-injected, never committed.
-- **Vendor address block:** `10.60.0.40–.49`. `dtcc-sim-a = 10.60.0.40`, `dtcc-sim-b = 10.60.0.41`.
+- **Vendor address block:** `10.60.0.40–.49`. `svc-sim-a = 10.60.0.40`, `svc-sim-b = 10.60.0.41`.
 - **Validation:** `vrg-container-run -- vrg-validate` is the only gate. Watch the known gotchas: `StrEnum`/UP042, ruff magic-trailing-comma, **100% branch coverage**, `uv run pytest`, never mask exit codes.
 - **Acceptance:** lab bring-up change → accepted only after a full cold rebuild of the combined setup proves bring-up one-pass and the 2×2 matrix passes at zero loss. Pacemaker arm first, then RDQM.
 - **Commits:** `vrg-commit --type <type> --scope vendor-dr --message <msg>` (this branch: `feature/237-vendor-dr-model`).
@@ -29,8 +29,8 @@
 | File | Responsibility |
 |---|---|
 | `docs/reports/2026-06-17-vendor-dr-seqreset-spike.md` | **Create.** Spike findings: RESET-CHANNEL behavior + enumerated manual-step list (gates Task 3). |
-| `lab/topology.yaml` | **Modify.** Renumber `dtcc-sim` → `dtcc-sim-a` (.40); add `dtcc-sim-b` (.41); `dtcc` group; new `distributed-pcmk-dr` setup. |
-| `ansible/site-distributed-dr.yml` | **Create.** Combined provisioning: compose DR (`site-pcmk-dr.yml`) + distributed (`site-distributed-shared.yml`); provision `QMDTCC` identically on both vendor sites; stop site-B listener. |
+| `lab/topology.yaml` | **Modify.** Renumber `svc-sim` → `svc-sim-a` (.40); add `svc-sim-b` (.41); `svc` group; new `distributed-pcmk-dr` setup. |
+| `ansible/site-distributed-dr.yml` | **Create.** Combined provisioning: compose DR (`site-pcmk-dr.yml`) + distributed (`site-distributed-shared.yml`); provision `QMSVC` identically on both vendor sites; stop site-B listener. |
 | `ansible/roles/mq-inter-qm/...` | **Modify.** Parameterize the vendor target / both-site provisioning; request channel CONNAME default = vendor primary. |
 | `src/mqlab/mqadmin.py` | **Create.** Thin, typed `pymqrest` adapter implementing the `ChannelAdmin` protocol used by the utility (isolates REST calls for testability). |
 | `src/mqlab/vendor_dr.py` | **Create.** Pure failover/sim/status logic against the `ChannelAdmin` protocol (no I/O); the testable core. |
@@ -57,7 +57,7 @@ Use the IBM-docs canonical fetch path (browser UA → `oldUrl` → `/docs/api/v1
 
 - [ ] **Step 2: Reproduce empirically on a scratch lab**
 
-On a running lab, point `QMPCMK.QMDTCC` at a *fresh* same-name QM instance and start the channel; confirm it stalls on a sequence error. Then run `RESET CHANNEL(QMPCMK.QMDTCC)` + `START CHANNEL` and confirm flow resumes with no message loss (persistent messages on the xmitq drain). Capture the `runmqsc`/REST transcript.
+On a running lab, point `QMPCMK.QMSVC` at a *fresh* same-name QM instance and start the channel; confirm it stalls on a sequence error. Then run `RESET CHANNEL(QMPCMK.QMSVC)` + `START CHANNEL` and confirm flow resumes with no message loss (persistent messages on the xmitq drain). Capture the `runmqsc`/REST transcript.
 
 - [ ] **Step 3: Enumerate the manual-step list and write the report**
 
@@ -77,7 +77,7 @@ vrg-commit --type docs --scope vendor-dr --message "sequence-reset spike: confir
 - Modify: `lab/topology.yaml`
 
 **Interfaces:**
-- Produces: nodes `dtcc-sim-a` (`net-ext: 10.60.0.40`) and `dtcc-sim-b` (`net-ext: 10.60.0.41`); group `dtcc: [dtcc-sim-a, dtcc-sim-b]`; setup `distributed-pcmk-dr` with groups `[san_a, san_b, pcmk_a, pcmk_b, dtcc, app]` and `provision: ansible/site-distributed-dr.yml`. Consumed by Tasks 3–6 and the integration tests.
+- Produces: nodes `svc-sim-a` (`net-ext: 10.60.0.40`) and `svc-sim-b` (`net-ext: 10.60.0.41`); group `svc: [svc-sim-a, svc-sim-b]`; setup `distributed-pcmk-dr` with groups `[san_a, san_b, pcmk_a, pcmk_b, svc, app]` and `provision: ansible/site-distributed-dr.yml`. Consumed by Tasks 3–6 and the integration tests.
 
 - [ ] **Step 1: Write the failing topology-integrity test**
 
@@ -87,39 +87,39 @@ Add to `tests/test_topology_integrity.py`:
 def test_vendor_pair_and_combined_setup():
     topo = load_topology()  # existing helper in this test module
     nodes = topo["nodes"]
-    assert nodes["dtcc-sim-a"]["nics"]["net-ext"] == "10.60.0.40"
-    assert nodes["dtcc-sim-b"]["nics"]["net-ext"] == "10.60.0.41"
-    assert "dtcc-sim" not in nodes  # renamed, not left behind
-    assert topo["groups"]["dtcc"] == ["dtcc-sim-a", "dtcc-sim-b"]
+    assert nodes["svc-sim-a"]["nics"]["net-ext"] == "10.60.0.40"
+    assert nodes["svc-sim-b"]["nics"]["net-ext"] == "10.60.0.41"
+    assert "svc-sim" not in nodes  # renamed, not left behind
+    assert topo["groups"]["svc"] == ["svc-sim-a", "svc-sim-b"]
     setup = topo["setups"]["distributed-pcmk-dr"]
-    assert setup["groups"] == ["san_a", "san_b", "pcmk_a", "pcmk_b", "dtcc", "app"]
+    assert setup["groups"] == ["san_a", "san_b", "pcmk_a", "pcmk_b", "svc", "app"]
     assert setup["provision"] == "ansible/site-distributed-dr.yml"
 ```
 
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `uv run pytest tests/test_topology_integrity.py::test_vendor_pair_and_combined_setup -v`
-Expected: FAIL (KeyError on `dtcc-sim-a`).
+Expected: FAIL (KeyError on `svc-sim-a`).
 
 - [ ] **Step 3: Edit `lab/topology.yaml`**
 
-Rename the `dtcc-sim` node block to `dtcc-sim-a` and set `net-ext: 10.60.0.40`; add a `dtcc-sim-b` mirror at `10.60.0.41` (same `net-mgmt` pattern, e.g. `10.50.0.55`/`.56` — pick free mgmt IPs and assert them in the test too if you pin them). Update `dtcc: [dtcc-sim-a, dtcc-sim-b]`. Add the `distributed-pcmk-dr` setup:
+Rename the `svc-sim` node block to `svc-sim-a` and set `net-ext: 10.60.0.40`; add a `svc-sim-b` mirror at `10.60.0.41` (same `net-mgmt` pattern, e.g. `10.50.0.55`/`.56` — pick free mgmt IPs and assert them in the test too if you pin them). Update `svc: [svc-sim-a, svc-sim-b]`. Add the `distributed-pcmk-dr` setup:
 
 ```yaml
   distributed-pcmk-dr:
     description: Distributed MQ + full DR (Pacemaker) — our 2-site DR ⇄ two-site vendor DR (#237)
     arm: pcmk-ubuntu
-    groups: [san_a, san_b, pcmk_a, pcmk_b, dtcc, app]
+    groups: [san_a, san_b, pcmk_a, pcmk_b, svc, app]
     provision: ansible/site-distributed-dr.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
-    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.40 }
+    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.40 }
 ```
 
 - [ ] **Step 4: Reference sweep for the renumber**
 
-Update every `10.60.0.50` / `dtcc-sim` reference: `dtcc_conn` in `distributed-pcmk-ubuntu` and `distributed-rdqm-rhel` (→ `10.60.0.40`), the `topology.yaml` `dtcc-sim` comments (#147/#182), the their-side channel CONNAME source, and `docs/reference/lab-bootstrap.md`. Grep to confirm none remain:
+Update every `10.60.0.50` / `svc-sim` reference: `svc_conn` in `distributed-pcmk-ubuntu` and `distributed-rdqm-rhel` (→ `10.60.0.40`), the `topology.yaml` `svc-sim` comments (#147/#182), the their-side channel CONNAME source, and `docs/reference/lab-bootstrap.md`. Grep to confirm none remain:
 
-Run: `grep -rn "10.60.0.50\|dtcc-sim\b" lab/ ansible/ docs/reference/`
+Run: `grep -rn "10.60.0.50\|svc-sim\b" lab/ ansible/ docs/reference/`
 Expected: only intentional historical/doc mentions remain.
 
 - [ ] **Step 5: Run the test + validate**
@@ -213,18 +213,18 @@ from mqlab.vendor_dr import failover, VendorDRError
 def test_failover_runs_ordered_steps_and_resets(fake_admin):
     # fake_admin records calls; ping/chstatus return RUNNING after start
     res = failover(
-        fake_admin, channel="QMPCMK.QMDTCC", xmitq="QMDTCC",
+        fake_admin, channel="QMPCMK.QMSVC", xmitq="QMSVC",
         current_conn="10.60.0.40(1414)", target_conn="10.60.0.41(1414)",
         current_reachable=lambda: False,  # primary down
         target_reachable=lambda: True,    # DR up
     )
     assert res.switched and res.verified
     assert fake_admin.calls == [
-        ("stop_channel", "QMPCMK.QMDTCC"),
-        ("set_conname", "QMPCMK.QMDTCC", "10.60.0.41(1414)"),
-        ("reset_channel", "QMPCMK.QMDTCC"),       # MANDATORY
-        ("resolve_channel", "QMPCMK.QMDTCC"),
-        ("start_channel", "QMPCMK.QMDTCC"),
+        ("stop_channel", "QMPCMK.QMSVC"),
+        ("set_conname", "QMPCMK.QMSVC", "10.60.0.41(1414)"),
+        ("reset_channel", "QMPCMK.QMSVC"),       # MANDATORY
+        ("resolve_channel", "QMPCMK.QMSVC"),
+        ("start_channel", "QMPCMK.QMSVC"),
     ]
 ```
 
@@ -398,11 +398,11 @@ vrg-commit --type feat --scope vendor-dr --message "cli: mqlab vendor failover/s
 
 **Interfaces:**
 - Consumes: the `distributed-pcmk-dr` setup groups (Task 2).
-- Produces: a provisioned combined lab — our 2-site DR (`QMPCMK`) + identical `QMDTCC` on `dtcc-sim-a` and `dtcc-sim-b`, site-B listener stopped, request channel `QMPCMK.QMDTCC` CONNAME defaulting to the vendor primary (`10.60.0.40`).
+- Produces: a provisioned combined lab — our 2-site DR (`QMPCMK`) + identical `QMSVC` on `svc-sim-a` and `svc-sim-b`, site-B listener stopped, request channel `QMPCMK.QMSVC` CONNAME defaulting to the vendor primary (`10.60.0.40`).
 
 - [ ] **Step 1: Write `site-distributed-dr.yml`**
 
-Compose the existing plays: `import_playbook: site-pcmk-dr.yml` (our DR substrate) then `import_playbook: site-distributed-shared.yml` (DTCC/app/channels), extended so the DTCC plays run against the `dtcc` group (both sites) and explicitly **stop the site-B listener** at the end (cold standby). Inject `mqweb_admin_password` where the inter-QM/mqweb roles require it.
+Compose the existing plays: `import_playbook: site-pcmk-dr.yml` (our DR substrate) then `import_playbook: site-distributed-shared.yml` (SVC/app/channels), extended so the SVC plays run against the `svc` group (both sites) and explicitly **stop the site-B listener** at the end (cold standby). Inject `mqweb_admin_password` where the inter-QM/mqweb roles require it.
 
 - [ ] **Step 2: Ansible syntax check**
 

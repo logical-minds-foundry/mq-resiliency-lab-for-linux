@@ -6,7 +6,7 @@
 
 **Goal:** Drive a continuous, persistent + syncpoint message flow through the live lab, inject the §6 fault catalog under load, collect the ledgers and post-event snapshots, and feed them through the Plan-1 core to produce honest per-scenario evidence reports — RPO 0 for HA, classified RPO ≠ 0 for forced DR — on both arms (C and D).
 
-**Architecture:** Two `pymqi` clients (a continuous firm-side generator and a god's-eye DTCC responder) emit the app-side and god's-eye ledgers as they run. A scenario runner starts the flow, invokes existing lab fault primitives (`net-*.sh`, `rdqmdr` / `pcmk-dr-cutover.sh`, process/node kill, plus new quiesce and replication-degrade scripts), captures survivor/primary-disk queue snapshots, collects the ledgers off the nodes, and reconciles → classifies → reports via `mqlab.dr`. The DTCC responder and firm client run on the `dtcc-sim` and `app-client` nodes, which sit outside both data-center sites, so the god's-eye oracle and the firm ledger survive a full-site loss (spec §4.2, Issue 3).
+**Architecture:** Two `pymqi` clients (a continuous app-side generator and a god's-eye SVC responder) emit the app-side and god's-eye ledgers as they run. A scenario runner starts the flow, invokes existing lab fault primitives (`net-*.sh`, `rdqmdr` / `pcmk-dr-cutover.sh`, process/node kill, plus new quiesce and replication-degrade scripts), captures survivor/primary-disk queue snapshots, collects the ledgers off the nodes, and reconciles → classifies → reports via `mqlab.dr`. The SVC responder and app client run on the `svc-sim` and `app-client` nodes, which sit outside both data-center sites, so the god's-eye oracle and the app ledger survive a full-site loss (spec §4.2, Issue 3).
 
 **Tech Stack:** Python ≥3.12, `pymqi` (lab nodes only — not a dev/CI dep), the existing Vagrant/libvirt lab + Ansible, bash fault scripts under `lab/scripts/`. Pure-logic modules unit-tested with `pytest`; live drills validated by running them and inspecting the produced `ScenarioReport`.
 
@@ -20,8 +20,8 @@
 - [Task 2: Snapshot — extract present sequences (pure)](#task-2-snapshot--extract-present-sequences-from-browsed-bodies-pure)
 - [Task 3: Scenario catalog as data (pure)](#task-3-scenario-catalog-as-data-pure)
 - [Task 4: Deploy the mqlab.dr package onto the lab nodes](#task-4-deploy-the-mqlabdr-package-onto-the-lab-nodes)
-- [Task 5: Firm-side continuous flow generator (pymqi)](#task-5-firm-side-continuous-flow-generator-pymqi)
-- [Task 6: DTCC god's-eye responder (pymqi)](#task-6-dtcc-gods-eye-responder-pymqi)
+- [Task 5: App-side continuous flow generator (pymqi)](#task-5-app-side-continuous-flow-generator-pymqi)
+- [Task 6: SVC god's-eye responder (pymqi)](#task-6-svc-gods-eye-responder-pymqi)
 - [Task 7: Ledger collection + the LIVE self-correctness baseline](#task-7-ledger-collection--the-live-self-correctness-baseline)
 - [Task 8: Live queue snapshots + controlled DR (DR-CTRL)](#task-8-live-queue-snapshots--controlled-dr-dr-ctrl)
 - [Task 9: Forced DR (DR-FORCE-1/2/3) — reproduce and classify the loss](#task-9-forced-dr-dr-force-123--reproduce-and-classify-the-loss)
@@ -61,8 +61,8 @@
 | `src/mqlab/dr/catalog.py` | the §6 scenario catalog as data + expectations (pure) |
 | `src/mqlab/dr/collect.py` | pull ledgers off nodes, capture snapshots (lab) |
 | `src/mqlab/dr/runner.py` | run a scenario end-to-end → `ScenarioReport` → files (lab) |
-| `clients/dr_flow.py` | firm-side continuous generator (persistent + syncpoint, pymqi) |
-| `clients/dr_responder.py` | DTCC god's-eye responder (syncpoint, pymqi) |
+| `clients/dr_flow.py` | app-side continuous generator (persistent + syncpoint, pymqi) |
+| `clients/dr_responder.py` | SVC god's-eye responder (syncpoint, pymqi) |
 | `lab/scripts/quiesce-drain.sh` | controlled quiesce: `endmqm -c` after fail-if-quiescing drain |
 | `lab/scripts/drbd-degrade.sh` | throttle / break replication for DR-FORCE-3 |
 | `lab/scripts/capture-diag.sh` | under-fault `runmqras`/FFST + cluster/replication SEV-1 package |
@@ -86,16 +86,16 @@ from mqlab.dr.wire import build_body, parse_body
 
 
 def test_roundtrip_preserves_identity_and_payload():
-    body = build_body(seq=42, uuid="abc-123", busdate="20260608", trade="TRADE-0042")
+    body = build_body(seq=42, uuid="abc-123", session_date="20260608", trade="MSG-0042")
     msg = parse_body(body)
     assert msg.seq == 42
     assert msg.uuid == "abc-123"
-    assert msg.busdate == "20260608"
-    assert msg.trade == "TRADE-0042"
+    assert msg.session_date == "20260608"
+    assert msg.trade == "MSG-0042"
 
 
 def test_body_is_bytes_and_self_delimited():
-    body = build_body(seq=1, uuid="u1", busdate="20260608", trade="T|with|pipes")
+    body = build_body(seq=1, uuid="u1", session_date="20260608", trade="T|with|pipes")
     assert isinstance(body, bytes)
     # the trade field may contain the delimiter; parsing must still recover it
     assert parse_body(body).trade == "T|with|pipes"
@@ -112,7 +112,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'mqlab.dr.wire'`
 # src/mqlab/dr/wire.py
 """Self-identifying DR message body.
 
-Layout (UTF-8): "DRv1|<seq>|<uuid>|<busdate>|<trade...>"
+Layout (UTF-8): "DRv1|<seq>|<uuid>|<session_date>|<trade...>"
 The trade field is last, so it may contain the '|' delimiter without ambiguity
 (we split with maxsplit=4).
 """
@@ -127,20 +127,20 @@ _PREFIX = "DRv1"
 class WireMessage:
     seq: int
     uuid: str
-    busdate: str
+    session_date: str
     trade: str
 
 
-def build_body(*, seq: int, uuid: str, busdate: str, trade: str) -> bytes:
-    return "|".join([_PREFIX, str(seq), uuid, busdate, trade]).encode("utf-8")
+def build_body(*, seq: int, uuid: str, session_date: str, trade: str) -> bytes:
+    return "|".join([_PREFIX, str(seq), uuid, session_date, trade]).encode("utf-8")
 
 
 def parse_body(body: bytes) -> WireMessage:
     parts = body.decode("utf-8").split("|", 4)
     if len(parts) != 5 or parts[0] != _PREFIX:
         raise ValueError(f"not a DRv1 body: {body!r}")
-    _, seq, uuid, busdate, trade = parts
-    return WireMessage(seq=int(seq), uuid=uuid, busdate=busdate, trade=trade)
+    _, seq, uuid, session_date, trade = parts
+    return WireMessage(seq=int(seq), uuid=uuid, session_date=session_date, trade=trade)
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -174,8 +174,8 @@ from mqlab.dr.snapshot import seqs_from_bodies
 
 def test_extracts_seqs_and_ignores_foreign_bodies():
     bodies = [
-        build_body(seq=10, uuid="u10", busdate="20260608", trade="T10"),
-        build_body(seq=11, uuid="u11", busdate="20260608", trade="T11"),
+        build_body(seq=10, uuid="u10", session_date="20260608", trade="T10"),
+        build_body(seq=11, uuid="u11", session_date="20260608", trade="T11"),
         b"not-a-dr-message",            # foreign traffic must be ignored, not crash
     ]
     assert seqs_from_bodies(bodies) == {10, 11}
@@ -329,7 +329,7 @@ CATALOG: tuple[Scenario, ...] = (
              "primary unrecoverable, flow continues through cutover", False,
              (Bucket.STRANDED, Bucket.AMBIGUOUS)),
     Scenario("DR-FORCE-2", Kind.DR_FORCED,
-             "primary isolated from both DTCC and secondary, app keeps producing",
+             "primary isolated from both SVC and secondary, app keeps producing",
              False, (Bucket.STRANDED,)),
     Scenario("DR-FORCE-3", Kind.DR_FORCED,
              "replication lagged/broken then failover (chained)", False,
@@ -358,7 +358,7 @@ vrg-commit --type feat --scope dr --message "catalog: §6 scenarios as data with
 ## Task 4: Deploy the `mqlab.dr` package onto the lab nodes
 
 The live clients (Tasks 5–6) import `mqlab.dr.wire` and `mqlab.dr.ledger`. The
-node venvs currently get standalone `epn.py` only. Extend the client Ansible role
+node venvs currently get standalone `header.py` only. Extend the client Ansible role
 to install the package into `~/mqvenv`.
 
 **Files:**
@@ -390,12 +390,12 @@ into `mqlab_src/` so pip can build it; reuse the repo's `[project]` name `mqlab`
 
 - [ ] **Step 2: Re-provision the client nodes**
 
-Run (from the lab dir): `vagrant provision app-client dtcc-sim`
+Run (from the lab dir): `vagrant provision app-client svc-sim`
 Expected: the two plays converge green.
 
 - [ ] **Step 3: Verify the import works on a node**
 
-Run: `vagrant ssh dtcc-sim -c '~/mqvenv/bin/python -c "import mqlab.dr.wire, mqlab.dr.ledger; print(\"ok\")"'`
+Run: `vagrant ssh svc-sim -c '~/mqvenv/bin/python -c "import mqlab.dr.wire, mqlab.dr.ledger; print(\"ok\")"'`
 Expected: prints `ok`
 
 - [ ] **Step 4: Validate and commit**
@@ -408,11 +408,11 @@ vrg-commit --type feat --scope dr --message "ansible: install mqlab package into
 
 ---
 
-## Task 5: Firm-side continuous flow generator (pymqi)
+## Task 5: App-side continuous flow generator (pymqi)
 
 A long-running generator: a producer loop puts persistent messages under
 syncpoint at a target rate while a concurrent consumer loop drains replies and
-confirms them — both appending to the firm ledger. Runs until signalled.
+confirms them — both appending to the app ledger. Runs until signalled.
 
 **Files:**
 - Create: `clients/dr_flow.py`
@@ -421,14 +421,14 @@ confirms them — both appending to the firm ledger. Runs until signalled.
 
 ```python
 # clients/dr_flow.py
-"""Firm-side continuous flow generator (persistent + syncpoint).
+"""App-side continuous flow generator (persistent + syncpoint).
 
 Producer: build_body() -> MQPUT (PERSISTENT) under syncpoint -> commit ->
-          firm ledger SENT.
+          app ledger SENT.
 Consumer: MQGET reply (FAIL_IF_QUIESCING) under syncpoint -> commit ->
-          firm ledger CONFIRMED.
+          app ledger CONFIRMED.
 Run:  ~/mqvenv/bin/python ~/dr_flow.py --rate 50 --seconds 600 \
-          --ledger ~/dr-ledgers/firm.jsonl
+          --ledger ~/dr-ledgers/app.jsonl
 """
 from __future__ import annotations
 
@@ -441,7 +441,7 @@ import pymqi
 
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import build_body, parse_body
-from mqlab.epn import pack_header  # reuse the EPN header
+from mqlab.header import pack_header  # reuse the FFH header
 
 STOP = threading.Event()
 
@@ -458,7 +458,7 @@ def _connect():
 
 
 def producer(qmgr, rate, seconds, expiry, ledger, lock):
-    q = pymqi.Queue(qmgr, "DTCC.REQUEST")
+    q = pymqi.Queue(qmgr, "SVC.REQUEST")
     pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT)
     # MQ expiry is in tenths of a second; MQEI_UNLIMITED (-1) = no expiry, the
     # core-flow default (spec §5). FB-REPLAY passes a short expiry to show the
@@ -471,9 +471,9 @@ def producer(qmgr, rate, seconds, expiry, ledger, lock):
     while not STOP.is_set() and time.monotonic() < deadline:
         seq += 1
         u = uuidlib.uuid4().hex
-        body = build_body(seq=seq, uuid=u, busdate="20260608", trade=f"TRADE-{seq}")
-        q.put(pack_header(password="pw", sender="FIRM01", receiver="DTCCSVC",
-                          busdate="20260608").encode() + body, md, pmo)
+        body = build_body(seq=seq, uuid=u, session_date="20260608", trade=f"MSG-{seq}")
+        q.put(pack_header(password="pw", sender="APP01", receiver="SVC",
+                          session_date="20260608").encode() + body, md, pmo)
         qmgr.commit()
         with lock:
             ledger.append(LedgerEntry(Event.SENT, seq, u, time.time()))
@@ -482,7 +482,7 @@ def producer(qmgr, rate, seconds, expiry, ledger, lock):
 
 
 def consumer(qmgr, ledger, lock):
-    q = pymqi.Queue(qmgr, "TRADE.REPLY")
+    q = pymqi.Queue(qmgr, "APP.REPLY")
     gmo = pymqi.GMO(
         Options=pymqi.CMQC.MQGMO_SYNCPOINT
         | pymqi.CMQC.MQGMO_WAIT
@@ -503,7 +503,7 @@ def consumer(qmgr, ledger, lock):
 
 
 def _parse_reply(raw: bytes):
-    # the reply echoes the DRv1 body after the EPN header; find the DRv1 marker
+    # the reply echoes the DRv1 body after the FFH header; find the DRv1 marker
     idx = raw.find(b"DRv1|")
     return parse_body(raw[idx:])
 
@@ -537,27 +537,27 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-(Reply parsing locates the `DRv1|` marker because the responder echoes the EPN
+(Reply parsing locates the `DRv1|` marker because the responder echoes the FFH
 header ahead of the body; `_parse_reply` slices from that marker.)
 
 - [ ] **Step 2: Smoke it against the single-QM lab (no faults)**
 
 Bring up the Phase-B single-QM lab if not running, then:
-Run: `vagrant ssh app-client -c '~/mqvenv/bin/python ~/dr_flow.py --rate 20 --seconds 10 --ledger ~/dr-ledgers/firm.jsonl'`
+Run: `vagrant ssh app-client -c '~/mqvenv/bin/python ~/dr_flow.py --rate 20 --seconds 10 --ledger ~/dr-ledgers/app.jsonl'`
 (Run Task 6's responder first so replies flow.)
-Expected observation: command exits 0; `vagrant ssh app-client -c 'wc -l ~/dr-ledgers/firm.jsonl'` shows ~400 lines (≈200 SENT + ≈200 CONFIRMED at 20/s for 10s).
+Expected observation: command exits 0; `vagrant ssh app-client -c 'wc -l ~/dr-ledgers/app.jsonl'` shows ~400 lines (≈200 SENT + ≈200 CONFIRMED at 20/s for 10s).
 
 - [ ] **Step 3: Validate and commit**
 
 ```bash
 vrg-container-run -- vrg-validate
 vrg-git add clients/dr_flow.py
-vrg-commit --type feat --scope dr --message "clients: continuous persistent+syncpoint firm flow generator"
+vrg-commit --type feat --scope dr --message "clients: continuous persistent+syncpoint app flow generator"
 ```
 
 ---
 
-## Task 6: DTCC god's-eye responder (pymqi)
+## Task 6: SVC god's-eye responder (pymqi)
 
 Continuous responder: get each request under syncpoint, record a god's-eye
 RECEIVED (counting duplicates by identity), reply, record REPLIED, commit.
@@ -569,13 +569,13 @@ RECEIVED (counting duplicates by identity), reply, record REPLIED, commit.
 
 ```python
 # clients/dr_responder.py
-"""DTCC-side god's-eye responder (syncpoint).
+"""SVC-side god's-eye responder (syncpoint).
 
 Records RECEIVED for EVERY get (so a redelivered message counts as a duplicate,
 spec §5/Issue 8) and REPLIED for every reply, into the god's-eye ledger. Runs on
-the dtcc-sim node, which is outside both DC sites, so the oracle survives a full
+the svc-sim node, which is outside both DC sites, so the oracle survives a full
 site loss (Issue 3).
-Run: ~/mqvenv/bin/python ~/dr_responder.py --seconds 600 --ledger ~/dr-ledgers/dtcc.jsonl
+Run: ~/mqvenv/bin/python ~/dr_responder.py --seconds 600 --ledger ~/dr-ledgers/svc.jsonl
 """
 from __future__ import annotations
 
@@ -587,7 +587,7 @@ import pymqi
 
 from mqlab.dr.ledger import Event, Ledger, LedgerEntry
 from mqlab.dr.wire import parse_body
-from mqlab.epn import pack_header
+from mqlab.header import pack_header
 
 
 def main() -> int:
@@ -597,9 +597,9 @@ def main() -> int:
     args = ap.parse_args()
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
-    qmgr = pymqi.connect("QDTCC", "SIM.SVRCONN", "localhost(1414)")
-    qin = pymqi.Queue(qmgr, "TRADE.REQUEST")
-    qout = pymqi.Queue(qmgr, "FIRM.REPLY")
+    qmgr = pymqi.connect("QMSVC", "SVC.SVRCONN", "localhost(1414)")
+    qin = pymqi.Queue(qmgr, "SVC.REQUEST")
+    qout = pymqi.Queue(qmgr, "APP.REPLY")
     gmo = pymqi.GMO(
         Options=pymqi.CMQC.MQGMO_SYNCPOINT
         | pymqi.CMQC.MQGMO_WAIT
@@ -622,9 +622,9 @@ def main() -> int:
         msg = parse_body(raw[idx:])
         ledger.append(LedgerEntry(Event.RECEIVED, msg.seq, msg.uuid, time.time()))
         reply = (
-            pack_header(password="pw", sender="DTCCSVC", receiver="FIRM01",
-                        busdate=msg.busdate).encode()
-            + raw[idx:]  # echo the DRv1 body so the firm can match seq/uuid
+            pack_header(password="pw", sender="SVC", receiver="APP01",
+                        session_date=msg.session_date).encode()
+            + raw[idx:]  # echo the DRv1 body so the app can match seq/uuid
         )
         qout.put(reply, md_persist, pmo)
         qmgr.commit()
@@ -641,16 +641,16 @@ if __name__ == "__main__":
 
 - [ ] **Step 2: Smoke it with the generator (no faults)**
 
-Run (responder, backgrounded): `vagrant ssh dtcc-sim -c '~/mqvenv/bin/python ~/dr_responder.py --seconds 15 --ledger ~/dr-ledgers/dtcc.jsonl' &`
+Run (responder, backgrounded): `vagrant ssh svc-sim -c '~/mqvenv/bin/python ~/dr_responder.py --seconds 15 --ledger ~/dr-ledgers/svc.jsonl' &`
 Then run Task 5's generator for 10s.
-Expected observation: `vagrant ssh dtcc-sim -c 'wc -l ~/dr-ledgers/dtcc.jsonl'` shows ~400 lines (≈200 RECEIVED + ≈200 REPLIED), matching the firm's SENT count.
+Expected observation: `vagrant ssh svc-sim -c 'wc -l ~/dr-ledgers/svc.jsonl'` shows ~400 lines (≈200 RECEIVED + ≈200 REPLIED), matching the app's SENT count.
 
 - [ ] **Step 3: Validate and commit**
 
 ```bash
 vrg-container-run -- vrg-validate
 vrg-git add clients/dr_responder.py
-vrg-commit --type feat --scope dr --message "clients: DTCC god's-eye syncpoint responder (counts duplicates)"
+vrg-commit --type feat --scope dr --message "clients: SVC god's-eye syncpoint responder (counts duplicates)"
 ```
 
 ---
@@ -706,16 +706,16 @@ from .exposure import exposure
 
 def run_baseline(run_dir: str | Path, arm: str) -> "ScenarioReport":  # noqa: F821
     run = Path(run_dir)
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    facts = reconcile(firm, dtcc,
-                      secondary_present=firm.sent_seqs(),  # no fault: all present
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    facts = reconcile(app, svc,
+                      secondary_present=app.sent_seqs(),  # no fault: all present
                       primary_disk_present=set(),
                       cutover_ts=float("inf"))
     assert_self_correct(facts)  # FAIL LOUD if the instrument disagrees with itself
-    return build_report("BASELINE", arm, facts, peak_exposure=exposure(firm))
+    return build_report("BASELINE", arm, facts, peak_exposure=exposure(app))
 ```
 
 - [ ] **Step 2: Run the live baseline**
@@ -813,14 +813,14 @@ def run_dr_ctrl(run_dir, arm, active_node, secondary_node):
                         "sudo rdqmdr -m QMAIN -s"], check=True)
     else:
         subprocess.run(["lab/scripts/pcmk-dr-cutover.sh"], check=True)
-    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    facts = reconcile(firm, dtcc, secondary_present=secondary_present | firm.confirmed_seqs(),
+    secondary_present = browse_queue(secondary_node, "QMAIN", "SVC.REQUEST")
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    facts = reconcile(app, svc, secondary_present=secondary_present | app.confirmed_seqs(),
                       primary_disk_present=set(), cutover_ts=float("inf"))
-    return build_report("DR-CTRL", arm, facts, peak_exposure=exposure(firm))
+    return build_report("DR-CTRL", arm, facts, peak_exposure=exposure(app))
 ```
 
 - [ ] **Step 4: Run DR-CTRL on arm C**
@@ -887,16 +887,16 @@ def run_dr_force(run_dir, arm, scenario_id, active_node, secondary_node,
                         "sudo rdqmdr -m QMAIN -p"], check=True)
     else:
         subprocess.run(["lab/scripts/pcmk-dr-cutover.sh", "--force"], check=True)
-    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
+    secondary_present = browse_queue(secondary_node, "QMAIN", "SVC.REQUEST")
     # post-mortem: what is still on the dead primary's disk (once reachable)
-    primary_disk = browse_queue(active_node, "QMAIN", "DTCC.REQUEST")
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    facts = reconcile(firm, dtcc, secondary_present=secondary_present,
+    primary_disk = browse_queue(active_node, "QMAIN", "SVC.REQUEST")
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    facts = reconcile(app, svc, secondary_present=secondary_present,
                       primary_disk_present=primary_disk, cutover_ts=float("inf"))
-    return build_report(scenario_id, arm, facts, peak_exposure=exposure(firm))
+    return build_report(scenario_id, arm, facts, peak_exposure=exposure(app))
 ```
 
 - [ ] **Step 3: Run DR-FORCE-2 (the marquee) on arm C**
@@ -944,20 +944,20 @@ def run_ha(run_dir, arm, scenario_id, active_node, secondary_node, inject):
     """HA drill: inject an intra-site fault under flow; expect RPO 0 (Continued)."""
     run = Path(run_dir)
     inject()  # kill -9 / poweroff / net-sever / storage-sever / rolling patch
-    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    facts = reconcile(firm, dtcc,
-                      secondary_present=secondary_present | firm.confirmed_seqs(),
+    secondary_present = browse_queue(secondary_node, "QMAIN", "SVC.REQUEST")
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    facts = reconcile(app, svc,
+                      secondary_present=secondary_present | app.confirmed_seqs(),
                       primary_disk_present=set(), cutover_ts=float("inf"))
-    return build_report(scenario_id, arm, facts, peak_exposure=exposure(firm))
+    return build_report(scenario_id, arm, facts, peak_exposure=exposure(app))
 
 
 def run_fb_replay(run_dir, arm, recovered_node, secondary_node):
     """Operational-error failback: bring the recovered QM up against stale
-    storage BEFORE resync, let it drain, then observe duplicates at DTCC."""
+    storage BEFORE resync, let it drain, then observe duplicates at SVC."""
     run = Path(run_dir)
     if arm == "c":
         subprocess.run(["vagrant", "ssh", recovered_node, "-c",
@@ -965,13 +965,13 @@ def run_fb_replay(run_dir, arm, recovered_node, secondary_node):
     else:
         subprocess.run(["vagrant", "ssh", recovered_node, "-c",
                         "sudo -u mqm strmqm QMAIN"], check=False)
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    facts = reconcile(firm, dtcc, secondary_present=set(),
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    facts = reconcile(app, svc, secondary_present=set(),
                       primary_disk_present=set(), cutover_ts=float("inf"))
-    return build_report("FB-REPLAY", arm, facts, peak_exposure=exposure(firm))
+    return build_report("FB-REPLAY", arm, facts, peak_exposure=exposure(app))
 
 
 def write_outputs(run_dir, reports):
@@ -1033,7 +1033,7 @@ vrg-commit --type feat --scope dr --message "runner: HA suite + FB-REPLAY + outp
 ## Task 11: §7 report completeness — fault-time, exposure peak/at-fault, diagnostics, floor, envelope
 
 This task closes the alignment gaps (review 2026-06-08): every drill records the
-**fault timestamp** (so RTO, exposure-at-fault, and `firm_confirmed` are correct —
+**fault timestamp** (so RTO, exposure-at-fault, and `app_confirmed` are correct —
 the earlier `cutover_ts=float("inf")` was a placeholder), captures diagnostics
 under fault, enforces the evidence floor, and emits the confidence-envelope
 inputs. A single `_finish` helper replaces the ad-hoc report-building tails in
@@ -1082,19 +1082,19 @@ def _finish(scenario_id, arm, run, *, fault_ts, service_restored_ts,
             secondary_present, primary_disk, diag_node,
             intervention_required=False, integrity_anomaly=False):
     run = Path(run)
-    firm = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/firm.jsonl",
-                                         run / "firm.jsonl"))
-    dtcc = Ledger.read_jsonl(pull_ledger("dtcc-sim", "~/dr-ledgers/dtcc.jsonl",
-                                         run / "dtcc.jsonl"))
-    floor = meets_floor(firm, FLOOR)
+    app = Ledger.read_jsonl(pull_ledger("app-client", "~/dr-ledgers/app.jsonl",
+                                         run / "app.jsonl"))
+    svc = Ledger.read_jsonl(pull_ledger("svc-sim", "~/dr-ledgers/svc.jsonl",
+                                         run / "svc.jsonl"))
+    floor = meets_floor(app, FLOOR)
     if not floor.ok:
         raise RuntimeError(f"{scenario_id}/{arm}: run below evidence floor: {floor.reason}")
-    facts = reconcile(firm, dtcc, secondary_present=secondary_present,
+    facts = reconcile(app, svc, secondary_present=secondary_present,
                       primary_disk_present=primary_disk, cutover_ts=fault_ts)
     return build_report(
         scenario_id, arm, facts,
-        peak_exposure=peak_exposure(firm),
-        exposure_at_fault=exposure(firm, at_ts=fault_ts),
+        peak_exposure=peak_exposure(app),
+        exposure_at_fault=exposure(app, at_ts=fault_ts),
         rto_seconds=(service_restored_ts - fault_ts) if service_restored_ts else None,
         intervention_required=intervention_required,
         integrity_anomaly=integrity_anomaly,
@@ -1112,9 +1112,9 @@ def run_dr_force(run_dir, arm, scenario_id, active_node, secondary_node, inject)
                         "sudo rdqmdr -m QMAIN -p"], check=True)
     else:
         subprocess.run(["lab/scripts/pcmk-dr-cutover.sh", "--force"], check=True)
-    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
+    secondary_present = browse_queue(secondary_node, "QMAIN", "SVC.REQUEST")
     service_restored_ts = time.time()
-    primary_disk = browse_queue(active_node, "QMAIN", "DTCC.REQUEST")  # post-mortem
+    primary_disk = browse_queue(active_node, "QMAIN", "SVC.REQUEST")  # post-mortem
     return _finish(scenario_id, arm, run_dir, fault_ts=fault_ts,
                    service_restored_ts=service_restored_ts,
                    secondary_present=secondary_present, primary_disk=primary_disk,
@@ -1122,7 +1122,7 @@ def run_dr_force(run_dir, arm, scenario_id, active_node, secondary_node, inject)
 ```
 
 Apply the same routing to `run_baseline` (no fault: `fault_ts=time.time()` after
-flow ends, `service_restored_ts=None`, `secondary_present=firm.sent_seqs()`,
+flow ends, `service_restored_ts=None`, `secondary_present=app.sent_seqs()`,
 `primary_disk=set()`), `run_dr_ctrl`, `run_ha`. Delete the now-duplicated tails.
 
 - [ ] **Step 3: Add the confidence-envelope inputs writer**
@@ -1146,8 +1146,8 @@ def write_envelope_inputs(run_dir, reports):
 ```
 
 (For the cross-arm fairness check, before pairing assert the two arms' runs cleared
-the floor with matching `(rate, seconds)` — `meets_floor(firm_c).seconds` ≈
-`meets_floor(firm_d).seconds` within tolerance — and record any mismatch.)
+the floor with matching `(rate, seconds)` — `meets_floor(app_c).seconds` ≈
+`meets_floor(app_d).seconds` within tolerance — and record any mismatch.)
 
 - [ ] **Step 4: Re-run one drill end-to-end and inspect the enriched report**
 
@@ -1196,7 +1196,7 @@ def run_fb_replay_pair(run_dir, arm, recovered_node, secondary_node):
     else:
         subprocess.run(["vagrant", "ssh", recovered_node, "-c",
                         "sudo -u mqm strmqm QMAIN"], check=False)
-    secondary_present = browse_queue(secondary_node, "QMAIN", "DTCC.REQUEST")
+    secondary_present = browse_queue(secondary_node, "QMAIN", "SVC.REQUEST")
     leg = _finish("FB-REPLAY", arm, run_dir, fault_ts=fault_ts,
                   service_restored_ts=time.time(),
                   secondary_present=secondary_present, primary_disk=set(),

@@ -40,7 +40,7 @@
    a high `c-min-rate`.
 6. **Root cause #3 — host I/O contention.** With 11 VMs on the host the sync is
    I/O-bound regardless of DRBD config. Halting the non-essential VMs (the
-   message-path `qm-main`/`dtcc-sim`) was what finally let it reach
+   message-path `qm-main`/`svc-sim`) was what finally let it reach
    `UpToDate/UpToDate`.
 7. **The real fix — don't sync at all.** Both backing disks start **blank**, so a
    full 8 GB copy is pointless. `drbdadm new-current-uuid --clear-bitmap mqlun`

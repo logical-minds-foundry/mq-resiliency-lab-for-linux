@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Bring RHEL/RDQM to parity with the `distributed-pcmk-ubuntu` setup — `app → QMRDQM (3-node RDQM HA) ⇄ QMDTCC over net-ext → responder → reply` — driven by the same `mqlab` command surface, by implementing the `rdqm-rhel` backend behind Plan A's arm registry.
+**Goal:** Bring RHEL/RDQM to parity with the `distributed-pcmk-ubuntu` setup — `app → QMRDQM (3-node RDQM HA) ⇄ QMSVC over net-ext → responder → reply` — driven by the same `mqlab` command surface, by implementing the `rdqm-rhel` backend behind Plan A's arm registry.
 
-**Architecture:** Extend Plan A's data-driven seam to a second backend. The `qm` dispatch grows two verb kinds (`cmd`, `script`) and an arm-aware cluster group; the `rdqm-rhel` arm's registry verbs are filled from a live verb spike. A new `distributed-rdqm-rhel` setup composes the RDQM HA substrate with the *same* shared distributed layer (`site-distributed-shared.yml`) the pcmk arm uses, plus the RDQM-specific pieces: a `net-ext` partner link, the our-side inter-QM MQSC to QMDTCC, and `mqweb` on QMRDQM.
+**Architecture:** Extend Plan A's data-driven seam to a second backend. The `qm` dispatch grows two verb kinds (`cmd`, `script`) and an arm-aware cluster group; the `rdqm-rhel` arm's registry verbs are filled from a live verb spike. A new `distributed-rdqm-rhel` setup composes the RDQM HA substrate with the *same* shared distributed layer (`site-distributed-shared.yml`) the pcmk arm uses, plus the RDQM-specific pieces: a `net-ext` partner link, the our-side inter-QM MQSC to QMSVC, and `mqweb` on QMRDQM.
 
 **Tech Stack:** Python 3.12 (frozen dataclasses, `from __future__ import annotations`), the merged Plan A seam (`mqlab.arms`, `mqlab.cli` qm dispatch), Ansible, RHEL 9.6 x86-64 under TCG, IBM MQ Advanced for Developers + RDQM (`crtmqm -sx`/`-sxs`, `rdqmint`, `rdqmstatus`, `rdqmadm`), pytest (`uv run pytest`, 100% branch coverage).
 
@@ -318,7 +318,7 @@ vrg-commit --type feat --scope arms --message "arms: fill rdqm-rhel registry ver
 
 **Files:** Modify `lab/topology.yaml`, `lab/scripts/rdqm-qm-create.sh`
 
-**Why:** The `rdqm-a1..3` nodes have no `net-ext` NIC, so QMRDQM cannot reach QMDTCC (on `net-ext 10.60.0.50`). The pcmk arm floats `mq_vip_ext` on net-ext; RDQM needs the same partner-facing floating IP.
+**Why:** The `rdqm-a1..3` nodes have no `net-ext` NIC, so QMRDQM cannot reach QMSVC (on `net-ext 10.60.0.50`). The pcmk arm floats `mq_vip_ext` on net-ext; RDQM needs the same partner-facing floating IP.
 
 - [ ] **Step 1: Add `net-ext` to `rdqm-a1..3`** in `lab/topology.yaml` (the `nics:` of each), e.g. `net-ext: 10.60.0.31/.32/.33`. (Disjoint from pcmk's `.51/.52/.53`.)
 
@@ -343,20 +343,20 @@ vrg-commit --type feat --scope rdqm --message "rdqm: net-ext partner link + seco
 
 ---
 
-### Task 6: Our-side inter-QM MQSC to QMDTCC on RDQM
+### Task 6: Our-side inter-QM MQSC to QMSVC on RDQM
 
 **Files:** Modify `lab/scripts/rdqm-qm-create.sh` (or add `ansible/roles/.../inter-qm.mqsc.j2` reuse)
 
-**Why:** parity with `mq-pcmk-qmgr`, which (gated on `dtcc_conn`) defines the our-side `QREMOTE`/xmitq/`SENDER`/`RECEIVER`/`APP.REPLY` link to QMDTCC. `rdqm-qm-create.sh` defines only base objects.
+**Why:** parity with `mq-pcmk-qmgr`, which (gated on `svc_conn`) defines the our-side `QREMOTE`/xmitq/`SENDER`/`RECEIVER`/`APP.REPLY` link to QMSVC. `rdqm-qm-create.sh` defines only base objects.
 
-- [ ] **Step 1:** Add an optional `DTCC_CONN` arg (`$4`) to `rdqm-qm-create.sh`; when set, append the inter-QM MQSC (mirror `ansible/roles/mq-pcmk-qmgr/templates/inter-qm.mqsc.j2` — same object set, `CONNAME($DTCC_CONN)`, our reply queue `APP.REPLY`, the `QMRDQM.QMDTCC`/`QMDTCC.QMRDQM` channels) to the `runmqsc $QM` block. Thread `qm.dtcc_conn` through `_qm_script` as `$4`.
+- [ ] **Step 1:** Add an optional `SVC_CONN` arg (`$4`) to `rdqm-qm-create.sh`; when set, append the inter-QM MQSC (mirror `ansible/roles/mq-pcmk-qmgr/templates/inter-qm.mqsc.j2` — same object set, `CONNAME($SVC_CONN)`, our reply queue `APP.REPLY`, the `QMRDQM.QMSVC`/`QMSVC.QMRDQM` channels) to the `runmqsc $QM` block. Thread `qm.svc_conn` through `_qm_script` as `$4`.
 
 - [ ] **Step 2:** Verify the channel/queue object set matches what `site-distributed-shared.yml`'s `mq-inter-qm` role expects on the **their** side (so the bidirectional link forms). The shared layer's `mq-inter-qm` already takes `our_qm`/`our_conn` — they must name `QMRDQM` and the rdqm partner VIP (`10.60.0.30`) for the rdqm setup (Task 7 sets these).
 
 - [ ] **Step 3: Commit** (lab-validated at Task 8):
 
 ```bash
-vrg-commit --type feat --scope rdqm --message "rdqm: our-side inter-QM MQSC to QMDTCC when a counterparty is set (#216)"
+vrg-commit --type feat --scope rdqm --message "rdqm: our-side inter-QM MQSC to QMSVC when a counterparty is set (#216)"
 ```
 
 ---
@@ -372,10 +372,10 @@ def test_distributed_rdqm_setup_composed():
     from mqlab.setups import lab_setups
     s = lab_setups()["distributed-rdqm-rhel"]
     assert s.arm == "rdqm-rhel"
-    assert s.groups == ["rdqm_a", "dtcc", "app"]
+    assert s.groups == ["rdqm_a", "svc", "app"]
     assert s.provision == "ansible/site-rdqm-distributed.yml"
     assert s.qm is not None and s.qm.name == "QMRDQM"
-    assert s.qm.dtcc_conn == "10.60.0.50"
+    assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
 ```
 
@@ -383,21 +383,21 @@ def test_distributed_rdqm_setup_composed():
 
 ```yaml
   distributed-rdqm-rhel:
-    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ DTCC service QM (QMDTCC) over net-ext
+    description: Distributed MQ (RDQM arm) — app → site-A RDQM HA QM (QMRDQM) ⇄ SVC service QM (QMSVC) over net-ext
     arm: rdqm-rhel
-    groups: [rdqm_a, dtcc, app]
+    groups: [rdqm_a, svc, app]
     provision: ansible/site-rdqm-distributed.yml
     secrets: [mqweb_admin_password]
-    qm: { name: QMRDQM, vip: 10.10.1.100, vip_ext: 10.60.0.30, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMRDQM, vip: 10.10.1.100, vip_ext: 10.60.0.30, svc_conn: 10.60.0.50 }
 ```
 
 - [ ] **Step 3: Create `ansible/site-rdqm-distributed.yml`** (RDQM substrate + the same shared layer, `our_qm`/`our_conn` = QMRDQM and its partner VIP):
 
 ```yaml
 # Distributed MQ (#147), RDQM arm: the RDQM HA substrate (site-rdqm.yml) + the same
-# substrate-free DTCC/app/channel layer the pcmk arm uses (site-distributed-shared.yml,
+# substrate-free SVC/app/channel layer the pcmk arm uses (site-distributed-shared.yml,
 # RDQM-parity §4). Our-side inter-QM MQSC is created at `mqlab qm create
-# distributed-rdqm-rhel` (rdqm-qm-create.sh, gated on dtcc_conn — Task 6).
+# distributed-rdqm-rhel` (rdqm-qm-create.sh, gated on svc_conn — Task 6).
 - import_playbook: site-rdqm.yml
 
 - import_playbook: site-distributed-shared.yml
@@ -442,10 +442,10 @@ Expected: ruff + mypy + ty clean, **100% branch coverage**, ansible syntax-check
 ```bash
 mqlab net create all
 mqlab vm create distributed-rdqm-rhel
-mqlab vm provision distributed-rdqm-rhel       # site-rdqm-distributed.yml: RDQM HA + mqweb + DTCC/app shared layer
+mqlab vm provision distributed-rdqm-rhel       # site-rdqm-distributed.yml: RDQM HA + mqweb + SVC/app shared layer
 mqlab qm create distributed-rdqm-rhel          # arm-dispatched: rdqm-qm-create.sh QMRDQM 10.10.1.100 10.60.0.30 10.60.0.50
 mqlab qm status distributed-rdqm-rhel          # arm-dispatched: rdqmstatus -m QMRDQM
-bash lab/scripts/e2e-test.sh 5                 # app_requester → QMRDQM → QMDTCC → responder → APP.REPLY, ×5
+bash lab/scripts/e2e-test.sh 5                 # app_requester → QMRDQM → QMSVC → responder → APP.REPLY, ×5
 ```
 
 Expected: `5/5 round-trips OK` — RDQM at parity with the pcmk distributed arm on the same `mqlab` surface. Confirm QMRDQM answers REST: `curl -sk https://10.10.1.100:9443/ibmmq/rest/v2/` returns. **Functional only** (TCG; no timing claims). Record per the cold-rebuild acceptance gate.
@@ -466,4 +466,4 @@ Expected: `5/5 round-trips OK` — RDQM at parity with the pcmk distributed arm 
 
 **2. Placeholder scan:** The one deliberate fill-in is Task 4's `qm-up`/`qm-down` registry strings — explicitly "replace with the spike-verified command," which is the whole point of Task 1 (verified, not guessed, per design §5). Every Python step has complete code. The ansible/script tasks (5,6) are structural with the Task-8 cold boot as their gate (they're lab-semantics, not unit-testable) — stated as such.
 
-**3. Type consistency:** `Arm.cluster_group` (Task 2) consumed by `_qm_cluster_cmd` (Task 2) and `_qm_dispatch` (Task 3). `VerbImpl(kind, value)` kinds `playbook|pcs|cmd|script` consistent across Tasks 2–4. `_qm_script(setup_name, script, qm, verb)` signature matches its call site and the `qm.name`/`qm.vip`/`qm.vip_ext`/`qm.dtcc_conn` fields from `setups.QmConfig`. `our_qm`/`our_conn` thread from the setup's `QmConfig` into the shared playbook (Task 7) exactly as the pcmk `site-distributed.yml` does.
+**3. Type consistency:** `Arm.cluster_group` (Task 2) consumed by `_qm_cluster_cmd` (Task 2) and `_qm_dispatch` (Task 3). `VerbImpl(kind, value)` kinds `playbook|pcs|cmd|script` consistent across Tasks 2–4. `_qm_script(setup_name, script, qm, verb)` signature matches its call site and the `qm.name`/`qm.vip`/`qm.vip_ext`/`qm.svc_conn` fields from `setups.QmConfig`. `our_qm`/`our_conn` thread from the setup's `QmConfig` into the shared playbook (Task 7) exactly as the pcmk `site-distributed.yml` does.

@@ -4,7 +4,7 @@
 
 **Goal:** Build a reproducible, idempotent two-organization certificate-authority provider for the lab that issues per-entity PKCS#12 key repositories, driven by an `mqlab pki` command group.
 
-**Architecture:** An Ansible role (`lab-pki`) using the `community.crypto` collection builds two independent org CAs (`client-org`, `dtcc-org`), issues each entity's key + cert, and assembles per-entity PKCS#12 keystores (personal cert + key + the signer certs that entity must trust) under `build/secrets/pki/`. A `connection=local` playbook (`site-pki.yml`) runs it on the controller; the `mqlab pki` Typer group wraps the playbook following the established `mqlab qm` pattern. Keystore passwords come from the existing `lab/scripts/lab-secret.sh` (generate-persist-inject). Certificate expiry/rotation is **out of scope** (spec §8.2).
+**Architecture:** An Ansible role (`lab-pki`) using the `community.crypto` collection builds two independent org CAs (`app-org`, `svc-org`), issues each entity's key + cert, and assembles per-entity PKCS#12 keystores (personal cert + key + the signer certs that entity must trust) under `build/secrets/pki/`. A `connection=local` playbook (`site-pki.yml`) runs it on the controller; the `mqlab pki` Typer group wraps the playbook following the established `mqlab qm` pattern. Keystore passwords come from the existing `lab/scripts/lab-secret.sh` (generate-persist-inject). Certificate expiry/rotation is **out of scope** (spec §8.2).
 
 **Tech Stack:** Ansible (`ansible-core` + `community.crypto`), `cryptography` (Python), Typer/Rich (`mqlab` CLI), pytest, IBM MQ PKCS#12 key repositories (`SSLKEYR`/`KEYRPWD`).
 
@@ -120,30 +120,30 @@ vrg-commit --type build --scope pki --message "provision community.crypto reprod
 
 - [ ] **Step 1: Write the inventory**
 
-Create `ansible/vars/pki-entities.yml`. `org` selects the issuing CA; `trust` lists the CA names whose signer certs go into this entity's keystore (own org always implied; cross-org peers add the other CA). The in-house QMs share `O`/`OU` with distinct `CN`s (spec §5, partial-DN identity).
+Create `ansible/vars/pki-entities.yml`. `org` selects the issuing CA; `trust` lists the CA names whose signer certs go into this entity's keystore (own org always implied; cross-org peers add the other CA). The app QMs share `O`/`OU` with distinct `CN`s (spec §5, partial-DN identity).
 
 ```yaml
 ---
 # Two independent org CAs (spec §4). Each CA: name -> subject.
 pki_cas:
-  client-org:
-    common_name: "client-org Root CA"
-    organization_name: "client-org"
-  dtcc-org:
-    common_name: "dtcc-org Root CA"
-    organization_name: "dtcc-org"
+  app-org:
+    common_name: "app-org Root CA"
+    organization_name: "app-org"
+  svc-org:
+    common_name: "svc-org Root CA"
+    organization_name: "svc-org"
 
 # Entities. cn = certificate CN; org = issuing CA; ou = organizational unit;
 # trust = extra CA names this entity must trust (beyond its own org CA);
 # kind = personal (gets key+cert+keystore) | trust_only (gets a CA bundle only).
 pki_entities:
-  - { cn: QMPCMK,        org: client-org, ou: clearing-service, kind: personal,   trust: [dtcc-org] }
-  - { cn: QMRDQM,        org: client-org, ou: clearing-service, kind: personal,   trust: [dtcc-org] }
-  - { cn: app-client,    org: client-org, ou: apps,             kind: personal,   trust: [] }
-  - { cn: mq_prometheus, org: client-org, ou: ops,              kind: personal,   trust: [] }
-  - { cn: mqweb,         org: client-org, ou: ops,              kind: personal,   trust: [] }
-  - { cn: pymqrest,      org: client-org, ou: ops,              kind: trust_only, trust: [] }
-  - { cn: QMDTCC,        org: dtcc-org,   ou: clearing-service, kind: personal,   trust: [client-org] }
+  - { cn: QMPCMK,        org: app-org, ou: messaging, kind: personal,   trust: [svc-org] }
+  - { cn: QMRDQM,        org: app-org, ou: messaging, kind: personal,   trust: [svc-org] }
+  - { cn: app-client,    org: app-org, ou: apps,             kind: personal,   trust: [] }
+  - { cn: mq_prometheus, org: app-org, ou: ops,              kind: personal,   trust: [] }
+  - { cn: mqweb,         org: app-org, ou: ops,              kind: personal,   trust: [] }
+  - { cn: pymqrest,      org: app-org, ou: ops,              kind: trust_only, trust: [] }
+  - { cn: QMSVC,        org: svc-org,   ou: messaging, kind: personal,   trust: [app-org] }
 ```
 
 - [ ] **Step 2: Validate YAML loads**
@@ -155,7 +155,7 @@ Expected: PASS (ansible-lint/yamllint accept the vars file).
 
 ```bash
 vrg-git add ansible/vars/pki-entities.yml
-vrg-commit --type feat --scope pki --message "add the two-org PKI entity inventory (#201)" --body "Declares the client-org and dtcc-org CAs and the base-lab entities with their DNs (O/OU/CN), issuing CA, trust sets, and personal-vs-trust-only kind. In-house QMs share O/OU with distinct CNs (partial-DN identity, spec 5)."
+vrg-commit --type feat --scope pki --message "add the two-org PKI entity inventory (#201)" --body "Declares the app-org and svc-org CAs and the base-lab entities with their DNs (O/OU/CN), issuing CA, trust sets, and personal-vs-trust-only kind. In-house QMs share O/OU with distinct CNs (partial-DN identity, spec 5)."
 ```
 
 ### Task 3: Role defaults + CA creation
@@ -377,7 +377,7 @@ Run (from the worktree, on a VM with the collection installed):
 ansible-playbook ansible/site-pki.yml -c local -i localhost,
 ansible-playbook ansible/site-pki.yml -c local -i localhost,   # second run
 ```
-Expected: first run `changed`, **second run `ok=… changed=0`** (idempotent); `build/secrets/pki/ca/{client-org,dtcc-org}/ca.crt` and `build/secrets/pki/entities/QMPCMK/QMPCMK.p12` exist.
+Expected: first run `changed`, **second run `ok=… changed=0`** (idempotent); `build/secrets/pki/ca/{app-org,svc-org}/ca.crt` and `build/secrets/pki/entities/QMPCMK/QMPCMK.p12` exist.
 
 - [ ] **Step 4: Validate + commit**
 
@@ -508,12 +508,12 @@ def test_pki_list_prints_entities_from_vars(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     (tmp_path / "ansible" / "vars").mkdir(parents=True)
     (tmp_path / "ansible" / "vars" / "pki-entities.yml").write_text(
-        "pki_cas: {}\npki_entities:\n  - {cn: QMPCMK, org: client-org, ou: clearing-service, kind: personal, trust: [dtcc-org]}\n"
+        "pki_cas: {}\npki_entities:\n  - {cn: QMPCMK, org: app-org, ou: messaging, kind: personal, trust: [svc-org]}\n"
     )
     result = CliRunner().invoke(cli.app, ["pki", "list"])
     assert result.exit_code == 0
     assert "QMPCMK" in result.output
-    assert "client-org" in result.output
+    assert "app-org" in result.output
 ```
 
 - [ ] **Step 2: Run the tests — verify they fail**
@@ -645,7 +645,7 @@ Note in the PR description that the cold-rebuild gate passed (date, that `commun
 - §8.1 lifecycle (ensure/add/issue) → Tasks 5, 6, 7 (`ensure`, `issue`, idempotent re-run = add-entity).
 - §8.2 expiry/rotation deferred → out of scope (no task), as designed.
 - §9 CLI surface → Tasks 6, 7. Per §9, QM-side keystore distribution + `SSLKEYR`/`KEYRPWD` wiring is the first **downstream** step (not this plan); Task 8 exercises it only to load-test one keystore.
-- §10 GOV1683-24 fidelity → Task 3 defaults pin `pki_key_size: 4096`; signature digest is `community.crypto`'s SHA-256 default (representative). Cipher/TLS-version specifics are deferred downstream per §10.
+- §10 those security standards fidelity → Task 3 defaults pin `pki_key_size: 4096`; signature digest is `community.crypto`'s SHA-256 default (representative). Cipher/TLS-version specifics are deferred downstream per §10.
 - §3/§11 cold-rebuild gate + collection provisioning → Tasks 1, 9.
 - Pushback [1] galaxy provisioning → Task 1; [2] encoding → Tasks 4, 8; [3] partial-DN → Task 2; [4] mqweb coupling → out of this plan (downstream, flagged in spec §9); [5] runmqsc/trust-only → Task 2 (`trust_only`), Task 8.
 

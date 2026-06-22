@@ -767,7 +767,7 @@ vrg-commit --type feat --scope manifest --message "mqlab: thread manifest select
           kernel: "{{ p_kern.stdout }}"
           os: "{{ p_os.stdout }}"
 
-- hosts: dtcc                     # counterparty QM host (no pacemaker)
+- hosts: svc                     # counterparty QM host (no pacemaker)
   gather_facts: false
   tasks:
     - { name: mq,     ansible.builtin.command: dspmqver -b -f 2, register: d_mq,   changed_when: false }

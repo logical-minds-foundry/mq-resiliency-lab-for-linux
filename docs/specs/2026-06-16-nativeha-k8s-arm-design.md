@@ -2,7 +2,7 @@
 
 > ## ⏸️ ON HOLD (2026-06-16) — paused, not cancelled
 >
-> **The firm has decided not to pursue Kubernetes.** They are committed to a
+> **The app has decided not to pursue Kubernetes.** They are committed to a
 > **DMZ-based deployment on bare metal / VMs**, so this Native-HA-on-Kubernetes
 > arm is **paused**. The design below is complete and remains valid — revisit it
 > if the Kubernetes option reopens.
@@ -36,11 +36,11 @@ leapfrog**, and that reframing — not the technology — is what is new here.
 
 The chain that creates the problem:
 
-1. The firm standardizes on **RHEL/OpenShift** and is deliberately
+1. The app standardizes on **RHEL/OpenShift** and is deliberately
    risk-averse — IBM-supportability first, deviation from the status quo second
    (consistent with the authoritative design's most heavily-weighted criterion,
    §2.7/§3, and confirmed at engagement start).
-2. Outside Kubernetes, the in-house MQ service is expected to land in a
+2. Outside Kubernetes, the app MQ service is expected to land in a
    **DMZ**.
 3. The DMZ has **no support for VMs** → it forces **bare metal**.
 4. Bare metal has **no support for the kickstart/automation estate** → it forces
@@ -48,7 +48,7 @@ The chain that creates the problem:
 5. Manual installation is **not reproducible** — for a critical, regulated,
    greenfield service, that is serious technical debt the moment it ships.
 
-The escape hatch the firm itself surfaced:
+The escape hatch the app itself surfaced:
 
 > The security team will **exempt a workload from the DMZ if it runs in
 > Kubernetes**, because they are satisfied they can control and limit its access
@@ -59,27 +59,27 @@ And Kubernetes has exactly one first-class HA mechanism for a queue manager:
 hatch and the HA mechanism are the same decision.
 
 **The play:** if the lab can demonstrate *reliable HADR message flow* through a
-Native-HA-on-Kubernetes deployment — slotted into the same app↔QM↔DTCC
+Native-HA-on-Kubernetes deployment — slotted into the same app↔QM↔SVC
 architecture already built — that evidence becomes the basis to propose
 Kubernetes as a **secondary, or even a replacement, architecture**. Success
 collapses the DMZ + bare-metal + manual-install complexity into a single, far
 simpler ask: **punch controlled firewall holes to a Kubernetes ingress** so
-remote queue managers can reach the in-house service.
+remote queue managers can reach the app service.
 
 ### 1.1 Greenfield — a tailwind, not only a challenge
 
-The firm has **zero internal MQ infrastructure**. No one there has MQ
-experience; the engagement exists precisely to build this in-house, off a
+The app has **zero internal MQ infrastructure**. No one there has MQ
+experience; the engagement exists precisely to build this app, off a
 third-party gateway provider, on a tight timeline. Two consequences:
 
 - **It removes a whole class of objection to the leapfrog.** There is no
   incumbent MQ deployment the Kubernetes path must stay compatible with — "it
   won't match how we already run MQ" cannot be raised, because there is nothing
-  to disrupt. The only real compatibility constraints are (a) the firm's
-  Kubernetes/platform/security standards and (b) the external DTCC interface,
+  to disrupt. The only real compatibility constraints are (a) the app's
+  Kubernetes/platform/security standards and (b) the external SVC interface,
   both of which the Native-HA-on-K8s path can satisfy directly.
 - **It raises the stakes on the lab being right.** For the next six months the
-  lab is effectively the firm's *sole* source of MQ HADR truth. The design owes
+  lab is effectively the app's *sole* source of MQ HADR truth. The design owes
   the same evidence discipline (§3, §4 of the authoritative design) it always
   did — only now there is no internal expertise to catch a wrong call.
 
@@ -125,7 +125,7 @@ build (§4) is its proof.
 
 **Decided 2026-06-16:** open as an **early-warning flag plus evidence-building**,
 not a decision demand. Rationale: credibility must precede deviation from the
-IBM/status-quo path, and the author is new to the firm — the play is high-reward,
+IBM/status-quo path, and the author is new to the app — the play is high-reward,
 but a premature hard ask risks the standing needed to land it later. The argument
 below is therefore framed as *what the investigation aims to demonstrate*, not as
 an immediate demand.
@@ -141,7 +141,7 @@ The escalation ladder (stages, not stances):
    when evidence is overwhelming and standing is established.
 
 **Triggers to escalate 1 → 2:** the lab demonstrates reliable end-to-end HADR
-message flow (§4); the firm confirms the OpenShift/security DMZ-exemption **in
+message flow (§4); the app confirms the OpenShift/security DMZ-exemption **in
 writing**; and a CRR-capable version stream (CD vs LTS, §7) is viable on the
 timeline.
 
@@ -165,21 +165,21 @@ and here is the mitigation I am already proving out."
   team already trusts (NetworkPolicies, ingress/Route config, mTLS), which is
   *why* they will exempt it.
 - **Two controlled boundaries, named honestly.** *Two* cross-cluster paths, not
-  one: the client/DTCC **ingress** (Routes, §4.5) and the **inter-region CRR
+  one: the client/SVC **ingress** (Routes, §4.5) and the **inter-region CRR
   replication link** (TLS, async, §4.4). Naming both up front is more honest than
   implying a single boundary.
 - **Bare metal eliminated.** Workloads are pods on the existing OpenShift estate;
   no DMZ-specific bare-metal footprint to provision and hand-maintain.
 - **Supportability preserved.** The **IBM-recommended** shape (Operator + Native
   HA + CRR), so the play does *not* trade away the IBM-supportability criterion
-  the firm weights highest — it stays inside IBM's blessed envelope, unlike a
+  the app weights highest — it stays inside IBM's blessed envelope, unlike a
   bespoke self-managed cluster.
 - **Greenfield tailwind (§1.1).** Nothing to stay compatible with internally.
 
 ### 3.4 Honest framing
 
 This is a long shot on **timeline**, not on **soundness**: the risk is whether
-the team can come up to speed and the firm can deploy inside the engagement
+the team can come up to speed and the app can deploy inside the engagement
 window — not whether the architecture is right. The CRR CD-vs-LTS gate (§7) is
 the single biggest timeline variable. State both plainly; overselling the
 timeline is how trust is lost.
@@ -284,12 +284,12 @@ introduced in **MQ 9.4.2** (a Continuous Delivery release, Feb 2025).
   reconciliation.
 
 **The inter-region replication link is a second controlled cross-cluster
-boundary** (distinct from the §4.5 client/DTCC ingress): the CRR replication
+boundary** (distinct from the §4.5 client/SVC ingress): the CRR replication
 endpoints connect cluster-A ↔ cluster-B over the simulated WAN, TLS-secured.
 
 **Endpoint exposure — resolved (validated 2026-06-16).** IBM documents
 **OpenShift Routes with TLS passthrough + SNI** as the mechanism for CRR data
-traffic — the *same* mechanism as the client/DTCC listener ingress (§4.5), so one
+traffic — the *same* mechanism as the client/SVC listener ingress (§4.5), so one
 ingress pattern covers both boundaries. The flow: deploy the Recovery group,
 retrieve its Route address(es), and populate them as the `address` values in the
 `nativeHAGroups.remotes` config of each group. (On vanilla Kubernetes/Helm, where
@@ -318,7 +318,7 @@ build time). This extends the existing `mqlab net` slice.
 **OpenShift Routes (TLS SNI passthrough)** — IBM's documented MQ-on-OpenShift
 ingress pattern — are the controlled cluster ingress. This is not an incidental
 wiring choice: **the Route is the artifact that replaces the DMZ gateway**, and
-the strategic case (§3) anchors here. External fixtures (`dtcc-sim`, `app-client`)
+the strategic case (§3) anchors here. External fixtures (`svc-sim`, `app-client`)
 attach through the Route exactly as a remote counterparty QM would in production.
 
 *(Supersedes the earlier brainstorm fork between a MetalLB LoadBalancer IP and an
@@ -367,14 +367,14 @@ node-failure HA. Record the compromise explicitly if reached.
 
 ### 4.8 App-flow slotting
 
-The in-house HA queue manager becomes **`QMNATIVE`**, replacing `QMPCMK`/`QMRDQM`
-as the in-house substrate in the existing distributed architecture
+The app HA queue manager becomes **`QMNATIVE`**, replacing `QMPCMK`/`QMRDQM`
+as the app substrate in the existing distributed architecture
 ([`2026-06-13-distributed-mq-architecture-design.md`](2026-06-13-distributed-mq-architecture-design.md)):
-`QMNATIVE ↔ QMDTCC` across the simulated WAN, `app-client` puts trades,
-`dtcc-sim` replies. **Same app contract, new substrate** — so the arm drops into
+`QMNATIVE ↔ QMSVC` across the simulated WAN, `app-client` puts trades,
+`svc-sim` replies. **Same app contract, new substrate** — so the arm drops into
 the message flow already built, and the comparison stays like-for-like.
 
-**Fixture wiring (cross-substrate).** `app-client` and `dtcc-sim` stay containers
+**Fixture wiring (cross-substrate).** `app-client` and `svc-sim` stay containers
 on the dev-VM runtime, but they now reach `QMNATIVE` **as external clients through
 its Route** — which is *good* fidelity: they behave exactly as a remote
 counterparty/app would in production. The consequence: the fixtures must speak
@@ -390,7 +390,7 @@ can run plaintext for convenience. **On this substrate that is impossible:**
 
 - **OpenShift Route SNI routing requires TLS** — the router selects the backend
   from the SNI hostname *inside the TLS handshake*. No TLS, no routing. This binds
-  the client/DTCC ingress (§4.5), the CRR replication link (§4.4), the admin REST
+  the client/SVC ingress (§4.5), the CRR replication link (§4.4), the admin REST
   Route (§4.10), and the fixture connections (§4.8).
 - **CRR replication is TLS-secured** between sites by design.
 
@@ -406,7 +406,7 @@ than bolt on a minimal cert hack, the decision is to **do it properly:**
   accepted as the price of doing it right.
 - **Distinguish two things:** *transport-TLS-as-plumbing* (mandatory here, in
   scope) vs. *security posture/hardening* — auth policy, mTLS client-auth, channel
-  exits, DTCC's mandated transport security — which remains a separate,
+  exits, SVC's mandated transport security — which remains a separate,
   requirements-driven effort (still out of scope for *this* arm, per §1). The
   DMZ-vs-NetworkPolicy security-equivalence argument for the pitch also lands in
   that workstream.
@@ -446,7 +446,7 @@ Deployment** to preserve them as-is. Either way, no host/local-bindings exporter
 
 A natural and important question: can MQ simply inherit Kubernetes' own HADR and
 have it "just work"? The honest answer shapes both the design and what we ask the
-firm.
+app.
 
 - *(Data)* Kubernetes natively provides **intra-cluster HA** — it reschedules
   pods onto healthy nodes and handles node failure. Native HA leans on this. But
@@ -464,7 +464,7 @@ firm.
   asynchronous infrastructure layer with a coarse RPO, when the whole thesis is
   *the data layer should own replication.* Expectation: **piggyback on
   Kubernetes for HA; have MQ own DR.**
-- *(The nuance that makes it a real question)* The firm may nonetheless have a
+- *(The nuance that makes it a real question)* The app may nonetheless have a
   *blessed platform DR pattern* for stateful workloads that they expect everything
   to use. If so, that is a gap we must understand — it could mean modeling *their*
   DR layer alongside, or instead of, MQ-native DR. This is why it leads the
@@ -472,13 +472,13 @@ firm.
 
 **Confirmed 2026-06-16:** IBM's own DR answer for Native HA *is* MQ-owns-DR —
 **CRR** (§4.4), asynchronous, MQ-layer replication. The piggyback judgment holds;
-the only open part is whether the firm mandates a platform DR pattern we must
+the only open part is whether the app mandates a platform DR pattern we must
 *also* accommodate.
 
 ## 6. Gap-analysis question bank
 
 The lab proves a *concept*; its value depends on knowing where the lab diverges
-from the firm's reality and whether each divergence *matters*. Because the firm
+from the app's reality and whether each divergence *matters*. Because the app
 is **greenfield for MQ** (§1.1), the bank splits by *who can answer*:
 
 ### Bucket A — for the platform / Kubernetes / security team (answerable)
@@ -502,22 +502,22 @@ Kubernetes practice.
 - **Release stream — LTS or CD?** CRR (the DR mechanism, §4.4) is **CD-only
   (9.4.2+), not in 9.4.0 LTS**, and is a **paid license add-on**. Which stream
   will they run, and is the CRR add-on budgeted? *(Unknown as of 2026-06-16; the
-  author is asking the firm today. Pivotal — it gates the timeline of the whole
+  author is asking the app today. Pivotal — it gates the timeline of the whole
   play, §7.)*
 
-### Bucket B — the third-party gateway & the DTCC interface (answerable, but from the vendor relationship / contract / DTCC, not internal MQ staff)
+### Bucket B — the third-party gateway & the SVC interface (answerable, but from the vendor relationship / contract / SVC, not internal MQ staff)
 The one place MQ-adjacent reality exists today.
 
 - What does the current **third-party gateway** actually do — what protocol and
-  direction is the firm→gateway link, and what must in-house MQ replace?
-- **Connection direction to DTCC:** does DTCC initiate **inbound** to us, or do
-  we initiate **outbound** to DTCC? (Changes the firewall-hole story entirely;
-  partly pre-answerable from DTCC's public FICC EPN MQ guide — §9.1 of the
+  direction is the app→gateway link, and what must app MQ replace?
+- **Connection direction to SVC:** does SVC initiate **inbound** to us, or do
+  we initiate **outbound** to SVC? (Changes the firewall-hole story entirely;
+  partly pre-answerable from SVC's public SVC FFH MQ guide — §9.1 of the
   authoritative design already references it.)
-- DTCC's mandated transport/security and resilience/test requirements (public
-  floor documented in §4.6; the firm's contractual specifics TBD).
+- SVC's mandated transport/security and resilience/test requirements (public
+  floor documented in §4.6; the app's contractual specifics TBD).
 
-### Bucket C — questions the lab owns (research agenda, not questions for the firm)
+### Bucket C — questions the lab owns (research agenda, not questions for the app)
 No internal MQ expertise exists, so these become the lab's job, informed by IBM
 docs and the engagement.
 
@@ -544,10 +544,10 @@ Listed explicitly so no one mistakes silence for an oversight.
   CRR landed in **MQ 9.4.2 (CD, Feb 2025)** — it is **not in the 9.4.0 LTS**
   baseline Appendix C assumes — and it is a **paid production license add-on**
   (expanded for K8s/OpenShift in 9.4.3). *(Judgment)* For a risk-averse,
-  LTS-preferring firm needing this by October, that is a real tension: they must
-  run a CD stream or wait for the next LTS to roll CRR up. **The firm's CD-vs-LTS
+  LTS-preferring app needing this by October, that is a real tension: they must
+  run a CD stream or wait for the next LTS to roll CRR up. **The app's CD-vs-LTS
   posture is currently unknown and pivotal** — it gates the timeline of the whole
-  play. Question raised to the firm (§6 bucket A, author asking 2026-06-16);
+  play. Question raised to the app (§6 bucket A, author asking 2026-06-16);
   verify the lab dev-entitlement unlocks CRR before building (§6 bucket C).
 - **CRR is newer/less-proven** (~16 months old at writing) — confirms the
   learning-cost flag (#187 §6); the DR *mechanism* is now understood (§4.4), but
@@ -569,7 +569,7 @@ Listed explicitly so no one mistakes silence for an oversight.
   adaptation). Tractable, but explicit build tasks, not freebies.
 - **arm64-lab vs x86-prod arch gap** — believed immaterial (§6); confirm via
   Bucket A.
-- **The firm's Kubernetes/security specifics are unconfirmed** — pending direct
+- **The app's Kubernetes/security specifics are unconfirmed** — pending direct
   questions (§6); the DMZ-exemption premise needs to be confirmed *in writing*,
   not verbal.
 - **Timeline, not soundness, is the real risk** (§3) — team ramp-up and
@@ -588,7 +588,7 @@ Settled in brainstorming (2026-06-16):
 3. IBM-recommended stack modelled: **Operator + Native HA CRD + Routes + oc /
    RHCOS**. ✅
 4. Ingress: **OpenShift Routes** (settles the earlier LB-vs-ingress fork). ✅
-5. App slot: **`QMNATIVE`** replaces the in-house HA QM in the distributed mesh.
+5. App slot: **`QMNATIVE`** replaces the app HA QM in the distributed mesh.
    ✅
 6. DR mechanism: **Native HA CRR** validated (§4.4) — two clusters,
    sync-local/async-cross, manual switchover/failover via the CRD. ✅
@@ -620,7 +620,7 @@ A `paad:pushback` review hardened the spec. Resolutions:
    is the spike's second gate (§4.2, §4.7).
 5. **Storage named** — in-cluster RWO block CSI provider, a spike build task
    (§4.2).
-6. **Fixture wiring** — `app-client`/`dtcc-sim` attach as external clients via the
+6. **Fixture wiring** — `app-client`/`svc-sim` attach as external clients via the
    Route, must speak TLS+SNI (§4.8).
 7. **Mandatory bolt-ons documented** — admin REST API (co-located) + metrics
    (native Operator), with the must-engineer flag (§4.10).
@@ -632,10 +632,10 @@ A `paad:pushback` review hardened the spec. Resolutions:
   `develop`, issue #198). ✅ on merge.
 - **The next design effort is the lab-security layer** (§4.9) — now a blocking
   dependency for this arm, and the immediate next brainstorm.
-- *Pending external input:* the firm's **CD-vs-LTS posture** and the other Bucket A
-  questions (§6), which the author is asking the firm.
+- *Pending external input:* the app's **CD-vs-LTS posture** and the other Bucket A
+  questions (§6), which the author is asking the app.
 - Implementation planning (writing-plans) is **not** triggered yet. The arm build
   is gated behind **three** things: the RDQM/Pacemaker framework proof (§2), the
   §4.7 feasibility spike (arm64 first), and the **lab-security layer** (§4.9). The
   first plannable unit is the **Phase-A feasibility spike**, once the security
-  brainstorm is under way and the firm's stream answer is in.
+  brainstorm is under way and the app's stream answer is in.

@@ -4,12 +4,12 @@
 > **Date:** 2026-06-03
 > **Author:** Phillip Moore (with Claude)
 > **Context:** Pre-engagement R&D for a client — a large financial services
-> firm bringing IBM MQ (DTCC clearing connectivity) in-house off a third-party
+> app bringing IBM MQ (SVC messaging connectivity) app off a third-party
 > provider. The client standardizes on Ubuntu Linux and wants to own the
-> service. The workload is **back-office post-trade clearing/settlement** with
-> DTCC — *not* real-time trade execution — so uptime/latency/throughput
+> service. The workload is **back-office post-trade messaging/settlement** with
+> SVC — *not* real-time trade execution — so uptime/latency/throughput
 > requirements differ from front-office systems and are **TBD** pending
-> client/DTCC input. This repo is a personal home-lab harness on an Apple M5
+> client/SVC input. This repo is a personal home-lab harness on an Apple M5
 > Max (128 GB, arm64) used to develop and validate portable MQ HA/DR tooling
 > **before the contract engagement begins (2026-06-15)**. The aim is to arrive
 > with the knowledge, hands-on understanding, and ideally some working tooling
@@ -17,11 +17,11 @@
 > production rollout happens later, on the client's own timeline.
 >
 > **Anonymization note:** this is deliberately generic, non-proprietary
-> industry work. A large enterprise needing to clear post-trade with DTCC over
+> industry work. A large enterprise needing to clear post-trade with SVC over
 > IBM MQ on a Linux cluster is a common, well-understood use case — none of it
 > is client-specific. The specific client is intentionally **not named** so
 > this R&D can be shared. Keep it that way: refer to "the client" / "the
-> enterprise," never the firm.
+> enterprise," never the app.
 
 ---
 
@@ -32,12 +32,12 @@
 > body below is preserved as the R&D record that led here — read it as
 > *evidence*, not as an open question.
 
-**The platform decision is made: RHEL + RDQM.** On engagement day one the firm
+**The platform decision is made: RHEL + RDQM.** On engagement day one the app
 confirmed it standardizes on RHEL and will run IBM MQ HA/DR on **RDQM**, driven
 by **IBM-supportability concerns** — precisely the criterion this design already
 weighted most heavily (§2.7; §3 "vendor-supportability gap"). The decision
 *validates* the R&D lean rather than reversing it: the comparison thread did its
-job and independently pointed at RDQM for the same reason the firm did.
+job and independently pointed at RDQM for the same reason the app did.
 
 **Consequences for this document:**
 
@@ -61,9 +61,9 @@ job and independently pointed at RDQM for the same reason the firm did.
    | `nativeha-rhel` | IBM MQ Native HA | RHEL/Linux | container/K8s | slot only |
    | `pcmk-debian` | Pacemaker/SAN | Debian (Trixie / 13) | VM | slot only |
 
-   This **un-parks the Native HA arm** (§2.3 arm 3): the firm already runs IBM MQ
+   This **un-parks the Native HA arm** (§2.3 arm 3): the app already runs IBM MQ
    Native HA, so it is a real future arm, not a hypothetical. **Debian (Trixie)**
-   is added because the firm's actual base OS is Debian, not Ubuntu; the Pacemaker
+   is added because the app's actual base OS is Debian, not Ubuntu; the Pacemaker
    backend ports to it with near-trivial L0 changes (Ubuntu is Debian-derived).
    **Guardrail:** no build work on the Native HA or Debian slots until the
    framework is proven on the `rdqm-rhel` + `pcmk-ubuntu` pair.
@@ -116,8 +116,8 @@ RDQM-at-parity — is specified in
   - [8.7 Recovery & diagnostics](#87-recovery--diagnostics)
   - [8.8 Packaging — optional, only if it earns its keep (Phase F)](#88-packaging--optional-only-if-it-earns-its-keep-phase-f)
   - [8.9 Design principles (the through-line)](#89-design-principles-the-through-line)
-- [9. DTCC Simulation & Validation](#9-dtcc-simulation--validation)
-  - [9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)](#91-connectivity-model-to-mirror-from-the-public-ficc-epn-mq-guide)
+- [9. SVC Simulation & Validation](#9-svc-simulation--validation)
+  - [9.1 Connectivity model to mirror (from the public SVC FFH MQ guide)](#91-connectivity-model-to-mirror-from-the-public-svc-ffh-mq-guide)
   - [9.2 Transport & security context (real-world, for fidelity notes)](#92-transport--security-context-real-world-for-fidelity-notes)
   - [9.3 Validation](#93-validation)
 - [10. Phasing](#10-phasing)
@@ -172,7 +172,7 @@ known).
 up and operate it — before any message-pumping, configuration breadth, or
 performance testing. Get this right first; everything else builds on it.
 
-**This is not a cheap-it-out exercise.** the client is a tier-one firm. We engineer
+**This is not a cheap-it-out exercise.** the client is a tier-one app. We engineer
 this with the most modern, strategic stack that meets the requirements — not
 the lowest-cost option that technically works.
 
@@ -197,9 +197,9 @@ the lowest-cost option that technically works.
   Channels and the REST API run with whatever minimal/relaxed security is most
   convenient — deliberately, to cut setup complexity on a dimension we are not
   evaluating. This is *not* a recommendation to run insecurely in production:
-  securing MQ for DTCC is a **separate, requirements-driven effort** that cannot
-  begin until we know *which* of MQ's many channel-security mechanisms DTCC (or
-  the client) mandates (TLS standards per GOV1683-24, security exits, etc. — see
+  securing MQ for SVC is a **separate, requirements-driven effort** that cannot
+  begin until we know *which* of MQ's many channel-security mechanisms SVC (or
+  the client) mandates (TLS standards per those security standards, security exits, etc. — see
   §11). If security testing becomes a goal, it gets its own experiments.
 - A complete solution has **two inseparable halves**: (a) intra-site HA — the
   queue manager survives node/component failure within a data center; and
@@ -220,14 +220,14 @@ the lowest-cost option that technically works.
   hardware, software, or configuration change**. This is a recommendation we
   push unless the client deliberately lowers the bar. (Full rationale in §4.7.)
 - **Vendor-supportability gap is a first-class, heavily-weighted criterion.**
-  MQ is a closed-source black box; for a tier-one firm we *must* be able to get
+  MQ is a closed-source black box; for a tier-one app we *must* be able to get
   IBM at the table for a SEV-1. Every architecture is judged partly on how far
   it deviates from what IBM will support (see §3). A self-managed Ubuntu cluster
   that IBM disclaims is a serious mark against it, however elegant.
-- **Workload is back-office post-trade clearing/settlement with DTCC** — not
+- **Workload is back-office post-trade messaging/settlement with SVC** — not
   front-office trade execution. Performance/throughput/latency are *not* the
   priority; correctness, recoverability, and failover behavior are. Exact
-  uptime/RPO/RTO targets are **TBD** pending DTCC/the client requirements, and the
+  uptime/RPO/RTO targets are **TBD** pending SVC/the client requirements, and the
   final recommendation is explicitly deferred until those are known.
 - **Scale boundary condition (drives nearly every decision below).** This is a
   **deliberately small, caged, bespoke service** — *not* a general-purpose MQ
@@ -335,7 +335,7 @@ deliverable (decision-makers will ask "why not the cheap option?").
 - **Q5 — DR replication mode & window:** For each arm, what is the realistic
   cross-site replication mode (sync vs async) and resulting RPO window? How
   does RDQM DR's continuous async (seconds) compare to the alternatives?
-- **Q6 — App/infra DR interface:** What must the application (and the DTCC
+- **Q6 — App/infra DR interface:** What must the application (and the SVC
   protocol) do to tolerate the DR message-loss window? (See §4.3.) This is a
   cross-team requirement, not pure infra.
 
@@ -455,7 +455,7 @@ the HA case (this section) and the DR case (§4).
   architecture deviate from a configuration IBM will support on a SEV-1? RDQM
   is fully IBM-supported end to end; an external Pacemaker/SAN cluster is "here
   are sample resource agents, you own the cluster, storage, and fencing." For a
-  tier-one firm running a black-box product, a wide gap is a serious liability —
+  tier-one app running a black-box product, a wide gap is a serious liability —
   when (not if) we hit an outage that needs IBM, we must be inside, or close to,
   their supported envelope. Measured concretely: which components IBM supports,
   which they disclaim, and what we'd have to prove/rebuild before they'll engage.
@@ -465,7 +465,7 @@ the HA case (this section) and the DR case (§4).
   and cluster/replication state for hand-off to IBM support. Tooling to gather
   this is part of the product (see §8).
 - **Performance overhead** *(out of scope for the comparison)* — this is
-  back-office clearing, not front-office execution; throughput/latency are not
+  back-office messaging, not front-office execution; throughput/latency are not
   decision criteria. Note synchronous-replication latency (DRBD) qualitatively
   only. Failover *speed* (RTO) matters and is captured above; raw message
   throughput is not benchmarked.
@@ -533,10 +533,10 @@ replication window can be lost or duplicated on cutover. This is the ugly,
 essential part of the design:
 
 - The infrastructure's guarantee degrades during DR; the **application and
-  the DTCC protocol must cooperate** to close the gap — sequence numbering,
+  the SVC protocol must cooperate** to close the gap — sequence numbering,
   acknowledgements, idempotent processing, **replay / re-request of
   unconfirmed trades**, and end-of-day reconciliation.
-- This is a **cross-team conversation** (infra ↔ application ↔ possibly DTCC),
+- This is a **cross-team conversation** (infra ↔ application ↔ possibly SVC),
   not something infrastructure can solve alone. Any recommendation must state
   the residual DR risk explicitly and the app-side obligations to mitigate it.
 
@@ -583,18 +583,18 @@ essential part of the design:
 ### 4.5 DR open questions
 
 - What cross-site RPO is *actually achievable* per arm, and what is the client's
-  tolerance (TBD — needs DTCC/vendor requirements)?
+  tolerance (TBD — needs SVC/vendor requirements)?
 - What is the cross-site RTO and the cutover procedure (manual vs automated)?
 - Failback to primary after a DR event without data loss or split-brain.
-- What are DTCC's absolute requirements for resilience and message integrity?
+- What are SVC's absolute requirements for resilience and message integrity?
   (The client's contractual specifics are TBD, but the public regulatory and
-  DTCC-disclosed floor is now documented — see §4.6.)
+  SVC-disclosed floor is now documented — see §4.6.)
 
 ### 4.6 Public & regulatory basis for the two-site DR requirement (researched)
 
 The requirement to run **two geographically separated data centers** — which
 is what *forces* a DR architecture rather than HA alone — is **not just client
-preference**. It traces to public regulatory mandates and DTCC's own disclosed
+preference**. It traces to public regulatory mandates and SVC's own disclosed
 posture. These are the citable floor; the client's actual contractual numbers
 (TBD) will sit on top and we iterate when we have them. *(Citations gathered
 from public sources 2026-06-03; verify currency against the version in force at
@@ -602,8 +602,8 @@ onboarding.)*
 
 - **Interagency Paper on Sound Practices to Strengthen the Resilience of the
   U.S. Financial System** (FRB / SEC / OCC, **April 2003**) — the post-9/11
-  origin of the mandate. Core clearing & settlement organizations target
-  recovery/resumption **within ~2 hours**; firms in "significant" market roles
+  origin of the mandate. Core messaging & settlement organizations target
+  recovery/resumption **within ~2 hours**; apps in "significant" market roles
   should strive for a **4-hour** capability; backup sites must be
   **out-of-region** — "as far away from the primary site as necessary to avoid
   being subject to the same set of risks," not sharing the same labor
@@ -613,12 +613,12 @@ onboarding.)*
     <https://www.federalreserve.gov/boarddocs/srletters/2003/sr0309.htm> ·
     <https://www.occ.treas.gov/news-issuances/bulletins/2003/bulletin-2003-14.html>
 - **SEC Regulation SCI** — 17 CFR §242.1001 & §242.1004 (adopted 2014). DTC,
-  NSCC, and FICC are registered clearing agencies = **"SCI entities"**, so this
-  binds DTCC directly: BC/DR must be **"sufficiently resilient and
+  NSCC, and SVC are registered messaging agencies = **"SCI entities"**, so this
+  binds SVC directly: BC/DR must be **"sufficiently resilient and
   geographically diverse"** with next-business-day / **two-hour** resumption of
   critical systems. **§1004 cascades to members:** designated participants must
   take part in BC/DR functional testing **at least annually** — the legal basis
-  for DTCC mandating member DR-test participation. *Confidence: HIGH.*
+  for SVC mandating member DR-test participation. *Confidence: HIGH.*
   - <https://www.law.cornell.edu/cfr/text/17/242.1001> ·
     <https://www.law.cornell.edu/cfr/text/17/242.1004>
 - **FINRA Rule 4370** — the broker-dealer's *own* business-continuity duty
@@ -626,18 +626,16 @@ onboarding.)*
   No prescribed distance/RTO — deliberately flexible. Relevant as the client's
   obligation, not a gateway distance spec. *Confidence: HIGH.*
   - <https://www.finra.org/rules-guidance/rulebooks/finra-rules/4370>
-- **DTCC's own disclosed posture** — NSCC/FICC PFMI Disclosure Frameworks
+- **SVC's own disclosed posture** — NSCC/SVC PFMI Disclosure Frameworks
   (CPMI-IOSCO Principle 17) and the public Quantitative Disclosures state a
   ~**two-hour RTO** and geographically dispersed data centers, matching the
   above. *Confidence: MEDIUM on exact wording (PDFs hard to quote cleanly —
-  verify directly).* DTCC's 2025 "Data Center Rotation Test Plan" shows
+  verify directly).* SVC's 2025 "Data Center Rotation Test Plan" shows
   movement toward active-active operation.
-  - <https://www.dtcc.com/legal/policy-and-compliance> ·
-    <https://www.dtcc.com/operational-resilience>
-- **Historical confirmation** — Computerworld (June 2004) reported DTCC built
+- **Historical confirmation** — Computerworld (June 2004) reported SVC built
   data centers **>1,000 miles apart** using EMC SRDF multihop mirroring,
   achieving **~3-hour DR with 0–30 min data loss**, explicitly citing the 2003
-  Interagency Paper. Period-accurate; DTCC has since tightened toward the
+  Interagency Paper. Period-accurate; SVC has since tightened toward the
   ~2-hour / near-zero-loss posture above. *Confidence: HIGH (historical).*
   - <https://www.computerworld.com/article/1702090/>
 
@@ -695,28 +693,28 @@ other way (B→A) as a planned operation, not that both directions are live
 simultaneously — that fully mutual case is the active/active vision in
 Appendix A.
 
-**Caveat — role rotation is DTCC-constrained, and that's a separate axis from
+**Caveat — role rotation is SVC-constrained, and that's a separate axis from
 3+3.** The clean "run live in A for six months, planned swap, run live in B"
 cadence is straightforward when **you own the whole stack end to end**. This is
 not that situation. Each data center will likely have its **own physical
-connectivity to DTCC** — historically leased lines, possibly secure
+connectivity to SVC** — historically leased lines, possibly secure
 internet/SMART circuits today; *how it's implemented now is unknown to us* and
-needs to be established. Because that connectivity terminates at DTCC, a site
+needs to be established. Because that connectivity terminates at SVC, a site
 swap is **not unilaterally ours to schedule** — it may require coordination with
-DTCC and put us on **their** test calendar, not ours. DTCC may even mandate the
+SVC and put us on **their** test calendar, not ours. SVC may even mandate the
 operating posture outright: e.g. *stay primary at all times, use the secondary
 only on a genuine primary failure, and fail back as soon as the primary is
 healthy* — i.e. classic active/standby with no elective rotation. Which model we
-can actually run is **dictated by the DTCC relationship and contract**, and we
+can actually run is **dictated by the SVC relationship and contract**, and we
 adapt to it.
 
 **This does not weaken the 3+3 requirement — it's orthogonal.** Whether we may
 *electively* run live from the secondary is an **operational** question
-constrained by DTCC. Whether the secondary must be a **full 3-node HA peer** is
+constrained by SVC. Whether the secondary must be a **full 3-node HA peer** is
 a **design** question, and the answer is yes regardless: if you have failed over
 to the secondary, *something bad has happened at the primary, and you cannot
 assume it will be repaired quickly* — you must design for a long stay with full
-HA at the recovery site. DTCC constraints only tweak *how we operate* the two
+HA at the recovery site. SVC constraints only tweak *how we operate* the two
 sites at a given moment; they do not change the fundamental requirement that
 **both sites are full-HA peers (3+3)**.
 
@@ -731,26 +729,26 @@ The lab simulates **two data centers** so DR is exercisable from day one,
 matching the "six Linux servers" hint: **three nodes per DC = 3+3**.
 
 - **DC-A (primary):** 3-node RDQM HA group (`node-a1/a2/a3`), synchronous,
-  automatic failover. Holds the QM's virtual IP that clients and DTCC channels
+  automatic failover. Holds the QM's virtual IP that clients and SVC channels
   attach to.
 - **DC-B (recovery):** 3-node HA group (`node-b1/b2/b3`) as the async DR
   target — full 3+3, production-grade (not a single recovery node).
 - **Inter-site WAN:** simulated `net-wan` link between the DCs, with optional
   injected latency, carrying the asynchronous DR replication.
-- **Networks (per the validated topology diagram):** DTCC-facing net; per-DC
+- **Networks (per the validated topology diagram):** SVC-facing net; per-DC
   data/VIP net; per-DC private heartbeat/replication net; client/app net.
 - **Fixtures run as containers, not VMs.** VMs are reserved for the thing that
   genuinely needs them — the HA cluster nodes (real kernel, DRBD, Pacemaker,
   multi-NIC). The fixtures do not:
-  - `dtcc-sim` QM (server side, sender/receiver channels back to the in-house
-    clearing QM) runs as a **container** (`icr.io/ibm-messaging/mq`), lifted
+  - `svc-sim` QM (server side, sender/receiver channels back to the app
+    messaging QM) runs as a **container** (`icr.io/ibm-messaging/mq`), lifted
     almost directly from the `mq-rest-admin-dev-environment` prior art, on the
     containerd/nerdctl runtime the §7.4 dev+lab VM already provides.
-  - `app-client` (requester puts trades → in-house QM; responder replies to DTCC
+  - `app-client` (requester puts trades → app QM; responder replies to SVC
     traffic) likewise runs as a **container**. Its message path uses a **native
     MQI client** (e.g. `pymqi`) over a SVRCONN channel — *not* `pymqrest`, which
     is admin-only (§8.1, §9).
-  - Both containers attach to the relevant libvirt networks (DTCC-facing,
+  - Both containers attach to the relevant libvirt networks (SVC-facing,
     client) alongside the cluster VMs.
 
 **Sizing:** this is a *functional* lab — failover correctness and behavior,
@@ -850,7 +848,7 @@ caveat still applies and belongs in the client's production decision.)*
 
 The harness is **Vagrant**. The lab's hard requirement is not VM *lifecycle* —
 it is **multi-node, multi-network topology**: isolated subnets for the
-client/app net, the DTCC-facing net, the per-DC data/VIP net, and crucially the
+client/app net, the SVC-facing net, the per-DC data/VIP net, and crucially the
 **private heartbeat and replication networks** the HA stack depends on.
 Vagrant's multi-machine + network DSL models exactly this and is a mature,
 widely-used, open-source tool that has solved this problem for over a decade.
@@ -970,7 +968,7 @@ assumptions baked in — so the *lab* is reusable and the *patterns* are portabl
 That is not a promise the scripts deploy as-is at the client (§0/§8.1); the
 harness is disposable, but the proven design and the reusable lab are not.
 
-The containerized fixtures (`dtcc-sim` QM and `app-client`, §5/§9) are *not*
+The containerized fixtures (`svc-sim` QM and `app-client`, §5/§9) are *not*
 Vagrant VMs — they run on the containerd/nerdctl runtime the §7.4 dev+lab VM
 already carries (the `vergil-vm` precedent), attached to the same libvirt
 networks as the cluster VMs.
@@ -1031,7 +1029,7 @@ Vergil's small ephemeral agent VMs."
 ### 7.5 Sizing budget
 
 The full 3+3 topology is ~6 cluster-node **VMs** at ~1 GB each (plus, for the
-Pacemaker arm, a witness + iSCSI-target VM); the `dtcc-sim` QM and `app-client`
+Pacemaker arm, a witness + iSCSI-target VM); the `svc-sim` QM and `app-client`
 are **containers**, not VMs, so they cost far less than a VM each. Under the
 leading nested-libvirt model (§7.2) the VMs live *inside* one Linux VM that also
 runs the fixture containers, so size that outer VM generously — ~**32–48 GB** of
@@ -1224,7 +1222,7 @@ The standards are part of the product, not documentation bolted on afterward.
   diagnostic snapshot (object definitions, channel/listener status, queue
   depths) — the picture you want captured alongside the `runmqras` bundle.
 - Together they serve the **vendor-supportability criterion (§3):** when a
-  SEV-1 hits a tier-one firm, the value is being able to hand IBM a complete
+  SEV-1 hits a tier-one app, the value is being able to hand IBM a complete
   diagnostic bundle immediately, regardless of which arm is deployed.
 
 ### 8.8 Packaging — optional, only if it earns its keep (Phase F)
@@ -1246,51 +1244,51 @@ two-arm parity at the operator interface · **two planes divided at
 REST-API-online (Ansible/bootstrap → `pymqrest`)** · every capability paired
 with a §3/§4 fault test that proves it.
 
-## 9. DTCC Simulation & Validation
+## 9. SVC Simulation & Validation
 
-The `dtcc-sim` fixture mimics DTCC's server side so we can validate the message
+The `svc-sim` fixture mimics SVC's server side so we can validate the message
 path and DR behavior end to end. The public record gives us enough to make the
 simulation **realistic in shape** (the exact per-service formats and endpoints
 are delivered per-client at onboarding and are not public — so we simulate the
-*pattern*, not a real DTCC interface). *(Grounded in public DTCC material
+*pattern*, not a real SVC interface). *(Grounded in public SVC material
 researched 2026-06-03; see §9.3 references.)*
 
-**It runs as a container, lifted from prior art.** `dtcc-sim` is a real IBM MQ
+**It runs as a container, lifted from prior art.** `svc-sim` is a real IBM MQ
 queue manager in a container (`icr.io/ibm-messaging/mq`), seeded with reciprocal
 channel/queue definitions, taken almost directly from the
 `mq-rest-admin-dev-environment` repo (docker-compose + MQSC seed + REST-enabled
 web server). It needs no VM — it runs on the containerd/nerdctl runtime inside
-the §7.4 dev+lab VM and attaches to the DTCC-facing libvirt network. **Two REST
+the §7.4 dev+lab VM and attaches to the SVC-facing libvirt network. **Two REST
 APIs, kept distinct:** the sim's *administrative* REST API (configured with
 `pymqrest`, like every QM here) is separate from the **messaging** path the
 `app-client` uses to actually put/get trade messages, which is a **native MQI
 client** (`pymqi`) over a SVRCONN/sender/receiver channel — not `pymqrest`.
 
-### 9.1 Connectivity model to mirror (from the public FICC EPN MQ guide)
+### 9.1 Connectivity model to mirror (from the public SVC FFH MQ guide)
 
-- **Distributed queuing**, not client/server: the firm's queue manager and the
-  DTCC queue manager exchange messages via **sender/receiver channels** with
+- **Distributed queuing**, not client/server: the app's queue manager and the
+  SVC queue manager exchange messages via **sender/receiver channels** with
   **local queues, remote-queue definitions, and transmission queues** on each
   side. The sim therefore runs its own QM with reciprocal channel definitions
-  back to the in-house QM.
+  back to the app QM.
 - **Application-level fixed-format header inside the message body** (distinct
   from the MQMD): blank-padded, left-justified fields — e.g. Password, Sender
-  (the firm's DTCC account ID), Receiver (a fixed service mnemonic), and
+  (the app's SVC account ID), Receiver (a fixed service mnemonic), and
   business date — followed by service-specific **ACK / reject codes** (e.g.
   header-validation failure, stale business date). The responder app validates
   and ACKs this header so we exercise realistic reject/replay handling.
 - **Per-client password auth carried in the header**; **a single connection
   ID** per client (multiple IDs cause duplicate delivery on the same channel);
   legacy TCP/CTCI and MQ must **not** be active simultaneously for one account.
-- **DTCC-side resiliency feature worth modeling:** DTCC can deliver a client's
+- **SVC-side resiliency feature worth modeling:** SVC can deliver a client's
   inbound messages into **multiple queues** to support the client's
   resiliency/DR — a useful pattern to reflect in the DR tests (§3.1 step 7).
 
 ### 9.2 Transport & security context (real-world, for fidelity notes)
 
-In production, MQ to DTCC runs over a **dedicated SMART circuit** (new-circuit
-lead times ~12–14 weeks — a *schedule* risk, not a lab one), and DTCC enforces
-**channel security/encryption standards (TLS)** per Important Notice GOV1683-24
+In production, MQ to SVC runs over a **dedicated SMART circuit** (new-circuit
+lead times ~12–14 weeks — a *schedule* risk, not a lab one), and SVC enforces
+**channel security/encryption standards (TLS)** per its connectivity security standards
 (mandatory since 2024-12-31; members register their MQ channel name;
 non-compliant connections are disconnected). The lab need not replicate SMART,
 but the tooling and standards **must** produce a TLS-secured channel
@@ -1299,20 +1297,17 @@ configuration so what we build is onboarding-ready.
 ### 9.3 Validation
 
 Fault-injection failover tests and DR cutover tests (per §3.1) run trades
-through `app-client → in-house QM → dtcc-sim → responder → back`, proving
+through `app-client → app QM → svc-sim → responder → back`, proving
 message integrity and measuring RTO/RPO across both HA failover and full-site
 DR cutover.
 
 **References (public; verify per-service at onboarding):**
 
-- FICC EPN MQ Implementation Guide (DTCC, "Public/White") —
-  <https://www.dtcc.com/-/media/Files/Downloads/Clearing-Services/FICC/MBSD/EPN-MQ-Implementation-Guide.pdf>
-- Important Notice GOV1683-24 (connectivity security standards, incl. MQ) —
-  <https://www.dtcc.com/-/media/Files/pdf/2024/4/19/GOV1683-24.pdf>
-- DTCC Settlement Service Guide (MQ used on the DTC settlement side) —
-  <https://www.dtcc.com/globals/pdfs/2018/february/27/service-guide-settlement>
+- SVC FFH MQ Implementation Guide (SVC, "Public/White") —
+- its connectivity security standards (connectivity security standards, incl. MQ) —
+- SVC Settlement Service Guide (MQ used on the DTC settlement side) —
 
-**Caveat:** message header layouts and ACK codes are **per-service** (FICC EPN
+**Caveat:** message header layouts and ACK codes are **per-service** (SVC FFH
 / MBSD vs DTC settlement vs NSCC/UTC). QM names, channel names, ports, and IP
 endpoints are **not public** and arrive per-client during onboarding — the sim
 must not hardcode any assumed real values.
@@ -1352,10 +1347,10 @@ complexity/supportability advantage.
   the leading **nested `vagrant-libvirt`** model — Lima nested-virt pass-through
   on this M5/macOS, severable heartbeat/replication nets, and acceptable
   TCG-emulated x86 for the RDQM arm — with the cloud-x86 split as the fallback.
-- **B.** Single standalone QM (Ubuntu arm64) + DTCC sim + client — prove the
+- **B.** Single standalone QM (Ubuntu arm64) + SVC sim + client — prove the
   end-to-end message path before any clustering. The QM is brought up by
   Ansible/bootstrap **with its REST API enabled**, then configured with
-  `pymqrest` (first real exercise of the content plane); `dtcc-sim` and
+  `pymqrest` (first real exercise of the content plane); `svc-sim` and
   `app-client` run as containers (§5/§9), the client using a **native MQI**
   connection for the trade path.
 - **C.** **RDQM arm, full HA+DR on RHEL x86-64 — the priority arm (drive to a
@@ -1374,14 +1369,14 @@ complexity/supportability advantage.
   replication surface vs. RDQM's shared-nothing turnkey box, at equal delivered
   functionality), and states the conditions under which each wins. The standing
   counterweight is the **client's RHEL-licensing posture and Ubuntu-stack
-  integration cost** (§2.7). Decision deferred to DTCC/the client requirements.
+  integration cost** (§2.7). Decision deferred to SVC/the client requirements.
 - **F.** Packaging & operational standards — `.deb`/`.rpm` wrapping the Ansible
   content **and the `pymqrest`-based Python tooling/CLI**, runbooks, health
   checks, and the **recovery & diagnostics tooling** (`runmqras`/FFST capture)
   proven in §3.1 step 8.
 - **G.** *(forward-looking, post-requirements)* Dual-path / multi-QM
   active-active across two DCs — see Appendix A. Out of scope for Deliverable
-  #1; gated on DTCC/app requirements.
+  #1; gated on SVC/app requirements.
 
 ## 11. Risks & Open Questions
 
@@ -1421,25 +1416,25 @@ complexity/supportability advantage.
 **DR / message integrity:**
 
 - Cross-site synchronous replication is impractical → residual DR message-loss
-  window; the app/DTCC reconciliation path (§4.3) must close it.
+  window; the app/SVC reconciliation path (§4.3) must close it.
 - Target envelope is now grounded (§4.6): **~2-hour RTO, out-of-region** —
   the client's exact contractual numbers remain TBD.
 
-**DTCC-specific (grounded in §9, but with real gaps):**
+**SVC-specific (grounded in §9, but with real gaps):**
 
-- **Which DTCC service** the client clears/settles through (FICC EPN, DTC
+- **Which SVC service** the client clears/settles through (SVC FFH, DTC
   settlement, NSCC/UTC, …) determines message header formats and ACK codes —
   **unknown** until the client tells us. The sim models the *pattern*, not a
   specific service's wire format.
-- **Channel security:** DTCC mandates TLS on the MQ channel (GOV1683-24) — the
+- **Channel security:** SVC mandates TLS on the MQ channel (those security standards) — the
   tooling must emit an onboarding-ready, TLS-secured channel config.
 - **Schedule risk:** a new dedicated SMART circuit has a ~12–14 week lead time;
   irrelevant to the lab but material to the client's production rollout plan.
 - **Open gap — no public mandate for dual/diverse member MQ circuits.** That
-  specific requirement (if it exists) lives in DTCC's **gated, internally
+  specific requirement (if it exists) lives in SVC's **gated, internally
   classified DR Guide** and per-client onboarding packets, not public material.
   We treat member-side dual-site connectivity as best practice and a **question
-  to confirm with the client/DTCC**, *not* a citable public requirement.
+  to confirm with the client/SVC**, *not* a citable public requirement.
 - QM names, channel names, ports, and endpoints are delivered per-client at
   onboarding — never hardcode assumed values.
 
@@ -1452,7 +1447,7 @@ complexity/supportability advantage.
 > appendix records the *expected shape of the eventual production
 > recommendation*, which is almost certainly built from **multiple** such
 > queue managers. It is deliberately not part of Deliverable #1; it gets
-> fleshed out once we understand DTCC's and the application's requirements.
+> fleshed out once we understand SVC's and the application's requirements.
 
 ### A.1 The pattern: parallel A/B flows across two live data centers
 
@@ -1505,11 +1500,11 @@ panel ②). Citations in §4.4.
 
 ### A.3 The big unknowns (gate this work)
 
-- **Does DTCC permit active/active?** Two simultaneously-live endpoints may or
-  may not be allowed by DTCC's connection model and sequencing assumptions.
-  Unknown until we study the DTCC application and its requirements.
+- **Does SVC permit active/active?** Two simultaneously-live endpoints may or
+  may not be allowed by SVC's connection model and sequencing assumptions.
+  Unknown until we study the SVC application and its requirements.
 - **Can both paths run live at once**, or is it active/standby at the
-  path level? Depends on DTCC assumptions.
+  path level? Depends on SVC assumptions.
 - **App-side routing & reconciliation:** the application must detect a dead
   path, reroute to the live stack, and reconcile in-flight/duplicated trades
   across paths — reinforcing the §4.3 app/infra interface point at a larger
@@ -1564,7 +1559,7 @@ functionality. This gives us a faithful place to build and exercise the
 
 > **Scope note.** A third-order, *strategic* concern — not part of Deliverable
 > #1, but it must be captured now because the version we build on has a finite
-> support life and DTCC will not retire a connection just because IBM end-of-lifes
+> support life and SVC will not retire a connection just because IBM end-of-lifes
 > a release. We design on a proven baseline and plan the upgrade around hard
 > vendor boundary conditions. *(Version/date facts researched 2026-06-03; treat
 > dates as approximate and re-verify at IBM's lifecycle pages before acting.)*
@@ -1600,7 +1595,7 @@ after.) The version question is still a deliberate decision point:
   inside that window — not to start on 10.0.
 - **10.0 is documented purely as a forward-looking item** (we show we're looking
   ahead), explored only **if time allows**. It is almost certainly academic for
-  this engagement: a conservative clearing partner like DTCC is unlikely to jump
+  this engagement: a conservative messaging partner like SVC is unlikely to jump
   to 10.0 early, and so is the client. Part of arriving prepared is bringing the
   written 9→10 gap analysis and upgrade plan (C.4) — as future planning, not a
   near-term task.
@@ -1648,7 +1643,7 @@ version.
   changes the recommendation if the client ever accepts containers.
 - Produce a **documented, tested 9.4→10.0 upgrade runbook** as part of the
   operational standards (§8), scheduled to complete inside the C.3 window and
-  ahead of any DTCC- or IBM-driven requirement to move.
+  ahead of any SVC- or IBM-driven requirement to move.
 - Re-verify all dates and the RDQM-platform question against IBM's lifecycle
   and System Requirements pages — vendor claims get the same trust-but-verify
   treatment as everything else.

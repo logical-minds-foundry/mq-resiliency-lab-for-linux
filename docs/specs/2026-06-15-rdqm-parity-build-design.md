@@ -11,11 +11,11 @@
 
 ## 1. Goal
 
-Bring RHEL/RDQM to **parity with the pcmk `distributed` setup** (app → in-house HA
-QM ⇄ QMDTCC over net-ext, driven by `mqlab`) **and finish the 3+3 DR**, so RDQM
+Bring RHEL/RDQM to **parity with the pcmk `distributed` setup** (app → app HA
+QM ⇄ QMSVC over net-ext, driven by `mqlab`) **and finish the 3+3 DR**, so RDQM
 becomes the primary, fully-tooled arm. "Works the same as distributed" is the bar:
-the same `mqlab` command surface, the same DTCC/app message path, with the
-in-house QM substrate provided by RDQM instead of Pacemaker.
+the same `mqlab` command surface, the same SVC/app message path, with the
+app QM substrate provided by RDQM instead of Pacemaker.
 
 This **folds the pivot's P2 into P3**: clean `mqlab` RDQM support *requires* the
 arm-backend seam, so the seam is built as RDQM is added rather than as a separate
@@ -23,8 +23,8 @@ phase. (Decision: confirmed in brainstorming.)
 
 **Hard requirement — REST on every QM (absolute).** Per the lab design §1, the MQ
 administrative REST API (`mqweb`) is enabled on **every** queue manager, without
-exception — QMRDQM, QMPCMK, and QMDTCC alike. This is non-negotiable, not a
-parity-nicety. Today it is **violated on the in-house pcmk QM** (`mq-pcmk-qmgr`
+exception — QMRDQM, QMPCMK, and QMSVC alike. This is non-negotiable, not a
+parity-nicety. Today it is **violated on the app pcmk QM** (`mq-pcmk-qmgr`
 enables no `mqweb`); this build closes that on **both** arms (§5). REST API
 *enablement* is distinct from a `pymqrest` declarative-content layer — the former
 is required here, the latter is a non-goal.
@@ -88,7 +88,7 @@ arm-*ambiguous* `distributed` is renamed → **`distributed-pcmk-ubuntu`**; the
 already-mechanism-named setups (`pcmk_san_ha`, `pcmk_san_dr`, `rdqm_ha`, `rdqm_dr`)
 keep their names; `monitoring` is arm-agnostic (no `arm:`). New setups:
 **`distributed-rdqm-rhel`** and its DR sibling (§6). The `qm:` `QmConfig`
-(name/vip/vip_ext/dtcc_conn) stays per-setup; the in-house QM name (`QMPCMK` vs
+(name/vip/vip_ext/svc_conn) stays per-setup; the app QM name (`QMPCMK` vs
 `QMRDQM`) flows from there into the shared layer's `our_qm` var (§4).
 
 **The rename is atomic with a reference sweep.** `distributed` is referenced beyond
@@ -101,16 +101,16 @@ name.
 ## 4. Extract the shared distributed layer
 
 **Reality:** `site-distributed.yml` line 9 does `import_playbook: site-pcmk.yml` —
-the shared DTCC/app/channel plays and the Pacemaker substrate are welded together,
+the shared SVC/app/channel plays and the Pacemaker substrate are welded together,
 so RDQM cannot reuse it as-is.
 
-**Refactor:** extract the shared plays (the `dtcc`/`app`/`mq-inter-qm` plays,
+**Refactor:** extract the shared plays (the `svc`/`app`/`mq-inter-qm` plays,
 parameterized by `our_qm`) into **`ansible/site-distributed-shared.yml`**. Then:
 
 - `site-distributed.yml` (pcmk) = `import_playbook: site-pcmk.yml` + `import_playbook: site-distributed-shared.yml`
 - **`site-rdqm-distributed.yml`** (new) = `import_playbook: site-rdqm.yml` + `import_playbook: site-distributed-shared.yml`
 
-Both arms provably run the **same** DTCC/app/channel code; only the imported
+Both arms provably run the **same** SVC/app/channel code; only the imported
 substrate differs. `our_qm` is threaded from the setup's `QmConfig.name`. This is
 the playbook-layer twin of the §2 seam and lands in Plan A (covered by the pcmk
 regression net, §8).
@@ -123,24 +123,24 @@ declarative-content plane (the `content/` dir is stale legacy, unused by
 distributed). REST API *enablement* is a separate absolute requirement (below),
 not part of the "content" question.
 
-- **New setup `distributed-rdqm-rhel`:** groups `[rdqm_a, dtcc, app]`, arm
-  `rdqm-rhel`, qm `QMRDQM` (vip/vip_ext/dtcc_conn mirroring distributed).
+- **New setup `distributed-rdqm-rhel`:** groups `[rdqm_a, svc, app]`, arm
+  `rdqm-rhel`, qm `QMRDQM` (vip/vip_ext/svc_conn mirroring distributed).
 - **Provision** (`site-rdqm-distributed.yml`): the RDQM HA substrate
   (`rdqm-install` + `rdqm-ha`) **+** the shared layer (§4) with `our_qm: QMRDQM`.
-  The DTCC counterparty QM + the `QMRDQM⇄QMDTCC` channels come from the **existing,
-  arm-agnostic `mq-qmgr` / `mq-inter-qm` roles** (they run on `dtcc`).
+  The SVC counterparty QM + the `QMRDQM⇄QMSVC` channels come from the **existing,
+  arm-agnostic `mq-qmgr` / `mq-inter-qm` roles** (they run on `svc`).
 - **`mqweb`/REST — absolute, every QM (§1):** REST is enabled on *every* queue
   manager, not as a parity option. Factor `mq-qmgr`'s mqweb logic
   (`mqweb.service.j2`, `mqwebuser.xml.j2`) into a **reusable `mqweb` role** and apply
   it to **QMRDQM** (RDQM nodes — this plan) **and QMPCMK** (`mq-pcmk-qmgr` — in
-  Plan A, closing the current gap where the in-house pcmk QM has no REST). QMDTCC
+  Plan A, closing the current gap where the app pcmk QM has no REST). QMSVC
   already has it via `mq-qmgr`. Per-node, per the pivot §8.3 REST-over-HA model.
 - **RDQM QM-lifecycle verbs — verified, not guessed:** Plan B's **first task is a
   spike** — bring up RDQM HA, observe and document the real `qm up`/`down`/`status`
   commands (`rdqmstatus -m`, `rdqmadm`, `dspmq`), *then* fill the registry rows from
   observed behavior. The design marks them to-be-verified-empirically.
 - **Acceptance:** `mqlab run distributed-rdqm-rhel` (the P1 baseline run) goes
-  green — app→QMRDQM→QMDTCC→reply round-trips, like distributed on pcmk.
+  green — app→QMRDQM→QMSVC→reply round-trips, like distributed on pcmk.
 
 ## 6. RDQM DR / the 3+3 (Plan C / P3b)
 
@@ -155,7 +155,7 @@ on RDQM mechanics:
   (`a2b`/`b2a`), the RDQM analogue of `pcmk-dr-cutover.sh`; wired to the registry's
   `dr-cutover` verb. A seed-peer equivalent if RDQM needs the recovery side
   pre-taught (verify in-lab).
-- **Setup `distributed-rdqm-rhel-dr`:** groups `[rdqm_a, rdqm_b, dtcc, app]` — two
+- **Setup `distributed-rdqm-rhel-dr`:** groups `[rdqm_a, rdqm_b, svc, app]` — two
   3-node sync HA groups, async DR between them; the app is a reconnectable client
   given both VIPs (as the pcmk DR path already is).
 - **Scope-honesty (pivot §6):** proves *functional* DR correctness on TCG

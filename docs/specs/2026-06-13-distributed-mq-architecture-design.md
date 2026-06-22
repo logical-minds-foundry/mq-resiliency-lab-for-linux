@@ -62,7 +62,7 @@ reconnect**: an application connects client-mode to one QM via its VIP and rides
 `MQCNO_RECONNECT` through failovers (the
 [client HA/DR cooperation contract](2026-06-09-mq-client-ha-cooperation-contract.md)).
 That validates HA of one QM — real and necessary — but it never models
-distributed messaging. The "DTCC" role was implemented as another **client of
+distributed messaging. The "SVC" role was implemented as another **client of
 the same QM**, not as a **remote queue manager**. There are no inter-QM channels,
 transmission queues, or remote-queue definitions anywhere in the tree.
 
@@ -75,10 +75,10 @@ Two halves separated by a WAN. We instrument **our** side (HA/DR); the
 counterparty is a deliberate black box.
 
 ```text
-  BUSINESS A — US (instrumented HA/DR)              ~ WAN ~        BUSINESS B — DTCC (black box)
+  BUSINESS A — US (instrumented HA/DR)              ~ WAN ~        BUSINESS B — SVC (black box)
 
   ┌──────────┐  client        ┌────────────────────┐                ┌───────────────────────────┐
-  │  APP VM  │ ─────────────▶ │      QMPCMK        │ ══ SDR/RCVR ══▶ │         QMDTCC            │
+  │  APP VM  │ ─────────────▶ │      QMPCMK        │ ══ SDR/RCVR ══▶ │         QMSVC            │
   │ requester│  CONNAME(      │  our HA/DR QM       │   channels     │  standalone, transparent  │
   │  "app"   │   VIP-A,VIP-B) │  (two sites, one    │ ◀══ pair ══════│  single endpoint          │
   └──────────┘                │   active at a time) │                │   │ bindings                │
@@ -90,9 +90,9 @@ counterparty is a deliberate black box.
 - **app** (requester) — a remote **client**; it cannot live on our cluster.
 - **QMPCMK** — our HA/DR queue manager, present across two sites, **exactly one
   site active at any instant**.
-- **QMDTCC** — the counterparty queue manager, **standalone, no HA/DR**, presenting
+- **QMSVC** — the counterparty queue manager, **standalone, no HA/DR**, presenting
   a single transparent endpoint (§7, §10).
-- **service** (responder) — co-located with QMDTCC on one VM, connected by
+- **service** (responder) — co-located with QMSVC on one VM, connected by
   **bindings** (local, no client).
 
 Nouns are **app** / **service** — the request-sender and the response-generator —
@@ -108,15 +108,15 @@ topology, two-VIP model, HA/DR lifecycle, message-flow plumbing).
 | Role | Name | Notes |
 |---|---|---|
 | Our HA/DR QM | **QMPCMK** | Pacemaker/SAN arm. A parallel **QMRDQM** follows on the RDQM arm, identical design, for side-by-side platform comparison. |
-| Counterparty QM | **QMDTCC** | Standalone, transparent single endpoint. |
+| Counterparty QM | **QMSVC** | Standalone, transparent single endpoint. |
 | App → QM channel | `APP.SVRCONN` | SVRCONN on QMPCMK; app connects client-mode. |
-| Our → their channel | `QMPCMK.QMDTCC` | SENDER on QMPCMK, RECEIVER on QMDTCC. Carries requests. |
-| Their → our channel | `QMDTCC.QMPCMK` | SENDER on QMDTCC, RECEIVER on QMPCMK. Carries replies. |
-| App request target | `DTCC.REQUEST` (`QREMOTE`) | Resolves to `SVC.REQUEST` @ `QMDTCC` via xmitq `QMDTCC`. |
-| Service inbound queue | `SVC.REQUEST` | `QLOCAL` on QMDTCC; the service GETs here. |
+| Our → their channel | `QMPCMK.QMSVC` | SENDER on QMPCMK, RECEIVER on QMSVC. Carries requests. |
+| Their → our channel | `QMSVC.QMPCMK` | SENDER on QMSVC, RECEIVER on QMPCMK. Carries replies. |
+| App request target | `SVC.REQUEST` (`QREMOTE`) | Resolves to `SVC.REQUEST` @ `QMSVC` via xmitq `QMSVC`. |
+| Service inbound queue | `SVC.REQUEST` | `QLOCAL` on QMSVC; the service GETs here. |
 | App reply queue | `APP.REPLY` | `QLOCAL` on QMPCMK; the app GETs here by `CorrelId`. |
-| Outbound xmitq (ours) | `QMDTCC` | `QLOCAL USAGE(XMITQ)` on QMPCMK; name = target QM. |
-| Reply xmitq (theirs) | `QMPCMK` | `QLOCAL USAGE(XMITQ)` on QMDTCC; name = target QM ⇒ auto-resolution. |
+| Outbound xmitq (ours) | `QMSVC` | `QLOCAL USAGE(XMITQ)` on QMPCMK; name = target QM. |
+| Reply xmitq (theirs) | `QMPCMK` | `QLOCAL USAGE(XMITQ)` on QMSVC; name = target QM ⇒ auto-resolution. |
 
 Channel-naming convention: a channel's SENDER end on one QM and its RECEIVER end
 on the other share the same name (`<source>.<target>`).
@@ -129,18 +129,18 @@ resolution (xmitq named after the remote QM) on the reply.
 
 ### 5.1 The flow
 
-1. **app** (client → QMPCMK) `MQPUT` to `DTCC.REQUEST`, setting
+1. **app** (client → QMPCMK) `MQPUT` to `SVC.REQUEST`, setting
    `ReplyToQ=APP.REPLY`, `ReplyToQMgr=QMPCMK`.
-2. `QREMOTE DTCC.REQUEST` resolves to `{ RNAME=SVC.REQUEST, RQMNAME=QMDTCC,
-   XMITQ=QMDTCC }`; the message lands on xmitq `QMDTCC`.
-3. SENDER `QMPCMK.QMDTCC` (triggered by the xmitq) drains it across the WAN.
-4. RECEIVER `QMPCMK.QMDTCC` on QMDTCC delivers to `SVC.REQUEST`.
+2. `QREMOTE SVC.REQUEST` resolves to `{ RNAME=SVC.REQUEST, RQMNAME=QMSVC,
+   XMITQ=QMSVC }`; the message lands on xmitq `QMSVC`.
+3. SENDER `QMPCMK.QMSVC` (triggered by the xmitq) drains it across the WAN.
+4. RECEIVER `QMPCMK.QMSVC` on QMSVC delivers to `SVC.REQUEST`.
 5. **service** (bindings) `MQGET`s `SVC.REQUEST`, processes, and `MQPUT`s the
    reply to the message's `ReplyToQ`/`ReplyToQMgr` (`APP.REPLY` @ `QMPCMK`).
-6. On QMDTCC, `RQMNAME=QMPCMK` resolves to xmitq `QMPCMK` **by name** (no remote
+6. On QMSVC, `RQMNAME=QMPCMK` resolves to xmitq `QMPCMK` **by name** (no remote
    qdef needed); the reply lands there.
-7. SENDER `QMDTCC.QMPCMK` drains it back across the WAN; RECEIVER
-   `QMDTCC.QMPCMK` on QMPCMK delivers to `APP.REPLY`.
+7. SENDER `QMSVC.QMPCMK` drains it back across the WAN; RECEIVER
+   `QMSVC.QMPCMK` on QMPCMK delivers to `APP.REPLY`.
 8. **app** `MQGET`s `APP.REPLY` by `CorrelId`.
 
 **Correlation contract (load-bearing).** The request/reply match works only if
@@ -157,23 +157,23 @@ glass-box and must be supportable without the AI.
 
 ```mqsc
 DEFINE QLOCAL(APP.REPLY)              REPLACE
-DEFINE QREMOTE(DTCC.REQUEST)  RNAME(SVC.REQUEST) RQMNAME(QMDTCC) XMITQ(QMDTCC) REPLACE
-DEFINE QLOCAL(QMDTCC)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMPCMK.QMDTCC) REPLACE
-DEFINE CHANNEL(QMPCMK.QMDTCC) CHLTYPE(SDR)  CONNAME('10.60.0.50(1414)') XMITQ(QMDTCC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(RCVR) REPLACE
+DEFINE QREMOTE(SVC.REQUEST)  RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE
+DEFINE QLOCAL(QMSVC)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMPCMK.QMSVC) REPLACE
+DEFINE CHANNEL(QMPCMK.QMSVC) CHLTYPE(SDR)  CONNAME('10.60.0.50(1414)') XMITQ(QMSVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL(QMSVC.QMPCMK) CHLTYPE(RCVR) REPLACE
 * APP.SVRCONN already defined by the mq-pcmk-qmgr role (CHLAUTH/ MCAUSER handled there)
 ```
 
-**On QMDTCC:**
+**On QMSVC:**
 
 ```mqsc
 DEFINE QLOCAL(SVC.REQUEST)            REPLACE
-DEFINE QLOCAL(QMPCMK)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMDTCC.QMPCMK) REPLACE
-DEFINE CHANNEL(QMDTCC.QMPCMK) CHLTYPE(SDR)  CONNAME('10.60.0.10(1414),10.60.0.20(1414)') XMITQ(QMPCMK) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-DEFINE CHANNEL(QMPCMK.QMDTCC) CHLTYPE(RCVR) REPLACE
+DEFINE QLOCAL(QMPCMK)  USAGE(XMITQ)   TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA(QMSVC.QMPCMK) REPLACE
+DEFINE CHANNEL(QMSVC.QMPCMK) CHLTYPE(SDR)  CONNAME('10.60.0.10(1414),10.60.0.20(1414)') XMITQ(QMPCMK) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+DEFINE CHANNEL(QMPCMK.QMSVC) CHLTYPE(RCVR) REPLACE
 ```
 
-The endpoint addresses are the partner-facing VIPs defined in §7 (DTCC at
+The endpoint addresses are the partner-facing VIPs defined in §7 (SVC at
 `10.60.0.50`; our per-site ext VIPs `10.60.0.10`/`10.60.0.20`). Channel security
 is **deliberately absent**: the inter-QM channels run wide open, exactly like
 `APP.SVRCONN` (`MCAUSER('mqm')`, `CHLAUTH(DISABLED)`), by the explicit non-goal
@@ -199,8 +199,8 @@ site VIPs**, so it follows the QM across HA (the VIP floats within a site) and D
 (a different VIP in the other site):
 
 - **app → QMPCMK**: `CONNAME(VIP-A, VIP-B)` + `MQCNO_RECONNECT`.
-- **QMDTCC → QMPCMK** (the reply SENDER): `CONNAME(VIP-A, VIP-B)`.
-- **QMPCMK → QMDTCC**: a **single** static endpoint (DTCC is not HA/DR).
+- **QMSVC → QMPCMK** (the reply SENDER): `CONNAME(VIP-A, VIP-B)`.
+- **QMPCMK → QMSVC**: a **single** static endpoint (SVC is not HA/DR).
 
 A CONNAME list probes its entries **in order** (A, then B). This is correct for
 active/standby: a client biases back to A, and only uses B when A is unreachable.
@@ -261,12 +261,12 @@ partner-facing endpoint, distinct from the internal app's data-plane VIP:
 | Endpoint | Address | On |
 |---|---|---|
 | Internal app VIP (existing) | `10.10.1.200` / `10.10.2.200` | `net-data-a` / `net-data-b` |
-| **Partner (DTCC) VIP — site A** | `10.60.0.10` | `net-ext`, floats with QMPCMK on `pcmk_a` |
-| **Partner (DTCC) VIP — site B** | `10.60.0.20` | `net-ext`, floats with QMPCMK on `pcmk_b` |
-| DTCC service VM | `10.60.0.50` | `net-ext` |
+| **Partner (SVC) VIP — site A** | `10.60.0.10` | `net-ext`, floats with QMPCMK on `pcmk_a` |
+| **Partner (SVC) VIP — site B** | `10.60.0.20` | `net-ext`, floats with QMPCMK on `pcmk_b` |
+| SVC service VM | `10.60.0.50` | `net-ext` |
 
-So: `QMDTCC.QMPCMK` SENDER `CONNAME('10.60.0.10(1414),10.60.0.20(1414)')`;
-`QMPCMK.QMDTCC` SENDER `CONNAME('10.60.0.50(1414)')`. Pacemaker manages the
+So: `QMSVC.QMPCMK` SENDER `CONNAME('10.60.0.10(1414),10.60.0.20(1414)')`;
+`QMPCMK.QMSVC` SENDER `CONNAME('10.60.0.50(1414)')`. Pacemaker manages the
 partner VIP as a second `IPaddr2` resource colocated and ordered with the QM, per
 site. The internal app continues to use the data-plane VIPs unchanged.
 
@@ -286,12 +286,12 @@ This mirrors production accurately — internal consumers hit an internal servic
 address; external partners hit a separate, internet-facing address that differs
 per site — and it gives the inter-business hop its own segment to traffic-shape
 later (§9). The pcmk nodes gain a `net-ext` NIC (`10.60.0.5{1,2,3}` site A,
-`10.60.0.6{1,2,3}` site B); `dtcc-sim` gains `net-ext` and drops `net-dtcc`.
+`10.60.0.6{1,2,3}` site B); `svc-sim` gains `net-ext` and drops `net-svc`.
 
 ### 7.2 Decision: two VIPs (confirmed)
 
 The two-VIP model in §7.1 is adopted. The rejected alternative — a **single
-shared VIP** reachable by both the internal app and DTCC (one network, one VIP
+shared VIP** reachable by both the internal app and SVC (one network, one VIP
 per site) — is simpler (no second `IPaddr2` resource) but **collapses the
 two-business boundary** onto one network and erases the internal/partner address
 distinction. That distinction is load-bearing: in the real world the internal and
@@ -313,17 +313,17 @@ Grounded in the current `lab/topology.yaml`:
 - **app** = the existing `app-client` VM (role rename to `app`). Already homed on
   `net-data-a`/`net-data-b`, so it already reaches both site VIPs; it needs only
   the CONNAME-list client configuration. No re-homing.
-- **DTCC service VM** = repurpose the existing `dtcc-sim` VM into the real
-  counterparty: it hosts **QMDTCC** (a standalone queue manager) **and** the
-  bindings **service** (responder). Re-home it from `net-dtcc` onto `net-ext`
+- **SVC service VM** = repurpose the existing `svc-sim` VM into the real
+  counterparty: it hosts **QMSVC** (a standalone queue manager) **and** the
+  bindings **service** (responder). Re-home it from `net-svc` onto `net-ext`
   (§7) so it can reach our partner VIPs and be reached from our QM.
 - **New setup** `distributed` (working name) composes the HA/DR cluster with the
   counterparty and the app: groups `[san_a, san_b, pcmk_a, pcmk_b]` (our QM,
-  both sites) + a `dtcc` service group + the `app` group, provisioned so the
+  both sites) + a `svc` service group + the `app` group, provisioned so the
   full cross-WAN request/reply path exists and is exercisable.
 - **Retire** the `standalone` setup, the `qm-main` VM, and **QMAIN** — a
   placeholder never used in HA/DR testing.
-- **Retire** the vestigial/mismatched EPN client pair
+- **Retire** the vestigial/mismatched FFH client pair
   (`clients/epn_requester.py` / `clients/epn_responder.py`) and reconcile the
   `clients/dr_*.py` helpers to the app/service roles defined here (a single
   reconnectable client to QMPCMK for the app; a bindings responder for the
@@ -349,7 +349,7 @@ mechanism underneath differs. It is out of scope for the first build.
 
 ## 10. The counterparty is a black box (v1 assumption)
 
-v1 assumes **DTCC presents a single transparent endpoint** — one queue manager,
+v1 assumes **SVC presents a single transparent endpoint** — one queue manager,
 one CONNAME, internal resiliency opaque to us. This is a legitimate real-world
 presentation (some counterparties genuinely behave this way) and it **isolates
 the variable**: when the inter-QM channel re-establishes after a failover, we
@@ -361,9 +361,9 @@ requirements are known. The expectation is that the eventual real model is on th
 
 ## 11. Open issues
 
-1. **Remote-side resiliency model.** v1 = single transparent DTCC endpoint.
+1. **Remote-side resiliency model.** v1 = single transparent SVC endpoint.
    Model richer counterparty topologies (transparent / two named QMs / per-site
-   endpoints) once DTCC's real requirements are known. This may change the
+   endpoints) once SVC's real requirements are known. This may change the
    inter-QM design (CONNAME handling, channel set) on *our* side.
 2. **WAN traffic-shaping.** Throttle/delay/drop on `net-ext` to simulate WAN
    degradation (§7.3).
@@ -386,7 +386,7 @@ docs/site.
 
 A build is "done" against this spec when:
 
-1. An **app** request `MQPUT` to `DTCC.REQUEST` crosses the WAN, is processed by
+1. An **app** request `MQPUT` to `SVC.REQUEST` crosses the WAN, is processed by
    the **service**, and the reply returns to `APP.REPLY` — across two distinct
    queue managers connected only by sender/receiver channels.
 2. Forcing an **HA** failover of QMPCMK *mid-flow* leaves the request/reply path
@@ -394,7 +394,7 @@ A build is "done" against this spec when:
    messages survive and flush, **no loss, no duplication, no corruption** (shared
    storage; proven under load in #66).
 3. Forcing a **DR** cutover of QMPCMK leaves the path working — the app and the
-   DTCC SENDER follow QMPCMK to the site-B VIP via their CONNAME lists, and the
+   SVC SENDER follow QMPCMK to the site-B VIP via their CONNAME lists, and the
    never-both-live invariant holds throughout — with loss semantics by cutover
    type:
    - **Planned/graceful** DR (quiesce → drain xmitqs → promote): **RPO 0**, no
@@ -405,9 +405,9 @@ A build is "done" against this spec when:
      DR-validation framework; cf. #74, master design §4.2). RPO 0 here is an
      edge-case windfall, not a pass condition.
 4. After a **DR cutover**, **both** VIPs are live at the target site — the data
-   VIP *and* the partner (`net-ext`) VIP — and **DTCC's SENDER reconnects** and
+   VIP *and* the partner (`net-ext`) VIP — and **SVC's SENDER reconnects** and
    resumes flow. (Guards the two-VIP automation gap, §7.1.)
-5. The two-business boundary is structurally real: DTCC reaches our QM only
+5. The two-business boundary is structurally real: SVC reaches our QM only
    across `net-ext`, never our internal planes.
-6. `QMAIN`/`standalone` and the vestigial EPN clients are removed; the tree
+6. `QMAIN`/`standalone` and the vestigial FFH clients are removed; the tree
    contains no single-QM-masquerading-as-distributed paths.

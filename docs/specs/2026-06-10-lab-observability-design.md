@@ -60,7 +60,7 @@ the fleet at a glance, whether the trade is flowing, and — the lab-specific
 payoff — *which node owns the queue manager right now* and what the replication
 lag / RPO window is as a failover happens.
 
-This is also a client-facing artifact. When we show DTCC "here is what each arm
+This is also a client-facing artifact. When we show SVC "here is what each arm
 costs to operate," a shared Grafana dashboard both arms are watched through is
 far more credible than a homegrown toy.
 
@@ -103,7 +103,7 @@ far more credible than a homegrown toy.
                                             is .1; drills never sever it)
    +-----------+        |
    |   obs     | .2 ----+   every node already carries a net-mgmt NIC (#104)
-   | Prometheus|        +-- qm-main(.10) dtcc-sim(.50) app-client(.60)
+   | Prometheus|        +-- qm-main(.10) svc-sim(.50) app-client(.60)
    | + Grafana |        +-- rdqm-a/b(.31-33/.41-43)   (RDQM arm)
    +-----------+        +-- san-a/b(.5/.6) pcmk-a/b(.51-53/.61-63)
         ^               +-- mon-probe(.3)
@@ -286,7 +286,7 @@ there is never a half-built dashboard.
   `qm-main`; `ha_cluster_exporter` on the Pacemaker arm. **Plus the QM-side
   enablement** (pushback Issue 3): an Ansible + `pymqrest` step that turns on QM
   monitoring/statistics and lays down the exporter's **SVRCONN channel + auth**.
-  Per the design's §11, DTCC mandates **TLS** on MQ channels, so the exporter
+  Per the design's §11, SVC mandates **TLS** on MQ channels, so the exporter
   channel is TLS — a faithful dry-run of the onboarding config. (Allowed
   sequencing tweak: get metrics flowing on a plaintext channel first, add TLS as
   a Layer-2 follow-step.) Import IBM's and ClusterLabs' dashboards.

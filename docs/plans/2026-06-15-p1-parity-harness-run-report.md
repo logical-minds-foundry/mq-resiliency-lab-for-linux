@@ -232,8 +232,8 @@ from mqlab.runreport import RunReport
 def _confirmed_report(arm: str) -> "object":
     facts = [
         MessageFacts(
-            seq=1, uuid="u1", firm_confirmed=True, dtcc_received=1,
-            dtcc_replied=True, on_secondary=False, on_primary_disk=False,
+            seq=1, uuid="u1", app_confirmed=True, svc_received=1,
+            svc_replied=True, on_secondary=False, on_primary_disk=False,
         )
     ]
     return build_report("BASELINE", arm, facts, peak_exposure=0)
@@ -627,7 +627,7 @@ def _setup(qm: QmConfig | None) -> Setup:
     return Setup(
         name="distributed",
         description="d",
-        groups=["san_a", "pcmk_a", "dtcc", "app"],
+        groups=["san_a", "pcmk_a", "svc", "app"],
         provision="ansible/site-distributed.yml",
         secrets=[],
         qm=qm,
@@ -635,7 +635,7 @@ def _setup(qm: QmConfig | None) -> Setup:
 
 
 def test_baseline_plan_is_one_step_invoking_dr_run() -> None:
-    qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10", dtcc_conn="10.60.0.50")
+    qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10", svc_conn="10.60.0.50")
     run_dir = Path("/tmp/run/20260615T143000Z-distributed")
     steps = baseline_run_plan(_setup(qm), run_dir, seconds=30, rate=20)
     assert len(steps) == 1
@@ -646,8 +646,8 @@ def test_baseline_plan_is_one_step_invoking_dr_run() -> None:
     assert "--qm" in argv and "QMPCMK" in argv
     assert "--vip" in argv and "10.10.1.200" in argv
     assert "--seconds" in argv and "30" in argv
-    assert str(run_dir / "firm.jsonl") in argv
-    assert str(run_dir / "dtcc.jsonl") in argv
+    assert str(run_dir / "app.jsonl") in argv
+    assert str(run_dir / "svc.jsonl") in argv
 
 
 def test_baseline_plan_requires_a_qm() -> None:
@@ -688,8 +688,8 @@ def baseline_run_plan(setup: Setup, run_dir: Path, *, seconds: int, rate: int) -
     if setup.qm is None:
         raise ValueError(f"setup {setup.name!r} has no QM to drive a baseline run")
     qm = setup.qm
-    firm_ledger = run_dir / "firm.jsonl"
-    dtcc_ledger = run_dir / "dtcc.jsonl"
+    app_ledger = run_dir / "app.jsonl"
+    svc_ledger = run_dir / "svc.jsonl"
     command = Command(
         [
             "bash",
@@ -704,10 +704,10 @@ def baseline_run_plan(setup: Setup, run_dir: Path, *, seconds: int, rate: int) -
             str(seconds),
             "--rate",
             str(rate),
-            "--firm-ledger",
-            str(firm_ledger),
-            "--dtcc-ledger",
-            str(dtcc_ledger),
+            "--app-ledger",
+            str(app_ledger),
+            "--svc-ledger",
+            str(svc_ledger),
         ]
     )
     label = f"baseline run {setup.name} ({seconds}s @ {rate}/s)"
@@ -739,11 +739,11 @@ vrg-commit --type feat --scope run --message "runplan: baseline_run_plan assembl
 ```bash
 #!/usr/bin/env bash
 # lab/scripts/dr-run.sh — drive one no-fault baseline flow for a setup and collect
-# the firm + DTCC ledgers to the host run dir (pivot spec §4.4 / DR-HA framework §4).
+# the app + SVC ledgers to the host run dir (pivot spec §4.4 / DR-HA framework §4).
 # Assumes the setup is already provisioned and up (run `mqlab vm provision <setup>`
 # first). Reuses the deployed clients/dr_flow.py + clients/dr_responder.py.
 set -euo pipefail
-SETUP="" QM="" VIP="" SECONDS_RUN=30 RATE=20 FIRM_LEDGER="" DTCC_LEDGER=""
+SETUP="" QM="" VIP="" SECONDS_RUN=30 RATE=20 APP_LEDGER="" SVC_LEDGER=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --setup) SETUP="$2"; shift 2;;
@@ -751,32 +751,32 @@ while [[ $# -gt 0 ]]; do
     --vip) VIP="$2"; shift 2;;
     --seconds) SECONDS_RUN="$2"; shift 2;;
     --rate) RATE="$2"; shift 2;;
-    --firm-ledger) FIRM_LEDGER="$2"; shift 2;;
-    --dtcc-ledger) DTCC_LEDGER="$2"; shift 2;;
+    --app-ledger) APP_LEDGER="$2"; shift 2;;
+    --svc-ledger) SVC_LEDGER="$2"; shift 2;;
     *) echo "dr-run: unknown arg $1" >&2; exit 2;;
   esac
 done
-: "${SETUP:?} ${QM:?} ${VIP:?} ${FIRM_LEDGER:?} ${DTCC_LEDGER:?}"
+: "${SETUP:?} ${QM:?} ${VIP:?} ${APP_LEDGER:?} ${SVC_LEDGER:?}"
 cd "$(dirname "$0")/.."
-mkdir -p "$(dirname "$FIRM_LEDGER")"
+mkdir -p "$(dirname "$APP_LEDGER")"
 
-# Responder on the surviving DTCC side (background; outlives the flow window).
-vagrant ssh dtcc-sim -c \
-  "~/mqvenv/bin/python ~/dr_responder.py --qm QMDTCC --conn 'localhost(1414)' \
-   --in-queue TRADE.REQUEST --out-queue FIRM.REPLY --seconds $((SECONDS_RUN + 10)) \
-   --ledger ~/dr-ledgers/dtcc.jsonl" &
+# Responder on the surviving SVC side (background; outlives the flow window).
+vagrant ssh svc-sim -c \
+  "~/mqvenv/bin/python ~/dr_responder.py --qm QMSVC --conn 'localhost(1414)' \
+   --in-queue SVC.REQUEST --out-queue APP.REPLY --seconds $((SECONDS_RUN + 10)) \
+   --ledger ~/dr-ledgers/svc.jsonl" &
 RESP_PID=$!
 
-# Steady-state firm flow through the QM VIP.
+# Steady-state app flow through the QM VIP.
 vagrant ssh app-client -c \
   "~/mqvenv/bin/python ~/dr_flow.py --qm ${QM} --conn '${VIP}(1414)' \
    --req-queue DR.REQUEST --reply-queue DR.REPLY --rate ${RATE} --seconds ${SECONDS_RUN} \
-   --ledger ~/dr-ledgers/firm.jsonl"
+   --ledger ~/dr-ledgers/app.jsonl"
 wait "$RESP_PID"
 
 # Collect both ledgers to the host run dir.
-vagrant ssh app-client -c 'cat ~/dr-ledgers/firm.jsonl' > "$FIRM_LEDGER"
-vagrant ssh dtcc-sim   -c 'cat ~/dr-ledgers/dtcc.jsonl' > "$DTCC_LEDGER"
+vagrant ssh app-client -c 'cat ~/dr-ledgers/app.jsonl' > "$APP_LEDGER"
+vagrant ssh svc-sim   -c 'cat ~/dr-ledgers/svc.jsonl' > "$SVC_LEDGER"
 echo "dr-run: collected ledgers for ${SETUP} (${QM}@${VIP})"
 ```
 
@@ -869,14 +869,14 @@ def run_setup(
     steps = baseline_run_plan(setup, run_dir, seconds=seconds, rate=rate)
     _execute("run", steps, step_mode=step)  # raises typer.Exit on any step failure
 
-    firm = Ledger.read_jsonl(run_dir / "firm.jsonl")
-    dtcc = Ledger.read_jsonl(run_dir / "dtcc.jsonl")
+    app = Ledger.read_jsonl(run_dir / "app.jsonl")
+    svc = Ledger.read_jsonl(run_dir / "svc.jsonl")
     facts = reconcile(
-        firm, dtcc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
+        app, svc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
     )
     assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
     scenario = build_report(
-        "BASELINE", parity.provisional_arm(setup.name), facts, peak_exposure=peak_exposure(firm)
+        "BASELINE", parity.provisional_arm(setup.name), facts, peak_exposure=peak_exposure(app)
     )
     metadata = capture_metadata(
         setup.name,

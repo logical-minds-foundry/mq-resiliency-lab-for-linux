@@ -10,7 +10,7 @@
 > defers mutual TLS / `CHLAUTH` / `SSLPEER`), and that the Native HA arm design
 > ([`2026-06-16-nativeha-k8s-arm-design.md`](2026-06-16-nativeha-k8s-arm-design.md)
 > §4.9, merged via #200) escalated to a **hard, up-front blocking dependency**.
-> DTCC also mandates channel TLS (Important Notice GOV1683-24). This is that lab.
+> SVC also mandates channel TLS (its connectivity security standards). This is that lab.
 
 ---
 
@@ -25,7 +25,7 @@ the next thing to build:
 1. **The Native HA arm hard-requires it.** On the OpenShift substrate, TLS is not
    optional hardening — Route SNI routing and Native HA CRR replication both
    require it (nativeha design §4.9). The arm build is gated behind this layer.
-2. **DTCC mandates it.** Channel TLS per GOV1683-24 is a real onboarding
+2. **SVC mandates it.** Channel TLS per those security standards is a real onboarding
    requirement; the tooling must eventually emit onboarding-ready TLS-secured
    channel config (authoritative design §9.2, §11).
 
@@ -40,7 +40,7 @@ same provider later.
 **In scope (this spec):**
 
 - A **certificate-authority "provider"** for the lab, modeling **two
-  organizations** (the in-house client org and the DTCC-modeled service org).
+  organizations** (the app client org and the SVC-modeled service org).
 - **Per-entity certificate/key issuance** for both organizations' MQ entities.
 - **Assembly of the key repositories** (PKCS#12) each entity consumes.
 - **Provisioning lifecycle** — idempotent create/ensure, add-entity.
@@ -81,7 +81,7 @@ exposes `apt_repos`/`vagrant_plugins`, not an Ansible-collections key, so the
 
 The provider, run from a committed **entity inventory**, does this per run:
 
-1. **Build the two org root CAs** — `client-org` and `dtcc-org`, each a private
+1. **Build the two org root CAs** — `app-org` and `svc-org`, each a private
    key + self-signed root certificate (§4).
 2. **Issue each entity's cert** — generate the entity key + CSR, sign with **its
    own org's** CA → personal certificate (§5).
@@ -95,23 +95,23 @@ exact thing an MQ queue manager or client consumes.
 ## 4. CA topology & trust model
 
 **Two independent organizational CAs, cross-trusted by signer exchange** — there
-is **no shared root**, exactly as two separate real enterprises do DTCC
+is **no shared root**, exactly as two separate real enterprises do SVC
 connectivity. This is the high-fidelity model: it lets the lab actually exercise
 cross-org `SSLPEER`/`CHLAUTH` DN matching across a real trust boundary instead of
 hand-waving it.
 
 ```
-client-org Root CA                      dtcc-org Root CA
-   ├─ QMPCMK            signer certs        ├─ QMDTCC
-   ├─ QMRDQM            exchanged  <──>      └─ (dtcc-side entities)
+app-org Root CA                      svc-org Root CA
+   ├─ QMPCMK            signer certs        ├─ QMSVC
+   ├─ QMRDQM            exchanged  <──>      └─ (svc-side entities)
    ├─ app-client
    ├─ mq_prometheus
    └─ mqweb / pymqrest
 ```
 
 - **Intra-org trust:** every entity trusts its own org's CA.
-- **Cross-org trust (the boundary that matters):** the in-house QMs that talk to
-  DTCC (`QMPCMK ↔ QMDTCC`, `QMRDQM ↔ QMDTCC`) carry the **other** org's CA signer
+- **Cross-org trust (the boundary that matters):** the app QMs that talk to
+  SVC (`QMPCMK ↔ QMSVC`, `QMRDQM ↔ QMSVC`) carry the **other** org's CA signer
   cert in their keystore, and vice versa. That mutual signer exchange is the real
   onboarding handshake, in miniature.
 
@@ -119,26 +119,26 @@ client-org Root CA                      dtcc-org Root CA
 
 Driven by a committed inventory. **DN scheme: `O=<org>, OU=<service>, CN=<entity>`.**
 
-**In-house identity toward DTCC (partial-DN matching).** The in-house clearing QMs
+**In-house identity toward SVC (partial-DN matching).** The app messaging QMs
 across arms (`QMPCMK`, `QMRDQM`, later `QMNATIVE`) share a stable
-**`O=client-org, OU=clearing-service`** while keeping **distinct per-arm `CN`s**.
-DTCC pins **one** peer rule via a **partial-DN `SSLPEER`** on the `O`/`OU` (the `CN`
+**`O=app-org, OU=messaging`** while keeping **distinct per-arm `CN`s**.
+SVC pins **one** peer rule via a **partial-DN `SSLPEER`** on the `O`/`OU` (the `CN`
 is free to vary) — faithful single-counterparty onboarding **without** collapsing
 the per-arm identities, so the arm-namespacing concurrency capability (pivot §3.4)
-is preserved. *(Whether real DTCC pins full- or partial-DN is an onboarding /
+is preserved. *(Whether real SVC pins full- or partial-DN is an onboarding /
 Bucket-A verification; the lab models partial-DN, the more flexible choice. The
 actual `SSLPEER` rule is configured in the downstream channel-security spec; the
 **DN structure** is pinned here so certs need no reissue.)*
 
 | Org (`O=`) | Entity (`CN=`) | Needs | Role |
 |---|---|---|---|
-| `client-org` | `QMPCMK` | personal + trust | Pacemaker-arm in-house QM; cross-org channel to DTCC |
-| `client-org` | `QMRDQM` | personal + trust | RDQM-arm in-house QM; cross-org channel to DTCC |
-| `client-org` | `app-client` | personal + trust | MQI client, mutual TLS over SVRCONN |
-| `client-org` | `mq_prometheus` | personal + trust | exporter client, TLS SVRCONN to the QM |
-| `client-org` | `mqweb` | personal | admin REST/web endpoint server cert (existing `mqwebuser.xml` sslRef) |
-| `client-org` | `pymqrest` | **trust-only** | REST client; authenticates by basic/LTPA, so it needs the org **CA bundle**, not a personal cert (unless mTLS-to-REST is added later) |
-| `dtcc-org` | `QMDTCC` | personal + trust | DTCC-sim service QM; cross-org channel to the in-house QMs |
+| `app-org` | `QMPCMK` | personal + trust | Pacemaker-arm app QM; cross-org channel to SVC |
+| `app-org` | `QMRDQM` | personal + trust | RDQM-arm app QM; cross-org channel to SVC |
+| `app-org` | `app-client` | personal + trust | MQI client, mutual TLS over SVRCONN |
+| `app-org` | `mq_prometheus` | personal + trust | exporter client, TLS SVRCONN to the QM |
+| `app-org` | `mqweb` | personal | admin REST/web endpoint server cert (existing `mqwebuser.xml` sslRef) |
+| `app-org` | `pymqrest` | **trust-only** | REST client; authenticates by basic/LTPA, so it needs the org **CA bundle**, not a personal cert (unless mTLS-to-REST is added later) |
+| `svc-org` | `QMSVC` | personal + trust | SVC-sim service QM; cross-org channel to the app QMs |
 
 "trust" = the signer/CA certs that entity must hold (own org CA; plus the other
 org's CA for cross-org peers — §4). *(QMNATIVE / OpenShift Route + CRR endpoint
@@ -176,7 +176,6 @@ one MQ tool into the otherwise end-to-end-Ansible pipeline.
 - IBM MQ supports PKCS#12 keystores — <https://community.ibm.com/community/user/blogs/robert-parker1/2024/08/13/did-you-know-ibm-mq-supports-pkcs12-keystores>
 - Securing IBM MQ 9.4 (PKCS#12 / `runmqktool`; CMS tooling removal) — <https://public.dhe.ibm.com/software/integration/wmq/docs/V9.4/PDFs/mq94.secure.pdf>
 - Ansible `community.crypto` collection — <https://docs.ansible.com/ansible/latest/collections/community/crypto/>
-- DTCC Important Notice GOV1683-24 (channel TLS) — <https://www.dtcc.com/-/media/Files/pdf/2024/4/19/GOV1683-24.pdf>
 
 ## 7. Secrets & ephemerality
 
@@ -246,11 +245,11 @@ foundation is stable.
   with `mqweb` cert adoption so nothing silently breaks. (Provider issues the certs
   here; the wiring + flip are downstream.)
 
-## 10. Fidelity to GOV1683-24
+## 10. Fidelity to those security standards
 
 Cipher specs, key sizes, and TLS versions should be **onboarding-representative**
 (TLS 1.2/1.3 cipher specs MQ supports, sane key sizes) so the lab's certs are a
-faithful dry-run of the DTCC-mandated posture. The exact mandated specifics are
+faithful dry-run of the SVC-mandated posture. The exact mandated specifics are
 pinned when the downstream channel-security spec consumes this foundation; here
 the goal is "representative, not toy."
 

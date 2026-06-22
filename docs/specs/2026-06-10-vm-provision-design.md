@@ -74,7 +74,7 @@ pcmk_san_dr:
 rdqm_ha:   { groups: [rdqm_a],         provision: ansible/site-rdqm.yml }
 rdqm_dr:   { groups: [rdqm_a, rdqm_b], provision: ansible/site-rdqm.yml }
 standalone:
-  groups: [qm, dtcc, client]
+  groups: [qm, svc, client]
   provision: ansible/site.yml
   secrets: [mqweb_admin_password]
 ```

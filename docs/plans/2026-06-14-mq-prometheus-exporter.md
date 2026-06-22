@@ -49,10 +49,10 @@ monitoring attributes it needs; Prometheus scrapes `mon-probe:9157`.
 **In scope:** QMPCMK exporter, end-to-end (QM attrs → exporter on mon-probe →
 scrape → panel data).
 
-**Out of scope (follow-up):** monitoring **QMDTCC** — it sits on `net-ext`, which
+**Out of scope (follow-up):** monitoring **QMSVC** — it sits on `net-ext`, which
 `mon-probe` isn't on; needs a `net-ext` NIC on `mon-probe` + a second exporter
 instance (port 9158) + scrape job. The role is parameterized so adding it later is
-a config addition, not a rewrite. (Panel's QMDTCC row reads no-data until then.)
+a config addition, not a rewrite. (Panel's QMSVC row reads no-data until then.)
 
 ## File structure
 
@@ -63,7 +63,7 @@ a config addition, not a rewrite. (Panel's QMDTCC row reads no-data until then.)
 - **Modify** `ansible/roles/mq-pcmk-qmgr/tasks/main.yml` — add the monitoring
   `ALTER QMGR` + `MAXHANDS(512)` to the QM-create MQSC block (cold-boot one-pass).
 - **Modify** `ansible/roles/mq-qmgr/tasks/main.yml` — same `ALTER QMGR` for
-  standalone QMs (QMDTCC), so it's exporter-ready when we add its instance.
+  standalone QMs (QMSVC), so it's exporter-ready when we add its instance.
 - **Modify** `src/mqlab/scrape.py` — add the `ibmmq` scrape job (`mon-probe:9157`).
 - **Modify** `ansible/site-obs.yml` — run `mq-exporter` on the probe (vars:
   QMPCMK / `10.10.1.200(1414)` / `APP.SVRCONN` / curated lists / 9157).

@@ -258,7 +258,7 @@ configuration plus roles, not a new code backend:
   organically. Per **#267**, distributed + HA + DR is the keystone (the only
   stack where a DR cutover moves *live distributed messaging* across sites), and
   Native HA must be shaped around it **from the start, not retrofitted**. The
-  one setup declares the full target — app + `dtcc` partner + 3+3 (`nha_<os>_a`
+  one setup declares the full target — app + `svc` partner + 3+3 (`nha_<os>_a`
   + `nha_<os>_b`) with CRR — and is **built in phases against that single
   registry entry**: Phase 1 validates HA on the site-A subset; Phase 3 boots
   site B and enables CRR. No `nativeha_ha`/`nativeha_dr` entries are created.
@@ -275,11 +275,11 @@ configuration plus roles, not a new code backend:
 
 ### 4.5 App-flow slotting
 
-`QMNATIVE` replaces `QMRDQM` / `QMPCMK` as the in-house HA queue manager in the
+`QMNATIVE` replaces `QMRDQM` / `QMPCMK` as the app HA queue manager in the
 distributed mesh
 ([`2026-06-13-distributed-mq-architecture-design.md`](2026-06-13-distributed-mq-architecture-design.md)):
-`QMNATIVE` ↔ `QMDTCC` across the simulated WAN, `app-client` puts trades,
-`dtcc-sim` replies. Same app contract, new substrate — the arm drops into the
+`QMNATIVE` ↔ `QMSVC` across the simulated WAN, `app-client` puts trades,
+`svc-sim` replies. Same app contract, new substrate — the arm drops into the
 existing message flow so the comparison stays like-for-like.
 
 ## 5. Phasing (one unit of work; PR granularity flexible)

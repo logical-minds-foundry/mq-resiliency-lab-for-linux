@@ -20,7 +20,7 @@ input tables (§3.2). RDQM is the richest of the three boards — it has Native-
 cross-site DR **and** a real DRBD storage section (which Native HA lacked).
 
 **Out of scope:** changes to the PCMK/NHA boards or the builders (already arm-agnostic); the
-distributed mesh (`distributed-rdqm-rhel`, which shares dtcc/app).
+distributed mesh (`distributed-rdqm-rhel`, which shares svc/app).
 
 ## 2. Dependency
 

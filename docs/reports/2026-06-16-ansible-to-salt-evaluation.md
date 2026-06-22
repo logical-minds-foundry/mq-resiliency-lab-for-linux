@@ -56,7 +56,7 @@ Surveyed 2026-06-16 against the live tree:
 
 - **9 playbooks** (two are ~1-line QM up/down wrappers), **21 roles, 21 Jinja2 templates,
   ~2,260 lines.**
-- **Zero Galaxy collections** — pure `ansible-core` builtins (reaffirmed by #157, which
+- **Zero Galaxy collections** — pure `ansible-core` builtins (reafapped by #157, which
   actively dropped a `community.general` dep). No `ibm.ibm_mq`; all MQ logic is
   `shell`/`command` against `/opt/mqm/bin`.
 - **Idiom frequency** (`ansible.builtin.*`): shell 36, copy 26, systemd 21, command 21,

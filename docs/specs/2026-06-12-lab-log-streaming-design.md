@@ -6,7 +6,7 @@
 > **Context:** A bolt-on to the existing lab observability stack (Prometheus +
 > Grafana on the `obs` VM). The metrics layer answers *"is it up, how loaded,
 > is the network healthy."* It cannot answer *"what is actually happening right
-> now"* — the message-by-message story of the firm app and the DTCC responder
+> now"* — the message-by-message story of the app app and the SVC responder
 > as they push trades through the HADR config, or the critical-event narration
 > of the cluster daemons during a failover. This design adds **live log
 > streaming** into the same Grafana surface so the operator can *watch* the lab
@@ -42,13 +42,13 @@ machines, rendered as **live-tailing panels** inside the existing Grafana
 dashboard, bolted onto the current Prometheus/Grafana stack without disturbing
 it.
 
-**First increment:** the two simulator apps — the firm-side requester and the
-DTCC-side responder — so the operator can watch messages send/ack in real time
+**First increment:** the two simulator apps — the app-side requester and the
+SVC-side responder — so the operator can watch messages send/ack in real time
 during a test, including across an HADR failover.
 
 **Success criteria.**
 
-- During a test run, the firm and DTCC app messages appear in Grafana panels in
+- During a test run, the app and SVC app messages appear in Grafana panels in
   **near-real-time** (Loki live-tail), reading naturally as a human log line.
 - The operator can narrow the stream by **severity, host, and source**, and
   full-text-search the message (e.g. `|= "id=abc"`) to follow a specific trade —
@@ -97,7 +97,7 @@ epn_requester / epn_responder
 systemd-run --unit=mqlab-requester --collect      ← launch wrapper (per app)
    │
    ▼
-journald   (on app-client / dtcc-sim)              unit=mqlab-requester, _HOSTNAME
+journald   (on app-client / svc-sim)              unit=mqlab-requester, _HOSTNAME
    │
    ▼
 Grafana Alloy   (fleet-wide, one per node)         reads journald, attaches host label
@@ -142,7 +142,7 @@ Both apps emit **one JSON object per line** through a **single shared emitter**
 |---|---|---|---|
 | `ts` | timestamp | `2026-06-12T14:03:01.123Z` | app-side precision timestamp (RFC 3339, UTC) |
 | `level` | severity | `info` / `warn` / `error` | panel coloring, severity filtering |
-| `msg` | message | `sent trade #42 to DTCC.REQUEST (id=a1b2c3)` | the human line; carries any domain detail as free text |
+| `msg` | message | `sent trade #42 to SVC.REQUEST (id=a1b2c3)` | the human line; carries any domain detail as free text |
 
 Two further dimensions arrive **from the journald + Alloy labels**, not the JSON
 line, mirroring syslog's hostname and tag:
@@ -213,8 +213,8 @@ one Grafana **Logs panel**; adding a source later is appending one entry.
 
 ```python
 LOG_SOURCES = [
-    {"title": "Firm app — requester", "selector": '{unit="mqlab-requester"}', "hosts": ["app-client"]},
-    {"title": "DTCC app — responder",  "selector": '{unit="mqlab-responder"}', "hosts": ["dtcc-sim"]},
+    {"title": "App app — requester", "selector": '{unit="mqlab-requester"}', "hosts": ["app-client"]},
+    {"title": "SVC app — responder",  "selector": '{unit="mqlab-responder"}', "hosts": ["svc-sim"]},
     # deferred — each a one-line addition later:
     # {"title": "Cluster · Pacemaker", "selector": '{unit=~"pacemaker.*|corosync.*", host=~"pcmk-.*"}'},
 ]

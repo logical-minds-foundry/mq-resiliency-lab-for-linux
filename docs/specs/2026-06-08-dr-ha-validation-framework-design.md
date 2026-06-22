@@ -75,7 +75,7 @@ result. (This reinforces lab-design §0: the lab is durable, reusable R&D infras
 
 **Goals**
 
-1. A **continuous, steady-state flow** through the full path (firm → QMAIN → DTCC sim →
+1. A **continuous, steady-state flow** through the full path (app → QMAIN → SVC sim →
    reply) that keeps running *through* every fault and DR event.
 2. **HA:** demonstrate **RPO 0 under load** across *every* fault in the suite. When a
    fault does **not** hold zero, that is not a failure of the exercise — it opens an
@@ -156,7 +156,7 @@ only as a deliberate knob in FB-REPLAY (§6) to demonstrate its mitigating effec
 
 Every message is **self-identifying**: a monotonic sequence number, a UUID, and
 `created` / `sent` / `reply` timestamps. Because the synthetic format is *ours*, detection
-needs nothing from DTCC's real protocol — that constraint only blocks Layer C, not Layer B.
+needs nothing from SVC's real protocol — that constraint only blocks Layer C, not Layer B.
 
 The generator and responder both write the app-side ledger (§4.2) as a side effect of
 every committed put/get, so the ledger is a faithful record of what the *application*
@@ -165,17 +165,17 @@ changed to persistent + syncpoint as part of this work.
 
 ### 4.2 Ledger oracle (three tiers)
 
-1. **App-side, both ends** — firm (requester) and DTCC sim (responder). **Authoritative
+1. **App-side, both ends** — app (requester) and SVC sim (responder). **Authoritative
    and production-realistic.** Persisted append-only so it survives the fault for
-   analysis. The **firm-side** ledger lives *with the firm client*, which must itself
+   analysis. The **app-side** ledger lives *with the app client*, which must itself
    survive a single-site loss to keep the flow running — so it cannot sit only on the
    primary site. Encodes the per-message tri-state: **never-sent** / **in-pipeline-unresolved**
    (local QM ACKed, no reply yet) / **confirmed** (reply received).
-2. **DTCC god's-eye** — a lab-only instrument recording what DTCC *actually* received and
+2. **SVC god's-eye** — a lab-only instrument recording what SVC *actually* received and
    replied to. We would never have this in production; in the lab it lets us **show our
    app-side detection is correct** against absolute truth, and **size the Ambiguous
-   bucket** (§5). **It must survive the faults under test:** the DTCC sim and its ledger
-   run on **independent, surviving infrastructure** — modelling DTCC as the third party it
+   bucket** (§5). **It must survive the faults under test:** the SVC sim and its ledger
+   run on **independent, surviving infrastructure** — modelling SVC as the third party it
    is, reachable over (simulated) leased lines, part of *neither* of our sites — so a
    full-site loss or a primary-isolation scenario never takes the oracle with it, and the
    analyzer can always reach it afterward.
@@ -203,10 +203,10 @@ single faults.
 Reports, at any instant T, the **exact** at-risk count the *application* can stand behind:
 
 ```
-exposure(T) = count(in-pipeline / unresolved)   [from the firm ledger]
+exposure(T) = count(in-pipeline / unresolved)   [from the app ledger]
 ```
 
-These are messages the firm has sent and had ACKed by the local QM but **not yet had
+These are messages the app has sent and had ACKed by the local QM but **not yet had
 reply-confirmed** — the set whose fate a failure at T would leave in doubt. Sampled
 continuously, this is the honest "if we die this instant, here is what is unresolved"
 number. At steady state, a well-architected QM at low-to-medium rate never actually queues
@@ -234,7 +234,7 @@ summary (§7).
 
 ## 5. Message lifecycle & classification model
 
-**Firm (requester) state machine — one record per message:**
+**App (requester) state machine — one record per message:**
 
 ```
 CREATED ──MQPUT+commit OK──▶ IN-PIPELINE ──reply matched──▶ CONFIRMED
@@ -243,31 +243,31 @@ CREATED ──MQPUT+commit OK──▶ IN-PIPELINE ──reply matched──▶ 
 ```
 
 **IN-PIPELINE / unresolved** is the dangerous state: the local QM ACKed (the message is
-durable *somewhere*), but no reply has returned — so the firm cannot know whether DTCC
+durable *somewhere*), but no reply has returned — so the app cannot know whether SVC
 received it, processed it, or the reply died in transit. **That ambiguity is the entire
 DR problem**, and the ledger makes it explicit rather than invisible.
 
-**DTCC sim** independently records `RECEIVED` + `REPLIED` into the god's-eye ledger,
+**SVC sim** independently records `RECEIVED` + `REPLIED` into the god's-eye ledger,
 **keyed by message identity (UUID/seq) and counting every receive** — so a redelivered
 message is flagged as a duplicate rather than silently reprocessed. The oracle **detects
 and counts** duplicates; it does not *prevent* them (idempotency is the app's job —
 deferred to #45 / Layer C).
 
-**After a forced cutover, every message sorts into one bucket** by diffing the firm ledger
-× the DTCC god's-eye ledger × what is actually present on the secondary:
+**After a forced cutover, every message sorts into one bucket** by diffing the app ledger
+× the SVC god's-eye ledger × what is actually present on the secondary:
 
 | Bucket | Meaning | Reconciliation implication |
 |---|---|---|
 | **Confirmed** | reply received before cutover | done, safe |
 | **Continued** | replicated + cleanly reprocessed on secondary | good — the system worked |
 | **Stranded** | SENT, never replicated, sitting on the dead primary | lost *now*; **replay hazard on failback** |
-| **Lost–unprocessed** | SENT, DTCC never received, absent on secondary | safe to resend |
-| **Ambiguous** | DTCC *did* process it, reply lost in cutover | **resend = duplicate** — the reconciliation set |
-| **Duplicated** | DTCC received it twice | already a dup — must be caught |
+| **Lost–unprocessed** | SENT, SVC never received, absent on secondary | safe to resend |
+| **Ambiguous** | SVC *did* process it, reply lost in cutover | **resend = duplicate** — the reconciliation set |
+| **Duplicated** | SVC received it twice | already a dup — must be caught |
 
-**The headline.** In production you have only the firm ledger, so **Stranded +
+**The headline.** In production you have only the app ledger, so **Stranded +
 Lost–unprocessed + Ambiguous all look identical — they are just "no reply."** The
-god's-eye DTCC ledger is what lets the *lab* establish the true split and **size the
+god's-eye SVC ledger is what lets the *lab* establish the true split and **size the
 Ambiguous bucket** — the set that, in the real world, forces human reconciliation because you
 genuinely cannot tell "never arrived" from "arrived, processed, reply lost." Demonstrating
 that we can measure that boundary is the pitch.
@@ -275,7 +275,7 @@ that we can measure that boundary is the pitch.
 **Duplication has two sources:**
 
 - **At cutover:** a message replicated to the secondary *and* processed on the primary
-  before death, with the reply lost → reprocessed on the secondary → DTCC sees it twice.
+  before death, with the reply lost → reprocessed on the secondary → SVC sees it twice.
 - **At failback (operational error, not normal resync):** the "comes back to haunt you"
   hazard. Under DRBD, a recovered primary that rejoins is resynced *from* the new primary —
   its divergent, un-replicated blocks are **discarded**, so normal resync is the *safe*
@@ -308,7 +308,7 @@ produce its target buckets is itself a finding.
 | **HA-5** | rolling patch one node at a time | **0** | Continued only | maintenance under flow (RDQM kernel-module case) |
 | **DR-CTRL** | quiesce → drain → confirm replication caught up → cutover | **0** | Confirmed / Continued | RPO 0 *is* reachable — and the exact preconditions that make the claim honest |
 | **DR-FORCE-1** | primary unrecoverable, flow continues through cutover | **≠ 0** | Stranded, Ambiguous, maybe Duplicated | the baseline forced-DR loss, quantified |
-| **DR-FORCE-2** *(marquee)* | primary isolated from **both** DTCC and secondary, app keeps producing | **≠ 0** | large Stranded | the linchpin — un-replicated messages stranded, gap sized |
+| **DR-FORCE-2** *(marquee)* | primary isolated from **both** SVC and secondary, app keeps producing | **≠ 0** | large Stranded | the linchpin — un-replicated messages stranded, gap sized |
 | **DR-FORCE-3** | replication lagged/broken **then** failover (chained) | **≠ 0, scales with lag** | Stranded grows with window | loss window = replication lag; ties to the exposure gauge |
 | **FB-REPLAY** | bring the recovered primary's QM online against stale local storage *before* resync/discard | duplication risk | Duplicated | the failback **operational-error** replay; deliverable is the failback-discipline finding (normal DRBD resync discards the stranded data — the safe path); expiry shown as mitigation |
 
@@ -341,7 +341,7 @@ Two roll-ups sit on top:
 2. **Cross-arm comparison** — the same scenario's bucket census, C vs D side by side. The
    honest input Phase E was missing.
 
-**Self-correctness (fail loud).** In a **no-fault baseline run**, the god's-eye DTCC
+**Self-correctness (fail loud).** In a **no-fault baseline run**, the god's-eye SVC
 ledger must agree with the app-side ledger exactly — zero Ambiguous, zero Lost. If they
 disagree with no fault injected, the *instrument* is broken, and we fix that before
 trusting any drill. (This satisfies the "no silent failures" rule: the oracle surfaces its

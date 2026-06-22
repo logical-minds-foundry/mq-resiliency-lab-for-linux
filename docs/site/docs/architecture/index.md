@@ -24,7 +24,7 @@ it disposable and reproducible.
 Inside the lab VM the lab is itself virtualized — nested virtualization
 (Apple silicon → macOS Virtualization → Lima → KVM/TCG) runs the guest
 fleet. Those guests sit on a fabric of isolated libvirt networks: per-site
-data and heartbeat networks, a WAN that links the two sites, the client/DTCC
+data and heartbeat networks, a WAN that links the two sites, the client/SVC
 application networks, and the SAN networks. The networks are designed to be
 **severable** so failures can be injected cleanly.
 
@@ -47,9 +47,17 @@ always a separate, asynchronous DR relationship with a manual cutover.
 ## Layer 3 — The standalone QM arm (the message path)
 
 The simplest arm proves the message path itself: a single queue manager
-(`qm-main`) exchanging messages with a simulated upstream (`dtcc-sim`) and an
+(`qm-main`) exchanging messages with a simulated upstream (`svc-sim`) and an
 application client over the client network. This is the foundation the HA/DR
 arms build on.
+
+> **A note on "service".** This lab uses *service* in two distinct senses. The
+> **external service** (`SVC` / `svc-sim`) is the request/reply responder our
+> queue manager exchanges messages with across the WAN — "service" in the
+> web-service / REST-endpoint sense. Our own HA/DR queue manager is *not* called
+> "the service": it is **the queue manager** (or "the broker") that serves
+> connected MQ clients. Reserving the word "service" for the external responder
+> avoids the ambiguity the two layers would otherwise create.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/04-standalone-qm.html" style="width:100%;height:320px;border:0;border-radius:8px;" title="Standalone QM message path"></iframe>
