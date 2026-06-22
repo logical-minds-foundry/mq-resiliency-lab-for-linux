@@ -1,7 +1,7 @@
 # Native HA CRR / full HADR (#246 Phase 3): site-A Live group + site-B Recovery
 # group + TLS (lab-pki .p12) + Cross-Region Replication over net-wan. The #267
 # keystone — distributed + HA + DR on the one consolidated setup. Run after the
-# distributed mesh (site-nativeha-distributed.yml) so QMNATIVE has the app/DTCC
+# distributed mesh (site-nativeha-distributed.yml) so QMNATIVE has the app/SVC
 # objects; the recovery group inherits them by CRR.
 
 # 1. Site-A Live HA group (idempotent fast-forward if already formed).

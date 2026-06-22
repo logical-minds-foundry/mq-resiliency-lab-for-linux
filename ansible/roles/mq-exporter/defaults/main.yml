@@ -21,8 +21,8 @@ mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
 # gate). The app queue + our outbound xmitq + the app reply queue.
-mq_exporter_monitored_queues: "HA.TEST,QMDTCC,APP.REPLY"
-mq_exporter_monitored_channels: "APP.SVRCONN,QMPCMK.QMDTCC,QMDTCC.QMPCMK"
+mq_exporter_monitored_queues: "HA.TEST,QMSVC,APP.REPLY"
+mq_exporter_monitored_channels: "APP.SVRCONN,QMPCMK.QMSVC,QMSVC.QMPCMK"
 # mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
 # cold boot confirms the build — master is a placeholder for reproducibility.
 mq_exporter_ref: master

@@ -1,21 +1,21 @@
-# Shared distributed-MQ layer (RDQM-parity §4): the substrate-FREE DTCC counterparty
-# (QMDTCC) + the their-side inter-QM channels + the app (requester) message path.
+# Shared distributed-MQ layer (RDQM-parity §4): the substrate-FREE SVC counterparty
+# (QMSVC) + the their-side inter-QM channels + the app (requester) message path.
 # Imported by each arm's distributed playbook OVER its own in-house QM substrate —
 # site-distributed.yml (Pacemaker) and site-rdqm-distributed.yml (RDQM, Plan B) — so
-# both arms run the identical DTCC/app code. The importer supplies `our_qm` (this
+# both arms run the identical SVC/app code. The importer supplies `our_qm` (this
 # side's QM name) and `our_conn` (its CONNAMEs) for the their-side channels.
 
-# Cold-boot guard for the DTCC + app hosts (mirrors site-pcmk.yml's guard; #151
+# Cold-boot guard for the SVC + app hosts (mirrors site-pcmk.yml's guard; #151
 # lesson): a guest not yet SSH-ready when its play fires must not drop out.
-- name: wait for the DTCC + app hosts to be SSH-ready (cold-boot guard)
-  hosts: dtcc:app
+- name: wait for the SVC + app hosts to be SSH-ready (cold-boot guard)
+  hosts: svc:app
   gather_facts: false
   tasks:
     - name: wait for connection
       ansible.builtin.wait_for_connection:
         timeout: 180
 
-- hosts: dtcc
+- hosts: svc
   become: true
   tasks:
     - name: acl package for unprivileged become
@@ -23,17 +23,17 @@
         name: acl
         update_cache: false
 
-- hosts: dtcc
+- hosts: svc
   roles: [mq-install]
 
-- hosts: dtcc
+- hosts: svc
   vars:
-    qmgr_name: QMDTCC
+    qmgr_name: QMSVC
   roles: [mq-qmgr]
 
-- hosts: dtcc
+- hosts: svc
   vars:
-    qmgr_name: QMDTCC
+    qmgr_name: QMSVC
   # our_qm / our_conn are supplied by the importing playbook (per arm).
   roles: [mq-inter-qm]
 

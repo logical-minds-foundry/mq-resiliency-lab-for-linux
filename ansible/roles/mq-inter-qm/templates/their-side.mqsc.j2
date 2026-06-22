@@ -7,10 +7,10 @@ DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
 * The co-located service responder connects client-mode via this SVRCONN (#180):
 * pip's pymqi is client-only, so a true bindings connect fails 2058. MCAUSER(mqm)
 * gives it admin authority; CHLAUTH is already disabled on this QM.
-DEFINE CHANNEL(SVC.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_dtcc }}') REPLACE
-* Monitoring SVRCONN for our client-org ops exporter (#250/#182). QMDTCC trusts the
+DEFINE CHANNEL(SVC.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
+* Monitoring SVRCONN for our client-org ops exporter (#250/#182). QMSVC trusts the
 * client-org CA (QM-link), so it validates the exporter's O=client-org cert; SSLPEER
-* pins it. Distinct from SVC.SVRCONN (the O=dtcc-org responder) so each client's peer
+* pins it. Distinct from SVC.SVRCONN (the O=svc-org responder) so each client's peer
 * identity stays exact.
 DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
 DEFINE CHANNEL({{ our_qm }}.{{ qmgr_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_inhouse }}') REPLACE

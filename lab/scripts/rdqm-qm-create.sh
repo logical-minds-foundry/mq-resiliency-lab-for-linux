@@ -13,15 +13,15 @@
 #
 # RDQM supports exactly ONE floating IP per queue manager (rdqmint, #216 spike: a second is
 # AMQ3877E). So the FIP is spent on the data plane (VIP) for the app's HA path; the partner
-# (QMDTCC) reaches us over net-ext via a per-node CONNAME list, not a second FIP.
+# (QMSVC) reaches us over net-ext via a per-node CONNAME list, not a second FIP.
 #
-# Usage: rdqm-qm-create.sh [QM=QMRDQM] [VIP=10.10.1.100] [DTCC_CONN]
+# Usage: rdqm-qm-create.sh [QM=QMRDQM] [VIP=10.10.1.100] [SVC_CONN]
 #   VIP       - site-A single floating IP (data plane); the app rides HA via this addr
-#   DTCC_CONN - counterparty CONNAME; when set, define the our-side inter-QM MQSC to QMDTCC
+#   SVC_CONN - counterparty CONNAME; when set, define the our-side inter-QM MQSC to QMSVC
 set -euo pipefail
 QM="${1:-QMRDQM}"
 VIP="${2:-10.10.1.100}"
-DTCC_CONN="${3:-}"
+SVC_CONN="${3:-}"
 cd "$(dirname "$0")/../../ansible"
 
 # Lab DR topology (net-wan replication addresses + per-site data VIPs). Fixed for this lab,
@@ -77,10 +77,10 @@ else
   base_mqsc rdqm-a1
 fi
 
-# Our-side inter-QM MQSC to QMDTCC (#147), only when a counterparty CONNAME is given (the
+# Our-side inter-QM MQSC to QMSVC (#147), only when a counterparty CONNAME is given (the
 # distributed setup). Defined on the site-A primary; replicates with the QM.
-if [ -n "$DTCC_CONN" ]; then
-  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(DTCC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMDTCC) XMITQ(QMDTCC) REPLACE\nDEFINE QLOCAL(QMDTCC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.QMDTCC) REPLACE\nDEFINE CHANNEL($QM.QMDTCC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$DTCC_CONN(1414)'\\'') XMITQ(QMDTCC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL(QMDTCC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+if [ -n "$SVC_CONN" ]; then
+  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE\nDEFINE QLOCAL(QMSVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.QMSVC) REPLACE\nDEFINE CHANNEL($QM.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ(QMSVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL(QMSVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 
 run rdqm-a1 "/opt/mqm/bin/rdqmstatus -m $QM"

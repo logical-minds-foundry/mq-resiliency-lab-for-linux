@@ -4,10 +4,10 @@
 qmgr: QMAIN
 objects:
   - kind: qlocal
-    name: TRADE.REPLY
+    name: APP.REPLY
     attrs: { default_persistence: "yes" }
   - kind: qlocal
-    name: QDTCC
+    name: QMSVC
     attrs:
       usage: XMITQ
       # Triggered xmitq: the channel initiator starts the SDR on message
@@ -16,16 +16,16 @@ objects:
       trigger_control: "YES"
       trigger_type: FIRST
       initiation_queue_name: SYSTEM.CHANNEL.INITQ
-      trigger_data: QMAIN.QDTCC
+      trigger_data: QMAIN.QMSVC
   - kind: qremote
-    name: DTCC.REQUEST
+    name: SVC.REQUEST
     attrs:
       default_persistence: "yes"
-      remote_queue_name: TRADE.REQUEST
-      remote_queue_manager_name: QDTCC
-      transmission_queue_name: QDTCC
+      remote_queue_name: SVC.REQUEST
+      remote_queue_manager_name: QMSVC
+      transmission_queue_name: QMSVC
   - kind: channel
-    name: QMAIN.QDTCC
+    name: QMAIN.QMSVC
     attrs:
       channel_type: SDR
       transport_type: TCP
@@ -33,9 +33,9 @@ objects:
       # client ack waits - the post-reboot e2e race found in B-Task 8).
       short_retry_interval: 10
       connection_name: 10.20.0.50(1414)
-      transmission_queue_name: QDTCC
+      transmission_queue_name: QMSVC
   - kind: channel
-    name: QDTCC.QMAIN
+    name: QMSVC.QMAIN
     attrs: { channel_type: RCVR, transport_type: TCP }
   - kind: channel
     name: APP.SVRCONN

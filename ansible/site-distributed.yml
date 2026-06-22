@@ -1,8 +1,8 @@
 # Distributed MQ (#147), Pacemaker arm: the SAN/cluster substrate (site-pcmk.yml)
-# plus the shared, substrate-free DTCC/app/channel layer (site-distributed-shared.yml,
+# plus the shared, substrate-free SVC/app/channel layer (site-distributed-shared.yml,
 # RDQM-parity §4). The RDQM arm reuses that same shared layer over its own substrate
 # (site-rdqm-distributed.yml, Plan B). Our-side inter-QM MQSC is defined later at
-# `mqlab qm create distributed-pcmk-ubuntu` (site-pcmk-qm.yml, gated on dtcc_conn);
+# `mqlab qm create distributed-pcmk-ubuntu` (site-pcmk-qm.yml, gated on svc_conn);
 # the their-side channels here use our_qm/our_conn. Channels establish bidirectionally
 # once both QMs exist; the responder retries until QMPCMK is up, so order is immaterial.
 - import_playbook: site-pcmk.yml
