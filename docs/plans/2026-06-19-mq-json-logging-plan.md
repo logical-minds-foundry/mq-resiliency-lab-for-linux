@@ -25,7 +25,7 @@
 ### Develop fit-check (rebased onto `4164bc4`, 2026-06-21)
 
 - Verified unchanged on develop, so the anchors below hold: `alloy/templates/config.alloy.j2`, the four `crtmqm` seams (`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `mq-nativeha-spike`), and `mq-client`/`mqweb`/`loki`.
-- RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), extended by the in-flight RDQM HA/DR work (#288). We seed `mqs.ini` at `rdqm-install` and **never edit the script** — no collision. (`rdqm-install` is actively churned by RDQM work → keep the Task 5 RDQM include deferred until that settles.)
+- RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), extended by the in-flight RDQM HA/DR work (#288). We seed `mqs.ini` at the end of `rdqm-install` and **never edit the script** — so QMRDQM inherits the template, with no collision. **Now wired** (universal coverage across all arms); if the RDQM HA/DR work later changes `rdqm-install`, reconcile at rebase.
 - `observability.yml` applies `alloy` to `hosts: all` (now with the cluster-state, nativeha-state, and rdqm-state collectors) → Task 7 gating is required (see Task 7 note).
 - **#286 (build-dir reorg) has landed.** The re-fetchable IBM-docs cache now lives under the `cache/` bucket: `build/cache/refs/ibm-docs/...` (resolve via `mqlab build path cache`). Docs updated; **no implementation impact** — all runtime paths are guest-side `/var/mqm/...`, and `build/*` is gitignored regardless.
 
@@ -431,10 +431,10 @@ vrg-commit --type feat --scope obs --message "mqweb: Liberty messageFormat=json 
 - [ ] **Step 6: rdqm-install — system.yml as the final task**
 
 RDQM creates its QM via `lab/scripts/rdqm-qm-create.sh` (`crtmqm -sx`), which runs
-*after* `rdqm-install`. Seeding `mqs.ini` here means that script's QM inherits the
-template — we do **not** edit the script (the RDQM agent is actively extending it
-for #288 HA/DR; leave it alone to avoid a collision). **Defer this step** if the
-RDQM agent has unmerged `rdqm-install` changes; rebase it in once their branch lands.
+*after* `rdqm-install`. Seeding `mqs.ini` at the end of `rdqm-install` means that
+script's QM (QMRDQM) inherits the template — we do **not** edit the script. **Done**
+(universal coverage); if the #288 RDQM HA/DR work later changes `rdqm-install`,
+reconcile at rebase.
 
 ```yaml
 - name: seed JSON diagnostic logging (mqs.ini template + journald)
