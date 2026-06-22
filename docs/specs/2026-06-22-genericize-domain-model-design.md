@@ -53,7 +53,7 @@ domain-neutral.
 3. **Tier 3 — the external service (`SVC`).** The external request/reply
    responder our queue manager exchanges messages with across the WAN — "service"
    in the web-service / REST-endpoint sense (something waiting to respond to a
-   request). (Was `DTCC` / `QMDTCC` / partially `SVC`.)
+   request). (Was `DTCC` / `QMDTCC` / "vendor" / partially `SVC`.)
 
 ### 2.1 The "service" discipline rule
 
@@ -70,14 +70,17 @@ one-line glossary note in the architecture doc states this explicitly.
 |---|---|---|
 | Tier-1 application (requester) | `FIRM`, `FIRM01`, `app-client` | **`APP`** / `app-client` |
 | Tier-2 queue manager(s) | — | **substrate names kept:** `QMPCMK` / `QMNATIVE` / `QMRDQM` / `QMAIN` |
-| Tier-3 external service (responder) | `DTCC`, `QMDTCC`, `SVC`, `QDTCC` | **`SVC`** / `svc-sim` / `QMSVC` |
+| Tier-3 external service (responder) | `DTCC`, `QMDTCC`, `QDTCC`, "vendor" (docs) | **`SVC`** / `svc-sim` / `QMSVC` |
 | Header pattern | `EPN` (Electronic Payments Network — a real protocol) | **fixed-format header (FFH)** |
 | Payload type | `TRADE` | *folded away* → `SVC.REQUEST` / `APP.REPLY` |
 | Date field | `busdate` | **`session_date`** |
 
-Three naming schemes currently coexist for the same concepts (`DTCC.*`, `SVC.*`,
-`TRADE.*` for requests; `FIRM.*`, `APP.*` for our app side). This spec collapses
-each concept to its single canonical token and eliminates the stragglers.
+Multiple naming schemes currently coexist for the same concepts (`DTCC.*`,
+`SVC.*`, `TRADE.*` for requests; `FIRM.*`, `APP.*` for our app side; and the
+docs-level word "vendor" for the external party). This spec collapses each
+concept to its single canonical token and eliminates the stragglers. "vendor" is
+docs-only — not in code/lab/ansible identifiers — and folds to "the external
+service" / `SVC` in prose.
 
 ## 4. Rename surface & exact mapping (code + lab + ansible)
 
@@ -115,10 +118,13 @@ A single atomic find/replace pass across `src/`, `clients/`, `lab/`, `ansible/`,
 ### 4.4 Header module & clients
 
 - `src/mqlab/epn.py` → `src/mqlab/header.py`. The `Header` dataclass and ACK
-  constants are unchanged; the field `busdate` → `session_date`.
-- Clients: `clients/epn_requester.py` → `clients/app_requester.py`;
-  `clients/epn_responder.py` → `clients/svc_responder.py`. Imports
-  (`from mqlab.epn import pack_header`) updated to `from mqlab.header import ...`.
+  constants are unchanged; the field `busdate` → `session_date`. All importers
+  (`from mqlab.epn import ...`) updated to `from mqlab.header import ...`.
+- Clients: the `epn_*` client files no longer exist — `app_requester.py` is
+  already canonical. The one remaining straggler is
+  `clients/service_responder.py` → `clients/svc_responder.py`, so client
+  filenames match the `SVC` token (`app_requester.py` + `svc_responder.py`);
+  update its importers.
 - Tests: `tests/test_epn.py` → `tests/test_header.py`; DR tests referencing
   `dtcc_*` fields updated to `svc_*`.
 
@@ -129,22 +135,27 @@ any real protocol.
 ## 5. Docs de-identification policy
 
 **Target gate:** in the tracked working tree, a recursive case-insensitive
-search for the unambiguous originating names — `dtcc`, `ficc`, `epn` — returns
-**zero hits**. The common-English tokens `firm` and `trade` cannot be grepped to
-literal zero (they appear inside `confirm`, `platform`, `trade-off`, etc.), so
-their gate is narrower: zero remaining *domain identifiers* — whole-word `FIRM` /
-`TRADE` / `FIRM01` and the `firm_*` / `trade_*` / `*.TRADE` / `TRADE.*` forms.
-Git history is *not* touched.
+search for the unambiguous originating names — `dtcc`, `ficc`, `epn`,
+`mqgateway`, `mqgw` — returns **zero hits**. The common-English tokens `firm`,
+`trade`, and `vendor` cannot be grepped to literal zero (they appear inside
+`confirm`, `platform`, `trade-off`, etc.), so their gate is narrower: zero
+remaining *domain references* — whole-word `FIRM` / `TRADE` / `FIRM01`, the
+`firm_*` / `trade_*` / `*.TRADE` / `TRADE.*` forms, and any use of "vendor"
+meaning the external party (folded to "the external service" / `SVC`). Git
+history is *not* touched.
 
 - **Anonymize in place** — all ~51 tracked `.md` files (specs, plans, reports,
   reference, `docs/site/`) get the §3/§4 mapping applied. Dated specs/plans/
   reports included: these are content edits to tracked files, not history
   rewrites. The vast majority of current DTCC mentions are *identifier* mentions
   (`QMDTCC`, `dtcc-sim`, `dtcc_received`), which the mapping already covers.
-- **Delete** — only documents (or sections) that are *substantially* about the
-  originating entity rather than the lab: deep-dive vendor research, the
-  EPN-MQ-implementation-guide notes, and the five `dtcc.com` citation URLs. These
-  are not load-bearing; the design is not specific to them.
+- **Delete** — documents (or sections) that are *substantially* about the
+  originating entity or its in-house tooling rather than the lab:
+  `docs/development/2026-06-17-mqgateway-datagram-requirements.md` (an
+  employer-specific in-house tool, "MQGateway", plus an out-of-scope inbound flow
+  — see §8), deep-dive originating-entity research, the EPN-MQ-implementation-guide
+  notes, and the five `dtcc.com` citation URLs. These are not load-bearing; the
+  design is not specific to them.
 - **Generic sourcing note** — where rationale referenced the originating entity,
   it is reworded to an unnamed generic form: "derived from a real-world
   clearing/payments resilience scenario." No entity is named.
@@ -168,11 +179,11 @@ do not reintroduce the old vocabulary:
 
 ## 7. Execution & validation
 
-- **Sequencing.** Execution is held until the remaining in-flight PRs merge and
-  `develop` is clean with no pending work. The rename then runs as the next
-  change — there is deliberately no concurrent branch work to serialize against.
-- **One atomic branch** `feature/85-genericize-domain-model`, branched off clean
-  `develop`, rebased and sanity-checked immediately before execution. The rename
+- **Sequencing.** In-flight work is complete and `develop` is current with no
+  pending branches, so this is the next change to the codebase — there is no
+  freeze window to wait on and nothing concurrent to serialize against.
+- **One atomic branch** `feature/85-genericize-domain-model`, rebased onto
+  current `develop` and sanity-checked immediately before execution. The rename
   lands in a single coordinated pass so the tree is never left half-renamed (the
   current inconsistent state is exactly the cost of *not* doing this atomically).
 - **Re-provision** the renamed `svc-sim` guest and re-render the `QMSVC` object
@@ -191,6 +202,11 @@ do not reintroduce the old vocabulary:
   separate human-driven GitHub + filesystem + Vergil-VM operation with its own
   `.claude` carry-forward gotcha. Lands before public release but is not coupled
   to this spec.
+- **The inbound, externally-initiated datagram flow** (the in-house "MQGateway"
+  concept, #245) — out-of-band admin traffic (start-of-day / end-of-day), not the
+  main request/reply payload. The lab does not model it; its requirements doc is
+  deleted (§5), and §2's role model stays request/reply only, with no second
+  initiation axis.
 - **Git history** — no rewriting, no `filter-branch`. The gate is the working
   tree only.
 - **CLI command-interface reorg** — a separate concern; this spec touches object
