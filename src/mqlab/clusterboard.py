@@ -913,19 +913,28 @@ def _annotations(ds_uid: str) -> dict[str, Any]:
 # ── RDQM: status band · instances · DRBD storage · DR card · timeline · logs · perf/net ──
 
 
-def _fit_table(panel: dict[str, Any]) -> dict[str, Any]:
-    """Keep a matrix() table to exactly its real columns (#287 feedback).
+_MATRIX_MIN_WIDTH = 80  # px floor per column; low enough that 6–7 columns shrink to fit (#300)
 
-    `joinByField` can carry a leftover Time field per instant query that organize doesn't fully
-    exclude; append a filterFieldsByName that keeps ONLY node + the real value columns. Scoped to
-    the rdqm matrices so the PCMK/NHA boards are untouched. (Horizontal-scrollbar elimination also
-    needs each panel tall enough that no vertical scrollbar steals width — see _rdqm_board's
-    matrix heights.)"""
+
+def _fit_table(panel: dict[str, Any]) -> dict[str, Any]:
+    """Make a matrix() table show exactly its real columns AND fit the panel (#287, #300).
+
+    Two fits:
+    - Columns: `joinByField` can carry a leftover Time field per instant query that organize
+      doesn't fully exclude; append a filterFieldsByName that keeps ONLY node + the real value
+      columns.
+    - Width: drop the per-column minWidth to _MATRIX_MIN_WIDTH so Grafana shrinks the 6–7 columns
+      to fit the panel instead of overflowing into a horizontal scrollbar. Grafana won't shrink a
+      column below its content/min width, so the default floor — not any vertical scrollbar — is
+      what forced the scroll; panel heights are right-sized separately for the vertical waste.
+
+    Scoped to the rdqm matrices so the PCMK/NHA boards are untouched."""
     org = next(t for t in panel["transformations"] if t["id"] == "organize")
     keep = list(org["options"]["renameByName"].values())  # ["node", <column titles…>]
     panel["transformations"].append(
         {"id": "filterFieldsByName", "options": {"include": {"names": keep}}}
     )
+    panel["fieldConfig"]["defaults"].setdefault("custom", {})["minWidth"] = _MATRIX_MIN_WIDTH
     return panel
 
 
@@ -980,7 +989,7 @@ def _rdqm_site_badge(group: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
         },
         _STALE_MAP,
     ]
-    badge = _stat("", expr, ds_uid, x, y, mappings=maps, w=4, h=8, value_size=_COMPACT_VALUE_SIZE)
+    badge = _stat("", expr, ds_uid, x, y, mappings=maps, w=4, h=6, value_size=_COMPACT_VALUE_SIZE)
     badge["options"]["colorMode"] = "background"
     badge["options"]["graphMode"] = "none"
     return badge
@@ -1306,42 +1315,42 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
         *rdqm_status_band(ds_uid, y=3),
         # ② Site A / Site B are the FIXED node groups (rdqm_a / rdqm_b). LIVE vs RECOVERY is a
         # *role* that swaps on rdqmdr cutover/failback — a compact chip beside each site matrix.
-        # The matrix is widened to w=20 so its five columns clear Grafana's per-column min width
-        # on a narrow window (else a hair of horizontal scroll appears).
+        # The matrix is x=4,w=20 to leave room for the badge at x=0,w=4; _fit_table sets a small
+        # per-column minWidth so the columns shrink to fit (no horizontal scrollbar).
         _row_header("② Instances — Site A & Site B", y=6),
-        # Each matrix is sized one row TALLER than its node count needs, so a vertical scrollbar
-        # never appears to steal width and force a hairline horizontal scrollbar (#287 feedback).
+        # Each matrix is sized to its three nodes (header + 3 rows), reflowed snug below the
+        # previous section — no padded empty rows (#300). The badge matches the matrix height.
         _rdqm_site_badge("rdqm_a", ds_uid, 0, 7),
-        _fit_table(matrix("Site A", _rdqm_instance_cols("rdqm-a.*"), ds_uid, y=7, h=8, x=4, w=20)),
-        _rdqm_site_badge("rdqm_b", ds_uid, 0, 15),
-        _fit_table(matrix("Site B", _rdqm_instance_cols("rdqm-b.*"), ds_uid, y=15, h=8, x=4, w=20)),
+        _fit_table(matrix("Site A", _rdqm_instance_cols("rdqm-a.*"), ds_uid, y=7, h=6, x=4, w=20)),
+        _rdqm_site_badge("rdqm_b", ds_uid, 0, 13),
+        _fit_table(matrix("Site B", _rdqm_instance_cols("rdqm-b.*"), ds_uid, y=13, h=6, x=4, w=20)),
         # ③ The pacemaker resource layer rdqmadm wraps, exposed like the PCMK board's compute
         # matrix and placed in the SAME position (above storage) so an RDQM board and an Ubuntu
         # pacemaker board read top-to-bottom the same way — both ride pacemaker + DRBD. This is
         # the layer rdqmstatus is blind to: a QM pacemaker can't start (fail-count → BANNED)
         # shows here even while HA status reads Normal (#287).
-        _row_header("③ Pacemaker resources — Site A & Site B", y=23),
+        _row_header("③ Pacemaker resources — Site A & Site B", y=19),
         _fit_table(
-            matrix("Pacemaker — Site A", _rdqm_pacemaker_cols("rdqm-a.*"), ds_uid, y=24, h=8)
+            matrix("Pacemaker — Site A", _rdqm_pacemaker_cols("rdqm-a.*"), ds_uid, y=20, h=6)
         ),
         _fit_table(
-            matrix("Pacemaker — Site B", _rdqm_pacemaker_cols("rdqm-b.*"), ds_uid, y=32, h=8)
+            matrix("Pacemaker — Site B", _rdqm_pacemaker_cols("rdqm-b.*"), ds_uid, y=26, h=6)
         ),
         # ④ Storage spans all six nodes (site-A HA group + site-B DR group both run qmrdqm), so
-        # it needs height for six rows + header with margin — h=13 keeps all six rows visible AND
-        # keeps the vertical scrollbar (and the hairline horizontal one) from appearing.
-        _row_header("④ Storage — DRBD (qmrdqm)", y=40),
-        _fit_table(matrix("Storage — DRBD", _rdqm_storage_cols(), ds_uid, y=41, h=13)),
-        _row_header("⑤ Cross-site DR (rdqmdr)", y=54),
-        *rdqm_dr_card(ds_uid, y=55),
-        _row_header("⟳ Failover timeline", y=58),
-        _rdqm_timeline(ds_uid, y=59),
-        _row_header("▤ RDQM logs", y=66),
-        _rdqm_log_row("loki", y=67),
-        _row_header("🖥 Performance", y=75),
-        *rdqm_perf_section(ds_uid, y=76),
-        _row_header("🌐 Network", y=83),
-        *rdqm_net_section(ds_uid, y=84),
+        # it carries six rows + header — h=10 fits all six with a small margin; _fit_table's
+        # minWidth keeps the horizontal scrollbar away.
+        _row_header("④ Storage — DRBD (qmrdqm)", y=32),
+        _fit_table(matrix("Storage — DRBD", _rdqm_storage_cols(), ds_uid, y=33, h=10)),
+        _row_header("⑤ Cross-site DR (rdqmdr)", y=43),
+        *rdqm_dr_card(ds_uid, y=44),
+        _row_header("⟳ Failover timeline", y=47),
+        _rdqm_timeline(ds_uid, y=48),
+        _row_header("▤ RDQM logs", y=55),
+        _rdqm_log_row("loki", y=56),
+        _row_header("🖥 Performance", y=64),
+        *rdqm_perf_section(ds_uid, y=65),
+        _row_header("🌐 Network", y=72),
+        *rdqm_net_section(ds_uid, y=73),
     ]
     return {
         "uid": "lab-rdqm-cluster",

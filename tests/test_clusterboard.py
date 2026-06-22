@@ -8,6 +8,7 @@ from mqlab.clusterboard import (
     fold_side,
     hero_tiles,
     integrity_panel,
+    lab_rdqm_dashboard,
     log_row,
     matrix,
     nativeha_status_band,
@@ -422,8 +423,44 @@ def test_rdqm_site_badge_flips_live_recovery_by_dr_role():
     # the chip combines the DR role with pacemaker startability so it goes red when banned
     assert "cluster_rdqm_dr_role_code" in expr and "cluster_rdqm_qm_startable" in expr
     assert 'groups=~"rdqm_a"' in expr
-    # a compact chip beside the (widened) matrix, not a full row
-    assert chip["gridPos"]["w"] == 4 and chip["gridPos"]["h"] == 8
+    # a compact chip beside the (widened) matrix, sized to match the matrix (#300)
+    assert chip["gridPos"]["w"] == 4 and chip["gridPos"]["h"] == 6
+
+
+def test_rdqm_matrices_are_right_sized_and_fit_without_horizontal_scroll():
+    """The ②/③ matrices fit their rows (no ~2 empty rows) and let columns shrink to fit
+    the panel (a small minWidth) so no horizontal scrollbar appears (#300)."""
+    board = json.loads(lab_rdqm_dashboard())
+    by_title = {p["title"]: p for p in board["panels"] if p.get("title")}
+    # 3-node instance + pacemaker matrices are sized to their rows, not two rows taller
+    for t in ("Site A", "Site B", "Pacemaker — Site A", "Pacemaker — Site B"):
+        p = by_title[t]
+        assert p["gridPos"]["h"] == 6, t
+        # columns can shrink below their content width -> no overflow -> no horizontal scroll
+        assert p["fieldConfig"]["defaults"]["custom"]["minWidth"] <= 100, t
+    # the six-node storage matrix is right-sized too
+    assert by_title["Storage — DRBD"]["gridPos"]["h"] == 10
+    assert by_title["Storage — DRBD"]["fieldConfig"]["defaults"]["custom"]["minWidth"] <= 100
+
+
+def test_rdqm_board_sections_are_contiguous_no_vertical_gaps():
+    """Right-sizing must reflow the y-stack so sections stay snug — a matrix's successor
+    sits immediately below it, never leaving the old padded gap (#300)."""
+    board = json.loads(lab_rdqm_dashboard())
+    by_title = {p["title"]: p for p in board["panels"] if p.get("title")}
+    site_a, site_b = by_title["Site A"], by_title["Site B"]
+    # Site B begins exactly where Site A ends (no gap, no overlap)
+    assert site_b["gridPos"]["y"] == site_a["gridPos"]["y"] + site_a["gridPos"]["h"]
+    pace_a, pace_b = by_title["Pacemaker — Site A"], by_title["Pacemaker — Site B"]
+    assert pace_b["gridPos"]["y"] == pace_a["gridPos"]["y"] + pace_a["gridPos"]["h"]
+    # the LIVE/RECOVERY badge beside Site A shares its top edge and height
+    a_y = site_a["gridPos"]["y"]
+    badge = next(
+        p
+        for p in board["panels"]
+        if p["type"] == "stat" and p["gridPos"]["w"] == 4 and p["gridPos"]["y"] == a_y
+    )
+    assert badge["gridPos"]["h"] == site_a["gridPos"]["h"]
 
 
 def test_rdqm_status_band_is_one_compact_full_width_row():
