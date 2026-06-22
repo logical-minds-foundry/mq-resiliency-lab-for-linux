@@ -18,7 +18,7 @@ def _setup(qm: QmConfig | None) -> Setup:
 
 
 def test_baseline_plan_is_one_step_invoking_dr_run(tmp_path) -> None:
-    qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10", dtcc_conn="10.60.0.50")
+    qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10", svc_conn="10.60.0.50")
     run_dir = tmp_path / "20260615T143000Z-distributed"
     steps = baseline_run_plan(_setup(qm), run_dir, seconds=30, rate=20)
     assert len(steps) == 1
@@ -32,8 +32,8 @@ def test_baseline_plan_is_one_step_invoking_dr_run(tmp_path) -> None:
     assert "10.10.1.200" in argv
     assert "--seconds" in argv
     assert "30" in argv
-    assert str(run_dir / "firm.jsonl") in argv
-    assert str(run_dir / "dtcc.jsonl") in argv
+    assert str(run_dir / "app.jsonl") in argv
+    assert str(run_dir / "svc.jsonl") in argv
 
 
 def test_baseline_plan_requires_a_qm(tmp_path) -> None:

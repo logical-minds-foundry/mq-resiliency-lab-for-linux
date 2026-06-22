@@ -29,9 +29,9 @@ def test_reconcile_builds_one_fact_per_sent_message():
     by_seq = {f.seq: f for f in facts}
     assert set(by_seq) == {1, 2, 3}
 
-    assert by_seq[1].firm_confirmed is True and by_seq[1].dtcc_received == 1
-    assert by_seq[2].firm_confirmed is False and by_seq[2].dtcc_received == 1
-    assert by_seq[3].dtcc_received == 0 and by_seq[3].on_primary_disk is True
+    assert by_seq[1].app_confirmed is True and by_seq[1].svc_received == 1
+    assert by_seq[2].app_confirmed is False and by_seq[2].svc_received == 1
+    assert by_seq[3].svc_received == 0 and by_seq[3].on_primary_disk is True
 
 
 def test_confirm_after_cutover_is_not_pre_cutover_confirmed():
@@ -48,7 +48,7 @@ def test_confirm_after_cutover_is_not_pre_cutover_confirmed():
         primary_disk_present=set(),
         cutover_ts=5.0,
     )
-    assert facts[0].firm_confirmed is False  # not confirmed at cutover
+    assert facts[0].app_confirmed is False  # not confirmed at cutover
     assert facts[0].on_secondary is True  # but it did replicate
 
 

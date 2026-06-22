@@ -19,7 +19,7 @@ Target QM / connection / queues are parameterized so the same client drives any
 arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
     ~/mqvenv/bin/python ~/dr_flow.py --qm QMPCMK --conn "10.10.1.200(1414)" \
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
-        --rate 20 --seconds 30 --ledger ~/dr-ledgers/firm.jsonl
+        --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 
 Deployed to lab nodes by ansible alongside mqlab/ and dr_mqi.py.
 """

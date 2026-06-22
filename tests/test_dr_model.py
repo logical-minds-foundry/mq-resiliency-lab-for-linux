@@ -24,9 +24,9 @@ def test_message_facts_is_frozen_and_carries_identity():
     f = MessageFacts(
         seq=7,
         uuid="u7",
-        firm_confirmed=False,
-        dtcc_received=1,
-        dtcc_replied=True,
+        app_confirmed=False,
+        svc_received=1,
+        svc_replied=True,
         on_secondary=False,
         on_primary_disk=True,
     )

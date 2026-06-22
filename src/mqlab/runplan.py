@@ -22,8 +22,8 @@ def baseline_run_plan(setup: Setup, run_dir: Path, *, seconds: int, rate: int) -
     if setup.qm is None:
         raise ValueError(f"setup {setup.name!r} has no QM to drive a baseline run")
     qm = setup.qm
-    firm_ledger = run_dir / "firm.jsonl"
-    dtcc_ledger = run_dir / "dtcc.jsonl"
+    app_ledger = run_dir / "app.jsonl"
+    svc_ledger = run_dir / "svc.jsonl"
     command = Command(
         [
             "bash",
@@ -39,9 +39,9 @@ def baseline_run_plan(setup: Setup, run_dir: Path, *, seconds: int, rate: int) -
             "--rate",
             str(rate),
             "--firm-ledger",
-            str(firm_ledger),
+            str(app_ledger),
             "--dtcc-ledger",
-            str(dtcc_ledger),
+            str(svc_ledger),
         ]
     )
     label = f"baseline run {setup.name} ({seconds}s @ {rate}/s)"

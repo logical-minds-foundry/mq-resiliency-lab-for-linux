@@ -12,7 +12,7 @@ crucially -- rebuild the connection ourselves when a controlled endmqm -w
 disconnects us non-reconnectably (auto-reconnect only covers abrupt breaks).
 
 Run on dtcc-sim:
-    ~/mqvenv/bin/python ~/dr_responder.py --seconds 40 --ledger ~/dr-ledgers/dtcc.jsonl
+    ~/mqvenv/bin/python ~/dr_responder.py --seconds 40 --ledger ~/dr-ledgers/svc.jsonl
 
 Deployed by ansible alongside mqlab/ and dr_mqi.py. Echoes the DRv1 body back so
 the firm can match seq/uuid.
@@ -137,7 +137,7 @@ def main():
                 pass
         ledger.write_jsonl(args.ledger)
 
-    received = len(ledger.dtcc_receive_counts())
+    received = len(ledger.svc_receive_counts())
     print(f"responder done: {received} received -> {args.ledger}")
     return 0
 

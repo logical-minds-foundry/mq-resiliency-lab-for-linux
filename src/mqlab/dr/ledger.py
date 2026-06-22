@@ -77,7 +77,7 @@ class Ledger:
     def uuid_of(self) -> dict[int, str]:
         return {e.seq: e.uuid for e in self.entries}
 
-    def firm_states(self) -> dict[int, MessageState]:
+    def app_states(self) -> dict[int, MessageState]:
         sent = self.sent_seqs()
         confirmed = self.confirmed_seqs()
         states: dict[int, MessageState] = {}
@@ -85,12 +85,12 @@ class Ledger:
             states[seq] = MessageState.CONFIRMED if seq in confirmed else MessageState.IN_PIPELINE
         return states
 
-    def dtcc_receive_counts(self) -> dict[int, int]:
+    def svc_receive_counts(self) -> dict[int, int]:
         counts: dict[int, int] = {}
         for e in self.entries:
             if e.event is Event.RECEIVED:
                 counts[e.seq] = counts.get(e.seq, 0) + 1
         return counts
 
-    def dtcc_replied(self) -> set[int]:
+    def svc_replied(self) -> set[int]:
         return {e.seq for e in self.entries if e.event is Event.REPLIED}

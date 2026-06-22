@@ -36,7 +36,7 @@ class QmConfig:
     name: str
     vip: str = ""
     vip_ext: str = ""
-    dtcc_conn: str | None = None
+    svc_conn: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +76,7 @@ def lab_setups() -> dict[str, Setup]:
                 name=cfg["qm"]["name"],
                 vip=cfg["qm"].get("vip", ""),
                 vip_ext=cfg["qm"].get("vip_ext", ""),
-                dtcc_conn=cfg["qm"].get("dtcc_conn"),
+                svc_conn=cfg["qm"].get("svc_conn"),
             )
             if cfg.get("qm")
             else None,

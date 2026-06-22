@@ -1267,7 +1267,7 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
                     "-e",
                     f"qm_vip_ext={qm.vip_ext}",
                     # the counterparty CONNAME, only when this QM talks to one (#147)
-                    *(["-e", f"dtcc_conn={qm.dtcc_conn}"] if qm.dtcc_conn else []),
+                    *(["-e", f"svc_conn={qm.svc_conn}"] if qm.svc_conn else []),
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
@@ -1329,7 +1329,7 @@ def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
     # floating IP (RDQM allows one FIP per QM, #216 spike), and (when set) the
     # counterparty CONNAME for the inter-QM MQSC. The partner reaches us over net-ext
     # by per-node CONNAME list (site-rdqm-distributed.yml our_conn), not a second VIP.
-    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.dtcc_conn or ""]
+    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.svc_conn or ""]
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         step = CommandStep(f"{setup_name} {verb}", Command(argv))  # noqa: S607
@@ -1464,8 +1464,8 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     steps = baseline_run_plan(setup, run_dir, seconds=seconds, rate=rate)
     _execute("run", steps, step_mode=step)  # raises typer.Exit on any step failure
 
-    firm = Ledger.read_jsonl(run_dir / "firm.jsonl")
-    dtcc = Ledger.read_jsonl(run_dir / "dtcc.jsonl")
+    firm = Ledger.read_jsonl(run_dir / "app.jsonl")
+    dtcc = Ledger.read_jsonl(run_dir / "svc.jsonl")
     facts = reconcile(
         firm, dtcc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
     )

@@ -15,7 +15,7 @@ promote of san-b loses exactly that tail. We feed the framework:
 Then reconcile -> classify -> report, WITHOUT asserting self-correctness.
 
 Run on the host:
-    uv run python clients/dr_forced.py <firm.jsonl> <dtcc.jsonl> <break_ts> <kill_ts>
+    uv run python clients/dr_forced.py <app.jsonl> <svc.jsonl> <break_ts> <kill_ts>
 """
 
 import json
@@ -33,11 +33,11 @@ def _sent_ts(path):
     return out
 
 
-def main(firm_path, dtcc_path, break_ts, kill_ts):
+def main(app_path, svc_path, break_ts, kill_ts):
     break_ts, kill_ts = float(break_ts), float(kill_ts)
-    firm = Ledger.read_jsonl(firm_path)
-    dtcc = Ledger.read_jsonl(dtcc_path)
-    sent_ts = _sent_ts(firm_path)
+    firm = Ledger.read_jsonl(app_path)
+    dtcc = Ledger.read_jsonl(svc_path)
+    sent_ts = _sent_ts(app_path)
 
     # The lost window: committed at A after replication broke, before the primary
     # died -- on the dead primary only, never shipped to san-b.

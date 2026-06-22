@@ -295,7 +295,7 @@ setups:
     groups: [san_a, pcmk_a, dtcc, app]
     provision: ansible/site-distributed.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
-    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }
   rdqm_ha:
     description: RDQM/RHEL shared-nothing — site-A 3-node HA
     arm: rdqm-rhel
@@ -319,7 +319,7 @@ setups:
     # No vip_ext: RDQM allows one floating IP per QM (#216 spike), spent on the data
     # VIP for the app's HA path. The partner (QMDTCC) reaches QMRDQM over net-ext by
     # per-node CONNAME list — see site-rdqm-distributed.yml (our_conn).
-    qm: { name: QMRDQM, vip: 10.10.1.100, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMRDQM, vip: 10.10.1.100, svc_conn: 10.60.0.50 }
   # Native HA arm (#246) — ONE consolidated distributed-HADR setup (#267), not the
   # older _ha/_dr/distributed-no-DR triple. Phase 1 builds HA on the site-A subset
   # (nha_rhel_a + dtcc + app); Phase 3 boots nha_rhel_b + enables CRR on this same
@@ -331,7 +331,7 @@ setups:
     groups: [nha_rhel_a, nha_rhel_b, dtcc, app]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
-    qm: { name: QMNATIVE, dtcc_conn: 10.60.0.50 }
+    qm: { name: QMNATIVE, svc_conn: 10.60.0.50 }
   monitoring:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]

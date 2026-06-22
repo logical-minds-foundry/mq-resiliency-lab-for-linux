@@ -29,8 +29,8 @@ def reconcile(
 ) -> list[MessageFacts]:
     uuid_of = firm.uuid_of()
     confirmed_pre = firm.confirmed_seqs(at_ts=cutover_ts)
-    dtcc_counts = dtcc.dtcc_receive_counts()
-    dtcc_repl = dtcc.dtcc_replied()
+    svc_counts = dtcc.svc_receive_counts()
+    svc_repl = dtcc.svc_replied()
 
     facts: list[MessageFacts] = []
     for seq in sorted(firm.sent_seqs()):
@@ -38,9 +38,9 @@ def reconcile(
             MessageFacts(
                 seq=seq,
                 uuid=uuid_of.get(seq, ""),
-                firm_confirmed=seq in confirmed_pre,
-                dtcc_received=dtcc_counts.get(seq, 0),
-                dtcc_replied=seq in dtcc_repl,
+                app_confirmed=seq in confirmed_pre,
+                svc_received=svc_counts.get(seq, 0),
+                svc_replied=seq in svc_repl,
                 on_secondary=seq in secondary_present,
                 on_primary_disk=seq in primary_disk_present,
             )

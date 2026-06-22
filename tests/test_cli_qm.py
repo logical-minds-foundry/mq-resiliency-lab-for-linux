@@ -85,7 +85,7 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
     ]
     assert str(play.cwd).endswith("/ansible")
     assert (tmp_path / "build" / "work" / "inventory.ini").exists()
-    assert not any(a.startswith("dtcc_conn=") for a in play.argv)  # not set -> not passed
+    assert not any(a.startswith("svc_conn=") for a in play.argv)  # not set -> not passed
 
 
 def test_qm_create_passes_dtcc_conn_when_set(monkeypatch, tmp_path):
@@ -97,7 +97,7 @@ def test_qm_create_passes_dtcc_conn_when_set(monkeypatch, tmp_path):
         + _ARMS
         + "setups:\n  distributed:\n    arm: pcmk-ubuntu\n    groups: [san_a, pcmk_a]\n"
         "    provision: ansible/site-distributed.yml\n"
-        "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, dtcc_conn: 10.60.0.50 }\n"
+        "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     runner = RecordingRunner(
@@ -106,7 +106,7 @@ def test_qm_create_passes_dtcc_conn_when_set(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
     result = CliRunner().invoke(cli.app, ["qm", "create", "distributed"])
     assert result.exit_code == 0
-    assert "dtcc_conn=10.60.0.50" in runner.recorded[-1].argv
+    assert "svc_conn=10.60.0.50" in runner.recorded[-1].argv
 
 
 def test_qm_create_members_down_exits_3(monkeypatch, tmp_path):

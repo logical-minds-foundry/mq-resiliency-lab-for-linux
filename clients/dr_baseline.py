@@ -7,7 +7,7 @@ firm SENT is CONFIRMED, and DTCC received each exactly once. Fail loud
 no fault injected, no later drill can be trusted.
 
 Run on the host:
-    uv run python clients/dr_baseline.py <firm.jsonl> <dtcc.jsonl>
+    uv run python clients/dr_baseline.py <app.jsonl> <svc.jsonl>
 """
 
 import sys
@@ -15,9 +15,9 @@ import sys
 from mqlab.dr import Ledger, assert_self_correct, build_report, exposure, reconcile
 
 
-def main(firm_path, dtcc_path):
-    firm = Ledger.read_jsonl(firm_path)
-    dtcc = Ledger.read_jsonl(dtcc_path)
+def main(app_path, svc_path):
+    firm = Ledger.read_jsonl(app_path)
+    dtcc = Ledger.read_jsonl(svc_path)
     facts = reconcile(
         firm,
         dtcc,
