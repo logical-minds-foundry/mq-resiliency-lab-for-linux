@@ -8,3 +8,6 @@ mqweb_security_dir: /var/mqm/web/installations/Installation1/servers/mqweb/resou
 # requires login like the REST API. The lab opts in via group_vars/all to open ONLY
 # the console — the REST API stays authenticated regardless. LAB ONLY.
 mqweb_console_anonymous: false
+# JSON diagnostic logging for the mqweb (Liberty) server (#282): single-line JSON
+# to messages.log, tailed into Loki as unit=ibm-mqweb.
+mqweb_json_logging: true

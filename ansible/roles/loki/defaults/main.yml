@@ -4,3 +4,6 @@ loki_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 loki_pkg: "loki-linux-{{ loki_arch }}"
 loki_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/{{ loki_pkg }}.zip"
 loki_retention: "24h"   # lab-ephemeral, mirrors prometheus_retention
+# logcli — Loki CLI for acceptance checks and human debugging of the log pipeline (#282).
+logcli_pkg: "logcli-linux-{{ loki_arch }}"
+logcli_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/{{ logcli_pkg }}.zip"

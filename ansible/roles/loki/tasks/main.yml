@@ -74,3 +74,18 @@
     enabled: true
     state: started
     daemon_reload: true
+
+# logcli (#282): acceptance-check + human debugging tool for the log pipeline.
+- name: download + unpack logcli
+  ansible.builtin.unarchive:
+    src: "{{ logcli_url }}"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/{{ logcli_pkg }}"
+
+- name: install the logcli binary
+  ansible.builtin.copy:
+    src: "/tmp/{{ logcli_pkg }}"
+    dest: /usr/local/bin/logcli
+    mode: "0755"
+    remote_src: true

@@ -9,7 +9,14 @@
     reach_peers: "{{ reach_all[inventory_hostname] | default({}) }}"
   roles:
     - node-exporter
-    - alloy
+    # #282: tail mqweb's JSON messages.log only on QM-bearing nodes (they run mqweb);
+    # MQ-core JSON arrives via journald (the alloy syslog-identifier relabel).
+    - role: alloy
+      vars:
+        alloy_tail_mqweb: >-
+          {{ 'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names
+             or 'pcmk_a' in group_names or 'pcmk_b' in group_names
+             or 'rdqm_a' in group_names or 'rdqm_b' in group_names }}
     - {role: net-reach, when: reach_peers | length > 0}
     # Cluster-state collector (#177) — only on the PCMK arm. A SINGLE role entry with
     # the role chosen by group membership: Ansible dedupes a role listed twice in one
