@@ -72,8 +72,11 @@ one-line glossary note in the architecture doc states this explicitly.
 | Tier-2 queue manager(s) | — | **substrate names kept:** `QMPCMK` / `QMNATIVE` / `QMRDQM` / `QMAIN` |
 | Tier-3 external service (responder) | `DTCC`, `QMDTCC`, `QDTCC`, "vendor" (docs) | **`SVC`** / `svc-sim` / `QMSVC` |
 | Header pattern | `EPN` (Electronic Payments Network — a real protocol) | **fixed-format header (FFH)** |
-| Payload type | `TRADE` | *folded away* → `SVC.REQUEST` / `APP.REPLY` |
+| Payload type (queue) | `TRADE` | *folded away* → `SVC.REQUEST` / `APP.REPLY` |
+| DRv1 wire payload field | `trade` | **`payload`** (literals `TRADE-<n>` → `MSG-<n>`) |
 | Date field | `busdate` | **`session_date`** |
+| External-facing network | `net-dtcc` / `virbr-dtcc` | **`net-svc`** / `virbr-svc` |
+| TLS/PKI identities | `dtcc-org`, `dtcc-responder`, `client-org`, `in-house`, OU `clearing-service` | **`svc-org`**, **`svc-responder`**, **`app-org`**, **`app`**, OU **`messaging`** |
 
 Multiple naming schemes currently coexist for the same concepts (`DTCC.*`,
 `SVC.*`, `TRADE.*` for requests; `FIRM.*`, `APP.*` for our app side; and the
@@ -89,14 +92,18 @@ A single atomic find/replace pass across `src/`, `clients/`, `lab/`, `ansible/`,
 
 ### 4.1 MQ objects
 
-- Queue manager: `QMDTCC` → `QMSVC`.
-- Transmission/remote queue to the external QM: `QDTCC` → the xmit/remote queue
-  targeting `QMSVC` (`QSVC` / `SVC.XMITQ` per existing MQSC role).
-- Inter-QM channels: `QM*.QMDTCC` / `QMDTCC.QM*` → `QM*.QMSVC` / `QMSVC.QM*`
-  (e.g. `QMPCMK.QMDTCC` → `QMPCMK.QMSVC`).
+- External queue manager — **two arms, one canonical name**: the distributed arm
+  names it `QMDTCC`; the standalone `content/` arm names it `QDTCC` (a bare QM
+  name in `content/dtcc-sim.yaml`, *not* a queue). Both → `QMSVC`.
+- Xmit queue to the external QM: in `content/qm-main.yaml` the xmitq is `QDTCC`
+  (named after the partner QM) → `QMSVC`.
+- Inter-QM channels: `QM*.QMDTCC` / `QMDTCC.QM*` (distributed) and
+  `QMAIN.QDTCC` / `QDTCC.QMAIN` (standalone) → `…QMSVC` / `QMSVC…`.
 - Request queue: `DTCC.REQUEST`, `TRADE.REQUEST` → `SVC.REQUEST`.
 - Reply queue: `TRADE.REPLY`, `FIRM.REPLY` → `APP.REPLY`.
-- Connection/object names: `DTCC_CONN` → `SVC_CONN`; `DTCCSVC` → `SVC`.
+- Sim SVRCONN: `SIM.SVRCONN` → `SVC.SVRCONN`.
+- Connection/object names: `DTCC_CONN` → `SVC_CONN`; the template var `dtcc_conn`
+  → `svc_conn`; `DTCCSVC` → `SVC`.
 - Already canonical, unchanged: `APP.SVRCONN`, `SVC.SVRCONN`, `MON.SVRCONN`.
 - `QMAIN` is kept — it names the standalone baseline queue manager, not a brand.
 
@@ -104,16 +111,25 @@ A single atomic find/replace pass across `src/`, `clients/`, `lab/`, `ansible/`,
 
 - Guest: `dtcc-sim` → `svc-sim`; content file `content/dtcc-sim.yaml` →
   `content/svc-sim.yaml`; the `nodes:` entry and all topology references.
-- Networks: `net-ext` (inter-business WAN) is already generic — unchanged. The
-  `net-*.xml` glob in `net-up.sh` requires no code change.
+- Networks: `net-ext` (inter-business WAN) is already generic — unchanged. But the
+  standalone arm rides a second network `net-dtcc` (bridge `virbr-dtcc`,
+  10.20.0.0/24): `lab/networks/net-dtcc.xml` → `net-svc.xml`, name `net-svc`,
+  bridge `virbr-svc` (subnet unchanged); also update the `net-dtcc` entry in the
+  `dashboard.py` message-path list. The `net-*.xml` glob in `net-up.sh` requires
+  no code change.
 
 ### 4.3 DR framework, fields & ledgers
 
-- Field names: `dtcc_received` → `svc_received`; `dtcc_replied` → `svc_replied`;
-  `dtcc_receive_counts` → `svc_receive_counts`; `dtcc_path` → `svc_path`.
+- Field names — all `dtcc_*` → `svc_*` (`dtcc_received`, `dtcc_replied`,
+  `dtcc_receive_counts`, `dtcc_path`, `dtcc_conn`, `dtcc_repl`, `dtcc_counts`) and
+  all `firm_*` → `app_*` (`firm_path`, `firm_confirmed`, `firm_states`,
+  `firm_ledger`). Enumerate with `grep -rIhoE '\b(dtcc|firm)_[a-z_]+\b'` before
+  editing — treat that output as the authoritative field set.
 - Ledgers: `dtcc_ledger` → `svc_ledger`; `firm_ledger` → `app_ledger`; ledger
-  files `dtcc.jsonl` → `svc.jsonl` (gitignored `build/` ledgers regenerate under
-  the new names).
+  files `dtcc.jsonl` / `firm.jsonl` → `svc.jsonl` / `app.jsonl` (gitignored
+  `build/` ledgers regenerate under the new names).
+- DRv1 wire body (`src/mqlab/dr/wire.py`): fields `busdate` → `session_date`,
+  `trade` → `payload`; payload literals `TRADE-<n>` → `MSG-<n>`.
 
 ### 4.4 Header module & clients
 
@@ -125,6 +141,10 @@ A single atomic find/replace pass across `src/`, `clients/`, `lab/`, `ansible/`,
   `clients/service_responder.py` → `clients/svc_responder.py`, so client
   filenames match the `SVC` token (`app_requester.py` + `svc_responder.py`);
   update its importers.
+- Deployment: the `mq-inter-qm` role deploys the responder as the systemd unit
+  `mq-service-responder` from `/var/mqm/service_responder.py` — rename to
+  `mq-svc-responder` / `/var/mqm/svc_responder.py` (unit template, role tasks,
+  `ExecStart`, keyrepo/certlabel → `svc-responder`).
 - Tests: `tests/test_epn.py` → `tests/test_header.py`; DR tests referencing
   `dtcc_*` fields updated to `svc_*`.
 
@@ -132,11 +152,28 @@ In docs and code comments, the header is described as "a fixed-format positional
 header (FFH)" — blank-padded, left-justified fields — with no reference to EPN or
 any real protocol.
 
+### 4.5 TLS / PKI identities
+
+The lab's cert identities encode the org names, so de-branding must reach the PKI
+(`ansible/vars/pki-entities.yml`, `ansible/group_vars/all/tls.yml`, and the
+`SSLPEER` references in the inter-QM MQSC templates). Both sides are fully
+neutralized (decided during planning):
+
+- External side: `dtcc-org` → `svc-org` (CA CN + `organization_name` + `trust:`
+  lists), `dtcc-responder` → `svc-responder` (cert CN, keyrepo path, certlabel),
+  `tls_peer_dtcc` → `tls_peer_svc` (value `O=dtcc-org` → `O=svc-org`).
+- Our side: `client-org` → `app-org`, `in-house`/`inhouse` → `app`, the our-side
+  peer var(s) → `tls_peer_app`.
+- Domain flavor: the cert OU `clearing-service` → `messaging`.
+
+These are cert *subject DNs*, so a rename regenerates certs on provisioning —
+covered by the cold-rebuild gate (§7).
+
 ## 5. Docs de-identification policy
 
 **Target gate:** in the tracked working tree, a recursive case-insensitive
 search for the unambiguous originating names — `dtcc`, `ficc`, `epn`,
-`mqgateway`, `mqgw` — returns **zero hits**. The common-English tokens `firm`,
+`mqgateway`, `mqgw`, `busdate`, `clearing` — returns **zero hits**. The common-English tokens `firm`,
 `trade`, and `vendor` cannot be grepped to literal zero (they appear inside
 `confirm`, `platform`, `trade-off`, etc.), so their gate is narrower: zero
 remaining *domain references* — whole-word `FIRM` / `TRADE` / `FIRM01`, the
