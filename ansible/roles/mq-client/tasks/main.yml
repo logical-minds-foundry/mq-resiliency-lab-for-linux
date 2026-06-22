@@ -45,6 +45,11 @@
   args:
     creates: /home/vagrant/mqvenv/bin/python
 
+- name: JSON diagnostic logging for client apps (mqclient.ini) (#282)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: client
+
 # TLS (#250): place the app-client keystore + a .sth stash so the requester can
 # present its cert over the now-mutual-TLS APP.SVRCONN. Owned by vagrant (the app
 # runs as vagrant); SSLPEER on the SVRCONN matches O=client-org (app-client is

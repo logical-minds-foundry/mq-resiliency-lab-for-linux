@@ -97,6 +97,11 @@
     fail_msg: "MQ level {{ mqver.stdout }} is below the 9.4.4 CRR floor"
     success_msg: "MQ level OK for Native HA CRR: {{ mqver.stdout }}"
 
+- name: seed JSON diagnostic logging (mqs.ini template + journald) (#282)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system
+
 # --- Native HA group formation (per node 7261515 walkthrough) ---
 # Each instance's name is its hostname; the queue manager name is shared.
 - name: create the Native HA instance (this node)

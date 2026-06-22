@@ -21,6 +21,11 @@
     fail_msg: "MQ level {{ mqver.stdout }} is below the 9.4.4 Native HA floor"
     success_msg: "MQ level OK for Native HA: {{ mqver.stdout }}"
 
+- name: seed JSON diagnostic logging (mqs.ini template + journald) (#282)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system
+
 - name: create the Native HA instance (this node)
   ansible.builtin.command: >
     crtmqm -lr {{ inventory_hostname }} -lf 8192 -lp 10 -ls 10 -p 1414 {{ qm_name }}
