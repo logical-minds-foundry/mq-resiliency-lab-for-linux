@@ -4,3 +4,5 @@ alloy_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 alloy_pkg: "alloy-linux-{{ alloy_arch }}"
 alloy_url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/{{ alloy_pkg }}.zip"
 loki_push_url: "http://10.50.0.2:3100/loki/api/v1/push"   # obs net-mgmt IP : Loki
+# Tail the mqweb (Liberty) JSON messages.log on queue-manager nodes (#282).
+alloy_tail_mqweb: false

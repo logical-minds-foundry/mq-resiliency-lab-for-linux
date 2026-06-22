@@ -2,6 +2,13 @@
 # of RDQM's `crtmqm -sx` + `rdqmint`: QM on the shared LUN, taught to every node,
 # handed to Pacemaker as fs -> vip -> qm. Idempotent (guards on every step).
 
+# JSON diagnostic logging (#282): seed the mqs.ini template + journald drop-in BEFORE
+# the QM is created on the LUN, so crtmqm bakes the DiagnosticMessages stanza into qm.ini.
+- name: seed JSON diagnostic logging (mqs.ini template + journald)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system
+
 # 0. The mountpoint dir must exist on EVERY node — Pacemaker's Filesystem
 #    resource mounts the LUN on whichever node the group lands on (script L34).
 - name: mountpoint directory on every node

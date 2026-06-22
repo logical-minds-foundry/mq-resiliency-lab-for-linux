@@ -1,0 +1,6 @@
+---
+# JSON diagnostic logging contract (#282). Values are lab-wide; override per-arm only
+# for paths (e.g. pcmk's shared-LUN qm.ini via mq_qmini_path at the call site).
+mq_diag_ident: ibm-mq
+mq_diag_severities: all
+mq_diag_exclude: "9001,9002"   # routine channel start/stop chatter

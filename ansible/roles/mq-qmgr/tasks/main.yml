@@ -1,5 +1,10 @@
 # L1b: create the QM, listener via MQSC, enable mqweb REST, and install
 # boot services so reboot brings everything back (spec 8.3).
+- name: seed JSON diagnostic logging (mqs.ini template + journald) (#282)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system
+
 - name: create queue manager
   ansible.builtin.command: /opt/mqm/bin/crtmqm -u SYSTEM.DEAD.LETTER.QUEUE {{ qmgr_name }}
   args:

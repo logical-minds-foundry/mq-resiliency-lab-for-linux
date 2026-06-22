@@ -45,4 +45,8 @@
 {% else %}
   <sslDefault sslRef="mqDefaultSSLConfig"/>
 {% endif %}
+{% if mqweb_json_logging | default(true) | bool %}
+  <!-- #282: JSON diagnostic logging to messages.log (tailed into Loki as unit=ibm-mqweb) -->
+  <logging messageFormat="json" messageSource="message,ffdc"/>
+{% endif %}
 </server>

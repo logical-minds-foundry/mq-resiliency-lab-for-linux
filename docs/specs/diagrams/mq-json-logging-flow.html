@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MQ diagnostic logging — everything to JSON in journald</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#11151a; color:#e6e8eb; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         margin:0; padding:28px 32px; line-height:1.45; }
+  h2 { margin:0 0 4px 0; }
+  .subtitle { opacity:.8; margin:0 0 18px 0; font-size:14px; max-width:980px; }
+  .flow { display:flex; align-items:stretch; gap:10px; flex-wrap:nowrap; }
+  .stage { display:flex; flex-direction:column; gap:10px; }
+  .stage.producers { flex:0 0 270px; }
+  .stage.contract  { flex:1 1 auto; }
+  .stage.transport { flex:0 0 230px; }
+  .stagelabel { font-size:11px; text-transform:uppercase; letter-spacing:.06em; opacity:.7; margin:0 2px 2px; }
+  .panel { border:2px solid #888; border-radius:12px; padding:12px 14px; }
+  .panel h3 { margin:0 0 8px 0; font-size:15px; }
+  /* producer cards */
+  .prod { border:2px solid #5a7fb0; border-radius:10px; padding:9px 11px; background:rgba(74,144,217,0.06); }
+  .prod.sys { border-color:#3fae9a; background:rgba(63,174,154,0.06); }
+  .prod.cli { border-color:#9a7fc0; background:rgba(154,124,192,0.07); }
+  .prod.web { border-color:#c9a24a; background:rgba(201,162,74,0.07); }
+  .prod h4 { margin:0 0 3px 0; font-size:13px; letter-spacing:.02em; }
+  .prod .role { font-size:11px; opacity:.78; margin:0 0 6px 0; }
+  .prod code { font-family:ui-monospace,monospace; font-size:11px; background:rgba(255,255,255,0.08);
+               padding:1px 5px; border-radius:4px; display:inline-block; }
+  .emit { font-size:10.5px; opacity:.85; margin-top:6px; }
+  .emit b { color:#7fd0ff; }
+  /* contract (portable) panel */
+  .contract-panel { border:2px solid #4ade80; border-radius:12px; padding:14px 16px;
+                    background:rgba(74,222,128,0.07); height:100%; box-sizing:border-box;
+                    display:flex; flex-direction:column; gap:12px; }
+  .contract-panel > h3 { color:#9af7bd; margin:0; }
+  .sink { border:1px solid #4ade80; border-radius:9px; padding:10px 12px; background:rgba(74,222,128,0.05); }
+  .sink .name { font-family:ui-monospace,monospace; font-size:13px; font-weight:600; }
+  .sink .meta { font-size:11px; opacity:.82; margin-top:3px; }
+  .sink code { font-family:ui-monospace,monospace; font-size:11px; background:rgba(255,255,255,0.08);
+               padding:1px 5px; border-radius:4px; }
+  .json { font-family:ui-monospace,monospace; font-size:10.5px; color:#bdeccb;
+          background:rgba(0,0,0,0.28); border-radius:6px; padding:7px 9px; margin-top:7px;
+          white-space:pre; overflow-x:auto; }
+  .portable-tag { align-self:flex-start; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em;
+                  color:#11151a; background:#4ade80; border-radius:5px; padding:2px 8px; font-weight:700; }
+  /* transport (swappable) */
+  .transport-panel { border:2px dashed #7a8696; border-radius:12px; padding:14px 16px;
+                     background:rgba(122,134,150,0.05); height:100%; box-sizing:border-box;
+                     display:flex; flex-direction:column; gap:9px; opacity:.92; }
+  .transport-panel h3 { color:#cdd5df; margin:0 0 2px 0; }
+  .hop { border:1px dashed #7a8696; border-radius:8px; padding:8px 10px; background:rgba(255,255,255,0.03);
+         font-family:ui-monospace,monospace; font-size:12px; }
+  .hop .h { font-weight:600; }
+  .hop .d { font-family:system-ui,sans-serif; font-size:10.5px; opacity:.75; margin-top:2px; }
+  .swap { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; opacity:.7; }
+  /* arrows */
+  .arrowcol { display:flex; flex-direction:column; justify-content:center; align-items:center;
+              flex:0 0 26px; }
+  .arrowcol .a { font-size:22px; opacity:.7; }
+  .arrowcol .lbl { font-size:9px; opacity:.6; writing-mode:vertical-rl; transform:rotate(180deg);
+                   letter-spacing:.04em; margin-top:4px; }
+  /* callouts */
+  .callouts { display:flex; gap:14px; margin-top:20px; flex-wrap:wrap; }
+  .ok { flex:1 1 360px; border-left:4px solid #4ade80; background:rgba(74,222,128,0.07);
+        padding:10px 14px; border-radius:6px; font-size:13px; }
+  .ok b { color:#9af7bd; }
+  .muted { flex:1 1 360px; border-left:4px solid #7a8696; background:rgba(122,134,150,0.07);
+           padding:10px 14px; border-radius:6px; font-size:13px; }
+  .muted b { color:#cdd5df; }
+  code.inl { font-family:ui-monospace,monospace; background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+
+<h2>MQ diagnostic logging — everything to JSON in journald</h2>
+<p class="subtitle">Every MQ surface is configured to emit <b>single-line JSON</b> into the operating-system journal. That JSON-in-the-journal boundary is the portable deliverable — vendor-neutral, manageable, and the same on every arm. Whatever ships and stores it downstream (here: Alloy → Loki → Grafana) is <b>site-specific and swappable</b>; a client site can substitute its own collector without touching anything to the left.</p>
+
+<div class="flow">
+
+  <!-- PRODUCERS -->
+  <div class="stage producers">
+    <div class="stagelabel">Producers — configured to JSON</div>
+
+    <div class="prod">
+      <h4>Queue manager</h4>
+      <p class="role">HA / CRR / Native-HA / channel events</p>
+      <code>qm.ini → DiagnosticMessages</code>
+      <div class="emit">Service=Syslog · inherited from the <code>mqs.ini</code> template at <code>crtmqm</code> → <b>single-line JSON</b></div>
+    </div>
+
+    <div class="prod sys">
+      <h4>System / installation</h4>
+      <p class="role">QM-unknown &amp; fallback errors</p>
+      <code>mqs.ini → DiagnosticSystemMessages</code>
+      <div class="emit">Service=Syslog → <b>single-line JSON</b></div>
+    </div>
+
+    <div class="prod cli">
+      <h4>Client applications</h4>
+      <p class="role">requester / sample apps, runmqsc client mode</p>
+      <code>mqclient.ini → DiagnosticSystemMessages</code>
+      <div class="emit">Service=Syslog (severity-filtered) → <b>single-line JSON</b></div>
+    </div>
+
+    <div class="prod web">
+      <h4>mqweb (Console / REST)</h4>
+      <p class="role">WebSphere Liberty server</p>
+      <code>messageFormat=json</code>
+      <div class="emit">writes <b>single-line JSON</b> to <code>messages.log</code></div>
+    </div>
+  </div>
+
+  <div class="arrowcol"><div class="a">⟶</div><div class="lbl">syslog() / file</div></div>
+
+  <!-- CONTRACT -->
+  <div class="stage contract">
+    <div class="stagelabel">The JSON contract — portable boundary</div>
+    <div class="contract-panel">
+      <span class="portable-tag">portable · vendor-neutral · per-arm identical</span>
+      <h3>Single-line JSON in the OS journal</h3>
+
+      <div class="sink">
+        <div class="name">systemd-journald</div>
+        <div class="meta">receives QM + system + client via <code>syslog()</code> ·
+          tagged <code>SYSLOG_IDENTIFIER=ibm-mq</code> · one valid JSON object per record</div>
+        <div class="json">{"ibm_messageId":"AMQ5806I","loglevel":"INFO",
+ "ibm_serverName":"QMNATIVE","ibm_datetime":"…Z",
+ "module":"amqzfu…","message":"…replication group…"}</div>
+      </div>
+
+      <div class="sink">
+        <div class="name">mqweb/logs/messages.log</div>
+        <div class="meta">Liberty JSON (single line) · tailed as a file ·
+          the multi-line-stanza parsing problem does <b>not</b> apply</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrowcol"><div class="a">⟶</div><div class="lbl">swappable</div></div>
+
+  <!-- TRANSPORT -->
+  <div class="stage transport">
+    <div class="stagelabel">Transport — lab choice, swappable</div>
+    <div class="transport-panel">
+      <h3>Site-specific</h3>
+      <div class="swap">client site may differ</div>
+      <div class="hop">
+        <div class="h">Grafana Alloy</div>
+        <div class="d">scrapes journald + tails messages.log; relabel <code class="inl">syslog_identifier→unit</code></div>
+      </div>
+      <div class="arrowcol" style="flex:0 0 auto;"><div class="a">↓</div></div>
+      <div class="hop">
+        <div class="h">Loki</div>
+        <div class="d">labels: host, unit · JSON parsed at query time (<code class="inl">| json</code>)</div>
+      </div>
+      <div class="arrowcol" style="flex:0 0 auto;"><div class="a">↓</div></div>
+      <div class="hop">
+        <div class="h">Grafana</div>
+        <div class="d">cockpit / QM log board (follow-on effort)</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="callouts">
+  <div class="ok">
+    <b>Why the boundary matters.</b> The work of this effort stops at JSON-in-the-journal.
+    Once MQ diagnostics are structured JSON in <code class="inl">journald</code> (+ one file for mqweb),
+    they are manageable by <i>any</i> tooling — <code class="inl">journalctl</code>, rsyslog forwarding,
+    a SIEM, or the lab's Alloy/Loki. Nothing to the left changes when the transport changes.
+  </div>
+  <div class="muted">
+    <b>The legacy text logs are ignored, by decision.</b> MQ always also writes the multi-line
+    <code class="inl">AMQERRnn.LOG</code> stanza files; they cannot be turned off. We neither ship nor
+    parse them — the JSON surface carries the same events in a line-oriented form. No stanza-block parser, ever.
+  </div>
+</div>
+
+</body>
+</html>

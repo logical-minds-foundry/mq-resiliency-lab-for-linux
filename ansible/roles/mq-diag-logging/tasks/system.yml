@@ -1,0 +1,42 @@
+---
+# System-level JSON diagnostic logging (#282): the DiagnosticMessagesTemplate is
+# copied into each new QM's qm.ini at crtmqm, so QMs inherit JSON-to-syslog;
+# DiagnosticSystemMessages covers QM-unknown / fallback errors. journald rate
+# limiting is disabled so Severities=all is never silently dropped.
+- name: seed JSON diagnostic logging template + system stanza in mqs.ini
+  ansible.builtin.blockinfile:
+    path: /var/mqm/mqs.ini
+    marker: "# {mark} MQ-DIAG-LOGGING (#282)"
+    block: |
+      DiagnosticMessagesTemplate:
+         Name=ClusterSyslog
+         Service=Syslog
+         Ident={{ mq_diag_ident }}
+         Severities={{ mq_diag_severities }}
+         ExcludeMessage={{ mq_diag_exclude }}
+      DiagnosticSystemMessages:
+         Name=ClusterSyslog
+         Service=Syslog
+         Ident={{ mq_diag_ident }}
+         Severities={{ mq_diag_severities }}
+  become: true
+  become_user: mqm
+
+- name: journald drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: disable journald rate-limiting on MQ nodes (no silent log loss)
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/10-mq.conf
+    mode: "0644"
+    content: |
+      # MQ JSON logging (#282): Severities=all can burst; never drop silently.
+      [Journal]
+      RateLimitIntervalSec=0
+      RateLimitBurst=0
+  become: true
+  notify: restart journald

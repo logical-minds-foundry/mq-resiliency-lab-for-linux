@@ -9,6 +9,17 @@ loki.relabel "journal" {
     source_labels = ["__journal__systemd_unit"]
     target_label  = "unit"
   }
+
+  // #282: MQ logs via syslog have no systemd unit. Fill `unit` from the syslog
+  // identifier ONLY when systemd_unit is empty, so cluster-daemon units (corosync,
+  // pacemaker, drbd) keep their existing `unit` label. MQ arrives as unit="ibm-mq".
+  rule {
+    source_labels = ["__journal__systemd_unit", "__journal__syslog_identifier"]
+    separator     = ";"
+    regex         = ";(.+)"
+    replacement   = "$1"
+    target_label  = "unit"
+  }
 }
 
 loki.source.journal "system" {
@@ -24,3 +35,19 @@ loki.write "obs" {
     url = "{{ loki_push_url }}"
   }
 }
+
+{% if alloy_tail_mqweb | default(false) | bool %}
+// #282: tail the mqweb (Liberty) JSON messages.log on QM nodes (labelled unit=ibm-mqweb).
+local.file_match "mqweb" {
+  path_targets = [{
+    "__path__" = "/var/mqm/web/installations/Installation1/servers/mqweb/logs/messages.log",
+    "host"     = "{{ inventory_hostname }}",
+    "unit"     = "ibm-mqweb",
+  }]
+}
+
+loki.source.file "mqweb" {
+  targets    = local.file_match.mqweb.targets
+  forward_to = [loki.write.obs.receiver]
+}
+{% endif %}

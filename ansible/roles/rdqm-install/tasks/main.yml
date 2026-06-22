@@ -130,3 +130,11 @@
       mqm soft nofile 10240
       mqm hard nofile 10240
   become: true
+
+# JSON diagnostic logging (#282): seed the mqs.ini template + journald drop-in at
+# install time — BEFORE rdqm-qm-create.sh runs `crtmqm -sx` (RDQM creates its QM via
+# a script, not a role), so QMRDQM inherits the DiagnosticMessages stanza on creation.
+- name: seed JSON diagnostic logging (mqs.ini template + journald)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system

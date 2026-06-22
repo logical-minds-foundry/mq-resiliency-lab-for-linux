@@ -1,0 +1,25 @@
+---
+# Client app diagnostics → syslog as JSON. NOTE: ExcludeMessage/SuppressMessage are
+# not honoured in mqclient.ini, so this surface is severity-filtered only. The block
+# is marker-delimited so it coexists with the TCP KeepAlive lineinfile on the same file.
+- name: ensure /var/mqm exists (client install ran)
+  ansible.builtin.file:
+    path: /var/mqm
+    state: directory
+    mode: "0775"
+  become: true
+
+- name: JSON diagnostic logging stanza in mqclient.ini
+  ansible.builtin.blockinfile:
+    path: /var/mqm/mqclient.ini
+    create: true
+    mode: "0644"
+    marker: "# {mark} MQ-DIAG-LOGGING (#282)"
+    block: |
+      DiagnosticSystemMessages:
+         Name=ClusterSyslog
+         Service=Syslog
+         Ident={{ mq_diag_ident }}
+         Severities={{ mq_diag_severities }}
+  become: true
+  become_user: mqm
