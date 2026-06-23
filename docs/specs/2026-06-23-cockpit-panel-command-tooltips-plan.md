@@ -292,6 +292,16 @@ def test_behind_command_is_backed_by_the_collector(key):
     assert behind_is_backed(key, QM_NATIVE, commands)
 
 
+def test_every_source_key_exists_in_the_collector():
+    # a renamed/removed probe must fail loudly with a named source key (spec §6),
+    # not a bare KeyError buried inside behind_is_backed.
+    valid = set(nativehastate._commands(QM_NATIVE))
+    for key, doc in TOOLTIPS.items():
+        if key.startswith("nativeha."):
+            missing = set(doc.source) - valid
+            assert not missing, f"{key} references unknown collector keys: {missing}"
+
+
 def test_drift_is_caught_when_behind_is_not_what_the_collector_runs():
     # a partial command must NOT pass (this is the loose-substring hole the check closes)
     commands = {"nativeha_x": (["su", "-", "mqm", "-c", "/opt/mqm/bin/dspmq -m QMNATIVE -o nativeha -x"], 3)}
@@ -307,8 +317,8 @@ def test_drift_is_caught_when_behind_is_not_what_the_collector_runs():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_tooltips.py -k 'command_tokens or backed or drift' -v`
-Expected: FAIL with `ImportError: cannot import name 'behind_is_backed'`.
+Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_tooltips.py -k 'command_tokens or backed or drift or source' -v`
+Expected: FAIL with `ImportError: cannot import name 'behind_is_backed'` (the module-level import fails until Step 3).
 
 - [ ] **Step 3: Implement the helpers**
 

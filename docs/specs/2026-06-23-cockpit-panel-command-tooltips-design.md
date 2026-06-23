@@ -198,7 +198,7 @@ final text.
 
 ## 10. Testing
 
-- **`tests/test_tooltips.py`** (new): the §6 cross-check (exact contiguous-token match);
+- **`tests/test_tooltips.py`** (new): the §6 cross-check (exact token-for-token equality);
   `render_description` markdown shape with `{qm}` substituted; every Native HA key renders
   non-empty; the unknown-key path **raises `KeyError`**.
 - **`tests/test_clusterboard.py`** (extend): all five ① band tiles, both ② matrices, and the ③ CRR
