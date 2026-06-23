@@ -57,7 +57,7 @@ packages = [
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
   "libarchive-tools",  # bsdtar — vagrant box unpacking
-  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant gem + vagrant-libvirt build deps
+  "ruby-dev", "libvirt-dev", "pkg-config", "build-essential",  # vagrant gem + vagrant-libvirt build deps (build-essential = gcc/g++/make/libc6-dev; the cloud base ships no libc6-dev)
 ]
 vagrant_plugins = ["vagrant-libvirt"]
 # Expose the lab's Grafana to the Mac. The obs guest's Grafana is a nested
@@ -84,7 +84,7 @@ packages = [
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
   "libarchive-tools",  # bsdtar — vagrant box unpacking
-  "ruby-dev", "libvirt-dev", "pkg-config", "gcc", "make",  # vagrant gem + vagrant-libvirt build deps
+  "ruby-dev", "libvirt-dev", "pkg-config", "build-essential",  # vagrant gem + vagrant-libvirt build deps (build-essential = gcc/g++/make/libc6-dev; the cloud base ships no libc6-dev)
 ]
 vagrant_plugins = ["vagrant-libvirt"]
 # Grafana relay -> workstation localhost:3001 (NOT 3000). vergil-user already
