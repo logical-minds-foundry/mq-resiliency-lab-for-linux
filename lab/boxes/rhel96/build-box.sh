@@ -95,6 +95,11 @@ sudo chown 64055:993 /var/lib/libvirt/images/rhel96-build.qcow2 \
 # 3. Transient build domain (the #24 TCG recipe), wait for install poweroff.
 sed -e "s|@ISO@|/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso|" \
   build-domain.xml.tpl > "$WORK/domain.xml"
+# Ensure the vagrant-libvirt management network exists before the build domain
+# attaches to it (#323). The plugin only auto-creates it on `vagrant up`, but this
+# raw-virsh build runs first; net-up is idempotent, so a network a prior `vagrant up`
+# already made is reused, not redefined.
+../../scripts/net-up.sh vagrant-libvirt
 virsh -c qemu:///system define "$WORK/domain.xml"
 virsh -c qemu:///system start rhel96-build
 echo "installing (TCG, expect 45-90 min); waiting for shut off..."
