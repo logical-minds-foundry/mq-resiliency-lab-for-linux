@@ -25,11 +25,26 @@ ignore = ["docs/site/docs/changelog.md", "docs/site/docs/releases"]
 vergil = "v2.1"
 
 [vm.vergil-user]
-cpus   = 12
+# Off-platform (GCP) backend — vergil-vm #199. The lab is dual-arch: an x86-targeted
+# stack whose guests run under native KVM on an x86 host and under TCG emulation on
+# arm64. A native-x86 GCP host runs the nested guests with /dev/kvm (driver=kvm),
+# escaping the arm64 TCG emulation tax. This EXTENDS the lab to x86 — arm64/Lima stays
+# supported by the same package set (qemu-system-x86 emulates x86 there).
+#
+# Mapping is 1:1 today — (identity, repo) → exactly one VM — so these keys REPLACE the
+# local Lima definition rather than adding a second box. Running a local arm64 box and
+# a cloud x86 box at once (and the destroy-orphan edge condition that exposes) is
+# tracked in vergil-project/vergil-vm#242. Until then: destroy the local VM BEFORE this
+# lands, then create in the cloud.
+backend  = "off-platform"
+provider = "gcp"
+region   = "us-central1"
+instance = "n2-standard-16"   # 16 vCPU / 64 GiB; N2/Intel → nested-virt-capable; ~$0.78/hr while running
+volume   = "300GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
+cpus   = 12                   # sanity floor / portable intent; `instance` is authoritative on cloud
 memory = "64GiB"
-disk   = "300GiB"
-# KVM-accelerate the nested arm64 lab guests (vergil-vm#131 per-profile knob;
-# default off). Requires macOS 15+ on M3+ at the Lima/vz layer.
+# nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. On the native-x86
+# cloud host this is real KVM, not the TCG fallback the arm64 Mac runs.
 nested = true
 # No apt "vagrant": there is no arm64 vagrant deb (HashiCorp ships amd64 only;
 # Ubuntu noble dropped it post-BUSL). vergil-vm gem-installs vagrant when
@@ -78,3 +93,17 @@ vagrant_plugins = ["vagrant-libvirt"]
 # so the vm-port becomes 3001. The target stays the obs node's Grafana (10.50.0.2:3000),
 # which is internal to the lab and unchanged.
 port_forwards = ["3001|10.50.0.2:3000"]
+
+# Off-platform lifecycle-validation profile (vergil-vm#199 / vergil-tooling#1706).
+# Deliberately tiny: smallest box that runs Claude Code, NO nested virt, NO lab
+# toolchain — just to beat on create/session/destroy + SSH and confirm Claude runs
+# inside. A standalone cloud identity, so it never collides with vergil-user.
+# The scaled-up, full-lab off-platform box is [vm.vergil-user] above (n2-standard-16
+# + nested KVM); this profile intentionally stays minimal as the lifecycle smoke test.
+[vm.vergil-audit]
+backend  = "off-platform"
+provider = "gcp"
+region   = "us-central1"
+instance = "e2-medium"     # 2 vCPU / 4 GiB — comfortably runs Claude Code; ~$0.03/hr
+volume   = "50GiB"         # modest while we iterate; bump for the lab later
+nested   = false           # not needed for the hello-world lifecycle test
