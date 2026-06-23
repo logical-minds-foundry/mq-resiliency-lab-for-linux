@@ -39,8 +39,9 @@ vergil = "v2.1"
 backend  = "off-platform"
 provider = "gcp"
 region   = "us-central1"
-instance = "n2-standard-16"   # 16 vCPU / 64 GiB; N2/Intel → nested-virt-capable; ~$0.78/hr while running
-volume   = "300GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
+zone     = "us-central1-f"
+instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running
+volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
 cpus   = 12                   # sanity floor / portable intent; `instance` is authoritative on cloud
 memory = "64GiB"
 # nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. On the native-x86
