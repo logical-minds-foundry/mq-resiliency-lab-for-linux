@@ -95,7 +95,16 @@ Expected: PASS — including the pre-existing `test_nativeha_status_band_is_one_
 Run: `cd .worktrees/issue-313-cockpit-tooltips && grep -n '"QMNATIVE"' src/mqlab/clusterboard.py`
 Expected: exactly **one** match — the constant definition `QM_NATIVE = "QMNATIVE"`. The two PromQL selectors (lines ~409, ~435) now go through `QM_NATIVE`; the prose occurrences (comment, logs-panel path) are intentionally untouched per Step 1.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Refactor**
+
+Look for:
+- **Placement** — `QM_NATIVE` belongs with the other module-level constants near the top, not buried beside one expr. Move it if it landed mid-file.
+- **Uniformity** — every de-hardcoded expr should interpolate the constant the same way (`f'…{QM_NATIVE}…'`); no NHA expr still inlines the literal (the Step 6 grep proves this).
+- **Naming for the family** — `QM_NATIVE` should read as the template for the future `QM_RDQM` / `QM_PCMK` (spec §11). Keep the name shape consistent so the fan-out is mechanical.
+
+Re-run `uv run pytest tests/test_clusterboard.py -k 'nativeha or qm_native' -v` after any change — still PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/clusterboard.py tests/test_clusterboard.py && vrg-commit --type refactor --scope obs --message "single QM_NATIVE constant; de-hardcode the Native HA board PromQL (#313)"
@@ -245,7 +254,16 @@ def render_description(key: str, qm: str) -> str:
 Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_tooltips.py -v`
 Expected: PASS (all three tests).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Refactor**
+
+Look for:
+- **Command literals** — every command string should live in a module constant (`_NHA_X`, `_NHA_G`, `_STATUS`, `_ERRLOG`); no raw `dspmq …` string inline in a `PanelDoc`. This is what lets the cross-check and the wiring share one definition.
+- **Render duplication** — the **Behind**/**Investigate** blocks in `render_description` are near-identical; if it reads cleaner, extract a local `_section(heading, templates, qm)` returning the bold heading + fenced block, and call it twice.
+- **Key naming** — keys follow one scheme (`nativeha.status.*`, `nativeha.instances`, `nativeha.crr`); no stray casing or separators.
+
+Re-run `uv run pytest tests/test_tooltips.py -v` after any change — still PASS.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/tooltips.py tests/test_tooltips.py && vrg-commit --type feat --scope obs --message "tooltips catalog + render_description for the Native HA panels (#313)" --body "Investigate commands verified read-only against IBM Docs 9.4 and live QMNATIVE."
@@ -356,7 +374,16 @@ def behind_is_backed(
 Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_tooltips.py -v`
 Expected: PASS (all tests, including the parametrized per-key checks and the drift test).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Refactor**
+
+Look for:
+- **Readable normalization** — `command_tokens` does two distinct steps (unwrap the `su -c` payload; strip the `/…/bin/` prefix). Keep each self-evident; a one-line comment per step beats a clever one-liner.
+- **Invariant guard** — `zip(doc.behind, doc.source, strict=True)` enforces the parallel-list contract; keep `strict=True` so a mismatched catalog entry fails loudly rather than silently truncating.
+- **Reuse** — if any other module already normalizes argv this way, consolidate rather than duplicating; otherwise leave `command_tokens` as the single home (Phases B/C will reuse it).
+
+Re-run `uv run pytest tests/test_tooltips.py -v` after any change — still PASS.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/tooltips.py tests/test_tooltips.py && vrg-commit --type feat --scope obs --message "cross-check binding tooltip 'behind' commands to collector argv (#313)"
@@ -415,7 +442,23 @@ Do the same in `_stat()` (clusterboard.py:290): add `description: str | None = N
 Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_clusterboard.py -k description -v`
 Expected: PASS (both tests, both branches — present and absent).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Refactor**
+
+Look for (the real consolidation in this task):
+- **Triplicated pattern** — `if description is not None: panel["description"] = description` now appears in `matrix()`, `_stat()`, **and** the pre-existing `_logs_panel()` (clusterboard.py:571). Extract one module-private helper and route all three through it:
+
+```python
+def _with_description(panel: dict[str, Any], description: str | None) -> dict[str, Any]:
+    if description is not None:
+        panel["description"] = description
+    return panel
+```
+
+  Have `matrix`/`_stat` end with `return _with_description(panel, description)`, and refit `_logs_panel` to use it too (it currently inlines the same lines). This is the "consolidate with existing code" win.
+
+Re-run `uv run pytest tests/test_clusterboard.py -k 'description or log_row' -v` after the change — still PASS (the `_logs_panel` description test must stay green).
+
+- [ ] **Step 6: Commit**
 
 ```bash
 cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/clusterboard.py tests/test_clusterboard.py && vrg-commit --type feat --scope obs --message "optional description= on matrix()/_stat() builders (#313)"
@@ -507,7 +550,22 @@ In `_nativeha_board`, add `description=render_description("nativeha.instances", 
 Run: `cd .worktrees/issue-313-cockpit-tooltips && uv run pytest tests/test_clusterboard.py::test_nativeha_panels_carry_command_tooltips -v`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Refactor**
+
+Look for:
+- **Repeated render call** — `render_description("…", QM_NATIVE)` now appears at ~10 call sites (5 band tiles + 3 CRR tiles + 2 matrices). Add a local helper near `_nativeha_board` and use it everywhere:
+
+```python
+def _nha_tip(key: str) -> str:
+    return render_description(key, QM_NATIVE)
+```
+
+  so call sites read `description=_nha_tip("nativeha.crr")` — less noise, one place that binds the arm's QM.
+- **Key/typo check** — every key passed matches a real `TOOLTIPS` entry (Task 2). A typo would raise `KeyError` at render — run the board render once to confirm none do.
+
+Re-run `uv run pytest tests/test_clusterboard.py -k 'nativeha' -v` after the change — still PASS.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/clusterboard.py tests/test_clusterboard.py && vrg-commit --type feat --scope obs --message "wire command tooltips onto the Native HA cockpit panels (#313)"
@@ -517,7 +575,7 @@ cd .worktrees/issue-313-cockpit-tooltips && vrg-git add src/mqlab/clusterboard.p
 
 ### Task 6: full validation + live-Grafana checkpoint
 
-**Files:** none (verification only).
+**Files:** none (verification only — no RED/GREEN/REFACTOR cycle; this task gates the work, it doesn't implement code).
 
 - [ ] **Step 1: Run the full validation pipeline**
 
