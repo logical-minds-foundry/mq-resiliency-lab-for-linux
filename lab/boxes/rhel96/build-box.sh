@@ -2,10 +2,13 @@
 # lab/boxes/rhel96/build-box.sh - cache-aware RHEL 9.6 box build.
 #
 # Builds the box ONCE (DVD ISO + OEMDRV kickstart -> qcow2 -> vagrant-libvirt
-# .box; ~45-90 min under TCG) and caches it on the HOST-DURABLE, repo-root
+# .box; ~45-90 min under TCG on the arm64 Mac, minutes under KVM on a native-x86
+# host — #327) and caches it on the HOST-DURABLE, repo-root
 # build/ so it survives base-VM rebuilds (#57). Subsequent runs just
 # `vagrant box add` from the cache (minutes). The running lab stays ephemeral.
 #
+#   --domain-type <kvm|qemu>            REQUIRED; mqlab supplies it from host facts
+#   --cpu-mode <host-passthrough|maximum> REQUIRED; pairs with --domain-type
 #   --rebuild-box / LAB_REBUILD_BOX=1   force a fresh build (overwrite the cache)
 #   --dry-run                           print the decision and exit, do nothing
 #   STALE_DAYS=N (default 30)           age past which a NON-blocking notice prints
@@ -17,13 +20,41 @@ BOX_NAME="rhel/9.6-x86_64"
 STALE_DAYS="${STALE_DAYS:-30}"
 FORCE="${LAB_REBUILD_BOX:-0}"
 DRY_RUN=0
-for arg in "$@"; do
-  case "$arg" in
+DOMAIN_TYPE=""
+CPU_MODE=""
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: build-box.sh --domain-type <kvm|qemu> --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
+
+  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies them
+  (it computes them from host facts via platforms.build_domain_virt, #327).
+  If you are running this by hand on a native-x86 host, pass:
+      --domain-type kvm  --cpu-mode host-passthrough
+  on the arm64 Mac (x86 guest is emulated), pass:
+      --domain-type qemu --cpu-mode maximum
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --rebuild-box) FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    *) echo "ERROR: unknown arg: $arg" >&2; exit 2 ;;
+    --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
+    --cpu-mode) CPU_MODE="${2:-}"; shift ;;
+    *) echo "ERROR: unknown arg: $1" >&2; usage; exit 2 ;;
   esac
+  shift
 done
+
+case "$DOMAIN_TYPE" in
+  kvm|qemu) ;;
+  *) echo "ERROR: --domain-type must be 'kvm' or 'qemu' (got '${DOMAIN_TYPE}')" >&2; usage; exit 2 ;;
+esac
+case "$CPU_MODE" in
+  host-passthrough|maximum) ;;
+  *) echo "ERROR: --cpu-mode must be 'host-passthrough' or 'maximum' (got '${CPU_MODE}')" >&2; usage; exit 2 ;;
+esac
 
 # Resolve the MAIN-worktree build/ (host-durable), NOT a feature worktree's
 # ephemeral build/. git-common-dir points at the main repo's .git from any
@@ -65,7 +96,7 @@ if [ "$action" = REUSE ]; then
   exit 0
 fi
 
-# --- Expensive path (BUILD / FORCE-BUILD): the ~45-90 min TCG install. ---
+# --- Expensive path (BUILD / FORCE-BUILD): the install (~45-90 min under TCG; minutes under KVM). ---
 ISO="${RHEL_ISO:-}"
 if [ -z "$ISO" ]; then
   c="$BUILD_DIR/state/rhel-9.6-x86_64-dvd.iso"
@@ -101,6 +132,8 @@ sudo chown 64055:993 /var/lib/libvirt/images/rhel96-build.qcow2 \
 
 # 3. Transient build domain (the #24 TCG recipe), wait for install poweroff.
 sed -e "s|@ISO@|/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso|" \
+  -e "s|@DOMAIN_TYPE@|${DOMAIN_TYPE}|" \
+  -e "s|@CPU_MODE@|${CPU_MODE}|" \
   build-domain.xml.tpl > "$WORK/domain.xml"
 # Ensure the vagrant-libvirt management network exists before the build domain
 # attaches to it (#323). The plugin only auto-creates it on `vagrant up`, but this
@@ -109,7 +142,11 @@ sed -e "s|@ISO@|/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso|" \
 ../../scripts/net-up.sh vagrant-libvirt
 virsh -c qemu:///system define "$WORK/domain.xml"
 virsh -c qemu:///system start rhel96-build
-echo "installing (TCG, expect 45-90 min); waiting for shut off..."
+if [ "$DOMAIN_TYPE" = kvm ]; then
+  echo "installing (KVM — native virtualization, much faster than the TCG path); waiting for shut off..."
+else
+  echo "installing (TCG, expect 45-90 min); waiting for shut off..."
+fi
 until [ "$(virsh -c qemu:///system domstate rhel96-build 2>/dev/null)" = "shut off" ]; do
   sleep 60
 done

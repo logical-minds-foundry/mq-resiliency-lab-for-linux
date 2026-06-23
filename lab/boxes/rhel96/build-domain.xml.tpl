@@ -1,8 +1,10 @@
-<!-- Transient RHEL 9.6 build domain - the #24-proven TCG x86 recipe.
+<!-- Transient RHEL 9.6 build domain - host-resolved recipe (#327): @DOMAIN_TYPE@/@CPU_MODE@
+     are substituted by build-box.sh from the args mqlab passes (KVM on a native-x86
+     host; TCG — the #24-proven x86 recipe — on the arm64 Mac).
      @ISO@ is substituted by build-box.sh. Boots DVD + OEMDRV kickstart,
      installs unattended, powers off (ks 'poweroff'), on_reboot=destroy
      keeps anaconda's mid-install reboot from looping the installer. -->
-<domain type='qemu'>
+<domain type='@DOMAIN_TYPE@'>
   <name>rhel96-build</name>
   <memory unit='MiB'>4096</memory>
   <vcpu>4</vcpu>
@@ -12,7 +14,7 @@
     <boot dev='hd'/>
   </os>
   <features><acpi/></features>
-  <cpu mode='maximum'/>
+  <cpu mode='@CPU_MODE@'/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>destroy</on_reboot>
   <devices>
