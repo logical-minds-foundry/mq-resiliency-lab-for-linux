@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from mqlab import cli
 from mqlab.cli import _ensure_local_boxes as _real_ensure_local_boxes  # captured before the stub
 from mqlab.cli import _sweep_orphan_volumes as _real_sweep_orphan_volumes
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.pauser import NoTTYError
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
@@ -509,9 +510,35 @@ def _seed_resolved(tmp_path, body):
     (tmp_path / "build" / "work" / "lab" / "topology.resolved.yaml").write_text(body)
 
 
+def test_box_build_steps_passes_kvm_args(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+    steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
+    assert [s.command.argv for s in steps] == [
+        [
+            "bash",
+            str(tmp_path / "lab/boxes/rhel96/build-box.sh"),
+            "--domain-type",
+            "kvm",
+            "--cpu-mode",
+            "host-passthrough",
+        ],
+    ]
+
+
+def test_box_build_steps_passes_tcg_args_on_arm(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
+    assert steps[0].command.argv[-4:] == ["--domain-type", "qemu", "--cpu-mode", "maximum"]
+
+
 def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    monkeypatch.setattr(
+        cli, "probe", lambda: HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+    )
     runner = RecordingRunner(
         results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([])]
     )
@@ -519,7 +546,14 @@ def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
     _real_ensure_local_boxes(["rdqm-a1"])
     argvs = [c.argv for c in runner.recorded]
     assert argvs[0] == ["vagrant", "box", "list"]
-    assert argvs[1] == ["bash", str(tmp_path / "lab/boxes/rhel96/build-box.sh")]
+    assert argvs[1] == [
+        "bash",
+        str(tmp_path / "lab/boxes/rhel96/build-box.sh"),
+        "--domain-type",
+        "kvm",
+        "--cpu-mode",
+        "host-passthrough",
+    ]
 
 
 def test_ensure_local_boxes_noop_when_box_present(monkeypatch, tmp_path):
