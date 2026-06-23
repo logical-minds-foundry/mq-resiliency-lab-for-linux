@@ -138,3 +138,18 @@ def test_resolved_node_has_every_vagrantfile_field():
         "nics",
     }
     assert required <= set(asdict(node))
+
+
+def test_build_domain_virt_x86_host_with_kvm_is_native():
+    assert p.build_domain_virt(X86_KVM) == ("kvm", "host-passthrough")
+
+
+def test_build_domain_virt_x86_host_without_kvm_falls_back_to_tcg():
+    # Defensive: the gated bring-up never reaches here (require_native_kvm), but
+    # the pure function stays honest and display-safe.
+    assert p.build_domain_virt(X86_NOKVM) == ("qemu", "maximum")
+
+
+def test_build_domain_virt_arm_host_is_foreign_tcg():
+    # x86_64 guest on an arm64 Mac is foreign-arch — must be TCG.
+    assert p.build_domain_virt(ARM_KVM) == ("qemu", "maximum")
