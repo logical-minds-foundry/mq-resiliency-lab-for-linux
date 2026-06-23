@@ -112,6 +112,19 @@ def _provider(
     )
 
 
+def build_domain_virt(facts: HostFacts) -> tuple[str, str]:
+    """(domain_type, cpu_mode) for the local x86_64 RHEL box build.
+
+    KVM when the host natively virtualizes x86_64; TCG otherwise (foreign-arch
+    arm64 Mac, or an x86 host without usable /dev/kvm). Pure and display-safe —
+    never raises — mirroring resolve(). The single authority for the box-build
+    domain's virtualization (design D1); build-box.sh consumes the result, it
+    does not re-derive it.
+    """
+    kvm = facts.arch == X86_64 and facts.kvm
+    return ("kvm", CPU_KVM) if kvm else ("qemu", CPU_TCG)
+
+
 def render_resolved(topo: dict[str, Any], facts: HostFacts) -> str:
     nodes = {name: asdict(node) for name, node in resolve(topo, facts).items()}
     return yaml.safe_dump({"nodes": nodes}, sort_keys=True)

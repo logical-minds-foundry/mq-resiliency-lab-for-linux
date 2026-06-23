@@ -22,7 +22,7 @@ from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
 from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
-from mqlab.hostfacts import probe
+from mqlab.hostfacts import HostFacts, probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.manifest import (
@@ -49,7 +49,7 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
-from mqlab.platforms import PlatformError, ensure_resolved
+from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
@@ -691,7 +691,8 @@ def _create_step(g: str) -> CommandStep:
 
 # Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
 # REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box add`)
-# and only does the ~45-90min ISO build on a truly first-ever run (#276/#291).
+# and only does the ISO build on a truly first-ever run — ~45-90 min under TCG
+# (arm64 Mac), minutes under KVM on a native-x86 host (#276/#291/#327).
 _LOCAL_BOX_BUILDERS = {
     "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
 }
@@ -731,9 +732,26 @@ def _guests_need_dvd(guests: list[str]) -> bool:
     return any((nodes.get(g) or {}).get("dvd") for g in guests)
 
 
-def _box_build_steps(needed: dict[str, str], present: dict[str, str]) -> list[CommandStep]:
+def _box_build_steps(
+    needed: dict[str, str], present: dict[str, str], facts: HostFacts
+) -> list[CommandStep]:
+    # The local-built box is RHEL x86_64; build_domain_virt is the single authority
+    # for whether that build runs under KVM (native x86 host) or TCG (#327).
+    domain_type, cpu_mode = build_domain_virt(facts)
     return [
-        CommandStep(f"box {box}", Command(["bash", str(repo_root() / script)]))  # noqa: S607
+        CommandStep(
+            f"box {box}",
+            Command(  # noqa: S607
+                [
+                    "bash",
+                    str(repo_root() / script),
+                    "--domain-type",
+                    domain_type,
+                    "--cpu-mode",
+                    cpu_mode,
+                ]
+            ),
+        )
         for box, script in sorted(needed.items())
         if box not in present
     ]
@@ -804,7 +822,7 @@ def _ensure_local_boxes(guests: list[str]) -> None:
         steps: list[CommandStep] = []
         if needed:
             cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
-            steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list))
+            steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list), probe())
         if need_dvd:
             stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
             steps.append(CommandStep("stage rhel dvd", stage))
