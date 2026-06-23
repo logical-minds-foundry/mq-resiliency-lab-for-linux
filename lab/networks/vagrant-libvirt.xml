@@ -1,0 +1,18 @@
+<!-- lab/networks/vagrant-libvirt.xml — the vagrant-libvirt plugin's management
+     network. UNLIKE the isolated net-* planes (host-only, no <forward>, no DHCP),
+     this one is NAT + DHCP: the box-build domain and vagrant-booted guests need an
+     IP and outbound access for install/provisioning. The plugin auto-creates this
+     lazily on the first `vagrant up`; we define it explicitly so the raw-virsh box
+     build (build-domain.xml.tpl) works on a fresh host that has never run
+     `vagrant up` (#323). 192.168.121.0/24 matches the plugin default, so the plugin
+     adopts the existing network rather than conflicting. -->
+<network>
+  <name>vagrant-libvirt</name>
+  <forward mode="nat"/>
+  <bridge name="virbr-vglt"/>
+  <ip address="192.168.121.1" netmask="255.255.255.0">
+    <dhcp>
+      <range start="192.168.121.2" end="192.168.121.254"/>
+    </dhcp>
+  </ip>
+</network>
