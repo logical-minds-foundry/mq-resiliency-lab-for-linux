@@ -182,12 +182,19 @@ Lives in `platforms.py` next to `_provider`, sharing `X86_64`, `CPU_KVM`, and
 `_box_build_steps` (reached via `_ensure_local_boxes`, exercised by `vm create`)
 gains the decision and threads it into the `Command`:
 
-- Obtain `facts`. The bring-up path already probes (`vm create` → `ensure_resolved`
-  at `cli.py:215`); `_box_build_steps`/`_ensure_local_boxes` take `facts` as an
-  **injected parameter** (default `probe()`) so the value is deterministic in
-  tests, the same facts-threading pattern #276 §5.1 used for `lab_guests` /
-  `setup_platforms`.
-- Compute `(dtype, cpu) = platforms.build_domain_virt(facts)`.
+- Split the I/O boundary from the pure decision so the matrix stays
+  deterministically testable (the goal of #276 §5.1's facts-threading, achieved
+  here by a cleaner split rather than a defaulted param on every function):
+  - `_box_build_steps(needed, present, facts)` takes `facts` as a **required**
+    parameter and is therefore unit-testable directly with synthetic `HostFacts`,
+    no host probe and no monkeypatch.
+  - `_ensure_local_boxes` owns the single `probe()` call (the bring-up path already
+    probes for `ensure_resolved` at `cli.py:215`) and passes the result down. It
+    gains no `facts` parameter — it has no caller that would supply one — so tests
+    pin the host by monkeypatching `cli.probe`, the same way `conftest` already
+    stubs `cli` seams.
+- Compute `(dtype, cpu) = platforms.build_domain_virt(facts)` inside
+  `_box_build_steps`.
 - Append `--domain-type <dtype> --cpu-mode <cpu>` to the existing
   `["bash", <build-box.sh>]` argv.
 
@@ -262,10 +269,14 @@ deliberate choice in §2.1 (acceptable for now, refactor candidate later).
 
 ## 7. Open items for the implementation plan
 
-- Final flag spelling (`--domain-type`/`--cpu-mode` proposed) and the accepted
-  value sets (`kvm|qemu`, `host-passthrough|maximum`).
-- Confirm `facts` injection threads cleanly into `_box_build_steps` /
-  `_ensure_local_boxes` (default `probe()`), without disturbing the #276 facts
-  flow already in `vm create`.
-- Decide whether to add the cheap standalone usage-die shell test (§6), or leave
-  the bash side entirely to Tier-2.
+All three open items were resolved while writing the plan
+(`docs/specs/2026-06-23-kvm-aware-box-build-plan.md`) and the alignment review:
+
+- **Flag spelling — resolved.** `--domain-type <kvm|qemu>` and
+  `--cpu-mode <host-passthrough|maximum>`.
+- **`facts` injection — resolved.** `_box_build_steps` takes `facts` as a required
+  parameter (directly testable); `_ensure_local_boxes` owns the single `probe()`
+  call and tests monkeypatch `cli.probe` (§4.2). No defaulted param is added.
+- **Usage-die test — resolved (included).** A cheap subprocess test
+  (`tests/test_build_box_usage.py`) exercises the early arg-validation path, which
+  runs before any git/virsh side effect, so it needs no libvirt.
