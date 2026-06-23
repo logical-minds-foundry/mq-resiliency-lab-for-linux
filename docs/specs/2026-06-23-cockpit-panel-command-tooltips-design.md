@@ -127,10 +127,12 @@ actually runs:
   - strip the absolute path prefix — `/opt/mqm/bin/dspmq …` → `dspmq …`;
   - split into command tokens.
 - Substitute the **same** `QM_NATIVE` value into the catalog template's `{qm}`, tokenize it, and
-  assert those tokens appear as a **contiguous run** within the normalized collector tokens — an
-  exact (not substring) match. Using one QM value on both sides is what makes the templated
-  catalog and the concrete collector argv comparable; contiguous-token matching is what closes the
-  loose-substring hole (a bare `dspmq` no longer passes).
+  assert those tokens **equal** the normalized collector tokens, token for token. Because the
+  normalizer reduces the collector argv to exactly its command, the displayed read command must
+  *be* the collector's command — not merely contained in it. Using one QM value on both sides is
+  what makes the templated catalog and the concrete collector argv comparable; full-token equality
+  is what closes the loose-substring hole (a bare `dspmq`, or any partial command, no longer
+  passes — a length-1 contiguous match would have).
 - Assert every `source` key exists in the collector's command set (a renamed/removed probe fails
   the test loudly).
 - Assert `render_description` produces non-empty markdown containing every `behind` and
