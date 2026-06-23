@@ -87,6 +87,13 @@ if [ ! -f /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso ]; then
   echo "staging ISO into the storage pool (12.7G copy)..."
   sudo cp "$ISO" /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 fi
+# Clean slate so the build is retryable (#325): a prior build that failed AFTER
+# `virsh define` (e.g. at start) leaves rhel96-build defined — which blocks both the
+# disk re-create (if it were still running) and the re-define below. Tear it down
+# first; idempotent (no-op when absent). The domain is undefined on success too, at the
+# end — this just covers the failure path.
+virsh -c qemu:///system destroy rhel96-build 2>/dev/null || true
+virsh -c qemu:///system undefine rhel96-build 2>/dev/null || true
 sudo qemu-img create -f qcow2 /var/lib/libvirt/images/rhel96-build.qcow2 20G
 sudo touch /var/lib/libvirt/images/rhel96-build-console.log
 sudo chown 64055:993 /var/lib/libvirt/images/rhel96-build.qcow2 \
