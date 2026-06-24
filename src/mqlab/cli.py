@@ -572,6 +572,14 @@ def _obs_up_steps() -> list[CommandStep]:
             Command(["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab"),  # noqa: S607
         ),
         CommandStep(
+            # Ensure the CA + entity keystores exist before site-obs.yml's pki-distribute
+            # copies mon-probe's mq_prometheus.p12 — the PKI material lives on the
+            # persistent volume and a recreate wipes it, so obs up must regenerate it
+            # itself (idempotent), like the MQ-tarball ensure in #335. (#341)
+            "pki ensure",
+            Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"),  # noqa: S607
+        ),
+        CommandStep(
             "provision monitoring",
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
