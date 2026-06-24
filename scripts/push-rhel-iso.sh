@@ -15,10 +15,15 @@
 #          MQLAB_RHEL_ISO=/path/to/rhel-9.6-x86_64-dvd.iso ./scripts/push-rhel-iso.sh
 set -euo pipefail
 
-# Off-platform target (GCP). Project is stable; instance/zone are resolved by
-# name-match below so a `vrg-vm rebuild` (new instance suffix) does not break this.
+# Off-platform target (GCP). Project is stable. The box is resolved by its Vergil
+# LABELS below, not by name: off-platform cloud resources are named with an opaque
+# vrg-<hash> (org/repo/identity live in labels, not the name), so a name-substring
+# match finds nothing — and labels also survive a `vrg-vm rebuild`'s changed suffix.
+# (#329)
 PROJECT_ID="vergil-project-500213-a1"
-NAME_MATCH="mq-resiliency-lab"
+LABEL_ORG="logical-minds-foundry"
+LABEL_REPO="mq-resiliency-lab-for-linux"
+LABEL_IDENTITY="vergil-user"
 VM_USER="ubuntu"
 VM_REPO_DIR="/vergil/projects/logical-minds-foundry/mq-resiliency-lab-for-linux"
 
@@ -40,13 +45,23 @@ command -v gcloud >/dev/null || { echo "ERROR: gcloud not on PATH (run this on t
 ISO_NAME="$(basename "$SRC")"
 DEST_DIR="$VM_REPO_DIR/build/state"
 
-# Resolve instance + zone by name-match (survives a rebuild's changed suffix).
-read -r INSTANCE ZONE < <(gcloud compute instances list \
-  --project="$PROJECT_ID" --filter="name~${NAME_MATCH}" --format='value(name,zone)' | head -1)
-[ -n "${INSTANCE:-}" ] || {
-  echo "ERROR: no running instance matching '${NAME_MATCH}' in ${PROJECT_ID}" >&2
+# Resolve instance + zone by Vergil labels. Capture the query into a variable FIRST,
+# then check it: piping straight into `read … < <(…)` under `set -e` aborts the whole
+# script the moment the query is empty (read returns non-zero on EOF), silently —
+# before the error below can ever fire. Capture-then-check makes the failure loud. (#329)
+label_filter="labels.vergil-org=${LABEL_ORG} AND labels.vergil-repo=${LABEL_REPO}"
+label_filter="${label_filter} AND labels.vergil-identity=${LABEL_IDENTITY}"
+matches="$(gcloud compute instances list \
+  --project="$PROJECT_ID" --filter="$label_filter" --format='value(name,zone)')" || {
+  echo "ERROR: 'gcloud compute instances list' failed (check auth / project ${PROJECT_ID})." >&2
   exit 1
 }
+if [ -z "$matches" ]; then
+  echo "ERROR: no off-platform VM found for ${LABEL_IDENTITY} ${LABEL_ORG}/${LABEL_REPO}" >&2
+  echo "       in project ${PROJECT_ID}. Is it created? Check: vrg-vm volumes" >&2
+  exit 1
+fi
+read -r INSTANCE ZONE <<<"$(printf '%s\n' "$matches" | head -1)"
 
 target="${VM_USER}@${INSTANCE}"
 gc=(--zone="$ZONE" --project="$PROJECT_ID" --tunnel-through-iap)
