@@ -616,6 +616,10 @@ def _obs_up_steps() -> list[CommandStep]:
 def obs_up(step: _StepFlag = False) -> None:
     """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
     _prepare_lab()  # obs up shells `vagrant up obs mon-probe` — gate + render (#276)
+    # obs up runs site-obs.yml directly (not via _provision), so it must ensure
+    # mon-probe's MQ tarball itself — idempotent, arch-correct for this host. (#335)
+    typer.echo("ensuring MQ artifacts for monitoring...")
+    _ensure_mq_artifacts("monitoring")
     _execute("obs-up", _obs_up_steps(), step_mode=step)
 
 
