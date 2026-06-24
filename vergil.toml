@@ -25,27 +25,22 @@ ignore = ["docs/site/docs/changelog.md", "docs/site/docs/releases"]
 vergil = "v2.1"
 
 [vm.vergil-user]
-# Off-platform (GCP) backend — vergil-vm #199. The lab is dual-arch: an x86-targeted
-# stack whose guests run under native KVM on an x86 host and under TCG emulation on
-# arm64. A native-x86 GCP host runs the nested guests with /dev/kvm (driver=kvm),
-# escaping the arm64 TCG emulation tax. This EXTENDS the lab to x86 — arm64/Lima stays
-# supported by the same package set (qemu-system-x86 emulates x86 there).
+# Shared base for the two named instances below (tier-4 role overlay). The lab is
+# dual-arch: an x86-targeted stack whose guests run under native KVM on an x86 host
+# and under TCG emulation on arm64. This package set serves BOTH backends
+# (qemu-system-x86 emulates x86 on the arm64 Mac).
 #
-# Mapping is 1:1 today — (identity, repo) → exactly one VM — so these keys REPLACE the
-# local Lima definition rather than adding a second box. Running a local arm64 box and
-# a cloud x86 box at once (and the destroy-orphan edge condition that exposes) is
-# tracked in vergil-project/vergil-vm#242. Until then: destroy the local VM BEFORE this
-# lands, then create in the cloud.
-backend  = "off-platform"
-provider = "gcp"
-region   = "us-central1"
-zone     = "us-central1-f"
-instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running
-volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
-cpus   = 12                   # sanity floor / portable intent; `instance` is authoritative on cloud
+# Two named instances inherit this base and add only what differs:
+#   - instances.local : the big-beefy Lima box on the Mac (arm64)
+#   - instances.cloud : a native-x86 GCP host (driver=kvm, escapes the TCG tax)
+# Run them with `vrg-vm <verb> --name local` / `--name cloud`. They are independent
+# boxes (own state, volume, fingerprint) and may run simultaneously (vergil-vm#242).
+# NOTE: a bare `vrg-vm <verb>` (no --name) builds a THIRD, unnamed default box from
+# this base alone — always pass --name local|cloud.
+cpus   = 12                   # sanity floor / portable intent; on cloud `instance` is authoritative
 memory = "64GiB"
-# nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. On the native-x86
-# cloud host this is real KVM, not the TCG fallback the arm64 Mac runs.
+# nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. Native KVM on the
+# x86 cloud host; the arm64 Mac falls back to TCG unless macOS 15+ on M3+.
 nested = true
 # No apt "vagrant": there is no arm64 vagrant deb (HashiCorp ships amd64 only;
 # Ubuntu noble dropped it post-BUSL). vergil-vm gem-installs vagrant when
@@ -60,12 +55,27 @@ packages = [
   "ruby-dev", "libvirt-dev", "pkg-config", "build-essential",  # vagrant gem + vagrant-libvirt build deps (build-essential = gcc/g++/make/libc6-dev; the cloud base ships no libc6-dev)
 ]
 vagrant_plugins = ["vagrant-libvirt"]
-# Expose the lab's Grafana to the Mac. The obs guest's Grafana is a nested
-# libvirt guest (static 10.50.0.2:3000) Lima can't see; vergil-vm (#170)
-# provisions a systemd-socket-proxyd relay on the base VM's 0.0.0.0:3000, which
-# Lima then auto-forwards to the workstation's localhost:3000. Records are
-# "<vm-port>|<host:port>". Takes effect on the next `vrg-vm rebuild`.
+# Expose the lab's Grafana to the workstation. The obs guest's Grafana is a nested
+# libvirt guest (static 10.50.0.2:3000) the host can't see directly; vergil-vm (#170)
+# provisions a systemd-socket-proxyd relay on the base VM's 0.0.0.0:3000, forwarded
+# to the workstation's localhost:3000. Records are "<vm-port>|<host:port>". Takes
+# effect on the next `vrg-vm rebuild`.
 port_forwards = ["3000|10.50.0.2:3000"]
+
+[vm.vergil-user.instances.local]
+# Big-beefy local Lima box on the Mac (arm64). No backend key = local Lima.
+# Inherits packages/nested/forwards/cpus/memory from [vm.vergil-user] above.
+disk = "300GiB"               # nested guest qcow2 images are the risk, not RAM
+
+[vm.vergil-user.instances.cloud]
+# Native-x86 GCP host — runs the nested guests with /dev/kvm (driver=kvm), escaping
+# the arm64 TCG emulation tax (vergil-vm#199; evidence in mq-cluster-tooling #289).
+backend  = "off-platform"
+provider = "gcp"
+region   = "us-central1"
+zone     = "us-central1-f"
+instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running
+volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
 
 [vm.anonymous]
 # Credential-less identity for isolated lab bootstrap testing (no GitHub/Claude
