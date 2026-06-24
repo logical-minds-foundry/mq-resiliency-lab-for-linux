@@ -20,10 +20,13 @@ _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
 @pytest.fixture(autouse=True)
-def _stub_mq_ensure(monkeypatch):
-    # _provision ensures MQ tarballs before the playbook (#333); stub the fetch by
-    # default so unit tests never hit IBM's CDN. Tests that assert the call override it.
-    monkeypatch.setattr(cli, "ensure_mq_tarballs", lambda *a, **k: [])
+def prereq_calls(monkeypatch):
+    # The provision verbs ensure fresh-volume prerequisites (galaxy + MQ + PKI) via
+    # _ensure_prereqs (#343). Stub it by default (so unit tests never fetch/run ansible)
+    # and record the setups it was asked to ensure, for tests that assert the call.
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_prereqs", lambda setup, **k: calls.append(setup))
+    return calls
 
 
 class _NoPause:
@@ -419,16 +422,11 @@ def test_vm_provision_sources_secret_renders_inventory_runs_playbook(monkeypatch
     assert (tmp_path / "build" / "work" / "inventory.ini").read_text().startswith("[san_a]")
 
 
-def test_vm_provision_ensures_mq_tarball_with_default_version(monkeypatch, tmp_path):
-    # A manifest-less setup must still have its MQ tarball ensured at provision,
-    # using the repo default version — decoupled from manifest existence. (#333)
+def test_vm_provision_ensures_prereqs(monkeypatch, tmp_path, prereq_calls):
+    # provision ensures the setup's fresh-volume prerequisites before the playbook (#343).
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(_PCMK_TOPO)
-    ensured: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        cli, "ensure_mq_tarballs", lambda setup, version, *a, **k: ensured.append((setup, version))
-    )
     runner = RecordingRunner(
         results=[
             _probe({"san-a": "running", "pcmk-a1": "running"}),
@@ -439,7 +437,7 @@ def test_vm_provision_ensures_mq_tarball_with_default_version(monkeypatch, tmp_p
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "provision", "pcmk_san_ha"])
     assert result.exit_code == 0
-    assert ensured == [("pcmk_san_ha", cli.DEFAULT_MQ_VERSION)]
+    assert "pcmk_san_ha" in prereq_calls
 
 
 def test_vm_provision_members_down_advises_and_exits_3(monkeypatch, tmp_path):

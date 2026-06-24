@@ -218,6 +218,39 @@ def _ensure_mq_artifacts(setup_name: str, *, requested: str | None = None) -> No
     )
 
 
+def _galaxy_install_step() -> CommandStep:
+    # Install the lab's Ansible galaxy collections (community.crypto, needed by the PKI
+    # play) into build/cache — ansible.cfg's collections_path. Idempotent: ansible-galaxy
+    # skips a collection already present. (#343)
+    argv = [
+        "ansible-galaxy",
+        "collection",
+        "install",
+        "-r",
+        "ansible/requirements.yml",
+        "-p",
+        "build/cache",
+    ]
+    return CommandStep("ansible collections", Command(argv, cwd=repo_root()))  # noqa: S607
+
+
+def _pki_ensure_step() -> CommandStep:
+    return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
+
+
+def _ensure_prereqs(setup_name: str, *, requested: str | None = None, step: bool = False) -> None:
+    """The single place that ensures every fresh-volume prerequisite a setup's playbooks
+    need (#343). All live under build/ on the persistent volume, which a recreate wipes,
+    so the provision verbs regenerate them — idempotently, in dependency order:
+      1. Ansible galaxy collections (community.crypto — required by the PKI play)
+      2. the MQ-for-Developers tarball(s) for the setup's guest platforms
+      3. the PKI CA + entity keystores
+    galaxy + PKI run through the step runner (progress/transcript); MQ is a Python fetch.
+    """
+    _ensure_mq_artifacts(setup_name, requested=requested)
+    _execute("prerequisites", [_galaxy_install_step(), _pki_ensure_step()], step_mode=step)
+
+
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
 #     KVM requirement before any verb that loads the Vagrantfile. -------------------
 def _doctor_checks() -> list[Check]:
@@ -572,14 +605,6 @@ def _obs_up_steps() -> list[CommandStep]:
             Command(["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab"),  # noqa: S607
         ),
         CommandStep(
-            # Ensure the CA + entity keystores exist before site-obs.yml's pki-distribute
-            # copies mon-probe's mq_prometheus.p12 — the PKI material lives on the
-            # persistent volume and a recreate wipes it, so obs up must regenerate it
-            # itself (idempotent), like the MQ-tarball ensure in #335. (#341)
-            "pki ensure",
-            Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"),  # noqa: S607
-        ),
-        CommandStep(
             "provision monitoring",
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
@@ -624,10 +649,9 @@ def _obs_up_steps() -> list[CommandStep]:
 def obs_up(step: _StepFlag = False) -> None:
     """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
     _prepare_lab()  # obs up shells `vagrant up obs mon-probe` — gate + render (#276)
-    # obs up runs site-obs.yml directly (not via _provision), so it must ensure
-    # mon-probe's MQ tarball itself — idempotent, arch-correct for this host. (#335)
-    typer.echo("ensuring MQ artifacts for monitoring...")
-    _ensure_mq_artifacts("monitoring")
+    # obs up runs site-obs.yml directly (not via _provision), so ensure monitoring's
+    # fresh-volume prerequisites (galaxy collections + MQ tarball + PKI) first. (#343)
+    _ensure_prereqs("monitoring", step=step)
     _execute("obs-up", _obs_up_steps(), step_mode=step)
 
 
@@ -1226,12 +1250,9 @@ def _provision(setup_name: str, *, requested: str | None = None) -> None:
             deps.transcript.write(note)
             raise typer.Exit(code=3)
         secret_env = {s.upper(): _source_secret(deps, s) for s in setup.secrets}
-        # Ensure the arch-correct MQ tarball(s) this setup's guests need are present
-        # before the playbook copies them — independent of whether the setup has a
-        # manifest (#333). Idempotent: a present, verified tarball is a no-op.
-        deps.renderer.note(f"ensuring MQ artifacts for {setup_name}")
-        deps.transcript.write(f"ensuring MQ artifacts for {setup_name}")
-        _ensure_mq_artifacts(setup_name, requested=requested)
+        # Ensure the setup's fresh-volume prerequisites (galaxy collections + MQ
+        # tarball + PKI) before the playbook runs — one place, idempotent. (#343)
+        _ensure_prereqs(setup_name, requested=requested)
         inv = inventory_path()
         inv.parent.mkdir(parents=True, exist_ok=True)
         inv.write_text(lab_inventory())
