@@ -26,6 +26,16 @@ def classify(states: dict[str, str], guest: str) -> str:
     return OFF  # shut off / paused / etc. — defined but not running
 
 
+def is_live(states: dict[str, str], guest: str) -> bool:
+    """True iff the guest is defined AND still holds a live qemu process — running OR
+    paused/suspended. Such a domain must be force-off'd before `undefine
+    --remove-all-storage`, which only works on a genuinely stopped (`shut off`)
+    domain. `classify`'s OFF lumps paused in with shut-off, so it can't make this
+    distinction (#339)."""
+    raw = states.get(f"lab_{guest}")
+    return raw is not None and raw != "shut off"
+
+
 def classify_net(states: dict[str, str], net: str) -> str:
     """Map a network to ABSENT / INACTIVE / ACTIVE from parsed `virsh net-list --all`.
 

@@ -24,7 +24,7 @@ from mqlab.fleet import parse_domain_states
 from mqlab.guestsel import resolve_guests
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.inventory import inventory_path, lab_inventory
-from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
+from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net, is_live
 from mqlab.manifest import (
     DEFAULT_MQ_VERSION,
     box_version_pins,
@@ -915,12 +915,13 @@ def _plan_create(guests: list[str], states: dict[str, str]) -> tuple[list[Comman
     steps: list[CommandStep] = []
     notes: list[str] = []
     for g in guests:
-        if classify(states, g) == ABSENT:
+        state = classify(states, g)
+        if state == ABSENT:
             steps.append(_create_step(g))
-        else:
-            notes.append(
-                f"{g}: already created — mqlab vm up to start, mqlab vm destroy to recreate"
-            )
+        elif state == OFF:
+            steps.append(_start_step(g))  # created but stopped -> bring it up (#339)
+        else:  # RUNNING
+            notes.append(f"{g}: already running — mqlab vm destroy to recreate")
     return steps, notes
 
 
@@ -956,13 +957,14 @@ def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[Comma
     steps: list[CommandStep] = []
     notes: list[str] = []
     for g in guests:
-        state = classify(states, g)
-        if state == RUNNING:
-            steps.extend([_forceoff_step(g), _undefine_step(g)])  # force off, then remove
-        elif state == OFF:
-            steps.append(_undefine_step(g))
-        else:
+        if classify(states, g) == ABSENT:
             notes.append(f"{g}: already gone")
+        elif is_live(states, g):
+            # running OR paused/suspended: a live qemu process to force off before
+            # undefine --remove-all-storage (which needs a stopped domain) (#339)
+            steps.extend([_forceoff_step(g), _undefine_step(g)])
+        else:
+            steps.append(_undefine_step(g))  # shut off: remove directly
     return steps, notes
 
 
