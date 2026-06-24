@@ -84,14 +84,29 @@ def test_vm_create_runs_vagrant_up_only_for_absent_guests(monkeypatch, tmp_path)
     assert all(str(c.cwd).endswith("/lab") for c in runner.recorded[1:])
 
 
-def test_vm_create_all_already_created_is_a_no_op(monkeypatch, tmp_path):
+def test_vm_create_starts_a_created_but_stopped_guest(monkeypatch, tmp_path):
+    # create means "ensure created AND running": a created-but-stopped guest is
+    # started, not left for a separate `vm up`. (#339)
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1"])
-    runner = RecordingRunner(results=[_probe({"node-a1": "shut off"})])
+    runner = RecordingRunner(results=[_probe({"node-a1": "shut off"}), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     result = CliRunner().invoke(cli.app, ["vm", "create", "all"])
     assert result.exit_code == 0
-    assert _argvs(runner) == [[*_VIRSH, "list", "--all"]]  # probe only, no vagrant up
+    assert _argvs(runner) == [
+        [*_VIRSH, "list", "--all"],
+        [*_VIRSH, "start", "lab_node-a1"],  # stopped -> bring it up
+    ]
+
+
+def test_vm_create_running_guest_is_a_no_op(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["node-a1"])
+    runner = RecordingRunner(results=[_probe({"node-a1": "running"})])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "create", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [[*_VIRSH, "list", "--all"]]  # already running, nothing to do
 
 
 def test_vm_create_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
@@ -219,6 +234,24 @@ def test_vm_destroy_running_guest_force_offs_then_undefines(monkeypatch, tmp_pat
     ]
 
 
+def test_vm_destroy_paused_guest_force_offs_then_undefines(monkeypatch, tmp_path):
+    # A paused domain still holds a live qemu process, so it must be force-off'd
+    # before undefine --remove-all-storage (which needs a stopped domain). (#339)
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_topology(tmp_path, ["node-a1"])
+    runner = RecordingRunner(
+        results=[_probe({"node-a1": "paused"}), ScriptedResult([]), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "destroy", "all"])
+    assert result.exit_code == 0
+    assert _argvs(runner) == [
+        [*_VIRSH, "list", "--all"],
+        [*_VIRSH, "destroy", "lab_node-a1"],  # paused -> force off first
+        [*_VIRSH, "undefine", "lab_node-a1", "--remove-all-storage", "--nvram"],
+    ]
+
+
 def test_vm_destroy_absent_guest_is_a_no_op(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_topology(tmp_path, ["node-a1"])
@@ -334,8 +367,8 @@ def test_advisory_notes_name_fully_qualified_mqlab_commands():
     # mqlab's own guidance points at the wrapper's own commands, fully qualified
     # with the `mqlab` prefix — never bare subcommands or the raw virsh/vagrant
     # invocation. This keeps mqlab's vocabulary distinct from the wrapped tool's.
-    _, create_notes = cli._plan_create(["g"], {"lab_g": "running"})  # already exists
-    assert any("mqlab vm up" in n and "mqlab vm destroy" in n for n in create_notes)
+    _, create_notes = cli._plan_create(["g"], {"lab_g": "running"})  # already running
+    assert any("mqlab vm destroy" in n for n in create_notes)
     _, up_notes = cli._plan_up(["g"], {})  # absent -> guide to create
     assert any("mqlab vm create" in n for n in up_notes)
 
