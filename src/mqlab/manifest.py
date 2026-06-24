@@ -30,6 +30,11 @@ _ARCH_SUFFIX = {
     "alma9-x86_64": "LinuxX64",
 }
 
+# Canonical MQ-for-Developers version, used to ensure a setup's tarball(s) when the
+# setup has no manifest pinning one (e.g. monitoring). Manifested setups override it
+# with their own `mq.version` pin. Mirrors scripts/fetch-mq.sh's VER. (#333)
+DEFAULT_MQ_VERSION = "9.4.5.0"
+
 
 @dataclass(frozen=True)
 class Manifest:

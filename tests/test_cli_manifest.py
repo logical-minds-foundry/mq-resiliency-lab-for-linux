@@ -58,3 +58,18 @@ def test_obs_manifest_args_present_then_absent(tmp_path, monkeypatch):
     assert cli._obs_manifest_args()[0] == "-e"
     (tmp_path / "manifests" / "_shared" / "observability.yaml").unlink()
     assert cli._obs_manifest_args() == []
+
+
+def test_resolve_mq_version_uses_manifest_pin(tmp_path, monkeypatch):
+    # A setup WITH a manifest takes its pinned mq version. (#333)
+    _repo(tmp_path)
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    assert cli.resolve_mq_version("s") == "9.4.5.0"
+
+
+def test_resolve_mq_version_defaults_when_no_manifest(tmp_path, monkeypatch):
+    # A setup WITHOUT a manifest (e.g. monitoring) falls back to the repo default,
+    # so its MQ artifact can still be ensured. (#333)
+    _repo(tmp_path)
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    assert cli.resolve_mq_version("monitoring") == cli.DEFAULT_MQ_VERSION
