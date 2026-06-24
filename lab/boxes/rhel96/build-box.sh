@@ -112,12 +112,11 @@ WORK="$BUILD_DIR/state/rhel96-box"; mkdir -p "$WORK"
 genisoimage -quiet -V OEMDRV -o "$WORK/oemdrv.iso" ks.cfg
 
 # 2. Stage inputs where qemu (its own uid) can read them - the host mount
-#    is not readable by the qemu user (diag-spike permission lesson).
+#    is not readable by the qemu user (diag-spike permission lesson). The small
+#    OEMDRV is always copied; the 12.7G DVD is symlinked from a local-fs source
+#    (cloud /vergil) or copied from a host-passthrough mount (Lima) (#337).
 sudo cp "$WORK/oemdrv.iso" /var/lib/libvirt/images/oemdrv.iso
-if [ ! -f /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso ]; then
-  echo "staging ISO into the storage pool (12.7G copy)..."
-  sudo cp "$ISO" /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
-fi
+../../scripts/stage-iso-into-pool.sh "$ISO" /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 # Clean slate so the build is retryable (#325): a prior build that failed AFTER
 # `virsh define` (e.g. at start) leaves rhel96-build defined — which blocks both the
 # disk re-create (if it were still running) and the re-define below. Tear it down
