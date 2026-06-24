@@ -129,6 +129,9 @@ sudo qemu-img create -f qcow2 /var/lib/libvirt/images/rhel96-build.qcow2 20G
 sudo touch /var/lib/libvirt/images/rhel96-build-console.log
 sudo chown 64055:993 /var/lib/libvirt/images/rhel96-build.qcow2 \
   /var/lib/libvirt/images/rhel96-build-console.log
+# World-readable so the install heartbeat (await-install.sh) can tail the serial
+# console without sudo; it is owned by the qemu uid above. (#331)
+sudo chmod a+r /var/lib/libvirt/images/rhel96-build-console.log
 
 # 3. Transient build domain (the #24 TCG recipe), wait for install poweroff.
 sed -e "s|@ISO@|/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso|" \
@@ -143,13 +146,13 @@ sed -e "s|@ISO@|/var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso|" \
 virsh -c qemu:///system define "$WORK/domain.xml"
 virsh -c qemu:///system start rhel96-build
 if [ "$DOMAIN_TYPE" = kvm ]; then
-  echo "installing (KVM — native virtualization, much faster than the TCG path); waiting for shut off..."
+  echo "installing (KVM — native virtualization, much faster than the TCG path)..."
 else
-  echo "installing (TCG, expect 45-90 min); waiting for shut off..."
+  echo "installing (TCG, expect 45-90 min)..."
 fi
-until [ "$(virsh -c qemu:///system domstate rhel96-build 2>/dev/null)" = "shut off" ]; do
-  sleep 60
-done
+# Wait for the install to power the domain off, with an elapsed + latest-console-line
+# heartbeat each poll instead of a silent sleep loop. (#331)
+./await-install.sh rhel96-build /var/lib/libvirt/images/rhel96-build-console.log 30
 
 # 4. Package the box into the CACHE (compressed convert sheds install scratch).
 sudo qemu-img convert -O qcow2 -c \
