@@ -14,11 +14,13 @@ from tests.fakes import RecordingRunner, ScriptedResult
 
 
 @pytest.fixture(autouse=True)
-def _stub_mq_ensure(monkeypatch):
-    # obs up ensures the monitoring MQ tarball before site-obs.yml copies it (#335);
-    # stub the fetch by default so unit tests never hit IBM's CDN. The dedicated test
-    # below overrides this with a recorder to assert the call.
-    monkeypatch.setattr(cli, "ensure_mq_tarballs", lambda *a, **k: [])
+def prereq_calls(monkeypatch):
+    # obs up ensures monitoring's fresh-volume prerequisites (galaxy + MQ + PKI) via
+    # _ensure_prereqs (#343); stub it (no fetch/ansible in unit tests) and record the
+    # setups it was asked to ensure, for the test that asserts the call.
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_prereqs", lambda setup, **k: calls.append(setup))
+    return calls
 
 
 class _NoPause:
@@ -88,7 +90,6 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
         results=[
             ScriptedResult(["rendered"]),
             ScriptedResult(["up"]),
-            ScriptedResult(["pki"]),
             ScriptedResult(["ok"]),
             ScriptedResult(["host ok"]),
             ScriptedResult(["relay ok"]),
@@ -102,48 +103,41 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert result.exit_code == 0
     argvs = [c.argv for c in runner.recorded]
     assert argvs[1][:3] == ["vagrant", "up", "obs"]
-    # PKI material is ensured before site-obs.yml's pki-distribute needs it (#341)
-    assert "site-pki.yml" in argvs[2]
-    assert "ansible-playbook" in argvs[3]
+    assert "ansible-playbook" in argvs[2]
     # bare filename (run from ansible/), not a doubled ansible/ansible/ path
-    assert argvs[3][-1] == "site-obs.yml"
+    assert argvs[2][-1] == "site-obs.yml"
     # the host collector is provisioned via a connection=local host-obs play
     assert any("host-obs.yml" in a for a in argvs)
     # after provisioning bounces grafana, the port-forward relay is re-healed (#264)
-    assert argvs[5] == ["sudo", "systemctl", "restart", *cli._RELAY_UNITS]
+    assert argvs[4] == ["sudo", "systemctl", "restart", *cli._RELAY_UNITS]
     # ...then the workstation-facing endpoint is verified fail-loud (curl -fsS)
-    assert argvs[6][0] == "curl"
-    assert "-fsS" in argvs[6]
-    assert argvs[6][-1] == "http://localhost:3000/api/health"
+    assert argvs[5][0] == "curl"
+    assert "-fsS" in argvs[5]
+    assert argvs[5][-1] == "http://localhost:3000/api/health"
     # all three artifacts rendered eagerly when the steps were built
     assert (tmp_path / "build" / "work" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "work" / "inventory.ini").exists()
     assert (tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-status.json").exists()
 
 
-def test_obs_up_ensures_monitoring_mq_tarball(monkeypatch, tmp_path):
-    # obs up runs site-obs.yml directly (not via _provision), so it must itself ensure
-    # mon-probe's MQ tarball — with the repo default version, since monitoring has no
-    # manifest. (#335)
+def test_obs_up_ensures_monitoring_prereqs(monkeypatch, tmp_path, prereq_calls):
+    # obs up runs site-obs.yml directly (not via _provision), so it ensures monitoring's
+    # fresh-volume prerequisites (galaxy + MQ + PKI) itself, before the steps. (#343)
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
-    ensured: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        cli, "ensure_mq_tarballs", lambda setup, version, *a, **k: ensured.append((setup, version))
-    )
-    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(7)])
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 0
-    assert ensured == [("monitoring", cli.DEFAULT_MQ_VERSION)]
+    assert "monitoring" in prereq_calls
 
 
 def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
-    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(7)])
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
     result = CliRunner().invoke(cli.app, ["obs", "up"])
@@ -157,7 +151,7 @@ def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
 def test_obs_up_also_renders_the_nativeha_board(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
-    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(7)])
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
     result = CliRunner().invoke(cli.app, ["obs", "up"])
@@ -171,7 +165,7 @@ def test_obs_up_also_renders_the_nativeha_board(monkeypatch, tmp_path):
 def test_obs_up_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
-    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(7)])
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
     result = CliRunner().invoke(cli.app, ["obs", "up"])
@@ -404,7 +398,7 @@ def test_obs_up_runs_prepare_lab(monkeypatch, tmp_path, prepare_lab_calls):
     # obs up shells `vagrant up obs mon-probe`, so it must gate (#276).
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
-    runner = RecordingRunner(results=[ScriptedResult(["x"]) for _ in range(7)])
+    runner = RecordingRunner(results=[ScriptedResult(["x"]) for _ in range(6)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
     result = CliRunner().invoke(cli.app, ["obs", "up"])
     assert result.exit_code == 0
