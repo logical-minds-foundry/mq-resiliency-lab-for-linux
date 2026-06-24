@@ -26,6 +26,7 @@ from mqlab.hostfacts import HostFacts, probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net
 from mqlab.manifest import (
+    DEFAULT_MQ_VERSION,
     box_version_pins,
     load_manifest,
     manifest_exists,
@@ -173,7 +174,8 @@ def _apply_manifest(
     setup_name: str, *, requested: str | None = None, at_create: bool = False
 ) -> Path | None:
     """Render the manifest overlay for a setup (None if it has no manifest). At create,
-    also pin box_version and ensure the MQ tarball(s) are present."""
+    also pin box_version. (MQ tarballs are ensured separately by _ensure_mq_artifacts,
+    which is topology-driven and not gated on a manifest — #333.)"""
     if not manifest_exists(setup_name):
         return None
     name = (
@@ -190,8 +192,30 @@ def _apply_manifest(
         pins = json.loads(bvf.read_text()) if bvf.exists() else {}
         pins.update(box_version_pins(man))
         bvf.write_text(json.dumps(pins))
-        ensure_mq_tarballs(setup_name, man.mq_version, mq_cache_dir(), fetch=_fetch_mq_tarball)
     return op
+
+
+def resolve_mq_version(setup_name: str, requested: str | None = None) -> str:
+    """The MQ version for a setup: its manifest's pin if it has one, else the repo
+    default — so a manifest-less setup (e.g. monitoring) still resolves a version. (#333)"""
+    if manifest_exists(setup_name):
+        name = resolve_selection(setup_name, requested or "default")
+        return load_manifest(setup_name, name).mq_version
+    return DEFAULT_MQ_VERSION
+
+
+def _ensure_mq_artifacts(setup_name: str, *, requested: str | None = None) -> None:
+    """Ensure the arch-correct MQ tarball(s) for a setup's guest platforms are present,
+    regardless of whether the setup has a manifest (#333). Topology-driven via
+    setup_platforms; the host facts are passed explicitly so the arch tracks this
+    controller rather than an implicit probe() default."""
+    ensure_mq_tarballs(
+        setup_name,
+        resolve_mq_version(setup_name, requested),
+        mq_cache_dir(),
+        fetch=_fetch_mq_tarball,
+        facts=probe(),
+    )
 
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
@@ -1188,6 +1212,12 @@ def _provision(setup_name: str, *, requested: str | None = None) -> None:
             deps.transcript.write(note)
             raise typer.Exit(code=3)
         secret_env = {s.upper(): _source_secret(deps, s) for s in setup.secrets}
+        # Ensure the arch-correct MQ tarball(s) this setup's guests need are present
+        # before the playbook copies them — independent of whether the setup has a
+        # manifest (#333). Idempotent: a present, verified tarball is a no-op.
+        deps.renderer.note(f"ensuring MQ artifacts for {setup_name}")
+        deps.transcript.write(f"ensuring MQ artifacts for {setup_name}")
+        _ensure_mq_artifacts(setup_name, requested=requested)
         inv = inventory_path()
         inv.parent.mkdir(parents=True, exist_ok=True)
         inv.write_text(lab_inventory())
