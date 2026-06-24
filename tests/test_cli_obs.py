@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
@@ -10,6 +11,14 @@ from mqlab import cli
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
+
+
+@pytest.fixture(autouse=True)
+def _stub_mq_ensure(monkeypatch):
+    # obs up ensures the monitoring MQ tarball before site-obs.yml copies it (#335);
+    # stub the fetch by default so unit tests never hit IBM's CDN. The dedicated test
+    # below overrides this with a recorder to assert the call.
+    monkeypatch.setattr(cli, "ensure_mq_tarballs", lambda *a, **k: [])
 
 
 class _NoPause:
@@ -107,6 +116,25 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert (tmp_path / "build" / "work" / "prometheus" / "targets" / "node.json").exists()
     assert (tmp_path / "build" / "work" / "inventory.ini").exists()
     assert (tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-status.json").exists()
+
+
+def test_obs_up_ensures_monitoring_mq_tarball(monkeypatch, tmp_path):
+    # obs up runs site-obs.yml directly (not via _provision), so it must itself ensure
+    # mon-probe's MQ tarball — with the repo default version, since monitoring has no
+    # manifest. (#335)
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    ensured: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        cli, "ensure_mq_tarballs", lambda setup, version, *a, **k: ensured.append((setup, version))
+    )
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+
+    assert result.exit_code == 0
+    assert ensured == [("monitoring", cli.DEFAULT_MQ_VERSION)]
 
 
 def test_obs_up_also_renders_the_cockpit_board(monkeypatch, tmp_path):
