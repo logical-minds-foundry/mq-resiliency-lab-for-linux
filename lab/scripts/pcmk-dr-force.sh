@@ -9,6 +9,7 @@
 # Direction: a2b (site A dead -> promote B) | b2a (site B dead -> promote A).
 set -euo pipefail
 DIR="${1:-a2b}"
+QM="${2:-QMPCMK}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
@@ -42,7 +43,7 @@ FIRST=$(echo $TO_NODES | awk '{print $1}')
 run "$FIRST" "if ! pcs resource status mq_group >/dev/null 2>&1; then
     pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs op monitor interval=20s timeout=40s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group
     pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip=${TO_VIP} cidr_netmask=24 --group mq_group --after mq_fs
-    pcs resource create mq_qm systemd:mq-QMPCMK --group mq_group --after mq_vip
+    pcs resource create mq_qm systemd:mq-${QM} --group mq_group --after mq_vip
   else pcs resource enable mq_group; fi"
 sleep 8
 run "$FIRST" "pcs status resources | tail -4"
@@ -51,9 +52,9 @@ run "$FIRST" "pcs status resources | tail -4"
 # peer. The first version masked every step with `|| true` and printed success
 # unconditionally -- so an empty ansible inventory (the worktree had no
 # build/work/inventory.ini) silently did nothing yet still reported "complete".
-if run "$TO_PCMK" "su mqm -c '/opt/mqm/bin/dspmq -m QMPCMK'" 2>/dev/null | grep -q 'STATUS(Running)'; then
-  echo "=== forced cutover $DIR complete; DR site is now $TO_PCMK, VIP $TO_VIP (QMPCMK Running) ==="
+if run "$TO_PCMK" "su mqm -c '/opt/mqm/bin/dspmq -m ${QM}'" 2>/dev/null | grep -q 'STATUS(Running)'; then
+  echo "=== forced cutover $DIR complete; DR site is now $TO_PCMK, VIP $TO_VIP (${QM} Running) ==="
 else
-  echo "ERROR: forced cutover $DIR did NOT bring QMPCMK up on $TO_PCMK" >&2
+  echo "ERROR: forced cutover $DIR did NOT bring ${QM} up on $TO_PCMK" >&2
   exit 1
 fi
