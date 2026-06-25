@@ -85,6 +85,10 @@ def test_vm_create_runs_vagrant_up_only_for_absent_guests(monkeypatch, tmp_path)
         ["vagrant", "up", "node-a1"],  # only the absent guest
     ]
     assert all(str(c.cwd).endswith("/lab") for c in runner.recorded[1:])
+    # vagrant create points at the SHARED dotfile so the lab isn't worktree-orphaned (#355)
+    create_env = runner.recorded[1].env
+    assert create_env is not None
+    assert create_env["VAGRANT_DOTFILE_PATH"].endswith("build/state/vagrant")
 
 
 def test_vm_create_starts_a_created_but_stopped_guest(monkeypatch, tmp_path):
@@ -387,6 +391,8 @@ def test_vm_ssh_execs_vagrant_in_lab(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert execs == [("vagrant", ["vagrant", "ssh", "node-a1"])]
     assert chdirs and chdirs[0].endswith("/lab")
+    # vagrant ssh points at the shared dotfile so it finds a lab this checkout didn't create (#355)
+    assert cli.os.environ["VAGRANT_DOTFILE_PATH"].endswith("build/state/vagrant")
 
 
 _PCMK_TOPO = (
