@@ -1349,6 +1349,14 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
                     f"qm_vip={qm.vip}",
                     "-e",
                     f"qm_vip_ext={qm.vip_ext}",
+                    "-e",
+                    f"qm_app={qm.qm_app}",
+                    "-e",
+                    f"qm_svc={qm.qm_svc}",
+                    "-e",
+                    f"chl_to_svc={qm.chl_to_svc}",
+                    "-e",
+                    f"chl_to_app={qm.chl_to_app}",
                     # the counterparty CONNAME, only when this QM talks to one (#147)
                     *(["-e", f"svc_conn={qm.svc_conn}"] if qm.svc_conn else []),
                 ],  # noqa: S607
