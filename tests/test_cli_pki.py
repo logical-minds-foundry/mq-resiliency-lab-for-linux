@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import io
 import json
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from rich.console import Console
 from typer.testing import CliRunner
@@ -96,6 +100,7 @@ def test_pki_list_prints_entities_from_topology(monkeypatch, tmp_path):
 
 
 # --- _render_pki_entities ---------------------------------------------------
+
 
 def test_render_pki_entities_includes_derived_qm_cns(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
@@ -193,6 +198,7 @@ def test_render_pki_entities_setup_without_qm_is_skipped(monkeypatch, tmp_path):
 
 
 # --- _pki_ensure_step prereqs path (#351) -----------------------------------
+
 
 def test_pki_ensure_step_renders_entities_before_playbook(monkeypatch, tmp_path):
     """_pki_ensure_step() must call _render_pki_entities() so that entities.json

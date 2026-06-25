@@ -537,14 +537,26 @@ def _render_reach_peers() -> Path:
 # Fixed non-QM PKI entities (verbatim from ansible/vars/pki-entities.yml §non-QM rows).
 # These are stable across QM renames and are never derived from the topology.
 _FIXED_PKI_ENTITIES: list[dict[str, Any]] = [
-    {"cn": "app-client",    "org": "app-org", "ou": "apps",      "kind": "personal",   "trust": []},
+    {"cn": "app-client", "org": "app-org", "ou": "apps", "kind": "personal", "trust": []},
     # Trusts svc-org too: one app-org ops identity that scrapes BOTH QMs (exporter
     # must validate QMSVC's O=svc-org server cert — #250 / MON.SVRCONN).
-    {"cn": "mq_prometheus", "org": "app-org", "ou": "ops",       "kind": "personal",   "trust": ["svc-org"]},
-    {"cn": "mqweb",         "org": "app-org", "ou": "ops",       "kind": "personal",   "trust": []},
-    {"cn": "pymqrest",      "org": "app-org", "ou": "ops",       "kind": "trust_only", "trust": []},
+    {
+        "cn": "mq_prometheus",
+        "org": "app-org",
+        "ou": "ops",
+        "kind": "personal",
+        "trust": ["svc-org"],
+    },
+    {"cn": "mqweb", "org": "app-org", "ou": "ops", "kind": "personal", "trust": []},
+    {"cn": "pymqrest", "org": "app-org", "ou": "ops", "kind": "trust_only", "trust": []},
     # Co-located SVC responder presents O=svc-org (#250 / SVC.SVRCONN).
-    {"cn": "svc-responder", "org": "svc-org", "ou": "messaging", "kind": "personal",   "trust": ["app-org"]},
+    {
+        "cn": "svc-responder",
+        "org": "svc-org",
+        "ou": "messaging",
+        "kind": "personal",
+        "trust": ["app-org"],
+    },
 ]
 
 
@@ -568,13 +580,25 @@ def _render_pki_entities() -> Path:
         if app_cn not in seen_app:
             seen_app.add(app_cn)
             qm_entities.append(
-                {"cn": app_cn, "org": "app-org", "ou": "messaging", "kind": "personal", "trust": ["svc-org"]}
+                {
+                    "cn": app_cn,
+                    "org": "app-org",
+                    "ou": "messaging",
+                    "kind": "personal",
+                    "trust": ["svc-org"],
+                }
             )
         svc_cn = setup.qm.qm_svc
         if svc_cn not in seen_svc:
             seen_svc.add(svc_cn)
             qm_entities.append(
-                {"cn": svc_cn, "org": "svc-org", "ou": "messaging", "kind": "personal", "trust": ["app-org"]}
+                {
+                    "cn": svc_cn,
+                    "org": "svc-org",
+                    "ou": "messaging",
+                    "kind": "personal",
+                    "trust": ["app-org"],
+                }
             )
 
     entities = qm_entities + _FIXED_PKI_ENTITIES
