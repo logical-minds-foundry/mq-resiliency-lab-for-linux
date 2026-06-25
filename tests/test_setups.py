@@ -96,7 +96,7 @@ def test_setups_of_lists_a_guests_setups(monkeypatch, tmp_path):
 
 def test_qmconfig_derives_app_svc_and_channel_pair():
     qm = QmConfig(name="QMPCMK", vip="10.10.1.200", vip_ext="10.60.0.10")
-    assert qm.svc == "QMSVC"               # default
+    assert qm.svc == "QMSVC"  # default
     assert qm.qm_app == "QMPCMK"
     assert qm.qm_svc == "QMSVC"
     assert qm.chl_to_svc == "QMPCMK.QMSVC"
