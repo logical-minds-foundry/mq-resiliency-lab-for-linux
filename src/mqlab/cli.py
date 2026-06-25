@@ -381,6 +381,27 @@ def _obs_manifest_args() -> list[str]:
     return ["-e", f"@{op}"]
 
 
+def _obs_qm_args() -> list[str]:
+    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
+    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
+    # per-stack observe generalizes this. Thread the QM identity from the single
+    # source (QmConfig) so the names derive instead of hardcoding.
+    setup = lab_setups().get("distributed-pcmk-ubuntu")
+    qm = setup.qm if setup else None
+    if qm is None:
+        return []
+    return [
+        "-e",
+        f"qm_app={qm.qm_app}",
+        "-e",
+        f"qm_svc={qm.qm_svc}",
+        "-e",
+        f"chl_to_svc={qm.chl_to_svc}",
+        "-e",
+        f"chl_to_app={qm.chl_to_app}",
+    ]
+
+
 def _manifest_id(setup_name: str) -> str:
     name = read_selection(setup_name)
     return f"{setup_name}/{name}" if name else ""
@@ -684,7 +705,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
             Command(
-                ["ansible-playbook", "site-obs.yml", *_obs_manifest_args()],  # noqa: S607
+                ["ansible-playbook", "site-obs.yml", *_obs_qm_args(), *_obs_manifest_args()],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),
