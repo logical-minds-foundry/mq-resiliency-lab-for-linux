@@ -45,5 +45,5 @@ run pcmk-a1 "pcs resource defaults update resource-stickiness=1000 || pcs resour
 # node is fenced, instead of the ~12-min blind spot of the default mount check.
 run pcmk-a1 "pcs resource status mq_fs >/dev/null 2>&1 || pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs op monitor interval=20s timeout=40s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group"
 run pcmk-a1 "pcs resource status mq_vip >/dev/null 2>&1 || pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip=$VIP cidr_netmask=24 --group mq_group --after mq_fs"
-run pcmk-a1 "pcs resource status mq_qm >/dev/null 2>&1 || pcs resource create mq_qm systemd:mq-$QM --group mq_group --after mq_vip"
+run pcmk-a1 "pcs resource status mq_qm >/dev/null 2>&1 || pcs resource create mq_qm systemd:mq-\${QM} --group mq_group --after mq_vip"
 run pcmk-a1 "pcs status resources"
