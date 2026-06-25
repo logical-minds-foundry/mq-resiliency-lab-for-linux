@@ -190,3 +190,26 @@ def test_render_pki_entities_setup_without_qm_is_skipped(monkeypatch, tmp_path):
     cns = {e["cn"] for e in data}
     # No QM CNs; only the fixed non-QM set.
     assert cns == _FIXED_CNS
+
+
+# --- _pki_ensure_step prereqs path (#351) -----------------------------------
+
+def test_pki_ensure_step_renders_entities_before_playbook(monkeypatch, tmp_path):
+    """_pki_ensure_step() must call _render_pki_entities() so that entities.json
+    exists before site-pki.yml runs (site-pki.yml loads it in a pre_tasks block).
+    This covers the _ensure_prereqs path (provision / obs_up) which builds the step
+    without going through the explicit pki ensure / pki issue commands. (#351)
+    """
+    _seed(monkeypatch, tmp_path, _PKI_TOPO)
+    original_render = cli._render_pki_entities
+    calls: list[bool] = []
+
+    def _spy_render() -> Path:
+        calls.append(True)
+        return original_render()
+
+    monkeypatch.setattr(cli, "_render_pki_entities", _spy_render)
+
+    cli._pki_ensure_step()
+
+    assert calls, "_render_pki_entities was NOT called by _pki_ensure_step()"

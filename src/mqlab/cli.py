@@ -235,6 +235,7 @@ def _galaxy_install_step() -> CommandStep:
 
 
 def _pki_ensure_step() -> CommandStep:
+    _render_pki_entities()
     return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
 
 
