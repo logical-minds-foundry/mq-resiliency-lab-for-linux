@@ -85,6 +85,10 @@ def test_vm_create_runs_vagrant_up_only_for_absent_guests(monkeypatch, tmp_path)
         ["vagrant", "up", "node-a1"],  # only the absent guest
     ]
     assert all(str(c.cwd).endswith("/lab") for c in runner.recorded[1:])
+    # vagrant create points at the SHARED dotfile so the lab isn't worktree-orphaned (#355)
+    create_env = runner.recorded[1].env
+    assert create_env is not None
+    assert create_env["VAGRANT_DOTFILE_PATH"].endswith("build/state/vagrant")
 
 
 def test_vm_create_starts_a_created_but_stopped_guest(monkeypatch, tmp_path):
@@ -387,6 +391,8 @@ def test_vm_ssh_execs_vagrant_in_lab(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert execs == [("vagrant", ["vagrant", "ssh", "node-a1"])]
     assert chdirs and chdirs[0].endswith("/lab")
+    # vagrant ssh points at the shared dotfile so it finds a lab this checkout didn't create (#355)
+    assert cli.os.environ["VAGRANT_DOTFILE_PATH"].endswith("build/state/vagrant")
 
 
 _PCMK_TOPO = (
@@ -466,6 +472,32 @@ def test_vm_provision_no_secret_setup_runs_playbook_without_sourcing(monkeypatch
     argvs = [c.argv for c in runner.recorded]
     assert argvs == [[*_VIRSH, "list", "--all"], ["ansible-playbook", "site-rdqm.yml"]]
     assert runner.recorded[-1].env is None  # no secrets -> no injected env
+
+
+def test_vm_provision_threads_qm_vars_from_setup(monkeypatch, tmp_path):
+    # The distributed provision playbooks consume qm_app/qm_svc/channels; thread them
+    # from the setup's QmConfig so the plays never reference an undefined setup_dict (#356).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+        "groups:\n  pcmk_a: [pcmk-a1]\n"
+        "setups:\n  dist:\n    groups: [pcmk_a]\n    provision: ansible/site-distributed.yml\n"
+        "    qm: {name: QMPCMK, vip: 10.10.1.200, svc_conn: 10.60.0.50}\n"
+    )
+    runner = RecordingRunner(results=[_probe({"pcmk-a1": "running"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    result = CliRunner().invoke(cli.app, ["vm", "provision", "dist"])
+    assert result.exit_code == 0
+    play = runner.recorded[-1]
+    assert play.argv[:2] == ["ansible-playbook", "site-distributed.yml"]
+    for pair in (
+        "qm_app=QMPCMK",
+        "qm_svc=QMSVC",
+        "chl_to_svc=QMPCMK.QMSVC",
+        "chl_to_app=QMSVC.QMPCMK",
+    ):
+        assert pair in play.argv
 
 
 def test_vm_provision_unknown_setup_exits_2(monkeypatch, tmp_path):

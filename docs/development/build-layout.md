@@ -15,7 +15,7 @@ path <bucket>` is the same authority for shell and other non-Python consumers.
 | Bucket   | Scope  | Lifecycle (when `clean` removes it)        | Holds |
 |----------|--------|---------------------------------------------|-------|
 | `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), doc refs (`refs/`), `ansible_collections/` |
-| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/`, `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the operator-curated `rhel-ha/` package repo, manifest selection pins |
+| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/`, `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the `vagrant/` dotfile (domain↔vagrant mapping + keys), the operator-curated `rhel-ha/` package repo, manifest selection pins |
 | `work/`  | local  | **every** `mqlab build clean`               | deterministic renders — `inventory.ini`, `lab/topology.resolved.yaml`, `box-versions.json`, `versions.json`, `grafana/`, `prometheus/`, `obs/`, `salt/`, manifest overlays |
 | `temp/`  | local  | **every** `mqlab build clean`               | scratch, junk, and the screenshot handoff dir |
 
@@ -31,6 +31,12 @@ are symlinks back to the main checkout's `build/`, so every worktree drives the
 **one** lab and reuses the **one** download cache. `work/` and `temp/` are
 *local*: each checkout renders its own, so parallel branches never fight over an
 inventory or a resolved topology.
+
+The lab's vagrant state lives in `state/vagrant` (not a per-checkout
+`lab/.vagrant`): `mqlab` points vagrant there via `VAGRANT_DOTFILE_PATH`, so the
+domain↔vagrant mapping is shared like the rest of `state/`. A worktree can thus
+drive — and `vagrant ssh` into — a lab any checkout created, and the mapping
+survives a worktree being cleaned up after its branch merges (#355).
 
 ## The `mqlab build` commands
 

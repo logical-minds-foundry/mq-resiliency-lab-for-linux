@@ -47,6 +47,7 @@ from mqlab.paths import (
     resolved_topology_path,
     runs_dir,
     selection_state_path,
+    state,
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
@@ -381,12 +382,12 @@ def _obs_manifest_args() -> list[str]:
     return ["-e", f"@{op}"]
 
 
-def _obs_qm_args() -> list[str]:
-    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
-    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
-    # per-stack observe generalizes this. Thread the QM identity from the single
-    # source (QmConfig) so the names derive instead of hardcoding.
-    setup = lab_setups().get("distributed-pcmk-ubuntu")
+def _qm_extra_vars(setup_name: str) -> list[str]:
+    # Thread a setup's QM identity (the single source, QmConfig) into the ansible
+    # plays that need it, so the QM/channel names DERIVE rather than referencing an
+    # undefined `setup_dict`. The distributed provision playbooks (their-side MQSC)
+    # and the obs exporters both consume these (#356). No qm -> no args.
+    setup = lab_setups().get(setup_name)
     qm = setup.qm if setup else None
     if qm is None:
         return []
@@ -400,6 +401,23 @@ def _obs_qm_args() -> list[str]:
         "-e",
         f"chl_to_app={qm.chl_to_app}",
     ]
+
+
+def _obs_qm_args() -> list[str]:
+    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
+    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
+    # per-stack observe generalizes this.
+    return _qm_extra_vars("distributed-pcmk-ubuntu")
+
+
+def _vagrant_env() -> dict[str, str]:
+    # Vagrant's per-machine state (the libvirt-domain <-> vagrant mapping + keys) is
+    # SHARED, irreplaceable live-lab state — one lab, one instance — so it belongs in
+    # build/state, not a per-worktree lab/.vagrant that dies with the worktree and
+    # orphans the running lab. Redirect the dotfile via VAGRANT_DOTFILE_PATH so every
+    # checkout/worktree drives the same lab. Resolved so all of them pass one canonical
+    # path through the worktree's state/ symlink to the primary checkout (#355).
+    return {"VAGRANT_DOTFILE_PATH": str(state("vagrant").resolve())}
 
 
 def _manifest_id(setup_name: str) -> str:
@@ -698,7 +716,9 @@ def _obs_up_steps() -> list[CommandStep]:
         ),
         CommandStep(
             "monitoring create",
-            Command(["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab"),  # noqa: S607
+            Command(  # noqa: S607
+                ["vagrant", "up", "obs", "mon-probe"], cwd=repo_root() / "lab", env=_vagrant_env()
+            ),
         ),
         CommandStep(
             "provision monitoring",
@@ -841,7 +861,7 @@ _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 def _create_step(g: str) -> CommandStep:
     # Create + provision via Vagrant — the one verb that needs Vagrant (#96).
-    cmd = Command(["vagrant", "up", g], cwd=repo_root() / "lab")  # noqa: S607
+    cmd = Command(["vagrant", "up", g], cwd=repo_root() / "lab", env=_vagrant_env())  # noqa: S607
     return CommandStep(f"{g} create", cmd)
 
 
@@ -977,7 +997,9 @@ def _ensure_local_boxes(guests: list[str]) -> None:
     try:
         steps: list[CommandStep] = []
         if needed:
-            cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab")  # noqa: S607
+            cmd = Command(  # noqa: S607
+                ["vagrant", "box", "list"], cwd=repo_root() / "lab", env=_vagrant_env()
+            )
             steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list), probe())
         if need_dvd:
             stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
@@ -1238,7 +1260,10 @@ def _execute_stateful(
 
 def _ssh_into(guest: str) -> None:
     # Interactive: replace this process with vagrant ssh so the TTY passes through —
-    # the one verb that is not a captured/streamed step. Runs from lab/.
+    # the one verb that is not a captured/streamed step. Runs from lab/. Point vagrant
+    # at the shared dotfile (#355) so it finds the running lab even when this checkout
+    # never created it (e.g. driving from a worktree, or after one was cleaned up).
+    os.environ.update(_vagrant_env())
     os.chdir(repo_root() / "lab")
     os.execvp("vagrant", ["vagrant", "ssh", guest])  # noqa: S606, S607 - TTY passthrough (lab)
 
@@ -1360,6 +1385,7 @@ def _provision(setup_name: str, *, requested: str | None = None) -> None:
                 [
                     "ansible-playbook",  # noqa: S607
                     Path(setup.provision).name,
+                    *_qm_extra_vars(setup_name),
                     *_manifest_args(setup_name, requested=requested),
                 ],
                 cwd=repo_root() / "ansible",

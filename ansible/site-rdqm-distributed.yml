@@ -8,7 +8,7 @@
 
 - import_playbook: site-distributed-shared.yml
   vars:
-    our_qm: "{{ setup_dict.qm.qm_app }}"
+    our_qm: "{{ qm_app | default('QMRDQM') }}"
     # RDQM spends its one floating IP on the data VIP (the app's HA path), so the
     # partner QM cannot reach us at a single net-ext VIP. Instead the SVC QM's SDR to us
     # carries a CONNAME list of the three rdqm_a net-ext node IPs: MQ tries them in
