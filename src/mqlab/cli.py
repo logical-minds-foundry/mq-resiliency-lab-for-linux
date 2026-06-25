@@ -381,12 +381,12 @@ def _obs_manifest_args() -> list[str]:
     return ["-e", f"@{op}"]
 
 
-def _obs_qm_args() -> list[str]:
-    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
-    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
-    # per-stack observe generalizes this. Thread the QM identity from the single
-    # source (QmConfig) so the names derive instead of hardcoding.
-    setup = lab_setups().get("distributed-pcmk-ubuntu")
+def _qm_extra_vars(setup_name: str) -> list[str]:
+    # Thread a setup's QM identity (the single source, QmConfig) into the ansible
+    # plays that need it, so the QM/channel names DERIVE rather than referencing an
+    # undefined `setup_dict`. The distributed provision playbooks (their-side MQSC)
+    # and the obs exporters both consume these (#356). No qm -> no args.
+    setup = lab_setups().get(setup_name)
     qm = setup.qm if setup else None
     if qm is None:
         return []
@@ -400,6 +400,13 @@ def _obs_qm_args() -> list[str]:
         "-e",
         f"chl_to_app={qm.chl_to_app}",
     ]
+
+
+def _obs_qm_args() -> list[str]:
+    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
+    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
+    # per-stack observe generalizes this.
+    return _qm_extra_vars("distributed-pcmk-ubuntu")
 
 
 def _manifest_id(setup_name: str) -> str:
@@ -1360,6 +1367,7 @@ def _provision(setup_name: str, *, requested: str | None = None) -> None:
                 [
                     "ansible-playbook",  # noqa: S607
                     Path(setup.provision).name,
+                    *_qm_extra_vars(setup_name),
                     *_manifest_args(setup_name, requested=requested),
                 ],
                 cwd=repo_root() / "ansible",
