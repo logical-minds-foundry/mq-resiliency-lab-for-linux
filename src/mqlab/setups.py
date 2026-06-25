@@ -37,6 +37,23 @@ class QmConfig:
     vip: str = ""
     vip_ext: str = ""
     svc_conn: str | None = None
+    svc: str = "QMSVC"
+
+    @property
+    def qm_app(self) -> str:
+        return self.name
+
+    @property
+    def qm_svc(self) -> str:
+        return self.svc
+
+    @property
+    def chl_to_svc(self) -> str:
+        return f"{self.name}.{self.svc}"
+
+    @property
+    def chl_to_app(self) -> str:
+        return f"{self.svc}.{self.name}"
 
 
 @dataclass(frozen=True)
@@ -77,6 +94,7 @@ def lab_setups() -> dict[str, Setup]:
                 vip=cfg["qm"].get("vip", ""),
                 vip_ext=cfg["qm"].get("vip_ext", ""),
                 svc_conn=cfg["qm"].get("svc_conn"),
+                svc=cfg["qm"].get("svc", "QMSVC"),
             )
             if cfg.get("qm")
             else None,
