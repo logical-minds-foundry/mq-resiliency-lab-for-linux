@@ -6,7 +6,7 @@
 # inventory rendered). QM=QMNATIVE, group=nha_rhel_a.
 set -euo pipefail
 
-QM=QMNATIVE
+QM="${1:?usage: nativeha-fault-suite.sh <qm-name> ...}"
 GROUP=nha_rhel_a
 HBMAC_A3=52:54:00:73:a0:a6   # net-hb-a on nha-rhel-a3 (verify via domiflist)
 V() { virsh -c qemu:///system "$@"; }

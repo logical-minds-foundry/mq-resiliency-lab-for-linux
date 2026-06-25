@@ -8,10 +8,10 @@
 
 - import_playbook: site-distributed-shared.yml
   vars:
-    our_qm: QMRDQM
+    our_qm: "{{ setup_dict.qm.qm_app }}"
     # RDQM spends its one floating IP on the data VIP (the app's HA path), so the
-    # partner QM cannot reach us at a single net-ext VIP. Instead QMSVC's SDR to us
+    # partner QM cannot reach us at a single net-ext VIP. Instead the SVC QM's SDR to us
     # carries a CONNAME list of the three rdqm_a net-ext node IPs: MQ tries them in
-    # order and reconnects to whichever node currently runs QMRDQM, so the partner
+    # order and reconnects to whichever node currently runs the app QM, so the partner
     # link rides an HA failover without a second floating IP (#216 spike).
     our_conn: "10.60.0.31(1414),10.60.0.32(1414),10.60.0.33(1414)"

@@ -4,10 +4,10 @@
 # (site-rdqm-distributed.yml, Plan B). Our-side inter-QM MQSC is defined later at
 # `mqlab qm create distributed-pcmk-ubuntu` (site-pcmk-qm.yml, gated on svc_conn);
 # the their-side channels here use our_qm/our_conn. Channels establish bidirectionally
-# once both QMs exist; the responder retries until QMPCMK is up, so order is immaterial.
+# once both QMs exist; the responder retries until the app QM is up, so order is immaterial.
 - import_playbook: site-pcmk.yml
 
 - import_playbook: site-distributed-shared.yml
   vars:
-    our_qm: QMPCMK
+    our_qm: "{{ setup_dict.qm.qm_app }}"
     our_conn: "10.60.0.10(1414),10.60.0.20(1414)"

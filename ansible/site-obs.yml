@@ -12,24 +12,24 @@
 # QM, each scraped by Prometheus on the mgmt plane (#172, #182). The role's build
 # steps are idempotent (`creates:` guards), so the second include reuses the one
 # binary and just adds a per-QM systemd unit.
-#   - QMPCMK on :9157 — our HA QM via its data-plane VIP (role defaults).
-#   - QMSVC on :9158 — the SVC counterparty via net-ext, its SVC.SVRCONN.
+#   - {{ qm_app }} on :9157 — our HA QM via its data-plane VIP (role defaults).
+#   - {{ qm_svc }} on :9158 — the SVC counterparty via net-ext, its SVC.SVRCONN.
 - hosts: probe
   become: true
   tasks:
-    - name: QMPCMK exporter (our HA QM)
+    - name: "{{ qm_app }} exporter (our HA QM)"
       ansible.builtin.include_role:
         name: mq-exporter
 
-    - name: QMSVC exporter (SVC counterparty, across net-ext)
+    - name: "{{ qm_svc }} exporter (SVC counterparty, across net-ext)"
       ansible.builtin.include_role:
         name: mq-exporter
       vars:
-        mq_exporter_qm: QMSVC
+        mq_exporter_qm: "{{ qm_svc }}"
         mq_exporter_conn: "10.60.0.50(1414)"
         # Connect on the dedicated monitoring SVRCONN (#250), not the responder's
         # SVC.SVRCONN — the exporter presents O=app-org, which MON.SVRCONN pins.
         mq_exporter_channel: MON.SVRCONN
         mq_exporter_port: 9158
-        mq_exporter_monitored_queues: "SVC.REQUEST,QMPCMK"
-        mq_exporter_monitored_channels: "SVC.SVRCONN,MON.SVRCONN,QMPCMK.QMSVC,QMSVC.QMPCMK"
+        mq_exporter_monitored_queues: "SVC.REQUEST,{{ qm_app }}"
+        mq_exporter_monitored_channels: "SVC.SVRCONN,MON.SVRCONN,{{ chl_to_svc }},{{ chl_to_app }}"

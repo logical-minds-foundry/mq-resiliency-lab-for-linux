@@ -2,6 +2,11 @@
 # The lab PKI provider. Runs locally on the controller (no managed hosts): it
 # generates CA + entity material under build/state/secrets/pki/. Mirrors host-obs.yml's
 # local-connection shape. repo_root is resolved from the playbook dir.
+#
+# pki_entities is rendered from the topology by `mqlab` (_render_pki_entities in
+# src/mqlab/cli.py) and written to build/work/pki/entities.json before this play
+# runs. The pre_task below loads it into the play variable, replacing the former
+# static list in vars/pki-entities.yml (#351).
 - name: lab PKI provider
   hosts: localhost
   connection: local
@@ -10,5 +15,9 @@
     repo_root: "{{ playbook_dir }}/.."
   vars_files:
     - vars/pki-entities.yml
+  pre_tasks:
+    - name: load rendered PKI entities from topology
+      ansible.builtin.set_fact:
+        pki_entities: "{{ lookup('file', repo_root + '/build/work/pki/entities.json') | from_json }}"
   roles:
     - lab-pki

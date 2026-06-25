@@ -19,6 +19,7 @@ the app can match seq/uuid.
 """
 
 import argparse
+import os
 import pathlib
 import time
 
@@ -94,7 +95,7 @@ def _serve(qmgr, args, ledger, deadline):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default="QMSVC")
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "QMSVC"))
     ap.add_argument("--conn", default="localhost(1414)")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--in-queue", default="SVC.REQUEST")
