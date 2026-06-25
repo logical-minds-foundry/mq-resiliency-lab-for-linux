@@ -82,6 +82,14 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
         "qm_vip=10.10.1.200",
         "-e",
         "qm_vip_ext=10.60.0.10",
+        "-e",
+        "qm_app=QMPCMK",
+        "-e",
+        "qm_svc=QMSVC",
+        "-e",
+        "chl_to_svc=QMPCMK.QMSVC",
+        "-e",
+        "chl_to_app=QMSVC.QMPCMK",
     ]
     assert str(play.cwd).endswith("/ansible")
     assert (tmp_path / "build" / "work" / "inventory.ini").exists()

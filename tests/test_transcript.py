@@ -25,3 +25,23 @@ def test_transcript_refuses_paths_outside_build(tmp_path, monkeypatch):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     with pytest.raises(TranscriptError):
         Transcript(tmp_path / "docs" / "reports" / "leak.log")
+
+
+def test_transcript_accepts_runs_under_symlinked_shared_state(tmp_path, monkeypatch):
+    # A git worktree whose state/ bucket is a symlink to the primary checkout's
+    # build/state (the shared-bucket model, #69). The transcript's resolved path
+    # lands under the primary build/, not the worktree's — it must still be
+    # accepted so the lab can be driven from a worktree.
+    primary_state = tmp_path / "primary" / "build" / "state"
+    primary_state.mkdir(parents=True)
+    worktree = tmp_path / "worktree"
+    (worktree / "build").mkdir(parents=True)
+    (worktree / "build" / "state").symlink_to(primary_state)
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(worktree))
+
+    path = transcript_path("vm-status", "20260625T165216Z")
+    with Transcript(path) as t:
+        t.write("ok")
+
+    written = primary_state / "runs" / "20260625T165216Z-vm-status.log"
+    assert written.read_text(encoding="utf-8") == "ok\n"

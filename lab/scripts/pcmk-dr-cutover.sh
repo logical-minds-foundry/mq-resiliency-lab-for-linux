@@ -8,6 +8,7 @@
 # caught up -> flip DRBD -> bring the peer site's storage+cluster up.
 set -euo pipefail
 DIR="${1:-a2b}"
+QM="${2:?usage: pcmk-dr-cutover.sh [a2b|b2a] <qm-name>}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
@@ -53,7 +54,7 @@ run "$FIRST" "pcs cluster unstandby --all 2>/dev/null || true
     pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs op monitor interval=30s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group
     pcs resource create mq_vip ocf:heartbeat:IPaddr2 ip=${TO_VIP} cidr_netmask=24 --group mq_group --after mq_fs
     pcs resource create mq_vip_ext ocf:heartbeat:IPaddr2 ip=${TO_VIP_EXT} cidr_netmask=24 --group mq_group --after mq_vip
-    pcs resource create mq_qm systemd:mq-QMPCMK --group mq_group --after mq_vip_ext
+    pcs resource create mq_qm systemd:mq-${QM} --group mq_group --after mq_vip_ext
   else
     pcs resource enable mq_group
   fi"

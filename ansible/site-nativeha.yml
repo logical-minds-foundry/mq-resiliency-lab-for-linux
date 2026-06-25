@@ -13,7 +13,7 @@
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: QMNATIVE
+    qm_name: "{{ setup_dict.qm.qm_app | default('QMNATIVE') }}"
     # Replication on the dedicated net-hb-a NIC (so the fault suite can sever it).
     nha_site_nodes:
       - { name: nha-rhel-a1, hb: 172.16.1.91, data: 10.10.1.91 }

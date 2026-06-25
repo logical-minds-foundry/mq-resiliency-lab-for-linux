@@ -64,6 +64,39 @@ def _seed_monitoring(tmp_path):
     )
 
 
+def _seed_monitoring_with_pcmk(tmp_path):
+    """Topology that includes distributed-pcmk-ubuntu with a QM, so _obs_qm_args threads vars."""
+    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "nodes:\n"
+        "  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
+        "  san-b: {nics: {net-mgmt: 10.50.0.6}}\n"
+        "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+        "  pcmk-b1: {nics: {net-mgmt: 10.50.0.61}}\n"
+        "  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
+        "  rdqm-b1: {nics: {net-mgmt: 10.50.0.41}}\n"
+        "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
+        "  app-client: {nics: {net-mgmt: 10.50.0.60}}\n"
+        "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
+        "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
+        "groups:\n"
+        "  san_a: [san-a]\n  san_b: [san-b]\n"
+        "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
+        "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
+        "  svc: [svc-sim]\n  app: [app-client]\n"
+        "  obs_box: [obs]\n  probe: [mon-probe]\n"
+        "setups:\n"
+        "  monitoring:\n    groups: [obs_box, probe]\n"
+        "  distributed-pcmk-ubuntu:\n"
+        "    groups: [san_a, san_b, pcmk_a, pcmk_b]\n"
+        "    qm:\n"
+        "      name: QMPCMK\n"
+        "      vip: 10.10.1.200\n"
+        "      vip_ext: 10.60.0.200\n"
+        "      svc: QMSVC\n"
+    )
+
+
 # --- targets: renders the file_sd JSON under build/ from topology ---
 
 
@@ -105,7 +138,7 @@ def test_obs_up_renders_then_creates_then_provisions(monkeypatch, tmp_path):
     assert argvs[1][:3] == ["vagrant", "up", "obs"]
     assert "ansible-playbook" in argvs[2]
     # bare filename (run from ansible/), not a doubled ansible/ansible/ path
-    assert argvs[2][-1] == "site-obs.yml"
+    assert "site-obs.yml" in argvs[2]
     # the host collector is provisioned via a connection=local host-obs play
     assert any("host-obs.yml" in a for a in argvs)
     # after provisioning bounces grafana, the port-forward relay is re-healed (#264)
@@ -197,6 +230,44 @@ def test_obs_up_propagates_step_failure(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "up"])
 
     assert result.exit_code == 4
+
+
+def test_obs_up_threads_qm_vars_from_pcmk_setup(monkeypatch, tmp_path):
+    # When topology includes distributed-pcmk-ubuntu with a qm block, obs up must
+    # thread qm_app/qm_svc/chl_to_svc/chl_to_app as extra-vars into site-obs.yml
+    # (so the play never references the undefined setup_dict). #351.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring_with_pcmk(tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+
+    assert result.exit_code == 0
+    site_obs_argv = next(c.argv for c in runner.recorded if "site-obs.yml" in c.argv)
+    assert "-e" in site_obs_argv
+    assert "qm_app=QMPCMK" in site_obs_argv
+    assert "qm_svc=QMSVC" in site_obs_argv
+    assert "chl_to_svc=QMPCMK.QMSVC" in site_obs_argv
+    assert "chl_to_app=QMSVC.QMPCMK" in site_obs_argv
+
+
+def test_obs_up_no_qm_args_when_pcmk_setup_absent(monkeypatch, tmp_path):
+    # When topology has no distributed-pcmk-ubuntu (e.g. a minimal monitoring-only
+    # topology), _obs_qm_args returns [] and site-obs.yml is invoked without QM
+    # extra-vars (the role defaults apply). #351.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)  # monitoring only — no distributed-pcmk-ubuntu
+    runner = RecordingRunner(results=[ScriptedResult(["ok"]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "up"])
+
+    assert result.exit_code == 0
+    site_obs_argv = next(c.argv for c in runner.recorded if "site-obs.yml" in c.argv)
+    # No QM extra-vars threaded — only site-obs.yml (and any manifest -e flags)
+    assert "qm_app=QMPCMK" not in site_obs_argv
+    assert "qm_svc=QMSVC" not in site_obs_argv
 
 
 # --- status: filters the fleet to the monitoring setup (virsh list --all) ---

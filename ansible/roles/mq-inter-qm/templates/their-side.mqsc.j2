@@ -8,7 +8,7 @@ DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
 * pip's pymqi is client-only, so a true bindings connect fails 2058. MCAUSER(mqm)
 * gives it admin authority; CHLAUTH is already disabled on this QM.
 DEFINE CHANNEL(SVC.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
-* Monitoring SVRCONN for our app-org ops exporter (#250/#182). QMSVC trusts the
+* Monitoring SVRCONN for our app-org ops exporter (#250/#182). {{ qm_svc }} trusts the
 * app-org CA (QM-link), so it validates the exporter's O=app-org cert; SSLPEER
 * pins it. Distinct from SVC.SVRCONN (the O=svc-org responder) so each client's peer
 * identity stays exact.

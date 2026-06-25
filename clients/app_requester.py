@@ -15,6 +15,7 @@ Deployed to the app VM by ansible. Run:
 """
 
 import argparse
+import os
 import time
 
 import pymqi
@@ -26,7 +27,7 @@ DEFAULT_CONN = "10.10.1.200(1414),10.10.2.200(1414)"
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default="QMPCMK")
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "QMPCMK"))
     ap.add_argument("--conn", default=DEFAULT_CONN)
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--request-queue", default="SVC.REQUEST")

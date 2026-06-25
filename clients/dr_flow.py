@@ -25,6 +25,7 @@ Deployed to lab nodes by ansible alongside mqlab/ and dr_mqi.py.
 """
 
 import argparse
+import os
 import pathlib
 import threading
 import time
@@ -199,7 +200,7 @@ class _Conn:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default="QMAIN")
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "QMAIN"))
     ap.add_argument("--conn", default="10.30.0.10(1414)")
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--req-queue", default="SVC.REQUEST")

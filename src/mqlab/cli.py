@@ -235,6 +235,7 @@ def _galaxy_install_step() -> CommandStep:
 
 
 def _pki_ensure_step() -> CommandStep:
+    _render_pki_entities()
     return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
 
 
@@ -378,6 +379,27 @@ def _obs_manifest_args() -> list[str]:
     op.parent.mkdir(parents=True, exist_ok=True)
     op.write_text(json.dumps(obs_overlay()))
     return ["-e", f"@{op}"]
+
+
+def _obs_qm_args() -> list[str]:
+    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
+    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
+    # per-stack observe generalizes this. Thread the QM identity from the single
+    # source (QmConfig) so the names derive instead of hardcoding.
+    setup = lab_setups().get("distributed-pcmk-ubuntu")
+    qm = setup.qm if setup else None
+    if qm is None:
+        return []
+    return [
+        "-e",
+        f"qm_app={qm.qm_app}",
+        "-e",
+        f"qm_svc={qm.qm_svc}",
+        "-e",
+        f"chl_to_svc={qm.chl_to_svc}",
+        "-e",
+        f"chl_to_app={qm.chl_to_app}",
+    ]
 
 
 def _manifest_id(setup_name: str) -> str:
@@ -533,6 +555,80 @@ def _render_reach_peers() -> Path:
     return path
 
 
+# Fixed non-QM PKI entities (verbatim from ansible/vars/pki-entities.yml §non-QM rows).
+# These are stable across QM renames and are never derived from the topology.
+_FIXED_PKI_ENTITIES: list[dict[str, Any]] = [
+    {"cn": "app-client", "org": "app-org", "ou": "apps", "kind": "personal", "trust": []},
+    # Trusts svc-org too: one app-org ops identity that scrapes BOTH QMs (exporter
+    # must validate QMSVC's O=svc-org server cert — #250 / MON.SVRCONN).
+    {
+        "cn": "mq_prometheus",
+        "org": "app-org",
+        "ou": "ops",
+        "kind": "personal",
+        "trust": ["svc-org"],
+    },
+    {"cn": "mqweb", "org": "app-org", "ou": "ops", "kind": "personal", "trust": []},
+    {"cn": "pymqrest", "org": "app-org", "ou": "ops", "kind": "trust_only", "trust": []},
+    # Co-located SVC responder presents O=svc-org (#250 / SVC.SVRCONN).
+    {
+        "cn": "svc-responder",
+        "org": "svc-org",
+        "ou": "messaging",
+        "kind": "personal",
+        "trust": ["app-org"],
+    },
+]
+
+
+def _render_pki_entities() -> Path:
+    """Derive PKI entity list from topology and write build/work/pki/entities.json.
+
+    Produces one entry per distinct app-org QM name (qm_app) and one entry for
+    the svc-org QM (qm_svc), deduped across setups, plus the fixed non-QM entities.
+    In Phase 1 this yields the same CN set as the static ansible/vars/pki-entities.yml.
+    """
+    from mqlab.setups import lab_setups
+
+    seen_app: set[str] = set()
+    seen_svc: set[str] = set()
+    qm_entities: list[dict[str, Any]] = []
+
+    for setup in lab_setups().values():
+        if setup.qm is None:
+            continue
+        app_cn = setup.qm.qm_app
+        if app_cn not in seen_app:
+            seen_app.add(app_cn)
+            qm_entities.append(
+                {
+                    "cn": app_cn,
+                    "org": "app-org",
+                    "ou": "messaging",
+                    "kind": "personal",
+                    "trust": ["svc-org"],
+                }
+            )
+        svc_cn = setup.qm.qm_svc
+        if svc_cn not in seen_svc:
+            seen_svc.add(svc_cn)
+            qm_entities.append(
+                {
+                    "cn": svc_cn,
+                    "org": "svc-org",
+                    "ou": "messaging",
+                    "kind": "personal",
+                    "trust": ["app-org"],
+                }
+            )
+
+    entities = qm_entities + _FIXED_PKI_ENTITIES
+    path = work("pki", "entities.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entities, indent=2) + "\n")
+    return path
+
+
 @obs_app.command("reach-peers")
 def obs_reach_peers() -> None:
     """Render build/work/obs/reach-peers.json (host -> net -> peers) from topology."""
@@ -609,7 +705,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
             Command(
-                ["ansible-playbook", "site-obs.yml", *_obs_manifest_args()],  # noqa: S607
+                ["ansible-playbook", "site-obs.yml", *_obs_qm_args(), *_obs_manifest_args()],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),
@@ -1349,6 +1445,14 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
                     f"qm_vip={qm.vip}",
                     "-e",
                     f"qm_vip_ext={qm.vip_ext}",
+                    "-e",
+                    f"qm_app={qm.qm_app}",
+                    "-e",
+                    f"qm_svc={qm.qm_svc}",
+                    "-e",
+                    f"chl_to_svc={qm.chl_to_svc}",
+                    "-e",
+                    f"chl_to_app={qm.chl_to_app}",
                     # the counterparty CONNAME, only when this QM talks to one (#147)
                     *(["-e", f"svc_conn={qm.svc_conn}"] if qm.svc_conn else []),
                 ],  # noqa: S607
@@ -1491,6 +1595,7 @@ _PKI_PLAYBOOK = ["ansible-playbook", "site-pki.yml", "-c", "local", "-i", "local
 @pki_app.command("ensure")
 def pki_ensure(step: _StepFlag = False) -> None:
     """Create/ensure both org CAs and every entity's certs + PKCS#12 keystores."""
+    _render_pki_entities()
     cmd = Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible")  # noqa: S607
     _execute("pki-ensure", [CommandStep("pki ensure", cmd)], step_mode=step)
 
@@ -1498,17 +1603,16 @@ def pki_ensure(step: _StepFlag = False) -> None:
 @pki_app.command("issue")
 def pki_issue(entity: str, step: _StepFlag = False) -> None:
     """Issue (or re-issue) one entity's cert + keystore — runs the provider for just that CN."""
+    _render_pki_entities()
     cmd = Command([*_PKI_PLAYBOOK, "-e", f"pki_only={entity}"], cwd=repo_root() / "ansible")  # noqa: S607
     _execute("pki-issue", [CommandStep(f"pki issue {entity}", cmd)], step_mode=step)
 
 
 @pki_app.command("list")
 def pki_list() -> None:
-    """List the PKI entity inventory (org, OU, kind) from ansible/vars/pki-entities.yml."""
-    import yaml as _yaml
-
-    data = _yaml.safe_load((repo_root() / "ansible" / "vars" / "pki-entities.yml").read_text())
-    for e in data.get("pki_entities", []):
+    """List the PKI entity inventory (org, OU, kind) derived from topology."""
+    entities = json.loads(_render_pki_entities().read_text())
+    for e in entities:
         typer.echo(f"{e['cn']:<14} org={e['org']:<11} ou={e.get('ou', '-'):<16} {e['kind']}")
 
 
