@@ -81,6 +81,10 @@ def ensure(repo: Path, *, run: Callable[[list[str]], str] = _git) -> None:
             )
         target.symlink_to(main / bucket)
 
+    # Auto-heal a lab created before #355: relocate lab/.vagrant into the shared state
+    # bucket so vagrant finds the running lab instead of orphaning it. No-op otherwise.
+    migrate_vagrant_dotfile(repo)
+
 
 def _reset_bucket(path: Path) -> None:
     if path.is_symlink():
@@ -166,4 +170,32 @@ def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
         if not dry_run:
             dst.parent.mkdir(parents=True, exist_ok=True)
             src.rename(dst)
+    v = migrate_vagrant_dotfile(repo, dry_run=dry_run, strict=True)
+    if v is not None:
+        planned.append(v)
     return planned
+
+
+def migrate_vagrant_dotfile(
+    repo: Path, *, dry_run: bool = False, strict: bool = False
+) -> tuple[str, str] | None:
+    """Move a pre-#355 lab/.vagrant into the shared state bucket (build/state/vagrant).
+    Vagrant now reads VAGRANT_DOTFILE_PATH=build/state/vagrant, so a lab created before
+    that change has its domain<->vagrant mapping in the old lab/.vagrant — leaving the
+    running lab orphaned (`vagrant up` -> 'domain already taken'). This relocates it.
+
+    Safe no-op when there is nothing to move. A pre-existing destination is left
+    untouched with strict=False (the auto-heal path in ensure); strict=True raises (the
+    explicit `mqlab build migrate`). Returns the (src, dst) it moved, or None."""
+    src = repo / "lab" / ".vagrant"
+    if not src.is_dir() or src.is_symlink():
+        return None
+    dst = repo / "build" / "state" / "vagrant"
+    if dst.exists():
+        if strict:
+            raise BuildEnvError(f"migrate collision: {dst} already exists; resolve by hand")
+        return None
+    if not dry_run:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
+    return (str(src), str(dst))
