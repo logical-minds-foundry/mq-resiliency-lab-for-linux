@@ -122,7 +122,11 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 # if/when those arms are in play.
 QMS: list[tuple[str, str, list[str]]] = [
     ("PCMKAPP", "service · Ubuntu HA/DR", ["APP.SVRCONN", "PCMKAPP.PCMKSVC", "PCMKSVC.PCMKAPP"]),
-    ("PCMKSVC", "counterparty · SVC service", ["SVC.SVRCONN", "PCMKSVC.PCMKAPP", "PCMKAPP.PCMKSVC"]),
+    (
+        "PCMKSVC",
+        "counterparty · SVC service",
+        ["SVC.SVRCONN", "PCMKSVC.PCMKAPP", "PCMKAPP.PCMKSVC"],
+    ),
 ]
 
 
