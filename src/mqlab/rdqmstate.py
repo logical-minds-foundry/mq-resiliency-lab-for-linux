@@ -312,7 +312,7 @@ def collect(node: str, qm: str, now: int) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for the deployed collector: `lab-rdqm-state --qm QMRDQM`."""
+    """Entry point for the deployed collector: `lab-rdqm-state --qm RDQMAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
     ap.add_argument("--node", default=os.uname().nodename)

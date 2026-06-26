@@ -196,8 +196,8 @@ def test_nativeha_status_band_is_one_compact_full_width_row():
     # the integrity tile still carries the gated hazard expr (no false green on no-data)
     integ = tiles[4]["targets"][0]["expr"]
     assert "cluster_nha_insync == 0" in integ and "count(cluster_nha_role) > 0" in integ
-    assert 'cluster_resource_owner{resource="QMNATIVE"}' in integ
-    assert 'cluster_resource_owner{resource="QMNATIVE"}' in tiles[0]["targets"][0]["expr"]
+    assert 'cluster_resource_owner{resource="NHARAPP"}' in integ
+    assert 'cluster_resource_owner{resource="NHARAPP"}' in tiles[0]["targets"][0]["expr"]
 
 
 def test_role_mapping_codes_active_replica_unknown():
@@ -477,7 +477,7 @@ def test_rdqm_status_band_is_one_compact_full_width_row():
     assert all(t["gridPos"]["h"] == 3 for t in tiles)
     assert all(t["options"]["text"]["valueSize"] == 22 for t in tiles)
     # running-on is the resolved QM owner; the floating-IP tile is first-class (the single VIP)
-    assert 'cluster_resource_owner{resource="QMRDQM"}' in tiles[0]["targets"][0]["expr"]
+    assert 'cluster_resource_owner{resource="RDQMAPP"}' in tiles[0]["targets"][0]["expr"]
     assert "cluster_rdqm_floating_ip" in tiles[3]["targets"][0]["expr"]
     # the integrity tile carries the gated hazard expr (no false green on no-data)
     integ = tiles[4]["targets"][0]["expr"]
