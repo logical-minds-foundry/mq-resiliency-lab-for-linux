@@ -28,12 +28,12 @@
 
 - hosts: svc
   vars:
-    qmgr_name: QMSVC
+    qmgr_name: "{{ qm_svc }}"  # per-stack svc QM name, threaded from QmConfig (#351)
   roles: [mq-qmgr]
 
 - hosts: svc
   vars:
-    qmgr_name: QMSVC
+    qmgr_name: "{{ qm_svc }}"  # per-stack svc QM name, threaded from QmConfig (#351)
   # our_qm / our_conn are supplied by the importing playbook (per arm).
   roles: [mq-inter-qm]
 
