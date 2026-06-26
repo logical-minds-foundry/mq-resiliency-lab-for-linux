@@ -17,7 +17,7 @@ seq/uuid across a rebuild so a failover never drops or silently re-keys it.
 
 Target QM / connection / queues are parameterized so the same client drives any
 arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
-    ~/mqvenv/bin/python ~/dr_flow.py --qm QMPCMK --conn "10.10.1.200(1414)" \
+    ~/mqvenv/bin/python ~/dr_flow.py --qm PCMKAPP --conn "10.10.1.200(1414)" \
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
         --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 

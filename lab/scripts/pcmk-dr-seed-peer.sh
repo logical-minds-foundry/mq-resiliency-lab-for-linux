@@ -4,9 +4,9 @@
 # Run after the QM is created at the live site (pcmk-qm-create.sh). The QM DATA
 # travels via DRBD; this only teaches the peer nodes that the QM exists (the
 # addmqinf + unit the Phase D findings flagged as a manual pre-cutover step).
-# Usage: pcmk-dr-seed-peer.sh [QM=QMPCMK] [PEER=pcmk_b] [SRC=pcmk-a1]
+# Usage: pcmk-dr-seed-peer.sh [QM=PCMKAPP] [PEER=pcmk_b] [SRC=pcmk-a1]
 set -euo pipefail
-QM="${1:-QMPCMK}"
+QM="${1:-PCMKAPP}"
 PEER="${2:-pcmk_b}"
 SRC="${3:-pcmk-a1}"
 cd "$(dirname "$0")/../../ansible"

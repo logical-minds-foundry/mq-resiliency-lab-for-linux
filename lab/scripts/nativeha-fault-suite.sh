@@ -3,7 +3,7 @@
 # virsh (hard) + ansible (in-guest) and reads Native HA group status. Fail-loud:
 # asserts an end state and exits non-zero otherwise (lab-gotchas: never trust
 # per-step success). Run from the worktree's ansible context (build/ symlinked,
-# inventory rendered). QM=QMNATIVE, group=nha_rhel_a.
+# inventory rendered). QM=NHARAPP, group=nha_rhel_a.
 set -euo pipefail
 
 QM="${1:?usage: nativeha-fault-suite.sh <qm-name> ...}"
