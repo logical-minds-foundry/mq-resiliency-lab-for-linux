@@ -51,5 +51,5 @@ def test_setup_parses_without_a_vip():
     # QmConfig.vip must be optional for the setup to parse.
     s = lab_setups()["distributed-nativeha-rhel"]
     assert s.qm is not None
-    assert s.qm.name == "QMNATIVE"
+    assert s.qm.qm_app == "NHARAPP" and s.qm.qm_svc == "NHARSVC"  # short-derived (#351)
     assert s.qm.vip == ""

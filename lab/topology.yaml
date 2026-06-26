@@ -218,6 +218,7 @@ arms:
   pcmk-ubuntu:
     mechanism: pacemaker-san
     cluster_group: pcmk_a
+    short: PCMK  # QM names derive: PCMKAPP (app/HA QM) + PCMKSVC (svc counterparty) (#351)
     verbs:
       qm-create:  { playbook: site-pcmk-qm.yml }
       qm-destroy: { playbook: site-pcmk-qm-down.yml }
@@ -227,6 +228,7 @@ arms:
   rdqm-rhel:
     mechanism: rdqm
     cluster_group: rdqm_a
+    short: RDQM  # RDQMAPP + RDQMSVC (#351)
     verbs:
       qm-create: { script: rdqm-qm-create.sh }
       qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
@@ -243,6 +245,7 @@ arms:
   pcmk-rhel:
     mechanism: pacemaker-san
     cluster_group: pcmk_rhel_a
+    short: PCMR  # PCMRAPP + PCMRSVC — distinct from pcmk-ubuntu (#351; arm retired in #350)
     verbs:
       qm-create:  { playbook: site-pcmk-rhel-qm.yml }
       qm-destroy: { playbook: site-pcmk-rhel-qm-down.yml }
@@ -252,6 +255,7 @@ arms:
   nativeha-rhel:
     mechanism: native-ha
     cluster_group: nha_rhel_a
+    short: NHAR  # NHARAPP + NHARSVC (#351)
     # Lifecycle is the mqmonitor@ systemd unit (NOT endmqm — systemd restarts it).
     verbs:
       qm-create:  { playbook: site-nativeha.yml }

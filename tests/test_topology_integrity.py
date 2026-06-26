@@ -106,7 +106,9 @@ def test_distributed_setup_composed():
     dist = lab_setups()["distributed-pcmk-ubuntu"]
     assert dist.groups == ["san_a", "pcmk_a", "svc", "app"]
     assert dist.provision == "ansible/site-distributed.yml"
-    assert dist.qm is not None and dist.qm.name == "QMPCMK"
+    assert dist.qm is not None
+    assert dist.qm.qm_app == "PCMKAPP" and dist.qm.qm_svc == "PCMKSVC"  # short-derived (#351)
+    assert dist.qm.chl_to_svc == "PCMKAPP.PCMKSVC"
     assert dist.qm.svc_conn == "10.60.0.50"
 
 
@@ -118,6 +120,6 @@ def test_distributed_rdqm_setup_composed():
     assert s.arm == "rdqm-rhel"
     assert s.groups == ["rdqm_a", "svc", "app"]
     assert s.provision == "ansible/site-rdqm-distributed.yml"
-    assert s.qm is not None and s.qm.name == "QMRDQM"
+    assert s.qm is not None and s.qm.qm_app == "RDQMAPP" and s.qm.qm_svc == "RDQMSVC"  # (#351)
     assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
