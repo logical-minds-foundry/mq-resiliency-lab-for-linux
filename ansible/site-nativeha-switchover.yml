@@ -9,8 +9,8 @@
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: QMNATIVE
-    ks_cn: QMNATIVE
+    qm_name: "{{ qm_app | default('NHARAPP') }}"
+    ks_cn: "{{ qm_app | default('NHARAPP') }}"
     this_group: Live
     this_role: "{{ 'live' if target_live == 'a' else 'Recovery' }}"
     peer_group_name: Recovery
@@ -22,8 +22,8 @@
 - hosts: nha_rhel_b
   become: true
   vars:
-    qm_name: QMNATIVE
-    ks_cn: QMNATIVE
+    qm_name: "{{ qm_app | default('NHARAPP') }}"
+    ks_cn: "{{ qm_app | default('NHARAPP') }}"
     this_group: Recovery
     this_role: "{{ 'live' if target_live == 'b' else 'Recovery' }}"
     peer_group_name: Live
@@ -34,7 +34,7 @@
 
 - hosts: nha_rhel_b:nha_rhel_a
   become: true
-  vars: { qm_name: QMNATIVE }
+  vars: { qm_name: "{{ qm_app | default('NHARAPP') }}" }
   tasks:
     - name: restart mqmonitor@ to apply the role swap
       ansible.builtin.systemd:

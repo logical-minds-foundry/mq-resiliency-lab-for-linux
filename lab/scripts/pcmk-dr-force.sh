@@ -9,7 +9,7 @@
 # Direction: a2b (site A dead -> promote B) | b2a (site B dead -> promote A).
 set -euo pipefail
 DIR="${1:-a2b}"
-QM="${2:-QMPCMK}"
+QM="${2:-PCMKAPP}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 

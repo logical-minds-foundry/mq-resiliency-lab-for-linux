@@ -33,7 +33,7 @@
     # emits the same cluster_* shape as cluster-state plus cluster_nha_* facets.
     - role: nativeha-state
       vars:
-        nativeha_qm: "{{ qm.name | default('QMNATIVE') }}"
+        nativeha_qm: "{{ qm.name | default('NHARAPP') }}"
       when: >-
         'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names
     # RDQM state collector (#287) — only on the rdqm-rhel arm. Every rdqm node (site-A HA
@@ -41,6 +41,6 @@
     # emits the same cluster_* shape as cluster-state plus cluster_rdqm_* HA/DR facets.
     - role: rdqm-state
       vars:
-        rdqm_qm: "{{ qm.name | default('QMRDQM') }}"
+        rdqm_qm: "{{ qm.name | default('RDQMAPP') }}"
       when: >-
         'rdqm_a' in group_names or 'rdqm_b' in group_names

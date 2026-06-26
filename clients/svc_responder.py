@@ -1,9 +1,9 @@
 """SVC service responder -- the counterparty (Business B) side of the QM-to-QM flow.
 
-Runs co-located with QMSVC on the SVC service VM in BINDINGS mode (a local
+Runs co-located with the SVC QM on the SVC service VM in BINDINGS mode (a local
 connection, no client channel). Reads each request from SVC.REQUEST, sends a reply
 to the request's ReplyToQ / ReplyToQMgr, and honours the request/reply correlation
-contract so the requesting app on QMPCMK can match it:
+contract so the requesting app can match it:
 
   * reply CorrelId = request MsgId   (the match key the app GETs by)
   * MQPMO_NEW_MSG_ID                 (the reply gets its own MsgId)
@@ -98,7 +98,7 @@ def serve(
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default="QMSVC")
+    ap.add_argument("--qm", default="PCMKSVC")
     ap.add_argument("--in-queue", default="SVC.REQUEST")
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--conn", default="localhost(1414)")

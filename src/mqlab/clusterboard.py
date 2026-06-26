@@ -157,7 +157,7 @@ _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # emitted by EVERY arm's collector into one Prometheus, so every board query over them MUST be
 # scoped to its own arm's ansible groups — otherwise one cluster's nodes leak into another's
 # board (#279: the nha arm's nodes showed up on the PCMK board). cluster_resource_owner is
-# additionally resource-scoped (mq_qm vs QMNATIVE), so it needs no group scope.
+# additionally resource-scoped (mq_qm vs NHARAPP), so it needs no group scope.
 _PCMK_SEL = '{groups=~"pcmk_a|pcmk_b"}'
 _NHA_SEL = '{groups=~"nha_rhel_a|nha_rhel_b"}'
 _RDQM_SEL = '{groups=~"rdqm_a|rdqm_b"}'
@@ -406,7 +406,7 @@ def _nativeha_integrity_expr() -> str:
     no-data reads STALE (spec §6)."""
     hazards = (
         f"(min(cluster_quorate{_NHA_SEL}) == bool 0)"
-        ' + (absent(cluster_resource_owner{resource="QMNATIVE"}) or vector(0))'
+        ' + (absent(cluster_resource_owner{resource="NHARAPP"}) or vector(0))'
         " + (count(cluster_nha_insync == 0) or vector(0))"
     )
     return f"({hazards}) and on() (count(cluster_nha_role) > 0)"
@@ -432,7 +432,7 @@ def nativeha_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
         _stat(
             # max by (holder) collapses the per-reporter series → one tile (the Active instance)
             "Active instance",
-            'max by (holder)(cluster_resource_owner{resource="QMNATIVE"})',
+            'max by (holder)(cluster_resource_owner{resource="NHARAPP"})',
             ds_uid,
             0,
             y,
@@ -705,7 +705,7 @@ def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     sel = '{host=~"nha-rhel-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*"} |~ `${level}`'
     note = (
         "Shows MQ-related journald units on the nha nodes. MQ's own error log "
-        "(/var/mqm/qmgrs/QMNATIVE/errors/AMQERR*.LOG) is file-based, not journald, so it is "
+        "(/var/mqm/qmgrs/NHARAPP/errors/AMQERR*.LOG) is file-based, not journald, so it is "
         "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/CRR logs."
     )
     return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
@@ -1036,7 +1036,7 @@ def rdqm_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
     return [
         _stat(
             "Running on",
-            'max by (holder)(cluster_resource_owner{resource="QMRDQM"})',
+            'max by (holder)(cluster_resource_owner{resource="RDQMAPP"})',
             ds_uid,
             0,
             y,
@@ -1228,7 +1228,7 @@ def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     )
     note = (
         "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes. MQ's own error log "
-        "(/var/mqm/qmgrs/QMRDQM/errors/AMQERR*.LOG) is file-based, not journald, so it is "
+        "(/var/mqm/qmgrs/RDQMAPP/errors/AMQERR*.LOG) is file-based, not journald, so it is "
         "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/DR logs."
     )
     return _logs_panel("▤ RDQM logs (severity: $level)", sel, loki_uid, y, description=note)

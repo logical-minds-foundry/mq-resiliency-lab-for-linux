@@ -77,6 +77,22 @@ def lab_groups() -> dict[str, list[str]]:
     return {g: list(hosts) for g, hosts in (_topology().get("groups") or {}).items()}
 
 
+def _qm_config(cfg: dict[str, Any], arms: dict[str, Any]) -> QmConfig:
+    """Build a setup's QmConfig. When its arm declares a `short` token (#351 Phase 2),
+    the QM names derive from it — `<short>APP` / `<short>SVC` — so the rename is a single
+    source change. A setup whose arm has no short (e.g. a seeded test topology) keeps the
+    explicit `qm.name`/`qm.svc`, so behaviour there is unchanged."""
+    qm = cfg["qm"]
+    short = (arms.get(cfg.get("arm") or "") or {}).get("short")
+    return QmConfig(
+        name=f"{short}APP" if short else qm["name"],
+        vip=qm.get("vip", ""),
+        vip_ext=qm.get("vip_ext", ""),
+        svc_conn=qm.get("svc_conn"),
+        svc=f"{short}SVC" if short else qm.get("svc", "QMSVC"),
+    )
+
+
 def lab_setups() -> dict[str, Setup]:
     """All named setups from topology.yaml, keyed by name."""
     data = _topology()
@@ -89,15 +105,7 @@ def lab_setups() -> dict[str, Setup]:
             groups=list(cfg.get("groups", [])),
             provision=cfg.get("provision"),
             secrets=list(cfg.get("secrets", [])),
-            qm=QmConfig(
-                name=cfg["qm"]["name"],
-                vip=cfg["qm"].get("vip", ""),
-                vip_ext=cfg["qm"].get("vip_ext", ""),
-                svc_conn=cfg["qm"].get("svc_conn"),
-                svc=cfg["qm"].get("svc", "QMSVC"),
-            )
-            if cfg.get("qm")
-            else None,
+            qm=_qm_config(cfg, data.get("arms") or {}) if cfg.get("qm") else None,
             arm=cfg.get("arm"),
         )
     return result

@@ -5,4 +5,4 @@ Description=Render lab_rdqm_state textfile (RDQM HA / DR / DRBD)
 [Service]
 Type=oneshot
 Environment=PYTHONPATH=/usr/local/lib/lab-rdqm-state
-ExecStart=/usr/bin/python3 -m mqlab.rdqmstate --qm {{ rdqm_qm | default('QMRDQM') }}
+ExecStart=/usr/bin/python3 -m mqlab.rdqmstate --qm {{ rdqm_qm | default('RDQMAPP') }}

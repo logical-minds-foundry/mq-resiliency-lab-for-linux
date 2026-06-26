@@ -52,10 +52,10 @@
       failed_when: crtmqm.rc != 0 and 'already exists' not in (crtmqm.stderr | default(''))
       changed_when: crtmqm.rc == 0
 
-    # 1b. TLS (#250): place QMPCMK's lab-pki keystore on the shared LUN so SSLKEYR
-    #     follows the QM on failover. Registers pki_keyrpwd for the MQSC below.
+    # 1b. TLS (#250): place the PCMK app QM's lab-pki keystore on the shared LUN so
+    #     SSLKEYR follows the QM on failover. Registers pki_keyrpwd for the MQSC below.
     #     Verified: GSKit (runmqakm) reads the compatibility2022 PKCS#12 cleanly.
-    - name: place QMPCMK keystore on the shared LUN (TLS)
+    - name: place {{ qm_name }} keystore on the shared LUN (TLS)
       ansible.builtin.include_role:
         name: pki-distribute
       vars:

@@ -4,4 +4,4 @@ Description=Render lab_nativeha_state textfile (Native HA / CRR)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /usr/local/bin/lab-nativeha-state --qm {{ nativeha_qm | default('QMNATIVE') }}
+ExecStart=/usr/bin/python3 /usr/local/bin/lab-nativeha-state --qm {{ nativeha_qm | default('NHARAPP') }}

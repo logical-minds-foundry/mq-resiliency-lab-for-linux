@@ -21,7 +21,7 @@
 - hosts: rdqm_b
   roles: [rdqm-install]
 
-# Stateless per-node mqweb on every site-B node's QMRDQM — administers the local QM
+# Stateless per-node mqweb on every site-B node's RDQMAPP — administers the local QM
 # whenever DR cutover lands it here. Mirrors the site-A play in site-rdqm.yml.
 - hosts: rdqm_b
   roles: [mqweb]

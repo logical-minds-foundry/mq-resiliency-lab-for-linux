@@ -18,7 +18,7 @@
 #   * run via `uv run` / the mqlab venv (needs ansible on PATH).
 set -euo pipefail
 DIR="${1:-a2b}"
-QM="${2:-QMRDQM}"
+QM="${2:-RDQMAPP}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
@@ -27,7 +27,7 @@ if [ "$DIR" = a2b ]; then
 elif [ "$DIR" = b2a ]; then
   FROM_PRIMARY=rdqm-b1; TO_PRIMARY=rdqm-a1; TO_VIP=10.10.1.100
 else
-  echo "usage: rdqm-dr-cutover.sh [a2b|b2a] [QM=QMRDQM]" >&2
+  echo "usage: rdqm-dr-cutover.sh [a2b|b2a] [QM=RDQMAPP]" >&2
   exit 2
 fi
 

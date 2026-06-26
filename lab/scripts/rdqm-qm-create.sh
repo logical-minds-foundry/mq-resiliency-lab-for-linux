@@ -13,15 +13,17 @@
 #
 # RDQM supports exactly ONE floating IP per queue manager (rdqmint, #216 spike: a second is
 # AMQ3877E). So the FIP is spent on the data plane (VIP) for the app's HA path; the partner
-# (QMSVC) reaches us over net-ext via a per-node CONNAME list, not a second FIP.
+# (RDQMSVC) reaches us over net-ext via a per-node CONNAME list, not a second FIP.
 #
-# Usage: rdqm-qm-create.sh [QM=QMRDQM] [VIP=10.10.1.100] [SVC_CONN]
+# Usage: rdqm-qm-create.sh [QM=RDQMAPP] [VIP=10.10.1.100] [SVC_CONN]
 #   VIP       - site-A single floating IP (data plane); the app rides HA via this addr
-#   SVC_CONN - counterparty CONNAME; when set, define the our-side inter-QM MQSC to QMSVC
+#   SVC_CONN - counterparty CONNAME; when set, define the our-side inter-QM MQSC to RDQMSVC
 set -euo pipefail
-QM="${1:-QMRDQM}"
+QM="${1:-RDQMAPP}"
 VIP="${2:-10.10.1.100}"
 SVC_CONN="${3:-}"
+# Derive the SVC counterparty name from QM (RDQMAPP -> RDQMSVC).
+QM_SVC="${QM/APP/SVC}"
 cd "$(dirname "$0")/../../ansible"
 
 # Lab DR topology (net-wan replication addresses + per-site data VIPs). Fixed for this lab,
@@ -54,7 +56,7 @@ if ansible rdqm-b1 -b -m shell -a "/opt/mqm/bin/rdqmstatus -n" >/dev/null 2>&1; 
 fi
 
 if [ "$DR" = 1 ]; then
-  echo "=== HA/DR detected (site-B group formed) — creating DR/HA QMRDQM, secondaries first ==="
+  echo "=== HA/DR detected (site-B group formed) — creating DR/HA RDQMAPP, secondaries first ==="
   # RDQM requires the HA secondaries created BEFORE the primary even for DR/HA — confirmed
   # live: `crtmqm -sx -rr p` on the primary errors "the secondary queue manager must first be
   # created" and prints the `-sxs -rr p -rl/-ri` command. (IBM's worked example implies the
@@ -69,7 +71,7 @@ if [ "$DR" = 1 ]; then
   add_vip rdqm-b1 "$B_VIP"
   base_mqsc rdqm-a1
 else
-  echo "=== HA-only (no site-B group) — creating site-A QMRDQM ==="
+  echo "=== HA-only (no site-B group) — creating site-A RDQMAPP ==="
   # Secondaries FIRST, then the primary (verified HA-only order).
   run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs $QM || /opt/mqm/bin/dspmq -m $QM"
   run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -fs 3072M $QM || /opt/mqm/bin/dspmq -m $QM"
@@ -77,10 +79,11 @@ else
   base_mqsc rdqm-a1
 fi
 
-# Our-side inter-QM MQSC to QMSVC (#147), only when a counterparty CONNAME is given (the
-# distributed setup). Defined on the site-A primary; replicates with the QM.
+# Our-side inter-QM MQSC to the SVC counterparty (#147), only when a counterparty
+# CONNAME is given (the distributed setup). Defined on the site-A primary; replicates
+# with the QM. QM_SVC is derived from QM (APP -> SVC suffix swap).
 if [ -n "$SVC_CONN" ]; then
-  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE\nDEFINE QLOCAL(QMSVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.QMSVC) REPLACE\nDEFINE CHANNEL($QM.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ(QMSVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL(QMSVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 
 run rdqm-a1 "/opt/mqm/bin/rdqmstatus -m $QM"

@@ -1,7 +1,7 @@
-# Distributed MQ (#147), Native HA arm: the QMNATIVE HA substrate (site-nativeha.yml)
+# Distributed MQ (#147), Native HA arm: the NHARAPP HA substrate (site-nativeha.yml)
 # + the shared, substrate-free SVC/app/channel layer (site-distributed-shared.yml),
 # identical to the pcmk/rdqm arms. Native HA has no floating VIP, so — like the RDQM
-# arm — the partner (QMSVC) reaches QMNATIVE by a CONNAME list of the three
+# arm — the partner (NHARSVC) reaches NHARAPP by a CONNAME list of the three
 # nha_rhel_a net-ext IPs; MQ tries them and connects to whichever instance is active,
 # so the partner link rides a failover with no second IP. Site-A only (Phase 1);
 # site B + CRR is Phase 3 on the same consolidated setup.
@@ -9,16 +9,18 @@
 
 - import_playbook: site-distributed-shared.yml
   vars:
-    our_qm: QMNATIVE
+    our_qm: "{{ qm_app | default('NHARAPP') }}"
     our_conn: "10.60.0.71(1414),10.60.0.72(1414),10.60.0.73(1414)"
 
-# Our-side inter-QM + app MQSC on QMNATIVE. runmqsc must run on the ACTIVE instance;
-# Native HA then replicates the objects to all instances via raft. Mirrors the RDQM
-# arm's our-side MQSC (rdqm-qm-create.sh) and the pcmk arm's inter-qm.mqsc.j2.
+# Our-side inter-QM + app MQSC on the active NHARAPP instance. runmqsc must run on
+# the ACTIVE instance; Native HA then replicates the objects to all instances via
+# raft. Mirrors the RDQM arm's our-side MQSC (rdqm-qm-create.sh) and the pcmk arm's
+# inter-qm.mqsc.j2.
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: QMNATIVE
+    qm_name: "{{ qm_app | default('NHARAPP') }}"
+    qm_svc_name: "{{ qm_svc | default('NHARSVC') }}"
     svc_conn: "10.60.0.50"
   tasks:
     - name: find the active Native HA instance
@@ -45,11 +47,11 @@
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')
         REFRESH SECURITY TYPE(CONNAUTH)
         DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
-        DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME(QMSVC) XMITQ(QMSVC) REPLACE
-        DEFINE QLOCAL(QMSVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.QMSVC) REPLACE
-        DEFINE CHANNEL({{ qm_name }}.QMSVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ(QMSVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-        DEFINE CHANNEL(QMSVC.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
-        START CHANNEL({{ qm_name }}.QMSVC)
+        DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
+        DEFINE QLOCAL({{ qm_svc_name }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.{{ qm_svc_name }}) REPLACE
+        DEFINE CHANNEL({{ qm_name }}.{{ qm_svc_name }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc_name }}) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+        DEFINE CHANNEL({{ qm_svc_name }}.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+        START CHANNEL({{ qm_name }}.{{ qm_svc_name }})
         MQSC
       register: mqsc
       changed_when: true

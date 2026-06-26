@@ -65,7 +65,7 @@
   when: mq_exporter_tls | bool
 
 # Per-QM unit name so the role can stand up more than one instance on the same
-# probe (QMPCMK on :9157, QMSVC on :9158 — #182). A static notify-handler can't
+# probe (PCMKAPP on :9157, PCMKSVC on :9158 — #182). A static notify-handler can't
 # target a per-instance unit, so restart inline when the unit changes.
 - name: exporter systemd unit
   ansible.builtin.template:

@@ -1,11 +1,11 @@
 """App requester -- Business A's application in the distributed flow (client mode).
 
-Connects client-mode to our HA queue manager (QMPCMK) via a CONNAME list of BOTH
-site VIPs, with MQCNO_RECONNECT, so it follows the QM across HA (the floating VIP
-within a data centre) and DR (the other site's VIP -- tried second). Puts a
-request to SVC.REQUEST -- a remote-queue definition that routes across the WAN to
-QMSVC -- and gets the reply from APP.REPLY, matched by CorrelId == the request's
-MsgId, the correlation contract the SVC service honours.
+Connects client-mode to our HA queue manager (PCMKAPP by default) via a CONNAME
+list of BOTH site VIPs, with MQCNO_RECONNECT, so it follows the QM across HA (the
+floating VIP within a data centre) and DR (the other site's VIP -- tried second).
+Puts a request to SVC.REQUEST -- a remote-queue definition that routes across the
+WAN to the SVC counterparty QM -- and gets the reply from APP.REPLY, matched by
+CorrelId == the request's MsgId, the correlation contract the SVC service honours.
 
 This is the normal-path requester. The full controlled-endmqm reconnect/rebuild
 contract (in dr_mqi.py) is exercised by the DR validation (Plan 4), not here.
@@ -27,7 +27,7 @@ DEFAULT_CONN = "10.10.1.200(1414),10.10.2.200(1414)"
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "QMPCMK"))
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "PCMKAPP"))
     ap.add_argument("--conn", default=DEFAULT_CONN)
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--request-queue", default="SVC.REQUEST")

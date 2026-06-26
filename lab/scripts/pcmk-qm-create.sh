@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# lab/scripts/pcmk-qm-create.sh - create QMPCMK on the shared LUN and hand
+# lab/scripts/pcmk-qm-create.sh - create PCMKAPP on the shared LUN and hand
 # it to Pacemaker as a Filesystem -> IPaddr2 -> systemd resource group.
 # The hand-built spelling of what 'crtmqm -sx' + rdqmint did in two
 # commands on the RDQM arm (spec 8.4 verb parity; ledger evidence).
-# Usage: pcmk-qm-create.sh [QM=QMPCMK] [VIP=10.10.1.200]
+# Usage: pcmk-qm-create.sh [QM=PCMKAPP] [VIP=10.10.1.200]
 set -euo pipefail
-QM="${1:-QMPCMK}"
+QM="${1:-PCMKAPP}"
 VIP="${2:-10.10.1.200}"
 cd "$(dirname "$0")/../../ansible"
 

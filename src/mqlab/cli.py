@@ -405,7 +405,7 @@ def _qm_extra_vars(setup_name: str) -> list[str]:
 
 def _obs_qm_args() -> list[str]:
     # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
-    # pcmk-pinned today (site-obs.yml historically hardcoded QMPCMK/QMSVC); #350's
+    # pcmk-pinned today (site-obs.yml historically hardcoded PCMKAPP/PCMKSVC); #350's
     # per-stack observe generalizes this.
     return _qm_extra_vars("distributed-pcmk-ubuntu")
 
@@ -578,7 +578,7 @@ def _render_reach_peers() -> Path:
 _FIXED_PKI_ENTITIES: list[dict[str, Any]] = [
     {"cn": "app-client", "org": "app-org", "ou": "apps", "kind": "personal", "trust": []},
     # Trusts svc-org too: one app-org ops identity that scrapes BOTH QMs (exporter
-    # must validate QMSVC's O=svc-org server cert — #250 / MON.SVRCONN).
+    # must validate the SVC QM's O=svc-org server cert — #250 / MON.SVRCONN).
     {
         "cn": "mq_prometheus",
         "org": "app-org",
