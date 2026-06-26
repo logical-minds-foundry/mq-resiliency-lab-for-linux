@@ -244,3 +244,61 @@ def test_migrate_collision_raises(tmp_path):
     (build / "cache" / "mq").mkdir(parents=True)  # destination already exists
     with pytest.raises(b.BuildEnvError, match="collision"):
         b.migrate(main)
+
+
+# --- vagrant dotfile relocation (#355) ---
+def test_migrate_relocates_vagrant_dotfile(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "lab" / ".vagrant" / "machines").mkdir(parents=True)
+    (main / "lab" / ".vagrant" / "machines" / "id").write_text("dom")
+    planned = b.migrate(main)
+    assert (main / "build" / "state" / "vagrant" / "machines" / "id").read_text() == "dom"
+    assert not (main / "lab" / ".vagrant").exists()
+    assert any(dst.endswith("/build/state/vagrant") for _, dst in planned)
+
+
+def test_migrate_vagrant_dry_run_moves_nothing(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "lab" / ".vagrant").mkdir(parents=True)
+    planned = b.migrate(main, dry_run=True)
+    assert any(dst.endswith("/build/state/vagrant") for _, dst in planned)
+    assert (main / "lab" / ".vagrant").exists()  # untouched
+
+
+def test_migrate_vagrant_collision_raises(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "lab" / ".vagrant").mkdir(parents=True)
+    (main / "build" / "state" / "vagrant").mkdir(parents=True)  # destination already present
+    with pytest.raises(b.BuildEnvError, match="migrate collision"):
+        b.migrate(main)
+
+
+def test_migrate_vagrant_skips_a_symlink(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "elsewhere").mkdir()
+    (main / "lab").mkdir(parents=True)
+    (main / "lab" / ".vagrant").symlink_to(main / "elsewhere")  # already a symlink -> skip
+    assert b.migrate_vagrant_dotfile(main) is None
+
+
+def test_ensure_auto_heals_vagrant_dotfile(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "lab" / ".vagrant" / "machines").mkdir(parents=True)
+    b.ensure(main, run=_real_git(main, main))  # ensure relocates it
+    assert (main / "build" / "state" / "vagrant" / "machines").is_dir()
+    assert not (main / "lab" / ".vagrant").exists()
+
+
+def test_ensure_leaves_existing_vagrant_dotfile_untouched(tmp_path):
+    # auto-heal path with a destination already present: no move, no raise (non-strict).
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    (main / "lab" / ".vagrant").mkdir(parents=True)
+    (main / "build" / "state" / "vagrant").mkdir(parents=True)
+    b.ensure(main, run=_real_git(main, main))  # must not raise
+    assert (main / "lab" / ".vagrant").exists()  # left in place
