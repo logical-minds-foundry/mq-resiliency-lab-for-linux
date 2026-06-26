@@ -1,14 +1,14 @@
-# Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to QMSVC and
+# Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to the SVC QM and
 # run the bindings responder as a systemd service. Expects (set by the caller):
-#   qmgr_name  — the counterparty QM (QMSVC)
-#   our_qm     — our HA QM name (QMPCMK)
+#   qmgr_name  — the counterparty SVC QM (e.g. PCMKSVC, RDQMSVC, NHARSVC)
+#   our_qm     — our HA QM name (e.g. PCMKAPP, RDQMAPP, NHARAPP)
 #   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
-# QMSVC must already be created + started (mq-qmgr role runs first).
+# The SVC QM must already be created + started (mq-qmgr role runs first).
 
-# TLS (#250): wire QMSVC's keystore before the channel MQSC (which now defines
+# TLS (#250): wire the SVC QM's keystore before the channel MQSC (which now defines
 # the channels with SSLCIPH/SSLPEER) — else the RCVR/SDR have no cert. Verified
 # live: channels run TLS 1.3, SSLPEER enforced with CHLAUTH disabled.
-- name: place QMSVC keystore on its host
+- name: place {{ qmgr_name }} keystore on its host
   ansible.builtin.include_role:
     name: pki-distribute
   vars:
@@ -53,7 +53,7 @@
   become_user: mqm
 
 # TLS (#250): the responder is a SVRCONN *client* (client-mode to localhost), so
-# it needs its own cert + a .sth stash, distinct from QMSVC's server keystore
+# it needs its own cert + a .sth stash, distinct from the SVC QM's server keystore
 # above. SSLPEER on SVC.SVRCONN matches O=svc-org (svc-responder is svc-org).
 - name: place the svc-responder keystore (TLS)
   ansible.builtin.include_role:

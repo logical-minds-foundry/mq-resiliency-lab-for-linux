@@ -1,5 +1,5 @@
 # Shared distributed-MQ layer (RDQM-parity §4): the substrate-FREE SVC counterparty
-# (QMSVC) + the their-side inter-QM channels + the app (requester) message path.
+# ({{ qm_svc }}) + the their-side inter-QM channels + the app (requester) message path.
 # Imported by each arm's distributed playbook OVER its own app QM substrate —
 # site-distributed.yml (Pacemaker) and site-rdqm-distributed.yml (RDQM, Plan B) — so
 # both arms run the identical SVC/app code. The importer supplies `our_qm` (this

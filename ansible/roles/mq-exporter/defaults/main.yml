@@ -2,7 +2,7 @@
 # mq_prometheus exporter — client-mode target (the instrumented subject is our
 # HA QM, reached via its data-plane VIP so the exporter follows it across
 # failover). Override per QM instance from site-obs.yml.
-mq_exporter_qm: "{{ qm_app | default('QMPCMK') }}"
+mq_exporter_qm: "{{ qm_app | default('PCMKAPP') }}"
 # Per-instance unit suffix so the probe can run one exporter per QM (#182).
 mq_exporter_instance: "{{ mq_exporter_qm | lower }}"
 mq_exporter_conn: "10.10.1.200(1414)"
@@ -21,8 +21,8 @@ mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
 # gate). The app queue + our outbound xmitq + the app reply queue.
-mq_exporter_monitored_queues: "HA.TEST,{{ qm_svc | default('QMSVC') }},APP.REPLY"
-mq_exporter_monitored_channels: "APP.SVRCONN,{{ chl_to_svc | default('QMPCMK.QMSVC') }},{{ chl_to_app | default('QMSVC.QMPCMK') }}"
+mq_exporter_monitored_queues: "HA.TEST,{{ qm_svc | default('PCMKSVC') }},APP.REPLY"
+mq_exporter_monitored_channels: "APP.SVRCONN,{{ chl_to_svc | default('PCMKAPP.PCMKSVC') }},{{ chl_to_app | default('PCMKSVC.PCMKAPP') }}"
 # mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
 # cold boot confirms the build — master is a placeholder for reproducibility.
 mq_exporter_ref: master

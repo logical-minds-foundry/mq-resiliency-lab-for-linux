@@ -9,5 +9,5 @@
 
 - import_playbook: site-distributed-shared.yml
   vars:
-    our_qm: "{{ qm_app | default('QMPCMK') }}"
+    our_qm: "{{ qm_app | default('PCMKAPP') }}"
     our_conn: "10.60.0.10(1414),10.60.0.20(1414)"

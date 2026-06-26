@@ -1,7 +1,7 @@
 ---
 # Place one lab-pki entity's PKCS#12 keystore on the host that uses it, and
 # source its (persisted-once) password from the controller. Caller sets:
-#   pki_entity     — the entity CN (e.g. QMPCMK)
+#   pki_entity     — the entity CN (e.g. PCMKAPP)
 #   pki_dest_dir   — where on the target host the keystore lands
 #   pki_owner      — file owner (default mqm)
 # Registers `pki_keyrpwd` (stdout = the keystore password; no_log).

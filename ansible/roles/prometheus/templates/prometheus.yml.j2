@@ -13,7 +13,7 @@ scrape_configs:
   # mq_prometheus exporters on mon-probe (net-mgmt), client-mode against each QM.
   # Metrics are keyed by qmgr= (not the host), so the panel follows the QM across
   # failover while the scrape target stays fixed here (#172). One job per QM:
-  # QMPCMK on :9157 (our HA QM), QMSVC on :9158 (the SVC counterparty, #182).
+  # PCMKAPP on :9157 (our HA QM), PCMKSVC on :9158 (the SVC counterparty, #182).
   - job_name: ibmmq
     static_configs:
       - targets: ["10.50.0.3:9157"]

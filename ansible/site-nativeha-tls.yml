@@ -3,8 +3,8 @@
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: QMNATIVE
-    ks_cn: QMNATIVE
+    qm_name: "{{ qm_app | default('NHARAPP') }}"
+    ks_cn: "{{ qm_app | default('NHARAPP') }}"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
     - name: restart mqmonitor@ to pick up TLS
