@@ -42,6 +42,14 @@
 #     fenced peer in ~30s -- the client HA-cooperation contract (#64). (#148) ---
 - hosts: app
   become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+
+- hosts: app
+  become: true
   roles: [mq-client]
 
 - hosts: app
