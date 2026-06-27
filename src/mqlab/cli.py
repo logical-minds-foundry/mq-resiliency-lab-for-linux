@@ -404,19 +404,43 @@ def _libvirt_pool_env() -> dict[str, str]:
     return {"MQLAB_LIBVIRT_POOL": name} if name else {}
 
 
+def _probe_pool_state(deps: Deps, name: str) -> str:
+    """The named libvirt pool's current state (ACTIVE/INACTIVE/ABSENT) from a live
+    `virsh pool-list --all` probe — so ensure can emit only the steps still needed."""
+    states = _probe(deps, Command([*_VIRSH, "pool-list", "--all"]), libvirtpool.parse_pool_states)  # noqa: S607
+    return libvirtpool.pool_state(states, name)
+
+
 def _ensure_libvirt_pool(*, step: bool) -> None:
     """Idempotently ensure the dedicated libvirt image pool exists before `vagrant up`.
 
     No-op on local (host-mount build/): the override is None, so no pool is created
-    and the default pool stands (local behavior unchanged, #376). On cloud, define +
-    build + start + autostart the dir pool at the local work bucket's libvirt-images
-    subdir, through the step runner like every other host-side op."""
+    and the default pool stands (local behavior unchanged, #376). On cloud, probe the
+    pool's live state and emit ONLY the lifecycle steps it still needs (look before
+    leaping, #99) so a re-run / `--from` resume never fails on an already-built or
+    already-active pool. The pool backs the local work bucket's libvirt-images subdir,
+    driven through the step runner like every other host-side op."""
     name = _libvirt_pool_override()
     if not name:
         return
     target = libvirtpool.images_target(repo_root(), bucket=buildenv.bucket_path)
     target.mkdir(parents=True, exist_ok=True)
-    _execute("libvirt-pool", libvirtpool.pool_ensure_steps(name, target), step_mode=step)
+    deps = build_deps("libvirt-pool", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        state = _probe_pool_state(deps, name)
+        steps = libvirtpool.pool_ensure_steps(name, target, state=state)
+        run_steps(
+            steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=step,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
 
 
 commons_app = typer.Typer(
@@ -1438,6 +1462,16 @@ def _bootstrap_run(
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
+        # The vms phase's `vagrant up` step carries env=None, so it inherits this
+        # process's environment. Export the vagrant env up front so that bring-up
+        # sees BOTH VAGRANT_DOTFILE_PATH (the shared #355 dotfile, so it drives the
+        # one canonical lab even from a worktree that never created it) AND
+        # MQLAB_LIBVIRT_POOL (#376, set only on cloud) so images land on the data
+        # disk's pool, not the boot disk's default. Mirrors _ssh_into's
+        # os.environ.update(_vagrant_env()); the secret injection below is the same
+        # sequencer-owns-the-env pattern (#373). On local the pool key is absent, so
+        # behavior is unchanged.
+        os.environ.update(_vagrant_env())
         states = _probe_all(deps, stack)
         selected = _select_phases(stack, states, only=only, from_phase=from_phase)
         if not selected:

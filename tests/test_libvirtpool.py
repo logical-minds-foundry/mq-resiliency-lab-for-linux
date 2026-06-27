@@ -70,18 +70,80 @@ def test_images_target_is_a_local_work_bucket_subdir() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# pool_ensure_steps — the idempotent virsh define/build/start/autostart steps
+# parse_pool_states / pool_state — the live-state read that makes ensure re-run-safe
 # --------------------------------------------------------------------------- #
-def test_pool_ensure_steps_emit_the_virsh_lifecycle() -> None:
-    steps = libvirtpool.pool_ensure_steps("mqlab-images", Path("/data/images"))
-    argvs = [s.command.argv for s in steps]
+POOL_LIST = (
+    " Name           State      Autostart\n"
+    "-------------------------------------\n"
+    " default        active     yes\n"
+    " mqlab-images   inactive   no\n"
+)
+
+
+def test_parse_pool_states_reads_name_and_state() -> None:
+    states = libvirtpool.parse_pool_states(POOL_LIST)
+    assert states == {"default": "active", "mqlab-images": "inactive"}
+
+
+def test_parse_pool_states_skips_short_and_header_rows() -> None:
+    # A malformed single-column row is skipped (covers the len(parts) < 2 guard).
+    states = libvirtpool.parse_pool_states("Name State\n----\nlonely\n default active\n")
+    assert states == {"default": "active"}
+
+
+def test_pool_state_absent_when_not_listed() -> None:
+    assert libvirtpool.pool_state({}, "mqlab-images") == libvirtpool.ABSENT
+
+
+def test_pool_state_active_and_inactive() -> None:
+    states = {"mqlab-images": "active", "other": "inactive"}
+    assert libvirtpool.pool_state(states, "mqlab-images") == libvirtpool.ACTIVE
+    assert libvirtpool.pool_state(states, "other") == libvirtpool.INACTIVE
+
+
+# --------------------------------------------------------------------------- #
+# pool_ensure_steps — emits ONLY the lifecycle steps the current state needs
+# --------------------------------------------------------------------------- #
+def _subcmds(steps) -> list[str]:
+    # the virsh subcommand of each step (e.g. pool-define-as) — the position after
+    # the qemu:///system connect URI in _VIRSH.
+    return [s.command.argv[s.command.argv.index("qemu:///system") + 1] for s in steps]
+
+
+def test_absent_pool_runs_full_lifecycle() -> None:
+    steps = libvirtpool.pool_ensure_steps(
+        "mqlab-images", Path("/data/images"), state=libvirtpool.ABSENT
+    )
     virsh = libvirtpool._VIRSH
-    assert argvs == [
+    assert [s.command.argv for s in steps] == [
         [*virsh, "pool-define-as", "mqlab-images", "dir", "--target", "/data/images"],
         [*virsh, "pool-build", "mqlab-images"],
         [*virsh, "pool-start", "mqlab-images"],
         [*virsh, "pool-autostart", "mqlab-images"],
     ]
+
+
+def test_absent_is_the_default_state() -> None:
+    # No state kwarg -> ABSENT -> full lifecycle (back-compat default).
+    steps = libvirtpool.pool_ensure_steps("mqlab-images", Path("/data/images"))
+    assert _subcmds(steps) == ["pool-define-as", "pool-build", "pool-start", "pool-autostart"]
+
+
+def test_inactive_pool_skips_define() -> None:
+    # Defined but not running: build + start + autostart, NO re-define.
+    steps = libvirtpool.pool_ensure_steps(
+        "mqlab-images", Path("/data/images"), state=libvirtpool.INACTIVE
+    )
+    assert _subcmds(steps) == ["pool-build", "pool-start", "pool-autostart"]
+
+
+def test_active_pool_only_reasserts_autostart() -> None:
+    # Already active: only autostart (a safe no-op re-assert) — never re-build/start
+    # an active pool, which can exit non-zero and halt a --from resume.
+    steps = libvirtpool.pool_ensure_steps(
+        "mqlab-images", Path("/data/images"), state=libvirtpool.ACTIVE
+    )
+    assert _subcmds(steps) == ["pool-autostart"]
 
 
 def test_pool_ensure_steps_are_labeled() -> None:

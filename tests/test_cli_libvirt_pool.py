@@ -13,12 +13,30 @@ I/O and wire the override into the bring-up:
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
+from rich.console import Console
 
 from mqlab import cli, libvirtpool
+from mqlab.render import Renderer
+from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
+
+
+class _NoPause:
+    def wait(self) -> None:
+        return None
+
+
+def _pool_deps(runner):
+    return cli.Deps(
+        runner=runner,
+        renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=80)),
+        transcript=Transcript(transcript_path("libvirt-pool", "20260627T000000Z")),
+        pauser=_NoPause(),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -73,31 +91,80 @@ def test_vagrant_env_omits_pool_on_host_mount(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # _ensure_libvirt_pool — the host-side pool create, before `vagrant up`
 # --------------------------------------------------------------------------- #
-def test_ensure_libvirt_pool_runs_virsh_on_real_disk(monkeypatch, tmp_path):
+def _subcmds(commands) -> list[str]:
+    return [c.argv[c.argv.index("qemu:///system") + 1] for c in commands]
+
+
+def _pool_list(state_line: str = ""):
+    lines = [" Name           State      Autostart", "----------------------------------"]
+    if state_line:
+        lines.append(state_line)
+    return ScriptedResult(lines)
+
+
+def test_ensure_libvirt_pool_full_lifecycle_when_absent(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     monkeypatch.setattr(cli, "_libvirt_pool_override", lambda: "mqlab-images")
-    captured: list[list[str]] = []
-
-    def fake_execute(verb, steps, *, step_mode):
-        captured.extend(s.command.argv for s in steps)
-
-    monkeypatch.setattr(cli, "_execute", fake_execute)
+    # 1st call: the pool-list probe (pool ABSENT); then define/build/start/autostart.
+    runner = RecordingRunner(results=[_pool_list()] + [ScriptedResult([]) for _ in range(4)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
     cli._ensure_libvirt_pool(step=False)
-    # define -> build -> start -> autostart, all against the dedicated pool name
-    assert captured[0][:2] == ["virsh", "-c"]
-    subcmds = [argv[argv.index("qemu:///system") + 1] for argv in captured]
-    assert subcmds == ["pool-define-as", "pool-build", "pool-start", "pool-autostart"]
+    # the probe ran first, then the full lifecycle against the dedicated pool name
+    assert _subcmds(runner.recorded) == [
+        "pool-list",
+        "pool-define-as",
+        "pool-build",
+        "pool-start",
+        "pool-autostart",
+    ]
     # the target dir is the local work bucket's libvirt-images subdir
-    define = captured[0]
+    define = runner.recorded[1].argv
     target = define[define.index("--target") + 1]
     assert target.endswith("build/work/libvirt-images")
+
+
+def test_ensure_libvirt_pool_active_only_reasserts_autostart(monkeypatch, tmp_path):
+    # Re-run safety: an already-active pool must NOT be re-built/re-started (those can
+    # exit non-zero and halt a --from resume) — only autostart is re-asserted.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_libvirt_pool_override", lambda: "mqlab-images")
+    runner = RecordingRunner(
+        results=[_pool_list(" mqlab-images   active     yes"), ScriptedResult([])]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
+    cli._ensure_libvirt_pool(step=False)
+    assert _subcmds(runner.recorded) == ["pool-list", "pool-autostart"]
+
+
+def test_ensure_libvirt_pool_inactive_skips_define(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_libvirt_pool_override", lambda: "mqlab-images")
+    runner = RecordingRunner(
+        results=[_pool_list(" mqlab-images   inactive   no")]
+        + [ScriptedResult([]) for _ in range(3)]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
+    cli._ensure_libvirt_pool(step=False)
+    assert _subcmds(runner.recorded) == ["pool-list", "pool-build", "pool-start", "pool-autostart"]
+
+
+def test_ensure_libvirt_pool_fails_loud_on_step_failure(monkeypatch, tmp_path):
+    # A genuine error (e.g. pool-define-as exits non-zero) is NOT swallowed —
+    # it surfaces as a typer.Exit carrying the step's exit code (fail-loud).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_libvirt_pool_override", lambda: "mqlab-images")
+    runner = RecordingRunner(results=[_pool_list(), ScriptedResult(["boom"], exit_code=3)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
+    with pytest.raises(cli.typer.Exit) as exc:
+        cli._ensure_libvirt_pool(step=False)
+    assert exc.value.exit_code == 3
 
 
 def test_ensure_libvirt_pool_noop_on_host_mount(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     monkeypatch.setattr(cli, "_libvirt_pool_override", lambda: None)
     monkeypatch.setattr(
-        cli, "_execute", lambda *a, **k: pytest.fail("local must run no virsh pool ops")
+        cli, "build_deps", lambda v, t: pytest.fail("local must run no virsh pool ops")
     )
     cli._ensure_libvirt_pool(step=False)  # no-op, no failure
 
@@ -152,3 +219,79 @@ def test_build_fstype_fails_loud_when_findmnt_errors(monkeypatch):
     monkeypatch.setattr(cli, "SubprocessRunner", lambda: runner)
     with pytest.raises(RuntimeError):
         cli._build_fstype(Path("/repo/build"))
+
+
+# --------------------------------------------------------------------------- #
+# CRITICAL — the override actually REACHES the vms-phase `vagrant up`.
+#
+# The vms-phase step carries env=None, so it inherits this process's environment.
+# _bootstrap_run must export _vagrant_env() (VAGRANT_DOTFILE_PATH + the #376 pool
+# override) before the phase loop. This snapshots os.environ at the moment the
+# `vagrant up` command runs to prove the var is present then — the gap the earlier
+# tests (which only asserted _vagrant_env() CONTAINS the var) missed.
+# --------------------------------------------------------------------------- #
+class _EnvSnapshotRunner:
+    """Records commands and, for each, the os.environ value of a watched key."""
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+        self.recorded: list = []
+        self.env_at: list[str | None] = []
+
+    def run(self, command, on_line) -> int:
+        import os
+
+        self.recorded.append(command)
+        self.env_at.append(os.environ.get(self.key))
+        return 0
+
+
+def test_bootstrap_vms_up_inherits_pool_env(monkeypatch, tmp_path):
+    from tests.test_cli_bootstrap import _seed, _states
+
+    _seed(monkeypatch, tmp_path)
+    # cloud path: build/ is a real disk -> override active.
+    monkeypatch.setattr(cli, "_build_fstype", lambda p: "ext4")
+    # only the vms phase is unsatisfied -> the sequencer runs `vagrant up`.
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=True, vms=False))
+    # neutralise the vms-phase prereqs (boxes/mq/pool) and secret sourcing — the
+    # focus is purely whether `vagrant up` inherits MQLAB_LIBVIRT_POOL.
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"s-{name}")
+
+    runner = _EnvSnapshotRunner("MQLAB_LIBVIRT_POOL")
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
+    monkeypatch.delenv("MQLAB_LIBVIRT_POOL", raising=False)
+
+    from typer.testing import CliRunner
+
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "vms"])
+    assert result.exit_code == 0
+    # exactly one command ran (the vagrant up step), and at that moment the pool
+    # override was present in os.environ -> the env=None subprocess inherits it.
+    vagrant_idx = next(i for i, c in enumerate(runner.recorded) if c.argv[0] == "vagrant")
+    assert runner.recorded[vagrant_idx].env is None  # inherits os.environ, not a per-cmd env
+    assert runner.env_at[vagrant_idx] == libvirtpool.POOL_NAME
+    monkeypatch.delenv("MQLAB_LIBVIRT_POOL", raising=False)
+
+
+def test_bootstrap_vms_up_no_pool_env_on_host_mount(monkeypatch, tmp_path):
+    from tests.test_cli_bootstrap import _seed, _states
+
+    _seed(monkeypatch, tmp_path)
+    # local path: build/ is a virtiofs host-mount -> NO override, NO env var.
+    monkeypatch.setattr(cli, "_build_fstype", lambda p: "virtiofs")
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=True, vms=False))
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"s-{name}")
+
+    runner = _EnvSnapshotRunner("MQLAB_LIBVIRT_POOL")
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _pool_deps(runner))
+    monkeypatch.delenv("MQLAB_LIBVIRT_POOL", raising=False)
+
+    from typer.testing import CliRunner
+
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "vms"])
+    assert result.exit_code == 0
+    vagrant_idx = next(i for i, c in enumerate(runner.recorded) if c.argv[0] == "vagrant")
+    assert runner.env_at[vagrant_idx] is None  # local stays on the default pool

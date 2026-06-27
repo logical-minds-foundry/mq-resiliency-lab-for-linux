@@ -74,21 +74,64 @@ def images_target(repo: Path, *, bucket: Callable[[str, Path], Path]) -> Path:
     return bucket("work", repo) / "libvirt-images"
 
 
-def pool_ensure_steps(name: str, target: Path) -> list[CommandStep]:
-    """The idempotent virsh steps that ensure a dir pool exists at `target`.
+# Pool states virsh reports (the State column of `virsh pool-list --all`). A pool
+# this code has never created is ABSENT (not in the listing at all).
+ACTIVE = "active"
+INACTIVE = "inactive"
+ABSENT = "absent"
 
-    Mirrors the net phase's define/autostart/start triple, extended with the
-    pool-build step a dir pool needs. virsh treats a re-define / re-build /
-    re-start of an existing pool as a no-op (or a tolerated already-exists), so
-    the sequence is idempotent. Glass-box: each runs through the step runner like
-    every other host-side op.
+
+def parse_pool_states(text: str) -> dict[str, str]:
+    """Parse `virsh pool-list --all` output -> {pool_name: state}.
+
+    Same Name / State / Autostart / Persistent column layout as
+    `virsh net-list --all` (name first, state second), so it parses identically.
     """
-    return [
-        CommandStep(
-            f"{name} pool define",
-            Command([*_VIRSH, "pool-define-as", name, "dir", "--target", str(target)]),
-        ),
-        CommandStep(f"{name} pool build", Command([*_VIRSH, "pool-build", name])),
-        CommandStep(f"{name} pool start", Command([*_VIRSH, "pool-start", name])),
-        CommandStep(f"{name} pool autostart", Command([*_VIRSH, "pool-autostart", name])),
-    ]
+    states: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("Name") or set(line) <= {"-"}:
+            continue
+        parts = line.split()
+        if len(parts) < 2:  # noqa: PLR2004 - a Name+State row needs two columns
+            continue
+        states[parts[0]] = parts[1]
+    return states
+
+
+def pool_state(states: dict[str, str], name: str) -> str:
+    """The pool's state from a parsed pool listing: ACTIVE / INACTIVE / ABSENT."""
+    raw = states.get(name)
+    if raw is None:
+        return ABSENT
+    return ACTIVE if raw == ACTIVE else INACTIVE
+
+
+def pool_ensure_steps(name: str, target: Path, *, state: str = ABSENT) -> list[CommandStep]:
+    """The virsh steps that bring a dir pool at `target` to defined+built+active+
+    autostart, emitting ONLY the steps the current `state` still needs.
+
+    Idempotency is by looking before leaping (the #99 pattern), NOT by tolerating
+    non-zero exits: `pool-build`/`pool-start` on an already-built/active pool can
+    exit non-zero on some libvirt versions, which would fail-loud and halt a
+    `--from` resume. So:
+      ABSENT   -> define + build + start + autostart (full lifecycle)
+      INACTIVE -> build + start + autostart (defined but not running; build is
+                  cheap+safe on a dir pool whose directory already exists)
+      ACTIVE   -> autostart only (re-asserting autostart is a safe no-op)
+    Every genuine error still surfaces (fail-loud). Glass-box: each runs through
+    the step runner like every other host-side op.
+    """
+    steps: list[CommandStep] = []
+    if state == ABSENT:
+        steps.append(
+            CommandStep(
+                f"{name} pool define",
+                Command([*_VIRSH, "pool-define-as", name, "dir", "--target", str(target)]),
+            )
+        )
+    if state in (ABSENT, INACTIVE):
+        steps.append(CommandStep(f"{name} pool build", Command([*_VIRSH, "pool-build", name])))
+        steps.append(CommandStep(f"{name} pool start", Command([*_VIRSH, "pool-start", name])))
+    steps.append(CommandStep(f"{name} pool autostart", Command([*_VIRSH, "pool-autostart", name])))
+    return steps
