@@ -81,10 +81,10 @@ def _topology() -> dict[str, Any]:
 
 
 def _commons_members() -> list[str]:
-    """Hosts of the shared observability stack (commons: obs_box + probe groups).
+    """Hosts of the shared commons set (commons: groups — obs_box + probe + svc + app).
 
-    Read the same way stack_members reads a stack's groups, so the obs/mon-probe
-    VMs the vms phase must bring up come from one source (topology), not a literal.
+    Read the same way stack_members reads a stack's groups, so the commons VMs the
+    vms phase must bring up come from one source (topology), not a literal.
     """
     data = _topology()
     all_groups: dict[str, list[str]] = {

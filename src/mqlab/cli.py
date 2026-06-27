@@ -1111,7 +1111,7 @@ def _qm_script(stack: Stack, script: str, verb: str) -> None:
     # Run a lab script with the rdqm-qm-create contract: QM, the single data-plane
     # floating IP (RDQM allows one FIP per QM, #216 spike), and (when set) the
     # counterparty CONNAME for the inter-QM MQSC. The partner reaches us over net-ext
-    # by per-node CONNAME list (site-rdqm-distributed.yml our_conn), not a second VIP.
+    # by per-node CONNAME list (site-rdqm.yml our_conn), not a second VIP.
     qm = stack.qm
     argv = ["bash", str(lab_script(script)), qm.qm_app, qm.vip, qm.svc_conn or ""]
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))

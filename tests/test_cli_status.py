@@ -7,15 +7,10 @@ and `PHASES[i].satisfied(stack, states)`.
 
 from __future__ import annotations
 
-import io
-
-from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
 from mqlab.phases import build_states
-from mqlab.render import Renderer
-from mqlab.transcript import Transcript, transcript_path
 
 # Topology mirroring test_cli_bootstrap.py: two stacks, one reserved.
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
@@ -99,20 +94,6 @@ def _states(*, net=True, vms=True, provision=False, observe=False):
     ]
     domains = {f"lab_{g}": "running" for g in guests} if vms else {}
     return build_states(nets=nets, domains=domains, qm_up=provision, observe=observe)
-
-
-class _NoPause:
-    def wait(self) -> None:
-        return None
-
-
-def _deps(runner):
-    return cli.Deps(
-        runner=runner,
-        renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=120)),
-        transcript=Transcript(transcript_path("status", "20260627T000000Z")),
-        pauser=_NoPause(),
-    )
 
 
 # --------------------------------------------------------------------------- #

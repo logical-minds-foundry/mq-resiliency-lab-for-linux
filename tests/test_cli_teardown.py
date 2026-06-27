@@ -182,9 +182,12 @@ def test_teardown_commons_flag_forces_commons_destroy(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     labels = [s.label for s in captured]
-    # At least one step must be for commons (label contains "commons")
-    commons_labels = [lbl for lbl in labels if "commons" in lbl]
-    assert commons_labels, f"expected commons steps with --commons, got labels: {labels}"
+    # Every commons VM must get a "commons destroy:" step (the prefix distinguishes
+    # them from stack-member steps); rdqm-rhel's own members are torn down too.
+    for host in ("obs", "mon-probe", "svc-sim", "app-client"):
+        assert any(lbl.startswith("commons destroy:") and host in lbl for lbl in labels), (
+            f"commons VM {host!r} not destroyed under --commons; labels: {labels}"
+        )
 
 
 def test_teardown_last_one_out_destroys_commons(monkeypatch, tmp_path):
@@ -369,15 +372,6 @@ def _deps_with_runner(runner):
         renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=80)),
         transcript=Transcript(transcript_path("teardown", "20260627T000000Z")),
         pauser=_NoPause(),
-    )
-
-
-def _deps_with_pauser(pauser):
-    return cli.Deps(
-        runner=_FailRunner(),
-        renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=80)),
-        transcript=Transcript(transcript_path("teardown", "20260627T000000Z")),
-        pauser=pauser,
     )
 
 

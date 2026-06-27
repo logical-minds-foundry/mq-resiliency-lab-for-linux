@@ -8,6 +8,8 @@ registry with plain dicts and assert the emitted CommandStep argv/labels.
 
 from __future__ import annotations
 
+import pytest
+
 from mqlab.orchestrator import CommandStep
 from mqlab.phases import PHASES, build_states, first_unsatisfied
 from mqlab.stacks import lab_stacks
@@ -174,12 +176,21 @@ def test_net_build_steps_define_autostart_start(monkeypatch, tmp_path):
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[0].build_steps(stack, None)
     assert all(isinstance(s, CommandStep) for s in steps)
-    labels = [s.label for s in steps]
+    by_label = {s.label: s for s in steps}
     # each lab net gets define + autostart + start
-    assert "net-mgmt define" in labels
-    assert "net-mgmt autostart" in labels
-    assert "net-mgmt start" in labels
-    assert "net-data-a define" in labels
+    assert "net-mgmt define" in by_label
+    assert "net-mgmt autostart" in by_label
+    assert "net-mgmt start" in by_label
+    assert "net-data-a define" in by_label
+    # the define step runs `virsh net-define <xml>`; autostart/start run net-autostart/net-start
+    assert by_label["net-mgmt define"].command.argv[:4] == [
+        "virsh",
+        "-c",
+        "qemu:///system",
+        "net-define",
+    ]
+    assert by_label["net-mgmt autostart"].command.argv[-2:] == ["net-autostart", "net-mgmt"]
+    assert by_label["net-mgmt start"].command.argv[-2:] == ["net-start", "net-mgmt"]
 
 
 def test_vms_build_steps_vagrant_up_members_and_commons(monkeypatch, tmp_path):
@@ -238,12 +249,8 @@ def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
     (lab / "networks").mkdir(parents=True)
     (lab / "topology.yaml").write_text(topo)
     stack = lab_stacks()["nativeha-ubuntu"]
-    try:
+    with pytest.raises(ValueError, match="provision"):
         PHASES[2].build_steps(stack, None)
-    except ValueError as exc:
-        assert "provision" in str(exc)
-    else:  # pragma: no cover - the call above must raise
-        raise AssertionError("expected ValueError for a stack with no provision playbook")
 
 
 def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
