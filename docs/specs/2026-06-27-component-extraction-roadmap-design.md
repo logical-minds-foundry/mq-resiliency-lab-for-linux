@@ -110,21 +110,58 @@ bundle-spec implementation detail, **not** decided here.
 ### 4.2 `mq-resiliency-logging`
 
 The `alloy` and `loki` roles (generic log transport, no MQ specificity) plus the
-`mq-diag-logging` role (the MQ-specific gem: the `mqs.ini`
-`DiagnosticMessagesTemplate` that routes MQ diagnostics to syslog/journald, and
-the journald rate-limit drop-in that prevents silent log loss). Published as
-Ansible roles. Independent of the observability bundle.
+`mq-diag-logging` role (the MQ-specific piece: the `DiagnosticMessagesTemplate`
+configuration that routes MQ diagnostics to syslog/journald, and the journald
+rate-limit drop-in that prevents silent log loss). Published as Ansible roles.
+Independent of the observability bundle.
+
+**Queue-manager boundary (decided in review).** The diagnostic configuration
+must ultimately take effect in a queue manager's `qm.ini`, but
+`mq-resiliency-logging` **never edits `qm.ini`** — not even existing files at
+install time:
+
+- `qm.ini` is a *multi-author* file: the operator writes it **and** MQ itself
+  rewrites it over time. The *supported* way to customize it is not hand-editing
+  but supplying a static stanza file registered at `crtmqm` time, which MQ then
+  preserves across its own updates. Editing `qm.ini` directly is therefore both
+  unsupported and unsafe — our change can be lost or clobbered. (The exact
+  supported mechanism/flags get pinned against IBM 9.4 docs in the logging
+  component's own spec.)
+- We ship **our** artifact — the required `DiagnosticMessagesTemplate` as a
+  documented static ini stanza — plus the journald and Alloy/Loki config we
+  fully own. Wiring the stanza into each queue manager via the supported
+  mechanism is the **operator's** responsibility, declared as a hard
+  prerequisite. This holds especially on multi-tenant hosts running many queue
+  managers, where only the operator controls how each `qm.ini` is written.
+- We **never restart** a queue manager: we can't assume *how* it is started
+  (systemd / custom rc / manual — MQ is not standardized here), and a running QM
+  is not ours to touch.
+- **No silent failure at the boundary.** A startup/preflight self-check detects
+  when the diagnostic template is not in effect for a monitored queue manager and
+  surfaces it as a loud, detectable signal (a log line and/or a health metric).
+  We cannot fix a boundary we don't own, but we refuse to hide it.
 
 ### 4.3 De-hardcoding required for extraction
 
-The dashboard generator currently bakes in lab specifics that must become
-profile inputs: Ansible group selectors (`groups=~"pcmk_a|pcmk_b"`), QM resource
-names (`mq_qm`, `NHARAPP`, `RDQMAPP`), host-name patterns (`nha-rhel-.*`),
-libvirt device patterns (`virbr-*`), network-plane lists, datasource UIDs
-(`prometheus`/`loki`), and the topology file path. The coupling is shallow and
+The dashboard generator still bakes in lab specifics that must become
+parameters: Ansible group selectors (`groups=~"pcmk_a|pcmk_b"`), **queue-manager
+names** (`NHARAPP`, `RDQMAPP`, `PCMKAPP`/`PCMKSVC`), **Pacemaker/DRBD resource
+names** (`mq_qm`, `qmrdqm`, `qmrdqm.dr`), host-name patterns (`nha-rhel-.*`,
+`rdqm-.*`), libvirt device patterns (`virbr-*`), network-plane lists, datasource
+UIDs (`prometheus`/`loki`), and the topology file path.
+
+This de-hardcoding is **already an in-flight lab workstream**, not greenfield:
+`src/mqlab/setups.py` is the established single source of truth for queue-manager
+names (landed via #351 / #353 / #363, with the #313 goal that the cockpit boards
+be QM-parameterized from one source), and the dashboard layer is the part that
+still lags. The extraction therefore **derives its parameterization from that
+existing source of truth — it must not introduce a second, competing one.** Note
+the coupling is wider than the QM name: the contract also pins Pacemaker/DRBD
+*resource* names (see §9), which `setups.py` does not by itself cover, so the
+bundle must carry those in its profile too. The coupling is shallow and
 mechanical — `render_cluster_dashboard(topo, arm, ds_uid)` already takes
-parameters; the work is removing the wrappers that re-hardcode them. This is
-detailed in the bundle's own spec, not here.
+parameters; the work is removing the wrappers that re-hardcode them. Detailed in
+the bundle's own spec, not here.
 
 ## 5. Source-of-truth & dependency architecture
 
@@ -142,10 +179,11 @@ lab (pure consumer)
 
 The split is **capability vs configuration**: the published packages provide the
 capability; the lab provides the topology-specific configuration that points the
-capability at this particular deployment. No intra-family cross-repo dependency
-remains — the contract is internal to the observability bundle, and logging is
-independent. The lab becomes a reference deployment that wires published parts
-together.
+capability at this particular deployment. In the lab, those configuration values
+come from the existing `setups.py` source of truth (§4.3), not a new mechanism
+invented for rendering. No intra-family cross-repo dependency remains — the
+contract is internal to the observability bundle, and logging is independent. The
+lab becomes a reference deployment that wires published parts together.
 
 ## 6. The dogfooding migration pattern (canonical, gated)
 
@@ -176,6 +214,10 @@ A component is **"extracted"** only when all six steps are complete.
    the full pipeline (RPM build, public publish, lab dogfood, cold-rebuild
    verify). Doing it first means the scary parts surface early, on the piece most
    worth the pain.
+   - **Precondition:** the in-flight QM-naming de-hardcoding (#351 / #313) must
+     reach the dashboard layer first — or be folded into this bundle's own step 1
+     (extract & scrub) — so the bundle isn't extracted against code another
+     workstream is still actively rewriting (see §4.3).
 2. **`mq-resiliency-logging`** — repeat the now-known-good pattern. Lower risk,
    independent, mostly generic.
 
@@ -186,6 +228,15 @@ at a time.
 
 ## 8. Conventions
 
+- **Boundary principle (ownership).** These are generic OSS components: they
+  configure only what they own (their own package files and config) and they
+  **declare requirements on, and loudly verify, what they don't** — but they
+  never reach across the boundary to mutate state they cannot safely assume they
+  control: a consumer's `qm.ini`, a running queue manager, the operator's
+  start/stop mechanism. In the lab we own everything; an external adopter does
+  not, and the components must hold that line. §4.2 is the canonical case (we
+  ship the diagnostic config as our artifact, never edit `qm.ini`, never restart
+  a QM, and self-check + signal when the prerequisite isn't met).
 - **Naming.** Provenance prefix `mq-resiliency-`; **no platform suffix** on
   components (they are generic across modern Unix — Linux, AIX, Solaris). The
   `-for-<platform>` suffix is reserved for artifacts that *bundle* OS-specific
@@ -217,6 +268,14 @@ The contract has two halves, both versioned inside the bundle:
    label (from Ansible inventory groups) and host-name patterns. A stock
    Prometheus will not have these unless the operator configures the relabeling.
 
+The contract pins not just metric *names* but specific resource-name label
+*values* — the Pacemaker/DRBD resource names (`mq_qm`, `qmrdqm`, `qmrdqm.dr`) and
+the QM names used as resource scopes (`NHARAPP`, `RDQMAPP`, …). The collector that
+emits a label value and the panel that queries it must be parameterized
+*together* from the same source (§4.3). A `setups.py`-style QM-name source of
+truth covers the QM names but **not** the cluster/DRBD resource names, so the
+bundle's profile must supply those too.
+
 Because the dashboards live in the same repo as the collectors, half (1) is a
 single-repo consistency invariant — a CI test asserts every metric a panel
 queries is one a collector emits. Half (2) cannot be enforced by code on the
@@ -239,6 +298,15 @@ the README leads with the label requirement.
   naming pass precedes any repo creation.
 - **IBM redistribution constraints.** Exporter is built-from-source against the
   MQ redist client; the bundle ships no IBM artifacts and documents the build.
+- **Overlap with the in-flight QM-naming refactor (#351 / #313).** The dashboard
+  de-hardcoding the bundle needs is partly already underway against `setups.py`.
+  Sequencing (§7) keeps the bundle from chasing a moving target; the alternative
+  is folding the remaining de-hardcoding into the bundle's own step 1.
+- **`qm.ini` boundary is load-bearing.** The logging component's value depends on
+  operators wiring the diagnostic stanza via the supported `crtmqm`-time
+  mechanism (§4.2). If that prerequisite is poorly documented, adopters get empty
+  log panels. The startup self-check is the backstop, but the documented
+  prerequisite is the primary mitigation.
 
 ## 11. Appendix — source-file → component map
 
