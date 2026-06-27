@@ -340,3 +340,82 @@ setups:
     description: Observability pair — Prometheus/Grafana (obs) + the MQ client probe (mon-probe)
     groups: [obs_box, probe]
     provision: ansible/site-obs.yml
+
+# stacks: — canonical 4-stack registry (#350). Each stack is the authoritative
+# union of its old arm (mechanism/verbs/short) and its full-HADR distributed setup
+# (groups, qm VIPs, alloc). Added alongside setups:/arms: in Task 1a; cutover
+# (retire setups:/arms:) is Task 1b.
+#
+# QM names derive from `short` via #351 short-derivation: <short>APP / <short>SVC.
+# No hardcoded QM literals here — names live exclusively in the short token.
+#
+# groups: lists the full HADR set (site-A + site-B + SANs, in bring-up order) —
+# the canonical "run the whole stack" shape. Individual phase groups are composed
+# by the playbooks.
+#
+# alloc: port/unit constants referenced by playbooks and the mqweb content plays.
+stacks:
+  pcmk-ubuntu:
+    mechanism: pacemaker-san
+    os: ubuntu
+    short: PCMK
+    groups: [san_a, pcmk_a, san_b, pcmk_b]
+    provision: ansible/site-pcmk.yml
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }
+    alloc: { exporter_app_port: 9157, exporter_svc_port: 9158, app_unit: app-pcmk, svc_port: 1414 }
+    verbs:
+      qm-create:  { playbook: site-pcmk-qm.yml }
+      qm-destroy: { playbook: site-pcmk-qm-down.yml }
+      qm-up:      { pcs: "resource enable mq_group" }
+      qm-down:    { pcs: "resource disable mq_group" }
+      qm-status:  { pcs: "status resources" }
+  rdqm-rhel:
+    mechanism: rdqm
+    os: rhel
+    short: RDQM
+    groups: [rdqm_a, rdqm_b]
+    provision: ansible/site-rdqm.yml
+    secrets: [mqweb_admin_password]
+    qm: { vip: 10.10.1.100, svc_conn: 10.60.0.50 }
+    alloc: { exporter_app_port: 9159, exporter_svc_port: 9160, app_unit: app-rdqm, svc_port: 1414 }
+    verbs:
+      qm-create: { script: rdqm-qm-create.sh }
+      qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
+      qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
+      qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
+  nativeha-rhel:
+    mechanism: native-ha
+    os: rhel
+    short: NHAR
+    groups: [nha_rhel_a, nha_rhel_b]
+    provision: ansible/site-nativeha.yml
+    secrets: [mqweb_admin_password]
+    qm: { svc_conn: 10.60.0.50 }
+    alloc: { exporter_app_port: 9161, exporter_svc_port: 9162, app_unit: app-nhar, svc_port: 1414 }
+    verbs:
+      qm-create:   { playbook: site-nativeha.yml }
+      qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
+      qm-up:       { cmd: "systemctl start mqmonitor@{qm}" }
+      qm-down:     { cmd: "systemctl stop mqmonitor@{qm}" }
+      dr-cutover:  { playbook: site-nativeha-switchover.yml }
+      dr-failback: { playbook: site-nativeha-switchover.yml }
+      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
+  # nativeha-ubuntu: reserved — no VMs provisioned yet. groups: [], provision: null.
+  # Placeholder so tooling can enumerate all 4 canonical stacks by name.
+  nativeha-ubuntu:
+    mechanism: native-ha
+    os: ubuntu
+    short: NHAU
+    groups: []
+    provision: null
+    secrets: []
+    qm: {}
+    alloc: {}
+    verbs: {}
+
+# commons: — shared observability stack. Replaces the old `monitoring` setup in the
+# stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.
+commons:
+  groups: [obs_box, probe]
+  provision: ansible/site-obs.yml
