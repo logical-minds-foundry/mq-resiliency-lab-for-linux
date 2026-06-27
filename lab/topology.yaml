@@ -232,7 +232,7 @@ stacks:
     qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }
     alloc: { exporter_app_port: 9157, exporter_svc_port: 9158, app_unit: app-pcmk, svc_port: 1414 }
     verbs:
-      qm-create:  { playbook: site-pcmk-qm.yml }
+      qm-create:  { playbook: site-pcmk.yml }
       qm-destroy: { playbook: site-pcmk-qm-down.yml }
       qm-up:      { pcs: "resource enable mq_group" }
       qm-down:    { pcs: "resource disable mq_group" }
