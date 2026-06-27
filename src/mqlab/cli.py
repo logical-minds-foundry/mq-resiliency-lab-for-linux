@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 import typer
 from rich.console import Console
 
-from mqlab import buildenv, parity
+from mqlab import buildenv, libvirtpool, parity
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_platforms,
@@ -199,14 +199,18 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
     for a stack, before that phase's steps run (#350 Task 5).
 
     Dispatches each declared prereq kind in dependency order:
+      libvirt_pool -> env-aware libvirt image pool on the data disk (vms phase, #376)
       boxes  -> build/register the local boxes for the stack's VMs (vms phase)
       mq     -> the MQ-for-Developers tarball(s) for the stack's platforms
       galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
       pki    -> the PKI CA + entity keystores (the exporters consume these too)
-    The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
-    runner (progress/transcript), galaxy before PKI. Only kinds the phase declares
-    run, so `--only observe` ensures only the exporter PKI."""
+    The Python fetches (boxes, mq) run inline; libvirt_pool + galaxy + PKI run through
+    the step runner (progress/transcript). The pool is ensured FIRST — before boxes
+    (DVD staging) and `vagrant up`, both of which write into the pool. Only kinds the
+    phase declares run, so `--only observe` ensures only the exporter PKI."""
     kinds = phase.ensure
+    if "libvirt_pool" in kinds:
+        _ensure_libvirt_pool(step=step)
     if "boxes" in kinds:
         _ensure_local_boxes(all_vms(stack))
     if "mq" in kinds:
@@ -360,7 +364,83 @@ def _vagrant_env() -> dict[str, str]:
     # orphans the running lab. Redirect the dotfile via VAGRANT_DOTFILE_PATH so every
     # checkout/worktree drives the same lab. Resolved so all of them pass one canonical
     # path through the worktree's state/ symlink to the primary checkout (#355).
-    return {"VAGRANT_DOTFILE_PATH": str(state("vagrant").resolve())}
+    #
+    # MQLAB_LIBVIRT_POOL (#376): on the cloud box, redirect VM-image storage onto the
+    # big data disk via a dedicated libvirt pool the Vagrantfile reads from this env;
+    # on local (virtiofs host-mount) the override is empty so the default pool stands.
+    return {"VAGRANT_DOTFILE_PATH": str(state("vagrant").resolve()), **_libvirt_pool_env()}
+
+
+# --- env-aware libvirt image pool (#376). On the cloud box libvirt's default pool
+#     (/var/lib/libvirt/images) sits on the 29 GB boot disk and fills during a full
+#     HADR bring-up -> QEMU werror=stop pauses the guests. Redirect image storage onto
+#     the real data disk, but ONLY where build/ is a real block device (cloud); on
+#     local (Lima virtiofs host-mount) qcow2 is unsafe and there's no disk problem, so
+#     the default pool is left untouched. The pure decision/step builders live in
+#     mqlab.libvirtpool; the host-side I/O (findmnt, virsh) lives here, mirroring how
+#     secrets / prereqs / the vagrant env are handled by the sequencer (phases stay pure).
+def _build_fstype(path: Path) -> str:
+    """The fstype of `path`'s mount, via findmnt (the injectable probe seam, #376).
+
+    findmnt -no FSTYPE --target <path> prints just the fstype (e.g. ext4, virtiofs).
+    Fail loud: a non-zero exit means the probe is untrustworthy — never guess."""
+    captured: list[str] = []
+    cmd = Command(["findmnt", "-no", "FSTYPE", "--target", str(path)])  # noqa: S607
+    code = SubprocessRunner().run(cmd, captured.append)
+    if code != 0:
+        msg = f"findmnt failed (exit {code}) probing the fstype of {path}"
+        raise RuntimeError(msg)
+    return "\n".join(captured).strip()
+
+
+def _libvirt_pool_override() -> str | None:
+    """The libvirt pool name to override with on this host, or None (keep default)."""
+    return libvirtpool.pool_override(repo_root(), probe_fstype=_build_fstype)
+
+
+def _libvirt_pool_env() -> dict[str, str]:
+    """The vagrant-env fragment carrying the pool override (empty on local)."""
+    name = _libvirt_pool_override()
+    return {"MQLAB_LIBVIRT_POOL": name} if name else {}
+
+
+def _probe_pool_state(deps: Deps, name: str) -> str:
+    """The named libvirt pool's current state (ACTIVE/INACTIVE/ABSENT) from a live
+    `virsh pool-list --all` probe — so ensure can emit only the steps still needed."""
+    states = _probe(deps, Command([*_VIRSH, "pool-list", "--all"]), libvirtpool.parse_pool_states)  # noqa: S607
+    return libvirtpool.pool_state(states, name)
+
+
+def _ensure_libvirt_pool(*, step: bool) -> None:
+    """Idempotently ensure the dedicated libvirt image pool exists before `vagrant up`.
+
+    No-op on local (host-mount build/): the override is None, so no pool is created
+    and the default pool stands (local behavior unchanged, #376). On cloud, probe the
+    pool's live state and emit ONLY the lifecycle steps it still needs (look before
+    leaping, #99) so a re-run / `--from` resume never fails on an already-built or
+    already-active pool. The pool backs the local work bucket's libvirt-images subdir,
+    driven through the step runner like every other host-side op."""
+    name = _libvirt_pool_override()
+    if not name:
+        return
+    target = libvirtpool.images_target(repo_root(), bucket=buildenv.bucket_path)
+    target.mkdir(parents=True, exist_ok=True)
+    deps = build_deps("libvirt-pool", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        state = _probe_pool_state(deps, name)
+        steps = libvirtpool.pool_ensure_steps(name, target, state=state)
+        run_steps(
+            steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=step,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
 
 
 commons_app = typer.Typer(
@@ -1382,6 +1462,16 @@ def _bootstrap_run(
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
+        # The vms phase's `vagrant up` step carries env=None, so it inherits this
+        # process's environment. Export the vagrant env up front so that bring-up
+        # sees BOTH VAGRANT_DOTFILE_PATH (the shared #355 dotfile, so it drives the
+        # one canonical lab even from a worktree that never created it) AND
+        # MQLAB_LIBVIRT_POOL (#376, set only on cloud) so images land on the data
+        # disk's pool, not the boot disk's default. Mirrors _ssh_into's
+        # os.environ.update(_vagrant_env()); the secret injection below is the same
+        # sequencer-owns-the-env pattern (#373). On local the pool key is absent, so
+        # behavior is unchanged.
+        os.environ.update(_vagrant_env())
         states = _probe_all(deps, stack)
         selected = _select_phases(stack, states, only=only, from_phase=from_phase)
         if not selected:
