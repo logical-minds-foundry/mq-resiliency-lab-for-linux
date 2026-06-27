@@ -45,6 +45,7 @@ TOPO = (
     "    mechanism: pacemaker-san\n"
     "    os: ubuntu\n"
     "    short: PCMK\n"
+    "    cluster_group: pcmk_a\n"
     "    groups: [san_a, pcmk_a, san_b, pcmk_b]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
@@ -64,6 +65,7 @@ TOPO = (
     "    mechanism: rdqm\n"
     "    os: rhel\n"
     "    short: RDQM\n"
+    "    cluster_group: rdqm_a\n"
     "    groups: [rdqm_a, rdqm_b]\n"
     "    provision: ansible/site-rdqm.yml\n"
     "    secrets: [mqweb_admin_password]\n"
@@ -82,6 +84,7 @@ TOPO = (
     "    mechanism: native-ha\n"
     "    os: rhel\n"
     "    short: NHAR\n"
+    "    cluster_group: nha_rhel_a\n"
     "    groups: [nha_rhel_a, nha_rhel_b]\n"
     "    provision: ansible/site-nativeha.yml\n"
     "    secrets: [mqweb_admin_password]\n"
@@ -201,14 +204,28 @@ def test_stack_members_dedupes_host_in_multiple_groups(monkeypatch, tmp_path):
     assert members == ["h1", "h2"]  # h1 appears in both grp_a and grp_b — listed once
 
 
+def test_cluster_group_populated_for_real_stacks(monkeypatch, tmp_path):
+    """cluster_group is set to the cluster node group, not the SAN or other first group."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stacks = lab_stacks()
+    # pcmk-ubuntu: groups[0] is san_a (SAN host), cluster_group must be pcmk_a
+    assert stacks["pcmk-ubuntu"].cluster_group == "pcmk_a"
+    # rdqm-rhel and nativeha-rhel also carry their cluster_group
+    assert stacks["rdqm-rhel"].cluster_group == "rdqm_a"
+    assert stacks["nativeha-rhel"].cluster_group == "nha_rhel_a"
+
+
 def test_nativeha_ubuntu_is_reserved(monkeypatch, tmp_path):
-    """nativeha-ubuntu is reserved: groups=[], provision=None."""
+    """nativeha-ubuntu is reserved: groups=[], provision=None, cluster_group=None."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
     nhu = stacks["nativeha-ubuntu"]
     assert nhu.groups == []
     assert nhu.provision is None
+    # Reserved stack has no cluster_group — omitting the key from topology yields None.
+    assert nhu.cluster_group is None
 
 
 def test_qm_names_derive_from_short(monkeypatch, tmp_path):

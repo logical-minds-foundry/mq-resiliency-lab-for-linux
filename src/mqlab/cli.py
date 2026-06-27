@@ -1728,17 +1728,25 @@ def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
 
     Resolves the stack's `qm-status` verb (the same per-stack dispatch dict the
     qm commands use) and runs that status command on the cluster's first node via
-    `ansible <group>[0] -b -m shell`. Exit 0 ⇒ provisioned + up. A stack with no
-    qm-status verb (a reserved stack) is, by definition, not provisioned.
+    `ansible <cluster_group>[0] -b -m shell`. Exit 0 ⇒ provisioned + up.
+
+    Uses `stack.cluster_group` (e.g. "pcmk_a", "rdqm_a") — NOT `stack.groups[0]`,
+    which for pcmk-ubuntu is the SAN iSCSI-target host ("san_a") that has no
+    Pacemaker or MQ tooling and would always return a non-zero exit code.
+
+    A stack with no qm-status verb or no cluster_group (reserved stack) is, by
+    definition, not provisioned — returns False with no runner call.
     """
     impl = stack.verbs.get("qm-status")
     if not impl:
         return False
+    if not stack.cluster_group:
+        return False
     [(kind, value)] = impl.items()
     # pcs/cmd are the only status shapes in the registry; both run a shell command
-    # on the cluster's first group node. value is a literal or a {qm}-templated cmd.
+    # on the cluster's first node. value is a literal or a {qm}-templated cmd.
     shell_cmd = f"pcs {value}" if kind == "pcs" else str(value).format(qm=stack.qm.name)
-    group = stack.groups[0]
+    group = stack.cluster_group
     cmd = Command(
         ["ansible", f"{group}[0]", "-b", "-m", "shell", "-a", shell_cmd],  # noqa: S607
         cwd=repo_root() / "ansible",

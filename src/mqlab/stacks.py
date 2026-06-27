@@ -28,16 +28,19 @@ class Stack:
     """A canonical lab stack — the full HADR shape for one mechanism+OS combination.
 
     Fields:
-        name:      stack key as it appears in topology.yaml's stacks: block.
-        mechanism: HA/DR mechanism string (e.g. "pacemaker-san", "rdqm", "native-ha").
-        os:        base OS ("ubuntu" or "rhel").
-        short:     4-char uppercase token; QM names derive from this (#351).
-        verbs:     per-verb dispatch dict (raw from YAML; commands/playbooks).
-        groups:    ordered list of atomic group names (site-A + site-B + SANs).
-        qm:        QmConfig — names derived from short, VIPs/svc_conn from topology.
-        provision: path to the top-level Ansible playbook, or None (reserved stacks).
-        secrets:   list of Vault/secret names required to provision this stack.
-        alloc:     allocation constants dict (exporter ports, app_unit, svc_port).
+        name:          stack key as it appears in topology.yaml's stacks: block.
+        mechanism:     HA/DR mechanism string (e.g. "pacemaker-san", "rdqm", "native-ha").
+        os:            base OS ("ubuntu" or "rhel").
+        short:         4-char uppercase token; QM names derive from this (#351).
+        verbs:         per-verb dispatch dict (raw from YAML; commands/playbooks).
+        cluster_group: Ansible group name for the cluster nodes (e.g. "pcmk_a", "rdqm_a").
+                       This is the correct probe target for qm-status — NOT groups[0], which
+                       may be a SAN host with no Pacemaker/MQ tooling. None for reserved stacks.
+        groups:        ordered list of atomic group names (site-A + site-B + SANs).
+        qm:            QmConfig — names derived from short, VIPs/svc_conn from topology.
+        provision:     path to the top-level Ansible playbook, or None (reserved stacks).
+        secrets:       list of Vault/secret names required to provision this stack.
+        alloc:         allocation constants dict (exporter ports, app_unit, svc_port).
     """
 
     name: str
@@ -45,6 +48,7 @@ class Stack:
     os: str
     short: str
     verbs: dict[str, Any]
+    cluster_group: str | None
     groups: list[str]
     qm: QmConfig
     provision: str | None
@@ -86,6 +90,7 @@ def lab_stacks() -> dict[str, Stack]:
             os=cfg["os"],
             short=short,
             verbs=dict(cfg.get("verbs") or {}),
+            cluster_group=cfg.get("cluster_group") or None,
             groups=list(cfg.get("groups") or []),
             qm=_qm_from_stack(short, dict(cfg.get("qm") or {})),
             provision=cfg.get("provision"),

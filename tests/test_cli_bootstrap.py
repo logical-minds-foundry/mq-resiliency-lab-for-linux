@@ -45,6 +45,7 @@ TOPO = (
     "    mechanism: pacemaker-san\n"
     "    os: ubuntu\n"
     "    short: PCMK\n"
+    "    cluster_group: pcmk_a\n"
     "    groups: [san_a, pcmk_a, pcmk_b]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
@@ -291,6 +292,14 @@ def test_probe_all_builds_states_dict(monkeypatch, tmp_path):
     assert states["domains"]["lab_pcmk-a1"] == "running"
     assert states["qm_up"] is True
     assert states["observe"] is True
+    # The qm-status probe MUST target the cluster node group (pcmk_a), not
+    # groups[0] which is san_a — the SAN host that has no Pacemaker/MQ tooling.
+    # This assertion would FAIL against the old code that used stack.groups[0].
+    qm_probe_cmd = runner.recorded[2]  # command 3 is the ansible qm-status call
+    assert "pcmk_a[0]" in qm_probe_cmd.argv, (
+        f"qm-status probe must target pcmk_a[0] (cluster group), "
+        f"not san_a[0] (SAN host); got argv={qm_probe_cmd.argv}"
+    )
 
 
 def test_probe_all_qm_down_when_status_nonzero(monkeypatch, tmp_path):
@@ -353,4 +362,37 @@ def test_probe_all_qm_down_when_no_status_verb(monkeypatch, tmp_path):
     assert states["qm_up"] is False
     assert states["observe"] is False
     # only the two virsh probes ran — no qm-status / prometheus probe
+    assert len(runner.recorded) == 2
+
+
+def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tmp_path):
+    # A stack that declares a qm-status verb but omits cluster_group (the second
+    # early-return guard in _probe_qm_up) returns False with no runner call for
+    # the qm-status step. This exercises the `if not stack.cluster_group` branch.
+    topo = (
+        "nodes: {}\n"
+        "groups: {}\n"
+        "stacks:\n"
+        "  edge-stack:\n"
+        "    mechanism: pacemaker-san\n"
+        "    os: ubuntu\n"
+        "    short: EDGE\n"
+        "    groups: []\n"
+        "    provision: null\n"
+        "    secrets: []\n"
+        "    qm: {}\n"
+        "    alloc: {}\n"
+        "    verbs:\n"
+        "      qm-status: { pcs: 'status resources' }\n"
+    )
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    lab = tmp_path / "lab"
+    (lab / "networks").mkdir(parents=True)
+    (lab / "topology.yaml").write_text(topo)
+    stack = cli._lookup_stack_or_exit("edge-stack")
+    assert stack.cluster_group is None  # no cluster_group declared
+    runner = RecordingRunner(results=[_net_listing({}), _dom_listing({})])
+    states = cli._probe_all(_deps(runner), stack)
+    assert states["qm_up"] is False
+    # only the two virsh probes ran — cluster_group guard prevents the ansible call
     assert len(runner.recorded) == 2

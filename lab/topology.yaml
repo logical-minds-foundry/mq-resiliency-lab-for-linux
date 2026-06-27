@@ -359,6 +359,7 @@ stacks:
     mechanism: pacemaker-san
     os: ubuntu
     short: PCMK
+    cluster_group: pcmk_a
     groups: [san_a, pcmk_a, san_b, pcmk_b]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
@@ -374,6 +375,7 @@ stacks:
     mechanism: rdqm
     os: rhel
     short: RDQM
+    cluster_group: rdqm_a
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
     secrets: [mqweb_admin_password]
@@ -388,6 +390,7 @@ stacks:
     mechanism: native-ha
     os: rhel
     short: NHAR
+    cluster_group: nha_rhel_a
     groups: [nha_rhel_a, nha_rhel_b]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
@@ -403,6 +406,7 @@ stacks:
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
   # nativeha-ubuntu: reserved — no VMs provisioned yet. groups: [], provision: null.
   # Placeholder so tooling can enumerate all 4 canonical stacks by name.
+  # cluster_group: null (omitted) — no cluster nodes allocated for this reserved stack.
   nativeha-ubuntu:
     mechanism: native-ha
     os: ubuntu
