@@ -51,6 +51,7 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
+from mqlab.phases import PHASES, build_states, first_unsatisfied
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -66,6 +67,7 @@ from mqlab.runreport import (
     write_bundle,
 )
 from mqlab.setups import lab_setups, setup_members
+from mqlab.stacks import lab_stacks
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
@@ -73,8 +75,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from mqlab.orchestrator import Pauser
+    from mqlab.phases import Phase
     from mqlab.runner import CommandRunner
     from mqlab.setups import QmConfig, Setup
+    from mqlab.stacks import Stack
 
 
 @dataclass
@@ -1704,30 +1708,192 @@ def run_setup(  # pragma: no cover - drives the live lab; proven by the integrat
     typer.echo(f"run report written: {bundle}")
 
 
-def _bootstrap_run(setup_name: str, *, manifest: str | None, step: bool) -> None:
-    """Bring a setup all the way up: host gate → networks → guests (create +
-    provision) → observability. A thin sequencing wrapper over the existing
-    verbs; each phase fails loud (raises typer.Exit) and halts the rest."""
-    _lookup_setup_or_exit(setup_name)  # validate the setup name early (exit 2 if unknown)
-    _prepare_lab()  # host gate up front — fail loud; vm_create re-gates (idempotent double-gate)
-    net_create("all", step=step)  # all lab nets: small shared set, no per-setup filter, idempotent
-    vm_create(setup_name, manifest=manifest, step=step)
-    obs_up(step=step)
+def _lookup_stack_or_exit(name: str) -> Stack:
+    # Validate a stack name early, with a clean exit-2 message (mirrors
+    # _lookup_setup_or_exit, but over the #350 canonical stack registry).
+    stack = lab_stacks().get(name)
+    if stack is None:
+        typer.echo(f"no stack named {name!r}", err=True)
+        raise typer.Exit(code=2)
+    return stack
+
+
+# Prometheus on the obs guest (net-mgmt IP : Prometheus port). The observe probe
+# queries its targets API to see whether this stack's exporters are registered.
+PROMETHEUS_URL = "http://10.50.0.2:9090"
+
+
+def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
+    """True iff the stack's QM reports up via its qm-status verb (provision phase).
+
+    Resolves the stack's `qm-status` verb (the same per-stack dispatch dict the
+    qm commands use) and runs that status command on the cluster's first node via
+    `ansible <group>[0] -b -m shell`. Exit 0 ⇒ provisioned + up. A stack with no
+    qm-status verb (a reserved stack) is, by definition, not provisioned.
+    """
+    impl = stack.verbs.get("qm-status")
+    if not impl:
+        return False
+    [(kind, value)] = impl.items()
+    # pcs/cmd are the only status shapes in the registry; both run a shell command
+    # on the cluster's first group node. value is a literal or a {qm}-templated cmd.
+    shell_cmd = f"pcs {value}" if kind == "pcs" else str(value).format(qm=stack.qm.name)
+    group = stack.groups[0]
+    cmd = Command(
+        ["ansible", f"{group}[0]", "-b", "-m", "shell", "-a", shell_cmd],  # noqa: S607
+        cwd=repo_root() / "ansible",
+    )
+    code = _probe_exit(deps, cmd)
+    return code == 0
+
+
+def _probe_observe(deps: Deps, stack: Stack) -> bool:
+    """True iff this stack's exporter is a healthy Prometheus target (observe phase).
+
+    Queries Prometheus' /api/v1/targets and checks the stack's app exporter port
+    (from alloc.exporter_app_port) appears among the active targets with health
+    "up". A stack with no exporter port allocated cannot be observed.
+    """
+    port = stack.alloc.get("exporter_app_port")
+    if not port:
+        return False
+    cmd = Command(
+        ["curl", "-fsS", "-m", "5", f"{PROMETHEUS_URL}/api/v1/targets"],  # noqa: S607
+    )
+    captured: list[str] = []
+    code = _probe_exit(deps, cmd, sink=captured.append)
+    if code != 0:
+        return False
+    payload = json.loads("\n".join(captured)) if captured else {}
+    targets = (payload.get("data") or {}).get("activeTargets") or []
+    needle = f":{port}/"
+    return any(needle in (t.get("scrapeUrl") or "") and t.get("health") == "up" for t in targets)
+
+
+def _probe_exit(deps: Deps, cmd: Command, *, sink: Callable[[str], None] | None = None) -> int:
+    """Run a probe command, echo+tee its output (no hiding), and return its exit code.
+
+    Like _probe but returns the exit code (the truth a satisfied-probe needs) and
+    optionally tees each line to `sink` for the caller to inspect (observe parses
+    the JSON body). Fail-loud by surfacing the real exit code — never swallowed.
+    """
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+
+    def tee(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+        if sink is not None:
+            sink(line)
+
+    return deps.runner.run(cmd, tee)
+
+
+def _probe_all(deps: Deps, stack: Stack) -> dict[str, Any]:
+    """Gather the live world into the canonical states dict the phases consume.
+
+    The live counterpart of phases.py's pure satisfied-probes: it actually runs
+    virsh (nets + domains), the stack's qm-status verb (provision truth), and the
+    Prometheus targets query (observe truth), then assembles them via build_states
+    so the shape matches the registry's contract exactly. Fail-loud: each probe
+    surfaces its real exit/parse result; nothing is swallowed.
+    """
+    nets = _probe_net_states(deps)
+    domains = _probe_states(deps)
+    qm_up = _probe_qm_up(deps, stack)
+    observe = _probe_observe(deps, stack)
+    return build_states(nets=nets, domains=domains, qm_up=qm_up, observe=observe)
+
+
+def _select_phases(
+    stack: Stack, states: dict[str, Any], *, only: str | None, from_phase: str | None
+) -> list[Phase]:
+    """The phases to run for this invocation, in order (sequencer selection).
+
+    --only PHASE   → just that phase
+    --from PHASE   → that phase onward
+    neither        → from the first unsatisfied phase onward (empty if all satisfied)
+    """
+    if only:
+        return [p for p in PHASES if p.name == only]
+    if from_phase:
+        idx = [p.name for p in PHASES].index(from_phase)
+        return PHASES[idx:]
+    start = first_unsatisfied(stack, states)
+    return [] if start is None else PHASES[start:]
+
+
+def _bootstrap_run(
+    stack_name: str, *, only: str | None = None, from_phase: str | None = None, step: bool
+) -> None:
+    """Bring a stack up by running its bring-up phases (net → vms → provision →
+    observe) from the first unsatisfied one, so a re-run resumes. --only/--from
+    override the selection. Each phase fails loud: a step failure halts the run
+    and prints a resume hint naming the failing phase."""
+    stack = _lookup_stack_or_exit(stack_name)
+    _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
+    deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        states = _probe_all(deps, stack)
+        selected = _select_phases(stack, states, only=only, from_phase=from_phase)
+        if not selected:
+            deps.renderer.note(f"{stack_name}: already satisfied — nothing to do")
+            return
+        for phase in selected:  # one phase at a time so a failure names its phase
+            try:
+                run_steps(
+                    phase.build_steps(stack, deps),
+                    runner=deps.runner,
+                    renderer=deps.renderer,
+                    transcript=deps.transcript,
+                    step_mode=step,
+                    pauser=deps.pauser,
+                )
+            except StepFailedError as exc:
+                hint = f"resume with: mqlab bootstrap {stack_name} --from {phase.name}"
+                typer.echo(hint, err=True)  # to the CLI's stderr, where the operator sees it
+                deps.transcript.write(hint)
+                raise typer.Exit(code=exc.exit_code) from exc
+    except NoTTYError as exc:
+        deps.renderer.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    finally:
+        deps.transcript.close()
+
+
+def _validate_phase_name(value: str | None, flag: str) -> str | None:
+    # Reject an unknown --from/--only phase name early with a clean exit-2 message.
+    if value is not None and value not in [p.name for p in PHASES]:
+        names = ", ".join(p.name for p in PHASES)
+        typer.echo(f"{flag}: unknown phase {value!r} (known: {names})", err=True)
+        raise typer.Exit(code=2)
+    return value
+
+
+_PHASE_HELP = "net/vms/provision/observe"
+_FromOpt = Annotated[
+    str | None, typer.Option("--from", help=f"run from this phase onward ({_PHASE_HELP})")
+]
+_OnlyOpt = Annotated[
+    str | None, typer.Option("--only", help=f"run only this phase ({_PHASE_HELP})")
+]
 
 
 @app.command("bootstrap")
 def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstrap_run
-    setup_name: Annotated[
-        str, typer.Argument(help="setup to bring up (e.g. distributed-pcmk-ubuntu)")
-    ],
-    manifest: _ManifestOpt = None,
+    stack_name: Annotated[str, typer.Argument(help="stack to bring up (e.g. pcmk-ubuntu)")],
+    from_phase: _FromOpt = None,
+    only: _OnlyOpt = None,
     step: _StepFlag = False,
 ) -> None:
-    """Bring up a whole setup in one command: networks → guests → observability.
+    """Bring up a whole stack in one command: net → vms → provision → observe.
 
-    This is the consumer happy path. Run `mqlab doctor` first to pre-flight the
-    host. (`mqlab run` is the separate post-bring-up baseline test driver.)"""
-    _bootstrap_run(setup_name, manifest=manifest, step=step)
+    Runs from the first unsatisfied phase, so a re-run resumes. Use --from PHASE
+    to force a starting phase or --only PHASE to run a single phase. Run
+    `mqlab doctor` first to pre-flight the host."""
+    _validate_phase_name(from_phase, "--from")
+    _validate_phase_name(only, "--only")
+    _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step)
 
 
 def main() -> None:
