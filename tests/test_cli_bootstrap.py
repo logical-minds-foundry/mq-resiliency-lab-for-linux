@@ -28,16 +28,18 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # block + commons + two lab networks (for the net phase to enumerate).
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
+    # nodes carry a net-mgmt IP so lab_inventory() renders ansible_host (the
+    # bootstrap now refreshes the inventory — #377).
     "nodes:\n"
-    "  san-a: {}\n"
-    "  pcmk-a1: {}\n"
-    "  pcmk-a2: {}\n"
-    "  pcmk-a3: {}\n"
-    "  pcmk-b1: {}\n"
-    "  obs: {}\n"
-    "  mon-probe: {}\n"
-    "  svc-sim: {}\n"
-    "  app-client: {}\n"
+    "  san-a: {nics: {net-mgmt: 10.50.0.10}}\n"
+    "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+    "  pcmk-a2: {nics: {net-mgmt: 10.50.0.52}}\n"
+    "  pcmk-a3: {nics: {net-mgmt: 10.50.0.53}}\n"
+    "  pcmk-b1: {nics: {net-mgmt: 10.50.0.61}}\n"
+    "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
+    "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
+    "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
+    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
@@ -217,6 +219,7 @@ def _stub_ensure(monkeypatch):
     own tests below)."""
     monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
+    monkeypatch.setattr(cli, "_render_inventory", lambda deps: None)
 
 
 def _record_ensures(monkeypatch):
@@ -227,6 +230,7 @@ def _record_ensures(monkeypatch):
         lambda stack, phase, *, step: ensured.append(phase.name),
     )
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
+    monkeypatch.setattr(cli, "_render_inventory", lambda deps: None)
     return ensured
 
 
@@ -329,6 +333,26 @@ def test_source_secret_exits_loud_on_failure(monkeypatch, tmp_path):
     runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=1)])
     with pytest.raises(typer.Exit):
         cli._source_secret(_deps(runner), "pcmk_hacluster_password")
+
+
+# --------------------------------------------------------------------------- #
+# inventory refresh (#377: provision ran against a STALE inventory missing the
+# #350 stack-aggregate groups -> hosts: pcmk_ubuntu plays silently no-op'd)
+# --------------------------------------------------------------------------- #
+def test_bootstrap_renders_inventory_with_aggregate_group(monkeypatch, tmp_path):
+    from mqlab.inventory import inventory_path
+
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(2)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    assert result.exit_code == 0
+    # the bootstrap must (re)render a fresh inventory carrying the stack-aggregate
+    # group the cutover playbooks target (the stale-inventory bug fixed by #377)
+    assert "[pcmk_ubuntu:children]" in inventory_path().read_text()
 
 
 # --------------------------------------------------------------------------- #

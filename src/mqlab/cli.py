@@ -1472,6 +1472,13 @@ def _bootstrap_run(
         # sequencer-owns-the-env pattern (#373). On local the pool key is absent, so
         # behavior is unchanged.
         os.environ.update(_vagrant_env())
+        # Refresh the ansible inventory before probing/provisioning (#377): the
+        # provision/observe playbooks target the #350 stack-aggregate groups
+        # (e.g. hosts: pcmk_ubuntu), and _probe_all + provision run ansible against
+        # build/work/inventory.ini. A stale file (pre-cutover, missing the aggregate
+        # groups) silently no-ops those plays (acl install, cold-boot guard). Always
+        # render fresh here in the sequencer — phases.py stays pure.
+        _render_inventory(deps)
         states = _probe_all(deps, stack)
         selected = _select_phases(stack, states, only=only, from_phase=from_phase)
         if not selected:
