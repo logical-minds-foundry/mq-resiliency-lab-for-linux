@@ -16,11 +16,15 @@ from rich.console import Console
 
 from mqlab import buildenv, parity
 from mqlab.arms import arm_of, lab_arms, resolve_verb
-from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
+from mqlab.artifact import (
+    download_mq_tarball,
+    ensure_mq_tarballs,
+    ensure_mq_tarballs_for_platforms,
+)
 from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
-from mqlab.fleet import parse_domain_states
+from mqlab.fleet import lab_guests, parse_domain_states
 from mqlab.guestsel import resolve_guests
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.inventory import inventory_path, lab_inventory
@@ -51,7 +55,7 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
-from mqlab.phases import PHASES, build_states, first_unsatisfied
+from mqlab.phases import PHASES, all_vms, build_states, first_unsatisfied
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -67,7 +71,7 @@ from mqlab.runreport import (
     write_bundle,
 )
 from mqlab.setups import lab_setups, setup_members
-from mqlab.stacks import lab_stacks
+from mqlab.stacks import lab_stacks, stack_members
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
@@ -255,6 +259,64 @@ def _ensure_prereqs(setup_name: str, *, requested: str | None = None, step: bool
     """
     _ensure_mq_artifacts(setup_name, requested=requested)
     _execute("prerequisites", [_galaxy_install_step(), _pki_ensure_step()], step_mode=step)
+
+
+# --- Stack-aware prerequisite ensures for the #350 bootstrap phase flow. -----------
+#     The setup-based _ensure_prereqs above stays untouched (old commands still use
+#     it). Bootstrap resolves prerequisites from the STACK and only for the phases
+#     actually selected this run — each phase declares its prereq kinds as data in
+#     phases.py (Phase.ensure); the dispatch below maps each name to its real I/O.
+def _stack_mq_platforms(stack: Stack) -> set[str]:
+    """Distinct MQ guest platforms the stack's cluster (QM) nodes run.
+
+    The MQ-for-Developers tarball is arch-specific, so we ensure one per distinct
+    platform among the stack's member VMs (its groups' hosts), host-resolved via
+    lab_guests (native-preferred, #276) — the same source the setup path uses.
+    Commons hosts (obs/probe) are excluded: they run no QM, so need no MQ tarball.
+    """
+    members = stack_members(stack.name) or []
+    platforms = lab_guests()
+    return {platforms[host] for host in members if host in platforms}
+
+
+def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
+    """Ensure the arch-correct MQ tarball(s) for a stack's cluster-node platforms.
+
+    The stack counterpart of _ensure_mq_artifacts (which is setup-resolved). Version
+    is the repo default — stacks carry no per-setup manifest pin in the #350 model.
+    """
+    ensure_mq_tarballs_for_platforms(
+        _stack_mq_platforms(stack),
+        DEFAULT_MQ_VERSION,
+        mq_cache_dir(),
+        fetch=_fetch_mq_tarball,
+    )
+
+
+def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None:
+    """Ensure the fresh-volume prerequisites a phase declares (phases.Phase.ensure),
+    for a stack, before that phase's steps run (#350 Task 5).
+
+    Dispatches each declared prereq kind in dependency order:
+      boxes  -> build/register the local boxes for the stack's VMs (vms phase)
+      mq     -> the MQ-for-Developers tarball(s) for the stack's platforms
+      galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
+      pki    -> the PKI CA + entity keystores (the exporters consume these too)
+    The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
+    runner (progress/transcript), galaxy before PKI. Only kinds the phase declares
+    run, so `--only observe` ensures only the exporter PKI."""
+    kinds = phase.ensure
+    if "boxes" in kinds:
+        _ensure_local_boxes(all_vms(stack))
+    if "mq" in kinds:
+        _ensure_mq_artifacts_for_stack(stack)
+    steps: list[CommandStep] = []
+    if "galaxy" in kinds:
+        steps.append(_galaxy_install_step())
+    if "pki" in kinds:
+        steps.append(_pki_ensure_step())
+    if steps:
+        _execute("prerequisites", steps, step_mode=step)
 
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
@@ -1849,6 +1911,9 @@ def _bootstrap_run(
             return
         for phase in selected:  # one phase at a time so a failure names its phase
             try:
+                # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
+                # only for the phases actually selected this run.
+                _ensure_prereqs_for_stack(stack, phase, step=step)
                 run_steps(
                     phase.build_steps(stack, deps),
                     runner=deps.runner,

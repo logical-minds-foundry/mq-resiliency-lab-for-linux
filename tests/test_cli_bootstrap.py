@@ -18,7 +18,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
-from mqlab.phases import build_states
+from mqlab.phases import PHASES, build_states
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
@@ -137,6 +137,7 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
     )
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(8)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)  # selection test: prereq-ensure is a separate concern
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
@@ -151,6 +152,7 @@ def test_bootstrap_only_runs_one_phase(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
@@ -162,6 +164,7 @@ def test_bootstrap_from_runs_phase_onward(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(8)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--from", "provision"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
@@ -185,6 +188,169 @@ def test_bootstrap_all_satisfied_is_a_noop(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# per-phase prerequisite ensures (#350 Task 5)
+#
+# Each selected phase ensures its declared prerequisites BEFORE its steps run.
+# We mock the cli-level ensure (cli._ensure_prereqs_for_stack) — phases.py stays
+# pure — and assert it is invoked once per selected phase, with that phase, and
+# only for phases actually selected this run.
+# --------------------------------------------------------------------------- #
+def _stub_ensure(monkeypatch):
+    """Neutralize the per-phase prereq-ensure so a sequencer-selection test stays
+    focused on phase selection (the ensure is covered by its own tests below)."""
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+
+
+def _record_ensures(monkeypatch):
+    ensured: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "_ensure_prereqs_for_stack",
+        lambda stack, phase, *, step: ensured.append(phase.name),
+    )
+    return ensured
+
+
+def test_bootstrap_ensures_prereqs_per_selected_phase(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=False, observe=False),
+    )
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(8)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    ensured = _record_ensures(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0
+    # net+vms satisfied -> only provision + observe selected -> ensured for each
+    assert ensured == ["provision", "observe"]
+
+
+def test_bootstrap_only_observe_ensures_only_observe(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    ensured = _record_ensures(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    assert result.exit_code == 0
+    assert ensured == ["observe"]
+
+
+def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=False))
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(6)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    calls: list[str] = []
+    # The net phase declares no prereqs, so dispatch must run no per-kind helper.
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
+    monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: calls.append("galaxy"))  # type: ignore[arg-type]
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: calls.append("pki"))  # type: ignore[arg-type]
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "net"])
+    assert result.exit_code == 0
+    assert calls == []  # net phase has no prerequisites
+
+
+# --------------------------------------------------------------------------- #
+# _ensure_prereqs_for_stack dispatch — which prereq kinds each phase pulls in
+# --------------------------------------------------------------------------- #
+def _phase(name):
+    return next(p for p in PHASES if p.name == name)
+
+
+def test_ensure_for_stack_vms_pulls_boxes_and_mq(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
+    monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: pytest.fail("galaxy not for vms"))
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: pytest.fail("pki not for vms"))
+    cli._ensure_prereqs_for_stack(stack, _phase("vms"), step=False)
+    assert sorted(calls) == ["boxes", "mq"]
+
+
+def _capture_execute(monkeypatch):
+    """Capture the step labels the dispatch passes to _execute (the step-runner seam)."""
+    labels: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "_execute",
+        lambda verb, steps, *, step_mode: labels.extend(s.label for s in steps),
+    )
+    return labels
+
+
+def test_ensure_for_stack_provision_pulls_galaxy_mq_pki(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    mq: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: mq.append("mq"))
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    labels = _capture_execute(monkeypatch)
+    cli._ensure_prereqs_for_stack(stack, _phase("provision"), step=False)
+    assert mq == ["mq"]
+    # galaxy + PKI run through the step runner, galaxy before PKI (PKI needs crypto)
+    assert labels == ["ansible collections", "pki ensure"]
+
+
+def test_ensure_for_stack_observe_pulls_only_pki(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    monkeypatch.setattr(
+        cli, "_ensure_mq_artifacts_for_stack", lambda s: pytest.fail("no mq for observe")
+    )
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: pytest.fail("no galaxy for observe"))
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    labels = _capture_execute(monkeypatch)
+    cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False)
+    assert labels == ["pki ensure"]  # exporter PKI only
+
+
+def test_ensure_for_stack_net_pulls_nothing(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    monkeypatch.setattr(cli, "_execute", lambda *a, **k: pytest.fail("net runs no ensure steps"))
+    monkeypatch.setattr(
+        cli, "_ensure_mq_artifacts_for_stack", lambda s: pytest.fail("net runs no mq ensure")
+    )
+    monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: pytest.fail("net runs no box ensure"))
+    cli._ensure_prereqs_for_stack(stack, _phase("net"), step=False)  # no-op, no failures
+
+
+def test_stack_mq_platforms_resolves_cluster_node_platforms(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    # All pcmk-ubuntu cluster nodes resolve to the host-default ubuntu platform.
+    plats = cli._stack_mq_platforms(stack)
+    assert plats  # non-empty: the QM hosts need an MQ tarball
+    assert all(p.startswith("ubuntu") for p in plats)
+
+
+def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(cli, "_stack_mq_platforms", lambda s: {"ubuntu2404-arm64"})
+    monkeypatch.setattr(cli, "mq_cache_dir", lambda: tmp_path / "mqcache")
+    monkeypatch.setattr(
+        cli,
+        "ensure_mq_tarballs_for_platforms",
+        lambda platforms, version, build_dir, *, fetch: captured.update(
+            platforms=platforms, version=version, build_dir=build_dir, fetch=fetch
+        ),
+    )
+    cli._ensure_mq_artifacts_for_stack(stack)
+    assert captured["platforms"] == {"ubuntu2404-arm64"}
+    assert captured["version"] == cli.DEFAULT_MQ_VERSION
+    assert captured["build_dir"] == tmp_path / "mqcache"
+    assert captured["fetch"] is cli._fetch_mq_tarball
+
+
+# --------------------------------------------------------------------------- #
 # failure -> resume hint
 # --------------------------------------------------------------------------- #
 def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):
@@ -193,6 +359,7 @@ def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):
     # The single provision step fails (exit 2).
     runner = RecordingRunner(results=[ScriptedResult([], exit_code=2)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 2
     assert "mqlab bootstrap pcmk-ubuntu --from provision" in result.output
@@ -204,6 +371,7 @@ def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
     # observe phase has 3 steps; --step pauses between them and the pauser has no TTY.
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_pauser(runner, _FailPause()))
+    _stub_ensure(monkeypatch)
     result = CliRunner().invoke(
         cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe", "--step"]
     )

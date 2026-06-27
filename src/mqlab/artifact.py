@@ -61,6 +61,30 @@ def _verify_sha256(path: Path) -> None:
         raise ValueError(f"sha256 mismatch for {path.name}: {actual} != {expected}")
 
 
+def ensure_mq_tarballs_for_platforms(
+    platforms: set[str],
+    mq_version: str,
+    build_mq_dir: Path,
+    *,
+    fetch: Callable[[str, Path], None],
+) -> list[Path]:
+    """Ensure the MQ tarball for each given platform is present + valid in the cache.
+
+    The platform-set core shared by `ensure_mq_tarballs` (setup-resolved platforms,
+    #266) and the stack-based bootstrap path (#350), so both fetch + verify through
+    one place. Caller resolves the platform set; this only acquires it.
+    """
+    paths: list[Path] = []
+    for platform in sorted(platforms):
+        name = tarball_name(mq_version, platform)
+        dest = build_mq_dir / name
+        if not dest.exists():
+            fetch(name, dest)  # raises on failure (no silent fallback)
+        _verify_sha256(dest)
+        paths.append(dest)
+    return paths
+
+
 def ensure_mq_tarballs(
     setup: str,
     mq_version: str,
@@ -71,12 +95,6 @@ def ensure_mq_tarballs(
 ) -> list[Path]:
     """Ensure the MQ tarball for each distinct platform in `setup` is present + valid.
     Platforms are host-resolved via `setup_platforms(setup, facts)` (#276)."""
-    paths: list[Path] = []
-    for platform in sorted(setup_platforms(setup, facts)):
-        name = tarball_name(mq_version, platform)
-        dest = build_mq_dir / name
-        if not dest.exists():
-            fetch(name, dest)  # raises on failure (no silent fallback)
-        _verify_sha256(dest)
-        paths.append(dest)
-    return paths
+    return ensure_mq_tarballs_for_platforms(
+        setup_platforms(setup, facts), mq_version, build_mq_dir, fetch=fetch
+    )

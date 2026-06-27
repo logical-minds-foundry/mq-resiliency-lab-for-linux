@@ -49,17 +49,27 @@ _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 @dataclass(frozen=True)
 class Phase:
-    """One bring-up phase: a name, a step emitter, and a satisfied-probe.
+    """One bring-up phase: a name, a step emitter, a satisfied-probe, and the
+    prerequisite kinds it needs.
 
     build_steps: emits the CommandSteps that ADVANCE this phase, for a stack.
     satisfied:   reads a gathered `states` dict and returns True iff this phase
                  needs no work (the gate that makes a re-run resume from the
                  first incomplete phase).
+    ensure:      data-only tuple naming the fresh-volume prerequisites this phase
+                 needs before its steps can run (#350 Task 5) — e.g. ("boxes",
+                 "mq") for vms, ("galaxy", "mq", "pki") for provision. This
+                 module stays PURE: the names are plain strings; the sequencer in
+                 cli.py owns the real I/O (tarball fetch, galaxy/PKI plays) and
+                 dispatches on these names. Keeping the declaration here means
+                 each phase still expresses its prereqs declaratively, in one
+                 place, alongside its steps.
     """
 
     name: str
     build_steps: Callable[[Stack, Any], list[CommandStep]]
     satisfied: Callable[[Stack, dict[str, Any]], bool]
+    ensure: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------- #
@@ -89,14 +99,22 @@ def _commons_members() -> list[str]:
     return members
 
 
-def _all_vms(stack: Stack) -> list[str]:
-    """Every VM bootstrap must bring up for this stack: members + commons, deduped."""
+def all_vms(stack: Stack) -> list[str]:
+    """Every VM bootstrap must bring up for this stack: members + commons, deduped.
+
+    Public so the sequencer (cli.py) can ensure the same VM set's boxes before the
+    vms phase runs them — one source of truth for "the stack's VMs", not a literal.
+    """
     members = stack_members(stack.name) or []
     vms = list(members)
     for host in _commons_members():
         if host not in vms:
             vms.append(host)
     return vms
+
+
+# Back-compat alias for the in-module callers below (kept private at the call sites).
+_all_vms = all_vms
 
 
 def _qm_extra_vars(stack: Stack) -> list[str]:
@@ -215,11 +233,20 @@ def _observe_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: A
 # --------------------------------------------------------------------------- #
 # registry
 # --------------------------------------------------------------------------- #
+# Per-phase prerequisite kinds (#350 Task 5), declared as plain data so phases.py
+# stays import-pure. The sequencer (cli.py _ensure_prereqs_for_stack) dispatches
+# each name to its real ensure before the phase's steps run, and only for phases
+# actually selected — so `bootstrap --only observe` ensures only exporter PKI.
 PHASES: list[Phase] = [
     Phase("net", _net_build_steps, _net_satisfied),
-    Phase("vms", _vms_build_steps, _vms_satisfied),
-    Phase("provision", _provision_build_steps, _provision_satisfied),
-    Phase("observe", _observe_build_steps, _observe_satisfied),
+    Phase("vms", _vms_build_steps, _vms_satisfied, ensure=("boxes", "mq")),
+    Phase(
+        "provision",
+        _provision_build_steps,
+        _provision_satisfied,
+        ensure=("galaxy", "mq", "pki"),
+    ),
+    Phase("observe", _observe_build_steps, _observe_satisfied, ensure=("pki",)),
 ]
 
 
