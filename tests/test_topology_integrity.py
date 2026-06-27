@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from mqlab.inventory import lab_inventory
 from mqlab.roster import lab_roster
-from mqlab.setups import lab_groups, lab_setups
+from mqlab.stacks import lab_stacks
+
+
+def _lab_groups() -> dict[str, list[str]]:
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return {g: list(h) for g, h in (topo.get("groups") or {}).items()}
 
 
 def test_real_topology_renders_without_error():
@@ -17,23 +26,18 @@ def test_real_topology_renders_roster():
     assert "minion_opts:" in out
 
 
-def test_every_setup_group_is_defined():
-    groups = lab_groups()
-    for setup in lab_setups().values():
-        for g in setup.groups:
-            assert g in groups, f"{setup.name} references undefined group {g}"
+def test_every_stack_group_is_defined():
+    groups = _lab_groups()
+    for stack in lab_stacks().values():
+        for g in stack.groups:
+            assert g in groups, f"{stack.name} references undefined group {g}"
 
 
-def test_pcmk_setups_declare_hacluster_and_mqweb_secrets():
-    # every QM-bearing pcmk setup carries the cluster secret AND mqweb_admin_password
+def test_pcmk_stack_declares_hacluster_and_mqweb_secrets():
+    # the QM-bearing pcmk stack carries the cluster secret AND mqweb_admin_password
     # (REST on every QM — design §1; mqweb is enabled at provision where it's injected)
-    setups = lab_setups()
-    assert setups["pcmk_san_ha"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
-    assert setups["pcmk_san_dr"].secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
-    assert setups["distributed-pcmk-ubuntu"].secrets == [
-        "pcmk_hacluster_password",
-        "mqweb_admin_password",
-    ]
+    pcmk = lab_stacks()["pcmk-ubuntu"]
+    assert pcmk.secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
 
 
 def test_real_topology_renders_scrape_targets():
@@ -99,27 +103,22 @@ def test_svc_sim_on_net_ext():
     assert topo["nodes"]["svc-sim"]["nics"].get("net-ext") == "10.60.0.50"
 
 
-def test_distributed_setup_composed():
-    """The distributed setup wires our HA QM (site A) to the SVC service VM (#147)."""
-    from mqlab.setups import lab_setups
-
-    dist = lab_setups()["distributed-pcmk-ubuntu"]
-    assert dist.groups == ["san_a", "pcmk_a", "svc", "app"]
-    assert dist.provision == "ansible/site-distributed.yml"
-    assert dist.qm is not None
+def test_pcmk_stack_composed():
+    """The pcmk-ubuntu stack is full HADR; its QM wires to the SVC counterparty (#147)."""
+    dist = lab_stacks()["pcmk-ubuntu"]
+    assert dist.groups == ["san_a", "pcmk_a", "san_b", "pcmk_b"]
+    assert dist.provision == "ansible/site-pcmk.yml"
     assert dist.qm.qm_app == "PCMKAPP" and dist.qm.qm_svc == "PCMKSVC"  # short-derived (#351)
     assert dist.qm.chl_to_svc == "PCMKAPP.PCMKSVC"
     assert dist.qm.svc_conn == "10.60.0.50"
 
 
-def test_distributed_rdqm_setup_composed():
-    """The RDQM arm's distributed setup mirrors pcmk's, over the RDQM substrate (#216)."""
-    from mqlab.setups import lab_setups
-
-    s = lab_setups()["distributed-rdqm-rhel"]
-    assert s.arm == "rdqm-rhel"
-    assert s.groups == ["rdqm_a", "svc", "app"]
-    assert s.provision == "ansible/site-rdqm-distributed.yml"
-    assert s.qm is not None and s.qm.qm_app == "RDQMAPP" and s.qm.qm_svc == "RDQMSVC"  # (#351)
+def test_rdqm_stack_composed():
+    """The RDQM stack mirrors pcmk's QM wiring, over the RDQM substrate (#216)."""
+    s = lab_stacks()["rdqm-rhel"]
+    assert s.mechanism == "rdqm"
+    assert s.groups == ["rdqm_a", "rdqm_b"]
+    assert s.provision == "ansible/site-rdqm.yml"
+    assert s.qm.qm_app == "RDQMAPP" and s.qm.qm_svc == "RDQMSVC"  # (#351)
     assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
