@@ -211,15 +211,30 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
     name via $PATH) rather than rendered eagerly here, so build_steps stays pure
     — the render happens when the runner executes the step. The obs playbook runs
     with this stack's #351 QM extra-vars so the exporters target the right QM.
+
+    Two playbooks (#381): site-obs.yml stands up the obs box (prometheus/grafana)
+    + the probe's MQ exporters; observability.yml instruments the cluster NODES
+    with node-exporter + the per-mechanism state collector (cluster-state /
+    nativeha-state / rdqm-state) whose textfiles feed the `cluster_*` cockpit
+    metrics. observability.yml is `hosts: all`, so it is --limited to THIS stack's
+    VMs (else it targets other, down stacks' nodes); net-reach needs reach-peers
+    rendered first.
     """
+    ansible = repo_root() / "ansible"
+    nodes = ",".join(all_vms(stack))
     return [
         CommandStep("render targets", Command(["mqlab", "obs", "targets"])),
         CommandStep("render dashboard", Command(["mqlab", "obs", "dashboard"])),
+        CommandStep("render reach-peers", Command(["mqlab", "obs", "reach-peers"])),
         CommandStep(
             f"{stack.name} provision observability",
+            Command(["ansible-playbook", "site-obs.yml", *_qm_extra_vars(stack)], cwd=ansible),
+        ),
+        CommandStep(
+            f"{stack.name} instrument nodes",
             Command(
-                ["ansible-playbook", "site-obs.yml", *_qm_extra_vars(stack)],
-                cwd=repo_root() / "ansible",
+                ["ansible-playbook", "observability.yml", "--limit", nodes, *_qm_extra_vars(stack)],
+                cwd=ansible,
             ),
         ),
     ]

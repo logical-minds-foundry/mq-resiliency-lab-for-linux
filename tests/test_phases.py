@@ -260,12 +260,21 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     steps = PHASES[3].build_steps(stack, None)
     labels = [s.label for s in steps]
     assert any("targets" in lab_ for lab_ in labels)
-    # the obs playbook runs with this stack's QM extra-vars
-    obs_argv = [s.command.argv for s in steps if s.command.argv[0] == "ansible-playbook"]
-    assert obs_argv, "expected an ansible-playbook step in the observe phase"
-    flat = obs_argv[0]
-    assert "site-obs.yml" in flat
-    assert "qm_app=PCMKAPP" in flat
+    # net-reach peers are rendered before observability.yml consumes them (#381)
+    assert any(s.command.argv == ["mqlab", "obs", "reach-peers"] for s in steps)
+    playbooks = [s.command.argv for s in steps if s.command.argv[0] == "ansible-playbook"]
+    names = {argv[1] for argv in playbooks}
+    # BOTH the obs box (site-obs.yml) AND the cluster-node instrumentation
+    # (observability.yml) run — the latter deploys node-exporter + the state
+    # collector that feed cluster_* (#381). Both carry the #351 QM extra-vars.
+    assert names == {"site-obs.yml", "observability.yml"}
+    for argv in playbooks:
+        assert "qm_app=PCMKAPP" in argv
+    obs_argv = next(a for a in playbooks if a[1] == "observability.yml")
+    # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
+    # nodes (cluster + commons) — a cluster node + a commons node both appear.
+    limit = obs_argv[obs_argv.index("--limit") + 1]
+    assert "pcmk-a1" in limit and "svc-sim" in limit
 
 
 def test_all_vms_includes_svc_and_app(monkeypatch, tmp_path):
