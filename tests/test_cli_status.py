@@ -18,6 +18,7 @@ from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 
 # Topology mirroring test_cli_bootstrap.py: two stacks, one reserved.
+# commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
     "  san-a: {}\n"
@@ -27,12 +28,16 @@ TOPO = (
     "  pcmk-b1: {}\n"
     "  obs: {}\n"
     "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
     "  pcmk_b:  [pcmk-b1]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
@@ -62,7 +67,7 @@ TOPO = (
     "    alloc: {}\n"
     "    verbs: {}\n"
     "commons:\n"
-    "  groups: [obs_box, probe]\n"
+    "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
 )
 
@@ -81,7 +86,17 @@ def _seed(monkeypatch, tmp_path):
 
 def _states(*, net=True, vms=True, provision=False, observe=False):
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
-    guests = ["san-a", "pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "obs", "mon-probe"]
+    guests = [
+        "san-a",
+        "pcmk-a1",
+        "pcmk-a2",
+        "pcmk-a3",
+        "pcmk-b1",
+        "obs",
+        "mon-probe",
+        "svc-sim",
+        "app-client",
+    ]
     domains = {f"lab_{g}": "running" for g in guests} if vms else {}
     return build_states(nets=nets, domains=domains, qm_up=provision, observe=observe)
 

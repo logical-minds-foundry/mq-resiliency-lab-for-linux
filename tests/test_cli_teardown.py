@@ -23,6 +23,7 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # Seeded topology: same structure as test_cli_bootstrap.py PLUS an rdqm-rhel stack
 # and a corresponding rdqm_a group + nodes. Both stacks have cluster_group set so
 # neither is "reserved" in the _other_stacks_up sense.
+# commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
     "  san-a: {}\n"
@@ -35,6 +36,8 @@ TOPO = (
     "  rdqm-a3: {}\n"
     "  obs: {}\n"
     "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
@@ -42,6 +45,8 @@ TOPO = (
     "  rdqm_a:  [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
@@ -76,7 +81,7 @@ TOPO = (
     "    verbs:\n"
     "      qm-status:  { cmd: 'dspmq -m {qm}' }\n"
     "commons:\n"
-    "  groups: [obs_box, probe]\n"
+    "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
 )
 
@@ -139,6 +144,8 @@ def _stub_probe_states(monkeypatch, domain_states=None):
             "rdqm-a3",
             "obs",
             "mon-probe",
+            "svc-sim",
+            "app-client",
         ]
         domain_states = {f"lab_{v}": "running" for v in vms}
     monkeypatch.setattr(cli, "_probe_states", lambda deps: domain_states)

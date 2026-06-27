@@ -25,6 +25,7 @@ from tests.fakes import RecordingRunner, ScriptedResult
 
 # A seeded topology mirroring tests/test_phases.py: nodes + groups + a stacks:
 # block + commons + two lab networks (for the net phase to enumerate).
+# commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
     "  san-a: {}\n"
@@ -34,12 +35,16 @@ TOPO = (
     "  pcmk-b1: {}\n"
     "  obs: {}\n"
     "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
     "  pcmk_b:  [pcmk-b1]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
@@ -58,7 +63,7 @@ TOPO = (
     "    verbs:\n"
     "      qm-status:  { pcs: 'status resources' }\n"
     "commons:\n"
-    "  groups: [obs_box, probe]\n"
+    "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
 )
 
@@ -77,7 +82,17 @@ def _seed(monkeypatch, tmp_path):
 
 def _states(*, net=True, vms=True, provision=False, observe=False):
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
-    guests = ["san-a", "pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "obs", "mon-probe"]
+    guests = [
+        "san-a",
+        "pcmk-a1",
+        "pcmk-a2",
+        "pcmk-a3",
+        "pcmk-b1",
+        "obs",
+        "mon-probe",
+        "svc-sim",
+        "app-client",
+    ]
     domains = {f"lab_{g}": "running" for g in guests} if vms else {}
     return build_states(nets=nets, domains=domains, qm_up=provision, observe=observe)
 

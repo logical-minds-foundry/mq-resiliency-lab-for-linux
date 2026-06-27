@@ -421,5 +421,5 @@ stacks:
 # commons: — shared observability stack. Replaces the old `monitoring` setup in the
 # stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.
 commons:
-  groups: [obs_box, probe]
+  groups: [obs_box, probe, svc, app]
   provision: ansible/site-obs.yml

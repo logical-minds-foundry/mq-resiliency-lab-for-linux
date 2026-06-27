@@ -13,7 +13,9 @@ from mqlab.phases import PHASES, build_states, first_unsatisfied
 from mqlab.stacks import lab_stacks
 
 # Mirror tests/test_stacks.py's seeded topology, plus the lab networks the net
-# phase enumerates and the commons (obs_box/probe) groups the vms phase needs.
+# phase enumerates and the commons (obs_box/probe/svc/app) groups the vms phase
+# needs. svc-sim and app-client are shared commons (spec §6): they must appear
+# in all_vms so the vms phase brings them up alongside the obs pair.
 TOPO = (
     "nodes:\n"
     "  san-a: {}\n"
@@ -23,12 +25,16 @@ TOPO = (
     "  pcmk-b1: {}\n"
     "  obs: {}\n"
     "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
     "  pcmk_b:  [pcmk-b1]\n"
     "  obs_box: [obs]\n"
     "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
@@ -46,7 +52,7 @@ TOPO = (
     "    verbs:\n"
     "      qm-status:  { pcs: 'status resources' }\n"
     "commons:\n"
-    "  groups: [obs_box, probe]\n"
+    "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
 )
 
@@ -73,7 +79,17 @@ def _fake_states(net=True, vms=True, provision=False, observe=False):
       observe: bool — this stack's exporter responds + targets registered
     """
     nets = {"net-mgmt": "active", "net-data-a": "active"} if net else {}
-    guests = ["san-a", "pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "obs", "mon-probe"]
+    guests = [
+        "san-a",
+        "pcmk-a1",
+        "pcmk-a2",
+        "pcmk-a3",
+        "pcmk-b1",
+        "obs",
+        "mon-probe",
+        "svc-sim",
+        "app-client",
+    ]
     domains = {f"lab_{g}": "running" for g in guests} if vms else {}
     return {"nets": nets, "domains": domains, "qm_up": provision, "observe": observe}
 
@@ -175,11 +191,14 @@ def test_vms_build_steps_vagrant_up_members_and_commons(monkeypatch, tmp_path):
     assert argv[0] == "vagrant"
     assert argv[1] == "up"
     targets = argv[2:]
-    # stack members + commons VMs, in order, deduped
+    # stack members + commons VMs (obs_box/probe/svc/app), in order, deduped
     assert "pcmk-a1" in targets
     assert "pcmk-b1" in targets
     assert "obs" in targets
     assert "mon-probe" in targets
+    # svc-sim and app-client are shared commons (spec §6); all_vms must include them
+    assert "svc-sim" in targets
+    assert "app-client" in targets
 
 
 def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
@@ -240,6 +259,25 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     flat = obs_argv[0]
     assert "site-obs.yml" in flat
     assert "qm_app=PCMKAPP" in flat
+
+
+def test_all_vms_includes_svc_and_app(monkeypatch, tmp_path):
+    """all_vms must include svc-sim and app-client for any stack.
+
+    svc-sim/app-client live in the shared commons (groups svc/app). Before the
+    topology fix they were in NEITHER the stack groups NOR the old commons groups
+    ([obs_box, probe]), so all_vms omitted them and the vms phase never vagrant-up'd
+    them — the distributed message path never started. This test fails against the
+    old commons groups and passes with the corrected [obs_box, probe, svc, app].
+    """
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    from mqlab.phases import all_vms
+
+    stack = lab_stacks()["pcmk-ubuntu"]
+    vms = all_vms(stack)
+    assert "svc-sim" in vms, "svc-sim must be in all_vms (shared commons svc group)"
+    assert "app-client" in vms, "app-client must be in all_vms (shared commons app group)"
 
 
 def test_all_vms_dedupes_overlap(monkeypatch, tmp_path):
