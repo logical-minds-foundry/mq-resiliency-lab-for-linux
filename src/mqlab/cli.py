@@ -905,6 +905,29 @@ def _probe_net_states(deps: Deps) -> dict[str, str]:
     return _probe(deps, Command([*_VIRSH, "net-list", "--all"]), parse_net_states)  # noqa: S607
 
 
+def _source_secret(deps: Deps, name: str) -> str:
+    # Auto-generated lab secret -> its value, injected into the provision playbook
+    # env (the roles read e.g. PCMK_HACLUSTER_PASSWORD via lookup('env', ...)). No
+    # hiding: the lab is a throwaway illusion, so this echoes + tees like any other
+    # step. lab-secret.sh generates+persists once. (#373: restores the pre-#350 path
+    # the cutover dropped with the old `vm provision`.)
+    cmd = Command(["bash", str(lab_script("lab-secret.sh")), name])  # noqa: S607
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+    captured: list[str] = []
+
+    def sink(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+        captured.append(line)
+
+    code = deps.runner.run(cmd, sink)
+    if code != 0:
+        deps.renderer.error(f"lab-secret.sh {name} failed (exit {code})")
+        raise typer.Exit(code=2)
+    return "\n".join(captured).strip()
+
+
 def _execute_stateful(
     verb: str,
     items: list[str],
@@ -1364,6 +1387,14 @@ def _bootstrap_run(
         if not selected:
             deps.renderer.note(f"{stack_name}: already satisfied — nothing to do")
             return
+        # Inject the stack's secrets as env vars for the provision playbook (#373):
+        # its roles read e.g. PCMK_HACLUSTER_PASSWORD via lookup('env', ...). The I/O
+        # (lab-secret.sh) lives here in the sequencer, not in pure phases.py — mirrors
+        # os.environ.update(_vagrant_env()). The #350 cutover dropped this with the old
+        # `vm provision`; without it the hacluster password is empty and chpasswd fails.
+        if any(phase.name == "provision" for phase in selected):
+            for secret in stack.secrets:
+                os.environ[secret.upper()] = _source_secret(deps, secret)
         for phase in selected:  # one phase at a time so a failure names its phase
             try:
                 # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),

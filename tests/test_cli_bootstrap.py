@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 
 import pytest
 import typer
@@ -211,9 +212,11 @@ def test_bootstrap_all_satisfied_is_a_noop(monkeypatch, tmp_path):
 # only for phases actually selected this run.
 # --------------------------------------------------------------------------- #
 def _stub_ensure(monkeypatch):
-    """Neutralize the per-phase prereq-ensure so a sequencer-selection test stays
-    focused on phase selection (the ensure is covered by its own tests below)."""
+    """Neutralize the per-phase prereq-ensure AND the provision secret-sourcing so a
+    sequencer-selection test stays focused on phase selection (each is covered by its
+    own tests below)."""
     monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
 
 
 def _record_ensures(monkeypatch):
@@ -223,6 +226,7 @@ def _record_ensures(monkeypatch):
         "_ensure_prereqs_for_stack",
         lambda stack, phase, *, step: ensured.append(phase.name),
     )
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
     return ensured
 
 
@@ -267,6 +271,64 @@ def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "net"])
     assert result.exit_code == 0
     assert calls == []  # net phase has no prerequisites
+
+
+# --------------------------------------------------------------------------- #
+# provision secret injection (#373: the #350 cutover dropped it -> hacluster
+# password came up empty and chpasswd failed on the cluster nodes)
+#
+# The provision playbook's roles read secrets from the environment (e.g.
+# PCMK_HACLUSTER_PASSWORD via lookup('env', ...)). The sequencer resolves
+# stack.secrets via lab-secret.sh and exports them (uppercased) before provision.
+# --------------------------------------------------------------------------- #
+def test_provision_injects_stack_secrets(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    sourced: list[str] = []
+
+    def fake_source(deps, name):
+        sourced.append(name)
+        return f"v-{name}"
+
+    monkeypatch.setattr(cli, "_source_secret", fake_source)
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(2)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    assert result.exit_code == 0
+    # both of the stack's secrets are sourced, in order, and exported uppercased
+    assert sourced == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    for name in sourced:  # exported under the uppercased name with the sourced value
+        assert os.environ[name.upper()] == f"v-{name}"
+        monkeypatch.delenv(name.upper(), raising=False)
+
+
+def test_non_provision_phase_sources_no_secrets(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    sourced: list[str] = []
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: sourced.append(name) or "x")
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    assert result.exit_code == 0
+    assert sourced == []  # observe doesn't touch the cluster/QM secrets
+
+
+def test_source_secret_returns_trimmed_value(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["  topsecret  "])])
+    value = cli._source_secret(_deps(runner), "pcmk_hacluster_password")
+    assert value == "topsecret"
+    assert runner.recorded[0].argv[-1] == "pcmk_hacluster_password"  # lab-secret.sh <name>
+
+
+def test_source_secret_exits_loud_on_failure(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["boom"], exit_code=1)])
+    with pytest.raises(typer.Exit):
+        cli._source_secret(_deps(runner), "pcmk_hacluster_password")
 
 
 # --------------------------------------------------------------------------- #
