@@ -2,8 +2,12 @@
 
 The inventory is the full declarative *map* of every host — not a snapshot of what
 is running (liveness lives in the verb pre-flight, #99/#102). One source of truth
-(topology), one grouping namespace: atomic role×site groups, plus setups rendered
-as Ansible `:children` parent groups (underscore names = groups, hyphens = hosts).
+(topology), one grouping namespace: atomic role×site groups, plus each stack
+rendered as an Ansible `:children` parent group (#350). The stack-aggregate group
+name is the stack name with hyphens→underscores (`pcmk-ubuntu` → `pcmk_ubuntu`),
+so a provision playbook can target `hosts: pcmk_ubuntu` and reach the union of that
+stack's atomic groups. Reserved stacks with no groups (e.g. nativeha-ubuntu) emit
+no aggregate. (underscore names = groups, hyphens = hosts.)
 """
 
 from __future__ import annotations
@@ -26,6 +30,11 @@ class InventoryError(RuntimeError):
     """topology.yaml cannot be rendered to a valid inventory."""
 
 
+def _stack_group(stack: str) -> str:
+    """The Ansible aggregate-group name for a stack: hyphens → underscores (#350)."""
+    return stack.replace("-", "_")
+
+
 def _mgmt_ip(nodes: dict[str, Any], host: str) -> str:
     spec = nodes.get(host)
     if spec is None:
@@ -41,18 +50,20 @@ def render_inventory(topo: dict[str, Any]) -> str:
     integrity problem (missing mgmt IP, undefined host or group) — never silently."""
     nodes = topo.get("nodes", {})
     groups = topo.get("groups", {})
-    setups = topo.get("setups", {})
+    stacks = topo.get("stacks", {})
     lines: list[str] = []
     for group, hosts in groups.items():
         lines.append(f"[{group}]")
         for host in hosts:
             lines.append(f"{host} ansible_host={_mgmt_ip(nodes, host)}")
-    for setup, cfg in setups.items():
+    for stack, cfg in stacks.items():
         members = (cfg or {}).get("groups", [])
         for g in members:
             if g not in groups:
-                raise InventoryError(f"setup {setup} references undefined group: {g}")
-        lines.append(f"[{setup}:children]")
+                raise InventoryError(f"stack {stack} references undefined group: {g}")
+        if not members:
+            continue  # reserved stack (e.g. nativeha-ubuntu) — no aggregate to render
+        lines.append(f"[{_stack_group(stack)}:children]")
         lines.extend(members)
     lines += [
         "[all:vars]",

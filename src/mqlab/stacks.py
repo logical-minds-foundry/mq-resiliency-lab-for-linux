@@ -141,16 +141,20 @@ def stack_members(name: str) -> list[str] | None:
 
     Returns None if the stack name is not found. An empty list is returned for
     reserved stacks (e.g. nativeha-ubuntu) that declare groups: [].
+
+    Reads the topology's `stacks`/`groups` blocks directly (a pure membership
+    query) rather than constructing a full Stack, so a guest-selection caller does
+    not depend on every stack field being present.
     """
-    stack = lab_stacks().get(name)
-    if stack is None:
-        return None
     data = _topology()
+    stacks = data.get("stacks") or {}
+    if name not in stacks:
+        return None
     all_groups: dict[str, list[str]] = {
         g: list(hosts) for g, hosts in (data.get("groups") or {}).items()
     }
     members: list[str] = []
-    for g in stack.groups:
+    for g in (stacks[name] or {}).get("groups", []):
         for host in all_groups.get(g, []):
             if host not in members:
                 members.append(host)

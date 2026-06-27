@@ -47,14 +47,14 @@
 # silently skips the whole san_a/san_b DRBD+target stage and marches on to the
 # cluster plays against half a topology. Wait for every node before any work.
 - name: wait for all DR-arm hosts to be SSH-ready (cold-boot guard)
-  hosts: pcmk_san_dr
+  hosts: pcmk_ubuntu
   gather_facts: false
   tasks:
     - name: wait for connection
       ansible.builtin.wait_for_connection:
         timeout: 180
 
-- hosts: pcmk_san_dr
+- hosts: pcmk_ubuntu
   become: true
   tasks:
     - name: acl package for unprivileged become

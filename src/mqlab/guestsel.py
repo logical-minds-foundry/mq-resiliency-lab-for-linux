@@ -14,7 +14,7 @@ import re
 import yaml
 
 from mqlab.paths import repo_root
-from mqlab.setups import setup_members
+from mqlab.stacks import stack_members
 
 ALL = "all"
 
@@ -33,9 +33,9 @@ def select_guests(pattern: str, names: list[str]) -> list[str]:
 
 
 def resolve_guests(pattern: str) -> list[str]:
-    """Resolve a selection: a setup name (its members, in bring-up order) wins;
+    """Resolve a selection: a stack name (its members, in bring-up order) wins;
     else `all` / a regex over guest names (#90)."""
-    members = setup_members(pattern)
+    members = stack_members(pattern)
     if members is not None:
         return members
     return select_guests(pattern, lab_guest_names())

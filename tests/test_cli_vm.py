@@ -116,17 +116,17 @@ def test_vm_create_running_guest_is_a_no_op(monkeypatch, tmp_path):
     assert _argvs(runner) == [[*_VIRSH, "list", "--all"]]  # already running, nothing to do
 
 
-def test_vm_create_by_setup_name_resolves_members_in_order(monkeypatch, tmp_path):
+def test_vm_create_by_stack_name_resolves_members_in_order(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  pcmk-a2: {}\n"
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1, pcmk-a2]\n"
-        "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
+        "stacks:\n  pcmk-ubuntu:\n    short: PCMK\n    groups: [san_a, pcmk_a]\n"
     )
     runner = RecordingRunner(results=[_probe({}), *(ScriptedResult([]) for _ in range(3))])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "create", "pcmk_san_ha"])
+    result = CliRunner().invoke(cli.app, ["vm", "create", "pcmk-ubuntu"])
     assert result.exit_code == 0
     assert [c.argv[-1] for c in runner.recorded[1:]] == ["san-a", "pcmk-a1", "pcmk-a2"]
 
@@ -303,17 +303,17 @@ def test_vm_status_nonzero_exit_propagates(monkeypatch, tmp_path):
     assert result.exit_code == 1
 
 
-def test_vm_status_accepts_a_setup_selector(monkeypatch, tmp_path):
+def test_vm_status_accepts_a_stack_selector(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {}\n  pcmk-a1: {}\n  rdqm-a1: {}\n"
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-        "setups:\n  pcmk_san_ha:\n    groups: [san_a, pcmk_a]\n"
+        "stacks:\n  pcmk-ubuntu:\n    short: PCMK\n    groups: [san_a, pcmk_a]\n"
     )
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    result = CliRunner().invoke(cli.app, ["vm", "status", "pcmk_san_ha"])
+    result = CliRunner().invoke(cli.app, ["vm", "status", "pcmk-ubuntu"])
     assert result.exit_code == 0
     assert runner.recorded[0].argv[-1] == "--all"  # still virsh list --all (the source)
 
@@ -324,7 +324,7 @@ def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
         "groups:\n  san_a: [san-a]\n"
-        "setups:\n  pcmk_san_ha: {groups: [san_a]}\n"
+        "stacks:\n  pcmk-ubuntu: {short: PCMK, groups: [san_a]}\n"
     )
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
@@ -333,7 +333,7 @@ def test_vm_inventory_writes_and_echoes(monkeypatch, tmp_path):
     written = (tmp_path / "build" / "work" / "inventory.ini").read_text()
     assert "[san_a]" in written
     assert "san-a ansible_host=10.50.0.5" in written
-    assert "[pcmk_san_ha:children]" in written
+    assert "[pcmk_ubuntu:children]" in written
 
 
 def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
@@ -342,7 +342,7 @@ def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
         "groups:\n  san_a: [san-a]\n"
-        "setups:\n  pcmk_san_ha: {groups: [san_a]}\n"
+        "stacks:\n  pcmk-ubuntu: {short: PCMK, groups: [san_a]}\n"
     )
     runner = RecordingRunner(results=[])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
@@ -352,7 +352,7 @@ def test_vm_roster_writes_and_echoes(monkeypatch, tmp_path):
     assert "san-a:" in written
     assert "host: 10.50.0.5" in written
     assert "roster_groups:\n      - san_a" in written
-    assert "roster_setups:\n      - pcmk_san_ha" in written
+    assert "roster_stacks:\n      - pcmk-ubuntu" in written
 
 
 def test_vm_up_step_without_tty_exits_two(monkeypatch, tmp_path):

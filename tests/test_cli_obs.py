@@ -59,7 +59,9 @@ def _seed_monitoring(tmp_path):
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
         "  svc: [svc-sim]\n  app: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
-        "setups:\n"
+        # obs status (removed in Stage 3) resolves the literal "monitoring" via
+        # resolve_guests, now stack-based; a throwaway stack keeps it green.
+        "stacks:\n"
         "  monitoring:\n    groups: [obs_box, probe]\n"
     )
 

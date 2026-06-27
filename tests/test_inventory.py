@@ -14,8 +14,8 @@ TOPO = {
         "san_a": ["san-a"],
         "pcmk_a": ["pcmk-a1", "pcmk-a2"],
     },
-    "setups": {
-        "pcmk_san_ha": {"groups": ["san_a", "pcmk_a"], "provision": "ansible/site-pcmk.yml"},
+    "stacks": {
+        "pcmk-ubuntu": {"groups": ["san_a", "pcmk_a"], "provision": "ansible/site-pcmk.yml"},
     },
 }
 
@@ -28,7 +28,8 @@ def test_render_emits_groups_children_and_vars_in_order():
         "[pcmk_a]\n"
         "pcmk-a1 ansible_host=10.50.0.51\n"
         "pcmk-a2 ansible_host=10.50.0.52\n"
-        "[pcmk_san_ha:children]\n"
+        # stack-aggregate group: hyphens -> underscores (#350)
+        "[pcmk_ubuntu:children]\n"
         "san_a\n"
         "pcmk_a\n"
         "[all:vars]\n"
@@ -39,23 +40,37 @@ def test_render_emits_groups_children_and_vars_in_order():
     )
 
 
+def test_reserved_stack_with_no_groups_emits_no_aggregate():
+    topo = {
+        "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
+        "groups": {"san_a": ["san-a"]},
+        "stacks": {
+            "pcmk-ubuntu": {"groups": ["san_a"]},
+            "nativeha-ubuntu": {"groups": []},  # reserved — no aggregate
+        },
+    }
+    out = render_inventory(topo)
+    assert "[pcmk_ubuntu:children]" in out
+    assert "nativeha_ubuntu" not in out
+
+
 def test_missing_mgmt_ip_raises():
-    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "setups": {}}
+    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
     with pytest.raises(InventoryError, match="no net-mgmt IP: san-a"):
         render_inventory(topo)
 
 
 def test_group_referencing_undefined_host_raises():
-    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "setups": {}}
+    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
     with pytest.raises(InventoryError, match="undefined host: san-a"):
         render_inventory(topo)
 
 
-def test_setup_referencing_undefined_group_raises():
+def test_stack_referencing_undefined_group_raises():
     topo = {
         "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
         "groups": {"san_a": ["san-a"]},
-        "setups": {"bad": {"groups": ["nope"]}},
+        "stacks": {"bad": {"groups": ["nope"]}},
     }
     with pytest.raises(InventoryError, match="undefined group: nope"):
         render_inventory(topo)
