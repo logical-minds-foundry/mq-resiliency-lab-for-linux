@@ -31,7 +31,7 @@
 
 # Cold-boot guard (#151): wait for every host to accept SSH before any work.
 - name: wait for all pcmk-rhel hosts to be SSH-ready (cold-boot guard)
-  hosts: pcmk_san_rhel_ha
+  hosts: san_a_rhel:pcmk_rhel_a
   gather_facts: false
   tasks:
     - name: wait for connection
@@ -39,10 +39,10 @@
         timeout: 180
 
 # Offline package sources (DVD BaseOS/AppStream + host-fetched HighAvailability).
-- hosts: pcmk_san_rhel_ha
+- hosts: san_a_rhel:pcmk_rhel_a
   roles: [rhel-ha-repo]
 
-- hosts: pcmk_san_rhel_ha
+- hosts: san_a_rhel:pcmk_rhel_a
   become: true
   tasks:
     - name: acl package for unprivileged become (dnf)

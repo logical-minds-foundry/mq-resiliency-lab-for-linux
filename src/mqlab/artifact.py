@@ -13,13 +13,11 @@ import shutil
 import urllib.request
 from typing import TYPE_CHECKING
 
-from mqlab.manifest import setup_platforms, tarball_name
+from mqlab.manifest import tarball_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
-
-    from mqlab.hostfacts import HostFacts
 
 # IBM MQ Advanced for Developers is a no-charge, NO-AUTH public download — so a
 # credential-less box (e.g. the anonymous bootstrap identity, #291) can fetch it.
@@ -61,18 +59,21 @@ def _verify_sha256(path: Path) -> None:
         raise ValueError(f"sha256 mismatch for {path.name}: {actual} != {expected}")
 
 
-def ensure_mq_tarballs(
-    setup: str,
+def ensure_mq_tarballs_for_platforms(
+    platforms: set[str],
     mq_version: str,
     build_mq_dir: Path,
     *,
     fetch: Callable[[str, Path], None],
-    facts: HostFacts | None = None,
 ) -> list[Path]:
-    """Ensure the MQ tarball for each distinct platform in `setup` is present + valid.
-    Platforms are host-resolved via `setup_platforms(setup, facts)` (#276)."""
+    """Ensure the MQ tarball for each given platform is present + valid in the cache.
+
+    The stack/commons bootstrap path (#350) resolves the platform set (host-resolved,
+    #276) and passes it here; this only acquires it (fetch on a miss, verify the
+    sha256 sidecar). One place to fetch + verify, no silent fallback.
+    """
     paths: list[Path] = []
-    for platform in sorted(setup_platforms(setup, facts)):
+    for platform in sorted(platforms):
         name = tarball_name(mq_version, platform)
         dest = build_mq_dir / name
         if not dest.exists():

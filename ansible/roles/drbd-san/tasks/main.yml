@@ -119,4 +119,5 @@
 # NOTE: promotion + skip-initial-sync + mkfs is NOT here. It needs BOTH peers up
 # and connected so the primary can `--clear-bitmap` (declare both in-sync at
 # zero, skipping the 8 GB full copy), and this role runs per-host before the
-# peer exists. It lives in a post-both-up play in site-pcmk-dr.yml.
+# peer exists. It lives in a post-both-up play in _pcmk-cluster-ha.yml (the
+# building block site-pcmk.yml composes; #350 Task 2 consolidation).

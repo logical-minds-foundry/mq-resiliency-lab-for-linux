@@ -1,7 +1,7 @@
 """Render a salt-ssh roster as a pure function of lab/topology.yaml (#206).
 
 Sibling to inventory.py: one source of truth (topology), the same group-reachable
-host set, fail-loud on the same integrity problems. Group/setup membership rides
+host set, fail-loud on the same integrity problems. Group/stack membership rides
 as grains under `minion_opts` so `salt-ssh -G 'roster_groups:<grp>'` can target it.
 """
 
@@ -41,24 +41,24 @@ def render_roster(topo: dict[str, Any]) -> str:
     """
     nodes = topo.get("nodes", {})
     groups = topo.get("groups", {})
-    setups = topo.get("setups", {})
+    stacks = topo.get("stacks", {})
 
-    for setup, cfg in setups.items():
+    for stack, cfg in stacks.items():
         for g in (cfg or {}).get("groups", []):
             if g not in groups:
-                raise RosterError(f"setup {setup} references undefined group: {g}")
+                raise RosterError(f"stack {stack} references undefined group: {g}")
 
     host_groups: dict[str, list[str]] = {}
     for group, hosts in groups.items():
         for host in hosts:
             host_groups.setdefault(host, []).append(group)
 
-    host_setups: dict[str, list[str]] = {host: [] for host in host_groups}
-    for setup, cfg in setups.items():
+    host_stacks: dict[str, list[str]] = {host: [] for host in host_groups}
+    for stack, cfg in stacks.items():
         members = set((cfg or {}).get("groups", []))
         for host, hgroups in host_groups.items():
             if members.intersection(hgroups):
-                host_setups[host].append(setup)
+                host_stacks[host].append(stack)
 
     priv = str(Path(INSECURE_KEY).expanduser())
     roster: dict[str, Any] = {}
@@ -71,7 +71,7 @@ def render_roster(topo: dict[str, Any]) -> str:
             "minion_opts": {
                 "grains": {
                     "roster_groups": host_groups[host],
-                    "roster_setups": host_setups[host],
+                    "roster_stacks": host_stacks[host],
                 }
             },
         }

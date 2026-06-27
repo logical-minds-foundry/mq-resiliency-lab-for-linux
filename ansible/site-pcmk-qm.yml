@@ -1,7 +1,0 @@
-# Create the Pacemaker-managed queue manager + its HA resource group.
-# Driven by `mqlab qm create <setup>` (passes qm_name / qm_vip).
-- hosts: pcmk_a
-  become: true
-  vars:
-    first_node: "{{ groups['pcmk_a'][0] }}"
-  roles: [mq-pcmk-qmgr]

@@ -32,13 +32,13 @@ def test_lab_guests_default_tracks_host(monkeypatch, tmp_path):
     assert lab_guests(X86) == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-x86_64"}
 
 
-def test_fleet_rows_joins_state_and_setups_and_sorts_by_columns(monkeypatch, tmp_path):
+def test_fleet_rows_joins_state_and_stacks_and_sorts_by_columns(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n  rdqm_a: [rdqm-a1]\n"
-        "setups:\n  pcmk-san-ha:\n    groups: [san_a, pcmk_a]\n"
-        "  rdqm-ha:\n    groups: [rdqm_a]\n"
+        "stacks:\n  pcmk-ubuntu:\n    groups: [san_a, pcmk_a]\n"
+        "  rdqm-rhel:\n    groups: [rdqm_a]\n"
     )
     platforms = {
         "rdqm-a1": "rhel96-x86_64",
@@ -49,8 +49,8 @@ def test_fleet_rows_joins_state_and_setups_and_sorts_by_columns(monkeypatch, tmp
     rows = fleet_rows(platforms, states)
     by_guest = {r.guest: r for r in rows}
     assert by_guest["rdqm-a1"].state == "not created"
-    assert by_guest["rdqm-a1"].setups == "rdqm-ha"
-    assert by_guest["san-a"].setups == "pcmk-san-ha"
+    assert by_guest["rdqm-a1"].stacks == "rdqm-rhel"
+    assert by_guest["san-a"].stacks == "pcmk-ubuntu"
     assert by_guest["pcmk-a1"].state == "running"
     # sorted by column left-to-right (guest first): plain alphabetical by guest
     assert [r.guest for r in rows] == ["pcmk-a1", "rdqm-a1", "san-a"]

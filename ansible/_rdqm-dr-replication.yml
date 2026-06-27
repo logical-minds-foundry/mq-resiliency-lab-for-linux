@@ -1,0 +1,33 @@
+# Building block (#350 Task 2): site-B 3-node RDQM HA group — the cross-site DR
+# receiving end (#288, Plan C). Body moved verbatim from the former
+# site-rdqm-dr.yml. Composed by site-rdqm.yml AFTER _rdqm-cluster-ha.yml.
+#
+# The DR replication link itself is established at QM-create time
+# (crtmqm -rr p/s -rl/-ri/-rp, net-wan, port 7001) — IBM's 9.4 worked example puts
+# the DR IPs on the command line, so no rdqm.ini DR stanza is needed here (rdqm.ini
+# stays the per-site HA Node/HA_Replication shape). This block only has to make the
+# site-B HA group exist so the DR secondary can be created on it. It also makes
+# `mqlab obs instrument` succeed on rdqm_b: rdqm-install configures the DVD dnf repo,
+# without which dnf has no source for packages like unzip (#288).
+- hosts: rdqm_b
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.dnf:
+        name: acl
+
+- hosts: rdqm_b
+  roles: [rdqm-install]
+
+# Stateless per-node mqweb on every site-B node's RDQMAPP — administers the local QM
+# whenever DR cutover lands it here. Mirrors the site-A play in _rdqm-cluster-ha.yml.
+- hosts: rdqm_b
+  roles: [mqweb]
+
+- hosts: rdqm_b
+  vars:
+    rdqm_site_nodes:
+      - { name: rdqm-b1, hb: 172.16.2.41, data: 10.10.2.41 }
+      - { name: rdqm-b2, hb: 172.16.2.42, data: 10.10.2.42 }
+      - { name: rdqm-b3, hb: 172.16.2.43, data: 10.10.2.43 }
+  roles: [rdqm-ha]

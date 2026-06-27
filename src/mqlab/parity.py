@@ -2,8 +2,9 @@
 arm's backend supports. Parity = identical capability + identical correctness;
 this declares the capability half. RDQM rows start NOT_YET until P3/P4 land.
 
-The arm-to-setup mapping lives in the topology-declared registry (`mqlab.arms`);
-the test suite asserts this matrix and that registry agree on the arm set.
+This is a standalone declaration keyed by arm name (the historical RDQM-parity
+catalog). The #350 cutover retired the topology `arms:` block; the live per-stack
+verb implementations now live on each Stack (lab/topology.yaml `stacks:`).
 """
 
 from __future__ import annotations

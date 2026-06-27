@@ -14,7 +14,7 @@ TOPO = {
         "pcmk_a": ["pcmk-a1"],
         "site_a": ["san-a", "pcmk-a1"],
     },
-    "setups": {"pcmk_san_ha": {"groups": ["san_a", "pcmk_a"]}},
+    "stacks": {"pcmk-ubuntu": {"groups": ["san_a", "pcmk_a"]}},
 }
 
 
@@ -33,8 +33,8 @@ def test_render_emits_targets_grains_in_first_appearance_order(monkeypatch):
         "      roster_groups:\n"
         "      - san_a\n"
         "      - site_a\n"
-        "      roster_setups:\n"
-        "      - pcmk_san_ha\n"
+        "      roster_stacks:\n"
+        "      - pcmk-ubuntu\n"
         "pcmk-a1:\n"
         "  host: 10.50.0.51\n"
         "  user: vagrant\n"
@@ -45,34 +45,34 @@ def test_render_emits_targets_grains_in_first_appearance_order(monkeypatch):
         "      roster_groups:\n"
         "      - pcmk_a\n"
         "      - site_a\n"
-        "      roster_setups:\n"
-        "      - pcmk_san_ha\n"
+        "      roster_stacks:\n"
+        "      - pcmk-ubuntu\n"
     )
 
 
 def test_missing_mgmt_ip_raises():
-    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "setups": {}}
+    topo = {"nodes": {"san-a": {"nics": {}}}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
     with pytest.raises(RosterError, match="no net-mgmt IP: san-a"):
         render_roster(topo)
 
 
 def test_group_referencing_undefined_host_raises():
-    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "setups": {}}
+    topo = {"nodes": {}, "groups": {"san_a": ["san-a"]}, "stacks": {}}
     with pytest.raises(RosterError, match="undefined host: san-a"):
         render_roster(topo)
 
 
-def test_setup_referencing_undefined_group_raises():
+def test_stack_referencing_undefined_group_raises():
     topo = {
         "nodes": {"san-a": {"nics": {"net-mgmt": "10.50.0.5"}}},
         "groups": {"san_a": ["san-a"]},
-        "setups": {"bad": {"groups": ["nope"]}},
+        "stacks": {"bad": {"groups": ["nope"]}},
     }
     with pytest.raises(RosterError, match="undefined group: nope"):
         render_roster(topo)
 
 
-def test_ungrouped_node_is_absent_and_uncovered_host_has_empty_setups(monkeypatch):
+def test_ungrouped_node_is_absent_and_uncovered_host_has_empty_stacks(monkeypatch):
     monkeypatch.setenv("HOME", "/home/tester")
     topo = {
         "nodes": {
@@ -81,14 +81,14 @@ def test_ungrouped_node_is_absent_and_uncovered_host_has_empty_setups(monkeypatc
             "lonely": {"nics": {"net-mgmt": "10.50.0.9"}},  # in no group
         },
         "groups": {"ga": ["a"], "gb": ["b"]},
-        "setups": {"s1": {"groups": ["ga"]}},  # covers a, not b
+        "stacks": {"s1": {"groups": ["ga"]}},  # covers a, not b
     }
     out = render_roster(topo)
     assert "lonely:" not in out  # ungrouped node absent (parity with inventory)
     assert "a:\n" in out and "b:\n" in out
-    # a is covered by s1; b is in a group no setup references -> empty list
-    assert "      roster_setups:\n      - s1\n" in out
+    # a is covered by s1; b is in a group no stack references -> empty list
+    assert "      roster_stacks:\n      - s1\n" in out
     assert (
-        "  minion_opts:\n    grains:\n      roster_groups:\n      - gb\n      roster_setups: []\n"
+        "  minion_opts:\n    grains:\n      roster_groups:\n      - gb\n      roster_stacks: []\n"
         in out
     )

@@ -1,23 +1,76 @@
-# The Native HA arm (#246), site-A 3-node HA group (Phase 1 = HA only).
-# Site B (nha_rhel_b) is the CRR/DR peer — Phase 3 in a future site-nativeha-dr.yml
-# that imports this play set and adds nha_rhel_b + CRR. Site-A-only keeps the
-# consolidated distributed-nativeha-rhel setup provisioning cleanly without an
-# uncreated site B (mirrors site-rdqm.yml).
-- hosts: nha_rhel_a
-  become: true
-  tasks:
-    - name: acl package for unprivileged become (become_user mqm)
-      ansible.builtin.dnf:
-        name: acl
+# One full-HADR provision for the nativeha-rhel stack (#350 Task 2). Native HA is
+# the compositional template; this aligns it to the same shape as the pcmk/rdqm
+# stacks. Composed from building blocks (move, don't rewrite):
+#   1. _nativeha-cluster-ha.yml    — live site-A Native HA group
+#   2. (folded qm-create)          — our-side inter-QM + app MQSC on the active
+#                                    instance (raft-replicated to all instances)
+#   3. site-distributed-shared.yml — the SVC counterparty QM + inter-QM channels
+#                                    + the reconnect-aware app requester
+#   4. _nativeha-dr-replication.yml — site-B Recovery group + TLS + CRR
+#
+# This supersedes the former site-nativeha.yml (site-A HA only) +
+# site-nativeha-distributed.yml + site-nativeha-dr.yml. Order is load-bearing: the
+# DR/CRR block runs LAST so NHARAPP already has the app/SVC objects, which the
+# Recovery group inherits by CRR (the #267 keystone).
+#
+# Provision-phase var contract (#350): the bootstrap `provision` phase passes the
+# #351 QM extra-vars (qm_app / qm_svc / chl_to_svc / chl_to_app). Native HA has no
+# floating VIP, so the SVC CONNAME and our-side CONNAME list are lab constants
+# supplied below — the phase stays pure and setup_dict (the #356 regression) is
+# never referenced.
+- import_playbook: _nativeha-cluster-ha.yml
 
+# Folded qm-create (#350 Task 2 step 2): our-side inter-QM + app MQSC on the ACTIVE
+# Native HA instance. runmqsc must run on the active instance; Native HA then
+# replicates the objects to all instances via raft. Mirrors the RDQM arm's our-side
+# MQSC (rdqm-qm-create.sh) and the pcmk arm's inter-qm.mqsc.j2. Body moved verbatim
+# from the former site-nativeha-distributed.yml.
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: "{{ qm_app | default('NHARAPP') }}"
-    # Replication on the dedicated net-hb-a NIC (so the fault suite can sever it).
-    nha_site_nodes:
-      - { name: nha-rhel-a1, hb: 172.16.1.91, data: 10.10.1.91 }
-      - { name: nha-rhel-a2, hb: 172.16.1.92, data: 10.10.1.92 }
-      - { name: nha-rhel-a3, hb: 172.16.1.93, data: 10.10.1.93 }
-  roles:
-    - mq-nativeha
+    qm_name: "{{ qm_app }}"
+    qm_svc_name: "{{ qm_svc }}"
+    svc_conn: "10.60.0.50"
+  tasks:
+    - name: find the active Native HA instance
+      ansible.builtin.shell: >
+        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x"
+        | grep -oE 'ROLE\(Active\) INSTANCE\(nha-rhel-a[0-9]\)'
+        | grep -oE 'nha-rhel-a[0-9]' | head -1
+      register: act
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['nha_rhel_a'][0] }}"
+
+    - name: record the active host
+      ansible.builtin.set_fact:
+        active_host: "{{ act.stdout | trim }}"
+      run_once: true
+
+    - name: apply our-side + app MQSC on the active instance (once; raft-replicated)
+      ansible.builtin.shell: |
+        su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}" <<'MQSC'
+        DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
+        START LISTENER(L1414)
+        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') HBINT(15) KAINT(15) REPLACE
+        ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')
+        REFRESH SECURITY TYPE(CONNAUTH)
+        DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
+        DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
+        DEFINE QLOCAL({{ qm_svc_name }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.{{ qm_svc_name }}) REPLACE
+        DEFINE CHANNEL({{ qm_name }}.{{ qm_svc_name }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc_name }}) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+        DEFINE CHANNEL({{ qm_svc_name }}.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE
+        START CHANNEL({{ qm_name }}.{{ qm_svc_name }})
+        MQSC
+      register: mqsc
+      changed_when: true
+      failed_when: mqsc.rc not in [0, 10]
+      run_once: true
+      delegate_to: "{{ active_host }}"
+
+- import_playbook: site-distributed-shared.yml
+  vars:
+    our_qm: "{{ qm_app }}"
+    our_conn: "10.60.0.71(1414),10.60.0.72(1414),10.60.0.73(1414)"
+
+- import_playbook: _nativeha-dr-replication.yml

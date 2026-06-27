@@ -1,0 +1,24 @@
+# Building block (#350 Task 2): site-A 3-node Native HA group (the live group).
+# Body moved verbatim from the former site-nativeha.yml. Composed by
+# site-nativeha.yml ahead of the folded our-side MQSC, the distributed-shared
+# layer, and _nativeha-dr-replication.yml (site B + TLS + CRR). mq-nativeha forms
+# the Live group; objects defined on its active instance replicate via raft, and
+# the Recovery group (site B) inherits them by CRR.
+- hosts: nha_rhel_a
+  become: true
+  tasks:
+    - name: acl package for unprivileged become (become_user mqm)
+      ansible.builtin.dnf:
+        name: acl
+
+- hosts: nha_rhel_a
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    # Replication on the dedicated net-hb-a NIC (so the fault suite can sever it).
+    nha_site_nodes:
+      - { name: nha-rhel-a1, hb: 172.16.1.91, data: 10.10.1.91 }
+      - { name: nha-rhel-a2, hb: 172.16.1.92, data: 10.10.1.92 }
+      - { name: nha-rhel-a3, hb: 172.16.1.93, data: 10.10.1.93 }
+  roles:
+    - mq-nativeha

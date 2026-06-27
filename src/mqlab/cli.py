@@ -4,77 +4,57 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
 from rich.console import Console
 
 from mqlab import buildenv, parity
-from mqlab.arms import arm_of, lab_arms, resolve_verb
-from mqlab.artifact import download_mq_tarball, ensure_mq_tarballs
+from mqlab.artifact import (
+    download_mq_tarball,
+    ensure_mq_tarballs_for_platforms,
+)
 from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
-from mqlab.dr import Ledger, assert_self_correct, build_report, peak_exposure, reconcile
-from mqlab.fleet import parse_domain_states
-from mqlab.guestsel import resolve_guests
+from mqlab.fleet import lab_guests, parse_domain_states
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.inventory import inventory_path, lab_inventory
-from mqlab.lifecycle import ABSENT, ACTIVE, INACTIVE, OFF, RUNNING, classify, classify_net, is_live
+from mqlab.lifecycle import ABSENT, RUNNING, classify, is_live
 from mqlab.manifest import (
     DEFAULT_MQ_VERSION,
-    box_version_pins,
-    load_manifest,
-    manifest_exists,
     obs_overlay,
-    read_selection,
-    resolve_selection,
-    vars_overlay,
 )
-from mqlab.netsel import parse_net_states, resolve_nets
+from mqlab.netsel import parse_net_states
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import (
-    box_versions_path,
-    lab_network,
     lab_script,
     mq_cache_dir,
     repo_root,
-    reports_dir,
     resolved_topology_path,
-    runs_dir,
-    selection_state_path,
     state,
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
+from mqlab.phases import PHASES, _commons_members, all_vms, build_states, first_unsatisfied
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
-from mqlab.runplan import baseline_run_plan
-from mqlab.runreport import (
-    RunReport,
-    append_index,
-    capture_metadata,
-    read_commit,
-    read_config_digest,
-    read_versions,
-    write_bundle,
-)
-from mqlab.setups import lab_setups, setup_members
+from mqlab.stacks import lab_stacks, stack_members
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from mqlab.orchestrator import Pauser
+    from mqlab.phases import Phase
     from mqlab.runner import CommandRunner
-    from mqlab.setups import QmConfig, Setup
+    from mqlab.stacks import Stack
 
 
 @dataclass
@@ -117,43 +97,7 @@ def _execute(verb: str, steps: list[CommandStep], *, step_mode: bool) -> None:
         deps.transcript.close()
 
 
-def _resolve_or_exit(pattern: str, resolver: Callable[[str], list[str]], noun: str) -> list[str]:
-    """Resolve a selection pattern to names, or exit 2 with a clear message (#75)."""
-    try:
-        names = resolver(pattern)
-    except re.error as exc:
-        typer.echo(f"invalid pattern /{pattern}/: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
-    if not names:
-        typer.echo(f"no lab {noun} matches /{pattern}/", err=True)
-        raise typer.Exit(code=2)
-    return names
-
-
-_NET_LIST = Command(["virsh", "-c", "qemu:///system", "net-list", "--all"])  # noqa: S607 - virsh on PATH (lab)
-
-
-def _net_status_steps() -> list[CommandStep]:
-    # No script exists; mqlab drives virsh directly. virsh's own output is already
-    # tabular, so this is a plain treatment-A pass-through — no re-rendering (#70).
-    return [CommandStep("networks status", _NET_LIST)]
-
-
-def _net_show_steps(nets: list[str]) -> list[CommandStep]:
-    # Multi-step verb (#75): three virsh reads per selected net — config and who is
-    # attached. Pass-through; net-dhcp-leases exits 0 even on no-DHCP nets.
-    base = ["virsh", "-c", "qemu:///system"]
-    reads = [("info", "net-info"), ("config", "net-dumpxml"), ("leases", "net-dhcp-leases")]
-    return [
-        CommandStep(f"{net} {label}", Command([*base, verb, net]))  # noqa: S607
-        for net in nets
-        for label, verb in reads
-    ]
-
-
 app = typer.Typer(help="mqlab — operator orchestrator for the MQ cluster lab", no_args_is_help=True)
-net_app = typer.Typer(help="libvirt lab networks", no_args_is_help=True)
-app.add_typer(net_app, name="net")
 
 _StepFlag = Annotated[bool, typer.Option("--step", help="pause after each step to inspect the lab")]
 _Pattern = Annotated[str, typer.Argument(help="name, regex, or 'all'")]
@@ -162,61 +106,14 @@ _ManifestOpt = Annotated[
 ]
 
 
-# --- Version manifest wiring (#266). All gracefully optional: a setup/repo with no
-#     manifest behaves exactly as before (the helpers return None / []). -------------
+# --- MQ artifact + prerequisite wiring (#266/#350). MQ tarballs are arch-specific;
+#     the repo-default version is used (the per-setup manifest pinning was dropped in
+#     the #350 cutover). ----------------------------------------------------------
 def _fetch_mq_tarball(name: str, dest: Path) -> None:
     """Acquire a missing MQ tarball from IBM's no-auth public CDN (#276/#291) — no
     credentials, so a fresh or anonymous box bootstraps without manual placement.
     Only the RHEL OS image stays a manual artifact (licensed, not downloadable)."""
     download_mq_tarball(name, dest)
-
-
-def _apply_manifest(
-    setup_name: str, *, requested: str | None = None, at_create: bool = False
-) -> Path | None:
-    """Render the manifest overlay for a setup (None if it has no manifest). At create,
-    also pin box_version. (MQ tarballs are ensured separately by _ensure_mq_artifacts,
-    which is topology-driven and not gated on a manifest — #333.)"""
-    if not manifest_exists(setup_name):
-        return None
-    name = (
-        resolve_selection(setup_name, requested or "default")
-        if at_create
-        else resolve_selection(setup_name, requested)
-    )
-    man = load_manifest(setup_name, name)
-    op = work("manifests", f"{setup_name}.overlay.json")
-    op.parent.mkdir(parents=True, exist_ok=True)
-    op.write_text(json.dumps(vars_overlay(man)))
-    if at_create:
-        bvf = box_versions_path()
-        pins = json.loads(bvf.read_text()) if bvf.exists() else {}
-        pins.update(box_version_pins(man))
-        bvf.write_text(json.dumps(pins))
-    return op
-
-
-def resolve_mq_version(setup_name: str, requested: str | None = None) -> str:
-    """The MQ version for a setup: its manifest's pin if it has one, else the repo
-    default — so a manifest-less setup (e.g. monitoring) still resolves a version. (#333)"""
-    if manifest_exists(setup_name):
-        name = resolve_selection(setup_name, requested or "default")
-        return load_manifest(setup_name, name).mq_version
-    return DEFAULT_MQ_VERSION
-
-
-def _ensure_mq_artifacts(setup_name: str, *, requested: str | None = None) -> None:
-    """Ensure the arch-correct MQ tarball(s) for a setup's guest platforms are present,
-    regardless of whether the setup has a manifest (#333). Topology-driven via
-    setup_platforms; the host facts are passed explicitly so the arch tracks this
-    controller rather than an implicit probe() default."""
-    ensure_mq_tarballs(
-        setup_name,
-        resolve_mq_version(setup_name, requested),
-        mq_cache_dir(),
-        fetch=_fetch_mq_tarball,
-        facts=probe(),
-    )
 
 
 def _galaxy_install_step() -> CommandStep:
@@ -240,17 +137,87 @@ def _pki_ensure_step() -> CommandStep:
     return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
 
 
-def _ensure_prereqs(setup_name: str, *, requested: str | None = None, step: bool = False) -> None:
-    """The single place that ensures every fresh-volume prerequisite a setup's playbooks
-    need (#343). All live under build/ on the persistent volume, which a recreate wipes,
-    so the provision verbs regenerate them — idempotently, in dependency order:
-      1. Ansible galaxy collections (community.crypto — required by the PKI play)
-      2. the MQ-for-Developers tarball(s) for the setup's guest platforms
-      3. the PKI CA + entity keystores
-    galaxy + PKI run through the step runner (progress/transcript); MQ is a Python fetch.
+def _commons_mq_platforms() -> set[str]:
+    """Distinct MQ guest platforms among the commons VMs (svc/app run MQ; the probe
+    runs the MQ exporters). Host-resolved via lab_guests (native-preferred, #276)."""
+    platforms = lab_guests()
+    return {platforms[host] for host in _commons_members() if host in platforms}
+
+
+def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
+    """Ensure every fresh-volume prerequisite the commons (obs/site-obs.yml) provision
+    needs (#343/#350). All live under build/ on the persistent volume, which a recreate
+    wipes, so commons up regenerates them — idempotently, in dependency order:
+      1. the MQ-for-Developers tarball(s) for the commons guest platforms
+      2. Ansible galaxy collections (community.crypto — required by the PKI play)
+      3. the PKI CA + entity keystores (the exporters consume these)
+    MQ is a Python fetch; galaxy + PKI run through the step runner (progress/transcript).
     """
-    _ensure_mq_artifacts(setup_name, requested=requested)
+    ensure_mq_tarballs_for_platforms(
+        _commons_mq_platforms(),
+        DEFAULT_MQ_VERSION,
+        mq_cache_dir(),
+        fetch=_fetch_mq_tarball,
+    )
     _execute("prerequisites", [_galaxy_install_step(), _pki_ensure_step()], step_mode=step)
+
+
+# --- Stack-aware prerequisite ensures for the #350 bootstrap phase flow. -----------
+#     The setup-based _ensure_prereqs above stays untouched (old commands still use
+#     it). Bootstrap resolves prerequisites from the STACK and only for the phases
+#     actually selected this run — each phase declares its prereq kinds as data in
+#     phases.py (Phase.ensure); the dispatch below maps each name to its real I/O.
+def _stack_mq_platforms(stack: Stack) -> set[str]:
+    """Distinct MQ guest platforms the stack's cluster (QM) nodes run.
+
+    The MQ-for-Developers tarball is arch-specific, so we ensure one per distinct
+    platform among the stack's member VMs (its groups' hosts), host-resolved via
+    lab_guests (native-preferred, #276) — the same source the setup path uses.
+    Commons hosts (obs/probe) are excluded: they run no QM, so need no MQ tarball.
+    """
+    members = stack_members(stack.name) or []
+    platforms = lab_guests()
+    return {platforms[host] for host in members if host in platforms}
+
+
+def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
+    """Ensure the arch-correct MQ tarball(s) for a stack's cluster-node platforms.
+
+    The stack counterpart of _ensure_mq_artifacts (which is setup-resolved). Version
+    is the repo default — stacks carry no per-setup manifest pin in the #350 model.
+    """
+    ensure_mq_tarballs_for_platforms(
+        _stack_mq_platforms(stack),
+        DEFAULT_MQ_VERSION,
+        mq_cache_dir(),
+        fetch=_fetch_mq_tarball,
+    )
+
+
+def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None:
+    """Ensure the fresh-volume prerequisites a phase declares (phases.Phase.ensure),
+    for a stack, before that phase's steps run (#350 Task 5).
+
+    Dispatches each declared prereq kind in dependency order:
+      boxes  -> build/register the local boxes for the stack's VMs (vms phase)
+      mq     -> the MQ-for-Developers tarball(s) for the stack's platforms
+      galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
+      pki    -> the PKI CA + entity keystores (the exporters consume these too)
+    The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
+    runner (progress/transcript), galaxy before PKI. Only kinds the phase declares
+    run, so `--only observe` ensures only the exporter PKI."""
+    kinds = phase.ensure
+    if "boxes" in kinds:
+        _ensure_local_boxes(all_vms(stack))
+    if "mq" in kinds:
+        _ensure_mq_artifacts_for_stack(stack)
+    steps: list[CommandStep] = []
+    if "galaxy" in kinds:
+        steps.append(_galaxy_install_step())
+    if "pki" in kinds:
+        steps.append(_pki_ensure_step())
+    if steps:
+        _execute("prerequisites", steps, step_mode=step)
 
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
@@ -365,13 +332,6 @@ def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -
         typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
 
 
-def _manifest_args(
-    setup_name: str, *, requested: str | None = None, at_create: bool = False
-) -> list[str]:
-    op = _apply_manifest(setup_name, requested=requested, at_create=at_create)
-    return ["-e", f"@{op}"] if op else []
-
-
 def _obs_manifest_args() -> list[str]:
     shared = repo_root() / "manifests" / "_shared" / "observability.yaml"
     if not shared.exists():
@@ -382,32 +342,15 @@ def _obs_manifest_args() -> list[str]:
     return ["-e", f"@{op}"]
 
 
-def _qm_extra_vars(setup_name: str) -> list[str]:
-    # Thread a setup's QM identity (the single source, QmConfig) into the ansible
-    # plays that need it, so the QM/channel names DERIVE rather than referencing an
-    # undefined `setup_dict`. The distributed provision playbooks (their-side MQSC)
-    # and the obs exporters both consume these (#356). No qm -> no args.
-    setup = lab_setups().get(setup_name)
-    qm = setup.qm if setup else None
-    if qm is None:
-        return []
-    return [
-        "-e",
-        f"qm_app={qm.qm_app}",
-        "-e",
-        f"qm_svc={qm.qm_svc}",
-        "-e",
-        f"chl_to_svc={qm.chl_to_svc}",
-        "-e",
-        f"chl_to_app={qm.chl_to_app}",
-    ]
-
-
 def _obs_qm_args() -> list[str]:
-    # The probe's exporters monitor the pcmk distributed setup's QM pair. obs is
-    # pcmk-pinned today (site-obs.yml historically hardcoded PCMKAPP/PCMKSVC); #350's
-    # per-stack observe generalizes this.
-    return _qm_extra_vars("distributed-pcmk-ubuntu")
+    # The probe's exporters monitor the pcmk-ubuntu stack's QM pair. obs is
+    # pcmk-pinned today (site-obs.yml historically hardcoded PCMKAPP/PCMKSVC); the
+    # per-stack observe phase (phases.py) generalizes this. The shared #351 QM
+    # extra-vars come from the canonical Stack via phases._qm_extra_vars.
+    from mqlab.phases import _qm_extra_vars
+
+    stack = lab_stacks().get("pcmk-ubuntu")
+    return _qm_extra_vars(stack) if stack else []
 
 
 def _vagrant_env() -> dict[str, str]:
@@ -420,69 +363,27 @@ def _vagrant_env() -> dict[str, str]:
     return {"VAGRANT_DOTFILE_PATH": str(state("vagrant").resolve())}
 
 
-def _manifest_id(setup_name: str) -> str:
-    name = read_selection(setup_name)
-    return f"{setup_name}/{name}" if name else ""
+commons_app = typer.Typer(
+    help="shared commons VMs (obs + probe + svc + app) independently of any stack",
+    no_args_is_help=True,
+)
+app.add_typer(commons_app, name="commons")
 
+qm_app = typer.Typer(help="MQ queue managers (per-stack HA lifecycle)", no_args_is_help=True)
+app.add_typer(qm_app, name="qm")
 
-def _manifest_digest_paths(setup_name: str) -> list[Path]:
-    p = selection_state_path(setup_name)
-    return [p] if p.exists() else []
-
-
-@net_app.command("create")
-def net_create(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Define + autostart the selected networks (skips any already defined)."""
-    nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute_stateful(
-        "net-create", nets, _net_plan_create, step_mode=step, prober=_probe_net_states
-    )
-
-
-@net_app.command("up")
-def net_up(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Activate the selected (already-defined) networks (skips any already up)."""
-    nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute_stateful("net-up", nets, _net_plan_up, step_mode=step, prober=_probe_net_states)
-
-
-@net_app.command("down")
-def net_down(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Deactivate the selected networks — virsh net-destroy (skips any already down)."""
-    nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute_stateful("net-down", nets, _net_plan_down, step_mode=step, prober=_probe_net_states)
-
-
-@net_app.command("destroy")
-def net_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Remove the selected networks — deactivates active ones first (skips absent)."""
-    nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute_stateful(
-        "net-destroy", nets, _net_plan_destroy, step_mode=step, prober=_probe_net_states
-    )
-
-
-@net_app.command("status")
-def net_status() -> None:
-    """Show which lab networks are defined / active / autostart."""
-    _execute("net-status", _net_status_steps(), step_mode=False)
-
-
-@net_app.command("show")
-def net_show(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Show config + DHCP leases for the selected lab networks (name, regex, or 'all')."""
-    nets = _resolve_or_exit(pattern, resolve_nets, "network")
-    _execute("net-show", _net_show_steps(nets), step_mode=step)
-
-
-vm_app = typer.Typer(help="lab guest VMs (vagrant + virsh)", no_args_is_help=True)
+# vm / obs retain only their render + interactive utility subcommands after the #350
+# cutover: the per-VM lifecycle moved to `bootstrap`/`teardown`. `vm inventory`/`roster`
+# render the static maps the playbooks + scripts consume; `vm ssh` is interactive
+# operator access. `obs targets`/`dashboard`/`net-state`/`reach-peers` are pure
+# topology→file renders the observe phase and the host collector shell out to; `obs open`
+# prints the Grafana URL. The setup-based `vm create/up/down/destroy/status/provision`
+# and `obs up/status/instrument` commands are gone.
+vm_app = typer.Typer(help="lab guest VM maps (inventory/roster) + ssh", no_args_is_help=True)
 app.add_typer(vm_app, name="vm")
 
-obs_app = typer.Typer(help="observability stack (Prometheus + Grafana)", no_args_is_help=True)
+obs_app = typer.Typer(help="observability renders (targets/dashboard) + open", no_args_is_help=True)
 app.add_typer(obs_app, name="obs")
-
-qm_app = typer.Typer(help="MQ queue managers (Pacemaker-managed HA)", no_args_is_help=True)
-app.add_typer(qm_app, name="qm")
 
 
 @obs_app.command("targets")
@@ -603,19 +504,21 @@ def _render_pki_entities() -> Path:
     """Derive PKI entity list from topology and write build/work/pki/entities.json.
 
     Produces one entry per distinct app-org QM name (qm_app) and one entry for
-    the svc-org QM (qm_svc), deduped across setups, plus the fixed non-QM entities.
-    In Phase 1 this yields the same CN set as the static ansible/vars/pki-entities.yml.
+    the svc-org QM (qm_svc), deduped across stacks, plus the fixed non-QM entities.
+    QM CNs derive from each stack's #351 short token (<short>APP / <short>SVC); the
+    CNs must match the SSLPEER/keystore labels the provision playbooks pass per QM.
+    A reserved stack with no short contributes no QM CN. (#350)
     """
-    from mqlab.setups import lab_setups
+    from mqlab.stacks import lab_stacks
 
     seen_app: set[str] = set()
     seen_svc: set[str] = set()
     qm_entities: list[dict[str, Any]] = []
 
-    for setup in lab_setups().values():
-        if setup.qm is None:
+    for stack in lab_stacks().values():
+        if not stack.short:
             continue
-        app_cn = setup.qm.qm_app
+        app_cn = stack.qm.qm_app
         if app_cn not in seen_app:
             seen_app.add(app_cn)
             qm_entities.append(
@@ -627,7 +530,7 @@ def _render_pki_entities() -> Path:
                     "trust": ["svc-org"],
                 }
             )
-        svc_cn = setup.qm.qm_svc
+        svc_cn = stack.qm.qm_svc
         if svc_cn not in seen_svc:
             seen_svc.add(svc_cn)
             qm_entities.append(
@@ -761,30 +664,6 @@ def _obs_up_steps() -> list[CommandStep]:
     ]
 
 
-@obs_app.command("up")
-def obs_up(step: _StepFlag = False) -> None:
-    """Render targets, create the monitoring pair, and provision Prometheus + Grafana."""
-    _prepare_lab()  # obs up shells `vagrant up obs mon-probe` — gate + render (#276)
-    # obs up runs site-obs.yml directly (not via _provision), so ensure monitoring's
-    # fresh-volume prerequisites (galaxy collections + MQ tarball + PKI) first. (#343)
-    _ensure_prereqs("monitoring", step=step)
-    _execute("obs-up", _obs_up_steps(), step_mode=step)
-
-
-@obs_app.command("status")
-def obs_status() -> None:
-    """Show the monitoring pair's state (topology joined with live virsh state)."""
-    guests = _resolve_or_exit("monitoring", resolve_guests, "guest")
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("obs-status", timestamp)
-    try:
-        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
-    finally:
-        deps.transcript.close()
-    if code != 0:
-        raise typer.Exit(code=code)
-
-
 @obs_app.command("open")
 def obs_open() -> None:
     """Print the Grafana URL and how to reach it from your workstation."""
@@ -800,69 +679,73 @@ def obs_open() -> None:
     typer.echo("grafana restart; 'mqlab obs up' now re-heals it as its last step (#264).")
 
 
-@obs_app.command("instrument")
-def obs_instrument(setup: str) -> None:
-    """Instrument a setup's guests — install node_exporter (+ net-reach) via observability.yml."""
-    _instrument(setup)
+# ---------------------------------------------------------------------------
+# commons — shared commons VMs (obs + probe + svc + app) independently of stacks
+# ---------------------------------------------------------------------------
+
+# The obs VMs that _obs_up_steps hardcodes in its monitoring-create vagrant up step.
+# Used by _commons_up_steps to identify which extra commons members need a separate
+# vagrant up call (svc-sim, app-client, or any future addition to the commons groups).
+_OBS_UP_MEMBERS = frozenset({"obs", "mon-probe"})
 
 
-def _instrument(setup_name: str) -> None:
-    # Fleet telemetry lives in observability.yml (hosts: all); per-setup provision
-    # playbooks don't install node_exporter. This runs that play limited to the
-    # setup, so its guests start reporting to Prometheus. Mirrors _provision.
-    setup = lab_setups().get(setup_name)
-    if setup is None:
-        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
-        raise typer.Exit(code=2)
-    members = setup_members(setup_name) or []
+def _commons_up_steps() -> list[CommandStep]:
+    """Build step list for `commons up`.
+
+    Reuses _obs_up_steps() for the observability render + vagrant up obs/probe +
+    site-obs.yml + host-obs.yml + relay heal + grafana verify steps, then appends
+    a vagrant up step for any extra commons members not covered by _obs_up_steps
+    (i.e. svc-sim and app-client when present in the commons topology).
+
+    Scope: commons up provisions shared infra VMs and observability only.  The per-
+    stack svc QM and app instance (MQ workload on svc-sim/app-client) are provisioned
+    by a stack's bootstrap provision phase — NOT here.
+    """
+    steps = _obs_up_steps()
+    extra = [m for m in _commons_members() if m not in _OBS_UP_MEMBERS]
+    if extra:
+        steps.append(
+            CommandStep(
+                "commons create (svc/app)",
+                Command(  # noqa: S607
+                    ["vagrant", "up", *extra],
+                    cwd=repo_root() / "lab",
+                    env=_vagrant_env(),
+                ),
+            )
+        )
+    return steps
+
+
+@commons_app.command("up")
+def commons_up(step: _StepFlag = False) -> None:
+    """Bring up all commons VMs and provision observability (site-obs.yml)."""
+    _prepare_lab()  # commons up shells vagrant — gate + render (#276)
+    _ensure_prereqs_for_commons(step=step)
+    _execute("commons-up", _commons_up_steps(), step_mode=step)
+
+
+@commons_app.command("status")
+def commons_status() -> None:
+    """Show commons health (topology joined with live virsh state)."""
+    guests = _commons_members()
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("obs-instrument", timestamp)
+    deps = build_deps("commons-status", timestamp)
     try:
-        states = _probe_states(deps)
-        down = [m for m in members if classify(states, m) != RUNNING]
-        if down:
-            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
-            deps.renderer.note(note)
-            deps.transcript.write(note)
-            raise typer.Exit(code=3)
-        # Render the inventory the play resolves through and the reach-peers map
-        # the net-reach role consumes, then run the play limited to this setup.
-        inv = inventory_path()
-        inv.parent.mkdir(parents=True, exist_ok=True)
-        inv.write_text(lab_inventory())
-        deps.renderer.note(f"rendered {inv}")
-        deps.transcript.write(f"rendered {inv}")
-        peers = _render_reach_peers()
-        deps.renderer.note(f"rendered {peers}")
-        deps.transcript.write(f"rendered {peers}")
-        step = CommandStep(
-            f"{setup_name} instrument",
-            Command(
-                ["ansible-playbook", "observability.yml", "--limit", setup_name],  # noqa: S607
-                cwd=repo_root() / "ansible",
-            ),
-        )
-        run_steps(
-            [step],
-            runner=deps.runner,
-            renderer=deps.renderer,
-            transcript=deps.transcript,
-            step_mode=False,
-            pauser=deps.pauser,
-        )
-    except StepFailedError as exc:
-        raise typer.Exit(code=exc.exit_code) from exc
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
     finally:
         deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+@commons_app.command("down")
+def commons_down(step: _StepFlag = False) -> None:
+    """Destroy all commons VMs (obs + probe + svc + app)."""
+    _execute_stateful("commons-down", _commons_members(), _plan_destroy, step_mode=step)
 
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
-
-
-def _create_step(g: str) -> CommandStep:
-    # Create + provision via Vagrant — the one verb that needs Vagrant (#96).
-    cmd = Command(["vagrant", "up", g], cwd=repo_root() / "lab", env=_vagrant_env())  # noqa: S607
-    return CommandStep(f"{g} create", cmd)
 
 
 # Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
@@ -933,56 +816,6 @@ def _box_build_steps(
     ]
 
 
-def parse_vol_list(text: str) -> dict[str, str]:
-    """Parse `virsh vol-list <pool>` -> {volume_name: path}; chrome lines skipped."""
-    out: dict[str, str] = {}
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("Name") or set(line) <= {"-"}:
-            continue
-        parts = line.split()
-        out[parts[0]] = parts[1] if len(parts) > 1 else ""
-    return out
-
-
-def _orphan_volumes(guests: list[str], vol_names: dict[str, str]) -> list[str]:
-    """Pool volumes belonging to the given guests (lab_<g>.img / lab_<g>-*), e.g. the
-    extra-disk vdb that vagrant-libvirt leaves behind when a create fails midway."""
-    return [
-        name
-        for g in guests
-        for name in vol_names
-        if name == f"lab_{g}.img" or name.startswith(f"lab_{g}-")
-    ]
-
-
-def _vol_delete_step(name: str) -> CommandStep:
-    cmd = Command([*_VIRSH, "vol-delete", "--pool", "default", name])  # noqa: S607
-    return CommandStep(f"vol {name}", cmd)
-
-
-def _sweep_orphan_volumes(guests: list[str]) -> None:
-    """After destroy, delete any pool volumes for these guests not tied to a domain —
-    the recovery path for a partially-failed create (vagrant-libvirt doesn't clean up
-    extra-disk volumes on failure, #276). No-op when there are no orphans."""
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("vm-destroy-sweep", timestamp)
-    try:
-        vols = _probe(deps, Command([*_VIRSH, "vol-list", "default"]), parse_vol_list)  # noqa: S607
-        run_steps(
-            [_vol_delete_step(v) for v in _orphan_volumes(guests, vols)],
-            runner=deps.runner,
-            renderer=deps.renderer,
-            transcript=deps.transcript,
-            step_mode=False,
-            pauser=deps.pauser,
-        )
-    except StepFailedError as exc:
-        raise typer.Exit(code=exc.exit_code) from exc
-    finally:
-        deps.transcript.close()
-
-
 def _ensure_local_boxes(guests: list[str]) -> None:
     """Make the RHEL substrate ready before `vagrant up`, so a fresh box bootstraps
     without manual steps (#276/#291): build/register any local-built box not yet in
@@ -1018,14 +851,6 @@ def _ensure_local_boxes(guests: list[str]) -> None:
         deps.transcript.close()
 
 
-def _start_step(g: str) -> CommandStep:
-    return CommandStep(f"{g} start", Command([*_VIRSH, "start", f"lab_{g}"]))  # noqa: S607
-
-
-def _shutdown_step(g: str) -> CommandStep:
-    return CommandStep(f"{g} shutdown", Command([*_VIRSH, "shutdown", f"lab_{g}"]))  # noqa: S607
-
-
 def _forceoff_step(g: str) -> CommandStep:
     return CommandStep(f"{g} force-off", Command([*_VIRSH, "destroy", f"lab_{g}"]))  # noqa: S607
 
@@ -1036,73 +861,10 @@ def _undefine_step(g: str) -> CommandStep:
     return CommandStep(f"{g} undefine", cmd)
 
 
-def _net_define_step(net: str) -> CommandStep:
-    # Create the network from its declarative XML (the one verb that needs the file).
-    cmd = Command([*_VIRSH, "net-define", str(lab_network(net))])  # noqa: S607
-    return CommandStep(f"{net} define", cmd)
-
-
-def _net_autostart_step(net: str) -> CommandStep:
-    return CommandStep(f"{net} autostart", Command([*_VIRSH, "net-autostart", net]))  # noqa: S607
-
-
-def _net_start_step(net: str) -> CommandStep:
-    return CommandStep(f"{net} start", Command([*_VIRSH, "net-start", net]))  # noqa: S607
-
-
-def _net_deactivate_step(net: str) -> CommandStep:
-    # virsh confusingly names *deactivate* `net-destroy` — this is mqlab `net down`.
-    return CommandStep(f"{net} deactivate", Command([*_VIRSH, "net-destroy", net]))  # noqa: S607
-
-
-def _net_undefine_step(net: str) -> CommandStep:
-    return CommandStep(f"{net} undefine", Command([*_VIRSH, "net-undefine", net]))  # noqa: S607
-
-
-# State-aware planners (#99): given the live state, act only where needed and emit
-# advisory notes for the rest. Idempotency = looking before you leap.
-def _plan_create(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for g in guests:
-        state = classify(states, g)
-        if state == ABSENT:
-            steps.append(_create_step(g))
-        elif state == OFF:
-            steps.append(_start_step(g))  # created but stopped -> bring it up (#339)
-        else:  # RUNNING
-            notes.append(f"{g}: already running — mqlab vm destroy to recreate")
-    return steps, notes
-
-
-def _plan_up(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for g in guests:
-        state = classify(states, g)
-        if state == OFF:
-            steps.append(_start_step(g))
-        elif state == RUNNING:
-            notes.append(f"{g}: already running")
-        else:
-            notes.append(f"{g}: not created — run mqlab vm create first")
-    return steps, notes
-
-
-def _plan_down(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for g in guests:
-        state = classify(states, g)
-        if state == RUNNING:
-            steps.append(_shutdown_step(g))
-        elif state == OFF:
-            notes.append(f"{g}: already off")
-        else:
-            notes.append(f"{g}: not created")
-    return steps, notes
-
-
+# State-aware destroy planner (#99): given the live state, act only where needed and
+# emit advisory notes for the rest. Idempotency = looking before you leap. (The
+# create/up/down planners retired with the vm lifecycle commands in #350; bootstrap's
+# phases own bring-up now, teardown + commons-down own destroy.)
 def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
     steps: list[CommandStep] = []
     notes: list[str] = []
@@ -1115,68 +877,6 @@ def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[Comma
             steps.extend([_forceoff_step(g), _undefine_step(g)])
         else:
             steps.append(_undefine_step(g))  # shut off: remove directly
-    return steps, notes
-
-
-# State-aware net planners (#98) — the same probe-then-act model as the guest verbs,
-# mapped onto the virsh net-* lifecycle. Existence = define/undefine; active =
-# start/deactivate. (virsh `net-destroy` means *deactivate*, not remove.)
-def _net_plan_create(
-    nets: list[str], states: dict[str, str]
-) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for net in nets:
-        if classify_net(states, net) == ABSENT:
-            steps.extend([_net_define_step(net), _net_autostart_step(net)])
-        else:
-            notes.append(
-                f"{net}: already created — mqlab net up to start, mqlab net destroy to recreate"
-            )
-    return steps, notes
-
-
-def _net_plan_up(nets: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for net in nets:
-        state = classify_net(states, net)
-        if state == INACTIVE:
-            steps.append(_net_start_step(net))
-        elif state == ACTIVE:
-            notes.append(f"{net}: already up")
-        else:
-            notes.append(f"{net}: not created — run mqlab net create first")
-    return steps, notes
-
-
-def _net_plan_down(nets: list[str], states: dict[str, str]) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for net in nets:
-        state = classify_net(states, net)
-        if state == ACTIVE:
-            steps.append(_net_deactivate_step(net))
-        elif state == INACTIVE:
-            notes.append(f"{net}: already down")
-        else:
-            notes.append(f"{net}: not created")
-    return steps, notes
-
-
-def _net_plan_destroy(
-    nets: list[str], states: dict[str, str]
-) -> tuple[list[CommandStep], list[str]]:
-    steps: list[CommandStep] = []
-    notes: list[str] = []
-    for net in nets:
-        state = classify_net(states, net)
-        if state == ACTIVE:
-            steps.extend([_net_deactivate_step(net), _net_undefine_step(net)])  # deactivate, remove
-        elif state == INACTIVE:
-            steps.append(_net_undefine_step(net))
-        else:
-            notes.append(f"{net}: already gone")
     return steps, notes
 
 
@@ -1203,27 +903,6 @@ def _probe_states(deps: Deps) -> dict[str, str]:
 def _probe_net_states(deps: Deps) -> dict[str, str]:
     # Per-network state from `virsh net-list --all` (keyed by plain net name).
     return _probe(deps, Command([*_VIRSH, "net-list", "--all"]), parse_net_states)  # noqa: S607
-
-
-def _source_secret(deps: Deps, name: str) -> str:
-    # Auto-generated lab secret -> its value, to inject into the playbook env.
-    # No hiding: the lab is a throwaway illusion, so this echoes + tees like any
-    # other step (mirrors _probe_states). lab-secret.sh generates+persists once.
-    cmd = Command(["bash", str(lab_script("lab-secret.sh")), name])  # noqa: S607
-    deps.renderer.command(cmd.display())
-    deps.transcript.write(f"$ {cmd.display()}")
-    captured: list[str] = []
-
-    def sink(line: str) -> None:
-        deps.renderer.output(line)
-        deps.transcript.write(line)
-        captured.append(line)
-
-    code = deps.runner.run(cmd, sink)
-    if code != 0:
-        deps.renderer.error(f"lab-secret.sh {name} failed (exit {code})")
-        raise typer.Exit(code=2)
-    return "\n".join(captured).strip()
 
 
 def _execute_stateful(
@@ -1268,55 +947,6 @@ def _ssh_into(guest: str) -> None:
     os.execvp("vagrant", ["vagrant", "ssh", guest])  # noqa: S606, S607 - TTY passthrough (lab)
 
 
-@vm_app.command("create")
-def vm_create(pattern: _Pattern, manifest: _ManifestOpt = None, step: _StepFlag = False) -> None:
-    """Create + provision the selected guests (skips any that already exist)."""
-    guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
-    # Pin box_version + ensure the MQ tarball before the boxes come up (no-op if the
-    # pattern is not a manifested setup). #266
-    _apply_manifest(pattern, requested=manifest, at_create=True)
-    _ensure_local_boxes(guests)  # build/register the RHEL box from its cache/ISO (#276/#291)
-    _execute_stateful("vm-create", guests, _plan_create, step_mode=step)
-
-
-@vm_app.command("up")
-def vm_up(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Start the selected guests (skips any already running)."""
-    guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _prepare_lab()  # host-arch gate + render the resolved topology (#276)
-    _execute_stateful("vm-up", guests, _plan_up, step_mode=step)
-
-
-@vm_app.command("down")
-def vm_down(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Shut down the selected guests (skips any already off)."""
-    guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute_stateful("vm-down", guests, _plan_down, step_mode=step)
-
-
-@vm_app.command("destroy")
-def vm_destroy(pattern: _Pattern, step: _StepFlag = False) -> None:
-    """Remove the selected guests + disks (force-stops running ones; skips absent)."""
-    guests = _resolve_or_exit(pattern, resolve_guests, "guest")
-    _execute_stateful("vm-destroy", guests, _plan_destroy, step_mode=step)
-    _sweep_orphan_volumes(guests)  # clean orphaned lab_<g>-* volumes from failed creates (#276)
-
-
-@vm_app.command("status")
-def vm_status(selector: _Pattern = "all") -> None:
-    """Show the fleet — topology joined with live virsh state; optional selector filters it."""
-    guests = _resolve_or_exit(selector, resolve_guests, "guest")
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("vm-status", timestamp)
-    try:
-        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
-    finally:
-        deps.transcript.close()
-    if code != 0:
-        raise typer.Exit(code=code)
-
-
 @vm_app.command("inventory")
 def vm_inventory() -> None:
     """Render build/work/inventory.ini from topology and echo it (the static map)."""
@@ -1351,67 +981,6 @@ def vm_roster() -> None:
         deps.transcript.close()
 
 
-def _provision(setup_name: str, *, requested: str | None = None) -> None:
-    setup = lab_setups().get(setup_name)
-    if setup is None:
-        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
-        raise typer.Exit(code=2)
-    if setup.provision is None:
-        typer.echo(f"setup {setup_name} has no provision playbook", err=True)
-        raise typer.Exit(code=2)
-    members = setup_members(setup_name) or []
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("vm-provision", timestamp)
-    try:
-        states = _probe_states(deps)
-        down = [m for m in members if classify(states, m) != RUNNING]
-        if down:
-            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
-            deps.renderer.note(note)
-            deps.transcript.write(note)
-            raise typer.Exit(code=3)
-        secret_env = {s.upper(): _source_secret(deps, s) for s in setup.secrets}
-        # Ensure the setup's fresh-volume prerequisites (galaxy collections + MQ
-        # tarball + PKI) before the playbook runs — one place, idempotent. (#343)
-        _ensure_prereqs(setup_name, requested=requested)
-        inv = inventory_path()
-        inv.parent.mkdir(parents=True, exist_ok=True)
-        inv.write_text(lab_inventory())
-        deps.renderer.note(f"rendered {inv}")
-        deps.transcript.write(f"rendered {inv}")
-        step = CommandStep(
-            f"{setup_name} provision",
-            Command(
-                [
-                    "ansible-playbook",  # noqa: S607
-                    Path(setup.provision).name,
-                    *_qm_extra_vars(setup_name),
-                    *_manifest_args(setup_name, requested=requested),
-                ],
-                cwd=repo_root() / "ansible",
-                env=secret_env or None,
-            ),
-        )
-        run_steps(
-            [step],
-            runner=deps.runner,
-            renderer=deps.renderer,
-            transcript=deps.transcript,
-            step_mode=False,
-            pauser=deps.pauser,
-        )
-    except StepFailedError as exc:
-        raise typer.Exit(code=exc.exit_code) from exc
-    finally:
-        deps.transcript.close()
-
-
-@vm_app.command("provision")
-def vm_provision(setup: str, manifest: _ManifestOpt = None) -> None:
-    """Provision a setup — render the inventory, then run its Ansible playbook."""
-    _provision(setup, requested=manifest)
-
-
 @vm_app.command("ssh")
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
@@ -1419,21 +988,22 @@ def vm_ssh(guest: str) -> None:
     _ssh_into(guest)
 
 
-# --- qm: the MQ queue-manager lifecycle on the Pacemaker arm (#109) --------------
-# create/destroy run the reproducible mq-pcmk-qmgr role (the client-reproducible
-# deliverable); up/down/status are direct, streamed pcs ops on the cluster. Pacemaker
-# is the only thing allowed to start/stop the QM (its systemd units are disabled).
+# --- qm: the MQ queue-manager lifecycle, dispatched off the stack's verbs (#350) --
+# create/destroy run the stack's qm-* playbooks (the client-reproducible deliverable);
+# up/down/status are direct, streamed shell ops on the stack's cluster first node
+# (pcs for pcmk, rdqm*/systemctl for the others). The verb implementations live on
+# the canonical Stack (stack.verbs), so a single dispatch covers every mechanism.
 
 
-def _setup_qm_or_exit(setup_name: str) -> QmConfig:
-    setup = lab_setups().get(setup_name)
-    if setup is None:
-        typer.echo(f"no lab setup named {setup_name!r} — see mqlab vm status", err=True)
+def _stack_qm_or_exit(stack_name: str) -> Stack:
+    stack = lab_stacks().get(stack_name)
+    if stack is None:
+        typer.echo(f"no stack named {stack_name!r} — see mqlab status", err=True)
         raise typer.Exit(code=2)
-    if setup.qm is None:
-        typer.echo(f"setup {setup_name} has no qm config", err=True)
+    if not stack.short:
+        typer.echo(f"stack {stack_name} has no qm config", err=True)
         raise typer.Exit(code=2)
-    return setup.qm
+    return stack
 
 
 def _render_inventory(deps: Deps) -> None:
@@ -1445,28 +1015,28 @@ def _render_inventory(deps: Deps) -> None:
     deps.transcript.write(f"rendered {inv}")
 
 
-def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
+def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
     # create/destroy: pre-flight members running -> render inventory -> run the play.
-    qm = _setup_qm_or_exit(setup_name)
-    members = setup_members(setup_name) or []
+    qm = stack.qm
+    members = stack_members(stack.name) or []
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         states = _probe_states(deps)
         down = [m for m in members if classify(states, m) != RUNNING]
         if down:
-            note = f"{', '.join(down)}: not running — run mqlab vm up {setup_name} first"
+            note = f"{', '.join(down)}: not running — run mqlab bootstrap {stack.name} first"
             deps.renderer.note(note)
             deps.transcript.write(note)
             raise typer.Exit(code=3)
         _render_inventory(deps)
         step = CommandStep(
-            f"{setup_name} {verb}",
+            f"{stack.name} {verb}",
             Command(
                 [
                     "ansible-playbook",
                     playbook,
                     "-e",
-                    f"qm_name={qm.name}",
+                    f"qm_name={qm.qm_app}",
                     "-e",
                     f"qm_vip={qm.vip}",
                     "-e",
@@ -1499,17 +1069,17 @@ def _qm_playbook(setup_name: str, playbook: str, verb: str) -> None:
         deps.transcript.close()
 
 
-def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
-    # up/down/status: a single streamed shell op on the arm's cluster first node
-    # (pcs for pcmk, rdqm* for rdqm). No pre-flight — if the cluster is unreachable,
-    # ansible's own error speaks (#109).
-    _setup_qm_or_exit(setup_name)
-    group = lab_arms()[arm_of(setup_name)].cluster_group
+def _qm_cluster_cmd(stack: Stack, shell_cmd: str, verb: str) -> None:
+    # up/down/status: a single streamed shell op on the stack's cluster first node
+    # (pcs for pcmk, rdqm*/systemctl for the others). No pre-flight — if the cluster
+    # is unreachable, ansible's own error speaks (#109). cluster_group is the correct
+    # probe target — NOT groups[0], which may be a SAN host with no MQ tooling.
+    group = stack.cluster_group
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         _render_inventory(deps)
         step = CommandStep(
-            f"{setup_name} {verb}",
+            f"{stack.name} {verb}",
             Command(
                 [
                     "ansible",
@@ -1537,15 +1107,16 @@ def _qm_cluster_cmd(setup_name: str, shell_cmd: str, verb: str) -> None:
         deps.transcript.close()
 
 
-def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
+def _qm_script(stack: Stack, script: str, verb: str) -> None:
     # Run a lab script with the rdqm-qm-create contract: QM, the single data-plane
     # floating IP (RDQM allows one FIP per QM, #216 spike), and (when set) the
     # counterparty CONNAME for the inter-QM MQSC. The partner reaches us over net-ext
-    # by per-node CONNAME list (site-rdqm-distributed.yml our_conn), not a second VIP.
-    argv = ["bash", str(lab_script(script)), qm.name, qm.vip, qm.svc_conn or ""]
+    # by per-node CONNAME list (site-rdqm.yml our_conn), not a second VIP.
+    qm = stack.qm
+    argv = ["bash", str(lab_script(script)), qm.qm_app, qm.vip, qm.svc_conn or ""]
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
-        step = CommandStep(f"{setup_name} {verb}", Command(argv))  # noqa: S607
+        step = CommandStep(f"{stack.name} {verb}", Command(argv))  # noqa: S607
         run_steps(
             [step],
             runner=deps.runner,
@@ -1560,52 +1131,58 @@ def _qm_script(setup_name: str, script: str, qm: QmConfig, verb: str) -> None:
         deps.transcript.close()
 
 
-def _qm_dispatch(setup_name: str, verb: str) -> None:
-    # Validate the setup (exists + has a QM) for clean exit-2 messages, then resolve
-    # the arm's implementation of the verb from the registry and run it (#202, #216).
-    qm = _setup_qm_or_exit(setup_name)
-    impl = resolve_verb(setup_name, verb)
-    if impl.kind == "playbook":
-        _qm_playbook(setup_name, impl.value, verb)
-    elif impl.kind == "pcs":
-        _qm_cluster_cmd(setup_name, f"pcs {impl.value}", verb)
-    elif impl.kind == "cmd":
-        _qm_cluster_cmd(setup_name, impl.value.format(qm=qm.name, vip=qm.vip), verb)
-    elif impl.kind == "script":
-        _qm_script(setup_name, impl.value, qm, verb)
+def _qm_dispatch(stack_name: str, verb: str) -> None:
+    # Validate the stack (exists + has a QM) for clean exit-2 messages, then resolve
+    # the stack's implementation of the verb from its verbs dict and run it. The verb
+    # kinds (playbook/pcs/cmd/script) mirror the per-mechanism shapes (#202, #216).
+    stack = _stack_qm_or_exit(stack_name)
+    qm = stack.qm
+    impl = stack.verbs.get(verb)
+    if not impl:
+        typer.echo(f"stack {stack_name} does not implement verb {verb!r}", err=True)
+        raise typer.Exit(code=2)
+    [(kind, value)] = impl.items()
+    if kind == "playbook":
+        _qm_playbook(stack, value, verb)
+    elif kind == "pcs":
+        _qm_cluster_cmd(stack, f"pcs {value}", verb)
+    elif kind == "cmd":
+        _qm_cluster_cmd(stack, str(value).format(qm=qm.qm_app, vip=qm.vip), verb)
+    elif kind == "script":
+        _qm_script(stack, str(value), verb)
     else:  # pragma: no cover - unknown kinds are a topology error
-        typer.echo(f"qm {verb}: unknown arm verb kind {impl.kind!r}", err=True)
+        typer.echo(f"qm {verb}: unknown stack verb kind {kind!r}", err=True)
         raise typer.Exit(code=2)
 
 
 @qm_app.command("create")
-def qm_create(setup: str) -> None:
-    """Create the queue manager + its HA resources (arm-dispatched)."""
-    _qm_dispatch(setup, "qm-create")
+def qm_create(stack: str) -> None:
+    """Create the queue manager + its HA resources (stack-dispatched)."""
+    _qm_dispatch(stack, "qm-create")
 
 
 @qm_app.command("destroy")
-def qm_destroy(setup: str) -> None:
+def qm_destroy(stack: str) -> None:
     """Remove the queue manager + its HA resources."""
-    _qm_dispatch(setup, "qm-destroy")
+    _qm_dispatch(stack, "qm-destroy")
 
 
 @qm_app.command("up")
-def qm_up(setup: str) -> None:
+def qm_up(stack: str) -> None:
     """Start the queue manager."""
-    _qm_dispatch(setup, "qm-up")
+    _qm_dispatch(stack, "qm-up")
 
 
 @qm_app.command("down")
-def qm_down(setup: str) -> None:
+def qm_down(stack: str) -> None:
     """Stop the queue manager (HA intact)."""
-    _qm_dispatch(setup, "qm-down")
+    _qm_dispatch(stack, "qm-down")
 
 
 @qm_app.command("status")
-def qm_status(setup: str) -> None:
+def qm_status(stack: str) -> None:
     """Show the queue manager's HA resource state."""
-    _qm_dispatch(setup, "qm-status")
+    _qm_dispatch(stack, "qm-status")
 
 
 # --- pki: the lab PKI / TLS certificate provider (#210) --------------------------
@@ -1648,86 +1225,367 @@ def parity_matrix() -> None:
     typer.echo(parity.render_markdown())
 
 
-def _lookup_setup_or_exit(name: str) -> Setup:
-    setup = lab_setups().get(name)
-    if setup is None:
-        typer.echo(f"no setup named {name!r}", err=True)
+def _lookup_stack_or_exit(name: str) -> Stack:
+    # Validate a stack name early, with a clean exit-2 message (mirrors
+    # _lookup_setup_or_exit, but over the #350 canonical stack registry).
+    stack = lab_stacks().get(name)
+    if stack is None:
+        typer.echo(f"no stack named {name!r}", err=True)
         raise typer.Exit(code=2)
-    return setup
+    return stack
 
 
-_Seconds = Annotated[int, typer.Option("--seconds", help="flow duration in seconds")]
-_Rate = Annotated[int, typer.Option("--rate", help="messages per second")]
+# Prometheus on the obs guest (net-mgmt IP : Prometheus port). The observe probe
+# queries its targets API to see whether this stack's exporters are registered.
+PROMETHEUS_URL = "http://10.50.0.2:9090"
 
 
-@app.command("run")
-def run_setup(  # pragma: no cover - drives the live lab; proven by the integration gate
-    setup_name: Annotated[str, typer.Argument(help="setup to run (e.g. distributed-pcmk-ubuntu)")],
-    seconds: _Seconds = 30,
-    rate: _Rate = 20,
-    step: _StepFlag = False,
+def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
+    """True iff the stack's QM reports up via its qm-status verb (provision phase).
+
+    Resolves the stack's `qm-status` verb (the same per-stack dispatch dict the
+    qm commands use) and runs that status command on the cluster's first node via
+    `ansible <cluster_group>[0] -b -m shell`. Exit 0 ⇒ provisioned + up.
+
+    Uses `stack.cluster_group` (e.g. "pcmk_a", "rdqm_a") — NOT `stack.groups[0]`,
+    which for pcmk-ubuntu is the SAN iSCSI-target host ("san_a") that has no
+    Pacemaker or MQ tooling and would always return a non-zero exit code.
+
+    A stack with no qm-status verb or no cluster_group (reserved stack) is, by
+    definition, not provisioned — returns False with no runner call.
+    """
+    impl = stack.verbs.get("qm-status")
+    if not impl:
+        return False
+    if not stack.cluster_group:
+        return False
+    [(kind, value)] = impl.items()
+    # pcs/cmd are the only status shapes in the registry; both run a shell command
+    # on the cluster's first node. value is a literal or a {qm}-templated cmd.
+    shell_cmd = f"pcs {value}" if kind == "pcs" else str(value).format(qm=stack.qm.name)
+    group = stack.cluster_group
+    cmd = Command(
+        ["ansible", f"{group}[0]", "-b", "-m", "shell", "-a", shell_cmd],  # noqa: S607
+        cwd=repo_root() / "ansible",
+    )
+    code = _probe_exit(deps, cmd)
+    return code == 0
+
+
+def _probe_observe(deps: Deps, stack: Stack) -> bool:
+    """True iff this stack's exporter is a healthy Prometheus target (observe phase).
+
+    Queries Prometheus' /api/v1/targets and checks the stack's app exporter port
+    (from alloc.exporter_app_port) appears among the active targets with health
+    "up". A stack with no exporter port allocated cannot be observed.
+    """
+    port = stack.alloc.get("exporter_app_port")
+    if not port:
+        return False
+    cmd = Command(
+        ["curl", "-fsS", "-m", "5", f"{PROMETHEUS_URL}/api/v1/targets"],  # noqa: S607
+    )
+    captured: list[str] = []
+    code = _probe_exit(deps, cmd, sink=captured.append)
+    if code != 0:
+        return False
+    payload = json.loads("\n".join(captured)) if captured else {}
+    targets = (payload.get("data") or {}).get("activeTargets") or []
+    needle = f":{port}/"
+    return any(needle in (t.get("scrapeUrl") or "") and t.get("health") == "up" for t in targets)
+
+
+def _probe_exit(deps: Deps, cmd: Command, *, sink: Callable[[str], None] | None = None) -> int:
+    """Run a probe command, echo+tee its output (no hiding), and return its exit code.
+
+    Like _probe but returns the exit code (the truth a satisfied-probe needs) and
+    optionally tees each line to `sink` for the caller to inspect (observe parses
+    the JSON body). Fail-loud by surfacing the real exit code — never swallowed.
+    """
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+
+    def tee(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+        if sink is not None:
+            sink(line)
+
+    return deps.runner.run(cmd, tee)
+
+
+def _probe_all(deps: Deps, stack: Stack) -> dict[str, Any]:
+    """Gather the live world into the canonical states dict the phases consume.
+
+    The live counterpart of phases.py's pure satisfied-probes: it actually runs
+    virsh (nets + domains), the stack's qm-status verb (provision truth), and the
+    Prometheus targets query (observe truth), then assembles them via build_states
+    so the shape matches the registry's contract exactly. Fail-loud: each probe
+    surfaces its real exit/parse result; nothing is swallowed.
+    """
+    nets = _probe_net_states(deps)
+    domains = _probe_states(deps)
+    qm_up = _probe_qm_up(deps, stack)
+    observe = _probe_observe(deps, stack)
+    return build_states(nets=nets, domains=domains, qm_up=qm_up, observe=observe)
+
+
+def _select_phases(
+    stack: Stack, states: dict[str, Any], *, only: str | None, from_phase: str | None
+) -> list[Phase]:
+    """The phases to run for this invocation, in order (sequencer selection).
+
+    --only PHASE   → just that phase
+    --from PHASE   → that phase onward
+    neither        → from the first unsatisfied phase onward (empty if all satisfied)
+    """
+    if only:
+        return [p for p in PHASES if p.name == only]
+    if from_phase:
+        idx = [p.name for p in PHASES].index(from_phase)
+        return PHASES[idx:]
+    start = first_unsatisfied(stack, states)
+    return [] if start is None else PHASES[start:]
+
+
+def _bootstrap_run(
+    stack_name: str, *, only: str | None = None, from_phase: str | None = None, step: bool
 ) -> None:
-    """Drive one no-fault baseline run of a setup and write a timestamped report
-    bundle stamped with (setup x config x commit) under build/state/reports/."""
-    setup = _lookup_setup_or_exit(setup_name)
-    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = runs_dir() / f"{timestamp}-{setup.name}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    """Bring a stack up by running its bring-up phases (net → vms → provision →
+    observe) from the first unsatisfied one, so a re-run resumes. --only/--from
+    override the selection. Each phase fails loud: a step failure halts the run
+    and prints a resume hint naming the failing phase."""
+    stack = _lookup_stack_or_exit(stack_name)
+    _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
+    deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        states = _probe_all(deps, stack)
+        selected = _select_phases(stack, states, only=only, from_phase=from_phase)
+        if not selected:
+            deps.renderer.note(f"{stack_name}: already satisfied — nothing to do")
+            return
+        for phase in selected:  # one phase at a time so a failure names its phase
+            try:
+                # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
+                # only for the phases actually selected this run.
+                _ensure_prereqs_for_stack(stack, phase, step=step)
+                run_steps(
+                    phase.build_steps(stack, deps),
+                    runner=deps.runner,
+                    renderer=deps.renderer,
+                    transcript=deps.transcript,
+                    step_mode=step,
+                    pauser=deps.pauser,
+                )
+            except StepFailedError as exc:
+                hint = f"resume with: mqlab bootstrap {stack_name} --from {phase.name}"
+                typer.echo(hint, err=True)  # to the CLI's stderr, where the operator sees it
+                deps.transcript.write(hint)
+                raise typer.Exit(code=exc.exit_code) from exc
+    except NoTTYError as exc:
+        deps.renderer.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    finally:
+        deps.transcript.close()
 
-    steps = baseline_run_plan(setup, run_dir, seconds=seconds, rate=rate)
-    _execute("run", steps, step_mode=step)  # raises typer.Exit on any step failure
 
-    app = Ledger.read_jsonl(run_dir / "app.jsonl")
-    svc = Ledger.read_jsonl(run_dir / "svc.jsonl")
-    facts = reconcile(
-        app, svc, secondary_present=set(), primary_disk_present=set(), cutover_ts=float("inf")
-    )
-    assert_self_correct(facts)  # baseline must be all-Confirmed or the instrument is broken
-    scenario = build_report("BASELINE", arm_of(setup.name), facts, peak_exposure=peak_exposure(app))
-    metadata = capture_metadata(
-        setup.name,
-        timestamp,
-        commit_reader=read_commit,
-        digest_reader=lambda: read_config_digest(
-            [
-                repo_root() / "lab" / "topology.yaml",
-                inventory_path(),
-                *_manifest_digest_paths(setup.name),
-            ]
-        ),
-        version_reader=read_versions,
-        manifest_reader=lambda: _manifest_id(setup.name),
-    )
-    report = RunReport(metadata=metadata, scenarios=[scenario])
-    bundle = write_bundle(report, reports_dir())
-    append_index(report, bundle, reports_dir())
-    typer.echo(f"run report written: {bundle}")
+def _validate_phase_name(value: str | None, flag: str) -> str | None:
+    # Reject an unknown --from/--only phase name early with a clean exit-2 message.
+    if value is not None and value not in [p.name for p in PHASES]:
+        names = ", ".join(p.name for p in PHASES)
+        typer.echo(f"{flag}: unknown phase {value!r} (known: {names})", err=True)
+        raise typer.Exit(code=2)
+    return value
 
 
-def _bootstrap_run(setup_name: str, *, manifest: str | None, step: bool) -> None:
-    """Bring a setup all the way up: host gate → networks → guests (create +
-    provision) → observability. A thin sequencing wrapper over the existing
-    verbs; each phase fails loud (raises typer.Exit) and halts the rest."""
-    _lookup_setup_or_exit(setup_name)  # validate the setup name early (exit 2 if unknown)
-    _prepare_lab()  # host gate up front — fail loud; vm_create re-gates (idempotent double-gate)
-    net_create("all", step=step)  # all lab nets: small shared set, no per-setup filter, idempotent
-    vm_create(setup_name, manifest=manifest, step=step)
-    obs_up(step=step)
+_PHASE_HELP = "net/vms/provision/observe"
+_FromOpt = Annotated[
+    str | None, typer.Option("--from", help=f"run from this phase onward ({_PHASE_HELP})")
+]
+_OnlyOpt = Annotated[
+    str | None, typer.Option("--only", help=f"run only this phase ({_PHASE_HELP})")
+]
 
 
 @app.command("bootstrap")
 def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstrap_run
-    setup_name: Annotated[
-        str, typer.Argument(help="setup to bring up (e.g. distributed-pcmk-ubuntu)")
-    ],
-    manifest: _ManifestOpt = None,
+    stack_name: Annotated[str, typer.Argument(help="stack to bring up (e.g. pcmk-ubuntu)")],
+    from_phase: _FromOpt = None,
+    only: _OnlyOpt = None,
     step: _StepFlag = False,
 ) -> None:
-    """Bring up a whole setup in one command: networks → guests → observability.
+    """Bring up a whole stack in one command: net → vms → provision → observe.
 
-    This is the consumer happy path. Run `mqlab doctor` first to pre-flight the
-    host. (`mqlab run` is the separate post-bring-up baseline test driver.)"""
-    _bootstrap_run(setup_name, manifest=manifest, step=step)
+    Runs from the first unsatisfied phase, so a re-run resumes. Use --from PHASE
+    to force a starting phase or --only PHASE to run a single phase. Run
+    `mqlab doctor` first to pre-flight the host."""
+    _validate_phase_name(from_phase, "--from")
+    _validate_phase_name(only, "--only")
+    _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step)
+
+
+def _other_stacks_up(deps: Deps, exclude: str) -> bool:
+    """True iff any member VM of a non-excluded, non-reserved stack is live.
+
+    Probes `virsh list --all` once and checks each eligible stack's members
+    against the result. "Reserved" means no cluster_group OR no members — those
+    stacks have no real VMs to query and are skipped.
+
+    Used by `_teardown_run` as a reference count: when the result is False the
+    caller is the last stack down and commons VMs can be reclaimed.
+    """
+    stacks = lab_stacks()
+    states = _probe_states(deps)
+    for name, stack in stacks.items():
+        if name == exclude:
+            continue
+        if stack.cluster_group is None:
+            continue  # reserved stack — no real VMs
+        members = stack_members(name) or []
+        if not members:
+            continue  # reserved/empty stack — skip
+        if any(is_live(states, member) for member in members):
+            return True
+    return False
+
+
+def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
+    """Destroy a stack's member VMs; reclaim shared commons when last stack out.
+
+    Logic:
+    - Resolves the stack (exit 2 on unknown).
+    - Plans member-VM destroy steps from the live domain states.
+    - Decides commons fate: destroy if --commons OR no other stack is still up.
+      When commons are kept a note is emitted so the operator knows why.
+    - Runs all accumulated steps in one pass (fail-loud on StepFailedError).
+
+    Extension point for Task 11: per-stack commons-instance cleanup (svc QM
+    dltmqm, exporter unit, scrape-target entry) belongs in a
+    `_teardown_stack_commons_instances(stack, deps)` helper inserted here
+    before the commons-VM destroy block. Today's commons are single-instance
+    shared VMs only.
+    """
+    stack = _lookup_stack_or_exit(stack_name)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("teardown", timestamp)
+    try:
+        members = stack_members(stack.name) or []
+        all_stack_vms = all_vms(stack)
+        commons_vms = [vm for vm in all_stack_vms if vm not in members]
+
+        states = _probe_states(deps)
+
+        member_steps, member_notes = _plan_destroy(members, states)
+        for note in member_notes:
+            deps.renderer.note(note)
+
+        destroy_commons = commons or not _other_stacks_up(deps, exclude=stack.name)
+
+        commons_steps: list[CommandStep] = []
+        if destroy_commons:
+            raw_commons, commons_notes = _plan_destroy(commons_vms, states)
+            for note in commons_notes:
+                deps.renderer.note(note)
+            # Inject "commons destroy" into every per-guest step label so tests
+            # (and operators) can distinguish them from member steps.
+            commons_steps = [
+                CommandStep(f"commons destroy: {s.label}", s.command) for s in raw_commons
+            ]
+        else:
+            deps.renderer.note(
+                "commons VMs kept — another stack is still up (use --commons to force removal)"
+            )
+
+        all_steps = member_steps + commons_steps
+        run_steps(
+            all_steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=step,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    except NoTTYError as exc:
+        deps.renderer.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    finally:
+        deps.transcript.close()
+
+
+@app.command("teardown")
+def teardown(  # pragma: no cover - thin delegator; logic covered via _teardown_run
+    stack_name: Annotated[str, typer.Argument(help="stack to tear down (e.g. rdqm-rhel)")],
+    commons: Annotated[
+        bool, typer.Option("--commons", help="also destroy shared commons VMs")
+    ] = False,
+    step: _StepFlag = False,
+) -> None:
+    """Destroy a stack's VMs; shared commons only when last stack down (or --commons)."""
+    _teardown_run(stack_name, commons=commons, step=step)
+
+
+def _status_one(stack: Stack, deps: Deps) -> None:
+    """Render phase completion for a single non-reserved stack.
+
+    Probes the live world once via _probe_all, then maps each Phase to ✓/✗ from
+    phase.satisfied(stack, states). Renders a Rich table: Phase | Status.
+    Fail-loud: real probe results surface; nothing is swallowed.
+    """
+    from rich.table import Table
+
+    states = _probe_all(deps, stack)
+    table = Table(title=f"stack: {stack.name}")
+    table.add_column("Phase")
+    table.add_column("Status")
+    for phase in PHASES:
+        ok = phase.satisfied(stack, states)
+        mark = "✓" if ok else "✗"
+        table.add_row(phase.name, mark)
+    deps.renderer.table(table)
+
+
+def _status_run(stack_name: str | None) -> None:
+    """Render phase completion for one stack (if named) or all non-reserved stacks.
+
+    A reserved stack is one whose cluster_group is None (e.g. nativeha-ubuntu):
+    it has no provision playbook and no real VMs to probe.
+
+    - Named reserved stack: emit a note and return without probing.
+    - Named non-reserved stack: probe once, render phases.
+    - No arg: iterate all non-reserved stacks, probing each once.
+    """
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("status", timestamp)
+    try:
+        if stack_name is not None:
+            stack = _lookup_stack_or_exit(stack_name)
+            if stack.cluster_group is None:
+                deps.renderer.note(
+                    f"{stack.name}: reserved stack — no provision playbook or cluster VMs"
+                )
+                return
+            _status_one(stack, deps)
+        else:
+            stacks = lab_stacks()
+            for stack in stacks.values():
+                if stack.cluster_group is None:
+                    continue  # skip reserved stacks in the all-stacks view
+                _status_one(stack, deps)
+    finally:
+        deps.transcript.close()
+
+
+@app.command("status")
+def status(  # pragma: no cover - thin delegator; logic covered via _status_run
+    stack_name: Annotated[
+        str | None,
+        typer.Argument(help="stack to show (e.g. pcmk-ubuntu); omit to show all stacks"),
+    ] = None,
+) -> None:
+    """Show phase completion (net/vms/provision/observe) for a stack or all stacks."""
+    _status_run(stack_name)
 
 
 def main() -> None:
