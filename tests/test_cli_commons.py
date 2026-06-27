@@ -80,8 +80,8 @@ def _deps(runner):
 
 @pytest.fixture(autouse=True)
 def stub_ensure_prereqs(monkeypatch):
-    """commons up calls _ensure_prereqs for monitoring — stub it so no real I/O."""
-    monkeypatch.setattr(cli, "_ensure_prereqs", lambda setup, **k: None)
+    """commons up calls _ensure_prereqs_for_commons — stub it so no real I/O."""
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_commons", lambda **k: None)
 
 
 def _recorded_steps(runner):
@@ -161,18 +161,18 @@ def test_commons_up_calls_prepare_lab(monkeypatch, tmp_path, prepare_lab_calls):
     assert prepare_lab_calls == ["prepare"]
 
 
-def test_commons_up_ensures_monitoring_prereqs(monkeypatch, tmp_path):
-    """commons up ensures monitoring's fresh-volume prerequisites before running steps."""
+def test_commons_up_ensures_commons_prereqs(monkeypatch, tmp_path):
+    """commons up ensures the commons fresh-volume prerequisites before running steps."""
     _seed(monkeypatch, tmp_path)
-    prereq_calls: list[str] = []
-    monkeypatch.setattr(cli, "_ensure_prereqs", lambda setup, **k: prereq_calls.append(setup))
+    prereq_calls: list[bool] = []
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_commons", lambda **k: prereq_calls.append(True))
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
 
     result = CliRunner().invoke(cli.app, ["commons", "up"])
 
     assert result.exit_code == 0
-    assert "monitoring" in prereq_calls
+    assert prereq_calls == [True]
 
 
 def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
@@ -340,3 +340,88 @@ def test_commons_no_subcommand_shows_help():
     """Invoking `commons` with no subcommand exits non-zero (no_args_is_help=True)."""
     result = CliRunner().invoke(cli.app, ["commons"])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# Coverage for the shared step-runner branches commons reuses (after the #350
+# vm/net/obs command removal, commons up/down are the surviving exercisers).
+# ---------------------------------------------------------------------------
+
+
+class _FailPause:
+    def wait(self) -> None:
+        raise cli.NoTTYError("no tty")
+
+
+def _deps_pauser(runner, pauser):
+    return cli.Deps(
+        runner=runner,
+        renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=80)),
+        transcript=Transcript(transcript_path("commons", "20260627T000000Z")),
+        pauser=pauser,
+    )
+
+
+def test_commons_up_without_tty_exits_two(monkeypatch, tmp_path):
+    """commons up --step with no TTY: _execute surfaces NoTTYError as exit 2."""
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_pauser(runner, _FailPause()))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up", "--step"])
+
+    assert result.exit_code == 2
+
+
+def test_commons_down_without_tty_exits_two(monkeypatch, tmp_path):
+    """commons down --step with no TTY: _execute_stateful surfaces NoTTYError as exit 2."""
+    _seed(monkeypatch, tmp_path)
+    commons_hosts = ["obs", "mon-probe", "svc-sim", "app-client"]
+    virsh_result = _dom_listing(dict.fromkeys(commons_hosts, "running"))
+    runner = RecordingRunner(results=[virsh_result, *(ScriptedResult([]) for _ in range(10))])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_pauser(runner, _FailPause()))
+
+    result = CliRunner().invoke(cli.app, ["commons", "down", "--step"])
+
+    assert result.exit_code == 2
+
+
+def test_commons_down_shut_off_vm_undefines_directly(monkeypatch, tmp_path):
+    """A shut-off (not live) commons VM hits _plan_destroy's direct-undefine branch."""
+    _seed(monkeypatch, tmp_path)
+    virsh_result = _dom_listing({"obs": "shut off"})  # off, not live -> undefine directly
+
+    captured: list = []
+    monkeypatch.setattr(cli, "run_steps", lambda steps, **kw: captured.extend(steps))
+    monkeypatch.setattr(
+        cli, "build_deps", lambda v, t: _deps(RecordingRunner(results=[virsh_result]))
+    )
+
+    result = CliRunner().invoke(cli.app, ["commons", "down"])
+
+    assert result.exit_code == 0
+    labels = [s.label for s in captured]
+    # exactly one step for obs: the undefine (no force-off, since it is not live)
+    obs_steps = [lbl for lbl in labels if "obs" in lbl]
+    assert obs_steps == ["obs undefine"]
+
+
+def test_commons_up_threads_obs_manifest_overlay(monkeypatch, tmp_path):
+    """When the shared obs manifest exists, _obs_manifest_args adds an -e @overlay arg
+    to the site-obs.yml provision step (the surviving exerciser is commons up)."""
+    _seed(monkeypatch, tmp_path)
+    shared = tmp_path / "manifests" / "_shared" / "observability.yaml"
+    shared.parent.mkdir(parents=True)
+    shared.write_text(
+        "prometheus: p\nnode_exporter: ne\nloki: l\nalloy: a\ngrafana: g\n"
+        "mq_metric_samples_ref: r\n"
+    )
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    obs_step = next(s for s in runner.recorded if "site-obs.yml" in s.argv)
+    overlay = tmp_path / "build" / "work" / "manifests" / "_obs.overlay.json"
+    assert ["-e", f"@{overlay}"] == obs_step.argv[-2:]

@@ -29,14 +29,6 @@ def _neutralize_ensure_local_boxes(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _neutralize_sweep_orphan_volumes(monkeypatch):
-    """Neutralise cli._sweep_orphan_volumes in every test — it shells `virsh vol-list`
-    / `vol-delete`, which must not run in unit tests (#276). Tested directly via the
-    import captured before this stub."""
-    monkeypatch.setattr(cli, "_sweep_orphan_volumes", lambda guests: None)
-
-
-@pytest.fixture(autouse=True)
 def _neutralize_build_ensure(monkeypatch):
     """Neutralise cli._build_ensure in every test — it shells git + makes symlinks
     (#286), which must not run in unit tests. The build commands test it via their own

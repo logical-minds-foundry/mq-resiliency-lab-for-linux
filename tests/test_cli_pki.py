@@ -18,23 +18,28 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # Non-QM entity CNs that must always be present in the rendered output.
 _FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "pymqrest", "svc-responder"}
 
-# The full static entity set that Phase 1 must reproduce exactly.
-_STATIC_CNS = {"QMPCMK", "QMRDQM", "QMNATIVE", "QMSVC"} | _FIXED_CNS
+# The app-org QM CNs derived from each stack's #351 short token (<short>APP) and
+# the per-stack svc-org counterparts (<short>SVC).
+_APP_CNS = {"PCMKAPP", "RDQMAPP", "NHARAPP"}
+_SVC_CNS = {"PCMKSVC", "RDQMSVC", "NHARSVC"}
 
-# Minimal topology covering all three app-org QMs and the shared svc-org QM.
+# The full entity set the stack model produces for this topology.
+_STATIC_CNS = _APP_CNS | _SVC_CNS | _FIXED_CNS
+
+# Minimal topology covering the three provisioned stacks; QM CNs derive from short.
 _PKI_TOPO = (
     "nodes: {}\n"
     "groups: {}\n"
-    "setups:\n"
-    "  pcmk_arm:\n"
-    "    groups: []\n"
-    "    qm: { name: QMPCMK, svc: QMSVC }\n"
-    "  rdqm_arm:\n"
-    "    groups: []\n"
-    "    qm: { name: QMRDQM, svc: QMSVC }\n"
-    "  nativeha_arm:\n"
-    "    groups: []\n"
-    "    qm: { name: QMNATIVE, svc: QMSVC }\n"
+    "stacks:\n"
+    "  pcmk-ubuntu:\n"
+    "    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
+    "    groups: []\n    qm: {}\n"
+    "  rdqm-rhel:\n"
+    "    mechanism: rdqm\n    os: rhel\n    short: RDQM\n"
+    "    groups: []\n    qm: {}\n"
+    "  nativeha-rhel:\n"
+    "    mechanism: native-ha\n    os: rhel\n    short: NHAR\n"
+    "    groups: []\n    qm: {}\n"
 )
 
 
@@ -52,7 +57,7 @@ def _deps(runner):
     )
 
 
-def _seed(monkeypatch, tmp_path, topo="nodes: {}\ngroups: {}\nsetups: {}\n"):
+def _seed(monkeypatch, tmp_path, topo="nodes: {}\ngroups: {}\nstacks: {}\n"):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(topo)
@@ -75,7 +80,7 @@ def test_pki_issue_passes_pki_only_extra_var(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
-    result = CliRunner().invoke(cli.app, ["pki", "issue", "QMPCMK"])
+    result = CliRunner().invoke(cli.app, ["pki", "issue", "PCMKAPP"])
     assert result.exit_code == 0
     assert runner.recorded[-1].argv == [
         "ansible-playbook",
@@ -85,7 +90,7 @@ def test_pki_issue_passes_pki_only_extra_var(monkeypatch, tmp_path):
         "-i",
         "localhost,",
         "-e",
-        "pki_only=QMPCMK",
+        "pki_only=PCMKAPP",
     ]
     # Entities file must have been rendered before the playbook ran.
     assert (tmp_path / "build" / "work" / "pki" / "entities.json").exists()
@@ -95,7 +100,7 @@ def test_pki_list_prints_entities_from_topology(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     result = CliRunner().invoke(cli.app, ["pki", "list"])
     assert result.exit_code == 0
-    assert "QMPCMK" in result.output
+    assert "PCMKAPP" in result.output
     assert "app-org" in result.output
 
 
@@ -107,17 +112,17 @@ def test_render_pki_entities_includes_derived_qm_cns(monkeypatch, tmp_path):
     path = cli._render_pki_entities()
     data = json.loads(path.read_text())
     cns = {e["cn"]: e["org"] for e in data}
-    assert cns["QMPCMK"] == "app-org"
-    assert cns["QMSVC"] == "svc-org"
+    assert cns["PCMKAPP"] == "app-org"
+    assert cns["PCMKSVC"] == "svc-org"
 
 
 def test_render_pki_entities_includes_all_qm_cns(monkeypatch, tmp_path):
-    """All three distinct app-org QMs and the shared svc-org QM must appear."""
+    """Every provisioned stack's app-org and svc-org QM CN must appear."""
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     path = cli._render_pki_entities()
     data = json.loads(path.read_text())
     cns = {e["cn"] for e in data}
-    assert {"QMPCMK", "QMRDQM", "QMNATIVE", "QMSVC"}.issubset(cns)
+    assert (_APP_CNS | _SVC_CNS).issubset(cns)
 
 
 def test_render_pki_entities_preserves_fixed_non_qm_entities(monkeypatch, tmp_path):
@@ -129,7 +134,7 @@ def test_render_pki_entities_preserves_fixed_non_qm_entities(monkeypatch, tmp_pa
 
 
 def test_render_pki_entities_full_set_matches_static_list(monkeypatch, tmp_path):
-    """Phase 1: the rendered CN set must equal today's static pki-entities.yml exactly."""
+    """The rendered CN set must equal the stack-derived entity set exactly."""
     _seed(monkeypatch, tmp_path, _PKI_TOPO)
     data = json.loads(cli._render_pki_entities().read_text())
     cns = {e["cn"] for e in data}
@@ -143,33 +148,34 @@ def test_render_pki_entities_correct_orgs_and_shape(monkeypatch, tmp_path):
     by_cn = {e["cn"]: e for e in data}
 
     # app-org QMs
-    for qm_cn in ("QMPCMK", "QMRDQM", "QMNATIVE"):
+    for qm_cn in _APP_CNS:
         e = by_cn[qm_cn]
         assert e["org"] == "app-org"
         assert e["ou"] == "messaging"
         assert e["kind"] == "personal"
         assert e["trust"] == ["svc-org"]
 
-    # svc-org QM
-    e = by_cn["QMSVC"]
-    assert e["org"] == "svc-org"
-    assert e["ou"] == "messaging"
-    assert e["kind"] == "personal"
-    assert e["trust"] == ["app-org"]
+    # svc-org QMs
+    for svc_cn in _SVC_CNS:
+        e = by_cn[svc_cn]
+        assert e["org"] == "svc-org"
+        assert e["ou"] == "messaging"
+        assert e["kind"] == "personal"
+        assert e["trust"] == ["app-org"]
 
 
-def test_render_pki_entities_dedupes_repeated_qm_names(monkeypatch, tmp_path):
-    """When multiple setups share the same QM name, only one entity is emitted."""
+def test_render_pki_entities_dedupes_repeated_svc_cn(monkeypatch, tmp_path):
+    """Stacks sharing a derived svc CN emit only one svc entity (dedupe)."""
     topo = (
         "nodes: {}\ngroups: {}\n"
-        "setups:\n"
-        "  arm_a:\n    groups: []\n    qm: { name: QMPCMK }\n"
-        "  arm_b:\n    groups: []\n    qm: { name: QMPCMK }\n"
+        "stacks:\n"
+        "  a:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
+        "  b:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     data = json.loads(cli._render_pki_entities().read_text())
-    qmpcmk_count = sum(1 for e in data if e["cn"] == "QMPCMK")
-    assert qmpcmk_count == 1
+    assert sum(1 for e in data if e["cn"] == "PCMKAPP") == 1
+    assert sum(1 for e in data if e["cn"] == "PCMKSVC") == 1
 
 
 def test_render_pki_entities_writes_to_work_pki(monkeypatch, tmp_path):
@@ -179,17 +185,21 @@ def test_render_pki_entities_writes_to_work_pki(monkeypatch, tmp_path):
     assert path == tmp_path / "build" / "work" / "pki" / "entities.json"
 
 
-def test_render_pki_entities_no_qm_setups_yields_only_fixed(monkeypatch, tmp_path):
-    """When no setup has a QM config, only the fixed non-QM entities are emitted."""
-    _seed(monkeypatch, tmp_path)  # empty topology — no setups
+def test_render_pki_entities_no_stacks_yields_only_fixed(monkeypatch, tmp_path):
+    """When there are no stacks, only the fixed non-QM entities are emitted."""
+    _seed(monkeypatch, tmp_path)  # empty topology — no stacks
     data = json.loads(cli._render_pki_entities().read_text())
     cns = {e["cn"] for e in data}
     assert cns == _FIXED_CNS
 
 
-def test_render_pki_entities_setup_without_qm_is_skipped(monkeypatch, tmp_path):
-    """A setup that declares no QM config must not add any entities."""
-    topo = "nodes: {}\ngroups: {}\nsetups:\n  bare:\n    groups: []\n"
+def test_render_pki_entities_stack_without_short_is_skipped(monkeypatch, tmp_path):
+    """A reserved stack with no short token contributes no QM entities."""
+    topo = (
+        "nodes: {}\ngroups: {}\n"
+        "stacks:\n"
+        "  reserved:\n    mechanism: m\n    os: o\n    short: ''\n    groups: []\n    qm: {}\n"
+    )
     _seed(monkeypatch, tmp_path, topo)
     data = json.loads(cli._render_pki_entities().read_text())
     cns = {e["cn"] for e in data}

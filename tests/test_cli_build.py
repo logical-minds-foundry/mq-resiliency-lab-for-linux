@@ -115,10 +115,11 @@ def test_build_clean_seam(monkeypatch, tmp_path):
 def test_root_callback_runs_build_ensure_for_lab_commands(monkeypatch):
     calls = []
     monkeypatch.setattr(cli, "_build_ensure", lambda: calls.append("ensure"))
-    monkeypatch.setattr(cli, "_execute", lambda *a, **k: None)  # neutralise the command body
-    result = runner.invoke(cli.app, ["net", "status"])
+    # obs open is a side-effect-free surviving command — it just prints URLs, so it
+    # exercises the root callback without touching the lab.
+    result = runner.invoke(cli.app, ["obs", "open"])
     assert result.exit_code == 0
-    assert calls == ["ensure"]  # the callback wired the buckets before the command's transcript
+    assert calls == ["ensure"]  # the callback wired the buckets before the command body
 
 
 def test_root_callback_skips_the_build_group(monkeypatch, tmp_path):
@@ -135,3 +136,10 @@ def test_root_callback_noop_without_subcommand(monkeypatch):
     monkeypatch.setattr(cli, "_build_ensure", lambda: calls.append("ensure"))
     runner.invoke(cli.app, [])  # bare `mqlab` -> help; no subcommand to wire for
     assert calls == []
+
+
+def test_main_invokes_the_app(monkeypatch):
+    called: list[bool] = []
+    monkeypatch.setattr(cli, "app", lambda: called.append(True))
+    cli.main()
+    assert called == [True]
