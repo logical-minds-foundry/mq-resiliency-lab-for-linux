@@ -1,16 +1,47 @@
-# Phase D DR build: the full 8-node cross-site topology with DRBD-async
-# under the SAN. DR-ready from the start (the Phase C lesson: don't bolt
-# DR on afterward). Run after both sites' nodes are booted.
-#
-# Run via the wrapper, which auto-sources the persisted hacluster secret
-# (PCMK_HACLUSTER_PASSWORD) instead of requiring a human to inject it -- the
-# secret is auto-generated once and saved in build/state/secrets/, so it survives
-# rebuilds and is never lost:
-#   lab/scripts/dr-provision.sh
-# (Running ansible-playbook directly still works if PCMK_HACLUSTER_PASSWORD is
-# exported; the wrapper just removes that footgun.)
+# Building block (#350 Task 2): the LIVE site (site A) of the Pacemaker/SAN
+# stack, on its DRBD-replicated LUN. Bodies moved verbatim from the former
+# site-pcmk-dr.yml (the full-HADR superset) — DRBD-async under the SAN, LIO on
+# /dev/drbd0, then site-A initiators -> cluster -> stonith -> MQ. Composed by
+# site-pcmk.yml ahead of _pcmk-dr-replication.yml (the standby site B). The
+# DR/DRBD ordering here is load-bearing (docs/reference/drbd-operations.md):
+# DRBD up on both peers -> skip-initial-sync -> LIO exports /dev/drbd0 ->
+# initiators log in -> cluster. Do not reorder.
 
-# Cold-boot guard (#160; the DR twin of #151's site-pcmk.yml guard): a clean
+# STONITH prerequisite (#133): fence_virsh ssh's from each cluster node to the
+# hypervisor (this VM, the libvirt host) as the fence user, then virsh-fences a
+# domain. That needs the keypair to exist AND its public half authorized for the
+# fence user here. Both are hypervisor-local, and the fence user is the user
+# running this play (== fence_hypervisor_user). Without it fence_virsh fails
+# "Permission denied (publickey)", STONITH never starts, and the cluster can
+# never fence or recover. The pcmk-stonith role copies the private key to the
+# nodes; this play generates it (if absent) and authorizes the public half.
+- name: fence keypair + hypervisor authorization (STONITH prerequisite)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fence_key: "{{ playbook_dir }}/../build/state/fence_key"
+  tasks:
+    - name: generate the fence keypair once (gitignored, under build/)
+      ansible.builtin.command:
+        cmd: ssh-keygen -t ed25519 -N "" -C "fence_virsh@lab" -f "{{ fence_key }}"
+        creates: "{{ fence_key }}"
+
+    - name: ensure the fence user's ~/.ssh exists
+      ansible.builtin.file:
+        path: ~/.ssh
+        state: directory
+        mode: "0700"
+
+    - name: authorize the fence public key for fence_virsh on the hypervisor
+      ansible.builtin.lineinfile:
+        path: ~/.ssh/authorized_keys
+        line: "{{ lookup('file', fence_key + '.pub') }}"
+        create: true
+        mode: "0600"
+        state: present
+
+# Cold-boot guard (#160; the DR twin of #151's site-pcmk guard): a clean
 # ground-up build runs `vm create` then `vm provision` back-to-back, and a guest
 # that is not yet SSH-ready when its play fires drops out as UNREACHABLE -- which
 # silently skips the whole san_a/san_b DRBD+target stage and marches on to the
@@ -77,20 +108,6 @@
       - iqn.2026-06.lab.mq:pcmk-a3
   roles: [iscsi-target]
 
-# --- DR-peer prep so the FORCED cutover to B needs no manual fixups (#67) ---
-# san-b gets the LIO package now; it exports the LUN only at cutover, once it is
-# force-promoted to primary (the drbd device is inaccessible on the secondary).
-- hosts: san_b
-  become: true
-  tasks:
-    - name: LIO target package on the DR-peer SAN
-      ansible.builtin.apt: { name: targetcli-fb, update_cache: true }
-# pcmk-b* get their stable initiator IQNs now (the cutover ACLs match on them);
-# they log in to san-b's target only at cutover -> iscsi-initiator with no
-# san_portal_ip sets the IQN and skips the login.
-- hosts: pcmk_b
-  roles: [iscsi-initiator]
-
 # --- Site A: initiators, cluster, fencing, MQ ---
 - hosts: pcmk_a
   vars: { san_target_iqn: iqn.2026-06.lab.mq:san-a.lun0, san_portal_ip: 10.40.1.5 }
@@ -111,23 +128,4 @@
 - hosts: pcmk_a
   roles: [mq-install]
 - hosts: pcmk_a
-  roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)
-
-# --- Site B: cluster, fencing, MQ (no QM yet; receives on cutover) ---
-- hosts: pcmk_b
-  vars: &b_vars
-    pcmk_cluster_name: mqpcmk-b
-    pcmk_site_nodes:
-      - { name: pcmk-b1, hb: 172.16.2.61 }
-      - { name: pcmk-b2, hb: 172.16.2.62 }
-      - { name: pcmk-b3, hb: 172.16.2.63 }
-    fence_hypervisor_ip: 192.168.121.1
-    fence_hypervisor_user: pmoore
-  roles: [pcmk-cluster]
-- hosts: pcmk_b
-  vars: *b_vars
-  roles: [pcmk-stonith]
-- hosts: pcmk_b
-  roles: [mq-install]
-- hosts: pcmk_b
   roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)

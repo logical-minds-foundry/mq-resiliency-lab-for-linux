@@ -1,0 +1,40 @@
+# Building block (#350 Task 2): the STANDBY site (site B) of the Pacemaker/SAN
+# stack — the cross-site DR receiving end. Bodies moved verbatim from the former
+# site-pcmk-dr.yml. Composed by site-pcmk.yml AFTER _pcmk-cluster-ha.yml (which
+# stands up site A on the DRBD-replicated LUN), preserving the original DR play
+# ordering: site A live, then site B's DR-peer prep + recovery cluster. Site B
+# holds no QM until a forced cutover (pcmk-dr-force.sh) promotes san-b and lands
+# the resource group here; see docs/reference/drbd-operations.md.
+
+# --- DR-peer prep so the FORCED cutover to B needs no manual fixups (#67) ---
+# san-b gets the LIO package now; it exports the LUN only at cutover, once it is
+# force-promoted to primary (the drbd device is inaccessible on the secondary).
+- hosts: san_b
+  become: true
+  tasks:
+    - name: LIO target package on the DR-peer SAN
+      ansible.builtin.apt: { name: targetcli-fb, update_cache: true }
+# pcmk-b* get their stable initiator IQNs now (the cutover ACLs match on them);
+# they log in to san-b's target only at cutover -> iscsi-initiator with no
+# san_portal_ip sets the IQN and skips the login.
+- hosts: pcmk_b
+  roles: [iscsi-initiator]
+
+# --- Site B: cluster, fencing, MQ (no QM yet; receives on cutover) ---
+- hosts: pcmk_b
+  vars: &b_vars
+    pcmk_cluster_name: mqpcmk-b
+    pcmk_site_nodes:
+      - { name: pcmk-b1, hb: 172.16.2.61 }
+      - { name: pcmk-b2, hb: 172.16.2.62 }
+      - { name: pcmk-b3, hb: 172.16.2.63 }
+    fence_hypervisor_ip: 192.168.121.1
+    fence_hypervisor_user: pmoore
+  roles: [pcmk-cluster]
+- hosts: pcmk_b
+  vars: *b_vars
+  roles: [pcmk-stonith]
+- hosts: pcmk_b
+  roles: [mq-install]
+- hosts: pcmk_b
+  roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)

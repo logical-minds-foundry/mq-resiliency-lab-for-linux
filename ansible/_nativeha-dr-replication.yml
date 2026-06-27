@@ -1,13 +1,11 @@
-# Native HA CRR / full HADR (#246 Phase 3): site-A Live group + site-B Recovery
-# group + TLS (lab-pki .p12) + Cross-Region Replication over net-wan. The #267
-# keystone — distributed + HA + DR on the one consolidated setup. Run after the
-# distributed mesh (site-nativeha-distributed.yml) so NHARAPP has the app/SVC
-# objects; the recovery group inherits them by CRR.
+# Building block (#350 Task 2): site-B Native HA Recovery group + TLS + Cross-Region
+# Replication (#246 Phase 3 / #267). Bodies moved verbatim from the former
+# site-nativeha-dr.yml (steps 2-6). Composed by site-nativeha.yml AFTER the live
+# group, the folded our-side MQSC, and the distributed-shared layer — so NHARAPP
+# already has the app/SVC objects and the Recovery group inherits them by CRR.
+# CRR over net-wan; restart order (Recovery then Live) is load-bearing.
 
-# 1. Site-A Live HA group (idempotent fast-forward if already formed).
-- import_playbook: site-nativeha.yml
-
-# 2. Site-B Recovery HA group (same role; its own net-hb-b replication set).
+# 1. Site-B Recovery HA group (same role; its own net-hb-b replication set).
 - hosts: nha_rhel_b
   become: true
   tasks:
@@ -17,7 +15,7 @@
 - hosts: nha_rhel_b
   become: true
   vars:
-    qm_name: "{{ qm_app | default('NHARAPP') }}"
+    qm_name: "{{ qm_app }}"
     nha_site_nodes:
       - { name: nha-rhel-b1, hb: 172.16.2.91, data: 10.10.2.91 }
       - { name: nha-rhel-b2, hb: 172.16.2.92, data: 10.10.2.92 }
@@ -25,21 +23,21 @@
   roles:
     - mq-nativeha
 
-# 3. TLS (lab-pki .p12) on every instance of both groups.
+# 2. TLS (lab-pki .p12) on every instance of both groups.
 - hosts: nha_rhel_a:nha_rhel_b
   become: true
   vars:
-    qm_name: "{{ qm_app | default('NHARAPP') }}"
-    ks_cn: "{{ qm_app | default('NHARAPP') }}"
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
 
-# 4. CRR — Live group (site A): replicate to the Recovery group (site B) over net-wan.
+# 3. CRR — Live group (site A): replicate to the Recovery group (site B) over net-wan.
 - hosts: nha_rhel_a
   become: true
   vars:
-    qm_name: "{{ qm_app | default('NHARAPP') }}"
-    ks_cn: "{{ qm_app | default('NHARAPP') }}"
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
     this_group: Live
     this_role: live
     peer_group_name: Recovery
@@ -48,12 +46,12 @@
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
 
-# 5. CRR — Recovery group (site B): knows the Live group (site A); Enabled=No.
+# 4. CRR — Recovery group (site B): knows the Live group (site A); Enabled=No.
 - hosts: nha_rhel_b
   become: true
   vars:
-    qm_name: "{{ qm_app | default('NHARAPP') }}"
-    ks_cn: "{{ qm_app | default('NHARAPP') }}"
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
     this_group: Recovery
     this_role: Recovery
     peer_group_name: Live
@@ -62,10 +60,10 @@
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
 
-# 6. Restart both groups to apply TLS + CRR (Recovery first, then Live).
+# 5. Restart both groups to apply TLS + CRR (Recovery first, then Live).
 - hosts: nha_rhel_b:nha_rhel_a
   become: true
-  vars: { qm_name: "{{ qm_app | default('NHARAPP') }}" }
+  vars: { qm_name: "{{ qm_app }}" }
   tasks:
     - name: restart mqmonitor@
       ansible.builtin.systemd:

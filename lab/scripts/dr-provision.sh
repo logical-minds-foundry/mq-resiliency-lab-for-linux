@@ -11,4 +11,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 export PCMK_HACLUSTER_PASSWORD="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"
 ( cd "$HERE/../.." && mqlab vm inventory )   # renders build/work/inventory.ini from topology
 cd "$HERE/../../ansible"
-exec ansible-playbook site-pcmk-dr.yml "$@"
+# #350 Task 2: the DR-ready Pacemaker provision is now the consolidated full-HADR
+# site-pcmk.yml (was site-pcmk-dr.yml). It also creates the QM, so it needs the
+# #351 QM extra-vars — the canonical path is `mqlab bootstrap pcmk-ubuntu`, which
+# passes them via phases._qm_extra_vars. This legacy wrapper requires them on the
+# command line, e.g.:
+#   dr-provision.sh -e qm_app=PCMKAPP -e qm_svc=PCMKSVC \
+#                   -e chl_to_svc=PCMKAPP.PCMKSVC -e chl_to_app=PCMKSVC.PCMKAPP
+exec ansible-playbook site-pcmk.yml "$@"
