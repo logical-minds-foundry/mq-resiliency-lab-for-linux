@@ -1969,5 +1969,107 @@ def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstra
     _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step)
 
 
+def _other_stacks_up(deps: Deps, exclude: str) -> bool:
+    """True iff any member VM of a non-excluded, non-reserved stack is live.
+
+    Probes `virsh list --all` once and checks each eligible stack's members
+    against the result. "Reserved" means no cluster_group OR no members — those
+    stacks have no real VMs to query and are skipped.
+
+    Used by `_teardown_run` as a reference count: when the result is False the
+    caller is the last stack down and commons VMs can be reclaimed.
+    """
+    stacks = lab_stacks()
+    states = _probe_states(deps)
+    for name, stack in stacks.items():
+        if name == exclude:
+            continue
+        if stack.cluster_group is None:
+            continue  # reserved stack — no real VMs
+        members = stack_members(name) or []
+        if not members:
+            continue  # reserved/empty stack — skip
+        if any(is_live(states, member) for member in members):
+            return True
+    return False
+
+
+def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
+    """Destroy a stack's member VMs; reclaim shared commons when last stack out.
+
+    Logic:
+    - Resolves the stack (exit 2 on unknown).
+    - Plans member-VM destroy steps from the live domain states.
+    - Decides commons fate: destroy if --commons OR no other stack is still up.
+      When commons are kept a note is emitted so the operator knows why.
+    - Runs all accumulated steps in one pass (fail-loud on StepFailedError).
+
+    Extension point for Task 11: per-stack commons-instance cleanup (svc QM
+    dltmqm, exporter unit, scrape-target entry) belongs in a
+    `_teardown_stack_commons_instances(stack, deps)` helper inserted here
+    before the commons-VM destroy block. Today's commons are single-instance
+    shared VMs only.
+    """
+    stack = _lookup_stack_or_exit(stack_name)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("teardown", timestamp)
+    try:
+        members = stack_members(stack.name) or []
+        all_stack_vms = all_vms(stack)
+        commons_vms = [vm for vm in all_stack_vms if vm not in members]
+
+        states = _probe_states(deps)
+
+        member_steps, member_notes = _plan_destroy(members, states)
+        for note in member_notes:
+            deps.renderer.note(note)
+
+        destroy_commons = commons or not _other_stacks_up(deps, exclude=stack.name)
+
+        commons_steps: list[CommandStep] = []
+        if destroy_commons:
+            raw_commons, commons_notes = _plan_destroy(commons_vms, states)
+            for note in commons_notes:
+                deps.renderer.note(note)
+            # Inject "commons destroy" into every per-guest step label so tests
+            # (and operators) can distinguish them from member steps.
+            commons_steps = [
+                CommandStep(f"commons destroy: {s.label}", s.command) for s in raw_commons
+            ]
+        else:
+            deps.renderer.note(
+                "commons VMs kept — another stack is still up (use --commons to force removal)"
+            )
+
+        all_steps = member_steps + commons_steps
+        run_steps(
+            all_steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=step,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    except NoTTYError as exc:
+        deps.renderer.error(str(exc))
+        raise typer.Exit(code=2) from exc
+    finally:
+        deps.transcript.close()
+
+
+@app.command("teardown")
+def teardown(  # pragma: no cover - thin delegator; logic covered via _teardown_run
+    stack_name: Annotated[str, typer.Argument(help="stack to tear down (e.g. rdqm-rhel)")],
+    commons: Annotated[
+        bool, typer.Option("--commons", help="also destroy shared commons VMs")
+    ] = False,
+    step: _StepFlag = False,
+) -> None:
+    """Destroy a stack's VMs; shared commons only when last stack down (or --commons)."""
+    _teardown_run(stack_name, commons=commons, step=step)
+
+
 def main() -> None:
     app()
