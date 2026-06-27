@@ -55,7 +55,7 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
-from mqlab.phases import PHASES, all_vms, build_states, first_unsatisfied
+from mqlab.phases import PHASES, _commons_members, all_vms, build_states, first_unsatisfied
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -547,6 +547,12 @@ app.add_typer(vm_app, name="vm")
 obs_app = typer.Typer(help="observability stack (Prometheus + Grafana)", no_args_is_help=True)
 app.add_typer(obs_app, name="obs")
 
+commons_app = typer.Typer(
+    help="shared commons VMs (obs + probe + svc + app) independently of any stack",
+    no_args_is_help=True,
+)
+app.add_typer(commons_app, name="commons")
+
 qm_app = typer.Typer(help="MQ queue managers (Pacemaker-managed HA)", no_args_is_help=True)
 app.add_typer(qm_app, name="qm")
 
@@ -920,6 +926,72 @@ def _instrument(setup_name: str) -> None:
         raise typer.Exit(code=exc.exit_code) from exc
     finally:
         deps.transcript.close()
+
+
+# ---------------------------------------------------------------------------
+# commons — shared commons VMs (obs + probe + svc + app) independently of stacks
+# ---------------------------------------------------------------------------
+
+# The obs VMs that _obs_up_steps hardcodes in its monitoring-create vagrant up step.
+# Used by _commons_up_steps to identify which extra commons members need a separate
+# vagrant up call (svc-sim, app-client, or any future addition to the commons groups).
+_OBS_UP_MEMBERS = frozenset({"obs", "mon-probe"})
+
+
+def _commons_up_steps() -> list[CommandStep]:
+    """Build step list for `commons up`.
+
+    Reuses _obs_up_steps() for the observability render + vagrant up obs/probe +
+    site-obs.yml + host-obs.yml + relay heal + grafana verify steps, then appends
+    a vagrant up step for any extra commons members not covered by _obs_up_steps
+    (i.e. svc-sim and app-client when present in the commons topology).
+
+    Scope: commons up provisions shared infra VMs and observability only.  The per-
+    stack svc QM and app instance (MQ workload on svc-sim/app-client) are provisioned
+    by a stack's bootstrap provision phase — NOT here.
+    """
+    steps = _obs_up_steps()
+    extra = [m for m in _commons_members() if m not in _OBS_UP_MEMBERS]
+    if extra:
+        steps.append(
+            CommandStep(
+                "commons create (svc/app)",
+                Command(  # noqa: S607
+                    ["vagrant", "up", *extra],
+                    cwd=repo_root() / "lab",
+                    env=_vagrant_env(),
+                ),
+            )
+        )
+    return steps
+
+
+@commons_app.command("up")
+def commons_up(step: _StepFlag = False) -> None:
+    """Bring up all commons VMs and provision observability (site-obs.yml)."""
+    _prepare_lab()  # commons up shells vagrant — gate + render (#276)
+    _ensure_prereqs("monitoring", step=step)
+    _execute("commons-up", _commons_up_steps(), step_mode=step)
+
+
+@commons_app.command("status")
+def commons_status() -> None:
+    """Show commons health (topology joined with live virsh state)."""
+    guests = _commons_members()
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("commons-status", timestamp)
+    try:
+        code = vm_status_core(deps.runner, deps.renderer, deps.transcript, guests=guests)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
+
+
+@commons_app.command("down")
+def commons_down(step: _StepFlag = False) -> None:
+    """Destroy all commons VMs (obs + probe + svc + app)."""
+    _execute_stateful("commons-down", _commons_members(), _plan_destroy, step_mode=step)
 
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
