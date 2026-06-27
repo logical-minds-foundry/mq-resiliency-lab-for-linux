@@ -2071,5 +2071,67 @@ def teardown(  # pragma: no cover - thin delegator; logic covered via _teardown_
     _teardown_run(stack_name, commons=commons, step=step)
 
 
+def _status_one(stack: Stack, deps: Deps) -> None:
+    """Render phase completion for a single non-reserved stack.
+
+    Probes the live world once via _probe_all, then maps each Phase to ✓/✗ from
+    phase.satisfied(stack, states). Renders a Rich table: Phase | Status.
+    Fail-loud: real probe results surface; nothing is swallowed.
+    """
+    from rich.table import Table
+
+    states = _probe_all(deps, stack)
+    table = Table(title=f"stack: {stack.name}")
+    table.add_column("Phase")
+    table.add_column("Status")
+    for phase in PHASES:
+        ok = phase.satisfied(stack, states)
+        mark = "✓" if ok else "✗"
+        table.add_row(phase.name, mark)
+    deps.renderer.table(table)
+
+
+def _status_run(stack_name: str | None) -> None:
+    """Render phase completion for one stack (if named) or all non-reserved stacks.
+
+    A reserved stack is one whose cluster_group is None (e.g. nativeha-ubuntu):
+    it has no provision playbook and no real VMs to probe.
+
+    - Named reserved stack: emit a note and return without probing.
+    - Named non-reserved stack: probe once, render phases.
+    - No arg: iterate all non-reserved stacks, probing each once.
+    """
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("status", timestamp)
+    try:
+        if stack_name is not None:
+            stack = _lookup_stack_or_exit(stack_name)
+            if stack.cluster_group is None:
+                deps.renderer.note(
+                    f"{stack.name}: reserved stack — no provision playbook or cluster VMs"
+                )
+                return
+            _status_one(stack, deps)
+        else:
+            stacks = lab_stacks()
+            for stack in stacks.values():
+                if stack.cluster_group is None:
+                    continue  # skip reserved stacks in the all-stacks view
+                _status_one(stack, deps)
+    finally:
+        deps.transcript.close()
+
+
+@app.command("status")
+def status(  # pragma: no cover - thin delegator; logic covered via _status_run
+    stack_name: Annotated[
+        str | None,
+        typer.Argument(help="stack to show (e.g. pcmk-ubuntu); omit to show all stacks"),
+    ] = None,
+) -> None:
+    """Show phase completion (net/vms/provision/observe) for a stack or all stacks."""
+    _status_run(stack_name)
+
+
 def main() -> None:
     app()
