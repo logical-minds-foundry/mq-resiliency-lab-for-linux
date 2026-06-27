@@ -6,7 +6,22 @@ so the tests run without a real lab checkout.
 
 from __future__ import annotations
 
-from mqlab.stacks import lab_stacks, stack_members
+from mqlab.stacks import QmConfig, lab_stacks, stack_members
+
+
+def test_qmconfig_derives_app_svc_and_channel_pair() -> None:
+    qm = QmConfig(name="PCMKAPP", vip="10.10.1.200", vip_ext="10.60.0.10", svc="PCMKSVC")
+    assert qm.qm_app == "PCMKAPP"
+    assert qm.qm_svc == "PCMKSVC"
+    assert qm.chl_to_svc == "PCMKAPP.PCMKSVC"
+    assert qm.chl_to_app == "PCMKSVC.PCMKAPP"
+
+
+def test_qmconfig_svc_defaults_empty() -> None:
+    qm = QmConfig(name="PCMKAPP")
+    assert qm.svc == ""  # no retired-name default
+    assert qm.qm_svc == ""
+
 
 # Minimal seeded topology covering all 4 stacks + the groups they reference.
 TOPO = (

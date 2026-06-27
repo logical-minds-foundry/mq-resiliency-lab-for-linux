@@ -20,7 +20,43 @@ from typing import Any
 import yaml
 
 from mqlab.paths import repo_root
-from mqlab.setups import QmConfig
+
+
+@dataclass(frozen=True)
+class QmConfig:
+    """A stack's queue-manager identity (#109): the QM name, its internal data-plane
+    VIP, its partner-facing (net-ext) VIP for the inter-business link (#146), and —
+    when this QM talks to a counterparty — that counterparty's CONNAME (#147).
+
+    `vip_ext` is optional: the Pacemaker stack binds it as a second VIP on the QM
+    resource group, but RDQM allows only one floating IP per QM (#216 spike), so the
+    RDQM stack omits it and the partner reaches the QM by per-node CONNAME list.
+
+    `vip` is optional too: Native HA (#246) has no floating IP at all — clients
+    reach the active instance via a multi-instance CONNAME list — so its stacks
+    omit `vip` entirely."""
+
+    name: str
+    vip: str = ""
+    vip_ext: str = ""
+    svc_conn: str | None = None
+    svc: str = ""
+
+    @property
+    def qm_app(self) -> str:
+        return self.name
+
+    @property
+    def qm_svc(self) -> str:
+        return self.svc
+
+    @property
+    def chl_to_svc(self) -> str:
+        return f"{self.name}.{self.svc}"
+
+    @property
+    def chl_to_app(self) -> str:
+        return f"{self.svc}.{self.name}"
 
 
 @dataclass(frozen=True)

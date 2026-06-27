@@ -483,7 +483,7 @@ def test_vm_provision_threads_qm_vars_from_setup(monkeypatch, tmp_path):
         "nodes:\n  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
         "groups:\n  pcmk_a: [pcmk-a1]\n"
         "setups:\n  dist:\n    groups: [pcmk_a]\n    provision: ansible/site-distributed.yml\n"
-        "    qm: {name: QMPCMK, vip: 10.10.1.200, svc_conn: 10.60.0.50}\n"
+        "    qm: {name: QMPCMK, svc: QMSVC, vip: 10.10.1.200, svc_conn: 10.60.0.50}\n"
     )
     runner = RecordingRunner(results=[_probe({"pcmk-a1": "running"}), ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))

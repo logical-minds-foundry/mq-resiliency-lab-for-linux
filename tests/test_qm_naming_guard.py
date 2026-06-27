@@ -19,9 +19,6 @@ SCAN_SUFFIXES = {".yml", ".yaml", ".j2", ".py", ".sh", ".mqsc", ".json"}
 RETIRED = re.compile(r"\bQM(PCMK|SVC|NATIVE|RDQM)\b")
 ALLOW = {
     Path(__file__).resolve(),  # this file names them by definition
-    # The source-of-truth's no-`short` fallback default (for seeded test topologies that
-    # don't declare a short); the only legitimate retired-name literal in production.
-    REPO / "src" / "mqlab" / "setups.py",
 }
 
 

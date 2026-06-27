@@ -28,13 +28,13 @@ _PKI_TOPO = (
     "setups:\n"
     "  pcmk_arm:\n"
     "    groups: []\n"
-    "    qm: { name: QMPCMK }\n"
+    "    qm: { name: QMPCMK, svc: QMSVC }\n"
     "  rdqm_arm:\n"
     "    groups: []\n"
-    "    qm: { name: QMRDQM }\n"
+    "    qm: { name: QMRDQM, svc: QMSVC }\n"
     "  nativeha_arm:\n"
     "    groups: []\n"
-    "    qm: { name: QMNATIVE }\n"
+    "    qm: { name: QMNATIVE, svc: QMSVC }\n"
 )
 
 

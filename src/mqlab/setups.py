@@ -17,43 +17,16 @@ from typing import Any
 import yaml
 
 from mqlab.paths import repo_root
+from mqlab.stacks import QmConfig
 
-
-@dataclass(frozen=True)
-class QmConfig:
-    """A setup's queue-manager identity (#109): the QM name, its internal data-plane
-    VIP, its partner-facing (net-ext) VIP for the inter-business link (#146), and —
-    when this QM talks to a counterparty — that counterparty's CONNAME (#147).
-
-    `vip_ext` is optional: the Pacemaker arm binds it as a second VIP on the QM
-    resource group, but RDQM allows only one floating IP per QM (#216 spike), so the
-    RDQM arm omits it and the partner reaches the QM by per-node CONNAME list.
-
-    `vip` is optional too: Native HA (#246) has no floating IP at all — clients
-    reach the active instance via a multi-instance CONNAME list — so its setups
-    omit `vip` entirely."""
-
-    name: str
-    vip: str = ""
-    vip_ext: str = ""
-    svc_conn: str | None = None
-    svc: str = "QMSVC"
-
-    @property
-    def qm_app(self) -> str:
-        return self.name
-
-    @property
-    def qm_svc(self) -> str:
-        return self.svc
-
-    @property
-    def chl_to_svc(self) -> str:
-        return f"{self.name}.{self.svc}"
-
-    @property
-    def chl_to_app(self) -> str:
-        return f"{self.svc}.{self.name}"
+__all__ = [
+    "QmConfig",
+    "Setup",
+    "lab_groups",
+    "lab_setups",
+    "setup_members",
+    "setups_of",
+]
 
 
 @dataclass(frozen=True)
@@ -78,10 +51,10 @@ def lab_groups() -> dict[str, list[str]]:
 
 
 def _qm_config(cfg: dict[str, Any], arms: dict[str, Any]) -> QmConfig:
-    """Build a setup's QmConfig. When its arm declares a `short` token (#351 Phase 2),
-    the QM names derive from it — `<short>APP` / `<short>SVC` — so the rename is a single
-    source change. A setup whose arm has no short (e.g. a seeded test topology) keeps the
-    explicit `qm.name`/`qm.svc`, so behaviour there is unchanged."""
+    """Build a setup's QmConfig. The setup's arm declares a `short` token (#351
+    Phase 2); the QM names derive from it — `<short>APP` / `<short>SVC` — so the
+    rename is a single source change. There is no retired-name fallback: a setup
+    whose arm has no short falls back to the explicit `qm.name`/`qm.svc` keys."""
     qm = cfg["qm"]
     short = (arms.get(cfg.get("arm") or "") or {}).get("short")
     return QmConfig(
@@ -89,7 +62,7 @@ def _qm_config(cfg: dict[str, Any], arms: dict[str, Any]) -> QmConfig:
         vip=qm.get("vip", ""),
         vip_ext=qm.get("vip_ext", ""),
         svc_conn=qm.get("svc_conn"),
-        svc=f"{short}SVC" if short else qm.get("svc", "QMSVC"),
+        svc=f"{short}SVC" if short else qm.get("svc", ""),
     )
 
 

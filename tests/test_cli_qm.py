@@ -44,7 +44,7 @@ _TOPO = (
     + _ARMS
     + "setups:\n  pcmk_san_ha:\n    arm: pcmk-ubuntu\n    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
-    "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
+    "    qm: { name: QMPCMK, svc: QMSVC, vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
 )
 
 
@@ -105,7 +105,8 @@ def test_qm_create_passes_svc_conn_when_set(monkeypatch, tmp_path):
         + _ARMS
         + "setups:\n  distributed:\n    arm: pcmk-ubuntu\n    groups: [san_a, pcmk_a]\n"
         "    provision: ansible/site-distributed.yml\n"
-        "    qm: { name: QMPCMK, vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+        "    qm: { name: QMPCMK, svc: QMSVC, vip: 10.10.1.200, vip_ext: 10.60.0.10,"
+        " svc_conn: 10.60.0.50 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     runner = RecordingRunner(
