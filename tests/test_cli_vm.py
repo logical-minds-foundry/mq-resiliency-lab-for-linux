@@ -81,9 +81,6 @@ def test_vm_ssh_execs_vagrant_in_lab(monkeypatch, tmp_path):
     execs: list[tuple[str, list[str]]] = []
     monkeypatch.setattr(cli.os, "chdir", lambda p: chdirs.append(str(p)))
     monkeypatch.setattr(cli.os, "execvp", lambda f, a: execs.append((f, a)))
-    # _vagrant_env probes the build/ fstype for the #376 pool override; stub the
-    # findmnt seam so the test never shells out (host-mount -> no override).
-    monkeypatch.setattr(cli, "_build_fstype", lambda p: "virtiofs")
     result = CliRunner().invoke(cli.app, ["vm", "ssh", "node-a1"])
     assert result.exit_code == 0
     assert execs == [("vagrant", ["vagrant", "ssh", "node-a1"])]

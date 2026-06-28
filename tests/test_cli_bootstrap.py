@@ -368,12 +368,10 @@ def test_ensure_for_stack_vms_pulls_boxes_and_mq(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
-    # vms also ensures the #376 libvirt pool; stub it (covered in test_cli_libvirt_pool).
-    monkeypatch.setattr(cli, "_ensure_libvirt_pool", lambda *, step: calls.append("libvirt_pool"))
     monkeypatch.setattr(cli, "_galaxy_install_step", lambda: pytest.fail("galaxy not for vms"))
     monkeypatch.setattr(cli, "_pki_ensure_step", lambda: pytest.fail("pki not for vms"))
     cli._ensure_prereqs_for_stack(stack, _phase("vms"), step=False)
-    assert sorted(calls) == ["boxes", "libvirt_pool", "mq"]
+    assert sorted(calls) == ["boxes", "mq"]
 
 
 def _capture_execute(monkeypatch):
