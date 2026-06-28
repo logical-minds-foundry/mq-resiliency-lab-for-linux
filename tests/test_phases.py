@@ -280,6 +280,11 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     # nodes (cluster + commons) — a cluster node + a commons node both appear.
     limit = obs_argv[obs_argv.index("--limit") + 1]
     assert "pcmk-a1" in limit and "svc-sim" in limit
+    # site-obs bounces grafana -> heal the relay, then fail-loud verify the
+    # workstation-facing endpoint actually serves (#264/#383).
+    argvs = [s.command.argv for s in steps]
+    assert any(a[:3] == ["sudo", "systemctl", "restart"] for a in argvs)
+    assert any(a[0] == "curl" and a[-1].endswith("/api/health") for a in argvs)
 
 
 def test_all_vms_includes_svc_and_app(monkeypatch, tmp_path):

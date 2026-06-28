@@ -37,6 +37,7 @@ from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
 from mqlab.orchestrator import CommandStep
 from mqlab.paths import repo_root
+from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.stacks import Stack, stack_members
 
@@ -247,6 +248,17 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
                 ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
                 cwd=ansible,
             ),
+        ),
+        # site-obs.yml bounced grafana, which wedges the held downstream of the
+        # vergil port-forward relay (#264) — heal it so the workstation can browse
+        # grafana, then fail loud if that endpoint isn't actually serving.
+        CommandStep(
+            "heal grafana port-forward relay",
+            Command(["sudo", "systemctl", "restart", *RELAY_UNITS]),
+        ),
+        CommandStep(
+            "verify grafana reachable (workstation forward)",
+            Command(["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]),
         ),
     ]
 
