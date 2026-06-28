@@ -40,6 +40,7 @@ from mqlab.paths import (
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.phases import PHASES, _commons_members, all_vms, build_states, first_unsatisfied
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
+from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
@@ -642,15 +643,9 @@ def obs_reach_peers() -> None:
         deps.transcript.close()
 
 
-GRAFANA_URL = "http://10.50.0.2:3000"  # obs net-mgmt IP : Grafana port (direct, inside the VM)
-# What the workstation actually browses: Lima auto-forwards the base VM's :3000 to
-# the Mac's localhost:3000, and the vergil-portforward relay (below) bridges :3000
-# to the obs guest — so from the Mac it's plain localhost:3000, no manual tunnel.
-WORKSTATION_GRAFANA_URL = "http://localhost:3000"
-# The systemd-socket-proxyd relay vergil-vm provisions from port_forwards in
-# vergil.toml (#170). Restarting grafana (the obs role's notify) wedges its held
-# downstream connection, so 'obs up' bounces it after provisioning (#264).
-_RELAY_UNITS = ["vergil-portforward-3000.socket", "vergil-portforward-3000.service"]
+# GRAFANA_URL / WORKSTATION_GRAFANA_URL / RELAY_UNITS now live in mqlab.relay
+# (imported at top) so the import-pure observe phase (phases.py) can share them
+# without importing cli.py (circular). (#383)
 
 
 def _obs_up_steps() -> list[CommandStep]:
@@ -732,7 +727,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # provisioning above bounced grafana; clear the relay's stale downstream
             # so the workstation forward isn't left wedged (#264).
             "heal grafana port-forward relay",
-            Command(["sudo", "systemctl", "restart", *_RELAY_UNITS]),  # noqa: S607
+            Command(["sudo", "systemctl", "restart", *RELAY_UNITS]),  # noqa: S607
         ),
         CommandStep(
             # fail loud if the workstation-facing endpoint isn't actually serving —
