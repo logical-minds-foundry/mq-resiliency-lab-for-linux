@@ -264,12 +264,17 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     assert any(s.command.argv == ["mqlab", "obs", "reach-peers"] for s in steps)
     playbooks = [s.command.argv for s in steps if s.command.argv[0] == "ansible-playbook"]
     names = {argv[1] for argv in playbooks}
-    # BOTH the obs box (site-obs.yml) AND the cluster-node instrumentation
-    # (observability.yml) run — the latter deploys node-exporter + the state
-    # collector that feed cluster_* (#381). Both carry the #351 QM extra-vars.
-    assert names == {"site-obs.yml", "observability.yml"}
+    # site-obs.yml (obs box) + observability.yml (cluster nodes, #382) +
+    # host-obs.yml (libvirt host: node-exporter for virbr-* throughput +
+    # host-net-state for lab_network_health, #383).
+    assert names == {"site-obs.yml", "observability.yml", "host-obs.yml"}
+    # the QM-bearing playbooks carry the #351 QM extra-vars; host-obs.yml is
+    # host-side/net-agnostic and runs connection=local instead.
     for argv in playbooks:
-        assert "qm_app=PCMKAPP" in argv
+        if argv[1] in ("site-obs.yml", "observability.yml"):
+            assert "qm_app=PCMKAPP" in argv
+    host_argv = next(a for a in playbooks if a[1] == "host-obs.yml")
+    assert host_argv[2:] == ["-c", "local", "-i", "localhost,"]
     obs_argv = next(a for a in playbooks if a[1] == "observability.yml")
     # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
     # nodes (cluster + commons) — a cluster node + a commons node both appear.

@@ -237,6 +237,17 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
                 cwd=ansible,
             ),
         ),
+        # Instrument the libvirt HOST (the Vergil VM, connection=local): node-exporter
+        # exposes the virbr-* bridge byte counters that feed the per-net throughput
+        # panels, and host-net-state emits lab_network_health. Without this the
+        # network rx/tx + health graphs have no data (#383).
+        CommandStep(
+            f"{stack.name} instrument host",
+            Command(
+                ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
+                cwd=ansible,
+            ),
+        ),
     ]
 
 
