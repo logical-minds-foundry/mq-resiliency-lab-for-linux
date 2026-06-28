@@ -277,7 +277,7 @@ def _observe_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: A
 # actually selected — so `bootstrap --only observe` ensures only exporter PKI.
 PHASES: list[Phase] = [
     Phase("net", _net_build_steps, _net_satisfied),
-    Phase("vms", _vms_build_steps, _vms_satisfied, ensure=("libvirt_pool", "boxes", "mq")),
+    Phase("vms", _vms_build_steps, _vms_satisfied, ensure=("boxes", "mq")),
     Phase(
         "provision",
         _provision_build_steps,

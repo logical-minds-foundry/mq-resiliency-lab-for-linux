@@ -37,11 +37,11 @@ Vagrant.configure("2") do |config|
       node.vm.hostname = name
       node.vm.boot_timeout = n["boot_timeout"] if n["boot_timeout"]
       node.vm.provider :libvirt do |lv|
-        # Env-aware image-storage pool (#376). mqlab sets MQLAB_LIBVIRT_POOL only on
-        # the cloud box (build/ on a real data disk) so VM images land on the big
-        # volume, not the 29 GB boot disk. Empty/unset (local virtiofs host-mount) ->
-        # libvirt's default pool stands, so local behavior is unchanged.
-        lv.storage_pool_name = ENV["MQLAB_LIBVIRT_POOL"] unless (ENV["MQLAB_LIBVIRT_POOL"] || "").empty?
+        # VM images use libvirt's default pool (/var/lib/libvirt/images on the boot
+        # disk) — ephemeral, wiped on rebuild. The #376 redirect onto the persistent
+        # /vergil data disk was reverted (#385): it put wipe-on-rebuild overlays on a
+        # never-wiped disk, orphaning volumes and breaking rebuilds. The boot disk is
+        # sized to fit instead (vergil-vm#270).
         lv.cpus     = n.fetch("cpus")
         lv.memory   = n.fetch("memory")
         lv.driver   = n.fetch("driver")
