@@ -76,6 +76,10 @@ region   = "us-central1"
 zone     = "us-central1-f"
 instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running
 volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
+boot_disk = "100GiB"          # EPHEMERAL boot disk — holds libvirt's default image pool (/var/lib/libvirt/images).
+                              # Default ~29 GiB filled during full-HADR bring-up → QEMU ENOSPC pauses (#375); images
+                              # stay on the boot disk (#386 reverted the data-disk redirect), so size it to fit
+                              # (~38 GiB peak + OS + qcow2 growth + headroom). Cloud-only; local is the roomy Mac box.
 
 [vm.anonymous]
 # Credential-less identity for isolated lab bootstrap testing (no GitHub/Claude
