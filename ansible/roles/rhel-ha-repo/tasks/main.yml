@@ -16,6 +16,7 @@
 - name: dnf repos from the DVD (BaseOS + AppStream)
   ansible.builtin.copy:
     dest: /etc/yum.repos.d/rhel-dvd.repo
+    mode: "0644"
     content: |
       [dvd-baseos]
       name=RHEL 9.6 DVD BaseOS
@@ -33,6 +34,7 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/state/rhel-ha/"
     dest: /opt/rhel-ha/
+    mode: "0644"
   become: true
 
 - name: createrepo for the local HighAvailability repo
@@ -44,6 +46,7 @@
 - name: dnf repo for the local HighAvailability packages
   ansible.builtin.copy:
     dest: /etc/yum.repos.d/rhel-ha-local.repo
+    mode: "0644"
     content: |
       [ha-local]
       name=EL9 HighAvailability (host-fetched, local)

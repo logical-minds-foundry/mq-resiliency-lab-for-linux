@@ -91,9 +91,10 @@
           net.ipv4.tcp_keepalive_time = 15
           net.ipv4.tcp_keepalive_intvl = 5
           net.ipv4.tcp_keepalive_probes = 3
-      register: mq_keepalive_sysctl
+      notify: apply mq keepalive sysctl
 
-    - name: apply the keepalive sysctl drop-in
+  handlers:
+    - name: apply mq keepalive sysctl
       become: true
       ansible.builtin.command: sysctl -p /etc/sysctl.d/99-mq-keepalive.conf
-      when: mq_keepalive_sysctl.changed
+      changed_when: true

@@ -5,6 +5,7 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
     dest: /tmp/mqadv.tar.gz
+    mode: "0644"
 
 - name: unpack
   ansible.builtin.unarchive:
@@ -44,6 +45,7 @@
 - name: mqm ulimits
   ansible.builtin.copy:
     dest: /etc/security/limits.d/99-mqm.conf
+    mode: "0644"
     content: |
       mqm soft nofile 10240
       mqm hard nofile 10240

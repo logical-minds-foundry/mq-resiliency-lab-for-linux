@@ -29,6 +29,7 @@
     - name: create the self-signed keystore on the origin (once)
       run_once: true
       delegate_to: "{{ cert_origin }}"
+      become: true
       become_user: mqm
       ansible.builtin.shell: |
         set -e

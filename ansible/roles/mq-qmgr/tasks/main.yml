@@ -16,6 +16,7 @@
   ansible.builtin.template:
     src: qm.service.j2
     dest: "/etc/systemd/system/mq-{{ qmgr_name }}.service"
+    mode: "0644"
   become: true
 
 # REST API on this QM — the every-QM hard requirement (design §1), via the shared
@@ -34,8 +35,11 @@
 
 - name: relax channel security (LAB ONLY - spec 1 puts security out of scope)
   ansible.builtin.shell: |
+    set -o pipefail
     printf "ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')\nREFRESH SECURITY TYPE(CONNAUTH)\n" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
   become: true
   become_user: mqm
   register: relax
@@ -44,8 +48,11 @@
 
 - name: define + start listener via MQSC (idempotent)
   ansible.builtin.shell: |
+    set -o pipefail
     echo "DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
     START LISTENER(L1414)" | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
   become: true
   become_user: mqm
   register: lsr
@@ -57,8 +64,11 @@
 # handles. Exporter-ready when an instance is pointed at this QM (#172).
 - name: enable QM monitoring for the prometheus exporter
   ansible.builtin.shell: |
+    set -o pipefail
     printf "ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
   become: true
   become_user: mqm
   register: mon

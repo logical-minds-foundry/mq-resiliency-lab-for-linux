@@ -12,6 +12,7 @@
   ansible.builtin.command: dspmqver -b -f 2
   register: mqver
   changed_when: false
+  become: true
   become_user: mqm
 
 - name: assert MQ >= 9.4.4 CD (Native HA off-container floor)
@@ -31,6 +32,7 @@
     crtmqm -lr {{ inventory_hostname }} -lf 8192 -lp 10 -ls 10 -p 1414 {{ qm_name }}
   args:
     creates: "/var/mqm/qmgrs/{{ qm_name }}"
+  become: true
   become_user: mqm
 
 # Append the NativeHAInstance peer set once. Rendered inline from nha_site_nodes
@@ -46,6 +48,7 @@
          Name={{ n.name }}
          ReplicationAddress={{ n.hb }}(9414)
       {% endfor %}
+  become: true
   become_user: mqm
 
 # Lifecycle is the mqmonitor.py liveness sample under systemd (NOT endmqm —

@@ -17,7 +17,10 @@
 
 - name: "{{ qmgr_name }}: SSLKEYR/KEYRPWD/CERTLABL + REFRESH SECURITY"
   ansible.builtin.shell: |
+    set -o pipefail
     printf "ALTER QMGR SSLKEYR('/var/mqm/ssl/{{ qmgr_name }}') KEYRPWD('%s') CERTLABL('{{ qmgr_name }}')\nREFRESH SECURITY TYPE(SSL)\n" '{{ pki_keyrpwd.stdout }}' | su mqm -c '/opt/mqm/bin/runmqsc {{ qmgr_name }}'
+  args:
+    executable: /bin/bash
   become: true
   no_log: true
   changed_when: true

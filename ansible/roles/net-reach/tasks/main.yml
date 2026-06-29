@@ -23,12 +23,12 @@
     dest: /etc/sysctl.d/99-lab-net-reach.conf
     content: "net.ipv4.ping_group_range = 0 2147483647\n"
     mode: "0644"
-  register: reach_sysctl
+  notify: apply ping_group_range sysctl
 
-- name: apply the ping_group_range sysctl
-  ansible.builtin.command: sysctl --system
-  changed_when: reach_sysctl.changed
-  when: reach_sysctl.changed
+# Apply the sysctl now (not at play end) so unprivileged ping works before the
+# timer's probe runs. (#371: replaces a when-changed command task with a handler.)
+- name: apply the ping_group_range sysctl now
+  ansible.builtin.meta: flush_handlers
 
 - name: enable + start the timer
   ansible.builtin.systemd:

@@ -70,6 +70,7 @@
     - name: one-time fs prep - format the shared LUN (run once)
       ansible.builtin.shell: |
         set -e
+        set -o pipefail
         dev=/dev/disk/by-path/ip-{{ san_portal_ip }}:3260-iscsi-{{ san_target_iqn }}-lun-0
         if blkid "$dev" 2>/dev/null | grep -q MQSHARED; then
           echo already-formatted

@@ -95,9 +95,12 @@
       register: pr_ne
       changed_when: false
     - name: mq_metric_samples build (binary + git sha)
-      ansible.builtin.shell: >-
-        mq_prometheus --version 2>&1 | head -1;
+      ansible.builtin.shell: |
+        set -o pipefail
+        mq_prometheus --version 2>&1 | head -1 || true
         git -C /usr/local/src/mq-metric-samples rev-parse --short HEAD
+      args:
+        executable: /bin/bash
       register: pr_mqms
       changed_when: false
     - name: stash

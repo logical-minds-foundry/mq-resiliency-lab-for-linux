@@ -8,6 +8,7 @@
 - name: configure target (idempotent via ls probe)
   ansible.builtin.shell: |
     set -e
+    set -o pipefail
     if targetcli ls /backstores/block 2>/dev/null | grep -q mqlun; then
       echo already-configured
       exit 0
