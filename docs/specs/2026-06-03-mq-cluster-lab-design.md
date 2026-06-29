@@ -1007,9 +1007,14 @@ externally-visible identity and push scope are unchanged.
 **Storage — just the filesystem we have.** No special block device. The **repo
 and all code/scripts live on a host-filesystem mount** (the same pattern as the
 dev-projects mount), so work is persisted on the Mac and survives VM rebuilds.
-*(Phase-A detail: the libvirt guest disk images likely want to sit on the VM's
-own disk / libvirt storage pool rather than a host mount, so DRBD block
-replication isn't fighting a 9p/virtiofs layer — confirm in the spike.)*
+*(Resolved in Phase A: the libvirt guest disk images sit on the VM's own
+**ephemeral boot disk** — libvirt's default `/var/lib/libvirt/images` pool — not
+on a host mount and not on the persistent data disk. That keeps DRBD block
+replication off a 9p/virtiofs layer, and keeps wipe-on-rebuild overlays off the
+never-wiped persistent disk. The #376 redirect did the latter — overlays onto
+the persistent `/vergil` disk — and broke rebuilds with orphaned volumes;
+reverted in #385/#386. The boot disk is sized to fit the image pool instead —
+cloud: `boot_disk = "100GiB"`, #388.)*
 
 **The payoff — collapse the macOS/Linux boundary.** Once bootstrapped, **we are
 developing on Linux, with Linux tools, for a Linux target.** macOS shrinks to a
