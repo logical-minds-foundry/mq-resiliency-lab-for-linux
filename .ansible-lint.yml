@@ -1,0 +1,20 @@
+# ansible-lint config for vrg-validate.
+#
+# vrg-validate runs `ansible-lint -c <vergil's bundled config>` and, via
+# vergil-tooling#1952, reads this file's `skip_list` / `exclude_paths` and
+# applies them on top (as `-x` / `--exclude`). This file's presence also trips
+# the gate's Ansible-content detection (our tree nests under ansible/, which
+# detection does not yet recognize on its own — vergil-tooling#1906).
+#
+# The SUBSTANTIVE rules stay enforced (risky-file-permissions, risky-shell-pipe,
+# partial-become, no-handler, command-instead-of-module, no-changed-when — fixed
+# in #371). skip_list defers the purely-cosmetic backlog (#403); each entry is a
+# tracked IOU to drain in a later cosmetic pass, not a permanent waiver.
+skip_list:
+  - name        # name[casing|play|template|missing] — task/play naming
+  - yaml        # yaml[colons|line-length|...] — formatting (yamllint already gates YAML)
+  - role-name   # hyphenated role dirs (rename cascade deferred)
+  - var-naming  # role var prefixing (cascades from the role renames)
+
+exclude_paths:
+  - lab/        # mqlab app config (lab/topology.yaml), not Ansible content
