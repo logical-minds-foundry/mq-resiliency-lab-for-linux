@@ -207,10 +207,12 @@ def test_role_mapping_codes_active_replica_unknown():
     assert opts["2"]["text"] == "Active"
     assert opts["1"]["text"] == "Replica"
     assert opts["0"]["text"] == "Unknown"
-    # the Recovery group's leader (ROLE Leader) is the healthy standby — yellow, not green
-    # (green is the live Active) and not red (red is only a genuinely down instance)
+    # the Recovery group's leader (ROLE Leader) is the healthy standby — blue (the "alternate
+    # green", same family as Replica), not green (green is the live Active), not red (a genuinely
+    # down instance), and not yellow (yellow is a warning, which a normal standby is not) (#399)
     assert opts["3"]["text"] == "Leader"
-    assert opts["3"]["color"] == "yellow"
+    assert opts["3"]["color"] == "blue"
+    assert opts["1"]["color"] == "blue"  # Replica — healthy follower, same standby family
     assert opts["2"]["color"] == "green"  # Active (live) is green
     assert opts["0"]["color"] == "red"  # only genuinely-unknown is alarming
 
@@ -345,10 +347,11 @@ def test_site_role_chip_flips_live_recovery_by_data():
 
     chip = _site_role_badge("nha-rhel-a.*", "promtest", 0, 7)
     # the chip derives its role from the site's instances (max role code: 2=Active→LIVE,
-    # 3=Leader→RECOVERY) so it flips on failover; green LIVE vs yellow RECOVERY, background-lit
+    # 3=Leader→RECOVERY) so it flips on failover; green LIVE vs blue RECOVERY (a healthy
+    # standby, not a yellow warning), background-lit (#399)
     opts = chip["fieldConfig"]["defaults"]["mappings"][0]["options"]
     assert opts["2"]["text"] == "LIVE" and opts["2"]["color"] == "green"
-    assert opts["3"]["text"] == "RECOVERY" and opts["3"]["color"] == "yellow"
+    assert opts["3"]["text"] == "RECOVERY" and opts["3"]["color"] == "blue"
     assert chip["options"]["colorMode"] == "background"
     assert 'member=~"nha-rhel-a.*"' in chip["targets"][0]["expr"]
     # it is a compact chip beside the matrix (narrow), not a full row
