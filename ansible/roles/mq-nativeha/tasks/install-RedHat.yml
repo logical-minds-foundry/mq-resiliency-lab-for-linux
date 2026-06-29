@@ -13,6 +13,7 @@
 - name: dnf repos from the DVD
   ansible.builtin.copy:
     dest: /etc/yum.repos.d/rhel-dvd.repo
+    mode: "0644"
     content: |
       [dvd-baseos]
       name=RHEL 9.6 DVD BaseOS
@@ -29,6 +30,7 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     dest: /tmp/mqadv.tar.gz
+    mode: "0644"
 
 - name: unpack
   ansible.builtin.unarchive:
@@ -63,6 +65,7 @@
 - name: mqm ulimits
   ansible.builtin.copy:
     dest: /etc/security/limits.d/99-mqm.conf
+    mode: "0644"
     content: |
       mqm soft nofile 10240
       mqm hard nofile 10240

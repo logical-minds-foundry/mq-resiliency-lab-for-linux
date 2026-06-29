@@ -33,10 +33,13 @@
     svc_conn: "10.60.0.50"
   tasks:
     - name: find the active Native HA instance
-      ansible.builtin.shell: >
-        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x"
-        | grep -oE 'ROLE\(Active\) INSTANCE\(nha-rhel-a[0-9]\)'
-        | grep -oE 'nha-rhel-a[0-9]' | head -1
+      ansible.builtin.shell: |
+        set -o pipefail
+        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x" \
+          | grep -oE 'ROLE\(Active\) INSTANCE\(nha-rhel-a[0-9]\)' \
+          | grep -oE 'nha-rhel-a[0-9]' | head -1 || true
+      args:
+        executable: /bin/bash
       register: act
       changed_when: false
       run_once: true

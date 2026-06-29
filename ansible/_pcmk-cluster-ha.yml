@@ -77,15 +77,19 @@
   tasks:
     - name: wait for the DRBD peer to connect
       ansible.builtin.shell: |
+        set -o pipefail
         for i in $(seq 1 60); do
           drbdadm cstate mqlun 2>/dev/null | grep -q Connected && exit 0
           sleep 2
         done
         echo "peer not connected:"; drbdadm cstate mqlun; exit 1
+      args:
+        executable: /bin/bash
       changed_when: false
     - name: skip-initial-sync + promote + filesystem (run once)
       ansible.builtin.shell: |
         set -e
+        set -o pipefail
         if blkid /dev/drbd0 2>/dev/null | grep -q MQSHARED; then
           echo already-initialized; exit 0
         fi
@@ -93,6 +97,8 @@
         drbdadm primary mqlun
         mkfs.xfs -L MQSHARED /dev/drbd0
         echo initialized
+      args:
+        executable: /bin/bash
       register: drbd_init
       changed_when: "'initialized' == drbd_init.stdout"
 

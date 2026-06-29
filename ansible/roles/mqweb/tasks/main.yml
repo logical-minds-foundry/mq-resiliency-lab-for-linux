@@ -8,6 +8,7 @@
   ansible.builtin.template:
     src: mqweb.service.j2
     dest: /etc/systemd/system/mqweb.service
+    mode: "0644"
   become: true
 
 # TLS (#250): replace Liberty's default self-signed cert with the org-CA `mqweb`
@@ -34,6 +35,7 @@
     dest: /var/mqm/web/installations/Installation1/servers/mqweb/mqwebuser.xml
     owner: mqm
     group: mqm
+    mode: "0640"
   become: true
   no_log: true
   register: mqwebuser_xml
@@ -51,9 +53,11 @@
 # (the message path does not depend on it). Idempotent: starting an already-active
 # unit is a no-op.
 - name: start mqweb without blocking on its (slow) readiness
-  ansible.builtin.command: systemctl start mqweb.service --no-block
+  ansible.builtin.systemd:
+    name: mqweb.service
+    state: started
+    no_block: true
   become: true
-  changed_when: true
 
 - name: bind mqweb to all interfaces
   ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
@@ -67,7 +71,9 @@
 # a restart to take effect. --no-block keeps provision from waiting on the slow
 # come-up. Only when the rendered XML actually changed.
 - name: restart mqweb to pick up the TLS cert (non-blocking)
-  ansible.builtin.command: systemctl restart mqweb.service --no-block
+  ansible.builtin.systemd:
+    name: mqweb.service
+    state: restarted
+    no_block: true
   become: true
   when: mqweb_tls | bool and mqwebuser_xml is changed
-  changed_when: true

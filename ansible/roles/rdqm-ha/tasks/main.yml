@@ -12,6 +12,7 @@
   ansible.builtin.template:
     src: rdqm.ini.j2
     dest: /var/mqm/rdqm.ini
+    mode: "0644"
     owner: mqm
     group: mqm
   become: true

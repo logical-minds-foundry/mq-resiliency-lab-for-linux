@@ -41,6 +41,7 @@
     -db /var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12 -pw "{{ ks_pw.stdout }}"
   args:
     creates: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.sth"
+  become: true
   become_user: mqm
   no_log: true
 
@@ -53,4 +54,5 @@
          CipherSpec=ANY_TLS12
          CertificateLabel={{ ks_cn }}
          KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}
+  become: true
   become_user: mqm

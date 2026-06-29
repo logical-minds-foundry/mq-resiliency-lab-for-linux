@@ -20,12 +20,15 @@
   # is idempotent; the lsmod guard keeps reporting honest. set -e fails loud.
   ansible.builtin.shell: |
     set -e
+    set -o pipefail
     if lsmod | grep -q '^drbd '; then
       echo already-loaded
     else
       modprobe drbd
       echo loaded
     fi
+  args:
+    executable: /bin/bash
   register: drbd_modprobe
   changed_when: "'loaded' in drbd_modprobe.stdout"
   become: true
@@ -33,6 +36,7 @@
 - name: drbd resource definition
   ansible.builtin.copy:
     dest: /etc/drbd.d/mqlun.res
+    mode: "0644"
     content: |
       resource mqlun {
         protocol A;

@@ -9,20 +9,21 @@
 - name: stable initiator IQN
   ansible.builtin.copy:
     dest: /etc/iscsi/initiatorname.iscsi
+    mode: "0644"
     content: "InitiatorName=iqn.2026-06.lab.mq:{{ inventory_hostname }}\n"
-  register: iqn_file
   become: true
+  notify: restart iscsid
 
-- name: restart iscsid on IQN change
-  ansible.builtin.systemd:
-    name: iscsid
-    state: restarted
-  when: iqn_file.changed
-  become: true
+# Restart iscsid with the new IQN *before* the login below — the login uses the
+# initiator IQN for the target ACL, so the restart must happen now, not at the
+# play's end (default handler timing). (#371: replaces a when-changed task.)
+- name: restart iscsid now (before the login uses the new IQN)
+  ansible.builtin.meta: flush_handlers
 
 - name: discover + login (idempotent via session probe)
   ansible.builtin.shell: |
     set -e
+    set -o pipefail
     if iscsiadm -m session 2>/dev/null | grep -q "{{ san_target_iqn }}"; then
       echo already-logged-in
       exit 0
@@ -31,6 +32,8 @@
     iscsiadm -m node -T {{ san_target_iqn }} -p {{ san_portal_ip }}:3260 --login
     iscsiadm -m node -T {{ san_target_iqn }} -p {{ san_portal_ip }}:3260 \
       --op update -n node.startup -v automatic
+  args:
+    executable: /bin/bash
   register: ilogin
   changed_when: "'already-logged-in' not in ilogin.stdout"
   # Skip the login when no target is given yet: the DR-peer site sets its stable

@@ -66,6 +66,7 @@
     # 2. MQSC config (lab posture, spec 1), then a clean stop.
     - name: apply MQSC config
       ansible.builtin.shell: |
+        set -o pipefail
         su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
         printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
         START LISTENER(L1414)\n
@@ -78,6 +79,8 @@
         DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n
         ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
         su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
+      args:
+        executable: /bin/bash
       run_once: true
       changed_when: true
 
@@ -107,7 +110,11 @@
 
     # 3. Teach the other nodes the QM definition, then release the mount.
     - name: capture the addmqinf command from the creation node
-      ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'"
+      ansible.builtin.shell: |
+        set -o pipefail
+        su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}' | grep '^addmqinf'
+      args:
+        executable: /bin/bash
       run_once: true
       register: addmqinf_cmd
       changed_when: false
@@ -134,6 +141,7 @@
 - name: queue-manager systemd unit (disabled)
   ansible.builtin.copy:
     dest: "/etc/systemd/system/mq-{{ qm_name }}.service"
+    mode: "0644"
     content: |
       [Unit]
       Description=IBM MQ queue manager {{ qm_name }} (pacemaker-managed)
