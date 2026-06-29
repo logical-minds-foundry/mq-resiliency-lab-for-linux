@@ -27,6 +27,7 @@ The `states` dict shape (the contract Task 4's `_probe_all` fills):
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -205,6 +206,21 @@ def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa:
 # --------------------------------------------------------------------------- #
 # observe phase
 # --------------------------------------------------------------------------- #
+def _host_mqlab() -> str:
+    """Absolute path to a host-runnable mqlab console script for the host services.
+
+    The host-net-state systemd service runs as root with a minimal PATH, so it
+    must call mqlab by absolute path. It must NOT be the repo's `.venv/bin/mqlab`:
+    on the cloud host that venv is built inside the vrg container, so its
+    console-script shebang is `/workspace/.venv/bin/python` — a path that exists
+    only in the container, not on the host, and the service dies (status=127),
+    leaving `lab_network_state` unemitted (#398). The mqlab driving this bootstrap
+    is by definition host-runnable, so use the console script beside the running
+    interpreter — the same install that renders the dashboards above.
+    """
+    return str(Path(sys.executable).resolve().parent / "mqlab")
+
+
 def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
     """Render the targets + dashboard, then provision the obs stack for this QM.
 
@@ -240,12 +256,22 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
         ),
         # Instrument the libvirt HOST (the Vergil VM, connection=local): node-exporter
         # exposes the virbr-* bridge byte counters that feed the per-net throughput
-        # panels, and host-net-state emits lab_network_health. Without this the
-        # network rx/tx + health graphs have no data (#383).
+        # panels, and host-net-state emits lab_network_state/health. Without this the
+        # network rx/tx + state + health graphs have no data (#383). `mqlab_bin` is the
+        # host-runnable mqlab the net-state service must call by absolute path (#398).
         CommandStep(
             f"{stack.name} instrument host",
             Command(
-                ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
+                [
+                    "ansible-playbook",
+                    "host-obs.yml",
+                    "-c",
+                    "local",
+                    "-i",
+                    "localhost,",
+                    "-e",
+                    f"mqlab_bin={_host_mqlab()}",
+                ],
                 cwd=ansible,
             ),
         ),

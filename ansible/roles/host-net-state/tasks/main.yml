@@ -1,4 +1,15 @@
 ---
+- name: require a host-runnable mqlab path
+  ansible.builtin.assert:
+    that:
+      - mqlab_bin is defined
+      - mqlab_bin | length > 0
+    fail_msg: >-
+      mqlab_bin is unset. Run host-obs.yml with `-e mqlab_bin=<abs path to a
+      host-runnable mqlab>` — NOT the repo .venv, whose interpreter may be
+      container-built on the cloud host (#398). The observe phase passes it
+      automatically (phases._host_mqlab).
+
 - name: textfile dir for the host collector
   ansible.builtin.file:
     path: /var/lib/node_exporter/textfile

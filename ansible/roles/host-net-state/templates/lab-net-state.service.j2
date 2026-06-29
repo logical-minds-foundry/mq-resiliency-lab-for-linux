@@ -3,7 +3,10 @@ Description=Render lab_network_state textfile
 
 [Service]
 Type=oneshot
-# Call the venv's mqlab console script by absolute path — no `uv` (not on root's
-# PATH) and no shell PATH dependency. MQLAB_REPO_ROOT lets mqlab find lab/networks.
+# Call mqlab by absolute path — root's minimal PATH has neither `uv` nor mqlab.
+# `mqlab_bin` is the host-runnable console script the observe phase passes in
+# (#398): NOT `{{ repo_root }}/.venv/bin/mqlab`, whose shebang on the cloud host
+# points at the container's `/workspace/.venv/bin/python` and dies status=127.
+# MQLAB_REPO_ROOT lets mqlab find lab/networks.
 Environment=MQLAB_REPO_ROOT={{ repo_root }}
-ExecStart=/bin/sh -c '{{ repo_root }}/.venv/bin/mqlab obs net-state > /var/lib/node_exporter/textfile/lab_network_state.prom.tmp && mv /var/lib/node_exporter/textfile/lab_network_state.prom.tmp /var/lib/node_exporter/textfile/lab_network_state.prom'
+ExecStart=/bin/sh -c '{{ mqlab_bin }} obs net-state > /var/lib/node_exporter/textfile/lab_network_state.prom.tmp && mv /var/lib/node_exporter/textfile/lab_network_state.prom.tmp /var/lib/node_exporter/textfile/lab_network_state.prom'
