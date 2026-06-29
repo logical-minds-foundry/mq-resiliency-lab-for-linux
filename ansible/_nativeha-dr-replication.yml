@@ -6,6 +6,11 @@
 # CRR over net-wan; restart order (Recovery then Live) is load-bearing.
 
 # 1. Site-B Recovery HA group (same role; its own net-hb-b replication set).
+#    Created + configured but NOT started (nha_start: false): a recovery group must
+#    first start already in GroupRole=Recovery so the Live group can rebase it and
+#    it adopts the Live QMId. Starting it as a plain group here would permanently
+#    set its own QMId and CRR would be rejected (AMQ3256E). Its first start is the
+#    ordered restart in step 5, after crr.yml (step 4) sets GroupRole=Recovery. (#389)
 - hosts: nha_rhel_b
   become: true
   tasks:
@@ -16,6 +21,7 @@
   become: true
   vars:
     qm_name: "{{ qm_app }}"
+    nha_start: false
     nha_site_nodes:
       - { name: nha-rhel-b1, hb: 172.16.2.91, data: 10.10.2.91 }
       - { name: nha-rhel-b2, hb: 172.16.2.92, data: 10.10.2.92 }
@@ -60,7 +66,10 @@
   tasks:
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
 
-# 5. Restart both groups to apply TLS + CRR (Recovery first, then Live).
+# 5. Bring up the groups to apply TLS + CRR — Recovery FIRST, then Live. For the
+#    site-B recovery group this is its FIRST start (deferred in step 1), now in
+#    GroupRole=Recovery, so the Live group rebases it on contact. For the live
+#    group this is a restart to pick up its CRR stanza. Order is load-bearing.
 - hosts: nha_rhel_b:nha_rhel_a
   become: true
   vars: { qm_name: "{{ qm_app }}" }

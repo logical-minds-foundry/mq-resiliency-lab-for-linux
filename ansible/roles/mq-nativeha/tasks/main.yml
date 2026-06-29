@@ -56,9 +56,17 @@
     dest: /etc/systemd/system/mqmonitor@.service
     state: link
 
-- name: enable + start the Native HA instance via systemd
+# `nha_start` gates the instance's FIRST start (default true). A Native HA group's
+# first election PERMANENTLY sets the QMId; a CRR Recovery group must instead first
+# start already in GroupRole=Recovery so it waits for the Live group to rebase it
+# (adopting the Live QMId) rather than committing its own — otherwise CRR is
+# rejected with AMQ3256E "configuration mismatch". So the site-B recovery group is
+# created + configured with nha_start=false and started only after crr.yml has set
+# its role (its first start is the ordered restart at the end of the DR play). The
+# Live group keeps the default (start now). (#389)
+- name: enable + (conditionally) start the Native HA instance via systemd
   ansible.builtin.systemd:
     name: "mqmonitor@{{ qm_name }}"
     enabled: true
-    state: started
+    state: "{{ 'started' if nha_start | default(true) | bool else 'stopped' }}"
     daemon_reload: true
