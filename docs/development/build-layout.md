@@ -38,6 +38,26 @@ domain↔vagrant mapping is shared like the rest of `state/`. A worktree can thu
 drive — and `vagrant ssh` into — a lab any checkout created, and the mapping
 survives a worktree being cleaned up after its branch merges (#355).
 
+## What does *not* live in `build/`: the VM image pool
+
+The lab's libvirt guest images — the per-domain `lab_*.img` overlays — live in
+libvirt's **default pool (`/var/lib/libvirt/images`) on the VM's ephemeral boot
+disk**, never under `build/`. They are the most ephemeral state the lab has:
+re-created from the base boxes on every `vrg-vm rebuild`, so their lifecycle is
+the boot disk's, not the persistent data disk's.
+
+This is the one place the bucket model does **not** bend. `cache/` and `state/`
+are *persistent* — in the cloud instance they live on the `/vergil` data disk
+that outlives the VM — so redirecting the image pool into `build/` puts
+wipe-on-rebuild overlays onto a never-wiped disk. That lifecycle/location
+mismatch is exactly what #376 did (`MQLAB_LIBVIRT_POOL` →
+`build/work/libvirt-images`): orphaned volumes survived a crash/rebuild and broke
+the next `vagrant up` with `Volume for domain is already created`, unrecoverable
+by `teardown` or `bootstrap --from vms`. Reverted in #385/#386. The correct
+shape: images stay on the ephemeral boot disk, and the boot disk is sized to fit
+(cloud: `boot_disk = "100GiB"`, #388). **Persistent disks hold persistent data
+only — never VM overlays.**
+
 ## The `mqlab build` commands
 
 | Command | What it does |
