@@ -118,6 +118,36 @@ def test_parse_nativeha_g_skips_summary_and_non_group_lines():
     assert out == {}
 
 
+def test_parse_nativeha_g_tolerates_unknown_backlog_for_waiting_recovery():
+    # A recovery group still waiting to be rebased by the live group reports
+    # BACKLOG(Unknown) (IBM's documented state). The collector must parse it as
+    # backlog=None instead of crashing on int('Unknown') — otherwise the whole
+    # textfile render aborts and the node reads 'no data' instead of degraded (#390).
+    text = (
+        "QMNAME(QMNATIVE) ROLE(Leader) QUORUM(1/3) GRPNAME(Recovery) GRPROLE(Recovery)\n"
+        " GRPNAME(Recovery) GRPROLE(Recovery) GRSTATUS(Waiting for connection) "
+        "BACKLOG(Unknown)\n"
+        " GRPNAME(Live) GRPROLE(Live) CONNGRP(no) GRSTATUS(Normal)\n"
+    )
+    out = nativehastate.parse_nativeha_g(text)  # must not raise
+    assert out["Recovery"]["backlog"] is None
+    assert out["Recovery"]["status"] == "Waiting for connection"
+    assert out["Live"]["connected"] is False
+    # render must still emit the group's role/status (degraded), just omit the backlog line
+    rendered = nativehastate.render_nativeha_state_prom(
+        node="nha-rhel-b1", qm="QMNATIVE", hax=None, grp=out, now=1, fresh_sources=()
+    )
+    assert 'cluster_nha_group_status{node="nha-rhel-b1",group="Recovery"' in rendered
+    assert 'cluster_nha_group_backlog{node="nha-rhel-b1",group="Recovery"}' not in rendered
+
+
+def test_parse_nativeha_x_tolerates_nonnumeric_quorum():
+    # defensive: a malformed/non-numeric QUORUM count must not crash the collector (#390)
+    out = nativehastate.parse_nativeha_x("QMNAME(QMNATIVE) QUORUM(Unknown) GRPROLE(Live)\n")
+    assert out["quorum_current"] is None
+    assert out["quorum_total"] is None
+
+
 def test_render_emits_quorum_owner_and_per_instance_metrics():
     hax = {
         "quorum_current": 3,

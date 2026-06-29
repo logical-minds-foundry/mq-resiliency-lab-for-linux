@@ -39,6 +39,21 @@ def _fields(line: str) -> dict[str, str]:
     return dict(_FIELD.findall(line))
 
 
+def _int_or_none(value: str | None) -> int | None:
+    """Parse an MQ numeric field, tolerating 'Unknown'/empty/missing. dspmq reports
+    BACKLOG(Unknown) (and INSYNC(Unknown)) for a recovery group still waiting to be
+    rebased by the live group — a legitimate, transient CRR state. The collector must
+    NEVER raise on a degraded-but-valid reading: one unparseable field would abort the
+    whole textfile render and blank every panel for that node ('no data') instead of
+    showing it degraded (#390)."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
 def parse_nativeha_x(text: str) -> dict[str, Any]:
     """Parse `dspmq -m <qm> -o nativeha -x` into quorum + group role + per-instance state.
 
@@ -58,9 +73,9 @@ def parse_nativeha_x(text: str) -> dict[str, Any]:
         if not f:
             continue
         if "QUORUM" in f:
-            cur, total = f["QUORUM"].split("/", 1)
-            summary["quorum_current"] = int(cur)
-            summary["quorum_total"] = int(total)
+            cur, _, total = f["QUORUM"].partition("/")
+            summary["quorum_current"] = _int_or_none(cur)
+            summary["quorum_total"] = _int_or_none(total)
             summary["group_role"] = f.get("GRPROLE")
             continue
         if "INSTANCE" in f and "ROLE" in f:
@@ -98,7 +113,7 @@ def parse_nativeha_g(text: str) -> dict[str, dict[str, Any]]:
             "status": f.get("GRSTATUS", "Unknown"),
             "connected": _yn(f, "CONNGRP"),
             "insync": _yn(f, "INSYNC"),
-            "backlog": int(f["BACKLOG"]) if "BACKLOG" in f else None,
+            "backlog": _int_or_none(f.get("BACKLOG")),
         }
     return groups
 
