@@ -37,7 +37,7 @@ vergil = "v2.1"
 # boxes (own state, volume, fingerprint) and may run simultaneously (vergil-vm#242).
 # NOTE: a bare `vrg-vm <verb>` (no --name) builds a THIRD, unnamed default box from
 # this base alone — always pass --name local|cloud.
-cpus   = 12                   # sanity floor / portable intent; on cloud `instance` is authoritative
+cpus   = 12                   # local/Lima sizing; the cloud instance overrides these to match its `instance` machine type (#405)
 memory = "64GiB"
 # nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. Native KVM on the
 # x86 cloud host; the arm64 Mac falls back to TCG unless macOS 15+ on M3+.
@@ -72,9 +72,11 @@ disk = "300GiB"               # nested guest qcow2 images are the risk, not RAM
 # the arm64 TCG emulation tax (vergil-vm#199; evidence in mq-cluster-tooling #289).
 backend  = "off-platform"
 provider = "gcp"
-region   = "us-central1"
-zone     = "us-central1-f"
-instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running
+region   = "us-east1"
+zone     = "us-east1-b"        # reservation mq-lab-n2-8 (#405); us-central1 N2 capacity exhausted 2026-06-29
+instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running; must match the reservation's machine type
+cpus   = 8                    # match n2-standard-8 (overrides the base 12) — declaring more than the
+memory = "32GiB"              # machine type provides warns about under-capacity; this is all the reservation gives (#405)
 volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
 boot_disk = "100GiB"          # EPHEMERAL boot disk — holds libvirt's default image pool (/var/lib/libvirt/images).
                               # Default ~29 GiB filled during full-HADR bring-up → QEMU ENOSPC pauses (#375); images
