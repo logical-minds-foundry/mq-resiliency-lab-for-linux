@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 Column = tuple[str, str, str]  # (title, promql, mapping_kind)
 
 _GREEN, _RED = "green", "red"
+# Colour taxonomy: green = live/active-good; blue = healthy but not the live-active
+# one (the "alternate green" — Replica, standby, Recovery); yellow = warning; red = bad.
+_BLUE, _YELLOW = "blue", "yellow"
 _MAPPINGS: dict[str, list[dict[str, Any]]] = {
     # 1 → green, 0 → red (daemon up, node online)
     "up": [
@@ -53,17 +56,17 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
     ],
     # Native-HA role code → coloured text. The Live group's leader is "Active" (running the QM,
     # green); the Recovery group's leader is "Leader" (the standby that applies CRR replication,
-    # yellow — healthy but not serving). Replica is a healthy follower (blue). Only a genuinely
-    # down/unknown instance is red. So a site reads green-led when live, yellow-led when standby
-    # (#279 feedback).
+    # blue — healthy but not the live-active one, not a warning). Replica is a healthy follower
+    # (also blue). Only a genuinely down/unknown instance is red. So a site reads green-led when
+    # live, blue-led when standby (#279 feedback; #399 recolour).
     "role": [
         {
             "type": "value",
             "options": {
                 "0": {"color": _RED, "text": "Unknown", "index": 0},
-                "1": {"color": "blue", "text": "Replica", "index": 1},
+                "1": {"color": _BLUE, "text": "Replica", "index": 1},
                 "2": {"color": _GREEN, "text": "Active", "index": 2},
-                "3": {"color": "yellow", "text": "Leader", "index": 3},
+                "3": {"color": _BLUE, "text": "Leader", "index": 3},
             },
         },
     ],
@@ -74,7 +77,7 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             "type": "value",
             "options": {
                 "0": {"color": _RED, "text": "Unknown", "index": 0},
-                "1": {"color": "blue", "text": "Secondary", "index": 1},
+                "1": {"color": _BLUE, "text": "Secondary", "index": 1},
                 "2": {"color": _GREEN, "text": "Primary", "index": 2},
             },
         },
@@ -86,7 +89,7 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
         {
             "type": "value",
             "options": {
-                "0": {"color": "blue", "text": "standby", "index": 0},
+                "0": {"color": _BLUE, "text": "standby", "index": 0},
                 "1": {"color": _GREEN, "text": "✓ running", "index": 1},
             },
         },
@@ -111,7 +114,7 @@ _MAPPINGS: dict[str, list[dict[str, Any]]] = {
             "type": "value",
             "options": {
                 "0": {"color": "#5a6168", "text": "stopped", "index": 0},
-                "1": {"color": "blue", "text": "replica", "index": 1},
+                "1": {"color": _BLUE, "text": "replica", "index": 1},
                 "2": {"color": _GREEN, "text": "active", "index": 2},
             },
         },
@@ -713,15 +716,16 @@ def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
 
 def _site_role_badge(site_regex: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
     """A bold per-site header badge: LIVE (green) when the site holds the Active instance,
-    RECOVERY (yellow) when it holds the standby Leader — derived from the data so it flips on
-    failover, never a static site label (#279 feedback). Background-coloured so the live/standby
-    split is obvious at a glance, without reading the role column."""
+    RECOVERY (blue) when it holds the standby Leader — a healthy standby, not a warning; derived
+    from the data so it flips on failover, never a static site label (#279 feedback; #399 recolour).
+    Background-coloured so the live/standby split is obvious at a glance, without reading the role
+    column."""
     maps = [
         {
             "type": "value",
             "options": {
                 "2": {"color": _GREEN, "text": "LIVE", "index": 0},
-                "3": {"color": "yellow", "text": "RECOVERY", "index": 1},
+                "3": {"color": _BLUE, "text": "RECOVERY", "index": 1},
             },
         },
         _STALE_MAP,
@@ -760,7 +764,7 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
         {
             "type": "value",
             "options": {
-                "0": {"color": "yellow", "text": "catching up", "index": 0},
+                "0": {"color": _YELLOW, "text": "catching up", "index": 0},
                 "1": {"color": _GREEN, "text": "✓ in-sync", "index": 1},
             },
         },
@@ -983,7 +987,7 @@ def _rdqm_site_badge(group: str, ds_uid: str, x: int, y: int) -> dict[str, Any]:
             "type": "value",
             "options": {
                 "0": {"color": _RED, "text": "⚠ NOT READY", "index": 0},
-                "1": {"color": "blue", "text": "RECOVERY", "index": 1},
+                "1": {"color": _BLUE, "text": "RECOVERY", "index": 1},
                 "2": {"color": _GREEN, "text": "LIVE", "index": 2},
             },
         },
