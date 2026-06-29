@@ -1,5 +1,7 @@
 # Host-side observability on the Vergil VM (the libvirt host). Run locally:
-#   ansible-playbook host-obs.yml -c local -i localhost,
+#   ansible-playbook host-obs.yml -c local -i localhost, -e mqlab_bin=$(command -v mqlab)
+# mqlab_bin is the host-runnable mqlab the net-state service calls by absolute
+# path (#398); the observe phase passes it automatically (phases._host_mqlab).
 - hosts: localhost
   connection: local
   become: true

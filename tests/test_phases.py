@@ -8,6 +8,9 @@ registry with plain dicts and assert the emitted CommandStep argv/labels.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
 from mqlab.orchestrator import CommandStep
@@ -274,7 +277,12 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
         if argv[1] in ("site-obs.yml", "observability.yml"):
             assert "qm_app=PCMKAPP" in argv
     host_argv = next(a for a in playbooks if a[1] == "host-obs.yml")
-    assert host_argv[2:] == ["-c", "local", "-i", "localhost,"]
+    assert host_argv[2:6] == ["-c", "local", "-i", "localhost,"]
+    # host-obs.yml is passed the host-runnable mqlab the net-state service calls
+    # by absolute path — beside the running interpreter, never the repo .venv (#398).
+    mqlab_bin = next(a for a in host_argv if a.startswith("mqlab_bin="))
+    assert host_argv[host_argv.index(mqlab_bin) - 1] == "-e"
+    assert mqlab_bin == f"mqlab_bin={Path(sys.executable).resolve().parent / 'mqlab'}"
     obs_argv = next(a for a in playbooks if a[1] == "observability.yml")
     # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
     # nodes (cluster + commons) — a cluster node + a commons node both appear.
