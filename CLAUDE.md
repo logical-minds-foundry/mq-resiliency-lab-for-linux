@@ -147,6 +147,23 @@ Raw `git` and `gh` are denied by the permission model. If a command
 is not available through the wrappers, explain the situation to the
 human who can run it directly via `! <command>` in the prompt.
 
+## External documentation (IBM Docs)
+
+IBM Docs return **HTTP 403** to the built-in `WebFetch` (a bot user-agent block,
+not auth), so it cannot read `ibm.com/docs/...` pages. Use the repo tool instead —
+it fetches with a browser UA and caches the canonical text under
+`build/refs/ibm-docs/<product>/<version>/<slug>/` (cite `content.txt`, with the
+`source_url` from `meta.json`):
+
+```bash
+python3 tools/ibm_doc_cache.py "https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=..."
+```
+
+Limitation: the tool resolves `ibm.com/docs/...` only. IBM **Support** pages
+(`ibm.com/support/pages/node/...`, including their `inline-files` PDFs) are
+retrievable by neither `WebFetch` nor the tool — fetch those manually (e.g. paste
+the text, or download the PDF into `build/temp/` and read it on the box).
+
 ## Validation
 
 ```bash
