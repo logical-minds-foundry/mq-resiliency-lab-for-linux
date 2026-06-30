@@ -1,0 +1,59 @@
+# Base IBM MQ install (NO RDQM stack) from the no-charge Developers Ubuntu tar,
+# via apt + the bundled .deb set. The Debian OS-adapter for the OS-agnostic
+# mq-nativeha role (#417, Phase 2 of #246) — the peer of install-RedHat.yml. The
+# formation logic (main.yml) is shared verbatim; only this install differs.
+#
+# Unlike the RHEL box (offline, DVD-repo'd, x86/TCG), the Ubuntu guests have apt
+# network access, so there is no offline-repo dance — apt resolves the debs' OS
+# deps directly. The tar arch suffix tracks the guest arch (host-resolved, #276):
+# ARM64 on the Apple-Silicon dev host, X64 on an x86 host — mirroring mq-install.
+- name: copy MQ Ubuntu tar to node
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
+    dest: /tmp/mqadv.tar.gz
+    mode: "0644"
+
+- name: unpack
+  ansible.builtin.unarchive:
+    src: /tmp/mqadv.tar.gz
+    dest: /tmp
+    remote_src: true
+    creates: /tmp/MQServer
+
+- name: accept developer licence
+  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  args:
+    creates: /var/mqm
+
+# Base MQ only (no RDQM/DRBD — Native HA replicates in-QM over raft). ibmmq-samples
+# carries the Native HA liveness monitor (/opt/mqm/samp/mqmonitor@.service) that
+# main.yml's systemd lifecycle links — the Debian peer of MQSeriesSamples on RHEL.
+# One pass before any QM exists: MQ's preinst refuses extra debs once a QM's shared
+# resources are live, so the full set (incl. sdk) must land together.
+- name: install base IBM MQ debs (no RDQM)
+  ansible.builtin.shell: |
+    set -e
+    apt-get update
+    cd /tmp/MQServer
+    apt-get install -y \
+      ./ibmmq-runtime_*.deb ./ibmmq-server_*.deb ./ibmmq-gskit_*.deb \
+      ./ibmmq-java_*.deb ./ibmmq-jre_*.deb ./ibmmq-web_*.deb \
+      ./ibmmq-sdk_*.deb ./ibmmq-client_*.deb ./ibmmq-samples_*.deb
+  args:
+    creates: /opt/mqm/bin/crtmqm
+  become: true
+
+- name: set primary installation (loader path)
+  ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm
+  args:
+    creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
+  become: true
+
+- name: mqm ulimits
+  ansible.builtin.copy:
+    dest: /etc/security/limits.d/99-mqm.conf
+    mode: "0644"
+    content: |
+      mqm soft nofile 10240
+      mqm hard nofile 10240
+  become: true

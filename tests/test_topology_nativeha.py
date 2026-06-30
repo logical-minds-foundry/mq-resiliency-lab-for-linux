@@ -1,7 +1,10 @@
-"""Topology coverage for the nativeha-rhel stack (#246, #267, #350).
+"""Topology coverage for the Native HA stacks — nativeha-rhel (#246, #267, #350) and
+its OS-as-only-variable peer nativeha-ubuntu (#417).
 
-The stack is ONE consolidated full-HADR stack (not the older _ha/_dr triple), and —
+Each stack is ONE consolidated full-HADR stack (not the older _ha/_dr triple), and —
 unlike RDQM/Pacemaker — Native HA has no floating VIP, so the QM must parse without one.
+The two arms share the mqmonitor@ verbs/mechanism; only OS, groups, QM names, and the
+provision playbook differ.
 """
 
 import pathlib
@@ -51,3 +54,67 @@ def test_stack_parses_without_a_vip():
     s = lab_stacks()["nativeha-rhel"]
     assert s.qm.qm_app == "NHARAPP" and s.qm.qm_svc == "NHARSVC"  # short-derived (#351)
     assert s.qm.vip == ""
+
+
+# --- nativeha-ubuntu (#417): the Ubuntu peer arm. Same mechanism/verbs as RHEL,
+# only the OS, groups, QM names, and provision playbook differ. ---
+
+
+def test_nativeha_ubuntu_stack_uses_mqmonitor_verbs():
+    stack = lab_stacks()["nativeha-ubuntu"]
+    assert stack.mechanism == "native-ha"
+    assert stack.os == "ubuntu"
+    # same lifecycle as the RHEL arm: the mqmonitor@ systemd unit
+    assert "mqmonitor@" in stack.verbs["qm-up"]["cmd"]
+    assert "mqmonitor@" in stack.verbs["qm-down"]["cmd"]
+    # CRR / DR verbs route to the Ubuntu switchover playbook
+    assert stack.verbs["dr-cutover"]["playbook"] == "site-nativeha-ubuntu-switchover.yml"
+    assert stack.verbs["dr-failback"]["playbook"] == "site-nativeha-ubuntu-switchover.yml"
+    assert "runmqras" in stack.verbs["diagnostics"]["cmd"]
+
+
+def test_nativeha_ubuntu_one_consolidated_full_hadr_stack():
+    stacks = lab_stacks()
+    s = stacks["nativeha-ubuntu"]
+    # both sites (HA + DR) in one stack (#267); commons (svc/app) are shared (#350)
+    assert set(s.groups) == {"nha_ubuntu_a", "nha_ubuntu_b"}
+    assert s.cluster_group == "nha_ubuntu_a"
+    assert s.provision == "ansible/site-nativeha-ubuntu.yml"
+
+
+def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
+    topo = _topology()
+    g = topo["groups"]
+    assert set(g["nha_ubuntu_a"]) == {"nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"}
+    assert set(g["nha_ubuntu_b"]) == {"nha-ubuntu-b1", "nha-ubuntu-b2", "nha-ubuntu-b3"}
+    # Unlike the RHEL arm (pinned rhel96-x86_64), the Ubuntu nodes are host-arch
+    # resolved (#276) — they carry NO explicit platform key, so they track the host
+    # arch (native arm64 on the Mac) and can coexist with pcmk-ubuntu (#417).
+    for host in g["nha_ubuntu_a"] + g["nha_ubuntu_b"]:
+        assert "platform" not in topo["nodes"][host]
+
+
+def test_nativeha_ubuntu_stack_parses_without_a_vip():
+    s = lab_stacks()["nativeha-ubuntu"]
+    assert s.qm.qm_app == "NHAUAPP" and s.qm.qm_svc == "NHAUSVC"  # short-derived (#351)
+    assert s.qm.vip == ""
+
+
+def test_nativeha_arms_use_collision_free_resources():
+    """The two coexisting stacks must not share exporter ports, app_unit, or node IPs."""
+    stacks = lab_stacks()
+    rhel, ubuntu = stacks["nativeha-rhel"], stacks["nativeha-ubuntu"]
+    # distinct exporter ports + scrape unit so both can run at once (#417)
+    assert ubuntu.alloc["exporter_app_port"] != rhel.alloc["exporter_app_port"]
+    assert ubuntu.alloc["exporter_svc_port"] != rhel.alloc["exporter_svc_port"]
+    assert ubuntu.alloc["app_unit"] != rhel.alloc["app_unit"]
+    # no IP collision across ALL node NICs in the topology (the pcmk-ubuntu arm runs too)
+    topo = _topology()
+    nodes = topo["nodes"]
+    ubuntu_hosts = set(topo["groups"]["nha_ubuntu_a"]) | set(topo["groups"]["nha_ubuntu_b"])
+    ubuntu_ips: set[str] = set()
+    other_ips: set[str] = set()
+    for host, spec in nodes.items():
+        for ip in (spec.get("nics") or {}).values():
+            (ubuntu_ips if host in ubuntu_hosts else other_ips).add(ip)
+    assert ubuntu_ips.isdisjoint(other_ips)

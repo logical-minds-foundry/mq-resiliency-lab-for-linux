@@ -166,6 +166,27 @@ _NHA_SEL = '{groups=~"nha_rhel_a|nha_rhel_b"}'
 _RDQM_SEL = '{groups=~"rdqm_a|rdqm_b"}'
 _RDQM_GROUPS = 'groups=~"rdqm_a|rdqm_b"'  # bare matcher for injecting into a wider selector
 
+# Per-arm Native HA board specialization (#417). The two Native HA arms (RHEL #246,
+# Ubuntu #417) share one cockpit assembly (_nativeha_board); only the QM name, the
+# ansible group selector, the host/instance name prefix, the board uid, and the title
+# differ — all derived from the arm name here so there is no second hardcoded board.
+_NHA_ARM_SPEC: dict[str, dict[str, str]] = {
+    "nativeha-rhel": {
+        "qm": "NHARAPP",
+        "groups": "nha_rhel_a|nha_rhel_b",
+        "prefix": "nha-rhel",
+        "uid": "lab-nativeha-cluster",
+        "title": "Native HA Cluster · Infrastructure View",
+    },
+    "nativeha-ubuntu": {
+        "qm": "NHAUAPP",
+        "groups": "nha_ubuntu_a|nha_ubuntu_b",
+        "prefix": "nha-ubuntu",
+        "uid": "lab-nativeha-ubuntu-cluster",
+        "title": "Native HA Cluster (Ubuntu) · Infrastructure View",
+    },
+}
+
 
 def _ds(uid: str) -> dict[str, str]:
     return {"type": "prometheus", "uid": uid}
@@ -403,22 +424,25 @@ def _integrity_from_expr(expr: str, ds_uid: str, y: int) -> dict[str, Any]:
     return panel
 
 
-def _nativeha_integrity_expr() -> str:
+def _nativeha_integrity_expr(qm: str = "NHARAPP", sel: str = _NHA_SEL) -> str:
     """Native HA cannot split-brain (raft quorum). The hazard reframes around availability +
     durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
-    no-data reads STALE (spec §6)."""
+    no-data reads STALE (spec §6). qm/sel select the arm (RHEL by default)."""
     hazards = (
-        f"(min(cluster_quorate{_NHA_SEL}) == bool 0)"
-        ' + (absent(cluster_resource_owner{resource="NHARAPP"}) or vector(0))'
+        f"(min(cluster_quorate{sel}) == bool 0)"
+        f' + (absent(cluster_resource_owner{{resource="{qm}"}}) or vector(0))'
         " + (count(cluster_nha_insync == 0) or vector(0))"
     )
     return f"({hazards}) and on() (count(cluster_nha_role) > 0)"
 
 
-def nativeha_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
+def nativeha_status_band(
+    ds_uid: str, y: int, qm: str = "NHARAPP", sel: str = _NHA_SEL
+) -> list[dict[str, Any]]:
     """① Cluster status as ONE compact full-width row of five equal tiles — Active instance ·
     Quorum · Instances in-sync · HA status · Integrity. Integrity is a tile among equals (not a
-    full-width banner) and the value font is capped to reclaim vertical space (#279 feedback)."""
+    full-width banner) and the value font is capped to reclaim vertical space (#279 feedback).
+    qm/sel select the arm (RHEL by default)."""
     normal = 'max by (member)(cluster_nha_hastatus{status="Normal"})'
     health_maps = [
         {
@@ -435,7 +459,7 @@ def nativeha_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
         _stat(
             # max by (holder) collapses the per-reporter series → one tile (the Active instance)
             "Active instance",
-            'max by (holder)(cluster_resource_owner{resource="NHARAPP"})',
+            f'max by (holder)(cluster_resource_owner{{resource="{qm}"}})',
             ds_uid,
             0,
             y,
@@ -468,7 +492,7 @@ def nativeha_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
         ),
         _stat(
             "Integrity",
-            _nativeha_integrity_expr(),
+            _nativeha_integrity_expr(qm, sel),
             ds_uid,
             19,
             y,
@@ -701,14 +725,17 @@ def _nativeha_timeline(ds_uid: str, y: int) -> dict[str, Any]:
     return _state_timeline("⟳ Failover & CRR timeline", _NHA_TIMELINE_SIGNALS, ds_uid, y)
 
 
-def _nativeha_log_row(loki_uid: str, y: int) -> dict[str, Any]:
-    """Native HA logs: MQ-related journald units on the nha-rhel hosts, severity-filtered by
+def _nativeha_log_row(
+    loki_uid: str, y: int, prefix: str = "nha-rhel", qm: str = "NHARAPP"
+) -> dict[str, Any]:
+    """Native HA logs: MQ-related journald units on the nha hosts, severity-filtered by
     the shared $level toggle. Note: MQ's own error log (AMQERR*.LOG) is file-based, not
-    journald — so the QM's HA/CRR events only appear here once Alloy tails those files."""
-    sel = '{host=~"nha-rhel-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*"} |~ `${level}`'
+    journald — so the QM's HA/CRR events only appear here once Alloy tails those files.
+    prefix/qm select the arm (RHEL by default)."""
+    sel = f'{{host=~"{prefix}-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*"}} |~ `${{level}}`'
     note = (
         "Shows MQ-related journald units on the nha nodes. MQ's own error log "
-        "(/var/mqm/qmgrs/NHARAPP/errors/AMQERR*.LOG) is file-based, not journald, so it is "
+        f"(/var/mqm/qmgrs/{qm}/errors/AMQERR*.LOG) is file-based, not journald, so it is "
         "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/CRR logs."
     )
     return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
@@ -807,12 +834,15 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
-def nativeha_perf_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
+def nativeha_perf_section(
+    ds_uid: str, y: int, groups: str = "nha_rhel_a|nha_rhel_b"
+) -> list[dict[str, Any]]:
     """Perf from existing node metrics: CPU busy%, intra-site raft (net-hb) throughput, and
-    cross-region CRR (net-wan) throughput. No SAN disk — Native HA has no storage tier."""
+    cross-region CRR (net-wan) throughput. No SAN disk — Native HA has no storage tier.
+    `groups` scopes CPU to this arm's ansible groups (RHEL by default)."""
     cpu_busy = (
         "100 - (avg by (host)(rate("
-        'node_cpu_seconds_total{groups=~"nha_rhel_a|nha_rhel_b", mode="idle"}[1m]'
+        f'node_cpu_seconds_total{{groups=~"{groups}", mode="idle"}}[1m]'
         ")) * 100)"
     )
     hb_rx = 'rate(node_network_receive_bytes_total{device=~"virbr-hb.*"}[1m])'
@@ -1373,11 +1403,13 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
 _ARM_NAMES = {
     "pcmk": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
     "nativeha-rhel": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
+    "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region · Ubuntu 24.04 LTS",
     "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr) · RHEL 9 (x86_64)",
 }
 _ARM_KIND = {
     "pcmk": "PCMK Cluster",
     "nativeha-rhel": "Native HA Cluster",
+    "nativeha-ubuntu": "Native HA Cluster",
     "rdqm-rhel": "RDQM Cluster",
 }
 
@@ -1406,41 +1438,45 @@ def _row_header(title: str, y: int) -> dict[str, Any]:
     }
 
 
-def _nativeha_board(ds_uid: str) -> dict[str, Any]:
-    """The Native HA cockpit (lab-nativeha-cluster), top-to-bottom: title banner · ① hero +
-    integrity · ② instances matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline ·
-    logs · perf · network. No storage section — Native HA has no DRBD/SAN tier."""
+def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel") -> dict[str, Any]:
+    """The Native HA cockpit, top-to-bottom: title banner · ① hero + integrity · ② instances
+    matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline · logs · perf · network.
+    No storage section — Native HA has no DRBD/SAN tier. One assembly serves both Native HA
+    arms (RHEL #246, Ubuntu #417); `arm` selects the QM/groups/host-prefix/uid (#417)."""
+    spec = _NHA_ARM_SPEC[arm]
+    qm, groups, prefix = spec["qm"], spec["groups"], spec["prefix"]
+    sel = f'{{groups=~"{groups}"}}'
     # Each named section gets its own peer-level row so they collapse independently and the
     # board reads consistently top-to-bottom (#279 feedback). A row absorbs the panels between
     # it and the next row.
     panels = [
-        _title_banner("nativeha-rhel", y=0),
+        _title_banner(arm, y=0),
         # ① one compact full-width row of five equal tiles (integrity is a tile, not a banner).
         _row_header("① Cluster status — active · quorum · in-sync · integrity", y=2),
-        *nativeha_status_band(ds_uid, y=3),
-        # ② Site A / Site B are the FIXED node groups (nha_rhel_a / nha_rhel_b). Live vs Recovery
+        *nativeha_status_band(ds_uid, y=3, qm=qm, sel=sel),
+        # ② Site A / Site B are the FIXED node groups (nha_<os>_a / nha_<os>_b). Live vs Recovery
         # is a *role* that swaps on DR cutover/failback — never a static site label (#279). A
         # compact LIVE/RECOVERY colour chip sits beside each site matrix (the role column gives
         # the per-instance detail); the matrix narrows to w=19 to make room.
         _row_header("② Instances — Site A & Site B", y=6),
-        _site_role_badge("nha-rhel-a.*", ds_uid, 0, 7),
-        matrix("Site A", _nativeha_instance_cols("nha-rhel-a.*"), ds_uid, y=7, h=7, x=5, w=19),
-        _site_role_badge("nha-rhel-b.*", ds_uid, 0, 14),
-        matrix("Site B", _nativeha_instance_cols("nha-rhel-b.*"), ds_uid, y=14, h=7, x=5, w=19),
+        _site_role_badge(f"{prefix}-a.*", ds_uid, 0, 7),
+        matrix("Site A", _nativeha_instance_cols(f"{prefix}-a.*"), ds_uid, y=7, h=7, x=5, w=19),
+        _site_role_badge(f"{prefix}-b.*", ds_uid, 0, 14),
+        matrix("Site B", _nativeha_instance_cols(f"{prefix}-b.*"), ds_uid, y=14, h=7, x=5, w=19),
         _row_header("③ Cross-region replication (CRR)", y=21),
         *nativeha_crr_card(ds_uid, y=22),
         _row_header("⟳ Failover & CRR timeline", y=25),
         _nativeha_timeline(ds_uid, y=26),
         _row_header("▤ Native HA logs", y=33),
-        _nativeha_log_row("loki", y=34),
+        _nativeha_log_row("loki", y=34, prefix=prefix, qm=qm),
         _row_header("🖥 Performance", y=42),
-        *nativeha_perf_section(ds_uid, y=43),
+        *nativeha_perf_section(ds_uid, y=43, groups=groups),
         _row_header("🌐 Network", y=50),
         *nativeha_net_section(ds_uid, y=51),
     ]
     return {
-        "uid": "lab-nativeha-cluster",
-        "title": "Native HA Cluster · Infrastructure View",
+        "uid": spec["uid"],
+        "title": spec["title"],
         "schemaVersion": 39,
         "version": 0,
         "panels": panels,
@@ -1448,7 +1484,7 @@ def _nativeha_board(ds_uid: str) -> dict[str, Any]:
         "annotations": _annotations(ds_uid),
         "time": {"from": "now-15m", "to": "now"},
         "refresh": "10s",
-        "tags": ["lab", "cockpit", "nativeha-rhel"],
+        "tags": ["lab", "cockpit", arm],
     }
 
 
@@ -1460,8 +1496,8 @@ def render_cluster_dashboard(
     """Assemble the cockpit board for the given arm. PCMK: hero + integrity + ② Compute / ③
     Storage matrices + timeline/logs/perf/net. Native HA dispatches to its own assembly
     (instances matrices, the §6 integrity reframing)."""
-    if arm == "nativeha-rhel":
-        return _nativeha_board(ds_uid)
+    if arm in _NHA_ARM_SPEC:
+        return _nativeha_board(ds_uid, arm)
     if arm == "rdqm-rhel":
         return _rdqm_board(ds_uid)
     panels = [
@@ -1512,6 +1548,17 @@ def lab_nativeha_dashboard() -> str:
     """Render the real lab/topology.yaml to the Native HA cockpit dashboard JSON text."""
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     return json.dumps(render_cluster_dashboard(topo, arm="nativeha-rhel"), indent=2) + "\n"
+
+
+def nativeha_ubuntu_dashboard_path() -> Path:
+    """Where the rendered Native HA (Ubuntu) cockpit board is written (gitignored)."""
+    return work("grafana", "dashboards", "lab-nativeha-ubuntu-cluster.json")
+
+
+def lab_nativeha_ubuntu_dashboard() -> str:
+    """Render the real lab/topology.yaml to the Native HA (Ubuntu) cockpit dashboard JSON text."""
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return json.dumps(render_cluster_dashboard(topo, arm="nativeha-ubuntu"), indent=2) + "\n"
 
 
 def rdqm_dashboard_path() -> Path:

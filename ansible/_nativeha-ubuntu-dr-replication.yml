@@ -1,0 +1,78 @@
+# Building block (#417, Phase 2 of #246): site-B Native HA Recovery group + TLS +
+# Cross-Region Replication on Ubuntu. The Debian peer of _nativeha-dr-replication.yml
+# — same load-bearing order (Recovery created-but-not-started, TLS on both groups,
+# CRR stanzas, then restart Recovery-first); only the host groups, instance names/IPs,
+# and the acl install (apt) differ. CRR over net-wan. Composed by site-nativeha-ubuntu.yml
+# AFTER the live group + folded our-side MQSC + distributed-shared, so NHAUAPP already
+# has the app/SVC objects and the Recovery group inherits them by CRR.
+
+# 1. Site-B Recovery HA group (NOT started: nha_start=false — it must first start in
+#    GroupRole=Recovery so the Live group rebases it and it adopts the Live QMId,
+#    else CRR is rejected AMQ3256E; its first start is the ordered restart in step 5). (#389)
+- hosts: nha_ubuntu_b
+  become: true
+  tasks:
+    - name: acl package for unprivileged become
+      ansible.builtin.apt:
+        name: acl
+        update_cache: true
+- hosts: nha_ubuntu_b
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    nha_start: false
+    nha_site_nodes:
+      - { name: nha-ubuntu-b1, hb: 172.16.2.11, data: 10.10.2.11 }
+      - { name: nha-ubuntu-b2, hb: 172.16.2.12, data: 10.10.2.12 }
+      - { name: nha-ubuntu-b3, hb: 172.16.2.13, data: 10.10.2.13 }
+  roles:
+    - mq-nativeha
+
+# 2. TLS (lab-pki .p12) on every instance of both groups.
+- hosts: nha_ubuntu_a:nha_ubuntu_b
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
+
+# 3. CRR — Live group (site A): replicate to the Recovery group (site B) over net-wan.
+- hosts: nha_ubuntu_a
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
+    this_group: Live
+    this_role: live
+    peer_group_name: Recovery
+    peer_wan_addrs: ["10.99.0.14", "10.99.0.15", "10.99.0.16"]
+    recovery_enabled: "Yes"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+# 4. CRR — Recovery group (site B): knows the Live group (site A); Enabled=No.
+- hosts: nha_ubuntu_b
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    ks_cn: "{{ qm_app }}"
+    this_group: Recovery
+    this_role: Recovery
+    peer_group_name: Live
+    peer_wan_addrs: ["10.99.0.11", "10.99.0.12", "10.99.0.13"]
+    recovery_enabled: "No"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
+
+# 5. Bring up the groups to apply TLS + CRR — Recovery FIRST (its deferred first
+#    start, now in GroupRole=Recovery so Live rebases it), then Live (restart to pick
+#    up its CRR stanza). Order is load-bearing.
+- hosts: nha_ubuntu_b:nha_ubuntu_a
+  become: true
+  vars: { qm_name: "{{ qm_app }}" }
+  tasks:
+    - name: restart mqmonitor@
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ qm_name }}"
+        state: restarted

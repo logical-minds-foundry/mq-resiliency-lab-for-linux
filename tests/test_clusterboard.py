@@ -329,6 +329,35 @@ def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
     assert "virbr-hb" in blob and "virbr-wan" in blob  # raft + CRR throughput
 
 
+def test_nativeha_ubuntu_board_is_the_rhel_board_reparameterized():
+    # The Ubuntu arm (#417) reuses the SAME assembly as RHEL; only the QM (NHAUAPP),
+    # the ansible groups (nha_ubuntu_*), the host/instance prefix (nha-ubuntu), and the
+    # board uid differ — every section the RHEL board has must be present, retargeted.
+    d = render_cluster_dashboard({}, arm="nativeha-ubuntu")
+    blob = json.dumps(d)
+    assert d["uid"] == "lab-nativeha-ubuntu-cluster"
+    assert "nativeha-ubuntu" in d["tags"]
+    # QM + group + prefix are all the Ubuntu arm's, and the RHEL arm's never leak in.
+    # (substring checks — json.dumps escapes the quotes in the PromQL label selectors)
+    assert "NHAUAPP" in blob
+    assert "NHARAPP" not in blob
+    assert "nha_ubuntu_a|nha_ubuntu_b" in blob
+    assert "nha_rhel_a|nha_rhel_b" not in blob
+    assert "nha-ubuntu-" in blob
+    assert "nha-rhel-" not in blob
+    # quorate stays scoped to THIS arm's groups (no cross-arm metric leak)
+    for m in re.finditer(r"cluster_quorate(\{[^}]*\})?", blob):
+        assert "nha_ubuntu_a|nha_ubuntu_b" in (m.group(1) or ""), "unscoped quorate on ubuntu board"
+    # full section parity (minus storage), same as RHEL
+    titles = [p.get("title", "") for p in d["panels"]]
+    assert any("Cross-region replication (CRR)" in t for t in titles)
+    assert any(t in ("Site A", "Site B") for t in titles)
+    assert "③ Storage — DRBD / SAN" not in titles
+    # the AMQERR note points at the Ubuntu QM's error path
+    logs = next(p for p in d["panels"] if p["type"] == "logs")
+    assert "/var/mqm/qmgrs/NHAUAPP/errors/" in logs["description"]
+
+
 def test_nativeha_crr_card_is_replication_health_not_group_roles():
     from mqlab.clusterboard import nativeha_crr_card
 
