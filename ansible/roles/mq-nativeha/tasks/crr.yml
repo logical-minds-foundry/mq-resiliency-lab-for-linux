@@ -20,7 +20,7 @@
       NativeHALocalInstance:
          CipherSpec=ANY_TLS12
          CertificateLabel={{ ks_cn }}
-         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}
+         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/key
          GroupName={{ this_group }}
          GroupRole={{ this_role }}
          GroupLocalAddress=(9415)

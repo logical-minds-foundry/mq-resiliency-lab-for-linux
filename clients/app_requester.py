@@ -36,7 +36,7 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=1.0)
     # TLS (#250): --keyrepo is the keystore *stem* (no .p12); a sibling .sth stash
     # supplies the password (pymqi's SCO has none). Omit both -> plaintext.
-    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/app-client")
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/key")
     ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args()
 

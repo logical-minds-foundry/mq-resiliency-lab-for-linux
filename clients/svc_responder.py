@@ -103,7 +103,7 @@ def main() -> int:
     ap.add_argument("--channel", default="SVC.SVRCONN")
     ap.add_argument("--conn", default="localhost(1414)")
     # TLS (#250): keystore stem + cert label; omit both for a plaintext connect.
-    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder")
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder/key")
     ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args()
     serve(args.qm, args.in_queue, args.channel, args.conn, args.keyrepo, args.certlabel)

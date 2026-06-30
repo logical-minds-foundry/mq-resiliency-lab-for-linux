@@ -46,7 +46,7 @@
     name: pki-distribute
   vars:
     pki_entity: mq_prometheus
-    pki_dest_dir: /var/mqm/ssl
+    pki_dest_dir: /var/mqm/ssl/mq_prometheus   # dedicated dir so the keystore can be key.{p12,sth} (#409)
     pki_owner: mqm
     pki_stash: true
   when: mq_exporter_tls | bool

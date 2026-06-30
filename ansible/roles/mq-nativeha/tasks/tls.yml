@@ -30,7 +30,7 @@
 - name: deploy the lab-pki .p12 keystore
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/state/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
-    dest: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12"
+    dest: "/var/mqm/qmgrs/{{ qm_name }}/ssl/key.p12"   # MQ-convention name; matches the QM-default SSLKEYR stem (#409)
     owner: mqm
     group: mqm
     mode: "0640"
@@ -38,9 +38,9 @@
 - name: stash the keystore password (runmqakm; needs libicu)
   ansible.builtin.command: >
     /opt/mqm/bin/runmqakm -keydb -stashpw -type pkcs12
-    -db /var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.p12 -pw "{{ ks_pw.stdout }}"
+    -db /var/mqm/qmgrs/{{ qm_name }}/ssl/key.p12 -pw "{{ ks_pw.stdout }}"
   args:
-    creates: "/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}.sth"
+    creates: "/var/mqm/qmgrs/{{ qm_name }}/ssl/key.sth"
   become: true
   become_user: mqm
   no_log: true
@@ -53,6 +53,6 @@
       NativeHALocalInstance:
          CipherSpec=ANY_TLS12
          CertificateLabel={{ ks_cn }}
-         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/{{ qm_name }}
+         KeyRepository=/var/mqm/qmgrs/{{ qm_name }}/ssl/key
   become: true
   become_user: mqm
