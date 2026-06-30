@@ -39,7 +39,7 @@
 {% if mqweb_tls | bool %}
   <!-- TLS (#250): serve the org-CA `mqweb` entity cert over TLS 1.3 instead of
        Liberty's default self-signed cert. serverKeyAlias is the cert label (CN). -->
-  <keyStore id="mqwebKeyStore" location="{{ mqweb_security_dir }}/mqweb.p12" type="PKCS12" password="{{ mqweb_keyrpwd }}"/>
+  <keyStore id="mqwebKeyStore" location="{{ mqweb_security_dir }}/key.p12" type="PKCS12" password="{{ mqweb_keyrpwd }}"/>
   <ssl id="mqwebSSL" keyStoreRef="mqwebKeyStore" serverKeyAlias="mqweb" sslProtocol="TLSv1.3"/>
   <sslDefault sslRef="mqwebSSL"/>
 {% else %}

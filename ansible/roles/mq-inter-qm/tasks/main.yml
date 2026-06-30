@@ -13,12 +13,12 @@
     name: pki-distribute
   vars:
     pki_entity: "{{ qmgr_name }}"
-    pki_dest_dir: /var/mqm/ssl
+    pki_dest_dir: "/var/mqm/qmgrs/{{ qmgr_name }}/ssl"   # per-QM key repo (its MQ-default dir); keystore is key.{p12,sth} (#409)
 
 - name: "{{ qmgr_name }}: SSLKEYR/KEYRPWD/CERTLABL + REFRESH SECURITY"
   ansible.builtin.shell: |
     set -o pipefail
-    printf "ALTER QMGR SSLKEYR('/var/mqm/ssl/{{ qmgr_name }}') KEYRPWD('%s') CERTLABL('{{ qmgr_name }}')\nREFRESH SECURITY TYPE(SSL)\n" '{{ pki_keyrpwd.stdout }}' | su mqm -c '/opt/mqm/bin/runmqsc {{ qmgr_name }}'
+    printf "ALTER QMGR SSLKEYR('/var/mqm/qmgrs/{{ qmgr_name }}/ssl/key') KEYRPWD('%s') CERTLABL('{{ qmgr_name }}')\nREFRESH SECURITY TYPE(SSL)\n" '{{ pki_keyrpwd.stdout }}' | su mqm -c '/opt/mqm/bin/runmqsc {{ qmgr_name }}'
   args:
     executable: /bin/bash
   become: true
@@ -63,7 +63,7 @@
     name: pki-distribute
   vars:
     pki_entity: svc-responder
-    pki_dest_dir: /var/mqm/ssl
+    pki_dest_dir: /var/mqm/ssl/svc-responder   # dedicated dir so the keystore can be key.{p12,sth} (#409)
     pki_owner: mqm
     pki_stash: true
 

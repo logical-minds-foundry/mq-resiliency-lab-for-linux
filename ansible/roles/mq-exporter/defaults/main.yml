@@ -17,7 +17,7 @@ mq_exporter_port: 9157
 # the password). Verified-at-build: cipherSpecification alias + CCDT field names.
 mq_exporter_tls: true
 mq_exporter_certlabel: mq_prometheus
-mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus
+mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus/key   # keystore stem; file is key.{p12,sth} (#409)
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
 # gate). The app queue + our outbound xmitq + the app reply queue.
