@@ -431,6 +431,19 @@ def test_stack_mq_platforms_resolves_cluster_node_platforms(monkeypatch, tmp_pat
     assert all(p.startswith("ubuntu") for p in plats)
 
 
+def test_stack_mq_platforms_includes_commons_svc_app(monkeypatch, tmp_path):
+    """The stack's provision installs MQ on the commons svc/app too (every provision
+    playbook imports site-distributed-shared.yml → mq-install on svc/app), so their
+    platform's tarball must be ensured even when no cluster node shares it. Regression
+    for the cold-cache miss on svc-sim's UbuntuLinuxX64 tarball (#407)."""
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    # A platform no cluster node uses — only the commons set contributes it.
+    monkeypatch.setattr(cli, "_commons_mq_platforms", lambda: {"commons-only-platform"})
+    plats = cli._stack_mq_platforms(stack)
+    assert "commons-only-platform" in plats
+
+
 def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
