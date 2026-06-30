@@ -169,16 +169,25 @@ def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
 #     actually selected this run — each phase declares its prereq kinds as data in
 #     phases.py (Phase.ensure); the dispatch below maps each name to its real I/O.
 def _stack_mq_platforms(stack: Stack) -> set[str]:
-    """Distinct MQ guest platforms the stack's cluster (QM) nodes run.
+    """Distinct MQ guest platforms a stack's provision installs MQ on.
 
     The MQ-for-Developers tarball is arch-specific, so we ensure one per distinct
-    platform among the stack's member VMs (its groups' hosts), host-resolved via
-    lab_guests (native-preferred, #276) — the same source the setup path uses.
-    Commons hosts (obs/probe) are excluded: they run no QM, so need no MQ tarball.
+    platform, host-resolved via lab_guests (native-preferred, #276) — the same
+    source the setup path uses. Two cohorts run MQ and both need their tarball:
+      - the stack's cluster (QM) member VMs (its groups' hosts), and
+      - the commons SVC/app endpoints: every stack's provision playbook imports
+        site-distributed-shared.yml, which runs mq-install on the svc/app hosts
+        (the per-stack SVC counterparty QM + the requester app). These are Ubuntu
+        (host-resolved), so on a cold cache — no prior `commons up` to leave the
+        tarball behind in the shared build/cache — it is absent unless we fetch it
+        here too (#407).
+    obs/probe also land in _commons_mq_platforms, but they resolve to that same
+    Ubuntu platform, so the union adds exactly the one Ubuntu tarball svc/app need.
     """
     members = stack_members(stack.name) or []
     platforms = lab_guests()
-    return {platforms[host] for host in members if host in platforms}
+    member_platforms = {platforms[host] for host in members if host in platforms}
+    return member_platforms | _commons_mq_platforms()
 
 
 def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
