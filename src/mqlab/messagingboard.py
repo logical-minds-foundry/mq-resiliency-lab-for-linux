@@ -90,8 +90,9 @@ def _queue_depth_expr(qm: str, queue: str) -> str:
 
 def _status_band(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str, Any]]:
     """① Flow indicators (not depths): App/SVC QM up · round-trip success % · message
-    rate · failure rate. Success% guards div-by-zero via `or vector(100)` (idle == OK)."""
-    success = f"100 * (1 - (sum(rate({_RT_FAIL}[5m])) / sum(rate({_RT_TOTAL}[5m])))) or vector(100)"
+    rate · failure rate. Success% reads No data when idle (no `or vector(100)` fallback —
+    a fake 100% on no traffic is misleading)."""
+    success = f"100 * (1 - (sum(rate({_RT_FAIL}[5m])) / sum(rate({_RT_TOTAL}[5m]))))"
     # Each tile carries: a title, its PromQL, its x-offset and width, an optional
     # colour mapping, and an optional value unit.
     specs: list[tuple[str, str, int, int, list[dict[str, Any]] | None, str | None]] = [
@@ -261,7 +262,9 @@ def render_messaging_board(
         _row_header("▤ Round-trip logs", y=19),
         _logs_panel(
             "▤ Round-trip logs (app + svc, severity: $level)",
-            '{unit=~"mq-app-requester|mq-svc-responder"} |~ `${level}`',
+            # Loki =~ is fully anchored and the journald unit label carries the .service
+            # suffix, so the names must be wildcarded to match mq-app-requester.service etc.
+            '{unit=~"mq-app-requester.*|mq-svc-responder.*"} |~ `${level}`',
             loki_uid,
             y=20,
         ),
