@@ -399,10 +399,21 @@ app.add_typer(obs_app, name="obs")
 
 @obs_app.command("targets")
 def obs_targets() -> None:
-    """Render the Prometheus file_sd targets from topology (node + per-stack ibmmq) and echo."""
+    """Render the Prometheus file_sd targets + the mq-exporter deployment list from topology.
+
+    Renders three topology projections into build/work: the node file_sd targets,
+    the per-stack ibmmq file_sd targets, and the per-stack mq-exporter deployment
+    list (`mq_exporters`) that site-obs.yml loops the mq-exporter role over. The
+    exporter list is folded in here — not a separate command — because the observe
+    phase already runs `mqlab obs targets` as a render step (phases.py) and then
+    hands the file to site-obs.yml as `-e @<file>`; keeping the render here pins the
+    bootstrap `observe` call site to the same projection the `obs up` path uses (#434).
+    """
     from mqlab.scrape import (
+        lab_mq_exporters,
         lab_mq_scrape_targets,
         lab_scrape_targets,
+        mq_exporters_path,
         mq_scrape_targets_path,
         scrape_targets_path,
     )
@@ -412,6 +423,7 @@ def obs_targets() -> None:
         for renderer_fn, path_fn in (
             (lab_scrape_targets, scrape_targets_path),
             (lab_mq_scrape_targets, mq_scrape_targets_path),
+            (lab_mq_exporters, mq_exporters_path),
         ):
             text = renderer_fn()
             path = path_fn()

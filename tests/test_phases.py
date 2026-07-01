@@ -15,6 +15,7 @@ import pytest
 
 from mqlab.orchestrator import CommandStep
 from mqlab.phases import PHASES, build_states, first_unsatisfied
+from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import lab_stacks
 
 # Mirror tests/test_stacks.py's seeded topology, plus the lab networks the net
@@ -276,6 +277,14 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     for argv in playbooks:
         if argv[1] in ("site-obs.yml", "observability.yml"):
             assert "qm_app=PCMKAPP" in argv
+    # site-obs.yml loops the mq-exporter role over the `mq_exporters` extra-var; it
+    # is a JSON list, so it is passed as a file (`-e @<mq_exporters_path>`). #423 wired
+    # this only into the `obs up` call site — the observe phase must carry it too or
+    # mon-probe fails on an undefined `mq_exporters` (#434). Pins the two call sites.
+    site_argv = next(a for a in playbooks if a[1] == "site-obs.yml")
+    exporters_ref = f"@{mq_exporters_path()}"
+    assert exporters_ref in site_argv
+    assert site_argv[site_argv.index(exporters_ref) - 1] == "-e"
     host_argv = next(a for a in playbooks if a[1] == "host-obs.yml")
     assert host_argv[2:6] == ["-c", "local", "-i", "localhost,"]
     # host-obs.yml is passed the host-runnable mqlab the net-state service calls

@@ -70,6 +70,35 @@ def test_obs_targets_writes_file_from_topology(monkeypatch, tmp_path):
     assert {"obs", "mon-probe"} <= hosts
 
 
+def test_obs_targets_also_writes_mq_exporters_deployment_list(monkeypatch, tmp_path):
+    # `obs targets` also renders the per-stack mq-exporter deployment list that
+    # site-obs.yml loops over. The observe phase runs this render step, then passes
+    # the file to site-obs.yml as `-e @<file>`; #423 wired that only into `obs up`,
+    # so the observe phase failed on an undefined `mq_exporters` (#434). Rendering it
+    # here pins both call sites to the same file.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    # add an observable stack so the deployment list is non-empty (app + svc instance)
+    topo = tmp_path / "lab" / "topology.yaml"
+    stack_yaml = (
+        "stacks:\n"
+        "  pcmk-ubuntu:\n"
+        "    short: PCMK\n"
+        "    qm: {vip: 10.10.1.200}\n"
+        "    alloc: {exporter_app_port: 9157, exporter_svc_port: 9158}\n"
+    )
+    topo.write_text(topo.read_text() + stack_yaml)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "targets"])
+
+    assert result.exit_code == 0
+    written = tmp_path / "build" / "work" / "obs" / "mq-exporters.json"
+    instances = json.loads(written.read_text())["mq_exporters"]
+    assert {i["role"] for i in instances} == {"app", "svc"}
+    assert {i["port"] for i in instances} == {9157, 9158}
+
+
 # --- dashboard: renders the fleet board + the cluster cockpit boards from topology ---
 
 
