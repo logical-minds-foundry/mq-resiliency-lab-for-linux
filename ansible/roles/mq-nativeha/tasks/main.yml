@@ -59,6 +59,24 @@
     dest: /etc/systemd/system/mqmonitor@.service
     state: link
 
+# systemd ignores /etc/security/limits.d (PAM/login-only), so the QM started under
+# mqmonitor@ inherits the low default open-files limit -> AMQ5657W. A drop-in on the
+# IBM sample unit sets it without editing the sample; the daemon_reload below picks
+# it up. (#448)
+- name: mqmonitor@ drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/mqmonitor@.service.d
+    state: directory
+    mode: "0755"
+
+- name: mqmonitor@ open-files limit (drop-in, not the IBM sample)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/mqmonitor@.service.d/limits.conf
+    mode: "0644"
+    content: |
+      [Service]
+      LimitNOFILE=10240
+
 # `nha_start` gates the instance's FIRST start (default true). A Native HA group's
 # first election PERMANENTLY sets the QMId; a CRR Recovery group must instead first
 # start already in GroupRole=Recovery so it waits for the Live group to rebase it
