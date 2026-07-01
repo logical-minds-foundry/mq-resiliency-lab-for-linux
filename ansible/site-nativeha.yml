@@ -44,6 +44,12 @@
       changed_when: false
       run_once: true
       delegate_to: "{{ groups['nha_rhel_a'][0] }}"
+      # Wait out leader election: the HA role starts the instances but returns
+      # before the group elects an Active. Poll until one appears, else this step
+      # (not a downstream AMQ8146E) fails loud and names the real culprit. (#421)
+      until: act.stdout | trim | length > 0
+      retries: 30
+      delay: 5
 
     - name: record the active host
       ansible.builtin.set_fact:
