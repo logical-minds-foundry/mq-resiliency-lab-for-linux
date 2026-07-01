@@ -31,6 +31,8 @@ def test_status_band_is_flow_indicators_not_depth_sum():
     # deliberately NO summed queue depth in the status band
     blob = json.dumps(render_messaging_board("s", "APP", "SVC"))
     assert "sum(ibmmq_queue_depth" not in blob
+    # success% must NOT fall back to a fake 100% on no traffic (#440) — idle reads No data
+    assert "or vector(100)" not in blob
 
 
 def test_roundtrip_timeline_uses_the_429_histogram():
@@ -43,7 +45,9 @@ def test_logs_panel_covers_both_app_and_svc_units():
     d = render_messaging_board("s", "APP", "SVC")
     logs = next(p for p in d["panels"] if p["type"] == "logs")
     expr = logs["targets"][0]["expr"]
-    assert "mq-app-requester" in expr and "mq-svc-responder" in expr
+    # Loki =~ is anchored and the unit label carries the .service suffix, so the unit
+    # names MUST be wildcarded — a bare name never matches mq-*.service (#440).
+    assert "mq-app-requester.*" in expr and "mq-svc-responder.*" in expr
 
 
 def test_flow_strip_channel_tiles_use_status_squash():
