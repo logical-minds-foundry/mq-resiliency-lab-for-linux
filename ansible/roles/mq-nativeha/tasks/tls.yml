@@ -1,14 +1,18 @@
 # Native HA replication TLS (#246 Phase 3): deploy the lab-pki PKCS#12 keystore +
 # stash its password + set NativeHALocalInstance TLS. Per-instance local config.
+# OS-agnostic (#417): RHEL needs libicu installed explicitly; the Ubuntu guests
+# ship it (and the MQ debs pull it), so the install step is RHEL-only and the
+# runmqakm call sets LD_LIBRARY_PATH instead (the proven pki-distribute pattern).
 # Vars: qm_name; ks_cn (the lab-pki entity CN, = the cert friendly name/label).
 # Keystore source: build/state/secrets/pki/entities/<ks_cn>/<ks_cn>.p12 (controller).
 #
 # NOTE the real gotcha (lab-gotchas.md): runmqakm needs the OS libicu
 # (libicuio.so.*) which the minimal RHEL box lacks — install it first.
 
-- name: libicu (runmqakm ICU runtime dep)
+- name: libicu (runmqakm ICU runtime dep — RHEL only; Ubuntu ships it)
   ansible.builtin.dnf:
     name: libicu
+  when: ansible_os_family == "RedHat"
 
 - name: ssl dir
   ansible.builtin.file:
@@ -35,12 +39,14 @@
     group: mqm
     mode: "0640"
 
-- name: stash the keystore password (runmqakm; needs libicu)
+- name: stash the keystore password (runmqakm; needs libicu/GSKit on LD_LIBRARY_PATH)
   ansible.builtin.command: >
     /opt/mqm/bin/runmqakm -keydb -stashpw -type pkcs12
     -db /var/mqm/qmgrs/{{ qm_name }}/ssl/key.p12 -pw "{{ ks_pw.stdout }}"
   args:
     creates: "/var/mqm/qmgrs/{{ qm_name }}/ssl/key.sth"
+  environment:
+    LD_LIBRARY_PATH: /opt/mqm/lib64
   become: true
   become_user: mqm
   no_log: true

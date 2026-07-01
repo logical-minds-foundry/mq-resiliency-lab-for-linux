@@ -15,6 +15,7 @@
       vars:
         alloy_tail_mqweb: >-
           {{ 'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names
+             or 'nha_ubuntu_a' in group_names or 'nha_ubuntu_b' in group_names
              or 'pcmk_a' in group_names or 'pcmk_b' in group_names
              or 'rdqm_a' in group_names or 'rdqm_b' in group_names }}
     - {role: net-reach, when: reach_peers | length > 0}
@@ -28,14 +29,19 @@
       when: >-
         'pcmk_a' in group_names or 'pcmk_b' in group_names
         or 'san_a' in group_names or 'san_b' in group_names
-    # Native-HA state collector (#279) — only on the nativeha-rhel arm. Every nha node
-    # (Live nha_rhel_a + Recovery nha_rhel_b) reports its own dspmq view; the collector
-    # emits the same cluster_* shape as cluster-state plus cluster_nha_* facets.
+    # Native-HA state collector (#279) — on BOTH Native HA arms (rhel #279, ubuntu #417).
+    # Every nha node (Live nha_*_a + Recovery nha_*_b) reports its own dspmq view; the
+    # collector emits the same cluster_* shape as cluster-state plus cluster_nha_* facets.
+    # The QM is per-arm: NHAUAPP on the ubuntu groups, NHARAPP on the rhel groups (`qm`
+    # is unset when this play runs standalone, so the per-group select is load-bearing).
     - role: nativeha-state
       vars:
-        nativeha_qm: "{{ qm.name | default('NHARAPP') }}"
+        nativeha_qm: >-
+          {{ 'NHAUAPP' if ('nha_ubuntu_a' in group_names or 'nha_ubuntu_b' in group_names)
+             else (qm.name | default('NHARAPP')) }}
       when: >-
         'nha_rhel_a' in group_names or 'nha_rhel_b' in group_names
+        or 'nha_ubuntu_a' in group_names or 'nha_ubuntu_b' in group_names
     # RDQM state collector (#287) — only on the rdqm-rhel arm. Every rdqm node (site-A HA
     # rdqm_a + site-B DR rdqm_b) reports its own rdqmstatus + drbdsetup view; the collector
     # emits the same cluster_* shape as cluster-state plus cluster_rdqm_* HA/DR facets.

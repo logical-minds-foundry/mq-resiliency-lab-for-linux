@@ -44,7 +44,13 @@ def test_render_markdown_has_a_row_per_verb_and_arm_columns() -> None:
 
 
 def test_matrix_covers_exactly_the_declared_arms() -> None:
-    assert set(MATRIX) == {"pcmk-ubuntu", "pcmk-rhel", "rdqm-rhel", "nativeha-rhel"}
+    assert set(MATRIX) == {
+        "pcmk-ubuntu",
+        "pcmk-rhel",
+        "rdqm-rhel",
+        "nativeha-rhel",
+        "nativeha-ubuntu",
+    }
 
 
 def test_parity_command_prints_matrix() -> None:

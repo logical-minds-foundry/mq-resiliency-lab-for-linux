@@ -35,11 +35,15 @@ VERBS: tuple[str, ...] = (
 # NOT_YET until its phases land — Phase 1 (#244) builds only the substrate.
 # nativeha-rhel (#246) is fully supported: HA verbs (Phase 1), CRR/DR verbs
 # (Phase 3), and diagnostics (runmqras capture) all proven on the live arm.
+# nativeha-ubuntu (#417) shares that backend verbatim — same mq-nativeha role,
+# same mqmonitor@ verbs, same CRR/switchover playbook shapes (only the Debian
+# install adapter + group/QM names differ) — so it declares the same capability.
 MATRIX: dict[str, dict[str, Support]] = {
     "pcmk-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
     "pcmk-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
     "nativeha-rhel": dict.fromkeys(VERBS, Support.SUPPORTED),
+    "nativeha-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
 }
 
 

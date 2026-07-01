@@ -1,0 +1,15 @@
+# Apply Native HA replication TLS (lab-pki .p12) to a group + restart, on Ubuntu.
+# The Debian peer of site-nativeha-tls.yml — reused by Phase-3 CRR and as the
+# site-A TLS de-risk. Group/QM via --limit + vars; defaults to the nativeha-ubuntu
+# site-A group and NHAUAPP.
+- hosts: nha_ubuntu_a
+  become: true
+  vars:
+    qm_name: "{{ qm_app | default('NHAUAPP') }}"
+    ks_cn: "{{ qm_app | default('NHAUAPP') }}"
+  tasks:
+    - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
+    - name: restart mqmonitor@ to pick up TLS
+      ansible.builtin.systemd:
+        name: "mqmonitor@{{ qm_name }}"
+        state: restarted

@@ -432,8 +432,10 @@ def obs_dashboard() -> None:
             cluster_dashboard_path,
             lab_cluster_dashboard,
             lab_nativeha_dashboard,
+            lab_nativeha_ubuntu_dashboard,
             lab_rdqm_dashboard,
             nativeha_dashboard_path,
+            nativeha_ubuntu_dashboard_path,
             rdqm_dashboard_path,
         )
 
@@ -445,6 +447,10 @@ def obs_dashboard() -> None:
         nha_cockpit.write_text(lab_nativeha_dashboard())
         deps.renderer.command(f"render -> {nha_cockpit}")
         deps.transcript.write(f"render -> {nha_cockpit}")
+        nha_ubuntu_cockpit = nativeha_ubuntu_dashboard_path()
+        nha_ubuntu_cockpit.write_text(lab_nativeha_ubuntu_dashboard())
+        deps.renderer.command(f"render -> {nha_ubuntu_cockpit}")
+        deps.transcript.write(f"render -> {nha_ubuntu_cockpit}")
         rdqm_cockpit = rdqm_dashboard_path()
         rdqm_cockpit.write_text(lab_rdqm_dashboard())
         deps.renderer.command(f"render -> {rdqm_cockpit}")
@@ -598,13 +604,15 @@ def _obs_up_steps() -> list[CommandStep]:
     dash.write_text(lab_dashboard())
 
     # the dedicated cluster cockpit boards, rendered beside lab-status: lab-pcmk-cluster (#219),
-    # lab-nativeha-cluster (#279), and lab-rdqm-cluster (#287)
+    # lab-nativeha-cluster (#279), lab-nativeha-ubuntu-cluster (#417), and lab-rdqm-cluster (#287)
     from mqlab.clusterboard import (
         cluster_dashboard_path,
         lab_cluster_dashboard,
         lab_nativeha_dashboard,
+        lab_nativeha_ubuntu_dashboard,
         lab_rdqm_dashboard,
         nativeha_dashboard_path,
+        nativeha_ubuntu_dashboard_path,
         rdqm_dashboard_path,
     )
 
@@ -613,6 +621,8 @@ def _obs_up_steps() -> list[CommandStep]:
     cockpit.write_text(lab_cluster_dashboard())
     nha_cockpit = nativeha_dashboard_path()
     nha_cockpit.write_text(lab_nativeha_dashboard())
+    nha_ubuntu_cockpit = nativeha_ubuntu_dashboard_path()
+    nha_ubuntu_cockpit.write_text(lab_nativeha_ubuntu_dashboard())
     rdqm_cockpit = rdqm_dashboard_path()
     rdqm_cockpit.write_text(lab_rdqm_dashboard())
 

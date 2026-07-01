@@ -1,0 +1,24 @@
+# Building block (#417, Phase 2 of #246): site-A 3-node Native HA group (the live
+# group) on Ubuntu. The Debian peer of _nativeha-cluster-ha.yml — identical shape,
+# only the host group (nha_ubuntu_a), the instance names/IPs, and the acl install
+# (apt, not dnf) differ. mq-nativeha forms the Live group via its OS-agnostic
+# main.yml; the install adapter (install-Debian.yml) is selected by os_family.
+- hosts: nha_ubuntu_a
+  become: true
+  tasks:
+    - name: acl package for unprivileged become (become_user mqm)
+      ansible.builtin.apt:
+        name: acl
+        update_cache: true
+
+- hosts: nha_ubuntu_a
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    # Replication on the dedicated net-hb-a NIC (so the fault suite can sever it).
+    nha_site_nodes:
+      - { name: nha-ubuntu-a1, hb: 172.16.1.11, data: 10.10.1.11 }
+      - { name: nha-ubuntu-a2, hb: 172.16.1.12, data: 10.10.1.12 }
+      - { name: nha-ubuntu-a3, hb: 172.16.1.13, data: 10.10.1.13 }
+  roles:
+    - mq-nativeha

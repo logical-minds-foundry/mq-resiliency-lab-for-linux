@@ -151,8 +151,8 @@ nodes:
 
   # --- Native HA arm (#246, #267): six RHEL x86_64 TCG nodes, shared-nothing
   # (raft log replication — NO extra_disk). Site A = nha_rhel_a (HA, Phase 1);
-  # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); an Ubuntu
-  # peer arm (nha-ubuntu-*) follows. HA replication on net-hb-a; CRR over net-wan.
+  # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); the Ubuntu
+  # peer arm (nha-ubuntu-*, #417) is below. HA replication on net-hb-a; CRR over net-wan.
   # Host octets .9x — kept clear of the pcmk-rhel arm's .7x block (both RHEL/TCG).
   nha-rhel-a1:
     platform: rhel96-x86_64
@@ -185,6 +185,42 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.96, net-data-b: 10.10.2.93, net-hb-b: 172.16.2.93, net-wan: 10.99.0.96 }
 
+  # --- Native HA Ubuntu arm (#417, Phase 2 of #246): the OS-as-only-variable peer
+  # of the RHEL arm above. Same shared-nothing raft shape (NO extra_disk), same
+  # net plan — HA replication on net-hb, CRR over net-wan. Site A = nha_ubuntu_a
+  # (HA), site B = nha_ubuntu_b (CRR/DR). Host octets .1x — clear of every other
+  # arm (rdqm .3x/.4x, pcmk .5x/.6x, pcmk-rhel .7x, nha-rhel .9x) so this arm can
+  # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
+  #
+  # Platform is host-resolved (#276, no `platform:` key) — NOT pinned to x86 like
+  # nha-rhel. On the Apple-Silicon dev host these run native arm64 (so the two
+  # Ubuntu stacks are usable side-by-side); on an x86 host they track x86_64. All
+  # three instances share one arch either way, which is all Native HA requires.
+  nha-ubuntu-a1:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.11, net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11, net-wan: 10.99.0.11, net-ext: 10.60.0.11 }
+  nha-ubuntu-a2:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.12, net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12, net-wan: 10.99.0.12, net-ext: 10.60.0.12 }
+  nha-ubuntu-a3:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.13, net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13, net-wan: 10.99.0.13, net-ext: 10.60.0.13 }
+  nha-ubuntu-b1:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.14, net-data-b: 10.10.2.11, net-hb-b: 172.16.2.11, net-wan: 10.99.0.14 }
+  nha-ubuntu-b2:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.15, net-data-b: 10.10.2.12, net-hb-b: 172.16.2.12, net-wan: 10.99.0.15 }
+  nha-ubuntu-b3:
+    cpus: 2
+    memory: 2048
+    nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }
+
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
 # playbooks target them; setups (below) compose them. Convention: underscores name
@@ -200,6 +236,8 @@ groups:
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]
   nha_rhel_b: [nha-rhel-b1, nha-rhel-b2, nha-rhel-b3]
+  nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]
+  nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2, nha-ubuntu-b3]
   svc:   [svc-sim]
   app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
@@ -270,19 +308,29 @@ stacks:
       dr-cutover:  { playbook: site-nativeha-switchover.yml }
       dr-failback: { playbook: site-nativeha-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
-  # nativeha-ubuntu: reserved — no VMs provisioned yet. groups: [], provision: null.
-  # Placeholder so tooling can enumerate all 4 canonical stacks by name.
-  # cluster_group: null (omitted) — no cluster nodes allocated for this reserved stack.
+  # nativeha-ubuntu (#417, Phase 2 of #246): the OS-as-only-variable peer of
+  # nativeha-rhel. Identical mechanism/verbs (mqmonitor@ systemd lifecycle, qm.ini
+  # GroupRole switchover); only the QM names (NHAU*), the groups (nha_ubuntu_*),
+  # the exporter ports/app_unit, and the provision playbook differ. Built to coexist
+  # with pcmk-ubuntu on one host (collision-free IPs/ports).
   nativeha-ubuntu:
     mechanism: native-ha
     os: ubuntu
     short: NHAU
-    groups: []
-    provision: null
-    secrets: []
-    qm: {}
-    alloc: {}
-    verbs: {}
+    cluster_group: nha_ubuntu_a
+    groups: [nha_ubuntu_a, nha_ubuntu_b]
+    provision: ansible/site-nativeha-ubuntu.yml
+    secrets: [mqweb_admin_password]
+    qm: { svc_conn: 10.60.0.50 }
+    alloc: { exporter_app_port: 9163, exporter_svc_port: 9164, app_unit: app-nhau, svc_port: 1414 }
+    verbs:
+      qm-create:   { playbook: site-nativeha-ubuntu.yml }
+      qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
+      qm-up:       { cmd: "systemctl start mqmonitor@{qm}" }
+      qm-down:     { cmd: "systemctl stop mqmonitor@{qm}" }
+      dr-cutover:  { playbook: site-nativeha-ubuntu-switchover.yml }
+      dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml }
+      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
 
 # commons: — shared observability stack. Replaces the old `monitoring` setup in the
 # stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.
