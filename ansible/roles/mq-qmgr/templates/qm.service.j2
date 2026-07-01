@@ -8,6 +8,9 @@ User=mqm
 ExecStart=/opt/mqm/bin/strmqm {{ qmgr_name }}
 ExecStop=/opt/mqm/bin/endmqm -w {{ qmgr_name }}
 TimeoutStartSec=300
+# systemd ignores /etc/security/limits.d (that's PAM/login-only), so the QM daemon
+# needs its open-files limit set here or it inherits the low default -> AMQ5657W (#448).
+LimitNOFILE=10240
 
 [Install]
 WantedBy=multi-user.target
