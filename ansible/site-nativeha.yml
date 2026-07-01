@@ -74,6 +74,8 @@
 - import_playbook: site-distributed-shared.yml
   vars:
     our_qm: "{{ qm_app }}"
-    our_conn: "10.60.0.71(1414),10.60.0.72(1414),10.60.0.73(1414)"
+    # This arm's own site-A net-ext IPs (the active instance answers on whichever
+    # of the three holds the QM) — NOT another arm's range (.7x is pcmk-rhel).
+    our_conn: "10.60.0.91(1414),10.60.0.92(1414),10.60.0.93(1414)"
 
 - import_playbook: _nativeha-dr-replication.yml
