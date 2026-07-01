@@ -1,84 +1,12 @@
 # mq_prometheus exporter on a stable off-cluster node (mon-probe), client-mode
-# against the QM VIP (#172). The exporter is built from source (no IBM arm64
-# redistributable exists), so the node needs the full MQ client libs + SDK
-# (/opt/mqm/inc + lib64 for the cgo build). The exporter itself runs no QM.
+# against the QM (#172). Built from source (no IBM arm64 redistributable exists),
+# so the node needs the full MQ client libs + SDK; the exporter runs no QM.
 #
-# First-cut from the #141 recipe — the Go-from-source build specifics
-# (build path, binary name, module fetch) are confirmed/iterated on a cold boot.
-- name: install full MQ (client libs + SDK for the cgo build)
-  ansible.builtin.include_role:
-    name: mq-install
+# Split (#423): build.yml is the one-time build + shared keystore; instance.yml is
+# one per-QM exporter unit. This main.yml runs both for a single default instance;
+# site-obs.yml instead runs build.yml once and loops instance.yml per stack.
+- name: build mq_prometheus + place the shared ops keystore (once)
+  ansible.builtin.include_tasks: build.yml
 
-- name: build toolchain (Go + git)
-  ansible.builtin.apt:
-    name:
-      - golang-go
-      - git
-      - build-essential
-    update_cache: true
-  become: true
-
-- name: fetch mq-metric-samples source
-  ansible.builtin.git:
-    repo: https://github.com/ibm-messaging/mq-metric-samples.git
-    dest: /usr/local/src/mq-metric-samples
-    version: "{{ mq_exporter_ref }}"
-  become: true
-
-# cgo against /opt/mqm — the whole reason the node carries the full MQ SDK.
-# Idempotent: `creates` skips the (slow, network-fetching) build on re-runs.
-- name: build mq_prometheus
-  ansible.builtin.command:
-    cmd: go build -o /usr/local/bin/mq_prometheus ./cmd/mq_prometheus
-    chdir: /usr/local/src/mq-metric-samples
-    creates: /usr/local/bin/mq_prometheus
-  environment:
-    CGO_CFLAGS: -I/opt/mqm/inc
-    CGO_LDFLAGS: -L/opt/mqm/lib64
-    GOFLAGS: -mod=mod
-  become: true
-
-# TLS (#250): one app-org ops keystore (+ .sth stash) for the exporter, shared
-# by every per-QM instance on this probe. Placed once; pki-distribute's copy/stash
-# are idempotent so the second include is a no-op.
-- name: place the mq_prometheus keystore (TLS)
-  ansible.builtin.include_role:
-    name: pki-distribute
-  vars:
-    pki_entity: mq_prometheus
-    pki_dest_dir: /var/mqm/ssl/mq_prometheus   # dedicated dir so the keystore can be key.{p12,sth} (#409)
-    pki_owner: mqm
-    pki_stash: true
-  when: mq_exporter_tls | bool
-
-# Per-instance CCDT: the only way to give a mq-metric-samples client connection an
-# SSLCIPH (no CLI flag exists). Carries this instance's channel/conn/QM + cipher +
-# cert label; the unit points MQCCDTURL/MQSSLKEYR at it.
-- name: render the exporter CCDT (TLS)
-  ansible.builtin.template:
-    src: exporter-ccdt.json.j2
-    dest: "{{ mq_exporter_ccdt }}"
-    owner: mqm
-    group: mqm
-    mode: "0644"
-  become: true
-  when: mq_exporter_tls | bool
-
-# Per-QM unit name so the role can stand up more than one instance on the same
-# probe (PCMKAPP on :9157, PCMKSVC on :9158 — #182). A static notify-handler can't
-# target a per-instance unit, so restart inline when the unit changes.
-- name: exporter systemd unit
-  ansible.builtin.template:
-    src: mq-exporter.service.j2
-    dest: "/etc/systemd/system/mq-exporter-{{ mq_exporter_instance }}.service"
-    mode: "0644"
-  become: true
-  register: mq_exporter_unit
-
-- name: enable + (re)start the exporter
-  ansible.builtin.systemd:
-    name: "mq-exporter-{{ mq_exporter_instance }}"
-    enabled: true
-    state: "{{ 'restarted' if mq_exporter_unit is changed else 'started' }}"
-    daemon_reload: true
-  become: true
+- name: stand up this exporter instance
+  ansible.builtin.include_tasks: instance.yml

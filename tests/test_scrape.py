@@ -64,3 +64,138 @@ def test_missing_mgmt_ip_raises():
     topo = {"nodes": {"bad": {"nics": {}}}, "groups": {}}
     with pytest.raises(ScrapeError, match="no net-mgmt IP: bad"):
         render_scrape_targets(topo)
+
+
+# --- MQ exporter / ibmmq scrape (#423) ---------------------------------------
+
+# A minimal per-stack topology: a VIP arm (pcmk), a VIP-less Native HA arm (whose
+# app conn is its site-A instances' data-plane IPs), and a reserved stack with no
+# alloc ports (skipped).
+MQ_TOPO = {
+    "nodes": {
+        "mon-probe": {"nics": {"net-mgmt": "10.50.0.3"}},
+        "nha-x-a1": {"nics": {"net-data-a": "10.10.1.11"}},
+        "nha-x-a2": {"nics": {"net-data-a": "10.10.1.12"}},
+        "nha-x-a3": {"nics": {"net-data-a": "10.10.1.13"}},
+    },
+    "groups": {"probe": ["mon-probe"], "nha_x_a": ["nha-x-a1", "nha-x-a2", "nha-x-a3"]},
+    "stacks": {
+        "pcmk-ubuntu": {
+            "short": "PCMK",
+            "qm": {"vip": "10.10.1.200"},
+            "alloc": {"exporter_app_port": 9157, "exporter_svc_port": 9158},
+        },
+        "nha-x": {
+            "short": "NHAX",
+            "cluster_group": "nha_x_a",
+            "qm": {},
+            "alloc": {"exporter_app_port": 9163, "exporter_svc_port": 9164},
+        },
+        "reserved": {"short": "RSVD", "qm": {}, "alloc": {}},  # no ports -> skipped
+    },
+}
+
+
+def test_mq_exporter_instances_one_app_and_svc_pair_per_stack():
+    from mqlab.scrape import mq_exporter_instances
+
+    insts = mq_exporter_instances(MQ_TOPO)
+    # reserved stack (no alloc ports) is skipped -> 2 real stacks * 2 = 4
+    assert [(i["qm"], i["role"], i["port"]) for i in insts] == [
+        ("PCMKAPP", "app", 9157),
+        ("PCMKSVC", "svc", 9158),
+        ("NHAXAPP", "app", 9163),
+        ("NHAXSVC", "svc", 9164),
+    ]
+    assert all(i["channel"] == "MON.SVRCONN" for i in insts)
+
+
+def test_mq_exporter_app_conn_is_vip_or_native_ha_instance_list():
+    from mqlab.scrape import mq_exporter_instances
+
+    by_qm = {i["qm"]: i for i in mq_exporter_instances(MQ_TOPO)}
+    # VIP arm: the app conn is the VIP; the svc conn is svc-sim's shared address
+    assert by_qm["PCMKAPP"]["conn"] == "10.10.1.200(1414)"
+    assert by_qm["PCMKSVC"]["conn"] == "10.60.0.50(1414)"
+    # VIP-less Native HA: the app conn lists every site-A instance (data plane)
+    assert by_qm["NHAXAPP"]["conn"] == "10.10.1.11(1414),10.10.1.12(1414),10.10.1.13(1414)"
+
+
+def test_render_mq_scrape_targets_file_sd_on_the_probe():
+    from mqlab.scrape import render_mq_scrape_targets
+
+    out = json.loads(render_mq_scrape_targets(MQ_TOPO))
+    assert out[0] == {
+        "targets": ["10.50.0.3:9157"],
+        "labels": {"host": "mon-probe", "stack": "pcmk-ubuntu", "role": "app"},
+    }
+    assert {t["targets"][0] for t in out} == {
+        "10.50.0.3:9157",
+        "10.50.0.3:9158",
+        "10.50.0.3:9163",
+        "10.50.0.3:9164",
+    }
+
+
+def test_render_mq_exporters_wraps_the_instance_list():
+    from mqlab.scrape import render_mq_exporters
+
+    out = json.loads(render_mq_exporters(MQ_TOPO))
+    assert list(out) == ["mq_exporters"]
+    assert len(out["mq_exporters"]) == 4
+
+
+def test_app_conn_without_vip_or_cluster_group_is_fail_loud():
+    from mqlab.scrape import mq_exporter_instances
+
+    _ports = {"exporter_app_port": 1, "exporter_svc_port": 2}
+    topo = {
+        "nodes": {"mon-probe": {"nics": {"net-mgmt": "10.50.0.3"}}},
+        "groups": {"probe": ["mon-probe"]},
+        "stacks": {"broken": {"short": "BAD", "qm": {}, "alloc": _ports}},
+    }
+    with pytest.raises(ScrapeError, match="no QM VIP and no cluster_group"):
+        mq_exporter_instances(topo)
+
+
+def test_native_ha_conn_needs_data_plane_ips():
+    from mqlab.scrape import mq_exporter_instances
+
+    _ports = {"exporter_app_port": 1, "exporter_svc_port": 2}
+    topo = {
+        "nodes": {"mon-probe": {"nics": {"net-mgmt": "10.50.0.3"}}, "n1": {"nics": {}}},
+        "groups": {"probe": ["mon-probe"], "g": ["n1"]},
+        "stacks": {"s": {"short": "S", "cluster_group": "g", "qm": {}, "alloc": _ports}},
+    }
+    with pytest.raises(ScrapeError, match="no net-data-a IP"):
+        mq_exporter_instances(topo)
+
+
+def test_missing_cluster_group_hosts_is_fail_loud():
+    from mqlab.scrape import mq_exporter_instances
+
+    _ports = {"exporter_app_port": 1, "exporter_svc_port": 2}
+    topo = {
+        "nodes": {"mon-probe": {"nics": {"net-mgmt": "10.50.0.3"}}},
+        "groups": {"probe": ["mon-probe"]},
+        "stacks": {"s": {"short": "S", "cluster_group": "ghost", "qm": {}, "alloc": _ports}},
+    }
+    with pytest.raises(ScrapeError, match="has no hosts"):
+        mq_exporter_instances(topo)
+
+
+def test_render_mq_scrape_targets_needs_a_probe_host():
+    from mqlab.scrape import render_mq_scrape_targets
+
+    with pytest.raises(ScrapeError, match="no 'probe' group host"):
+        render_mq_scrape_targets({"nodes": {}, "groups": {}, "stacks": {}})
+
+
+def test_lab_mq_renderers_read_the_real_topology():
+    from mqlab.scrape import lab_mq_exporters, lab_mq_scrape_targets
+
+    # the real topology renders without error and covers all four canonical stacks
+    exporters = json.loads(lab_mq_exporters())["mq_exporters"]
+    qms = {e["qm"] for e in exporters}
+    assert {"PCMKAPP", "RDQMAPP", "NHARAPP", "NHAUAPP"} <= qms
+    assert json.loads(lab_mq_scrape_targets())  # non-empty file_sd list
