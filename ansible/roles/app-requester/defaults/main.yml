@@ -1,0 +1,19 @@
+---
+# app-requester (#429): the always-on request/reply stream on the app host — the
+# workload behind the messaging cockpit. Emits round-trip logs (journald -> Loki via
+# Alloy) + a node-exporter textfile metric (app_roundtrip_* counters + latency
+# histogram). The importing arm supplies:
+#   app_conn — the DATA-PLANE CONNAME the app host uses to reach its app QM (the VIP
+#              on the VIP arms; the Native HA site-A instances' data IPs where none).
+#   app_tls  — APP.SVRCONN is mutual-TLS on pcmk (#250); plaintext on nativeha/rdqm.
+app_requester_qm: "{{ our_qm }}"
+app_requester_conn: "{{ app_conn }}"
+app_requester_tls: "{{ app_tls | default(true) }}"
+app_requester_channel: APP.SVRCONN
+app_requester_rate: 1.0            # msgs/sec — v1 fixed-rate laminar stream
+app_requester_msg_size: 32
+# The app-client keystore stem + label placed by the mq-client role (#250).
+app_requester_keyrepo: /home/vagrant/ssl/key
+app_requester_certlabel: app-client
+app_requester_textfile_dir: /var/lib/node_exporter/textfile
+app_requester_textfile: "{{ app_requester_textfile_dir }}/app_roundtrip.prom"

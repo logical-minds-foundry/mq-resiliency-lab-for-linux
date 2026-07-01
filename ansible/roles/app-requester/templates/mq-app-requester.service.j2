@@ -1,0 +1,18 @@
+[Unit]
+Description=mq-app-requester — continuous request/reply stream ({{ app_requester_qm }}) (#429)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vagrant
+Group=vagrant
+# One long ExecStart (like mq-svc-responder): --textfile publishes the round-trip
+# metric for node-exporter; TLS args are appended only when the app channel is TLS.
+ExecStart=/home/vagrant/mqvenv/bin/python /home/vagrant/app_requester.py --qm {{ app_requester_qm }} --conn "{{ app_requester_conn }}" --channel {{ app_requester_channel }} --rate {{ app_requester_rate }} --msg-size {{ app_requester_msg_size }} --textfile {{ app_requester_textfile }}{% if app_requester_tls | bool %} --keyrepo {{ app_requester_keyrepo }} --certlabel {{ app_requester_certlabel }}{% endif %}
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
