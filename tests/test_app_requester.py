@@ -62,6 +62,29 @@ def test_write_textfile_is_atomic_and_world_readable(tmp_path):
     assert list(tmp_path.iterdir()) == [p]  # no leftover temp file
 
 
+def test_publish_metrics_writes_the_textfile(tmp_path):
+    s = ar.RoundTripStats()
+    s.record_success(2.0)
+    p = tmp_path / "app_roundtrip.prom"
+    ar.publish_metrics(str(p), s)
+    assert "app_roundtrip_total 1" in p.read_text()
+
+
+def test_publish_metrics_survives_a_write_failure_but_shouts(monkeypatch, capsys):
+    # A metrics-dir hiccup (e.g. the node-exporter textfile dir not yet writable)
+    # must NEVER take down the round-trip workload — but it must be loud, not swallowed.
+    s = ar.RoundTripStats()
+    s.record_success(1.0)
+
+    def _boom(_path, _text):
+        raise PermissionError(13, "Permission denied", "/var/lib/node_exporter/textfile/x.tmp")
+
+    monkeypatch.setattr(ar, "write_textfile", _boom)
+    ar.publish_metrics("/var/lib/node_exporter/textfile/app_roundtrip.prom", s)  # must not raise
+    out = capsys.readouterr().out
+    assert "FAILED" in out and "Permission denied" in out  # loud, never swallowed
+
+
 def test_default_args_stream_forever_at_one_per_second():
     args = ar._build_args([])
     assert args.count == 0  # 0 == infinite (the service default)

@@ -8,16 +8,34 @@
     group: vagrant
     mode: "0644"
 
-# node-exporter creates the textfile dir owned by node_exporter; the requester runs
-# as vagrant and must publish its .prom there. Own it to vagrant — node_exporter
-# still reads the (world-readable) .prom files. Idempotent whichever role runs first.
-- name: node-exporter textfile dir writable by the requester
+# The requester runs as vagrant but must publish its .prom into node-exporter's
+# textfile dir. Don't fight node-exporter for sole ownership (its `observe` phase
+# runs AFTER us and re-chowns the dir to node_exporter, which crash-looped the
+# requester on mkstemp EACCES — #449). Instead join the node_exporter group and
+# rely on the group-writable+setgid drop zone the node-exporter role establishes.
+- name: node_exporter group exists (node-exporter role reuses it in the observe phase)
+  ansible.builtin.group:
+    name: node_exporter
+    system: true
+  become: true
+
+- name: vagrant joins node_exporter so it can publish into the shared textfile dir
+  ansible.builtin.user:
+    name: vagrant
+    groups: node_exporter
+    append: true
+  become: true
+  register: app_requester_group
+
+# Ensure the drop zone exists and is group-writable even if this role runs before
+# node-exporter (fresh provision): group node_exporter, setgid + group-write. Owner
+# is left to node-exporter (the observe phase) — vagrant writes via the group.
+- name: node-exporter textfile dir as a shared, group-writable drop zone
   ansible.builtin.file:
     path: "{{ app_requester_textfile_dir }}"
     state: directory
-    owner: vagrant
-    group: vagrant
-    mode: "0755"
+    group: node_exporter
+    mode: "02775"
   become: true
 
 - name: app-requester systemd unit
@@ -28,10 +46,13 @@
   become: true
   register: app_requester_unit
 
+# Restart on a unit change OR when vagrant just gained the node_exporter group: a
+# running process won't pick up a new supplementary group until it re-execs, so this
+# heals an already-crash-looping deployment on the next run without a full rebuild.
 - name: enable + (re)start the app requester
   ansible.builtin.systemd:
     name: mq-app-requester
     enabled: true
-    state: "{{ 'restarted' if app_requester_unit is changed else 'started' }}"
+    state: "{{ 'restarted' if (app_requester_unit is changed or app_requester_group is changed) else 'started' }}"
     daemon_reload: true
   become: true
