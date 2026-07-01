@@ -21,9 +21,14 @@ mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus/key   # keystore stem; file is k
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
 # Wildcard ALL objects, including SYSTEM.* (#423): filtering is a display concern,
 # not a scrape concern, and the system series (e.g. SYSTEM.CLUSTER.* churn) is a
-# proven leading indicator we want for free. The exporter opens a handle per
-# monitored queue (MAXHANDS gate), but a lab QM has well under the 256 default, so
-# the wildcard is safe here — a production deployment would filter, the lab does not.
+# proven leading indicator we want for free — a production deployment would filter,
+# the lab does not.
+# MAXHANDS gate (#443): the exporter opens a handle per monitored queue, and the
+# wildcard set exceeds the crtmqm MAXHANDS(256) default (~280 handles). Any QM this
+# scrapes MUST set MAXHANDS(512) — the mq-qmgr role does; the Native HA app QMs get
+# it in their inline MQSC (site-nativeha*.yml). Below it the exporter self-aborts
+# (exit 10) and crash-loops, which the QM logs as an AMQ9638E/AMQ9999E SSL flood —
+# a masquerade, not a TLS fault.
 # NOTE: exact mq-metric-samples wildcard syntax is build-verified on the first cold boot.
 mq_exporter_monitored_queues: "*,SYSTEM.*"
 mq_exporter_monitored_channels: "*,SYSTEM.*"
