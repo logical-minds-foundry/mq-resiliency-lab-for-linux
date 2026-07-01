@@ -74,5 +74,9 @@
     # This arm's own site-A net-ext IPs (the active instance answers on whichever
     # of the three holds the QM) — NOT another arm's range.
     our_conn: "10.60.0.11(1414),10.60.0.12(1414),10.60.0.13(1414)"
+    # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
+    # lists the site-A instances. APP.SVRCONN is plaintext here -> app_tls false. (#429)
+    app_conn: "10.10.1.11(1414),10.10.1.12(1414),10.10.1.13(1414)"
+    app_tls: false
 
 - import_playbook: _nativeha-ubuntu-dr-replication.yml

@@ -1,0 +1,37 @@
+# Deploy the continuous app requester as a managed service on the app host (#429).
+# The pymqi venv + the app-client keystore are already placed by the mq-client role.
+- name: deploy the app requester
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../clients/app_requester.py"
+    dest: /home/vagrant/app_requester.py
+    owner: vagrant
+    group: vagrant
+    mode: "0644"
+
+# node-exporter creates the textfile dir owned by node_exporter; the requester runs
+# as vagrant and must publish its .prom there. Own it to vagrant — node_exporter
+# still reads the (world-readable) .prom files. Idempotent whichever role runs first.
+- name: node-exporter textfile dir writable by the requester
+  ansible.builtin.file:
+    path: "{{ app_requester_textfile_dir }}"
+    state: directory
+    owner: vagrant
+    group: vagrant
+    mode: "0755"
+  become: true
+
+- name: app-requester systemd unit
+  ansible.builtin.template:
+    src: mq-app-requester.service.j2
+    dest: /etc/systemd/system/mq-app-requester.service
+    mode: "0644"
+  become: true
+  register: app_requester_unit
+
+- name: enable + (re)start the app requester
+  ansible.builtin.systemd:
+    name: mq-app-requester
+    enabled: true
+    state: "{{ 'restarted' if app_requester_unit is changed else 'started' }}"
+    daemon_reload: true
+  become: true

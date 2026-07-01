@@ -43,3 +43,6 @@
   vars:
     our_qm: "{{ qm_app }}"
     our_conn: "10.60.0.10(1414),10.60.0.20(1414)"
+    # The app host reaches its app QM on the data plane: site-A VIP (HA) + site-B VIP
+    # (DR). APP.SVRCONN is mutual-TLS here (#250), so app_tls defaults true. (#429)
+    app_conn: "10.10.1.200(1414),10.10.2.200(1414)"

@@ -51,3 +51,7 @@
     # order and reconnects to whichever node currently runs the app QM, so the partner
     # link rides an HA failover without a second floating IP (#216 spike).
     our_conn: "10.60.0.31(1414),10.60.0.32(1414),10.60.0.33(1414)"
+    # The app host reaches the app QM on its one data VIP. APP.SVRCONN is plaintext on
+    # this arm (rdqm TLS is NOT_YET, #426) -> app_tls false. (#429)
+    app_conn: "10.10.1.100(1414)"
+    app_tls: false

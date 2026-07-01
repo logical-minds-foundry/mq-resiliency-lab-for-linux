@@ -62,12 +62,6 @@
       args:
         creates: /home/vagrant/mqvenv/bin/python
 
-    - name: deploy the app requester
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../clients/app_requester.py"
-        dest: /home/vagrant/app_requester.py
-        mode: "0644"
-
     - name: client TCP KeepAlive in mqclient.ini (fast dead-peer detection)
       become: true
       ansible.builtin.blockinfile:
@@ -92,6 +86,12 @@
           net.ipv4.tcp_keepalive_intvl = 5
           net.ipv4.tcp_keepalive_probes = 3
       notify: apply mq keepalive sysctl
+
+    # The always-on request/reply stream + round-trip signal (#429). Placed last so
+    # the venv + app-client keystore + mqclient.ini tuning are all in place first.
+    - name: deploy the app-requester service
+      ansible.builtin.include_role:
+        name: app-requester
 
   handlers:
     - name: apply mq keepalive sysctl
