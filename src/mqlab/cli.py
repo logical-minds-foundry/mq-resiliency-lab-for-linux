@@ -465,6 +465,12 @@ def obs_dashboard() -> None:
         rdqm_cockpit.write_text(lab_rdqm_dashboard())
         deps.renderer.command(f"render -> {rdqm_cockpit}")
         deps.transcript.write(f"render -> {rdqm_cockpit}")
+        # the per-stack messaging-flow boards (#431)
+        from mqlab.messagingboard import write_messaging_dashboards
+
+        write_messaging_dashboards()
+        deps.renderer.command("render -> messaging boards (per stack)")
+        deps.transcript.write("render -> messaging boards (per stack)")
     finally:
         deps.transcript.close()
 
@@ -644,6 +650,11 @@ def _obs_up_steps() -> list[CommandStep]:
     nha_ubuntu_cockpit.write_text(lab_nativeha_ubuntu_dashboard())
     rdqm_cockpit = rdqm_dashboard_path()
     rdqm_cockpit.write_text(lab_rdqm_dashboard())
+
+    # the per-stack messaging-flow boards (#431)
+    from mqlab.messagingboard import write_messaging_dashboards
+
+    write_messaging_dashboards()
 
     return [
         CommandStep(

@@ -91,6 +91,19 @@
     mode: "0644"
   notify: restart grafana
 
+# the per-stack messaging-flow boards (#431) — one lab-messaging-<stack>.json each,
+# rendered by mqlab; copy whichever exist.
+- name: deploy the rendered messaging-flow cockpit dashboards (#431)
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  with_fileglob:
+    - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-messaging-*.json"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d
