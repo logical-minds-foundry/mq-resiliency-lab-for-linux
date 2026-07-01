@@ -143,10 +143,12 @@ def run(args: argparse.Namespace) -> int:
         ConnectionName=args.conn.encode(),
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
-    sco = None
+    # Always a valid SCO: connect_with_options calls sco.pack(), so a None sco crashes
+    # (AttributeError) on the plaintext path (no keyrepo). TLS just sets its fields. (#442)
+    sco = pymqi.SCO()
     if args.keyrepo:
         cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
-        sco = pymqi.SCO(KeyRepository=args.keyrepo.encode())
+        sco.KeyRepository = args.keyrepo.encode()
         if args.certlabel:
             sco.CertificateLabel = args.certlabel.encode()
 
