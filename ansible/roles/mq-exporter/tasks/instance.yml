@@ -1,0 +1,37 @@
+# One mq_prometheus exporter instance (one QM). Split from main.yml (#423) so
+# site-obs.yml can loop it per stack after build.yml has run once. Caller sets the
+# per-instance vars: mq_exporter_qm / _instance / _conn / _channel / _port.
+#
+# Per-instance CCDT: the only way to give a mq-metric-samples client an SSLCIPH (no
+# CLI flag exists). Carries this instance's channel/conn(s)/QM + cipher + cert
+# label; the unit points MQCCDTURL/MQSSLKEYR at it. mq_exporter_conn may be a
+# comma-separated CONNAME list (Native HA has no VIP — the CCDT lists every
+# instance so the exporter reaches whichever holds the QM).
+- name: render the exporter CCDT (TLS)
+  ansible.builtin.template:
+    src: exporter-ccdt.json.j2
+    dest: "{{ mq_exporter_ccdt }}"
+    owner: mqm
+    group: mqm
+    mode: "0644"
+  become: true
+  when: mq_exporter_tls | bool
+
+# Per-QM unit name so the probe runs one exporter per QM (per-stack alloc ports,
+# #423). A static notify-handler can't target a per-instance unit, so restart
+# inline when the unit changes.
+- name: exporter systemd unit
+  ansible.builtin.template:
+    src: mq-exporter.service.j2
+    dest: "/etc/systemd/system/mq-exporter-{{ mq_exporter_instance }}.service"
+    mode: "0644"
+  become: true
+  register: mq_exporter_unit
+
+- name: enable + (re)start the exporter
+  ansible.builtin.systemd:
+    name: "mq-exporter-{{ mq_exporter_instance }}"
+    enabled: true
+    state: "{{ 'restarted' if mq_exporter_unit is changed else 'started' }}"
+    daemon_reload: true
+  become: true

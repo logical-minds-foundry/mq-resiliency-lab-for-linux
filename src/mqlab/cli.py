@@ -352,15 +352,16 @@ def _obs_manifest_args() -> list[str]:
     return ["-e", f"@{op}"]
 
 
-def _obs_qm_args() -> list[str]:
-    # The probe's exporters monitor the pcmk-ubuntu stack's QM pair. obs is
-    # pcmk-pinned today (site-obs.yml historically hardcoded PCMKAPP/PCMKSVC); the
-    # per-stack observe phase (phases.py) generalizes this. The shared #351 QM
-    # extra-vars come from the canonical Stack via phases._qm_extra_vars.
-    from mqlab.phases import _qm_extra_vars
+def _obs_exporter_args() -> list[str]:
+    # The probe runs one mq_prometheus pair PER STACK on the alloc ports (#423), no
+    # longer pcmk-pinned. site-obs.yml loops the mq-exporter role over this list; the
+    # per-stack QM/conn/port derivation is a pure function of topology (mqlab.scrape).
+    from mqlab.scrape import lab_mq_exporters, mq_exporters_path
 
-    stack = lab_stacks().get("pcmk-ubuntu")
-    return _qm_extra_vars(stack) if stack else []
+    path = mq_exporters_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(lab_mq_exporters())
+    return ["-e", f"@{path}"]
 
 
 def _vagrant_env() -> dict[str, str]:
@@ -398,19 +399,28 @@ app.add_typer(obs_app, name="obs")
 
 @obs_app.command("targets")
 def obs_targets() -> None:
-    """Render build/work/prometheus/targets/node.json from topology and echo it."""
-    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+    """Render the Prometheus file_sd targets from topology (node + per-stack ibmmq) and echo."""
+    from mqlab.scrape import (
+        lab_mq_scrape_targets,
+        lab_scrape_targets,
+        mq_scrape_targets_path,
+        scrape_targets_path,
+    )
 
     deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
-        text = lab_scrape_targets()
-        path = scrape_targets_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-        deps.renderer.command(f"render -> {path}")
-        for line in text.splitlines():
-            deps.renderer.output(line)
-            deps.transcript.write(line)
+        for renderer_fn, path_fn in (
+            (lab_scrape_targets, scrape_targets_path),
+            (lab_mq_scrape_targets, mq_scrape_targets_path),
+        ):
+            text = renderer_fn()
+            path = path_fn()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+            deps.renderer.command(f"render -> {path}")
+            for line in text.splitlines():
+                deps.renderer.output(line)
+                deps.transcript.write(line)
     finally:
         deps.transcript.close()
 
@@ -586,14 +596,23 @@ def obs_reach_peers() -> None:
 def _obs_up_steps() -> list[CommandStep]:
     from mqlab.dashboard import dashboard_path, lab_dashboard
     from mqlab.inventory import inventory_path, lab_inventory
-    from mqlab.scrape import lab_scrape_targets, scrape_targets_path
+    from mqlab.scrape import (
+        lab_mq_scrape_targets,
+        lab_scrape_targets,
+        mq_scrape_targets_path,
+        scrape_targets_path,
+    )
 
-    # Render all three artifacts eagerly when the steps are built: the Prometheus
-    # scrape targets, the Ansible inventory the provision step needs (mirrors
-    # dr-provision.sh), and the Grafana dashboard the grafana role deploys.
+    # Render all the artifacts eagerly when the steps are built: the Prometheus
+    # scrape targets (node + per-stack ibmmq, #423), the Ansible inventory the
+    # provision step needs (mirrors dr-provision.sh), and the Grafana dashboard.
     targets = scrape_targets_path()
     targets.parent.mkdir(parents=True, exist_ok=True)
     targets.write_text(lab_scrape_targets())
+
+    mq_targets = mq_scrape_targets_path()
+    mq_targets.parent.mkdir(parents=True, exist_ok=True)
+    mq_targets.write_text(lab_mq_scrape_targets())
 
     inv = inventory_path()
     inv.parent.mkdir(parents=True, exist_ok=True)
@@ -642,7 +661,7 @@ def _obs_up_steps() -> list[CommandStep]:
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
             # picked up — matches dr-provision.sh.
             Command(
-                ["ansible-playbook", "site-obs.yml", *_obs_qm_args(), *_obs_manifest_args()],  # noqa: S607
+                ["ansible-playbook", "site-obs.yml", *_obs_exporter_args(), *_obs_manifest_args()],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),

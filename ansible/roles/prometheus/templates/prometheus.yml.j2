@@ -12,14 +12,9 @@ scrape_configs:
 
   # mq_prometheus exporters on mon-probe (net-mgmt), client-mode against each QM.
   # Metrics are keyed by qmgr= (not the host), so the panel follows the QM across
-  # failover while the scrape target stays fixed here (#172). One job per QM:
-  # PCMKAPP on :9157 (our HA QM), PCMKSVC on :9158 (the SVC counterparty, #182).
+  # failover. One exporter pair PER STACK on the topology alloc ports (9157-9164);
+  # the target list is rendered per-stack from topology (mqlab scrape, #423) so all
+  # per-stack boards can be live at once. A stopped stack's targets just read down.
   - job_name: ibmmq
-    static_configs:
-      - targets: ["10.50.0.3:9157"]
-        labels: { host: mon-probe }
-
-  - job_name: ibmmq-svc
-    static_configs:
-      - targets: ["10.50.0.3:9158"]
-        labels: { host: mon-probe }
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/ibmmq.json"]

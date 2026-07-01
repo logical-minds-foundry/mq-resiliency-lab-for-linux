@@ -19,10 +19,14 @@ mq_exporter_tls: true
 mq_exporter_certlabel: mq_prometheus
 mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus/key   # keystore stem; file is key.{p12,sth} (#409)
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
-# Curated, not '*' — the exporter opens a handle per monitored queue (MAXHANDS
-# gate). The app queue + our outbound xmitq + the app reply queue.
-mq_exporter_monitored_queues: "HA.TEST,{{ qm_svc | default('PCMKSVC') }},APP.REPLY"
-mq_exporter_monitored_channels: "APP.SVRCONN,{{ chl_to_svc | default('PCMKAPP.PCMKSVC') }},{{ chl_to_app | default('PCMKSVC.PCMKAPP') }}"
+# Wildcard ALL objects, including SYSTEM.* (#423): filtering is a display concern,
+# not a scrape concern, and the system series (e.g. SYSTEM.CLUSTER.* churn) is a
+# proven leading indicator we want for free. The exporter opens a handle per
+# monitored queue (MAXHANDS gate), but a lab QM has well under the 256 default, so
+# the wildcard is safe here — a production deployment would filter, the lab does not.
+# NOTE: exact mq-metric-samples wildcard syntax is build-verified on the first cold boot.
+mq_exporter_monitored_queues: "*,SYSTEM.*"
+mq_exporter_monitored_channels: "*,SYSTEM.*"
 # mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
 # cold boot confirms the build — master is a placeholder for reproducibility.
 mq_exporter_ref: master

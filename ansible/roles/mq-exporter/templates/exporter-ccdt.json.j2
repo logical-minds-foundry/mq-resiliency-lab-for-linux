@@ -5,10 +5,12 @@
       "type": "clientConnection",
       "clientConnection": {
         "connection": [
+{% for c in mq_exporter_conn.split(',') %}
           {
-            "host": "{{ mq_exporter_conn.split('(')[0] }}",
-            "port": {{ mq_exporter_conn.split('(')[1].split(')')[0] }}
-          }
+            "host": "{{ c.split('(')[0] }}",
+            "port": {{ c.split('(')[1].split(')')[0] }}
+          }{{ "," if not loop.last else "" }}
+{% endfor %}
         ],
         "queueManager": "{{ mq_exporter_qm }}"
       },
