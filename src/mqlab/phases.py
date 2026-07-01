@@ -40,6 +40,7 @@ from mqlab.orchestrator import CommandStep
 from mqlab.paths import repo_root
 from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
+from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import Stack, stack_members
 
 if TYPE_CHECKING:
@@ -243,9 +244,24 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
         CommandStep("render targets", Command(["mqlab", "obs", "targets"])),
         CommandStep("render dashboard", Command(["mqlab", "obs", "dashboard"])),
         CommandStep("render reach-peers", Command(["mqlab", "obs", "reach-peers"])),
+        # site-obs.yml loops the mq-exporter role over the `mq_exporters` extra-var, a
+        # JSON list rendered from topology by the `render targets` step above into
+        # mq_exporters_path(). It is a list, so it must be passed as a file (`-e @path`),
+        # not inline like the #351 QM vars. The `obs up` call site (cli.py) passes the
+        # same file via _obs_exporter_args(); #423 wired only that one, so the observe
+        # phase dereferenced an undefined `mq_exporters` and mon-probe failed (#434).
         CommandStep(
             f"{stack.name} provision observability",
-            Command(["ansible-playbook", "site-obs.yml", *_qm_extra_vars(stack)], cwd=ansible),
+            Command(
+                [
+                    "ansible-playbook",
+                    "site-obs.yml",
+                    "-e",
+                    f"@{mq_exporters_path()}",
+                    *_qm_extra_vars(stack),
+                ],
+                cwd=ansible,
+            ),
         ),
         CommandStep(
             f"{stack.name} instrument nodes",
