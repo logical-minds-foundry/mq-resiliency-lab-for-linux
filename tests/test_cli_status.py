@@ -61,6 +61,7 @@ TOPO = (
     "    qm: {}\n"
     "    alloc: {}\n"
     "    verbs: {}\n"
+    "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"

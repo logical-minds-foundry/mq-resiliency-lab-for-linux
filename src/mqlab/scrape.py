@@ -29,9 +29,8 @@ HYPERVISOR_MGMT_IP = "10.50.0.1"  # the Vergil VM (libvirt host) on net-mgmt
 # Native HA site-A instances' data-plane addresses as a CONNAME list (no VIP).
 MQ_LISTENER_PORT = 1414
 MON_CHANNEL = "MON.SVRCONN"  # dedicated ops SVRCONN the exporter presents O=app-org on (#250)
-# The SVC counterparty QM is reached on svc-sim's net-ext address; one per stack,
-# but they share svc-sim:1414, so only the active stack's svc exporter connects.
-SVC_EXPORTER_CONN = f"10.60.0.50({MQ_LISTENER_PORT})"
+# The SVC counterparty is a single shared QM (SVCQM) on svc-sim; it is scraped once,
+# from the top-level `svc:` block — not one per stack (#446). See _svc_exporter_instance.
 PROBE_GROUP = "probe"
 EXPORTER_DATA_NET = "net-data-a"  # the plane mon-probe reaches site-A QMs on (VIPs live here)
 
@@ -117,20 +116,42 @@ def _app_qm_conn(topo: dict[str, Any], name: str, cfg: dict[str, Any]) -> str:
     return ",".join(conns)
 
 
+def _svc_exporter_instance(topo: dict[str, Any]) -> dict[str, Any]:
+    """The single shared svc exporter target (#446): one SVCQM on svc-sim, scraped
+    once and labelled `commons`. Its name (<short>QM), conn, and port come from the
+    top-level `svc:` block — fail loud if that block is incomplete."""
+    svc = topo.get("svc") or {}
+    short = svc.get("short")
+    conn = svc.get("conn")
+    port = svc.get("exporter_port")
+    if not short or not conn or not port:
+        raise ScrapeError("topology `svc:` block must declare short, conn, exporter_port")
+    qm = f"{short}QM"
+    return {
+        "instance": qm.lower(),
+        "stack": "commons",
+        "role": "svc",
+        "qm": qm,
+        "conn": f"{conn}({MQ_LISTENER_PORT})",
+        "channel": MON_CHANNEL,
+        "port": port,
+    }
+
+
 def mq_exporter_instances(topo: dict[str, Any]) -> list[dict[str, Any]]:
-    """One mq_prometheus instance per QM per stack (app + svc), on the stack's alloc
-    ports. QM names derive from the stack short (#351); series are qmgr-keyed so a
-    board follows failover. Stacks without alloc exporter ports are skipped."""
+    """Per-stack APP exporters (each on its stack's alloc port) + ONE shared SVCQM svc
+    exporter. App emission is guarded on `exporter_app_port` ALONE — svc is no longer
+    per-stack, so a stack without an svc port must NOT lose its app exporter (#446).
+    QM names derive from the stack short (#351); series are qmgr-keyed so a board
+    follows failover."""
     out: list[dict[str, Any]] = []
     for name, cfg in (topo.get("stacks") or {}).items():
         cfg = cfg or {}
         short = cfg.get("short")
-        alloc = cfg.get("alloc") or {}
-        app_port = alloc.get("exporter_app_port")
-        svc_port = alloc.get("exporter_svc_port")
-        if not short or not app_port or not svc_port:
+        app_port = (cfg.get("alloc") or {}).get("exporter_app_port")
+        if not short or not app_port:
             continue  # reserved / not observable
-        qm_app, qm_svc = f"{short}APP", f"{short}SVC"
+        qm_app = f"{short}APP"
         out.append(
             {
                 "instance": qm_app.lower(),
@@ -142,17 +163,7 @@ def mq_exporter_instances(topo: dict[str, Any]) -> list[dict[str, Any]]:
                 "port": app_port,
             }
         )
-        out.append(
-            {
-                "instance": qm_svc.lower(),
-                "stack": name,
-                "role": "svc",
-                "qm": qm_svc,
-                "conn": SVC_EXPORTER_CONN,
-                "channel": MON_CHANNEL,
-                "port": svc_port,
-            }
-        )
+    out.append(_svc_exporter_instance(topo))
     return out
 
 

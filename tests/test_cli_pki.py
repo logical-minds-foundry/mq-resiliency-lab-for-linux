@@ -18,10 +18,10 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # Non-QM entity CNs that must always be present in the rendered output.
 _FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "pymqrest", "svc-responder"}
 
-# The app-org QM CNs derived from each stack's #351 short token (<short>APP) and
-# the per-stack svc-org counterparts (<short>SVC).
+# The app-org QM CNs derived from each stack's #351 short token (<short>APP), and
+# the single shared svc-org counterparty CN (SVCQM) every stack talks to (#446).
 _APP_CNS = {"PCMKAPP", "RDQMAPP", "NHARAPP"}
-_SVC_CNS = {"PCMKSVC", "RDQMSVC", "NHARSVC"}
+_SVC_CNS = {"SVCQM"}
 
 # The full entity set the stack model produces for this topology.
 _STATIC_CNS = _APP_CNS | _SVC_CNS | _FIXED_CNS
@@ -40,6 +40,7 @@ _PKI_TOPO = (
     "  nativeha-rhel:\n"
     "    mechanism: native-ha\n    os: rhel\n    short: NHAR\n"
     "    groups: []\n    qm: {}\n"
+    "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
 )
 
 
@@ -113,7 +114,7 @@ def test_render_pki_entities_includes_derived_qm_cns(monkeypatch, tmp_path):
     data = json.loads(path.read_text())
     cns = {e["cn"]: e["org"] for e in data}
     assert cns["PCMKAPP"] == "app-org"
-    assert cns["PCMKSVC"] == "svc-org"
+    assert cns["SVCQM"] == "svc-org"  # the single shared counterparty (#446)
 
 
 def test_render_pki_entities_includes_all_qm_cns(monkeypatch, tmp_path):
@@ -165,17 +166,19 @@ def test_render_pki_entities_correct_orgs_and_shape(monkeypatch, tmp_path):
 
 
 def test_render_pki_entities_dedupes_repeated_svc_cn(monkeypatch, tmp_path):
-    """Stacks sharing a derived svc CN emit only one svc entity (dedupe)."""
+    """The shared svc CN emits only one svc entity across stacks (dedupe) — and the
+    app CN dedupes when two stacks share a short (#446)."""
     topo = (
         "nodes: {}\ngroups: {}\n"
         "stacks:\n"
         "  a:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
         "  b:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     data = json.loads(cli._render_pki_entities().read_text())
     assert sum(1 for e in data if e["cn"] == "PCMKAPP") == 1
-    assert sum(1 for e in data if e["cn"] == "PCMKSVC") == 1
+    assert sum(1 for e in data if e["cn"] == "SVCQM") == 1
 
 
 def test_render_pki_entities_writes_to_work_pki(monkeypatch, tmp_path):
@@ -199,6 +202,7 @@ def test_render_pki_entities_stack_without_short_is_skipped(monkeypatch, tmp_pat
         "nodes: {}\ngroups: {}\n"
         "stacks:\n"
         "  reserved:\n    mechanism: m\n    os: o\n    short: ''\n    groups: []\n    qm: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     data = json.loads(cli._render_pki_entities().read_text())

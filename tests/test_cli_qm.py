@@ -45,7 +45,9 @@ _TOPO = (
     "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
     "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
-    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n" + _PCMK_VERBS
+    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
+    + _PCMK_VERBS
+    + "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
 
 
@@ -86,18 +88,23 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
         "-e",
         "qm_app=PCMKAPP",
         "-e",
-        "qm_svc=PCMKSVC",
+        "qm_svc=SVCQM",
         "-e",
-        "chl_to_svc=PCMKAPP.PCMKSVC",
+        "chl_to_svc=PCMKAPP.SVCQM",
         "-e",
-        "chl_to_app=PCMKSVC.PCMKAPP",
+        "chl_to_app=SVCQM.PCMKAPP",
+        # svc is now the shared counterparty; its CONNAME comes from the svc: block
+        # and is threaded for every stack (#446).
+        "-e",
+        "svc_conn=10.60.0.50",
     ]
     assert str(play.cwd).endswith("/ansible")
     assert (tmp_path / "build" / "work" / "inventory.ini").exists()
-    assert not any(a.startswith("svc_conn=") for a in play.argv)  # not set -> not passed
 
 
-def test_qm_create_passes_svc_conn_when_set(monkeypatch, tmp_path):
+def test_qm_create_passes_svc_conn_from_the_shared_svc_block(monkeypatch, tmp_path):
+    # Post-#446 the counterparty CONNAME is a property of the shared svc: block, not
+    # the per-stack qm: block — it is threaded for every stack that has one.
     topo = (
         "nodes:\n"
         "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"
@@ -106,7 +113,9 @@ def test_qm_create_passes_svc_conn_when_set(monkeypatch, tmp_path):
         "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
         "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
         "    provision: ansible/site-pcmk.yml\n"
-        "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n" + _PCMK_VERBS
+        "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
+        + _PCMK_VERBS
+        + "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
     runner = RecordingRunner(
@@ -209,6 +218,7 @@ def test_qm_stack_without_qm_config_exits_2(monkeypatch, tmp_path):
             "groups:\n  g: [h]\n"
             "stacks:\n  bare:\n    mechanism: m\n    os: o\n    short: ''\n    groups: [g]\n"
             "    qm: {}\n    verbs: {}\n"
+            "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         ),
     )
     result = CliRunner().invoke(cli.app, ["qm", "up", "bare"])
@@ -234,6 +244,7 @@ _RDQM_TOPO = (
     "    verbs:\n"
     "      qm-status: { cmd: '/opt/mqm/bin/rdqmstatus -m {qm}' }\n"
     "      qm-create: { script: rdqm-qm-create.sh }\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
 
 
@@ -263,9 +274,9 @@ def test_qm_create_runs_rdqm_script_with_qm_and_vip(monkeypatch, tmp_path):
     argv = runner.recorded[-1].argv
     assert argv[0] == "bash"
     assert argv[1].endswith("/lab/scripts/rdqm-qm-create.sh")
-    # QM, the single data-plane floating IP, counterparty CONNAME ("" when unset).
-    # No partner VIP: RDQM allows one floating IP per QM (#216 spike).
-    assert argv[2:] == ["RDQMAPP", "10.10.1.100", ""]
+    # QM, the single data-plane floating IP, and the shared counterparty CONNAME
+    # (from the svc: block, #446). No partner VIP: RDQM allows one floating IP per QM.
+    assert argv[2:] == ["RDQMAPP", "10.10.1.100", "10.60.0.50"]
 
 
 def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):

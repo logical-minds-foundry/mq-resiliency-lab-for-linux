@@ -65,6 +65,7 @@ TOPO = (
     "      svc_port: 1414\n"
     "    verbs:\n"
     "      qm-status:  { pcs: 'status resources' }\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
@@ -633,6 +634,7 @@ def test_probe_all_qm_down_when_no_status_verb(monkeypatch, tmp_path):
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     lab = tmp_path / "lab"
@@ -666,6 +668,7 @@ def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tm
         "    alloc: {}\n"
         "    verbs:\n"
         "      qm-status: { pcs: 'status resources' }\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     lab = tmp_path / "lab"

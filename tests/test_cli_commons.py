@@ -52,6 +52,7 @@ TOPO = (
     "  probe:   [mon-probe]\n"
     "  svc:     [svc-sim]\n"
     "  app:     [app-client]\n"
+    "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
@@ -198,6 +199,7 @@ def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
         "  svc: [svc-sim]\n  app: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         "commons:\n"
         "  groups: [obs_box, probe]\n"  # only obs/probe — no extra
         "  provision: ansible/site-obs.yml\n"

@@ -37,6 +37,7 @@ class QmConfig:
     omit `vip` entirely."""
 
     name: str
+    short: str = ""
     vip: str = ""
     vip_ext: str = ""
     svc_conn: str | None = None
@@ -57,6 +58,12 @@ class QmConfig:
     @property
     def chl_to_app(self) -> str:
         return f"{self.svc}.{self.name}"
+
+    @property
+    def req_queue(self) -> str:
+        """This stack's own request queue on the shared SVCQM — the per-stack
+        independence axis of #446 (each stack owns {SHORT}.SVC.REQUEST)."""
+        return f"{self.short}.SVC.REQUEST" if self.short else ""
 
 
 @dataclass(frozen=True)
@@ -97,27 +104,43 @@ def _topology() -> dict[str, Any]:
     return data
 
 
-def _qm_from_stack(short: str, qm_cfg: dict[str, Any]) -> QmConfig:
-    """Build a QmConfig from a stack entry's short token and its qm: sub-block.
+def _svc_identity(topo: dict[str, Any]) -> tuple[str, str]:
+    """The shared Business-B counterparty identity from the top-level `svc:` block:
+    (SVC QM name, its CONNAME). One SVCQM serves every stack (#446); its name derives
+    from the block's short (<short>QM) so no QM literal is hardcoded. Fail loud — a
+    topology that declares stacks must declare a valid svc block."""
+    svc = topo.get("svc") or {}
+    short = svc.get("short")
+    conn = svc.get("conn")
+    if not short or not conn:
+        raise ValueError("topology `svc:` block must declare `short` and `conn` (#446)")
+    return f"{short}QM", str(conn)
 
-    Names derive purely from short — <short>APP for the HA/app QM, <short>SVC for
-    the counterparty. No retired-name fallback: all stacks are required to declare
-    a short.
-    """
+
+def _qm_from_stack(short: str, qm_cfg: dict[str, Any], svc_name: str, svc_conn: str) -> QmConfig:
+    """Build a QmConfig from a stack entry's short token, its qm: sub-block, and the
+    SHARED svc identity. The app QM name derives from short (<short>APP); the
+    counterparty is the single SVCQM (name + conn threaded in), not a per-stack
+    {short}SVC (#446). No retired-name fallback: all stacks declare a short."""
     return QmConfig(
         name=f"{short}APP",
+        short=short,
         vip=qm_cfg.get("vip", ""),
         vip_ext=qm_cfg.get("vip_ext", ""),
-        svc_conn=qm_cfg.get("svc_conn"),
-        svc=f"{short}SVC",
+        svc_conn=svc_conn,
+        svc=svc_name,
     )
 
 
 def lab_stacks() -> dict[str, Stack]:
     """All canonical stacks from topology.yaml's stacks: block, keyed by name."""
     data = _topology()
+    stacks_cfg = data.get("stacks") or {}
+    # A topology that declares stacks needs the shared counterparty; a stackless one
+    # (e.g. a pki/empty fixture) does not — the svc block is required only when used.
+    svc_name, svc_conn = _svc_identity(data) if stacks_cfg else ("", "")
     result: dict[str, Stack] = {}
-    for name, cfg in (data.get("stacks") or {}).items():
+    for name, cfg in stacks_cfg.items():
         cfg = cfg or {}
         short = cfg["short"]
         result[name] = Stack(
@@ -128,7 +151,7 @@ def lab_stacks() -> dict[str, Stack]:
             verbs=dict(cfg.get("verbs") or {}),
             cluster_group=cfg.get("cluster_group") or None,
             groups=list(cfg.get("groups") or []),
-            qm=_qm_from_stack(short, dict(cfg.get("qm") or {})),
+            qm=_qm_from_stack(short, dict(cfg.get("qm") or {}), svc_name, svc_conn),
             provision=cfg.get("provision"),
             secrets=list(cfg.get("secrets") or []),
             alloc=dict(cfg.get("alloc") or {}),

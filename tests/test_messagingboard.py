@@ -84,6 +84,7 @@ def test_write_messaging_dashboards_renders_provisioned_stacks_only(monkeypatch,
     topo = {
         "nodes": {},
         "groups": {},
+        "svc": {"short": "SVC", "conn": "10.60.0.50", "exporter_port": 9158},
         "stacks": {
             "live": _stack_cfg("LIVE", "ansible/x.yml"),
             "reserved": _stack_cfg("RSVD", None),
@@ -96,4 +97,4 @@ def test_write_messaging_dashboards_renders_provisioned_stacks_only(monkeypatch,
     paths = mb.write_messaging_dashboards()
     # the reserved stack (provision: null) is filtered out; only the live one renders
     assert [p.name for p in paths] == ["lab-messaging-live.json"]
-    assert "LIVEAPP" in paths[0].read_text() and "LIVESVC" in paths[0].read_text()
+    assert "LIVEAPP" in paths[0].read_text() and "SVCQM" in paths[0].read_text()

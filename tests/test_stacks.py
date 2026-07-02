@@ -6,21 +6,45 @@ so the tests run without a real lab checkout.
 
 from __future__ import annotations
 
-from mqlab.stacks import QmConfig, lab_stacks, stack_members
+import pytest
+
+from mqlab.stacks import QmConfig, _svc_identity, lab_stacks, stack_members
 
 
 def test_qmconfig_derives_app_svc_and_channel_pair() -> None:
-    qm = QmConfig(name="PCMKAPP", vip="10.10.1.200", vip_ext="10.60.0.10", svc="PCMKSVC")
+    # svc is the single shared counterparty (SVCQM), not a per-stack {short}SVC (#446)
+    qm = QmConfig(
+        name="PCMKAPP", short="PCMK", vip="10.10.1.200", vip_ext="10.60.0.10", svc="SVCQM"
+    )
     assert qm.qm_app == "PCMKAPP"
-    assert qm.qm_svc == "PCMKSVC"
-    assert qm.chl_to_svc == "PCMKAPP.PCMKSVC"
-    assert qm.chl_to_app == "PCMKSVC.PCMKAPP"
+    assert qm.qm_svc == "SVCQM"
+    assert qm.chl_to_svc == "PCMKAPP.SVCQM"
+    assert qm.chl_to_app == "SVCQM.PCMKAPP"
 
 
 def test_qmconfig_svc_defaults_empty() -> None:
     qm = QmConfig(name="PCMKAPP")
     assert qm.svc == ""  # no retired-name default
     assert qm.qm_svc == ""
+
+
+def test_qmconfig_req_queue_derives_from_short() -> None:
+    qm = QmConfig(name="PCMKAPP", short="PCMK", svc="SVCQM", svc_conn="10.60.0.50")
+    assert qm.req_queue == "PCMK.SVC.REQUEST"  # this stack's own queue on SVCQM (1b)
+
+
+def test_qmconfig_req_queue_empty_without_short() -> None:
+    assert QmConfig(name="PCMKAPP").req_queue == ""
+
+
+def test_svc_identity_reads_the_svc_block() -> None:
+    topo = {"svc": {"short": "SVC", "conn": "10.60.0.50"}}
+    assert _svc_identity(topo) == ("SVCQM", "10.60.0.50")
+
+
+def test_svc_identity_fail_loud_when_incomplete() -> None:
+    with pytest.raises(ValueError, match="svc"):
+        _svc_identity({"svc": {"short": "SVC"}})  # no conn
 
 
 # Minimal seeded topology covering all 4 stacks + the groups they reference.
@@ -127,6 +151,7 @@ TOPO = (
     "    qm: {}\n"
     "    alloc: {}\n"
     "    verbs: {}\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
 )
 
 
@@ -244,15 +269,17 @@ def test_nativeha_ubuntu_is_reserved(monkeypatch, tmp_path):
 
 
 def test_qm_names_derive_from_short(monkeypatch, tmp_path):
-    """Each stack's QmConfig derives names from short (#351)."""
+    """Each stack's app QM derives from short (#351); the svc QM is the single shared
+    SVCQM for every stack (#446)."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
     assert stacks["pcmk-ubuntu"].qm.qm_app == "PCMKAPP"
-    assert stacks["pcmk-ubuntu"].qm.qm_svc == "PCMKSVC"
     assert stacks["rdqm-rhel"].qm.qm_app == "RDQMAPP"
-    assert stacks["rdqm-rhel"].qm.qm_svc == "RDQMSVC"
     assert stacks["nativeha-rhel"].qm.qm_app == "NHARAPP"
-    assert stacks["nativeha-rhel"].qm.qm_svc == "NHARSVC"
     assert stacks["nativeha-ubuntu"].qm.qm_app == "NHAUAPP"
-    assert stacks["nativeha-ubuntu"].qm.qm_svc == "NHAUSVC"
+    # svc is shared across all stacks
+    assert {s.qm.qm_svc for s in stacks.values()} == {"SVCQM"}
+    # each stack still owns a distinct request queue on that shared SVCQM
+    assert stacks["pcmk-ubuntu"].qm.req_queue == "PCMK.SVC.REQUEST"
+    assert stacks["nativeha-rhel"].qm.req_queue == "NHAR.SVC.REQUEST"
