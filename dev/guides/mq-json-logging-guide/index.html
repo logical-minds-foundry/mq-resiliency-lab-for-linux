@@ -1,0 +1,1573 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../_template/">
+      
+      
+        <link rel="next" href="../../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>JSON diagnostic logging - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ibm-mq-json-diagnostic-logging-emit-error-logs-as-json" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              JSON diagnostic logging
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Full parameter reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-stanza-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 Stanza attributes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-the-json-record-key-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 The JSON record (key fields)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Full parameter reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Full parameter reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-stanza-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 Stanza attributes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-the-json-record-key-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 The JSON record (key fields)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ibm-mq-json-diagnostic-logging-emit-error-logs-as-json">IBM MQ JSON diagnostic logging — emit error logs as JSON<a class="headerlink" href="#ibm-mq-json-diagnostic-logging-emit-error-logs-as-json" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 9.4 (stanza-based services available from 9.1.0)</li>
+<li><strong>Status:</strong> Active</li>
+<li><strong>Last validated in lab:</strong> 2026-06-22</li>
+<li><strong>Related guides:</strong> none yet (a log-shipping pipeline guide is planned)</li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>IBM MQ can write its diagnostic messages — the "error logs": information, warning,
+and error events — as <strong>one JSON object per line</strong>, ready for any log processor
+(journald/syslog, a file tailer, a SIEM). This guide configures that across the
+queue manager, client applications, and the mqweb (MQ Console / REST) server. It
+is for anyone who wants MQ diagnostics to be queryable rather than parsed out of
+free-form text.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope: the MQ-side configuration that makes MQ <em>produce</em> JSON — the diagnostic
+message service stanzas in the <code>.ini</code> files, and the mqweb logging element.</p>
+<p>Out of scope: <em>shipping</em> those logs anywhere (journald → collector → store). That
+is a separate concern and a planned guide; this one assumes you already have, or
+will add, whatever transports your logs.</p>
+<p>Version floor: the stanza-based diagnostic message services (<code>Service=File</code> or
+<code>Service=Syslog</code>, <code>Format=json</code>) are available from <strong>MQ 9.1.0</strong>. Content here is
+pinned to <strong>9.4</strong>. Configuration changes take effect on <strong>queue-manager restart</strong>.</p>
+<h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
+<p>Two output styles exist. Pick per environment; they can coexist across a fleet.</p>
+<ol>
+<li><strong>Syslog (recommended on Linux/AIX).</strong> MQ emits each JSON record through
+   <code>syslog()</code>, so it joins the OS journal as a single managed stream — nothing
+   extra to rotate on the box, and it rides your existing log transport.
+   <em>Compromise:</em> Linux/AIX only, and <code>ExcludeMessage</code>/<code>SuppressMessage</code> filtering
+   is not honoured for client processes (<code>mqclient.ini</code>), so the client surface is
+   severity-filtered only.</li>
+<li><strong>File.</strong> MQ writes <code>AMQERR0x.json</code> alongside the legacy <code>.LOG</code> files.
+   Portable across all platforms and useful when you need JSON on the box itself.
+   <em>Compromise:</em> extra files to rotate and ship; you own their lifecycle.</li>
+</ol>
+<p>Alongside the style choice, <strong>set the template once so every new queue manager
+inherits JSON logging automatically</strong> (section 4, step 2). This is the single
+highest-leverage step: it removes the per-QM edit and guarantees a freshly created
+queue manager is already emitting JSON on first start.</p>
+<p>The lab's default is <strong>Syslog + template inheritance</strong>. The evidence behind the
+Syslog-versus-File choice is in
+<a href="#appendix-b-alternatives-and-tradeoffs">Appendix B</a>.</p>
+<h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
+<p>Each surface below gets a diagnostic message service stanza. Add the ones that
+apply to your deployment; all take effect on the next restart of the component.</p>
+<ol>
+<li><strong>Queue manager (<code>qm.ini</code>).</strong> Add a <code>DiagnosticMessages</code> stanza naming the
+   service (<code>Syslog</code> or <code>File</code>), a unique <code>Name</code>, and — for Syslog — an <code>Ident</code>
+   (syslog tag, default <code>ibm-mq</code>) and the <code>Severities</code> you want. For the File
+   style, set <code>Format = json</code>. See
+   <a href="#appendix-c-complete-configuration-examples">Appendix C</a> for both variants in
+   full.</li>
+<li><strong>Every new queue manager (<code>mqs.ini</code>).</strong> Add a <code>DiagnosticMessagesTemplate</code>
+   stanza to the system-wide <code>mqs.ini</code>. MQ copies it into each queue manager's
+   <code>qm.ini</code> at <code>crtmqm</code> time, so set it once and every queue manager created
+   afterwards gets JSON logging without a per-QM edit.</li>
+<li><strong>System / installation diagnostics (<code>mqs.ini</code>).</strong> Add a
+   <code>DiagnosticSystemMessages</code> stanza to catch messages emitted when no
+   queue-manager context exists — early errors, or a queue manager that cannot
+   write its own logs.</li>
+<li><strong>Client applications (<code>mqclient.ini</code>).</strong> Add a <code>DiagnosticSystemMessages</code>
+   stanza for MQI/client processes (for example <code>runmqsc</code> in client mode, or
+   sample apps). <code>mqclient.ini</code> is read from the application's directory, from
+   <code>/var/mqm/mqclient.ini</code>, or from the path in the <code>MQCLNTCF</code> environment
+   variable.</li>
+<li><strong>MQ Console / REST server (mqweb).</strong> mqweb is WebSphere Liberty, not the
+   diagnostic-service stanzas. Turn on JSON for its <code>messages.log</code> by adding a
+   Liberty <code>&lt;logging&gt;</code> element to the server configuration (<code>mqwebuser.xml</code>), then
+   restart the mqweb server. The element is shown in
+   <a href="#appendix-c-complete-configuration-examples">Appendix C</a>.</li>
+</ol>
+<h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>File style:</strong> find the newest <code>AMQERR0x.json</code> in the queue manager's <code>errors</code>
+  directory and confirm each line is a single, self-contained JSON object.</li>
+<li><strong>Syslog style (Linux):</strong> read the journal entries tagged with your <code>Ident</code>
+  (default <code>ibm-mq</code>) and confirm each record is one JSON object per line.</li>
+<li><strong>Content check:</strong> a valid record carries the key fields in
+  <a href="#appendix-a-full-parameter-reference">Appendix A</a> — notably <code>ibm_messageId</code>
+  (e.g. <code>AMQ9209E</code>), <code>loglevel</code>, and the expanded <code>message</code> text. If those are
+  present and each line parses cleanly, the surface is configured correctly.</li>
+</ul>
+<h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>The legacy text logs never go away.</strong> The multi-line <code>AMQERRnn.LOG</code> files are
+  always written and cannot be turned off. JSON is <em>additive</em> — it carries the
+  same events, line-oriented. You simply stop shipping and parsing the text logs.</li>
+<li><strong>Restart to apply.</strong> A <code>qm.ini</code> change takes effect only on queue-manager
+  restart. With the template (step 2), a freshly created queue manager already has
+  the stanza, so no restart is needed in the normal create-then-start flow.</li>
+<li><strong>Do not use <code>AMQ_ADDITIONAL_JSON_LOG</code>.</strong> That environment variable was a 9.0.4
+  stop-gap; it is undocumented in current MQ and superseded by these stanzas.</li>
+<li><strong>Client filtering is limited.</strong> <code>ExcludeMessage</code> / <code>SuppressMessage</code> are not
+  honoured in <code>mqclient.ini</code>; the client surface is severity-filtered only.</li>
+</ul>
+<hr />
+<h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
+<h3 id="a1-stanza-attributes">A.1 Stanza attributes<a class="headerlink" href="#a1-stanza-attributes" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Applies to</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Service</code></td>
+<td>all</td>
+<td><code>File</code> or <code>Syslog</code> (mandatory)</td>
+</tr>
+<tr>
+<td><code>Name</code></td>
+<td>all</td>
+<td>unique stanza name (mandatory)</td>
+</tr>
+<tr>
+<td><code>Format</code></td>
+<td>File</td>
+<td><code>json</code> or <code>text</code> (<code>json</code> is the default for a custom File service)</td>
+</tr>
+<tr>
+<td><code>FilePrefix</code> / <code>FileSize</code></td>
+<td>File</td>
+<td>filename prefix (default <code>AMQERR</code>) / rollover size (default 32 MB)</td>
+</tr>
+<tr>
+<td><code>Ident</code></td>
+<td>Syslog</td>
+<td>syslog tag (default <code>ibm-mq</code>)</td>
+</tr>
+<tr>
+<td><code>Severities</code></td>
+<td>all</td>
+<td><code>I,W,E,S,T</code> or numeric <code>0,10,20,40,50</code>; <code>E+</code> = error-and-above</td>
+</tr>
+<tr>
+<td><code>ExcludeMessage</code> / <code>SuppressMessage</code></td>
+<td><code>qm.ini</code> / <code>mqs.ini</code> only</td>
+<td>drop / rate-limit specific message numbers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="a2-the-json-record-key-fields">A.2 The JSON record (key fields)<a class="headerlink" href="#a2-the-json-record-key-fields" title="Permanent link">&para;</a></h3>
+<p>Each record is <code>type:"mq_log"</code> and includes, among others: <code>ibm_messageId</code> (e.g.
+<code>AMQ9209E</code>), <code>loglevel</code> (<code>INFO</code> / <code>WARNING</code> / <code>ERROR</code>), <code>ibm_datetime</code> (ISO-8601
+UTC), <code>ibm_serverName</code> (queue-manager name), <code>host</code>, <code>module</code> (<code>source.c:line</code>),
+<code>ibm_remoteHost</code> (client IP), and <code>message</code> (the full expanded text).</p>
+<h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Syslog</th>
+<th>File</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Platforms</td>
+<td>Linux / AIX only</td>
+<td>all platforms</td>
+</tr>
+<tr>
+<td>Where it lands</td>
+<td>OS journal / syslog, one managed stream</td>
+<td><code>AMQERR0x.json</code> beside the <code>.LOG</code> files</td>
+</tr>
+<tr>
+<td>On-box lifecycle</td>
+<td>OS-managed</td>
+<td>you rotate and ship the files</td>
+</tr>
+<tr>
+<td>Client <code>ExcludeMessage</code></td>
+<td>not honoured (severity filter only)</td>
+<td>not honoured (severity filter only)</td>
+</tr>
+<tr>
+<td>Best when</td>
+<td>shipping centrally on Linux/AIX</td>
+<td>you need JSON on the box, or non-syslog platforms</td>
+</tr>
+</tbody>
+</table>
+<p>The recommendation ranks Syslog first for centralized Linux/AIX shipping because
+it removes on-box file management and joins one OS-managed stream. Choose File
+when a platform lacks syslog, or when a local JSON copy on the box has value. The
+tradeoff is yours to weigh against your transport and platform mix.</p>
+<h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
+<p><strong>Queue manager (<code>qm.ini</code>) — Syslog variant</strong> (Linux/AIX; emits JSON via
+<code>syslog()</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span><span class="w">          </span><span class="c1"># syslog identifier/tag (default: ibm-mq)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span><span class="w">             </span><span class="c1"># I, W, E, S, T  (use E+ for errors-and-above)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">   </span><span class="na">ExcludeMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">9001,9002</span><span class="w">   </span><span class="c1"># optional: drop routine channel start/stop noise</span>
+</code></pre></div>
+<p><strong>Queue manager (<code>qm.ini</code>) — File variant:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">File</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">   </span><span class="na">Format</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s">json</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">   </span><span class="na">FilePrefix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">AMQERR</span>
+</code></pre></div>
+<p>After restart, the File variant writes <code>AMQERR0x.json</code> in the queue manager's
+<code>errors</code> directory (<code>/var/mqm/qmgrs/&lt;QM&gt;/errors/</code>).</p>
+<p><strong>Every new queue manager (<code>mqs.ini</code>):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="na">DiagnosticMessagesTemplate</span><span class="o">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
+</code></pre></div>
+<p><strong>System / installation diagnostics (<code>mqs.ini</code>):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
+</code></pre></div>
+<p><strong>Client applications (<code>mqclient.ini</code>):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
+</code></pre></div>
+<p><strong>MQ Console / REST server (mqweb) — Liberty <code>&lt;logging&gt;</code> element in
+<code>mqwebuser.xml</code>:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">&lt;logging</span><span class="w"> </span><span class="na">messageFormat=</span><span class="s">&quot;json&quot;</span><span class="w"> </span><span class="na">messageSource=</span><span class="s">&quot;message,ffdc&quot;</span><span class="nt">/&gt;</span>
+</code></pre></div>
+<p>mqweb logs land in
+<code>&lt;MQ_DATA&gt;/web/installations/&lt;installation&gt;/servers/mqweb/logs/messages.log</code>.
+Restart the mqweb server to apply.</p>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<p>Work the surfaces in order; the first one that is empty is your fault domain.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No JSON at all from a queue manager</td>
+<td><code>qm.ini</code> has no <code>DiagnosticMessages</code> stanza, or the queue manager was created before the <code>mqs.ini</code> template was set</td>
+<td>confirm the stanza is present (or the template is set and the QM re-created); restart the queue manager</td>
+</tr>
+<tr>
+<td>JSON to the wrong place</td>
+<td><code>Service</code> set to <code>File</code> when you expected Syslog, or vice-versa</td>
+<td>correct <code>Service</code> and, for File, ensure <code>Format = json</code></td>
+</tr>
+<tr>
+<td>A line will not parse as JSON</td>
+<td>you are reading a legacy <code>.LOG</code> text file, not the JSON output</td>
+<td>read <code>AMQERR0x.json</code> (File) or the entries tagged with your <code>Ident</code> (Syslog)</td>
+</tr>
+<tr>
+<td>Bursts of events missing under load</td>
+<td>the OS log layer is rate-limiting (e.g. journald default rate limits)</td>
+<td>raise or disable rate limiting for the MQ log source at the OS layer</td>
+</tr>
+<tr>
+<td>mqweb still writing text</td>
+<td>the Liberty <code>&lt;logging&gt;</code> element is missing or the mqweb server was not restarted</td>
+<td>add the element to <code>mqwebuser.xml</code> and restart mqweb</td>
+</tr>
+</tbody>
+</table>
+<p>Notes:</p>
+<ul>
+<li>A <code>qm.ini</code> change requires a queue-manager restart; with the <code>mqs.ini</code> template,
+  a freshly created queue manager already has the stanza and needs no restart.</li>
+<li>Confirm no events are silently dropped: MQ and the OS log layer should report no
+  "suppressed" counters for the MQ source. If they do, the drop is at the OS log
+  layer, not in MQ.</li>
+</ul>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<p>Search these topic titles in the IBM MQ 9.4 documentation at
+<a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>: <em>Diagnostic message logging</em>,
+<em>Diagnostic message services</em>, <em>Diagnostic message service stanzas</em>, <em>JSON format
+diagnostic messages</em>, and <em>QMErrorLog stanza</em>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>
