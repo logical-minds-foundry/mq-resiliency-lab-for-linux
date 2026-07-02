@@ -31,6 +31,7 @@ nodes:
   svc-sim:
     cpus: 2
     memory: 2048
+    org: service  # the mocked counterparty — the service.com side of net-ext
     # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP (#147).
     nics: { net-mgmt: 10.50.0.50, net-ext: 10.60.0.50 }
   app-client:
@@ -59,6 +60,7 @@ nodes:
   infra-client:
     nics: { net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-data-b: 10.10.2.8, net-ext: 10.60.0.8 }
   infra-svc:
+    org: service  # the mock service.com nameserver
     nics: { net-mgmt: 10.50.0.9, net-ext: 10.60.0.9 }
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
