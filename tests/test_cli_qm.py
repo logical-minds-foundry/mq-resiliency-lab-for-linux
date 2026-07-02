@@ -93,6 +93,9 @@ def test_qm_create_runs_playbook_with_qm_extra_vars(monkeypatch, tmp_path):
         "chl_to_svc=PCMKAPP.SVCQM",
         "-e",
         "chl_to_app=SVCQM.PCMKAPP",
+        # each stack owns its own request queue on the shared SVCQM (#446)
+        "-e",
+        "svc_req_queue=PCMK.SVC.REQUEST",
         # svc is now the shared counterparty; its CONNAME comes from the svc: block
         # and is threaded for every stack (#446).
         "-e",

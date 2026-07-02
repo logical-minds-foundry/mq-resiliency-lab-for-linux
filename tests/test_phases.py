@@ -230,6 +230,7 @@ def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
     assert "qm_svc=SVCQM" in argv  # single shared counterparty (#446)
     assert "chl_to_svc=PCMKAPP.SVCQM" in argv
     assert "chl_to_app=SVCQM.PCMKAPP" in argv
+    assert "svc_req_queue=PCMK.SVC.REQUEST" in argv  # this stack's own queue on SVCQM
 
 
 def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):

@@ -136,6 +136,8 @@ def _qm_extra_vars(stack: Stack) -> list[str]:
         f"chl_to_svc={qm.chl_to_svc}",
         "-e",
         f"chl_to_app={qm.chl_to_app}",
+        "-e",
+        f"svc_req_queue={qm.req_queue}",
     ]
 
 

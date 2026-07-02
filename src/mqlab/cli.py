@@ -1128,6 +1128,8 @@ def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
                     f"chl_to_svc={qm.chl_to_svc}",
                     "-e",
                     f"chl_to_app={qm.chl_to_app}",
+                    "-e",
+                    f"svc_req_queue={qm.req_queue}",
                     # the counterparty CONNAME, only when this QM talks to one (#147)
                     *(["-e", f"svc_conn={qm.svc_conn}"] if qm.svc_conn else []),
                 ],  # noqa: S607
