@@ -52,7 +52,9 @@ def test_stack_parses_without_a_vip():
     # Native HA has no floating VIP (multi-instance CONNAME list instead);
     # QmConfig.vip must be optional for the stack to parse.
     s = lab_stacks()["nativeha-rhel"]
-    assert s.qm.qm_app == "NHARAPP" and s.qm.qm_svc == "NHARSVC"  # short-derived (#351)
+    assert s.qm.qm_app == "NHARAPP"  # short-derived (#351)
+    assert s.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
+    assert s.qm.req_queue == "NHAR.SVC.REQUEST"
     assert s.qm.vip == ""
 
 
@@ -96,7 +98,9 @@ def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
 
 def test_nativeha_ubuntu_stack_parses_without_a_vip():
     s = lab_stacks()["nativeha-ubuntu"]
-    assert s.qm.qm_app == "NHAUAPP" and s.qm.qm_svc == "NHAUSVC"  # short-derived (#351)
+    assert s.qm.qm_app == "NHAUAPP"  # short-derived (#351)
+    assert s.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
+    assert s.qm.req_queue == "NHAU.SVC.REQUEST"
     assert s.qm.vip == ""
 
 
@@ -104,9 +108,11 @@ def test_nativeha_arms_use_collision_free_resources():
     """The two coexisting stacks must not share exporter ports, app_unit, or node IPs."""
     stacks = lab_stacks()
     rhel, ubuntu = stacks["nativeha-rhel"], stacks["nativeha-ubuntu"]
-    # distinct exporter ports + scrape unit so both can run at once (#417)
+    # distinct app exporter ports + scrape unit so both can run at once (#417). The
+    # svc exporter is now a single shared SVCQM target (#446), so there is no per-stack
+    # svc port to collide on.
     assert ubuntu.alloc["exporter_app_port"] != rhel.alloc["exporter_app_port"]
-    assert ubuntu.alloc["exporter_svc_port"] != rhel.alloc["exporter_svc_port"]
+    assert "exporter_svc_port" not in ubuntu.alloc and "exporter_svc_port" not in rhel.alloc
     assert ubuntu.alloc["app_unit"] != rhel.alloc["app_unit"]
     # no IP collision across ALL node NICs in the topology (the pcmk-ubuntu arm runs too)
     topo = _topology()

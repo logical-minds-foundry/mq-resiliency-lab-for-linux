@@ -267,8 +267,8 @@ stacks:
     groups: [san_a, pcmk_a, san_b, pcmk_b]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
-    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }
-    alloc: { exporter_app_port: 9157, exporter_svc_port: 9158, app_unit: app-pcmk, svc_port: 1414 }
+    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }
+    alloc: { exporter_app_port: 9157, app_unit: app-pcmk, svc_port: 1414 }
     verbs:
       qm-create:  { playbook: site-pcmk.yml }
       qm-destroy: { playbook: site-pcmk-qm-down.yml }
@@ -283,8 +283,8 @@ stacks:
     groups: [rdqm_a, rdqm_b]
     provision: ansible/site-rdqm.yml
     secrets: [mqweb_admin_password]
-    qm: { vip: 10.10.1.100, svc_conn: 10.60.0.50 }
-    alloc: { exporter_app_port: 9159, exporter_svc_port: 9160, app_unit: app-rdqm, svc_port: 1414 }
+    qm: { vip: 10.10.1.100 }
+    alloc: { exporter_app_port: 9159, app_unit: app-rdqm, svc_port: 1414 }
     verbs:
       qm-create: { script: rdqm-qm-create.sh }
       qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
@@ -298,8 +298,8 @@ stacks:
     groups: [nha_rhel_a, nha_rhel_b]
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
-    qm: { svc_conn: 10.60.0.50 }
-    alloc: { exporter_app_port: 9161, exporter_svc_port: 9162, app_unit: app-nhar, svc_port: 1414 }
+    qm: {}
+    alloc: { exporter_app_port: 9161, app_unit: app-nhar, svc_port: 1414 }
     verbs:
       qm-create:   { playbook: site-nativeha.yml }
       qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
@@ -321,8 +321,8 @@ stacks:
     groups: [nha_ubuntu_a, nha_ubuntu_b]
     provision: ansible/site-nativeha-ubuntu.yml
     secrets: [mqweb_admin_password]
-    qm: { svc_conn: 10.60.0.50 }
-    alloc: { exporter_app_port: 9163, exporter_svc_port: 9164, app_unit: app-nhau, svc_port: 1414 }
+    qm: {}
+    alloc: { exporter_app_port: 9163, app_unit: app-nhau, svc_port: 1414 }
     verbs:
       qm-create:   { playbook: site-nativeha-ubuntu.yml }
       qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
@@ -331,6 +331,15 @@ stacks:
       dr-cutover:  { playbook: site-nativeha-ubuntu-switchover.yml }
       dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
+
+# svc: — the single shared Business-B counterparty (#446). One SVCQM on svc-sim;
+# each app stack owns its own {SHORT}.SVC.REQUEST queue + responder for independence.
+# Names derive from `short` (SVCQM = {short}QM) — no hardcoded QM literal (#351).
+svc:
+  short: SVC
+  conn: 10.60.0.50        # inter-business WAN CONNAME (was the per-stack qm.svc_conn)
+  listener_port: 1414
+  exporter_port: 9158     # the one shared svc exporter port (freed from pcmk's slot)
 
 # commons: — shared observability stack. Replaces the old `monitoring` setup in the
 # stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.

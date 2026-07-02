@@ -6,9 +6,10 @@
 # active-instance hostnames, and the our-side CONNAME list (this arm's own net-ext
 # IPs) differ; the MQSC body and the shared building blocks are identical.
 #
-# Provision-phase var contract (#350/#351): the bootstrap `provision` phase passes
-# qm_app (=NHAUAPP) / qm_svc (=NHAUSVC) / chl_to_svc / chl_to_app. Native HA has no
-# floating VIP, so the SVC CONNAME and our-side CONNAME list are lab constants here.
+# Provision-phase var contract (#350/#351/#446): the bootstrap `provision` phase passes
+# qm_app (=NHAUAPP) / qm_svc (=SVCQM, shared) / chl_to_svc / chl_to_app / svc_req_queue
+# (=NHAU.SVC.REQUEST). Native HA has no floating VIP, so the SVC CONNAME and our-side
+# CONNAME list are lab constants here.
 - import_playbook: _nativeha-ubuntu-cluster-ha.yml
 
 # Folded qm-create: our-side inter-QM + app MQSC on the ACTIVE Native HA instance.
@@ -56,7 +57,7 @@
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ') CERTLABL('{{ qm_name }}') MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)
         REFRESH SECURITY TYPE(CONNAUTH)
         DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
-        DEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
+        DEFINE QREMOTE(SVC.REQUEST) RNAME({{ svc_req_queue }}) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
         DEFINE QLOCAL({{ qm_svc_name }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.{{ qm_svc_name }}) REPLACE
         DEFINE CHANNEL({{ qm_name }}.{{ qm_svc_name }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc_name }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
         DEFINE CHANNEL({{ qm_svc_name }}.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE

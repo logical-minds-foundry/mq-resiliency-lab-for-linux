@@ -57,6 +57,7 @@ TOPO = (
     "      svc_port: 1414\n"
     "    verbs:\n"
     "      qm-status:  { pcs: 'status resources' }\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
@@ -226,9 +227,10 @@ def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
     assert "site-pcmk.yml" in argv  # the stack's provision playbook (basename)
     # #351 QM extra-vars sourced from stack.qm (names DERIVE from short)
     assert "qm_app=PCMKAPP" in argv
-    assert "qm_svc=PCMKSVC" in argv
-    assert "chl_to_svc=PCMKAPP.PCMKSVC" in argv
-    assert "chl_to_app=PCMKSVC.PCMKAPP" in argv
+    assert "qm_svc=SVCQM" in argv  # single shared counterparty (#446)
+    assert "chl_to_svc=PCMKAPP.SVCQM" in argv
+    assert "chl_to_app=SVCQM.PCMKAPP" in argv
+    assert "svc_req_queue=PCMK.SVC.REQUEST" in argv  # this stack's own queue on SVCQM
 
 
 def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
@@ -248,6 +250,7 @@ def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     lab = tmp_path / "lab"
     (lab / "networks").mkdir(parents=True)
@@ -348,6 +351,7 @@ def test_all_vms_dedupes_overlap(monkeypatch, tmp_path):
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         "commons:\n"
         "  groups: [obs_box, probe]\n"
         "  provision: ansible/site-obs.yml\n"

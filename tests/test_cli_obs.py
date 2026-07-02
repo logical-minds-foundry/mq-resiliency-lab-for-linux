@@ -51,6 +51,7 @@ def _seed_monitoring(tmp_path):
         "  rdqm_a: [rdqm-a1]\n  rdqm_b: [rdqm-b1]\n"
         "  svc: [svc-sim]\n  app: [app-client]\n"
         "  obs_box: [obs]\n  probe: [mon-probe]\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
 
 
@@ -85,7 +86,7 @@ def test_obs_targets_also_writes_mq_exporters_deployment_list(monkeypatch, tmp_p
         "  pcmk-ubuntu:\n"
         "    short: PCMK\n"
         "    qm: {vip: 10.10.1.200}\n"
-        "    alloc: {exporter_app_port: 9157, exporter_svc_port: 9158}\n"
+        "    alloc: {exporter_app_port: 9157}\n"
     )
     topo.write_text(topo.read_text() + stack_yaml)
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))

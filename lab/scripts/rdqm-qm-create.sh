@@ -15,15 +15,19 @@
 # AMQ3877E). So the FIP is spent on the data plane (VIP) for the app's HA path; the partner
 # (RDQMSVC) reaches us over net-ext via a per-node CONNAME list, not a second FIP.
 #
-# Usage: rdqm-qm-create.sh [QM=RDQMAPP] [VIP=10.10.1.100] [SVC_CONN]
-#   VIP       - site-A single floating IP (data plane); the app rides HA via this addr
-#   SVC_CONN - counterparty CONNAME; when set, define the our-side inter-QM MQSC to RDQMSVC
+# Usage: rdqm-qm-create.sh [QM=RDQMAPP] [VIP=10.10.1.100] [SVC_CONN] [QM_SVC=SVCQM] [SVC_REQ_QUEUE]
+#   VIP           - site-A single floating IP (data plane); the app rides HA via this addr
+#   SVC_CONN      - counterparty CONNAME; when set, define the our-side inter-QM MQSC to QM_SVC
+#   QM_SVC        - the shared counterparty QM name (SVCQM); #446
+#   SVC_REQ_QUEUE - this stack's own request queue on QM_SVC ({SHORT}.SVC.REQUEST); #446
 set -euo pipefail
 QM="${1:-RDQMAPP}"
 VIP="${2:-10.10.1.100}"
 SVC_CONN="${3:-}"
-# Derive the SVC counterparty name from QM (RDQMAPP -> RDQMSVC).
-QM_SVC="${QM/APP/SVC}"
+# The shared SVC counterparty (SVCQM) and this stack's request queue on it (#446),
+# threaded from QmConfig; no longer derived {QM/APP/SVC}.
+QM_SVC="${4:-SVCQM}"
+SVC_REQ_QUEUE="${5:-}"
 cd "$(dirname "$0")/../../ansible"
 
 # Lab DR topology (net-wan replication addresses + per-site data VIPs). Fixed for this lab,
@@ -81,9 +85,10 @@ fi
 
 # Our-side inter-QM MQSC to the SVC counterparty (#147), only when a counterparty
 # CONNAME is given (the distributed setup). Defined on the site-A primary; replicates
-# with the QM. QM_SVC is derived from QM (APP -> SVC suffix swap).
+# with the QM. QM_SVC is the shared counterparty (SVCQM); this stack's request queue
+# on it is SVC_REQ_QUEUE ({SHORT}.SVC.REQUEST) — both threaded in, not derived (#446).
 if [ -n "$SVC_CONN" ]; then
-  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME(SVC.REQUEST) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 
 run rdqm-a1 "/opt/mqm/bin/rdqmstatus -m $QM"

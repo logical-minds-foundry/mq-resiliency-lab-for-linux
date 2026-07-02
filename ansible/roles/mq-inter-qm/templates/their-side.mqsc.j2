@@ -3,7 +3,7 @@
 * leave via SENDER {{ qmgr_name }}.{{ our_qm }} over xmitq {{ our_qm }}, whose CONNAME
 * lists BOTH our site VIPs so it follows our QM across HA (same site) and DR (other
 * site). Retry timers tuned for lab snappiness (spec §5.2 / §6).
-DEFINE QLOCAL(SVC.REQUEST) DEFPSIST(YES) REPLACE
+DEFINE QLOCAL({{ svc_req_queue }}) DEFPSIST(YES) REPLACE
 * The co-located service responder connects client-mode via this SVRCONN (#180):
 * pip's pymqi is client-only, so a true bindings connect fails 2058. MCAUSER(mqm)
 * gives it admin authority; CHLAUTH is already disabled on this QM.

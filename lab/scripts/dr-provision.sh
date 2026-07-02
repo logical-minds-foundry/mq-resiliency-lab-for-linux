@@ -16,6 +16,6 @@ cd "$HERE/../../ansible"
 # #351 QM extra-vars — the canonical path is `mqlab bootstrap pcmk-ubuntu`, which
 # passes them via phases._qm_extra_vars. This legacy wrapper requires them on the
 # command line, e.g.:
-#   dr-provision.sh -e qm_app=PCMKAPP -e qm_svc=PCMKSVC \
-#                   -e chl_to_svc=PCMKAPP.PCMKSVC -e chl_to_app=PCMKSVC.PCMKAPP
+#   dr-provision.sh -e qm_app=PCMKAPP -e qm_svc=SVCQM -e svc_req_queue=PCMK.SVC.REQUEST \
+#                   -e chl_to_svc=PCMKAPP.SVCQM -e chl_to_app=SVCQM.PCMKAPP
 exec ansible-playbook site-pcmk.yml "$@"

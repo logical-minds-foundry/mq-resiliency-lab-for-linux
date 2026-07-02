@@ -80,6 +80,7 @@ TOPO = (
     "      svc_port: 1414\n"
     "    verbs:\n"
     "      qm-status:  { cmd: 'dspmq -m {qm}' }\n"
+    "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     "commons:\n"
     "  groups: [obs_box, probe, svc, app]\n"
     "  provision: ansible/site-obs.yml\n"
@@ -277,6 +278,7 @@ def test_other_stacks_up_skips_reserved_stack_no_cluster_group(monkeypatch, tmp_
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         "commons:\n"
         "  groups: []\n"
     )
@@ -322,6 +324,7 @@ def test_other_stacks_up_skips_stack_with_empty_members(monkeypatch, tmp_path):
         "    qm: {}\n"
         "    alloc: {}\n"
         "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         "commons:\n"
         "  groups: []\n"
     )

@@ -108,8 +108,10 @@ def test_pcmk_stack_composed():
     dist = lab_stacks()["pcmk-ubuntu"]
     assert dist.groups == ["san_a", "pcmk_a", "san_b", "pcmk_b"]
     assert dist.provision == "ansible/site-pcmk.yml"
-    assert dist.qm.qm_app == "PCMKAPP" and dist.qm.qm_svc == "PCMKSVC"  # short-derived (#351)
-    assert dist.qm.chl_to_svc == "PCMKAPP.PCMKSVC"
+    assert dist.qm.qm_app == "PCMKAPP"  # short-derived (#351)
+    assert dist.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
+    assert dist.qm.chl_to_svc == "PCMKAPP.SVCQM"
+    assert dist.qm.req_queue == "PCMK.SVC.REQUEST"  # this stack's own queue on SVCQM
     assert dist.qm.svc_conn == "10.60.0.50"
 
 
@@ -119,6 +121,8 @@ def test_rdqm_stack_composed():
     assert s.mechanism == "rdqm"
     assert s.groups == ["rdqm_a", "rdqm_b"]
     assert s.provision == "ansible/site-rdqm.yml"
-    assert s.qm.qm_app == "RDQMAPP" and s.qm.qm_svc == "RDQMSVC"  # (#351)
+    assert s.qm.qm_app == "RDQMAPP"  # (#351)
+    assert s.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
+    assert s.qm.req_queue == "RDQM.SVC.REQUEST"
     assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
