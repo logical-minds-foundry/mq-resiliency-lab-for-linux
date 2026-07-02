@@ -15,9 +15,11 @@ alternatives are ranked. Start a new guide by copying
 - **[JSON diagnostic logging](mq-json-logging-guide.md)** — make IBM MQ write its
   diagnostic messages as one JSON object per line, across the queue manager,
   clients, and mqweb.
+- **[Metrics & monitoring configuration](mq-metrics-config-guide.md)** — enable
+  the queue-manager monitoring and statistics a metrics collector (e.g. the IBM MQ
+  Prometheus exporter) needs, with coherent per-object inheritance.
 
 ## Planned
 
-Further guides tracked under the epic: Prometheus / MQ-metrics configuration, TCP
-configuration, and security (TLS with channel and connection authentication and
-object authorizations), among others.
+Further guides tracked under the epic: TCP configuration, and security (TLS with
+channel and connection authentication and object authorizations), among others.
