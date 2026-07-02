@@ -52,7 +52,8 @@ _STATUS_MAP: list[dict[str, Any]] = [
 _APP_SVRCONN = "APP.SVRCONN"
 _SVC_SVRCONN = "SVC.SVRCONN"
 _APP_REPLY = "APP.REPLY"
-_SVC_REQUEST = "SVC.REQUEST"
+# The request queue name is now per-stack ({SHORT}.SVC.REQUEST), passed into the board
+# rather than a shared constant (#446).
 
 # Exporter metadata columns stripped from the queue/channel tables (name + value kept).
 _TABLE_DROP_COLS = [
@@ -108,10 +109,15 @@ def _status_band(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str
     ]
 
 
-def _flow_strip(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str, Any]]:
+def _flow_strip(
+    ds_uid: str, app_qm: str, svc_qm: str, req_queue: str, y: int
+) -> list[dict[str, Any]]:
     """② The message path as a row of positioned tiles (not a custom viz, so it stays
     generic): app-client → APP.SVRCONN → [APP QM] → SDR → [SVC QM] → SVC.SVRCONN →
-    svc-sim, with the APP.REPLY return leg. Each hop colours on its own metric."""
+    svc-sim, with the APP.REPLY return leg. Each hop colours on its own metric.
+
+    `req_queue` is THIS stack's own request queue on the shared SVCQM ({SHORT}.SVC.REQUEST),
+    so the depth tile reflects this stack's traffic, not the summed shared queue (#446)."""
     sdr = f"{app_qm}.{svc_qm}"  # our-side sender to the SVC counterparty
     w = 3
     tiles = [
@@ -121,7 +127,7 @@ def _flow_strip(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str,
         (sdr, _channel_status_expr(app_qm, sdr), None, _STATUS_MAP),
         (f"{svc_qm} (svc)", _qm_status_expr(svc_qm), None, _STATUS_MAP),
         (_SVC_SVRCONN, _channel_status_expr(svc_qm, _SVC_SVRCONN), None, _STATUS_MAP),
-        ("svc-sim: " + _SVC_REQUEST, _queue_depth_expr(svc_qm, _SVC_REQUEST), None, None),
+        ("svc-sim: " + req_queue, _queue_depth_expr(svc_qm, req_queue), None, None),
         (_APP_REPLY, _queue_depth_expr(app_qm, _APP_REPLY), None, None),
     ]
     return [
@@ -248,15 +254,21 @@ def _title_banner(stack_name: str, app_qm: str, svc_qm: str, y: int) -> dict[str
 
 
 def render_messaging_board(
-    stack_name: str, app_qm: str, svc_qm: str, ds_uid: str = "prometheus", loki_uid: str = "loki"
+    stack_name: str,
+    app_qm: str,
+    svc_qm: str,
+    req_queue: str,
+    ds_uid: str = "prometheus",
+    loki_uid: str = "loki",
 ) -> dict[str, Any]:
-    """Assemble the flow-oriented messaging board for one stack."""
+    """Assemble the flow-oriented messaging board for one stack. `req_queue` is this
+    stack's request queue on the shared SVCQM ({SHORT}.SVC.REQUEST), #446."""
     panels = [
         _title_banner(stack_name, app_qm, svc_qm, y=0),
         _row_header("① Messaging status — QMs · success · rate · failures", y=2),
         *_status_band(ds_uid, app_qm, svc_qm, y=3),
         _row_header("② The message flow — app-client ⇄ SVC", y=6),
-        *_flow_strip(ds_uid, app_qm, svc_qm, y=7),
+        *_flow_strip(ds_uid, app_qm, svc_qm, req_queue, y=7),
         _row_header("⟳ Round-trip — throughput · failures · latency", y=11),
         *_roundtrip_timeline(ds_uid, y=12),
         _row_header("▤ Round-trip logs", y=19),
@@ -326,7 +338,9 @@ def write_messaging_dashboards() -> list[Path]:
     sites, so the per-stack loop lives (and is tested) here, not inline in cli."""
     paths: list[Path] = []
     for stack in _messaging_stacks():
-        board = render_messaging_board(stack.name, stack.qm.qm_app, stack.qm.qm_svc)
+        board = render_messaging_board(
+            stack.name, stack.qm.qm_app, stack.qm.qm_svc, stack.qm.req_queue
+        )
         path = messaging_dashboard_path(stack.name)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(board, indent=2) + "\n")
