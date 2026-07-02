@@ -62,5 +62,10 @@ nav:
       - Release Notes:
           - releases/index.md
   - Getting Started: getting-started.md
+  - Guides:
+      - guides/index.md
+      - Authoring standard: guides/guide-standard.md
+      - Guide template: guides/_template.md
+      - JSON diagnostic logging: guides/mq-json-logging-guide.md
   - Architecture: architecture/index.md
   - Design & Specs: design-and-specs.md
