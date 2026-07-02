@@ -41,6 +41,32 @@ _TEXTFILE_HELP = (
     ("app_roundtrip_latency_ms", "histogram", "Successful round-trip latency (ms)."),
 )
 
+# MQ reason codes on which the client CONNECTION is dead/unusable and the workload
+# must re-establish it (vs a per-message failure like 2033 MQRC_NO_MSG_AVAILABLE —
+# a slow/missing reply — that leaves the connection usable). Plain ints so this
+# stays pymqi-free (run() imports pymqi lazily). The #457 crux: on a Native HA
+# failover the requester was reusing a dead hconn forever (MQCNO_RECONNECT did not
+# arm); it now tears down and reconnects on these codes. (#457)
+_RECONNECT_REASONS: frozenset[int] = frozenset(
+    {
+        2009,  # MQRC_CONNECTION_BROKEN
+        2018,  # MQRC_HCONN_ERROR
+        2019,  # MQRC_HOBJ_ERROR
+        2059,  # MQRC_Q_MGR_NOT_AVAILABLE
+        2161,  # MQRC_Q_MGR_QUIESCING
+        2162,  # MQRC_Q_MGR_STOPPING
+        2202,  # MQRC_CONNECTION_QUIESCING
+        2203,  # MQRC_CONNECTION_STOPPING
+    }
+)
+
+
+def _is_reconnectable(reason: int) -> bool:
+    """Whether an MQMIError reason means the client connection is dead and must be
+    re-established, vs a per-message failure that leaves it usable (e.g. 2033, a
+    missed reply). Drives the reconnect decision in run()'s streaming loop. (#457)"""
+    return reason in _RECONNECT_REASONS
+
 
 class RoundTripStats:
     """Accumulates the round-trip signal: attempt/failure counters and a latency
@@ -165,23 +191,43 @@ def run(args: argparse.Namespace) -> int:
         if args.certlabel:
             sco.CertificateLabel = args.certlabel.encode()
 
-    qmgr = pymqi.QueueManager(None)
-    qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT)
-    qreq = pymqi.Queue(qmgr, args.request_queue)
-    qrep = pymqi.Queue(qmgr, args.reply_queue)
     gmo = pymqi.GMO(
         Options=(pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING),
         WaitInterval=15000,
         MatchOptions=pymqi.CMQC.MQMO_MATCH_CORREL_ID,
     )
 
+    def _connect() -> tuple:
+        """(Re)establish the client connection + queue handles. MQCNO_RECONNECT is
+        kept (transparent MQI reconnect when it engages), but run() no longer relies
+        on it alone — see the outer reconnect loop below. (#457)"""
+        qmgr = pymqi.QueueManager(None)
+        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT)
+        return qmgr, pymqi.Queue(qmgr, args.request_queue), pymqi.Queue(qmgr, args.reply_queue)
+
+    def _disconnect(qmgr: object) -> None:
+        """Best-effort teardown — the hconn may already be dead, so a disconnect
+        error here is expected and swallowed (this is the cleanup path, not a signal)."""
+        if qmgr is None:
+            return
+        try:
+            qmgr.disconnect()
+        except pymqi.MQMIError:
+            pass
+
     stats = RoundTripStats()
     payload = b"x" * max(1, args.msg_size)
     interval = 1.0 / args.rate if args.rate > 0 else 0.0
+    qmgr = qreq = qrep = None
     i = 0
     try:
         while args.count == 0 or i < args.count:
             try:
+                if qmgr is None:
+                    # (Re)connect. A connect failure mid-failover (the QM briefly
+                    # unreachable) is caught below and retried next iteration — the
+                    # --rate interval is the backoff.
+                    qmgr, qreq, qrep = _connect()
                 put_md = pymqi.MD(
                     ReplyToQ=args.reply_queue.encode(),
                     ReplyToQMgr=args.qm.encode(),
@@ -195,17 +241,22 @@ def run(args: argparse.Namespace) -> int:
                 stats.record_success(dt)
                 print(f"[{i}] round-trip {dt:.0f}ms <- {reply.decode(errors='replace')[:48]}", flush=True)
             except pymqi.MQMIError as exc:
-                # Fail loud (never swallow) but keep streaming: a missed reply / dead
-                # peer is a data point, and MQCNO_RECONNECT re-establishes the QM.
+                # Fail loud (never swallow) but keep streaming: a missed reply is a
+                # data point. If the CONNECTION is dead (not just a missed reply),
+                # tear it down so the next iteration reconnects fresh — MQCNO_RECONNECT
+                # alone does not recover a Native HA failover here (#457).
                 stats.record_failure()
                 print(f"[{i}] round-trip FAILED: {exc}", flush=True)
+                if _is_reconnectable(exc.reason):
+                    _disconnect(qmgr)
+                    qmgr = qreq = qrep = None
             if args.textfile:
                 publish_metrics(args.textfile, stats)
             i += 1
             if interval:
                 time.sleep(interval)
     finally:
-        qmgr.disconnect()
+        _disconnect(qmgr)
     return 0 if stats.failures == 0 else 1
 
 
