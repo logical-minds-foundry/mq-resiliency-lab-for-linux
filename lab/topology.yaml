@@ -51,6 +51,16 @@ nodes:
     memory: 1024
     nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }
 
+  # --- DNS infrastructure (#474, epic .github#21): per-side authoritative
+  # nameservers, their own failure domain so DNS can be broken and measured
+  # independently later. infra-client serves client.com (our estate) and reaches
+  # guests on the mgmt + both site data planes; infra-svc is the mock service.com
+  # nameserver on the inter-business WAN. Default (small) footprint — BIND is light. ---
+  infra-client:
+    nics: { net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-data-b: 10.10.2.8, net-ext: 10.60.0.8 }
+  infra-svc:
+    nics: { net-mgmt: 10.50.0.9, net-ext: 10.60.0.9 }
+
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
     platform: rhel96-x86_64
@@ -244,6 +254,7 @@ groups:
   # (Ansible warns on group==host); probe/mon-probe already differ.
   obs_box: [obs]
   probe:   [mon-probe]
+  infra:   [infra-client, infra-svc]
 
 # stacks: — canonical 4-stack registry (#350). Each stack is the authoritative
 # union of its old arm (mechanism/verbs/short) and its full-HADR distributed setup
@@ -344,5 +355,5 @@ svc:
 # commons: — shared observability stack. Replaces the old `monitoring` setup in the
 # stacks namespace; the `monitoring` setup entry above remains intact until Task 1b.
 commons:
-  groups: [obs_box, probe, svc, app]
+  groups: [obs_box, probe, svc, app, infra]
   provision: ansible/site-obs.yml
