@@ -126,3 +126,28 @@ def test_rdqm_stack_composed():
     assert s.qm.req_queue == "RDQM.SVC.REQUEST"
     assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
+
+
+def test_dns_infra_nodes_present_and_attached():
+    """The DNS infra nodes (#474): infra-client is authoritative-to-be for
+    client.com and reaches our guests on the mgmt + both data planes; infra-svc
+    is the mock service.com nameserver on the inter-business WAN. Both join the
+    `infra` group, which commons brings up with the shared set."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    nodes = topo["nodes"]
+    assert nodes["infra-client"]["nics"] == {
+        "net-mgmt": "10.50.0.8",
+        "net-data-a": "10.10.1.8",
+        "net-data-b": "10.10.2.8",
+        "net-ext": "10.60.0.8",
+    }
+    assert nodes["infra-svc"]["nics"] == {
+        "net-mgmt": "10.50.0.9",
+        "net-ext": "10.60.0.9",
+    }
+    assert topo["groups"]["infra"] == ["infra-client", "infra-svc"]
+    assert "infra" in topo["commons"]["groups"]
