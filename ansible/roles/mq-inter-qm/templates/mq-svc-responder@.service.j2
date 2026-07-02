@@ -1,0 +1,19 @@
+[Unit]
+# Per-stack responder (#446): %i is this stack's request queue on the shared SVCQM
+# (e.g. mq-svc-responder@PCMK.SVC.REQUEST). Each stack gets its own instance so their
+# always-on #429 streams stay independent — a stuck responder affects only its stack.
+Description=SVC service responder for %i (client-mode localhost; QM-to-QM #147/#180)
+After=mq-{{ qmgr_name }}.service
+Requires=mq-{{ qmgr_name }}.service
+
+[Service]
+Type=simple
+User=mqm
+Group=mqm
+Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
+ExecStart=/var/mqm/rvenv/bin/python /var/mqm/svc_responder.py --qm {{ qmgr_name }} --in-queue %i --channel SVC.SVRCONN --conn "localhost(1414)" --keyrepo /var/mqm/ssl/svc-responder/key --certlabel svc-responder
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

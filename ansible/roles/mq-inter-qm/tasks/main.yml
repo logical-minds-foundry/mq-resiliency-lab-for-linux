@@ -76,16 +76,18 @@
     mode: "0644"
   become: true
 
-- name: responder systemd unit
+- name: responder systemd template unit (per-stack instance; #446)
   ansible.builtin.template:
-    src: mq-svc-responder.service.j2
-    dest: /etc/systemd/system/mq-svc-responder.service
+    src: mq-svc-responder@.service.j2
+    dest: /etc/systemd/system/mq-svc-responder@.service
     mode: "0644"
   become: true
 
-- name: enable + start the responder
+# Each stack enables its OWN instance keyed on its request queue ({SHORT}.SVC.REQUEST),
+# so responders stay independent across the stacks sharing the one SVCQM (#446).
+- name: enable + start the responder for this stack's request queue
   ansible.builtin.systemd:
-    name: mq-svc-responder
+    name: "mq-svc-responder@{{ svc_req_queue }}.service"
     enabled: true
     state: started
     daemon_reload: true

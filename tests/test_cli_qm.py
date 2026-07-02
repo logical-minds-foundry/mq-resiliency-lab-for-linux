@@ -277,9 +277,10 @@ def test_qm_create_runs_rdqm_script_with_qm_and_vip(monkeypatch, tmp_path):
     argv = runner.recorded[-1].argv
     assert argv[0] == "bash"
     assert argv[1].endswith("/lab/scripts/rdqm-qm-create.sh")
-    # QM, the single data-plane floating IP, and the shared counterparty CONNAME
-    # (from the svc: block, #446). No partner VIP: RDQM allows one floating IP per QM.
-    assert argv[2:] == ["RDQMAPP", "10.10.1.100", "10.60.0.50"]
+    # QM, the single data-plane floating IP, the shared counterparty CONNAME (from the
+    # svc: block), the shared counterparty QM (SVCQM), and this stack's request queue
+    # on it (#446). No partner VIP: RDQM allows one floating IP per QM.
+    assert argv[2:] == ["RDQMAPP", "10.10.1.100", "10.60.0.50", "SVCQM", "RDQM.SVC.REQUEST"]
 
 
 def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):
