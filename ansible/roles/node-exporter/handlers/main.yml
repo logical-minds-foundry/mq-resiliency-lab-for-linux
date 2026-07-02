@@ -4,3 +4,9 @@
     name: node_exporter
     state: restarted
     daemon_reload: true
+
+# Apply the drop-zone tmpfiles rule immediately (not just on next boot) so the
+# 02775 mode takes effect this run (#458).
+- name: apply node_exporter textfile tmpfiles
+  ansible.builtin.command: systemd-tmpfiles --create /etc/tmpfiles.d/node-exporter-textfile.conf
+  changed_when: true

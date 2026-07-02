@@ -35,6 +35,18 @@
     group: node_exporter
     mode: "02775"
 
+# Make the drop-zone mode regression-proof (#458): declare it to systemd-tmpfiles so
+# the setgid+group-write mode is owned by ONE declarative source and re-asserted on
+# every boot — it can no longer silently drift back to 0755 (the #449 hazard).
+- name: node_exporter textfile drop-zone tmpfiles.d rule
+  ansible.builtin.copy:
+    src: node-exporter-textfile.conf
+    dest: /etc/tmpfiles.d/node-exporter-textfile.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: apply node_exporter textfile tmpfiles
+
 - name: install the systemd unit
   ansible.builtin.template:
     src: node_exporter.service.j2
