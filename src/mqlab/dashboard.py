@@ -113,19 +113,18 @@ def _cpu_panel(label: str, sel: str, y: int) -> dict[str, Any]:
 
 # --- MQ Service (Layer 2) ---------------------------------------------------
 # One curated row per queue manager we actually run today: our HA QM (PCMKAPP)
-# and the SVC counterparty (PCMKSVC, #153). Each entry also names the channels we
-# care about (the client SVRCONN + the inter-QM SENDER/RECEIVER pair, named
-# identically on both ends), so the panel draws a tile per channel object even
-# when it has no live status. Queue rows are driven by the exporter's curated
-# monitoredQueues, so the depth table + rate graphs need no per-QM list here.
-# PCMKSVC reads "No status" until its exporter lands (#182); RDQMAPP / QMAIN return
-# if/when those arms are in play.
+# and the shared SVC counterparty (SVCQM, #446 — was the per-stack PCMKSVC). Each
+# entry also names the channels we care about (the client SVRCONN + the inter-QM
+# SENDER/RECEIVER pair, named identically on both ends), so the panel draws a tile
+# per channel object even when it has no live status. Queue rows are driven by the
+# exporter's curated monitoredQueues, so the depth table + rate graphs need no per-QM
+# list here.
 QMS: list[tuple[str, str, list[str]]] = [
-    ("PCMKAPP", "service · Ubuntu HA/DR", ["APP.SVRCONN", "PCMKAPP.PCMKSVC", "PCMKSVC.PCMKAPP"]),
+    ("PCMKAPP", "service · Ubuntu HA/DR", ["APP.SVRCONN", "PCMKAPP.SVCQM", "SVCQM.PCMKAPP"]),
     (
-        "PCMKSVC",
+        "SVCQM",
         "counterparty · SVC service",
-        ["SVC.SVRCONN", "PCMKSVC.PCMKAPP", "PCMKAPP.PCMKSVC"],
+        ["SVC.SVRCONN", "SVCQM.PCMKAPP", "PCMKAPP.SVCQM"],
     ),
 ]
 

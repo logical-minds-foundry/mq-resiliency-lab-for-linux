@@ -6,9 +6,10 @@
 # active-instance hostnames, and the our-side CONNAME list (this arm's own net-ext
 # IPs) differ; the MQSC body and the shared building blocks are identical.
 #
-# Provision-phase var contract (#350/#351): the bootstrap `provision` phase passes
-# qm_app (=NHAUAPP) / qm_svc (=NHAUSVC) / chl_to_svc / chl_to_app. Native HA has no
-# floating VIP, so the SVC CONNAME and our-side CONNAME list are lab constants here.
+# Provision-phase var contract (#350/#351/#446): the bootstrap `provision` phase passes
+# qm_app (=NHAUAPP) / qm_svc (=SVCQM, shared) / chl_to_svc / chl_to_app / svc_req_queue
+# (=NHAU.SVC.REQUEST). Native HA has no floating VIP, so the SVC CONNAME and our-side
+# CONNAME list are lab constants here.
 - import_playbook: _nativeha-ubuntu-cluster-ha.yml
 
 # Folded qm-create: our-side inter-QM + app MQSC on the ACTIVE Native HA instance.

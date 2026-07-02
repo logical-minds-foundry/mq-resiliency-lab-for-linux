@@ -181,6 +181,16 @@ def test_render_pki_entities_dedupes_repeated_svc_cn(monkeypatch, tmp_path):
     assert sum(1 for e in data if e["cn"] == "SVCQM") == 1
 
 
+def test_render_pki_entities_exactly_one_svc_org_cn_is_svcqm(monkeypatch, tmp_path):
+    """The svc side collapses to a single shared SVCQM cert across all stacks (#446) —
+    not one {short}SVC per stack. Locks the dedup the shared model relies on."""
+    _seed(monkeypatch, tmp_path, _PKI_TOPO)
+    data = json.loads(cli._render_pki_entities().read_text())
+    # the QM-derived svc-org CN (excluding the fixed svc-responder client cert)
+    svc_qm_cns = [e["cn"] for e in data if e.get("org") == "svc-org" and e["cn"] not in _FIXED_CNS]
+    assert svc_qm_cns == ["SVCQM"]
+
+
 def test_render_pki_entities_writes_to_work_pki(monkeypatch, tmp_path):
     """The rendered file must land at build/work/pki/entities.json."""
     _seed(monkeypatch, tmp_path, _PKI_TOPO)

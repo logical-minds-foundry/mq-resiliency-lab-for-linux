@@ -27,7 +27,7 @@ mkdir -p "$(dirname "$APP_LEDGER")"
 
 # Responder on the surviving SVC side (background; outlives the flow window).
 vagrant ssh svc-sim -c \
-  "~/mqvenv/bin/python ~/dr_responder.py --qm ${QM_SVC:-PCMKSVC} --conn 'localhost(1414)' \
+  "~/mqvenv/bin/python ~/dr_responder.py --qm ${QM_SVC:-SVCQM} --conn 'localhost(1414)' \
    --in-queue SVC.REQUEST --out-queue APP.REPLY --seconds $((SECONDS_RUN + 10)) \
    --ledger ~/dr-ledgers/svc.jsonl" &
 RESP_PID=$!

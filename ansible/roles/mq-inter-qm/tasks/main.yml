@@ -1,6 +1,6 @@
 # Their-side of the QM-to-QM link (#147): apply the inter-QM MQSC to the SVC QM and
 # run the bindings responder as a systemd service. Expects (set by the caller):
-#   qmgr_name  — the counterparty SVC QM (e.g. PCMKSVC, RDQMSVC, NHARSVC)
+#   qmgr_name  — the single shared counterparty SVC QM (SVCQM, #446)
 #   our_qm     — our HA QM name (e.g. PCMKAPP, RDQMAPP, NHARAPP)
 #   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
 # The SVC QM must already be created + started (mq-qmgr role runs first).
