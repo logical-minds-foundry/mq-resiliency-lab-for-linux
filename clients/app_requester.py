@@ -112,6 +112,19 @@ def write_textfile(path: str, text: str) -> None:
         raise
 
 
+def publish_metrics(path: str, stats: RoundTripStats) -> None:
+    """Publish the round-trip metric textfile, tolerating a write failure loudly.
+
+    The textfile is a *side* signal; the request/reply stream is the product. A
+    transient inability to write it (e.g. the node-exporter textfile dir not yet
+    writable by us) must never crash the workload -- but it must be loud, never
+    swallowed. Mirrors the MQMIError policy in run(): report and keep streaming."""
+    try:
+        write_textfile(path, render_prom(stats))
+    except OSError as exc:
+        print(f"textfile publish FAILED (metrics only, stream continues): {exc}", flush=True)
+
+
 def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "PCMKAPP"))
@@ -187,7 +200,7 @@ def run(args: argparse.Namespace) -> int:
                 stats.record_failure()
                 print(f"[{i}] round-trip FAILED: {exc}", flush=True)
             if args.textfile:
-                write_textfile(args.textfile, render_prom(stats))
+                publish_metrics(args.textfile, stats)
             i += 1
             if interval:
                 time.sleep(interval)

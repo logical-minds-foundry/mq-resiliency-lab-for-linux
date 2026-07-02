@@ -21,13 +21,19 @@
     remote_src: true
   notify: restart node_exporter
 
-- name: node_exporter textfile dir
+# A shared drop zone, not node_exporter's private dir: the root-run collectors AND
+# the unprivileged app-requester (User=vagrant, in the node_exporter group) publish
+# .prom files here. setgid + group-write (02775) keeps it writable by any group
+# member regardless of which role chowned it last — this play runs in the `observe`
+# phase, AFTER app-requester's `provision`, so 0755 here silently stole write access
+# from vagrant and crash-looped the requester on mkstemp EACCES (#449).
+- name: node_exporter textfile dir (shared, group-writable drop zone)
   ansible.builtin.file:
     path: /var/lib/node_exporter/textfile
     state: directory
     owner: node_exporter
     group: node_exporter
-    mode: "0755"
+    mode: "02775"
 
 - name: install the systemd unit
   ansible.builtin.template:
