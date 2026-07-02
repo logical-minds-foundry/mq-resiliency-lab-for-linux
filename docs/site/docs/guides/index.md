@@ -18,8 +18,11 @@ alternatives are ranked. Start a new guide by copying
 - **[Metrics & monitoring configuration](mq-metrics-config-guide.md)** — enable
   the queue-manager monitoring and statistics a metrics collector (e.g. the IBM MQ
   Prometheus exporter) needs, with coherent per-object inheritance.
+- **[TCP configuration](mq-tcp-config-guide.md)** — tune the `TCP` stanza and the
+  OS keepalive timers for fast dead-peer detection (HA failover), plus listener
+  backlog, connect timeout, and buffers.
 
 ## Planned
 
-Further guides tracked under the epic: TCP configuration, and security (TLS with
-channel and connection authentication and object authorizations), among others.
+Further guides tracked under the epic: security (TLS with channel and connection
+authentication and object authorizations), among others.
