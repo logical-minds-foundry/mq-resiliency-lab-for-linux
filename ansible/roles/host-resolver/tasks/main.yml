@@ -1,0 +1,39 @@
+---
+# host-resolver (#477, epic .github#21): point each guest at its org's infra
+# nameserver for the lab domains ONLY (split-horizon — public/apt DNS keeps the
+# guest's upstream, so a lab-DNS outage never breaks provisioning), and add the
+# host's own lab FQDN to /etc/hosts. Per-host facts come from `mqlab dns render`.
+# nsswitch stays `files dns` (Ubuntu default) — /etc/hosts wins, DNS is the
+# fallthrough. HA/replication fabric names are seeded by the HA roles, not here.
+- name: load this host's DNS facts (rendered by `mqlab dns render`)
+  ansible.builtin.set_fact:
+    host_resolver_dns: >-
+      {{ (lookup('file', host_resolver_src ~ '/hostfacts.json') | from_json)[inventory_hostname]
+         | default({}) }}
+
+- name: ensure the resolved.conf.d drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: "0755"
+  become: true
+  when: host_resolver_dns.resolver is defined
+
+- name: lab split-horizon resolver drop-in
+  ansible.builtin.template:
+    src: 00-lab-dns.conf.j2
+    dest: /etc/systemd/resolved.conf.d/00-lab-dns.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: host_resolver_dns.resolver is defined
+  notify: restart systemd-resolved
+
+- name: self lab FQDN in /etc/hosts (survives a lab-DNS outage)
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} lab-dns self (#477)"
+    block: "{{ host_resolver_dns.self_ip }} {{ host_resolver_dns.fqdn }} {{ inventory_hostname }}"
+  become: true
+  when: host_resolver_dns.self_ip is defined

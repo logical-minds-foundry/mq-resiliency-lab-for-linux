@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab.bind import _infra_by_org, lab_render, render
+from mqlab.bind import _infra_by_org, _resolver_ip, host_dns_facts, lab_render, render
 from mqlab.dns import DnsError
 
 TOPO = {
@@ -85,3 +85,28 @@ def test_lab_render_real_topology():
     assert "forwarders { 10.60.0.8; };" in out["named.conf.options.infra-svc"]
     # a real VIP service record lands in the client zone
     assert "pcmk-vip.client.com. IN A 10.10.1.200" in out["client.com.zone"]
+
+
+def test_host_dns_facts_resolver_self_and_fqdn():
+    facts = host_dns_facts(TOPO)
+    # a client-org QM points at infra-client on the shared data-a plane
+    assert facts["qm-a1"] == {
+        "resolver": "10.10.1.8",
+        "self_ip": "10.10.1.11",
+        "fqdn": "qm-a1.client.com",
+    }
+    # infra nodes resolve via their own BIND on loopback
+    assert facts["infra-client"]["resolver"] == "127.0.0.1"
+    assert facts["infra-svc"]["resolver"] == "127.0.0.1"
+    assert facts["infra-svc"]["fqdn"] == "infra-svc.service.com"
+
+
+def test_host_dns_facts_skips_interfaceless_nodes():
+    topo = {**TOPO, "nodes": {**TOPO["nodes"], "ghost": {"nics": {}}}}
+    assert "ghost" not in host_dns_facts(topo)
+
+
+def test_resolver_ip_raises_without_a_shared_plane():
+    infra = _infra_by_org(TOPO)
+    with pytest.raises(DnsError, match="shares no plane with its infra node"):
+        _resolver_ip("lonely", {"nics": {"net-hb-a": "172.16.1.1"}}, infra)
