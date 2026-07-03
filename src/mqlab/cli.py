@@ -509,15 +509,18 @@ app.add_typer(dns_app, name="dns")
 
 @dns_app.command("render")
 def dns_render() -> None:
-    """Render BIND zone files + per-node named.conf into build/work/dns/ (#476)."""
-    from mqlab.bind import lab_render
+    """Render BIND zone files + named.conf + host resolver facts into build/work/dns/ (#476)."""
+    from mqlab.bind import lab_host_dns_facts, lab_render
 
     out_dir = work("dns")
     out_dir.mkdir(parents=True, exist_ok=True)
     files = lab_render()
     for name, content in files.items():
         (out_dir / name).write_text(content)
-    typer.echo(f"rendered {len(files)} DNS files -> {out_dir}")
+    (out_dir / "hostfacts.json").write_text(
+        json.dumps(lab_host_dns_facts(), indent=2, sort_keys=True) + "\n"
+    )
+    typer.echo(f"rendered {len(files) + 1} DNS files -> {out_dir}")
 
 
 def _render_reach_peers() -> Path:

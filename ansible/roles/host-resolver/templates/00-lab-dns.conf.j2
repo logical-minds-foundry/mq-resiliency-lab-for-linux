@@ -1,0 +1,5 @@
+# Managed by the host-resolver role (#477). Split-horizon: only the lab domains
+# resolve via the infra nameserver; everything else keeps the guest's upstream.
+[Resolve]
+DNS={{ host_resolver_dns.resolver }}
+Domains=~client.com ~service.com ~10.in-addr.arpa

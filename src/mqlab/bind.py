@@ -137,3 +137,46 @@ def render(topo: dict[str, Any]) -> dict[str, str]:
 def lab_render() -> dict[str, str]:
     """Render BIND artifacts for the real lab/topology.yaml."""
     return render(_lab_topo())
+
+
+_RESOLVER_ORDER = ("net-data-a", "net-data-b", "net-ext", "net-mgmt")
+
+
+def _resolver_ip(
+    host: str, spec: dict[str, Any], infra: dict[str, tuple[str, dict[str, Any]]]
+) -> str:
+    """The nameserver IP ``host`` should query: its org's infra node on the first
+    plane they share (data planes first — DNS rides the modeled axis, not the
+    Watcher). An infra node resolves via its own BIND on loopback."""
+    if any(host == name for name, _ in infra.values()):
+        return "127.0.0.1"
+    infra_host, infra_spec = infra[_org_of(spec)]
+    host_nics = spec.get("nics") or {}
+    infra_nics = infra_spec.get("nics") or {}
+    for plane in _RESOLVER_ORDER:
+        if plane in host_nics and plane in infra_nics:
+            return str(infra_nics[plane])
+    raise DnsError(f"{host!r} shares no plane with its infra node {infra_host!r}")
+
+
+def host_dns_facts(topo: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """Per-host resolver + self-identity facts the host-resolver role consumes:
+    ``{host -> {resolver, self_ip, fqdn}}``. Interface-less hosts are skipped."""
+    infra = _infra_by_org(topo)
+    out: dict[str, dict[str, str]] = {}
+    for host, spec in (topo.get("nodes") or {}).items():
+        nics = spec.get("nics") or {}
+        if not nics:
+            continue
+        primary = _primary_plane(host, nics)
+        out[host] = {
+            "resolver": _resolver_ip(host, spec, infra),
+            "self_ip": str(nics[primary]),
+            "fqdn": f"{host}.{_zone_of(spec)}",
+        }
+    return out
+
+
+def lab_host_dns_facts() -> dict[str, dict[str, str]]:
+    """Host DNS facts for the real lab/topology.yaml."""
+    return host_dns_facts(_lab_topo())

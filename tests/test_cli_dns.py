@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from mqlab import cli
@@ -31,3 +33,7 @@ def test_dns_render_writes_zone_and_config_files(monkeypatch, tmp_path):
     assert 'zone "1.10.10.in-addr.arpa"' in local
     opts = (dns_dir / "named.conf.options.infra-client").read_text()
     assert "forwarders { 10.60.0.9; };" in opts
+    # host resolver facts for the host-resolver role (#477)
+    facts = json.loads((dns_dir / "hostfacts.json").read_text())
+    assert facts["infra-svc"]["resolver"] == "127.0.0.1"
+    assert facts["infra-client"]["fqdn"] == "infra-client.client.com"
