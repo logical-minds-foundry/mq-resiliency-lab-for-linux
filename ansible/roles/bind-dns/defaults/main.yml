@@ -1,0 +1,5 @@
+---
+# The DNS artifacts rendered by `mqlab dns render` on the control node, copied to
+# the infra guests. The render step (and applying this role) is wired into the
+# provisioning flow by B5 (#478); this role assumes the files already exist.
+bind_dns_src: "{{ playbook_dir }}/../build/work/dns"
