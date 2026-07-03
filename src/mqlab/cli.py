@@ -503,6 +503,23 @@ def obs_net_state() -> None:
         deps.transcript.close()
 
 
+dns_app = typer.Typer(help="DNS zone + BIND config renders (#476)", no_args_is_help=True)
+app.add_typer(dns_app, name="dns")
+
+
+@dns_app.command("render")
+def dns_render() -> None:
+    """Render BIND zone files + per-node named.conf into build/work/dns/ (#476)."""
+    from mqlab.bind import lab_render
+
+    out_dir = work("dns")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    files = lab_render()
+    for name, content in files.items():
+        (out_dir / name).write_text(content)
+    typer.echo(f"rendered {len(files)} DNS files -> {out_dir}")
+
+
 def _render_reach_peers() -> Path:
     """Write work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json
