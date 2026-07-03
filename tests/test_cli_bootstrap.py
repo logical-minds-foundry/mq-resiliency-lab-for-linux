@@ -154,7 +154,7 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=True, vms=True, provision=False, observe=False),
     )
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)  # selection test: prereq-ensure is a separate concern
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
@@ -169,19 +169,20 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
 def test_bootstrap_only_runs_one_phase(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
-    runner = RecordingRunner(results=[ScriptedResult([])])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
     argv0s = [c.argv[0] for c in runner.recorded]
-    assert argv0s == ["ansible-playbook"]  # exactly the provision step, nothing else
+    # exactly the provision phase: render DNS, serve+point (site-dns), then the stack (#478)
+    assert argv0s == ["mqlab", "ansible-playbook", "ansible-playbook"]
 
 
 def test_bootstrap_from_runs_phase_onward(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     _stub_ensure(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--from", "provision"])
@@ -242,7 +243,7 @@ def test_bootstrap_ensures_prereqs_per_selected_phase(monkeypatch, tmp_path):
         "_probe_all",
         lambda deps, stack: _states(net=True, vms=True, provision=False, observe=False),
     )
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     ensured = _record_ensures(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
@@ -254,7 +255,7 @@ def test_bootstrap_ensures_prereqs_per_selected_phase(monkeypatch, tmp_path):
 def test_bootstrap_only_observe_ensures_only_observe(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     ensured = _record_ensures(monkeypatch)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
@@ -265,7 +266,7 @@ def test_bootstrap_only_observe_ensures_only_observe(monkeypatch, tmp_path):
 def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=False))
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     calls: list[str] = []
     # The net phase declares no prereqs, so dispatch must run no per-kind helper.
@@ -297,7 +298,7 @@ def test_provision_injects_stack_secrets(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_source_secret", fake_source)
     monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(2)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
@@ -314,7 +315,7 @@ def test_non_provision_phase_sources_no_secrets(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: sourced.append(name) or "x")
     monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
@@ -347,7 +348,7 @@ def test_bootstrap_renders_inventory_with_aggregate_group(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(2)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 0
@@ -484,7 +485,7 @@ def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
     # observe phase has 3 steps; --step pauses between them and the pauser has no TTY.
-    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_pauser(runner, _FailPause()))
     _stub_ensure(monkeypatch)
     result = CliRunner().invoke(

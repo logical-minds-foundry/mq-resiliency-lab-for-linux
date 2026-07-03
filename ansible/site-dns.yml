@@ -1,0 +1,27 @@
+---
+# DNS bring-up (#478, epic .github#21): serve the generated zones on the infra
+# nodes, then point every guest's resolver at them. Run (by the provision phase)
+# BEFORE the stack's own provision playbook, so the app-requester's runtime
+# reverse lookups (#454) resolve from the outset instead of paying the ~10s
+# getnameinfo tax. Zone artifacts are rendered by `mqlab dns render` immediately
+# before this. The caller limits the run to the stack's VM set (members +
+# commons, which carries the infra nodes).
+
+# Cold-boot guard: a freshly-booted infra guest may not be SSH-ready when this
+# play fires (mirrors site-pcmk.yml / site-distributed-shared.yml, #151).
+- name: wait for the infra nodes to be SSH-ready (cold-boot guard)
+  hosts: infra
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+
+- name: serve DNS on the infra nodes
+  hosts: infra
+  become: true
+  roles: [bind-dns]
+
+- name: point every guest's resolver at the lab nameserver
+  hosts: all
+  roles: [host-resolver]

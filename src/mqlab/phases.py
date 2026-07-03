@@ -186,19 +186,34 @@ def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
 # provision phase
 # --------------------------------------------------------------------------- #
 def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
-    """Run the stack's provision playbook with the #351 QM extra-vars.
+    """Bring up DNS, then run the stack's provision playbook with the #351 QM
+    extra-vars.
 
-    Fail loud (no silent skip) if the stack declares no provision playbook — a
-    reserved stack like nativeha-ubuntu cannot be bootstrapped.
+    DNS goes first (#478): render the zones from topology, serve them on the infra
+    nodes (bind-dns), and point every guest's resolver at them (host-resolver), so
+    the app-requester's runtime reverse lookups (#454) resolve from the outset
+    rather than paying the ~10s getnameinfo tax until observe. site-dns.yml is
+    limited to this stack's VM set (members + commons, which carries the infra
+    nodes). Fail loud (no silent skip) if the stack declares no provision
+    playbook — a reserved stack like nativeha-ubuntu cannot be bootstrapped.
     """
     if stack.provision is None:
         msg = f"stack {stack.name!r} has no provision playbook — cannot bootstrap"
         raise ValueError(msg)
+    ansible = repo_root() / "ansible"
+    nodes = ",".join(all_vms(stack))
     cmd = Command(
         ["ansible-playbook", Path(stack.provision).name, *_qm_extra_vars(stack)],
-        cwd=repo_root() / "ansible",
+        cwd=ansible,
     )
-    return [CommandStep(f"{stack.name} provision", cmd)]
+    return [
+        CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
+        CommandStep(
+            f"{stack.name} provision dns",
+            Command(["ansible-playbook", "site-dns.yml", "--limit", nodes], cwd=ansible),
+        ),
+        CommandStep(f"{stack.name} provision", cmd),
+    ]
 
 
 def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG001
