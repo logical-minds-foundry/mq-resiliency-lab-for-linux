@@ -222,7 +222,14 @@ def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
     _seed(tmp_path)
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[2].build_steps(stack, None)
-    argv = steps[0].command.argv
+    # DNS comes up first (#478): render the zones, then serve + point resolvers
+    assert steps[0].command.argv == ["mqlab", "dns", "render"]
+    dns_argv = steps[1].command.argv
+    assert dns_argv[0] == "ansible-playbook"
+    assert "site-dns.yml" in dns_argv
+    assert "--limit" in dns_argv
+    # then the stack's own provision playbook
+    argv = steps[2].command.argv
     assert argv[0] == "ansible-playbook"
     assert "site-pcmk.yml" in argv  # the stack's provision playbook (basename)
     # #351 QM extra-vars sourced from stack.qm (names DERIVE from short)
