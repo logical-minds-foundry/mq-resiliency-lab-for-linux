@@ -56,13 +56,13 @@ def test_render_prom_histogram_is_cumulative_and_wellformed():
     assert "# TYPE app_roundtrip_total counter" in text
 
 
-def test_write_textfile_is_atomic_and_group_readable_not_world(tmp_path):
+def test_write_textfile_is_atomic_and_owner_only(tmp_path):
     p = tmp_path / "app_roundtrip.prom"
     ar.write_textfile(str(p), "hello\n")
     assert p.read_text() == "hello\n"
-    mode = p.stat().st_mode
-    assert mode & 0o040  # group-readable — node-exporter reads it via the node_exporter group
-    assert not (mode & 0o004)  # NOT world-readable (least privilege; #491)
+    # Owner-only mode bits (mkstemp's 0600) — no group/world read/write. node-exporter
+    # reads it cross-user via a POSIX ACL set by provisioning, not a mode bit (#493).
+    assert p.stat().st_mode & 0o777 == 0o600
     assert list(tmp_path.iterdir()) == [p]  # no leftover temp file
 
 

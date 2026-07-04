@@ -47,6 +47,22 @@
     mode: "0644"
   notify: apply node_exporter textfile tmpfiles
 
+# node-exporter (a separate service user) reads the app-requester's OWNER-ONLY
+# (0600) .prom files via a POSIX default ACL — so the files need no group/world mode
+# bit (which CodeQL flags as py/overly-permissive-file, #491). The cross-user read is
+# an env-specific implementation detail: a dependency on the `acl` package (#493).
+- name: acl package (setfacl for the drop-zone default ACL)
+  ansible.builtin.package:
+    name: acl
+    state: present
+  become: true
+
+- name: default ACL — node_exporter reads new .prom files in the drop zone (#493)
+  ansible.builtin.command:
+    cmd: setfacl -d -m u:node_exporter:r /var/lib/node_exporter/textfile
+  become: true
+  changed_when: false
+
 - name: install the systemd unit
   ansible.builtin.template:
     src: node_exporter.service.j2
