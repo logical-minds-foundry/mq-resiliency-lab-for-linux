@@ -130,7 +130,12 @@ def write_textfile(path: str, text: str) -> None:
     try:
         with os.fdopen(fd, "w") as handle:
             handle.write(text)
-        os.chmod(tmp, 0o644)  # mkstemp is 0600; node-exporter (another user) must read it
+        # Leave the file OWNER-ONLY (mkstemp's 0600) — deliberately no group/world
+        # mode bit. node-exporter (a separate service user) reads the .prom via a
+        # POSIX default ACL granting node_exporter read on the drop zone, set by
+        # provisioning (#493). Keeping the mode owner-only avoids CodeQL
+        # py/overly-permissive-file, and that cross-user read is an env-specific
+        # implementation detail (the `acl` dependency), not part of the atomic write.
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):
