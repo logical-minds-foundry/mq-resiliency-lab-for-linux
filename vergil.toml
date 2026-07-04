@@ -4,6 +4,9 @@ versioning-scheme = "semver"
 branching-model = "library-release"
 release-model = "tagged-release"
 primary-language = "python"
+# Public repo: GHAS/code-scanning is on. Declared explicitly rather than inferred
+# from visibility, so the CI-gates ruleset posture is unambiguous (#491).
+ghas = true
 
 [ci]
 versions = ["3.12"]
