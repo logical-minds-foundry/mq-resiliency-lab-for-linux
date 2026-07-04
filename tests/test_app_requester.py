@@ -56,11 +56,13 @@ def test_render_prom_histogram_is_cumulative_and_wellformed():
     assert "# TYPE app_roundtrip_total counter" in text
 
 
-def test_write_textfile_is_atomic_and_world_readable(tmp_path):
+def test_write_textfile_is_atomic_and_group_readable_not_world(tmp_path):
     p = tmp_path / "app_roundtrip.prom"
     ar.write_textfile(str(p), "hello\n")
     assert p.read_text() == "hello\n"
-    assert p.stat().st_mode & 0o044  # group+world readable (node-exporter reads it)
+    mode = p.stat().st_mode
+    assert mode & 0o040  # group-readable — node-exporter reads it via the node_exporter group
+    assert not (mode & 0o004)  # NOT world-readable (least privilege; #491)
     assert list(tmp_path.iterdir()) == [p]  # no leftover temp file
 
 

@@ -130,7 +130,10 @@ def write_textfile(path: str, text: str) -> None:
     try:
         with os.fdopen(fd, "w") as handle:
             handle.write(text)
-        os.chmod(tmp, 0o644)  # mkstemp is 0600; node-exporter (another user) must read it
+        # mkstemp is 0600; node-exporter reads the .prom via the node_exporter group
+        # on the setgid drop zone (#458), so group-read is enough — not world-read
+        # (least privilege; clears CodeQL py/overly-permissive-file, #491).
+        os.chmod(tmp, 0o640)
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):
