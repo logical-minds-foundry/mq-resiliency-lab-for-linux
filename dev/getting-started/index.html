@@ -1295,12 +1295,15 @@ prints the exact recipe; in short:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># on your workstation (macOS):</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>limactl<span class="w"> </span>list<span class="w">                                                  </span><span class="c1"># find this repo&#39;s instance</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>ssh<span class="w"> </span>-F<span class="w"> </span>~/.lima/&lt;instance&gt;/ssh.config<span class="w"> </span>-L<span class="w"> </span><span class="m">3000</span>:10.50.0.2:3000<span class="w"> </span>&lt;host-alias&gt;
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># then browse:  http://localhost:3000/d/lab-fleet-node   (admin / admin)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># then browse:  http://localhost:3000/d/lab-watcher   (admin / admin)</span>
 </code></pre></div>
-<p>The <strong>Fleet — Node Health</strong> dashboard shows a tile per node. Scrape targets are
-rendered from <strong>the full <code>topology.yaml</code></strong>, so <em>every</em> node is a target — a node
-that isn't running simply shows <strong>red (<code>up == 0</code>)</strong> rather than vanishing. That
-is deliberate: a missing thing you can see beats a missing thing you can't.</p>
+<p><strong>The Watcher</strong> (<code>lab-watcher</code>, #488) is the lab-state front door: a support-layer
+instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
+drilling into its own cockpit board. Scrape targets are rendered from <strong>the full
+<code>topology.yaml</code></strong>, so <em>every</em> node is a target — a node that isn't running simply
+shows <strong>red (<code>up == 0</code>)</strong> rather than vanishing. That is deliberate: a missing
+thing you can see beats a missing thing you can't. The predecessor <strong>Fleet — Node
+Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per node, at <code>/d/lab-fleet-node</code>.</p>
 <p><code>obs up</code> brings up only the observer pair; to put host metrics on a running arm,
 overlay the fleet role onto its group:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>pcmk_a<span class="w">                                  </span><span class="c1"># boots the arm (arm64, KVM-fast)</span>
