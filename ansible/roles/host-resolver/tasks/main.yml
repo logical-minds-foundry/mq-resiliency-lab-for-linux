@@ -1,34 +1,55 @@
 ---
-# host-resolver (#477, epic .github#21): point each guest at its org's infra
-# nameserver for the lab domains ONLY (split-horizon — public/apt DNS keeps the
-# guest's upstream, so a lab-DNS outage never breaks provisioning), and add the
-# host's own lab FQDN to /etc/hosts. Per-host facts come from `mqlab dns render`.
-# nsswitch stays `files dns` (Ubuntu default) — /etc/hosts wins, DNS is the
-# fallthrough. HA/replication fabric names are seeded by the HA roles, not here.
+# host-resolver (#477/#497, epic .github#21): point each guest at its org's infra
+# node as its SOLE resolver (Approach B). infra answers the lab zones and forwards
+# everything else (public) to the base-VM egress -- internal servers never reach
+# the internet directly, mirroring a real enterprise. Also add the host's own lab
+# FQDN to /etc/hosts. Per-host facts come from `mqlab dns render`.
+#
+# The mechanism is OS-specific: Ubuntu has systemd-resolved (a resolved.conf.d
+# drop-in); RHEL 9 does NOT ship it, so it uses NetworkManager's global-dns. nsswitch
+# stays `files dns` -- /etc/hosts wins, DNS is the fallthrough. HA/replication fabric
+# names are seeded by the HA roles, not here.
 - name: load this host's DNS facts (rendered by `mqlab dns render`)
   ansible.builtin.set_fact:
     host_resolver_dns: >-
       {{ (lookup('file', host_resolver_src ~ '/hostfacts.json') | from_json)[inventory_hostname]
          | default({}) }}
 
-- name: ensure the resolved.conf.d drop-in directory exists
-  ansible.builtin.file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
+- name: point resolver at infra (Ubuntu / systemd-resolved)
+  when: host_resolver_dns.resolver is defined and ansible_os_family == "Debian"
   become: true
-  when: host_resolver_dns.resolver is defined
+  block:
+    - name: resolved.conf.d directory
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        mode: "0755"
+    - name: lab resolver drop-in
+      ansible.builtin.template:
+        src: 00-lab-dns.conf.j2
+        dest: /etc/systemd/resolved.conf.d/00-lab-dns.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: restart systemd-resolved
 
-- name: lab split-horizon resolver drop-in
-  ansible.builtin.template:
-    src: 00-lab-dns.conf.j2
-    dest: /etc/systemd/resolved.conf.d/00-lab-dns.conf
-    owner: root
-    group: root
-    mode: "0644"
+- name: point resolver at infra (RHEL / NetworkManager global-dns)
+  when: host_resolver_dns.resolver is defined and ansible_os_family == "RedHat"
   become: true
-  when: host_resolver_dns.resolver is defined
-  notify: restart systemd-resolved
+  block:
+    - name: NetworkManager conf.d directory
+      ansible.builtin.file:
+        path: /etc/NetworkManager/conf.d
+        state: directory
+        mode: "0755"
+    - name: lab global-dns drop-in
+      ansible.builtin.template:
+        src: lab-dns-networkmanager.conf.j2
+        dest: /etc/NetworkManager/conf.d/00-lab-dns.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload networkmanager
 
 - name: self lab FQDN in /etc/hosts (survives a lab-DNS outage)
   ansible.builtin.blockinfile:

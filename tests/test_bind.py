@@ -41,19 +41,20 @@ def test_reverse_zone_files_and_ptr_dotting():
 
 def test_authority_and_forwarding_split():
     out = render(TOPO)
-    # client infra masters client.com AND every reverse zone
+    # client infra masters client.com + every reverse zone, forwards service.com to the svc peer
     local_c = out["named.conf.local.infra-client"]
     assert 'zone "client.com" { type master; file "/etc/bind/zones/client.com.zone"; };' in local_c
-    assert 'zone "1.10.10.in-addr.arpa"' in local_c
-    assert 'zone "0.60.10.in-addr.arpa"' in local_c
-    # service infra masters only service.com
+    assert 'zone "1.10.10.in-addr.arpa" { type master;' in local_c
+    assert 'zone "service.com" { type forward; forwarders { 10.60.0.9; }; };' in local_c
+    # svc infra masters service.com, forwards client.com + reverse to the client peer
     local_s = out["named.conf.local.infra-svc"]
     assert 'zone "service.com" { type master;' in local_s
-    assert "client.com" not in local_s
-    # each forwards the rest to its peer's net-ext address (forward only)
-    assert "forwarders { 10.60.0.9; };" in out["named.conf.options.infra-client"]
-    assert "forwarders { 10.60.0.8; };" in out["named.conf.options.infra-svc"]
-    assert "forward only;" in out["named.conf.options.infra-client"]
+    assert 'zone "client.com" { type forward; forwarders { 10.60.0.8; }; };' in local_s
+    assert 'zone "1.10.10.in-addr.arpa" { type forward; forwarders { 10.60.0.8; }; };' in local_s
+    # both forward everything else (public) to the base-VM egress
+    assert "forwarders { 192.168.121.1; };" in out["named.conf.options.infra-client"]
+    assert "forwarders { 192.168.121.1; };" in out["named.conf.options.infra-svc"]
+    assert "forward only;" in out["named.conf.options.infra-svc"]
 
 
 def test_infra_by_org_rejects_undefined_host():
@@ -80,9 +81,12 @@ def test_lab_render_real_topology():
     out = lab_render()
     assert "client.com.zone" in out
     assert "service.com.zone" in out
-    # the real peer addresses (B1's .8/.9 on net-ext)
-    assert "forwarders { 10.60.0.9; };" in out["named.conf.options.infra-client"]
-    assert "forwarders { 10.60.0.8; };" in out["named.conf.options.infra-svc"]
+    # both infra nodes forward public queries to the base-VM egress
+    assert "forwarders { 192.168.121.1; };" in out["named.conf.options.infra-client"]
+    assert "forwarders { 192.168.121.1; };" in out["named.conf.options.infra-svc"]
+    # cross-org lab zones forward to the peer's net-ext address (B1's .8/.9)
+    assert "forwarders { 10.60.0.9; };" in out["named.conf.local.infra-client"]
+    assert "forwarders { 10.60.0.8; };" in out["named.conf.local.infra-svc"]
     # the real VIP service records land in the client zone (site-A + site-B DR)
     assert "pcmk-vip-a.client.com. IN A 10.10.1.200" in out["client.com.zone"]
     assert "pcmk-vip-b.client.com. IN A 10.10.2.200" in out["client.com.zone"]

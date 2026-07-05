@@ -1,5 +1,6 @@
-# Managed by the host-resolver role (#477). Split-horizon: only the lab domains
-# resolve via the infra nameserver; everything else keeps the guest's upstream.
+# Managed by the host-resolver role (#497). infra is the SOLE resolver: it answers
+# the lab zones and forwards everything else (public) to the base-VM egress.
+# Domains=~. routes every query here (Approach B — no split-horizon).
 [Resolve]
 DNS={{ host_resolver_dns.resolver }}
-Domains=~client.com ~service.com ~10.in-addr.arpa
+Domains=~.
