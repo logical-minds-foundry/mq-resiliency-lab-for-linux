@@ -95,18 +95,24 @@ def _node_forward(host: str, spec: dict[str, Any], zone: str) -> list[Record]:
 
 
 def _vips(topo: dict[str, Any]) -> list[tuple[str, str]]:
-    """(fqdn, ip) for each pcmk/rdqm VIP. VIPs are client-org service names; Native
-    HA stacks omit ``vip`` and contribute none."""
+    """(fqdn, ip) for each pcmk/rdqm VIP — client-org service names. The site suffix
+    matches the ``-data-a``/``-data-b`` convention: ``-a`` is the live (site-A) VIP,
+    ``-b`` the DR (site-B) VIP; ``-ext`` are the partner-facing (net-ext) VIPs.
+    Native HA stacks omit ``vip`` and contribute none."""
     out: list[tuple[str, str]] = []
     for cfg in (topo.get("stacks") or {}).values():
         short = ((cfg or {}).get("short") or "").lower()
         qm = (cfg or {}).get("qm") or {}
         if not short:
             continue
-        if qm.get("vip"):
-            out.append((f"{short}-vip.{ZONES['client']}", str(qm["vip"])))
-        if qm.get("vip_ext"):
-            out.append((f"{short}-vip-ext.{ZONES['client']}", str(qm["vip_ext"])))
+        for key, label in (
+            ("vip", "vip-a"),
+            ("vip_b", "vip-b"),
+            ("vip_ext", "vip-ext-a"),
+            ("vip_ext_b", "vip-ext-b"),
+        ):
+            if qm.get(key):
+                out.append((f"{short}-{label}.{ZONES['client']}", str(qm[key])))
     return out
 
 

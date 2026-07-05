@@ -280,7 +280,7 @@ stacks:
     groups: [san_a, pcmk_a, san_b, pcmk_b]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
-    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }
+    qm: { vip: 10.10.1.200, vip_b: 10.10.2.200, vip_ext: 10.60.0.10, vip_ext_b: 10.60.0.20 }
     alloc: { exporter_app_port: 9157, app_unit: app-pcmk, svc_port: 1414 }
     verbs:
       qm-create:  { playbook: site-pcmk.yml }

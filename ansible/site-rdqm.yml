@@ -33,7 +33,7 @@
   vars:
     qm_name: "{{ qm_app }}"
     qm_vip: 10.10.1.100
-    svc_conn: 10.60.0.50
+    svc_conn: "svc-sim-ext.service.com"
   tasks:
     - name: create the RDQM queue manager (verified create order; DR auto-detect)
       ansible.builtin.command:
@@ -50,8 +50,8 @@
     # carries a CONNAME list of the three rdqm_a net-ext node IPs: MQ tries them in
     # order and reconnects to whichever node currently runs the app QM, so the partner
     # link rides an HA failover without a second floating IP (#216 spike).
-    our_conn: "10.60.0.31(1414),10.60.0.32(1414),10.60.0.33(1414)"
+    our_conn: "rdqm-a1-ext.client.com(1414),rdqm-a2-ext.client.com(1414),rdqm-a3-ext.client.com(1414)"
     # The app host reaches the app QM on its one data VIP. APP.SVRCONN is plaintext on
     # this arm (rdqm TLS is NOT_YET, #426) -> app_tls false. (#429)
-    app_conn: "10.10.1.100(1414)"
+    app_conn: "rdqm-vip-a.client.com(1414)"
     app_tls: false
