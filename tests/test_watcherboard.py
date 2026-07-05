@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
+from mqlab.paths import repo_root
 from mqlab.watcherboard import (
+    _STACK_COLS,
+    _SUPPORT_COLS,
     DASHBOARD_UID,
     build_watcher,
     lab_watcher_dashboard,
@@ -238,3 +243,46 @@ def test_real_topology_renders_a_valid_watcher_board():
     # … and a rollup row for every real stack (pcmk / rdqm / nhar / nhau)
     for stack in ("pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel", "nativeha-ubuntu"):
         assert stack in stripes, f"real topology: no stack row for {stack}"
+
+
+def test_site_node_count_dedups_by_member_before_summing():
+    # Regression: the state collector runs on a 5s timer per cluster node and each tick
+    # emits the FULL membership, so a bare sum(cluster_node_online{...}) multiplies
+    # (a healthy 3-node site reads ~9). The per-site "n" count tile must dedup by the
+    # `member` label BEFORE summing — clusterboard.py's proven `max by (member)(...)`
+    # idiom — the same way clusterboard's own node-count tiles do.
+    d = build_watcher(FIXTURE)
+    count_tiles = [
+        t for p in d["panels"] if p.get("title") == "n" for t in p.get("targets", []) if "expr" in t
+    ]
+    assert count_tiles, "no per-site node-count ('n') tile found"
+    for t in count_tiles:
+        expr = t["expr"]
+        assert "sum(" in expr, expr
+        assert "cluster_node_online" in expr, expr
+        assert "max by (member)" in expr, f"count tile not deduped by member before summing: {expr}"
+
+
+def test_support_and_stack_column_grids_are_contiguous_and_sum_to_24():
+    for cols in (_SUPPORT_COLS, _STACK_COLS):
+        cursor = 0
+        for x, w in cols.values():
+            assert x == cursor, f"column grid gap/overlap: expected x={cursor}, got x={x}"
+            cursor += w
+        assert cursor == 24, f"column grid does not sum to 24 cols: got {cursor}"
+
+
+def test_real_topology_every_stack_drill_link_resolves_to_a_cockpit():
+    # every real stack row must resolve to a mapped cockpit uid — a "/d/" link with an
+    # empty uid (a stack missing from _COCKPIT_UID) is a silent dead link. Each stack row
+    # emits exactly one drill (linked) panel, in the same order as the stack registry, so
+    # zip the ordered drill-link URLs against the ordered stack names.
+    dash = json.loads(lab_watcher_dashboard())
+    real_stacks = list(
+        yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text()).get("stacks", {})
+    )
+    drill_urls = [p["links"][0]["url"] for p in dash["panels"] if p.get("links")]
+    assert real_stacks, "real topology declares no stacks"
+    assert len(drill_urls) == len(real_stacks)
+    for stack, url in zip(real_stacks, drill_urls, strict=True):
+        assert url and url != "/d/", f"real topology: stack {stack} drill link uid is empty"

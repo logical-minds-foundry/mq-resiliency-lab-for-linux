@@ -332,7 +332,7 @@ def _site_tiles(
     nx, nw = _STACK_COLS[n_col]
     count = _stat(
         "n",
-        f'sum(cluster_node_online{{groups=~"{sel}"}})',
+        f'sum(max by (member)(cluster_node_online{{groups=~"{sel}"}}))',
         ds,
         nx,
         y,
