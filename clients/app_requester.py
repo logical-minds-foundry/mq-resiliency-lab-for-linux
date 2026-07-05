@@ -33,7 +33,7 @@ _BUCKETS_MS: tuple[float, ...] = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000
 
 # Both site VIPs by default (site-A floats within DC-A for HA; site-B is the DR
 # endpoint). A per-stack service overrides --conn with that stack's app-QM address.
-DEFAULT_CONN = "10.10.1.200(1414),10.10.2.200(1414)"
+DEFAULT_CONN = "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
 
 _TEXTFILE_HELP = (
     ("app_roundtrip_total", "counter", "Total app round-trips attempted."),

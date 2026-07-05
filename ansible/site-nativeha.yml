@@ -30,7 +30,7 @@
   vars:
     qm_name: "{{ qm_app }}"
     qm_svc_name: "{{ qm_svc }}"
-    svc_conn: "10.60.0.50"
+    svc_conn: "svc-sim-ext.service.com"
   tasks:
     - name: find the active Native HA instance
       ansible.builtin.shell: |
@@ -90,10 +90,10 @@
     our_qm: "{{ qm_app }}"
     # This arm's own site-A net-ext IPs (the active instance answers on whichever
     # of the three holds the QM) — NOT another arm's range (.7x is pcmk-rhel).
-    our_conn: "10.60.0.91(1414),10.60.0.92(1414),10.60.0.93(1414)"
+    our_conn: "nha-rhel-a1-ext.client.com(1414),nha-rhel-a2-ext.client.com(1414),nha-rhel-a3-ext.client.com(1414)"
     # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
     # lists the site-A instances. APP.SVRCONN is plaintext here -> app_tls false. (#429)
-    app_conn: "10.10.1.91(1414),10.10.1.92(1414),10.10.1.93(1414)"
+    app_conn: "nha-rhel-a1-data-a.client.com(1414),nha-rhel-a2-data-a.client.com(1414),nha-rhel-a3-data-a.client.com(1414)"
     app_tls: false
 
 - import_playbook: _nativeha-dr-replication.yml

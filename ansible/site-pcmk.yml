@@ -35,14 +35,14 @@
     qm_name: "{{ qm_app }}"
     qm_vip: 10.10.1.200
     qm_vip_ext: 10.60.0.10
-    svc_conn: 10.60.0.50
+    svc_conn: "svc-sim-ext.service.com"
     first_node: "{{ groups['pcmk_a'][0] }}"
   roles: [mq-pcmk-qmgr]
 
 - import_playbook: site-distributed-shared.yml
   vars:
     our_qm: "{{ qm_app }}"
-    our_conn: "10.60.0.10(1414),10.60.0.20(1414)"
+    our_conn: "pcmk-vip-ext-a.client.com(1414),pcmk-vip-ext-b.client.com(1414)"
     # The app host reaches its app QM on the data plane: site-A VIP (HA) + site-B VIP
     # (DR). APP.SVRCONN is mutual-TLS here (#250), so app_tls defaults true. (#429)
-    app_conn: "10.10.1.200(1414),10.10.2.200(1414)"
+    app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
