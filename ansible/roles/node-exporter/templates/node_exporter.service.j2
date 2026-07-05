@@ -8,7 +8,9 @@ User=node_exporter
 Group=node_exporter
 ExecStart=/usr/local/bin/node_exporter \
   --web.listen-address=:9100 \
-  --collector.textfile.directory=/var/lib/node_exporter/textfile
+  --collector.textfile.directory=/var/lib/node_exporter/textfile \
+  --collector.systemd \
+  --collector.systemd.unit-include=^(named|bind9|prometheus|grafana-server|node_exporter|mq_prometheus.*|mq-.*|mqmonitor@.*)\.service$
 Restart=on-failure
 
 [Install]
