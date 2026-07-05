@@ -36,6 +36,11 @@ from mqlab.dns import (
 _SERIAL = 1  # one authoritative server per zone, no transfer — serial is nominal
 _TTL = 300
 _ZONE_DIR = "/etc/bind/zones"
+# The lab's enterprise-edge egress to the internet: the vagrant-libvirt NAT gateway
+# (libvirt's dnsmasq on the base VM, pinned to the plugin default in
+# lab/networks/vagrant-libvirt.xml). infra forwards every non-lab (public) query
+# here — internal servers never reach the internet directly (Approach B, #497).
+_EGRESS = "192.168.121.1"
 
 
 def _infra_by_org(topo: dict[str, Any]) -> dict[str, tuple[str, dict[str, Any]]]:
@@ -87,13 +92,22 @@ def _zone_decl(name: str) -> str:
     return f'zone "{name}" {{ type master; file "{_ZONE_DIR}/{name}.zone"; }};'
 
 
-def _named_options(peer_ip: str) -> str:
+def _zone_forward(name: str, peer_ip: str) -> str:
+    """A cross-org lab zone this node does not master — forward it to the peer infra
+    (which is authoritative), overriding the global egress forwarder for that zone."""
+    return f'zone "{name}" {{ type forward; forwarders {{ {peer_ip}; }}; }};'
+
+
+def _named_options() -> str:
+    """Global options: forward every non-authoritative, non-lab (public) query to the
+    base-VM egress. Per-zone `forward` stanzas in named.conf.local override this for
+    the cross-org lab zones."""
     return (
         "options {\n"
         '    directory "/var/cache/bind";\n'
         "    recursion yes;\n"
         "    allow-query { any; };\n"
-        f"    forwarders {{ {peer_ip}; }};\n"
+        f"    forwarders {{ {_EGRESS}; }};\n"
         "    forward only;\n"
         "    dnssec-validation no;\n"
         "    listen-on { any; };\n"
@@ -123,14 +137,22 @@ def render(topo: dict[str, Any]) -> dict[str, str]:
     for rz, records in rev.items():
         out[f"{rz}.zone"] = _zone_file(rz, client_ns, records)
 
-    # per-node config: client masters client.com + all reverse; service masters service.com
+    # Per-node config. The client infra masters client.com + all reverse zones and
+    # forwards service.com to the svc peer; the svc infra masters service.com and
+    # forwards client.com + all reverse to the client peer. Everything else (public)
+    # goes to the base-VM egress via the global options forwarder — no node ever
+    # recurses to the internet directly.
     client_zones = [ZONES["client"], *rev]
     svc_ext = svc_spec["nics"]["net-ext"]
     client_ext = client_spec["nics"]["net-ext"]
-    out[f"named.conf.local.{client_host}"] = "\n".join(_zone_decl(z) for z in client_zones) + "\n"
-    out[f"named.conf.local.{svc_host}"] = _zone_decl(ZONES["service"]) + "\n"
-    out[f"named.conf.options.{client_host}"] = _named_options(svc_ext)
-    out[f"named.conf.options.{svc_host}"] = _named_options(client_ext)
+    client_local = [_zone_decl(z) for z in client_zones]
+    client_local.append(_zone_forward(ZONES["service"], svc_ext))
+    svc_local = [_zone_decl(ZONES["service"])]
+    svc_local += [_zone_forward(z, client_ext) for z in client_zones]
+    out[f"named.conf.local.{client_host}"] = "\n".join(client_local) + "\n"
+    out[f"named.conf.local.{svc_host}"] = "\n".join(svc_local) + "\n"
+    out[f"named.conf.options.{client_host}"] = _named_options()
+    out[f"named.conf.options.{svc_host}"] = _named_options()
     return out
 
 

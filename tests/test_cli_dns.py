@@ -32,7 +32,7 @@ def test_dns_render_writes_zone_and_config_files(monkeypatch, tmp_path):
     local = (dns_dir / "named.conf.local.infra-client").read_text()
     assert 'zone "1.10.10.in-addr.arpa"' in local
     opts = (dns_dir / "named.conf.options.infra-client").read_text()
-    assert "forwarders { 10.60.0.9; };" in opts
+    assert "forwarders { 192.168.121.1; };" in opts  # public -> base-VM egress
     # host resolver facts for the host-resolver role (#477)
     facts = json.loads((dns_dir / "hostfacts.json").read_text())
     assert facts["infra-svc"]["resolver"] == "127.0.0.1"
