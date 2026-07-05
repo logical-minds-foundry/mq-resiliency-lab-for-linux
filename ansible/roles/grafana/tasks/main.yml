@@ -104,6 +104,15 @@
     - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-messaging-*.json"
   notify: restart grafana
 
+- name: deploy the rendered Watcher dashboard — the lab-state front door (#488)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-watcher.json"
+    dest: /var/lib/grafana/dashboards/lab-watcher.json
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
     path: /etc/systemd/system/grafana-server.service.d

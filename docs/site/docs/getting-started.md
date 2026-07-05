@@ -188,13 +188,16 @@ prints the exact recipe; in short:
 # on your workstation (macOS):
 limactl list                                                  # find this repo's instance
 ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>
-# then browse:  http://localhost:3000/d/lab-fleet-node   (admin / admin)
+# then browse:  http://localhost:3000/d/lab-watcher   (admin / admin)
 ```
 
-The **Fleet — Node Health** dashboard shows a tile per node. Scrape targets are
-rendered from **the full `topology.yaml`**, so *every* node is a target — a node
-that isn't running simply shows **red (`up == 0`)** rather than vanishing. That
-is deliberate: a missing thing you can see beats a missing thing you can't.
+**The Watcher** (`lab-watcher`, #488) is the lab-state front door: a support-layer
+instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
+drilling into its own cockpit board. Scrape targets are rendered from **the full
+`topology.yaml`**, so *every* node is a target — a node that isn't running simply
+shows **red (`up == 0`)** rather than vanishing. That is deliberate: a missing
+thing you can see beats a missing thing you can't. The predecessor **Fleet — Node
+Health** board (`lab-fleet-node`) still renders a tile per node, at `/d/lab-fleet-node`.
 
 `obs up` brings up only the observer pair; to put host metrics on a running arm,
 overlay the fleet role onto its group:

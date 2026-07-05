@@ -483,6 +483,13 @@ def obs_dashboard() -> None:
         write_messaging_dashboards()
         deps.renderer.command("render -> messaging boards (per stack)")
         deps.transcript.write("render -> messaging boards (per stack)")
+        # The Watcher — the lab-state front-door board (#488)
+        from mqlab.watcherboard import lab_watcher_dashboard, watcher_dashboard_path
+
+        watcher = watcher_dashboard_path()
+        watcher.write_text(lab_watcher_dashboard())
+        deps.renderer.command(f"render -> {watcher}")
+        deps.transcript.write(f"render -> {watcher}")
     finally:
         deps.transcript.close()
 
@@ -688,6 +695,11 @@ def _obs_up_steps() -> list[CommandStep]:
 
     write_messaging_dashboards()
 
+    # The Watcher — the lab-state front-door board (#488)
+    from mqlab.watcherboard import lab_watcher_dashboard, watcher_dashboard_path
+
+    watcher_dashboard_path().write_text(lab_watcher_dashboard())
+
     return [
         CommandStep(
             "render targets + inventory + dashboard",
@@ -743,8 +755,11 @@ def _obs_up_steps() -> list[CommandStep]:
 @obs_app.command("open")
 def obs_open() -> None:
     """Print the Grafana URL and how to reach it from your workstation."""
-    typer.echo(f"Workstation: {WORKSTATION_GRAFANA_URL}/d/lab-fleet-node  (Fleet — Node Health)")
-    typer.echo(f"In the VM:   {GRAFANA_URL}/d/lab-fleet-node  (direct to the obs guest)")
+    typer.echo(f"Workstation: {WORKSTATION_GRAFANA_URL}/d/lab-watcher  (The Watcher — lab state)")
+    typer.echo(f"In the VM:   {GRAFANA_URL}/d/lab-watcher  (direct to the obs guest)")
+    typer.echo(
+        f"Fleet — Node Health (#488 predecessor): {WORKSTATION_GRAFANA_URL}/d/lab-fleet-node"
+    )
     typer.echo(f"Live tail:   {WORKSTATION_GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
     typer.echo('             query {unit="mqlab-requester"} and toggle Live)')
     typer.echo("")
