@@ -127,6 +127,20 @@ def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
     assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
 
 
+def test_obs_dashboard_also_renders_the_watcher_board(monkeypatch, tmp_path):
+    # The Watcher (#488) — the lab-state front-door board — renders alongside the
+    # other cockpits when `obs dashboard` runs.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
+
+    assert result.exit_code == 0
+    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-watcher.json"
+    assert json.loads(board.read_text())["uid"] == "lab-watcher"
+
+
 # --- open: prints the workstation URL and explains the automatic forward ---
 
 
@@ -134,9 +148,11 @@ def test_obs_open_prints_workstation_url_and_automatic_forward():
     result = CliRunner().invoke(cli.app, ["obs", "open"])
     assert result.exit_code == 0
     # the workstation browses plain localhost:3000 (auto-forwarded), plus the
-    # in-VM direct URL for reference
+    # in-VM direct URL for reference. The Watcher (#488) is the front door;
+    # the predecessor Fleet — Node Health board is still reachable.
+    assert "http://localhost:3000/d/lab-watcher" in result.stdout
+    assert "http://10.50.0.2:3000/d/lab-watcher" in result.stdout
     assert "http://localhost:3000/d/lab-fleet-node" in result.stdout
-    assert "http://10.50.0.2:3000/d/lab-fleet-node" in result.stdout
     assert "/explore" in result.stdout
     assert "mqlab-requester" in result.stdout
     # the forward is automatic and anonymous now — the stale manual-tunnel /
