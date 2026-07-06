@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 DASHBOARD_UID = "lab-watcher"  # pinned — referenced by mqlab obs open + docs
 
-_GREEN, _RED = "green", "red"
+_GREEN, _RED, _YELLOW, _GREY = "green", "red", "yellow", "grey"
 
 # 1 → green up, 0 → red down, no-data → STALE (fail-loud: a scrape target that is down
 # still has an `up` series reading 0, so the row shows DOWN rather than vanishing).
@@ -68,6 +68,32 @@ _SERVICE_MAP: list[dict[str, Any]] = [
     },
     _STALE_MAP,
 ]
+# The counterparty QM's health, mirroring the shared qmgr-status family (dashboard.py's
+# _STATUS_OPTIONS): 2 → Running, 1 → Transitioning, 0 → Stopped, -1 → No status (the
+# `or vector(-1)` object-driven sentinel when the exporter has no live status). A queue
+# depth is workload, not health — this reports whether the SVC QM is actually alive (#502).
+_QMSTATUS_MAP: list[dict[str, Any]] = [
+    {
+        "type": "value",
+        "options": {
+            "-1": {"color": _GREY, "text": "No status", "index": 0},
+            "0": {"color": _RED, "text": "Stopped", "index": 1},
+            "1": {"color": _YELLOW, "text": "Transitioning", "index": 2},
+            "2": {"color": _GREEN, "text": "Running", "index": 3},
+        },
+    },
+]
+
+# Explicit thresholds so no tile relies on Grafana's accidental default (green base, red
+# at 80) — which is only meaningful for the CPU/mem percentage gauges. Informational value
+# tiles (uptime, counts, rates) get a neutral, health-free colour; CPU/mem get a real
+# utilisation ramp (#502).
+_NEUTRAL: list[dict[str, Any]] = [{"color": "text", "value": None}]
+_UTIL: list[dict[str, Any]] = [
+    {"color": _GREEN, "value": None},
+    {"color": _YELLOW, "value": 75},
+    {"color": _RED, "value": 90},
+]
 
 
 @dataclass(frozen=True)
@@ -83,6 +109,9 @@ class RoleSpec:
     domain_title: str
     domain: str
     domain_unit: str
+    # When set, the domain tile is a status pill coloured by these value-mappings (e.g. the
+    # SVC QM's running/stopped health) instead of a neutral numeric value + unit.
+    domain_mappings: list[dict[str, Any]] | None = None
 
 
 # The curated support-host order: infra (the DNS pair) first, then obs, probe, svc, app.
@@ -117,9 +146,13 @@ _ROLE_SPEC: dict[str, RoleSpec] = {
     "svc": RoleSpec(
         role="SVC counterparty",
         unit="mq_prometheus.*.service|mq-.*.service",
-        domain_title="SVCQM depth",
-        domain='max(ibmmq_queue_depth{{qmgr="{svc}"}})',
-        domain_unit="short",
+        # A QM's queue depth is workload, not health. Report whether the counterparty QM is
+        # actually running (the shared qmgr-status signal), object-driven via `or vector(-1)`
+        # so the pill stays populated (No status) when the exporter has nothing live (#502).
+        domain_title="SVCQM",
+        domain='max(ibmmq_qmgr_status{{qmgr="{svc}"}}) or vector(-1)',
+        domain_unit="short",  # ignored when domain_mappings is set (a status pill, not a number)
+        domain_mappings=_QMSTATUS_MAP,
     ),
     "app": RoleSpec(
         role="App client",
@@ -169,6 +202,14 @@ def _bg(panel: dict[str, Any]) -> dict[str, Any]:
     and value-only tiles read as solid colour blocks, like clusterboard's site badges."""
     panel["options"]["colorMode"] = "background"
     panel["options"]["graphMode"] = "none"
+    return panel
+
+
+def _thr(panel: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attach explicit absolute thresholds so the tile's colour is deliberate — not
+    Grafana's default red-at-80, which only suits the percentage gauges. Mutates and
+    returns the panel, like _bg."""
+    panel["fieldConfig"]["defaults"]["thresholds"] = {"mode": "absolute", "steps": steps}
     return panel
 
 
@@ -229,50 +270,77 @@ def _support_row(group: str, host: str, svc_qm: str, y: int) -> list[dict[str, A
         h=_ROW_H,
     )
     cx, cw = _SUPPORT_COLS["cpu"]
-    cpu = _stat(
-        "CPU",
-        f'100 - (avg by (host)(rate(node_cpu_seconds_total{{host="{host}",mode="idle"}}[1m]))'
-        " * 100)",
-        ds,
-        cx,
-        y,
-        unit="percent",
-        w=cw,
-        h=_ROW_H,
+    cpu = _thr(
+        _stat(
+            "CPU",
+            f'100 - (avg by (host)(rate(node_cpu_seconds_total{{host="{host}",mode="idle"}}[1m]))'
+            " * 100)",
+            ds,
+            cx,
+            y,
+            unit="percent",
+            w=cw,
+            h=_ROW_H,
+        ),
+        _UTIL,
     )
     mx, mw = _SUPPORT_COLS["mem"]
-    mem = _stat(
-        "mem",
-        f'100 * (1 - node_memory_MemAvailable_bytes{{host="{host}"}}'
-        f' / node_memory_MemTotal_bytes{{host="{host}"}})',
-        ds,
-        mx,
-        y,
-        unit="percent",
-        w=mw,
-        h=_ROW_H,
+    mem = _thr(
+        _stat(
+            "mem",
+            f'100 * (1 - node_memory_MemAvailable_bytes{{host="{host}"}}'
+            f' / node_memory_MemTotal_bytes{{host="{host}"}})',
+            ds,
+            mx,
+            y,
+            unit="percent",
+            w=mw,
+            h=_ROW_H,
+        ),
+        _UTIL,
     )
     dx, dw = _SUPPORT_COLS["domain"]
-    domain = _stat(
-        spec.domain_title,
-        spec.domain.format(host=host, svc=svc_qm),
-        ds,
-        dx,
-        y,
-        unit=spec.domain_unit,
-        w=dw,
-        h=_ROW_H,
-    )
+    domain_expr = spec.domain.format(host=host, svc=svc_qm)
+    if spec.domain_mappings is not None:
+        # a status pill (the SVC QM's running/stopped health) — coloured by value-mappings
+        domain = _stat(
+            spec.domain_title,
+            domain_expr,
+            ds,
+            dx,
+            y,
+            mappings=spec.domain_mappings,
+            w=dw,
+            h=_ROW_H,
+        )
+    else:
+        # an informational value (count/rate) — deliberate neutral, health-free colour
+        domain = _thr(
+            _stat(
+                spec.domain_title,
+                domain_expr,
+                ds,
+                dx,
+                y,
+                unit=spec.domain_unit,
+                w=dw,
+                h=_ROW_H,
+            ),
+            _NEUTRAL,
+        )
     ux, uw = _SUPPORT_COLS["uptime"]
-    uptime = _stat(
-        "uptime",
-        f'node_time_seconds{{host="{host}"}} - node_boot_time_seconds{{host="{host}"}}',
-        ds,
-        ux,
-        y,
-        unit="dtdurations",
-        w=uw,
-        h=_ROW_H,
+    uptime = _thr(
+        _stat(
+            "uptime",
+            f'node_time_seconds{{host="{host}"}} - node_boot_time_seconds{{host="{host}"}}',
+            ds,
+            ux,
+            y,
+            unit="dtdurations",
+            w=uw,
+            h=_ROW_H,
+        ),
+        _NEUTRAL,
     )
     return [stripe, role, service, cpu, mem, domain, uptime]
 

@@ -14,13 +14,25 @@ import yaml
 
 from mqlab.paths import repo_root
 from mqlab.watcherboard import (
+    _NEUTRAL,
+    _QMSTATUS_MAP,
     _STACK_COLS,
     _SUPPORT_COLS,
+    _UTIL,
     DASHBOARD_UID,
     build_watcher,
     lab_watcher_dashboard,
     watcher_dashboard_path,
 )
+
+
+def _by_title(panels: list[dict], title: str) -> list[dict]:
+    return [p for p in panels if p.get("title") == title]
+
+
+def _thresholds(panel: dict) -> list[dict]:
+    return panel.get("fieldConfig", {}).get("defaults", {}).get("thresholds", {}).get("steps", [])
+
 
 # A minimal fixture topology: the five commons support groups (infra carries two DNS
 # hosts) + two stacks — pacemaker-san (owner resource = the pacemaker id "mq_qm") and
@@ -133,7 +145,10 @@ def test_domain_metric_is_the_roles_one_signal():
     exprs = " ".join(_exprs(d["panels"]))
     assert "count(up == 1)" in exprs  # obs scrape targets N/M
     assert 'up{job="ibmmq"}' in exprs  # mon-probe exporters up
-    assert 'ibmmq_queue_depth{qmgr="SVCQM"}' in exprs  # svc-sim SVCQM depth (short-derived)
+    # svc-sim reports the SVC QM's *health* (running/stopped), not a meaningless queue
+    # depth — the shared qmgr-status signal, QM name short-derived, object-driven sentinel.
+    assert 'ibmmq_qmgr_status{qmgr="SVCQM"}' in exprs
+    assert "ibmmq_queue_depth" not in exprs  # the dubious depth stat is gone (#502)
     assert "rate(app_roundtrip_total[1m])" in exprs  # app-client round-trip
     assert "lab_dns_queries_total" in exprs  # DNS q/s (future bind exporter, object-driven)
 
@@ -286,3 +301,54 @@ def test_real_topology_every_stack_drill_link_resolves_to_a_cockpit():
     assert len(drill_urls) == len(real_stacks)
     for stack, url in zip(real_stacks, drill_urls, strict=True):
         assert url and url != "/d/", f"real topology: stack {stack} drill link uid is empty"
+
+
+def test_uptime_is_informational_never_a_health_colour():
+    # Regression (#502): uptime is time-since-boot in SECONDS; with no explicit thresholds
+    # Grafana's default (red at >= 80) painted a healthy 2-hour uptime RED on every host.
+    # Uptime is informational, so it now carries a deliberate neutral colour — never red.
+    d = build_watcher(FIXTURE)
+    tiles = _by_title(d["panels"], "uptime")
+    assert tiles, "no uptime tile"
+    for t in tiles:
+        assert _thresholds(t) == _NEUTRAL, t
+        assert all(step["color"] != "red" for step in _thresholds(t))
+
+
+def test_cpu_and_mem_carry_deliberate_utilisation_thresholds():
+    # CPU/mem must not depend on Grafana's accidental red-at-80 default either; they get an
+    # explicit utilisation ramp (green -> amber 75 -> red 90) (#502).
+    d = build_watcher(FIXTURE)
+    for title in ("CPU", "mem"):
+        tiles = _by_title(d["panels"], title)
+        assert tiles, f"no {title} tile"
+        for t in tiles:
+            assert _thresholds(t) == _UTIL, (title, t)
+
+
+def test_informational_domain_tiles_are_neutral_not_accidental_red():
+    # the count/rate domain tiles (obs scrape, probe exporters, app round-trip, DNS q/s)
+    # are informational values — deliberate neutral colour, not the red-at-80 accident.
+    d = build_watcher(FIXTURE)
+    for title in ("scrape ✓", "exporters", "round-trip", "⟲ q/s"):
+        tiles = _by_title(d["panels"], title)
+        assert tiles, f"no {title} tile"
+        for t in tiles:
+            assert _thresholds(t) == _NEUTRAL, (title, t)
+
+
+def test_svc_domain_is_a_qm_health_pill_not_a_queue_depth():
+    # #502: the SVC tile reports whether the counterparty QM is running (shared qmgr-status
+    # signal, object-driven `or vector(-1)`), coloured by the running/stopped mappings —
+    # NOT a meaningless max-queue-depth number inheriting the red-at-80 accident.
+    d = build_watcher(FIXTURE)
+    tiles = _by_title(d["panels"], "SVCQM")
+    assert tiles, "no SVCQM health tile"
+    tile = tiles[0]
+    expr = tile["targets"][0]["expr"]
+    assert 'ibmmq_qmgr_status{qmgr="SVCQM"}' in expr and "or vector(-1)" in expr
+    assert tile["fieldConfig"]["defaults"]["mappings"] == _QMSTATUS_MAP
+    # 2 -> Running/green is the healthy mapping; -1 -> the No-status sentinel
+    opts = _QMSTATUS_MAP[0]["options"]
+    assert opts["2"]["text"] == "Running" and opts["2"]["color"] == "green"
+    assert opts["-1"]["text"] == "No status"
