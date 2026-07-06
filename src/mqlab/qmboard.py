@@ -194,8 +194,14 @@ def _q_series(metric: str, qm: str, obj: str) -> str:
 
 
 def _c_series(metric: str, qm: str, obj: str) -> str:
-    """A channel series: `max(ibmmq_channel_<metric>{qmgr,channel})`."""
+    """A channel gauge series: `max(ibmmq_channel_<metric>{qmgr,channel})` (nettime, status)."""
     return f'max(ibmmq_channel_{metric}{{qmgr="{qm}",channel="{obj}"}})'
+
+
+def _c_rate(metric: str, qm: str, obj: str) -> str:
+    """A channel COUNTER as a per-second rate (messages/bytes are `# TYPE counter`, so a raw
+    plot is a meaningless ever-climbing line — the throughput trend is the rate)."""
+    return f'sum(rate(ibmmq_channel_{metric}{{qmgr="{qm}",channel="{obj}"}}[1m]))'
 
 
 def _q_put_rate(qm: str, obj: str) -> str:
@@ -276,11 +282,11 @@ def _channel_block(ds_uid: str, qm: str, channel: str, role: str, y: int) -> lis
     py = y + 1
     panels = [
         _timeseries(
-            f"{channel} — throughput",
+            f"{channel} — throughput (per-sec)",
             [
-                _t("A", _c_series("messages", qm, channel), "messages"),
-                _t("B", _c_series("bytes_sent", qm, channel), "bytes sent"),
-                _t("C", _c_series("bytes_rcvd", qm, channel), "bytes rcvd"),
+                _t("A", _c_rate("messages", qm, channel), "messages/s"),
+                _t("B", _c_rate("bytes_sent", qm, channel), "bytes sent/s"),
+                _t("C", _c_rate("bytes_rcvd", qm, channel), "bytes rcvd/s"),
             ],
             ds_uid,
             0,

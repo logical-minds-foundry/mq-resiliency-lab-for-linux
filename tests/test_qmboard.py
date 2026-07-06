@@ -205,6 +205,11 @@ def test_channel_graphs_bind_verified_channel_metrics():
     assert "ibmmq_channel_bytes_sent" in blob
     assert "ibmmq_channel_bytes_rcvd" in blob
     assert "ibmmq_channel_nettime_short" in blob
+    # throughput counters must be rate()-d (they're `# TYPE counter` — a raw plot is a
+    # meaningless climbing line), while nettime (a gauge) stays raw
+    assert "rate(ibmmq_channel_messages" in blob
+    assert "rate(ibmmq_channel_bytes_sent" in blob
+    assert "rate(ibmmq_channel_nettime_short" not in blob
     assert "ibmmq_channel_status_squash" in blob
 
 
