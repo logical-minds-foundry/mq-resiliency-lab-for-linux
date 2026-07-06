@@ -398,7 +398,11 @@ app.add_typer(obs_app, name="obs")
 
 
 @obs_app.command("targets")
-def obs_targets() -> None:
+def obs_targets(
+    stack: str | None = typer.Option(
+        None, "--stack", help="scope the exporter deployment list to one stack (#503)"
+    ),
+) -> None:
     """Render the Prometheus file_sd targets + the mq-exporter deployment list from topology.
 
     Renders three topology projections into build/work: the node file_sd targets,
@@ -425,7 +429,9 @@ def obs_targets() -> None:
             (lab_mq_scrape_targets, mq_scrape_targets_path),
             (lab_mq_exporters, mq_exporters_path),
         ):
-            text = renderer_fn()
+            # only the exporter deployment list is scoped to `stack`; the node/ibmmq
+            # scrape-target files stay full-topology (a down target is benign) (#503)
+            text = lab_mq_exporters(stack) if path_fn is mq_exporters_path else renderer_fn()
             path = path_fn()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)

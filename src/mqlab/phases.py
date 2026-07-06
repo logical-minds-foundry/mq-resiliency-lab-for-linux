@@ -258,7 +258,10 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
     ansible = repo_root() / "ansible"
     nodes = ",".join(all_vms(stack))
     return [
-        CommandStep("render targets", Command(["mqlab", "obs", "targets"])),
+        # --stack scopes the exporter deployment list to THIS stack, so observing one
+        # stack never stands up (crash-looping) exporter units for un-provisioned ones
+        # (#503); the node/ibmmq scrape-target renders stay full-topology.
+        CommandStep("render targets", Command(["mqlab", "obs", "targets", "--stack", stack.name])),
         CommandStep("render dashboard", Command(["mqlab", "obs", "dashboard"])),
         CommandStep("render reach-peers", Command(["mqlab", "obs", "reach-peers"])),
         # site-obs.yml loops the mq-exporter role over the `mq_exporters` extra-var, a
