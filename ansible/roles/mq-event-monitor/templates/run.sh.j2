@@ -1,0 +1,17 @@
+#!/bin/bash
+# MQ event collector launcher (#515, epic .github#31). Started by the queue manager as
+# an MQ SERVICE object (CONTROL(QMGR)), so it travels with the QM across every failover.
+#
+# `exec` matters: it replaces this shell so the process the QM tracks (MQ_SERVER_PID) IS
+# amqsevt. The service's STOPCMD is `kill MQ_SERVER_PID`, so QM shutdown then stops the
+# collector cleanly. A naive `amqsevt | logger` would leave the QM tracking the shell and
+# ORPHAN the pipeline on stop — the collector would keep draining after the QM went away.
+#
+# Destructive drain (no -b): amqsevt is the single event consumer; each event processed
+# once. No -q → the standard SYSTEM.ADMIN.*.EVENT set. `stdbuf -oL` keeps stdout
+# line-buffered so JSON reaches journald promptly. Output → journald tagged
+# '{{ mq_event_syslog_tag }}', beside the MQ core logs (tag 'ibm-mq'); when amqsevt exits,
+# the logger reader sees EOF and exits too.
+#
+# $1 is the queue-manager name, passed by the service's STARTARG.
+exec stdbuf -oL {{ mq_event_amqsevt_bin }} -m "$1" -o json > >(exec logger -t {{ mq_event_syslog_tag }})

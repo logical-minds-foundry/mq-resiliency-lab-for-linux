@@ -111,3 +111,9 @@
   register: perfq
   changed_when: "'AMQ8008' in perfq.stdout"
   failed_when: perfq.rc not in [0, 10]
+
+# Deploy the event collector (#515): amqsevt as an MQ SERVICE object that drains the events
+# enabled above to JSON on journald. CONTROL(QMGR) makes it travel with the QM across failover.
+- name: deploy the MQ event-monitor service (#515)
+  ansible.builtin.include_role:
+    name: mq-event-monitor

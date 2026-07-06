@@ -1,0 +1,6 @@
+---
+# MQ event collector (#515, epic .github#31)
+mq_event_amqsevt_bin: /opt/mqm/samp/bin/amqsevt
+mq_event_syslog_tag: mq-events
+mq_event_run_dir: /opt/mq-event-monitor
+mq_event_service_name: MQ.EVENT.MONITOR
