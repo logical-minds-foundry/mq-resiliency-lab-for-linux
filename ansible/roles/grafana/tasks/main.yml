@@ -104,6 +104,19 @@
     - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-messaging-*.json"
   notify: restart grafana
 
+# per-QM state boards (#489) — one lab-qm-<short>.json per app QM, rendered by
+# mqlab; copy whichever exist.
+- name: deploy the rendered per-QM state dashboards (#489)
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  with_fileglob:
+    - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-qm-*.json"
+  notify: restart grafana
+
 - name: deploy the rendered Watcher dashboard — the lab-state front door (#488)
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-watcher.json"
