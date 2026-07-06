@@ -16,8 +16,9 @@ only covers abrupt breaks). The producer carries the in-flight message's
 seq/uuid across a rebuild so a failover never drops or silently re-keys it.
 
 Target QM / connection / queues are parameterized so the same client drives any
-arm: the message path (QMAIN @ 10.30.0.10) or an HA arm via its VIP, e.g.
-    ~/mqvenv/bin/python ~/dr_flow.py --qm PCMKAPP --conn "10.10.1.200(1414)" \
+arm; it defaults to the Pacemaker arm (PCMKAPP) via its VIP FQDNs, e.g.
+    ~/mqvenv/bin/python ~/dr_flow.py --qm PCMKAPP \
+        --conn "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)" \
         --req-queue DR.REQUEST --reply-queue DR.REPLY \
         --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 
@@ -200,8 +201,10 @@ class _Conn:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "QMAIN"))
-    ap.add_argument("--conn", default="10.30.0.10(1414)")
+    # Defaults target the Pacemaker arm's app QM via its generated VIP FQDNs (#495);
+    # the legacy QMAIN @ 10.30.0.10 single-QM default predated the #351 four-stack model.
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM", "PCMKAPP"))
+    ap.add_argument("--conn", default="pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)")
     ap.add_argument("--channel", default="APP.SVRCONN")
     ap.add_argument("--req-queue", default="SVC.REQUEST")
     ap.add_argument("--reply-queue", default="APP.REPLY")
