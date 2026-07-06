@@ -424,14 +424,14 @@ def obs_targets(
 
     deps = build_deps("obs-targets", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
+        # only the exporter deployment list is scoped to `stack`; the node/ibmmq
+        # scrape-target files stay full-topology (a down target is benign) (#503)
         for renderer_fn, path_fn in (
             (lab_scrape_targets, scrape_targets_path),
             (lab_mq_scrape_targets, mq_scrape_targets_path),
-            (lab_mq_exporters, mq_exporters_path),
+            (lambda: lab_mq_exporters(stack), mq_exporters_path),
         ):
-            # only the exporter deployment list is scoped to `stack`; the node/ibmmq
-            # scrape-target files stay full-topology (a down target is benign) (#503)
-            text = lab_mq_exporters(stack) if path_fn is mq_exporters_path else renderer_fn()
+            text = renderer_fn()
             path = path_fn()
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
