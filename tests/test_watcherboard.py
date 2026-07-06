@@ -102,15 +102,25 @@ def _stripes(panels: list[dict]) -> list[dict]:
     ]
 
 
-def _row_labels(panels: list[dict]) -> list[str]:
-    # each row's identity now lives in its column-2 text tile as "**name**<br/>…" (the stripe
-    # itself is state-only, #505); the banner ("## …") and section rows are not identity tiles
-    labels: list[str] = []
+def _identity_contents(panels: list[dict]) -> list[str]:
+    # the column-2 identity tiles render "**name**<br/>…" (#505); the banner ("## …") and the
+    # section-header rows are not identity tiles, so filter to text panels starting with "**"
+    out: list[str] = []
     for p in panels:
         if p.get("type") == "text":
-            m = re.match(r"\*\*(.+?)\*\*", p.get("options", {}).get("content", ""))
-            if m:
-                labels.append(m.group(1))
+            content = p.get("options", {}).get("content", "")
+            if content.startswith("**"):
+                out.append(content)
+    return out
+
+
+def _row_labels(panels: list[dict]) -> list[str]:
+    # each row's identity is the bold name in its column-2 tile (the stripe is state-only)
+    labels: list[str] = []
+    for content in _identity_contents(panels):
+        m = re.match(r"\*\*(.+?)\*\*", content)
+        if m:
+            labels.append(m.group(1))
     return labels
 
 
@@ -380,11 +390,7 @@ def test_status_stripes_carry_no_title_state_only_leftmost_column():
 
 
 def _bold_texts(panels: list[dict]) -> str:
-    return " ".join(
-        p["options"]["content"]
-        for p in panels
-        if p.get("type") == "text" and p.get("options", {}).get("content", "").startswith("**")
-    )
+    return " ".join(_identity_contents(panels))
 
 
 def test_stack_row_carries_its_full_name_in_column_two():
