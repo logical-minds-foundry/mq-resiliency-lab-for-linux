@@ -244,9 +244,11 @@ def _support_row(group: str, host: str, svc_qm: str, y: int) -> list[dict[str, A
     spec = _ROLE_SPEC[group]
     ds = "prometheus"
     sx, sw = _SUPPORT_COLS["stripe"]
+    # The stripe is a state-only block (up/down/STALE); the host name lives in column 2
+    # (the role tile) — no redundant, Grafana-truncated name in the leftmost column (#505).
     stripe = _bg(
         _stat(
-            host,
+            "",
             f'up{{job="node",host="{host}"}}',
             ds,
             sx,
@@ -422,9 +424,12 @@ def _stack_row(name: str, cfg: dict[str, Any], y: int) -> list[dict[str, Any]]:
     all_sel = "|".join(groups)
 
     sx, sw = _STACK_COLS["stripe"]
+    # State-only stripe (up/down/STALE); the stack name lives in column 2 alongside the
+    # mechanism — otherwise the truncated stripe title was the only place the name showed,
+    # and the two native-ha stacks collided at "nati…" (#505).
     stripe = _bg(
         _stat(
-            name,
+            "",
             f'min(cluster_node_online{{groups=~"{all_sel}"}})',
             ds,
             sx,
@@ -435,7 +440,7 @@ def _stack_row(name: str, cfg: dict[str, Any], y: int) -> list[dict[str, Any]]:
         )
     )
     mx, mw = _STACK_COLS["mech"]
-    mech = _text(mechanism, mx, y, mw)
+    mech = _text(f"**{name}**<br/>{mechanism}", mx, y, mw)
     site_a = _site_tiles("Site A · live", resource, a_groups, ("site_a", "n_a"), y)
     site_b = _site_tiles("Site B · DR", resource, b_groups, ("site_b", "n_b"), y)
     fx, fw = _STACK_COLS["flow"]
