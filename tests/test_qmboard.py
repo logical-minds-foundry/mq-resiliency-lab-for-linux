@@ -83,9 +83,12 @@ def test_board_uid_and_sections_present():
 
 def test_the_only_graph_panels_are_timeseries():
     # every graphing panel is a timeseries (the v2 panel type); the sole non-graph panels are
-    # the compact stat pills, the row headers, and the text banner.
+    # the compact stat pills, the row headers, the text banner, and the per-object mq-events
+    # logs panels (#526).
     board = _board()
-    graph_types = {p["type"] for p in board["panels"] if p["type"] not in {"stat", "row", "text"}}
+    graph_types = {
+        p["type"] for p in board["panels"] if p["type"] not in {"stat", "row", "text", "logs"}
+    }
     assert graph_types == {"timeseries"}
 
 
@@ -259,3 +262,31 @@ def test_write_renders_provisioned_stacks_only(monkeypatch, tmp_path):
     # the reserved stack (provision: null) is filtered out; the two provisioned ones render
     assert names == ["lab-qm-nhax.json", "lab-qm-othr.json"]
     assert "NHAXAPP" in (tmp_path / "lab-qm-nhax.json").read_text()
+
+
+def _logs_panels(board):
+    return _panels_of(board, "logs")
+
+
+def test_per_object_event_panels_present_and_scoped():
+    # #526: each object on the board carries an MQ instrumentation-events panel reading the
+    # {unit="mq-events"} JSON stream, scoped to that object. NHAX → app_qm NHAXAPP, svc SVCQM.
+    board = _board()
+    exprs = [p["targets"][0]["expr"] for p in _logs_panels(board)]
+    assert exprs, "expected mq-events panels on the QM board"
+    assert all('unit="mq-events"' in e and "| json" in e for e in exprs)
+    # ① QM-level: all events for this QM (eventData.queueMgrName)
+    assert any('eventData_queueMgrName="NHAXAPP"' in e for e in exprs)
+    # ② each critical queue (APP.REPLY + the svc XMITQ SVCQM), by the affected-object field
+    assert any('eventSource_objectName="APP.REPLY"' in e for e in exprs)
+    assert any('eventSource_objectName="SVCQM"' in e for e in exprs)
+    # ③ each critical channel (SVRCONN in, SDR out, RCVR back)
+    assert any('eventSource_objectName="APP.SVRCONN"' in e for e in exprs)
+    assert any('eventSource_objectName="NHAXAPP.SVCQM"' in e for e in exprs)
+    assert any('eventSource_objectName="SVCQM.NHAXAPP"' in e for e in exprs)
+
+
+def test_event_panels_bind_the_loki_datasource():
+    board = render_qm_board(FIXTURE, "nha-x", {"short": "NHAX"}, loki_uid="loki-x")
+    logs = _logs_panels(board)
+    assert logs and all(p["datasource"] == {"type": "loki", "uid": "loki-x"} for p in logs)
