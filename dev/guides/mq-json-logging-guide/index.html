@@ -873,6 +873,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="6. What stays / caveats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-qmini-gets-written-and-who-owns-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How qm.ini gets written — and who owns it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1174,6 +1191,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="6. What stays / caveats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-qmini-gets-written-and-who-owns-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How qm.ini gets written — and who owns it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1280,7 +1314,7 @@
 <ul>
 <li><strong>MQ version:</strong> 9.4 (stanza-based services available from 9.1.0)</li>
 <li><strong>Status:</strong> Active</li>
-<li><strong>Last validated in lab:</strong> 2026-06-22</li>
+<li><strong>Last validated in lab:</strong> 2026-07-06</li>
 <li><strong>Related guides:</strong> none yet (a log-shipping pipeline guide is planned)</li>
 </ul>
 <hr />
@@ -1314,26 +1348,63 @@ pinned to <strong>9.4</strong>. Configuration changes take effect on <strong>que
    <em>Compromise:</em> extra files to rotate and ship; you own their lifecycle.</li>
 </ol>
 <p>Alongside the style choice, <strong>set the template once so every new queue manager
-inherits JSON logging automatically</strong> (section 4, step 2). This is the single
+inherits JSON logging automatically</strong> (section 4, step 1). This is the single
 highest-leverage step: it removes the per-QM edit and guarantees a freshly created
-queue manager is already emitting JSON on first start.</p>
-<p>The lab's default is <strong>Syslog + template inheritance</strong>. The evidence behind the
-Syslog-versus-File choice is in
+queue manager is already emitting JSON on first start. It is also the mechanism
+the lab uses — you seed the template in <code>mqs.ini</code> and let MQ own the copy it
+writes into each <code>qm.ini</code>, rather than hand-editing <code>qm.ini</code> directly.</p>
+<p><strong>Choose your severity floor deliberately.</strong> <code>Severities</code> defaults to <code>all</code>
+(every level: information, warning, error, stop, system). That is a lot of noise
+— information-level events dominate the stream. The lab intentionally runs at
+<code>all</code> because we want to <em>see everything</em> while exercising failures; in
+production, <code>W+</code> (warnings-and-above) or <code>E+</code> (errors-and-above) is the saner
+default. Set it explicitly to what you want (section 4); do not assume the
+default is production-appropriate.</p>
+<p>The lab's default is <strong>Syslog + template inheritance, <code>Severities=all</code></strong>. The
+evidence behind the Syslog-versus-File choice is in
 <a href="#appendix-b-alternatives-and-tradeoffs">Appendix B</a>.</p>
 <h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
 <p>Each surface below gets a diagnostic message service stanza. Add the ones that
-apply to your deployment; all take effect on the next restart of the component.</p>
+apply to your deployment; all take effect on the next restart of the component.
+Steps 1 and 2 are two routes to the same <code>qm.ini</code> outcome — <strong>prefer the template
+(step 1); reach for the direct edit (step 2) only to override a single queue
+manager or to retrofit one created before the template existed.</strong></p>
 <ol>
-<li><strong>Queue manager (<code>qm.ini</code>).</strong> Add a <code>DiagnosticMessages</code> stanza naming the
-   service (<code>Syslog</code> or <code>File</code>), a unique <code>Name</code>, and — for Syslog — an <code>Ident</code>
-   (syslog tag, default <code>ibm-mq</code>) and the <code>Severities</code> you want. For the File
-   style, set <code>Format = json</code>. See
+<li><strong>Every new queue manager, via the template (<code>mqs.ini</code>) — the recommended
+   path.</strong> Add a <code>DiagnosticMessagesTemplate</code> stanza to the system-wide
+   <code>mqs.ini</code>. MQ copies it into each queue manager's <code>qm.ini</code> at <code>crtmqm</code> time,
+   so set it once and every queue manager created afterwards gets JSON logging
+   without a per-QM edit. This is the lab's mechanism: MQ owns the <code>qm.ini</code> copy,
+   so you never hand-edit <code>qm.ini</code> for logging.</li>
+</ol>
+<blockquote>
+<p><strong>Expect a "field drop" between the template and the <code>qm.ini</code> it produces.</strong>
+<code>crtmqm</code> copies the template but <strong>omits any key whose value equals its
+default</strong>. So a template of <code>Name</code> / <code>Service=Syslog</code> / <code>Ident=ibm-mq</code> /
+<code>Severities=all</code> / <code>ExcludeMessage=9001,9002</code> materializes in <code>qm.ini</code> as
+just:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">Name</span><span class="o">=</span><span class="s">ClusterSyslog</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">   </span><span class="na">Service</span><span class="o">=</span><span class="s">Syslog</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">   </span><span class="na">ExcludeMessage</span><span class="o">=</span><span class="s">9001,9002</span>
+</code></pre></div>
+<p><code>Ident</code> and <code>Severities</code> are <strong>absent but still in effect</strong> — they fall back
+to their defaults (<code>ibm-mq</code> and <code>all</code>), which is exactly what the template
+asked for. Nothing is lost and nothing is filtered: an absent <code>Severities</code>
+means <code>all</code>, not "less than all". If you want a non-default severity floor
+(say <code>W+</code>), set it in the template — then, being non-default, it <em>will</em>
+appear in the generated <code>qm.ini</code>.</p>
+</blockquote>
+<ol>
+<li><strong>An individual queue manager, by editing <code>qm.ini</code> directly.</strong> Add a
+   <code>DiagnosticMessages</code> stanza naming the service (<code>Syslog</code> or <code>File</code>), a unique
+   <code>Name</code>, and — for Syslog — an <code>Ident</code> (syslog tag, default <code>ibm-mq</code>) and the
+   <code>Severities</code> you want. For the File style, set <code>Format = json</code>. Direct <code>.ini</code>
+   editing is a supported IBM mechanism and takes effect on the next
+   queue-manager restart; see the mechanism note in
+   <a href="#6-what-stays--caveats">section 6</a>. See
    <a href="#appendix-c-complete-configuration-examples">Appendix C</a> for both variants in
    full.</li>
-<li><strong>Every new queue manager (<code>mqs.ini</code>).</strong> Add a <code>DiagnosticMessagesTemplate</code>
-   stanza to the system-wide <code>mqs.ini</code>. MQ copies it into each queue manager's
-   <code>qm.ini</code> at <code>crtmqm</code> time, so set it once and every queue manager created
-   afterwards gets JSON logging without a per-QM edit.</li>
 <li><strong>System / installation diagnostics (<code>mqs.ini</code>).</strong> Add a
    <code>DiagnosticSystemMessages</code> stanza to catch messages emitted when no
    queue-manager context exists — early errors, or a queue manager that cannot
@@ -1373,6 +1444,29 @@ apply to your deployment; all take effect on the next restart of the component.<
 <li><strong>Client filtering is limited.</strong> <code>ExcludeMessage</code> / <code>SuppressMessage</code> are not
   honoured in <code>mqclient.ini</code>; the client surface is severity-filtered only.</li>
 </ul>
+<h3 id="how-qmini-gets-written-and-who-owns-it">How <code>qm.ini</code> gets written — and who owns it<a class="headerlink" href="#how-qmini-gets-written-and-who-owns-it" title="Permanent link">&para;</a></h3>
+<p>There are two supported ways to get a stanza into <code>qm.ini</code>, and one behaviour to
+be aware of:</p>
+<ul>
+<li><strong>Template copy (what the lab uses).</strong> Seed <code>DiagnosticMessagesTemplate</code> in
+  <code>mqs.ini</code>; <code>crtmqm</code> writes the <code>DiagnosticMessages</code> stanza into <code>qm.ini</code> for
+  you. MQ owns that copy — you never touch <code>qm.ini</code> for logging.</li>
+<li><strong>Direct edit.</strong> Editing <code>qm.ini</code> with a text editor (or an automation tool) is
+  an <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms">IBM-supported mechanism</a>;
+  changes take effect on the next queue-manager restart.</li>
+<li><strong>AutoConfig is the one thing that rebuilds <code>qm.ini</code>.</strong> If — and only if — you
+  create the queue manager with <code>crtmqm -ii</code> (or add an <code>AutoConfig</code> stanza with
+  <code>IniConfig</code>), MQ <strong>discards and rebuilds <code>qm.ini</code> on every start</strong> from a
+  cached override file, and <em>"any manual changes to the <code>qm.ini</code> file are lost"</em>
+  (<a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=qmini-automatic-configuration-startup">IBM: automatic configuration of <code>qm.ini</code> at startup</a>).
+  AutoConfig is IBM-scoped to uniform clusters; <strong>the lab does not use it</strong>, so no
+  rebuild happens and hand-placed stanzas persist. If you <em>do</em> adopt AutoConfig,
+  put your overrides in the <code>IniConfig</code> file, not in <code>qm.ini</code> directly.</li>
+</ul>
+<p>For automation that hand-edits <code>qm.ini</code> (e.g. Ansible <code>blockinfile</code>), there is a
+residual robustness gap: if a future MQ operation ever normalizes <code>qm.ini</code> and
+strips comments, marker-based idempotency breaks. The lab tracks this for the
+Native HA stanzas in issue #508.</p>
 <hr />
 <h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
 <h3 id="a1-stanza-attributes">A.1 Stanza attributes<a class="headerlink" href="#a1-stanza-attributes" title="Permanent link">&para;</a></h3>
@@ -1471,46 +1565,46 @@ tradeoff is yours to weigh against your transport and platform mix.</p>
 <h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
 <p><strong>Queue manager (<code>qm.ini</code>) — Syslog variant</strong> (Linux/AIX; emits JSON via
 <code>syslog()</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span><span class="w">          </span><span class="c1"># syslog identifier/tag (default: ibm-mq)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span><span class="w">             </span><span class="c1"># I, W, E, S, T  (use E+ for errors-and-above)</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">   </span><span class="na">ExcludeMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">9001,9002</span><span class="w">   </span><span class="c1"># optional: drop routine channel start/stop noise</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span><span class="w">          </span><span class="c1"># syslog identifier/tag (default: ibm-mq)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span><span class="w">             </span><span class="c1"># I, W, E, S, T  (use E+ for errors-and-above)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">   </span><span class="na">ExcludeMessage</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">9001,9002</span><span class="w">   </span><span class="c1"># optional: drop routine channel start/stop noise</span>
 </code></pre></div>
 <p><strong>Queue manager (<code>qm.ini</code>) — File variant:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">File</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">   </span><span class="na">Format</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s">json</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">   </span><span class="na">FilePrefix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">AMQERR</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="na">DiagnosticMessages</span><span class="o">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">File</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">   </span><span class="na">Format</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s">json</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">   </span><span class="na">FilePrefix</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">AMQERR</span>
 </code></pre></div>
 <p>After restart, the File variant writes <code>AMQERR0x.json</code> in the queue manager's
 <code>errors</code> directory (<code>/var/mqm/qmgrs/&lt;QM&gt;/errors/</code>).</p>
 <p><strong>Every new queue manager (<code>mqs.ini</code>):</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="na">DiagnosticMessagesTemplate</span><span class="o">:</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
-</code></pre></div>
-<p><strong>System / installation diagnostics (<code>mqs.ini</code>):</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="na">DiagnosticMessagesTemplate</span><span class="o">:</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
-<p><strong>Client applications (<code>mqclient.ini</code>):</strong></p>
+<p><strong>System / installation diagnostics (<code>mqs.ini</code>):</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
+<p><strong>Client applications (<code>mqclient.ini</code>):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
+</code></pre></div>
 <p><strong>MQ Console / REST server (mqweb) — Liberty <code>&lt;logging&gt;</code> element in
 <code>mqwebuser.xml</code>:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">&lt;logging</span><span class="w"> </span><span class="na">messageFormat=</span><span class="s">&quot;json&quot;</span><span class="w"> </span><span class="na">messageSource=</span><span class="s">&quot;message,ffdc&quot;</span><span class="nt">/&gt;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">&lt;logging</span><span class="w"> </span><span class="na">messageFormat=</span><span class="s">&quot;json&quot;</span><span class="w"> </span><span class="na">messageSource=</span><span class="s">&quot;message,ffdc&quot;</span><span class="nt">/&gt;</span>
 </code></pre></div>
 <p>mqweb logs land in
 <code>&lt;MQ_DATA&gt;/web/installations/&lt;installation&gt;/servers/mqweb/logs/messages.log</code>.
@@ -1540,6 +1634,11 @@ Restart the mqweb server to apply.</p>
 <td>A line will not parse as JSON</td>
 <td>you are reading a legacy <code>.LOG</code> text file, not the JSON output</td>
 <td>read <code>AMQERR0x.json</code> (File) or the entries tagged with your <code>Ident</code> (Syslog)</td>
+</tr>
+<tr>
+<td><code>qm.ini</code> is missing <code>Ident</code> / <code>Severities</code> that the template set</td>
+<td>expected: <code>crtmqm</code> drops keys equal to their default (<code>ibm-mq</code>, <code>all</code>) when copying the template — they are still in effect</td>
+<td>none needed; to make a key appear, set it to a non-default value in the template</td>
 </tr>
 <tr>
 <td>Bursts of events missing under load</td>
