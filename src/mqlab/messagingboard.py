@@ -18,39 +18,24 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from mqlab.clusterboard import (
+    _STATUS_MAP,
     _ds,
     _log_level_var,
     _logs_panel,
+    _qm_status_expr,
     _row_header,
     _stat,
     _t,
     _timeseries,
 )
 from mqlab.paths import work
+from mqlab.qmboard import qm_board_uid
 from mqlab.stacks import lab_stacks
-
-# `qm_board_uid` is imported lazily inside `_status_band` (below) — qmboard.py imports
-# from this module at load time (_STATUS_MAP, _qm_status_expr), so a module-level import
-# here would be circular.
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from mqlab.stacks import Stack
-
-# MQ channel/QM status squash: -1 no-status(grey) · 0 stopped(red) · 1
-# transitioning(yellow) · 2 running(green). Same coding dashboard.py uses.
-_STATUS_MAP: list[dict[str, Any]] = [
-    {
-        "type": "value",
-        "options": {
-            "-1": {"text": "No status", "color": "grey", "index": 0},
-            "0": {"text": "Stopped", "color": "red", "index": 1},
-            "1": {"text": "Transitioning", "color": "yellow", "index": 2},
-            "2": {"text": "Running", "color": "green", "index": 3},
-        },
-    },
-]
 
 # Lab-constant object names in the app<->svc flow (the QM names are per-stack).
 _APP_SVRCONN = "APP.SVRCONN"
@@ -81,10 +66,6 @@ _RT_FAIL = "app_roundtrip_failures_total"
 _RT_BUCKET = "app_roundtrip_latency_ms_bucket"
 
 
-def _qm_status_expr(qm: str) -> str:
-    return f'max(ibmmq_qmgr_status{{qmgr="{qm}"}}) or vector(-1)'
-
-
 def _channel_status_expr(qm: str, channel: str) -> str:
     return f'max(ibmmq_channel_status_squash{{qmgr="{qm}",channel="{channel}"}}) or vector(-1)'
 
@@ -98,8 +79,6 @@ def _status_band(ds_uid: str, app_qm: str, svc_qm: str, short: str, y: int) -> l
     rate · failure rate. Success% reads No data when idle (no `or vector(100)` fallback —
     a fake 100% on no traffic is misleading). The App QM tile also carries a data-link
     drilling into that stack's per-QM state board (`lab-qm-<short>`, #489)."""
-    from mqlab.qmboard import qm_board_uid  # local: avoids a circular import (see top)
-
     success = f"100 * (1 - (sum(rate({_RT_FAIL}[5m])) / sum(rate({_RT_TOTAL}[5m]))))"
     # Each tile carries: a title, its PromQL, its x-offset and width, an optional
     # colour mapping, and an optional value unit.

@@ -23,8 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.clusterboard import _STALE_MAP, _ds, _row_header, _stat
-from mqlab.messagingboard import _STATUS_MAP, _qm_status_expr
+from mqlab.clusterboard import _STALE_MAP, _STATUS_MAP, _ds, _qm_status_expr, _row_header, _stat
 from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
