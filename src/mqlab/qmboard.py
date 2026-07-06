@@ -1,29 +1,43 @@
-"""Per-QM state board (#489) — one code-templated Grafana board per app queue manager,
-answering "how is *this* QM doing?": the QM's own health (① a stat band), its critical
-application queues (② a table), and its critical channels (③ a table). It joins the cockpit
-family (clusterboard.py / messagingboard.py) as the single-QM *operational* view.
+"""Per-QM state board (#489 → #521 v2) — one code-templated Grafana board per app queue
+manager, answering "how is *this* QM doing, and *how is it trending*?": the QM's own
+health (① a compact stat band + trend graphs), its critical application queues (② grouped
+time-series blocks), and its critical channels (③ grouped time-series blocks).
+
+Where the #489 board rendered static stat tiles + instant object tables, this v2 renders the
+same live-verified metric bindings as **time-series trend graphs** — the point is to *see the
+derivative*: put-rate vs get-rate on one graph is the depth derivative; in-handles vs
+out-handles on one graph is who is attached; the channel status over time shows *when* it
+dropped. Related series share a graph on purpose (the relationship is the signal).
 
 Everything comes from the already-scraped Prometheus `ibmmq_*` series (no new exporter,
-collector, or REST path). The metric bindings were verified against a live exporter's
-`/metrics` during the observe pass; the object-driven `or vector(-1)` wrapper makes any
-that turn out sparse read as no-data rather than a false zero.
+collector, or REST path); the metric bindings are the ones verified against a live exporter's
+`/metrics` during the observe pass. Status tiles keep the object-driven `or vector(-1)`
+sentinel so a null series reads no-data, never a false healthy; a trend graph with no series
+simply renders empty, which is the honest no-data for a trend.
 
 Object-driven, not metric-driven (the fleet convention, #178): the queues and channels we
 care about are known up front (derived from the stack `short`, no QM literal hardcoded), so
-each renders a tile/row at all times — a missing series reads as a coloured no-data, never a
-vanished row. QM/queue/channel names derive from `short`: app QM = `<short>APP`, svc QM =
-`<svc.short>QM`; only the fixed MQSC object names (APP.REPLY, APP.SVRCONN) are constants.
+each gets its own labelled block at all times. QM/queue/channel names derive from `short`:
+app QM = `<short>APP`, svc QM = `<svc.short>QM`; only the fixed MQSC object names (APP.REPLY,
+APP.SVRCONN) are constants.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.clusterboard import _STALE_MAP, _STATUS_MAP, _ds, _qm_status_expr, _row_header, _stat
+from mqlab.clusterboard import (
+    _STALE_MAP,
+    _STATUS_MAP,
+    _qm_status_expr,
+    _row_header,
+    _stat,
+    _t,
+    _timeseries,
+)
 from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
@@ -35,15 +49,6 @@ DASHBOARD_UID_PREFIX = "lab-qm-"
 # `short`). APP.REPLY is where replies land; APP.SVRCONN is the app client's inbound channel.
 _APP_REPLY = "APP.REPLY"
 _APP_SVRCONN = "APP.SVRCONN"
-
-_REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-# The value expr of one table cell, as a function of (qm, object). The table builder wraps
-# each in `... or vector(-1)` + a label_replace that stamps the object name, so the curated
-# row is present even when the series is absent.
-CellExpr = Callable[[str, str], str]
-# (column title, cell-expr builder, optional colour mapping for the value cell)
-Column = tuple[str, CellExpr, list[dict[str, Any]] | None]
 
 # QM status / channel status share the messaging board's -1/0/1/2 coloured family; every
 # status tile additionally carries STALE so a truly-null series never reads healthy.
@@ -69,7 +74,7 @@ def qm_board_uid(short: str) -> str:
     return f"{DASHBOARD_UID_PREFIX}{short.lower()}"
 
 
-# ── ① QM header band ──────────────────────────────────────────────────────────
+# ── ① QM header band — compact status pills + trend graphs ────────────────────
 
 
 def _uptime_expr(qm: str) -> str:
@@ -101,7 +106,7 @@ def _services_expr(qm: str) -> str:
 
 
 def _recovery_log_expr(qm: str) -> str:
-    # Early-warning gauge for a filling recovery log: restart / (restart + reusable) as a
+    # Early-warning trend for a filling recovery log: restart / (restart + reusable) as a
     # percentage. Sparse-safe via the trailing sentinel.
     restart = f'max(ibmmq_qmgr_log_size_restart{{qmgr="{qm}"}})'
     reusable = f'max(ibmmq_qmgr_log_size_reusable{{qmgr="{qm}"}})'
@@ -109,41 +114,88 @@ def _recovery_log_expr(qm: str) -> str:
 
 
 def _qm_band(ds_uid: str, app_qm: str, y: int) -> list[dict[str, Any]]:
-    """A row of six equal stat tiles: status · uptime · connections · msg-rate (sparkline) ·
-    services pill · recovery-log %. Every value expr is object-driven (`or vector(-1)`)."""
-    # Each tile carries a title, its PromQL, an x-offset, an optional colour mapping, and an
-    # optional value unit.
-    specs: list[tuple[str, str, int, list[dict[str, Any]] | None, str | None]] = [
-        ("Status", _qm_status_expr(app_qm), 0, _QM_STATUS_MAP, None),
-        ("Uptime", _uptime_expr(app_qm), 4, None, "dtdurations"),
-        ("Connections", _connections_expr(app_qm), 8, None, None),
-        ("Msg rate", _msg_rate_expr(app_qm), 12, None, "short"),
-        ("Services", _services_expr(app_qm), 16, _SERVICES_MAP, None),
-        ("Recovery log %", _recovery_log_expr(app_qm), 20, None, "percent"),
+    """① QM health: a compact top row of three status pills (Status · Uptime · Services),
+    then a row of three trend graphs (Connections · Msg rate · Recovery-log %). Status stays
+    categorical (a stat pill); the counts/rates that tell a story become timeseries."""
+    pills = [
+        _stat(
+            "Status",
+            _qm_status_expr(app_qm),
+            ds_uid,
+            0,
+            y,
+            mappings=_QM_STATUS_MAP,
+            w=8,
+            h=3,
+            value_size=22,
+        ),
+        _stat(
+            "Uptime",
+            _uptime_expr(app_qm),
+            ds_uid,
+            8,
+            y,
+            unit="dtdurations",
+            w=8,
+            h=3,
+            value_size=22,
+        ),
+        _stat(
+            "Services",
+            _services_expr(app_qm),
+            ds_uid,
+            16,
+            y,
+            mappings=_SERVICES_MAP,
+            w=8,
+            h=3,
+            value_size=22,
+        ),
     ]
-    return [
-        _stat(title, expr, ds_uid, x, y, mappings=mappings, unit=unit, w=4, h=4, value_size=22)
-        for title, expr, x, mappings, unit in specs
+    ty = y + 3
+    trends = [
+        _timeseries(
+            "Connections",
+            [_t("A", _connections_expr(app_qm), "connections")],
+            ds_uid,
+            0,
+            ty,
+            w=8,
+        ),
+        _timeseries(
+            "Msg rate (put+get / s)",
+            [_t("A", _msg_rate_expr(app_qm), "put+get / s")],
+            ds_uid,
+            8,
+            ty,
+            w=8,
+            unit="short",
+        ),
+        _timeseries(
+            "Recovery log %",
+            [_t("A", _recovery_log_expr(app_qm), "log used")],
+            ds_uid,
+            16,
+            ty,
+            w=8,
+            unit="percent",
+        ),
     ]
+    return [*pills, *trends]
 
 
-# ── ②/③ The curated object tables ─────────────────────────────────────────────
+# ── ② queue trend blocks / ③ channel trend blocks ────────────────────────────
 
 
-def _q(metric: str) -> CellExpr:
-    """A simple queue cell: `max(ibmmq_queue_<metric>{qmgr,queue})`."""
-    return lambda qm, obj: f'max(ibmmq_queue_{metric}{{qmgr="{qm}",queue="{obj}"}})'
+def _q_series(metric: str, qm: str, obj: str) -> str:
+    """A queue series: `max(ibmmq_queue_<metric>{qmgr,queue})` (no sentinel — an empty
+    trend is the honest no-data for a graph)."""
+    return f'max(ibmmq_queue_{metric}{{qmgr="{qm}",queue="{obj}"}})'
 
 
-def _c(metric: str) -> CellExpr:
-    """A simple channel cell: `max(ibmmq_channel_<metric>{qmgr,channel})`."""
-    return lambda qm, obj: f'max(ibmmq_channel_{metric}{{qmgr="{qm}",channel="{obj}"}})'
-
-
-def _q_pct_full(qm: str, obj: str) -> str:
-    depth = f'max(ibmmq_queue_depth{{qmgr="{qm}",queue="{obj}"}})'
-    max_depth = f'max(ibmmq_queue_attribute_max_depth{{qmgr="{qm}",queue="{obj}"}})'
-    return f"100 * {depth} / {max_depth}"
+def _c_series(metric: str, qm: str, obj: str) -> str:
+    """A channel series: `max(ibmmq_channel_<metric>{qmgr,channel})`."""
+    return f'max(ibmmq_channel_{metric}{{qmgr="{qm}",channel="{obj}"}})'
 
 
 def _q_put_rate(qm: str, obj: str) -> str:
@@ -154,123 +206,110 @@ def _q_get_rate(qm: str, obj: str) -> str:
     return f'sum(rate(ibmmq_queue_mqget_count{{qmgr="{qm}",queue="{obj}"}}[1m]))'
 
 
-def _queue_columns() -> list[Column]:
-    return [
-        ("Depth", _q("depth"), None),
-        ("% full", _q_pct_full, None),
-        ("Oldest age", _q("oldest_message_age"), None),
-        ("Uncommitted", _q("uncommitted_messages"), None),
-        ("In handles", _q("input_handles"), None),
-        ("Out handles", _q("output_handles"), None),
-        ("Put rate", _q_put_rate, None),
-        ("Get rate", _q_get_rate, None),
-        ("Since get", _q("time_since_get"), None),
+def _channel_status_series(qm: str, obj: str) -> str:
+    # The channel status timeline keeps the sentinel: a dropped/absent channel must read
+    # -1 (No status), not an empty gap, so you can see *when* it went down.
+    return f"{_c_series('status_squash', qm, obj)} or vector(-1)"
+
+
+def _queue_block(ds_uid: str, qm: str, queue: str, y: int) -> list[dict[str, Any]]:
+    """One queue's block: a labelled row header + four trend graphs in a 2×2 grid —
+    Depth (with max-depth reference) · Flow (put vs get, the depth derivative) · Handles
+    (in vs out) · Age & in-flight (oldest-age + uncommitted). Related series share a graph."""
+    header = _row_header(f"② Queue · {queue} — depth · flow · handles · age", y)
+    py = y + 1
+    panels = [
+        _timeseries(
+            f"{queue} — depth",
+            [
+                _t("A", _q_series("depth", qm, queue), "depth"),
+                _t("B", _q_series("attribute_max_depth", qm, queue), "max depth"),
+            ],
+            ds_uid,
+            0,
+            py,
+            w=12,
+        ),
+        _timeseries(
+            f"{queue} — flow (put vs get / s)",
+            [
+                _t("A", _q_put_rate(qm, queue), "put rate"),
+                _t("B", _q_get_rate(qm, queue), "get rate"),
+            ],
+            ds_uid,
+            12,
+            py,
+            w=12,
+            unit="ops",
+        ),
+        _timeseries(
+            f"{queue} — handles (in vs out)",
+            [
+                _t("A", _q_series("input_handles", qm, queue), "input"),
+                _t("B", _q_series("output_handles", qm, queue), "output"),
+            ],
+            ds_uid,
+            0,
+            py + 7,
+            w=12,
+        ),
+        _timeseries(
+            f"{queue} — age & in-flight",
+            [
+                _t("A", _q_series("oldest_message_age", qm, queue), "oldest age"),
+                _t("B", _q_series("uncommitted_messages", qm, queue), "uncommitted"),
+            ],
+            ds_uid,
+            12,
+            py + 7,
+            w=12,
+        ),
     ]
+    return [header, *panels]
 
 
-def _channel_columns() -> list[Column]:
-    return [
-        ("Status", _c("status_squash"), _QM_STATUS_MAP),
-        ("Substate", _c("substate"), None),
-        ("Messages", _c("messages"), None),
-        ("Bytes sent", _c("bytes_sent"), None),
-        ("Bytes rcvd", _c("bytes_rcvd"), None),
-        ("Batches", _c("batches"), None),
-        ("Nettime", _c("nettime_short"), None),
-        ("Since msg", _c("time_since_msg"), None),
-        ("Cur inst", _c("cur_inst"), None),
+def _channel_block(ds_uid: str, qm: str, channel: str, role: str, y: int) -> list[dict[str, Any]]:
+    """One channel's block: a labelled row header + three trend graphs — Throughput
+    (messages + bytes sent/rcvd) · Nettime (round-trip latency) · Status (the squash code
+    over time, so a drop is visible in the timeline)."""
+    header = _row_header(f"③ Channel · {channel} ({role}) — throughput · nettime · status", y)
+    py = y + 1
+    panels = [
+        _timeseries(
+            f"{channel} — throughput",
+            [
+                _t("A", _c_series("messages", qm, channel), "messages"),
+                _t("B", _c_series("bytes_sent", qm, channel), "bytes sent"),
+                _t("C", _c_series("bytes_rcvd", qm, channel), "bytes rcvd"),
+            ],
+            ds_uid,
+            0,
+            py,
+            w=8,
+        ),
+        _timeseries(
+            f"{channel} — nettime",
+            [_t("A", _c_series("nettime_short", qm, channel), "nettime")],
+            ds_uid,
+            8,
+            py,
+            w=8,
+            unit="µs",
+        ),
+        _timeseries(
+            f"{channel} — status",
+            [_t("A", _channel_status_series(qm, channel), "status")],
+            ds_uid,
+            16,
+            py,
+            w=8,
+        ),
     ]
-
-
-def _cell(value_expr: str, label: str, obj: str) -> str:
-    """Wrap one cell's value in the object-driven sentinel and stamp the object name so the
-    curated row is present even when the series is absent."""
-    return f'label_replace({value_expr} or vector(-1),"{label}","{obj}","","")'
-
-
-def _object_table(
-    ds_uid: str,
-    title: str,
-    qm: str,
-    objects: list[str],
-    label: str,
-    columns: list[Column],
-    y: int,
-) -> dict[str, Any]:
-    """A curated multi-column table: one row per object in `objects` (keyed by `label` =
-    queue/channel), one column per `Column`. Each column is a single instant target unioning
-    a per-object `label_replace(... or vector(-1))` cell, so every curated row renders at all
-    times; a value cell with a `mapping` is colour-background-mapped (channel status)."""
-    name_col = label.capitalize()
-    targets: list[dict[str, Any]] = []
-    rename: dict[str, str] = {label: name_col}
-    overrides: list[dict[str, Any]] = []
-    for i, (col_title, cell_expr, mapping) in enumerate(columns):
-        ref = _REFIDS[i]
-        expr = " or ".join(_cell(cell_expr(qm, obj), label, obj) for obj in objects)
-        targets.append(
-            {
-                "refId": ref,
-                "expr": expr,
-                "format": "table",
-                "instant": True,
-                "datasource": _ds(ds_uid),
-            }
-        )
-        rename[f"Value #{ref}"] = col_title
-        if mapping is not None:
-            overrides.append(
-                {
-                    "matcher": {"id": "byName", "options": col_title},
-                    "properties": [
-                        {
-                            "id": "custom.cellOptions",
-                            "value": {"type": "color-background", "mode": "basic"},
-                        },
-                        {"id": "mappings", "value": mapping},
-                        {"id": "color", "value": {"mode": "fixed"}},
-                    ],
-                }
-            )
-    return {
-        "type": "table",
-        "title": title,
-        "datasource": _ds(ds_uid),
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": y},
-        "targets": targets,
-        "transformations": [
-            {"id": "joinByField", "options": {"byField": label, "mode": "outer"}},
-            {
-                "id": "organize",
-                "options": {"renameByName": rename, "excludeByName": {"Time": True}},
-            },
-            {"id": "sortBy", "options": {"sort": [{"field": name_col}]}},
-        ],
-        "fieldConfig": {"defaults": {"custom": {"align": "center"}}, "overrides": overrides},
-        "options": {"cellHeight": "sm"},
-    }
-
-
-def _queues_table(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> dict[str, Any]:
-    """② Critical queues: APP.REPLY (replies land here) and the svc XMITQ (named after the
-    counterparty QM, USAGE(XMITQ) — the canonical request-outbound path)."""
-    queues = [_APP_REPLY, svc_qm]
-    return _object_table(
-        ds_uid, f"{app_qm} — critical queues", app_qm, queues, "queue", _queue_columns(), y
-    )
-
-
-def _channels_table(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> dict[str, Any]:
-    """③ Critical channels: APP.SVRCONN (app client in), <app>.<svc> (SDR → svc),
-    <svc>.<app> (RCVR ← svc)."""
-    channels = [_APP_SVRCONN, f"{app_qm}.{svc_qm}", f"{svc_qm}.{app_qm}"]
-    return _object_table(
-        ds_uid, f"{app_qm} — critical channels", app_qm, channels, "channel", _channel_columns(), y
-    )
+    return [header, *panels]
 
 
 def _title_banner(name: str, app_qm: str, y: int) -> dict[str, Any]:
-    content = f"## Queue Manager · {name} · {app_qm} — health · critical queues · channels"
+    content = f"## Queue Manager · {name} · {app_qm} — health · critical queues · channels (trends)"
     return {
         "type": "text",
         "title": "",
@@ -289,15 +328,33 @@ def render_qm_board(
     short = cfg["short"]
     app_qm = f"{short}APP"
     svc_qm = f"{topo['svc']['short']}QM"
-    panels = [
-        _title_banner(name, app_qm, y=0),
-        _row_header("① QM health — status · uptime · connections · rate · services · log", y=2),
-        *_qm_band(ds_uid, app_qm, y=3),
-        _row_header("② Critical queues — APP.REPLY · SVCQM XMITQ", y=7),
-        _queues_table(ds_uid, app_qm, svc_qm, y=8),
-        _row_header("③ Critical channels — SVRCONN · SDR · RCVR", y=16),
-        _channels_table(ds_uid, app_qm, svc_qm, y=17),
+
+    panels: list[dict[str, Any]] = [_title_banner(name, app_qm, y=0)]
+    y = 2
+    panels.append(
+        _row_header("① QM health — status · uptime · services · connections · rate · log", y)
+    )
+    y += 1
+    panels.extend(_qm_band(ds_uid, app_qm, y))
+    y += 10  # 3 pills (h=3) over 3 trend graphs (h=7)
+
+    # ② Critical queues: APP.REPLY (replies land here) and the svc XMITQ (named after the
+    # counterparty QM, USAGE(XMITQ) — the canonical request-outbound path). One block each.
+    for queue in (_APP_REPLY, svc_qm):
+        panels.extend(_queue_block(ds_uid, app_qm, queue, y))
+        y += 15  # header (1) + two rows of graphs (7 + 7)
+
+    # ③ Critical channels: APP.SVRCONN (app client in), <app>.<svc> (SDR → svc),
+    # <svc>.<app> (RCVR ← svc). One block each.
+    channels = [
+        (_APP_SVRCONN, "SVRCONN"),
+        (f"{app_qm}.{svc_qm}", "SDR"),
+        (f"{svc_qm}.{app_qm}", "RCVR"),
     ]
+    for channel, role in channels:
+        panels.extend(_channel_block(ds_uid, app_qm, channel, role, y))
+        y += 8  # header (1) + one row of graphs (7)
+
     return {
         "uid": qm_board_uid(short),
         "title": f"Queue Manager · {app_qm}",
