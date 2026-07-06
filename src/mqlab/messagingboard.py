@@ -290,7 +290,15 @@ def render_messaging_board(
         _row_header("▤ MQ instrumentation events — this stack", y=28),
         _events_panel(
             loki_uid,
-            [app_qm, svc_qm, req_queue, _APP_REPLY, _APP_SVRCONN, _SVC_SVRCONN, f"{app_qm}.{svc_qm}"],
+            [
+                app_qm,
+                svc_qm,
+                req_queue,
+                _APP_REPLY,
+                _APP_SVRCONN,
+                _SVC_SVRCONN,
+                f"{app_qm}.{svc_qm}",
+            ],
             y=29,
         ),
         _row_header("▦ Queues & channels", y=37),
