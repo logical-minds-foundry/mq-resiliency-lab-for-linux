@@ -32,6 +32,7 @@ import yaml
 from mqlab.clusterboard import (
     _STALE_MAP,
     _STATUS_MAP,
+    _logs_panel,
     _qm_status_expr,
     _row_header,
     _stat,
@@ -325,8 +326,24 @@ def _title_banner(name: str, app_qm: str, y: int) -> dict[str, Any]:
     }
 
 
+def _events_panel(loki_uid: str, title: str, filter_clause: str, y: int) -> dict[str, Any]:
+    """A per-object MQ instrumentation-events panel (#526). The mq-event-monitor collector
+    (#515) drains the QM's SYSTEM.ADMIN.*.EVENT queues to JSON tagged mq-events — a separate
+    Loki stream (unit=mq-events) from the diagnostic logs. `| json` flattens the event; the
+    affected object is eventSource.objectName (→ eventSource_objectName) and the QM is
+    eventData.queueMgrName. Each panel scopes to one object so its events sit inline with the
+    metric graphs for that same object (for the QM: start/stop, config, and the CMDEV admin
+    commands worth watching during a live triage)."""
+    sel = f'{{unit="mq-events"}} | json | {filter_clause}'
+    return _logs_panel(title, sel, loki_uid, y)
+
+
 def render_qm_board(
-    topo: dict[str, Any], name: str, cfg: dict[str, Any], ds_uid: str = "prometheus"
+    topo: dict[str, Any],
+    name: str,
+    cfg: dict[str, Any],
+    ds_uid: str = "prometheus",
+    loki_uid: str = "loki",
 ) -> dict[str, Any]:
     """Assemble one stack's app-QM board (pure — no I/O). `name` is the stack key; `cfg` is
     that stack's config (its `short` drives the QM/queue/channel names + the uid); `topo`
@@ -343,15 +360,36 @@ def render_qm_board(
     y += 1
     panels.extend(_qm_band(ds_uid, app_qm, y))
     y += 10  # 3 pills (h=3) over 3 trend graphs (h=7)
+    # ① QM-level events: everything this QM emits (start/stop, config, and the CMDEV admin
+    # commands) — scoped by eventData.queueMgrName (#526).
+    panels.append(
+        _events_panel(
+            loki_uid,
+            f"▤ {app_qm} — all QM events",
+            f'eventData_queueMgrName="{app_qm}"',
+            y,
+        )
+    )
+    y += 8  # logs panel (h=8)
 
     # ② Critical queues: APP.REPLY (replies land here) and the svc XMITQ (named after the
-    # counterparty QM, USAGE(XMITQ) — the canonical request-outbound path). One block each.
+    # counterparty QM, USAGE(XMITQ) — the canonical request-outbound path). One block each,
+    # each followed by that queue's own events panel (#526).
     for queue in (_APP_REPLY, svc_qm):
         panels.extend(_queue_block(ds_uid, app_qm, queue, y))
         y += 15  # header (1) + two rows of graphs (7 + 7)
+        panels.append(
+            _events_panel(
+                loki_uid,
+                f"▤ {queue} — events",
+                f'eventSource_objectName="{queue}"',
+                y,
+            )
+        )
+        y += 8
 
     # ③ Critical channels: APP.SVRCONN (app client in), <app>.<svc> (SDR → svc),
-    # <svc>.<app> (RCVR ← svc). One block each.
+    # <svc>.<app> (RCVR ← svc). One block each, each followed by that channel's events (#526).
     channels = [
         (_APP_SVRCONN, "SVRCONN"),
         (f"{app_qm}.{svc_qm}", "SDR"),
@@ -360,6 +398,15 @@ def render_qm_board(
     for channel, role in channels:
         panels.extend(_channel_block(ds_uid, app_qm, channel, role, y))
         y += 8  # header (1) + one row of graphs (7)
+        panels.append(
+            _events_panel(
+                loki_uid,
+                f"▤ {channel} — events",
+                f'eventSource_objectName="{channel}"',
+                y,
+            )
+        )
+        y += 8
 
     return {
         "uid": qm_board_uid(short),
