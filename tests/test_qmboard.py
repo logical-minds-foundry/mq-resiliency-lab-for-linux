@@ -1,6 +1,6 @@
-"""Per-QM state board (#489): the pure builder — one board per app QM showing that
-QM's health + its critical queues + its critical channels, all object-driven from the
-already-scraped ibmmq_* series. Mirrors tests/test_messagingboard.py."""
+"""Per-QM state board (#489 → #521 v2): the pure builder — one board per app QM showing
+that QM's health + its critical queues + its critical channels as *time-series trend graphs*,
+all object-driven from the already-scraped ibmmq_* series. Mirrors tests/test_messagingboard.py."""
 
 from __future__ import annotations
 
@@ -31,22 +31,37 @@ def _board():
     return render_qm_board(FIXTURE, "nha-x", {"short": "NHAX"})
 
 
+def _panels_of(board, kind):
+    return [p for p in board["panels"] if p["type"] == kind]
+
+
 def _stat_exprs(board):
     return [
-        t["expr"]
-        for p in board["panels"]
-        if p["type"] == "stat"
-        for t in p.get("targets", [])
-        if "expr" in t
+        t["expr"] for p in _panels_of(board, "stat") for t in p.get("targets", []) if "expr" in t
     ]
 
 
-def _tables(board):
-    return [p for p in board["panels"] if p["type"] == "table"]
+def _timeseries_panels(board):
+    return _panels_of(board, "timeseries")
 
 
-def _table_exprs(board):
-    return [t["expr"] for p in _tables(board) for t in p.get("targets", []) if "expr" in t]
+def _panel_exprs(panel):
+    return [t["expr"] for t in panel.get("targets", []) if "expr" in t]
+
+
+def _all_exprs(board):
+    return [t["expr"] for p in board["panels"] for t in p.get("targets", []) if "expr" in t]
+
+
+def _panel_titled(board, needle):
+    """The one timeseries panel whose title contains `needle` (unique per queue/channel)."""
+    hits = [p for p in _timeseries_panels(board) if needle in p["title"]]
+    assert len(hits) == 1, (needle, [p["title"] for p in hits])
+    return hits[0]
+
+
+def _row_titles(board):
+    return [p["title"] for p in _panels_of(board, "row")]
 
 
 def test_uid_prefix_and_helper():
@@ -55,18 +70,28 @@ def test_uid_prefix_and_helper():
     assert qm_board_uid("pcmk") == "lab-qm-pcmk"
 
 
-def test_board_uid_and_three_sections_present():
+def test_board_uid_and_sections_present():
     board = _board()
     assert board["uid"] == "lab-qm-nhax"
-    # ① QM band = stat tiles; ② queues + ③ channels = exactly two tables.
-    assert any(p["type"] == "stat" for p in board["panels"])
-    assert len(_tables(board)) == 2
+    # ① QM band still has compact stat pills; the trends are timeseries panels; there are
+    # NO table panels anymore (this is the v2 change).
+    assert _panels_of(board, "stat")
+    assert _timeseries_panels(board)
+    assert not _panels_of(board, "table")
     assert "cockpit" in board["tags"] and "nha-x" in board["tags"]
+
+
+def test_the_only_graph_panels_are_timeseries():
+    # every graphing panel is a timeseries (the v2 panel type); the sole non-graph panels are
+    # the compact stat pills, the row headers, and the text banner.
+    board = _board()
+    graph_types = {p["type"] for p in board["panels"] if p["type"] not in {"stat", "row", "text"}}
+    assert graph_types == {"timeseries"}
 
 
 def test_names_are_derived_from_short_with_no_cross_stack_leak():
     board = _board()
-    exprs = " ".join(_stat_exprs(board) + _table_exprs(board))
+    exprs = " ".join(_all_exprs(board))
     # app QM + the three critical channels (SVRCONN / SDR / RCVR) + both critical queues
     assert 'qmgr="NHAXAPP"' in exprs
     assert 'queue="APP.REPLY"' in exprs
@@ -80,8 +105,7 @@ def test_names_are_derived_from_short_with_no_cross_stack_leak():
 
 
 def test_qm_band_binds_the_verified_metric_names():
-    exprs = _stat_exprs(_board())
-    blob = " ".join(exprs)
+    blob = " ".join(_all_exprs(_board()))
     assert "ibmmq_qmgr_status" in blob
     assert "ibmmq_qmgr_uptime" in blob
     assert "ibmmq_qmgr_connection_count" in blob
@@ -97,76 +121,112 @@ def test_qm_band_binds_the_verified_metric_names():
     assert "ibmmq_qmgr_log_size_reusable" in blob
 
 
-def test_every_band_value_tile_is_object_driven():
-    # object-driven: a missing series must read as no-data, never a false zero — so every
-    # QM-band value expr ends with the `or vector(-1)` sentinel.
-    for expr in _stat_exprs(_board()):
-        assert expr.endswith("or vector(-1)"), expr
-
-
-def test_status_tile_carries_the_stale_map():
+def test_band_connections_rate_and_log_are_now_timeseries():
+    # the story-telling counts/rates moved out of stat tiles into trend graphs.
     board = _board()
+    conn = _panel_titled(board, "Connections")
+    rate = _panel_titled(board, "Msg rate")
+    log = _panel_titled(board, "Recovery log %")
+    assert "ibmmq_qmgr_connection_count" in " ".join(_panel_exprs(conn))
+    assert "ibmmq_qmgr_interval_mqput_mqput1_total_count" in " ".join(_panel_exprs(rate))
+    assert "ibmmq_qmgr_log_size_restart" in " ".join(_panel_exprs(log))
+
+
+def test_status_pills_are_object_driven_and_carry_stale():
+    # the compact QM pills (status / uptime / services) stay object-driven: a missing series
+    # reads no-data (or STALE), never a false zero — every pill expr ends with the sentinel.
+    board = _board()
+    for expr in _stat_exprs(board):
+        assert expr.endswith("or vector(-1)"), expr
     status_tiles = [
         p
-        for p in board["panels"]
-        if p["type"] == "stat" and _STALE_MAP in p["fieldConfig"]["defaults"].get("mappings", [])
+        for p in _panels_of(board, "stat")
+        if _STALE_MAP in p["fieldConfig"]["defaults"].get("mappings", [])
     ]
     assert status_tiles  # at least the QM status + services pills carry STALE
 
 
-def test_queue_columns_bind_verified_queue_metrics():
-    exprs = " ".join(_table_exprs(_board()))
-    assert "ibmmq_queue_depth" in exprs
-    assert "ibmmq_queue_attribute_max_depth" in exprs  # %full
-    assert "ibmmq_queue_oldest_message_age" in exprs
-    assert "ibmmq_queue_uncommitted_messages" in exprs
-    assert "ibmmq_queue_input_handles" in exprs
-    assert "ibmmq_queue_output_handles" in exprs
+def test_each_queue_has_its_own_labelled_block_of_four_trend_graphs():
+    board = _board()
+    rows = _row_titles(board)
+    # a labelled row per critical queue
+    assert any("Queue · APP.REPLY" in t for t in rows)
+    assert any("Queue · SVCQM" in t for t in rows)
+    # four trend graphs per queue: depth · flow · handles · age
+    for q in ("APP.REPLY", "SVCQM"):
+        titles = [p["title"] for p in _timeseries_panels(board) if p["title"].startswith(q)]
+        assert any("depth" in t for t in titles)
+        assert any("flow" in t for t in titles)
+        assert any("handles" in t for t in titles)
+        assert any("age" in t for t in titles)
+
+
+def test_queue_graphs_bind_verified_queue_metrics():
+    blob = " ".join(_all_exprs(_board()))
+    assert "ibmmq_queue_depth" in blob
+    assert "ibmmq_queue_attribute_max_depth" in blob  # depth reference series
+    assert "ibmmq_queue_oldest_message_age" in blob
+    assert "ibmmq_queue_uncommitted_messages" in blob
+    assert "ibmmq_queue_input_handles" in blob
+    assert "ibmmq_queue_output_handles" in blob
     # verified-at-build: the real counter is mqput_mqput1_count / mqget_count (no _total_)
-    assert "rate(ibmmq_queue_mqput_mqput1_count" in exprs
-    assert "rate(ibmmq_queue_mqget_count" in exprs
-    assert "ibmmq_queue_time_since_get" in exprs
+    assert "rate(ibmmq_queue_mqput_mqput1_count" in blob
+    assert "rate(ibmmq_queue_mqget_count" in blob
 
 
-def test_channel_columns_bind_verified_channel_metrics():
-    exprs = " ".join(_table_exprs(_board()))
-    assert "ibmmq_channel_status_squash" in exprs
-    assert "ibmmq_channel_substate" in exprs
-    assert "ibmmq_channel_messages" in exprs
-    assert "ibmmq_channel_bytes_sent" in exprs
-    assert "ibmmq_channel_bytes_rcvd" in exprs
-    assert "ibmmq_channel_batches" in exprs
-    assert "ibmmq_channel_nettime_short" in exprs
-    assert "ibmmq_channel_time_since_msg" in exprs
-    assert "ibmmq_channel_cur_inst" in exprs
+def test_flow_and_handles_graphs_group_both_series_on_one_panel():
+    # the relationship IS the derivative: enqueue vs dequeue share one graph, and
+    # in-handles vs out-handles share one graph.
+    board = _board()
+    flow = _panel_titled(board, "APP.REPLY — flow")
+    flow_blob = " ".join(_panel_exprs(flow))
+    assert "rate(ibmmq_queue_mqput_mqput1_count" in flow_blob
+    assert "rate(ibmmq_queue_mqget_count" in flow_blob
+    handles = _panel_titled(board, "APP.REPLY — handles")
+    handles_blob = " ".join(_panel_exprs(handles))
+    assert "ibmmq_queue_input_handles" in handles_blob
+    assert "ibmmq_queue_output_handles" in handles_blob
 
 
-def test_tables_are_object_driven_over_the_curated_objects():
-    # each table column stamps every curated object's row (label_replace) so the row is
-    # present even with no series, and every cell falls back to `or vector(-1)`.
-    for expr in _table_exprs(_board()):
-        assert "or vector(-1)" in expr
-        assert "label_replace(" in expr
-    blob = " ".join(_table_exprs(_board()))
-    assert 'label_replace(max(ibmmq_queue_depth{qmgr="NHAXAPP",queue="APP.REPLY"})' in blob
-    chan_cell = (
-        'label_replace(max(ibmmq_channel_status_squash{qmgr="NHAXAPP",channel="APP.SVRCONN"})'
-    )
-    assert chan_cell in blob
+def test_each_channel_has_its_own_labelled_block_of_three_trend_graphs():
+    board = _board()
+    rows = _row_titles(board)
+    for chan in ("APP.SVRCONN", "NHAXAPP.SVCQM", "SVCQM.NHAXAPP"):
+        assert any(f"Channel · {chan}" in t for t in rows)
+        titles = [p["title"] for p in _timeseries_panels(board) if p["title"].startswith(chan)]
+        assert any("throughput" in t for t in titles)
+        assert any("nettime" in t for t in titles)
+        assert any("status" in t for t in titles)
 
 
-def test_channel_status_column_is_colour_mapped_but_plain_columns_are_not():
-    channels_table = _tables(_board())[1]
-    overrides = channels_table["fieldConfig"]["overrides"]
-    mapped_cols = {o["matcher"]["options"] for o in overrides}
-    assert "Status" in mapped_cols  # channel status carries the coloured mapping
-    assert "Messages" not in mapped_cols  # a plain numeric column has no mapping override
+def test_channel_graphs_bind_verified_channel_metrics():
+    blob = " ".join(_all_exprs(_board()))
+    assert "ibmmq_channel_messages" in blob
+    assert "ibmmq_channel_bytes_sent" in blob
+    assert "ibmmq_channel_bytes_rcvd" in blob
+    assert "ibmmq_channel_nettime_short" in blob
+    # throughput counters must be rate()-d (they're `# TYPE counter` — a raw plot is a
+    # meaningless climbing line), while nettime (a gauge) stays raw
+    assert "rate(ibmmq_channel_messages" in blob
+    assert "rate(ibmmq_channel_bytes_sent" in blob
+    assert "rate(ibmmq_channel_nettime_short" not in blob
+    assert "ibmmq_channel_status_squash" in blob
+
+
+def test_channel_status_timeline_keeps_the_no_status_sentinel():
+    # the status graph must show WHEN a channel dropped: a missing series reads -1 (No status),
+    # not an empty gap — so the status series keeps its `or vector(-1)` sentinel.
+    board = _board()
+    status = _panel_titled(board, "APP.SVRCONN — status")
+    expr = _panel_exprs(status)[0]
+    assert "ibmmq_channel_status_squash" in expr
+    assert expr.endswith("or vector(-1)")
 
 
 def test_rename_short_makes_the_board_follow_it():
     b2 = render_qm_board(FIXTURE, "nha-x", {"short": "ZZZ"})
     assert b2["uid"] == "lab-qm-zzz"
-    assert 'qmgr="ZZZAPP"' in " ".join(_stat_exprs(b2) + _table_exprs(b2))
+    assert 'qmgr="ZZZAPP"' in " ".join(_all_exprs(b2))
     assert "NHAXAPP" not in json.dumps(b2)  # nothing hardcoded — the board tracks the short
 
 
@@ -182,6 +242,8 @@ def test_real_topology_smoke_one_valid_board_per_app_qm():
         board = json.loads(text)  # valid JSON
         uids.add(board["uid"])
         assert path.name == f"{board['uid']}.json"
+        # each real board renders as time-series trends
+        assert any(p["type"] == "timeseries" for p in board["panels"])
     assert {"lab-qm-pcmk", "lab-qm-rdqm", "lab-qm-nhar", "lab-qm-nhau"} <= uids
 
 
