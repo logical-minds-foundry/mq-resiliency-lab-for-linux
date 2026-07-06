@@ -6,13 +6,14 @@
 # round-trips (app_requester returns 1 on any miss). (#148)
 #
 # Arm-agnostic: the app targets our-side HA QM by name + CONNAME. Defaults are the
-# Pacemaker arm (PCMKAPP, site VIPs 10.10.1.200/10.10.2.200); pass QM + CONN to drive
-# the RDQM arm (RDQMAPP, data VIP 10.10.1.100). (#216)
+# Pacemaker arm (PCMKAPP, VIP FQDNs pcmk-vip-a/-b.client.com); pass QM + CONN to drive
+# the RDQM arm (RDQMAPP, rdqm-vip-a.client.com). (#216, #494)
 # Usage: e2e-test.sh [N=5] [QM=PCMKAPP] [CONN=<conname-list>]
 set -euo pipefail
 N="${1:-5}"
 QM="${2:-PCMKAPP}"
-CONN="${3:-10.10.1.200(1414),10.10.2.200(1414)}"
+# CONN is a client CONNAME (what app_requester dials) -> use the generated VIP FQDNs (#494)
+CONN="${3:-pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)}"
 cd "$(dirname "$0")/.."
 # TLS (#250): present the app-client cert over the mutual-TLS APP.SVRCONN. The
 # keystore stem (+ sibling .sth stash) and cert label are placed by mq-client.
