@@ -274,6 +274,11 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     steps = PHASES[3].build_steps(stack, None)
     labels = [s.label for s in steps]
     assert any("targets" in lab_ for lab_ in labels)
+    # the exporter deployment list is scoped to THIS stack (#503), so observing one stack
+    # never deploys another stack's (crash-looping) exporter unit
+    assert any(
+        s.command.argv == ["mqlab", "obs", "targets", "--stack", "pcmk-ubuntu"] for s in steps
+    )
     # net-reach peers are rendered before observability.yml consumes them (#381)
     assert any(s.command.argv == ["mqlab", "obs", "reach-peers"] for s in steps)
     playbooks = [s.command.argv for s in steps if s.command.argv[0] == "ansible-playbook"]

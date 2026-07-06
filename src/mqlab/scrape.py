@@ -138,12 +138,17 @@ def _svc_exporter_instance(topo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def mq_exporter_instances(topo: dict[str, Any]) -> list[dict[str, Any]]:
+def mq_exporter_instances(topo: dict[str, Any], stack: str | None = None) -> list[dict[str, Any]]:
     """Per-stack APP exporters (each on its stack's alloc port) + ONE shared SVCQM svc
     exporter. App emission is guarded on `exporter_app_port` ALONE — svc is no longer
     per-stack, so a stack without an svc port must NOT lose its app exporter (#446).
     QM names derive from the stack short (#351); series are qmgr-keyed so a board
-    follows failover."""
+    follows failover.
+
+    When `stack` is given, the list is scoped to that stack's app exporter plus the
+    shared svc (`commons`) exporter — so provisioning one stack deploys only its own
+    exporter unit, never one for an un-provisioned stack that would then crash-loop
+    (#503). `stack=None` returns the full topology-wide list."""
     out: list[dict[str, Any]] = []
     for name, cfg in (topo.get("stacks") or {}).items():
         cfg = cfg or {}
@@ -164,6 +169,8 @@ def mq_exporter_instances(topo: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     out.append(_svc_exporter_instance(topo))
+    if stack is not None:
+        out = [e for e in out if e["stack"] in (stack, "commons")]
     return out
 
 
@@ -181,10 +188,11 @@ def render_mq_scrape_targets(topo: dict[str, Any]) -> str:
     return json.dumps(entries, indent=2) + "\n"
 
 
-def render_mq_exporters(topo: dict[str, Any]) -> str:
-    """The per-stack mq-exporter deployment list, consumed as an extra-var by
-    site-obs.yml's include_role loop (`mq_exporters`)."""
-    return json.dumps({"mq_exporters": mq_exporter_instances(topo)}, indent=2) + "\n"
+def render_mq_exporters(topo: dict[str, Any], stack: str | None = None) -> str:
+    """The mq-exporter deployment list, consumed as an extra-var by site-obs.yml's
+    include_role loop (`mq_exporters`). `stack` scopes it to one stack's exporter +
+    the shared svc (#503)."""
+    return json.dumps({"mq_exporters": mq_exporter_instances(topo, stack)}, indent=2) + "\n"
 
 
 def mq_scrape_targets_path() -> Path:
@@ -203,7 +211,8 @@ def lab_mq_scrape_targets() -> str:
     return render_mq_scrape_targets(topo)
 
 
-def lab_mq_exporters() -> str:
-    """Render the real lab/topology.yaml to the per-stack exporter deployment JSON."""
+def lab_mq_exporters(stack: str | None = None) -> str:
+    """Render the real lab/topology.yaml to the exporter deployment JSON, optionally
+    scoped to one stack's exporter + the shared svc (#503)."""
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return render_mq_exporters(topo)
+    return render_mq_exporters(topo, stack)

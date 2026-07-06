@@ -100,6 +100,40 @@ def test_obs_targets_also_writes_mq_exporters_deployment_list(monkeypatch, tmp_p
     assert {i["port"] for i in instances} == {9157, 9158}
 
 
+def test_obs_targets_stack_scopes_only_the_exporter_deployment_list(monkeypatch, tmp_path):
+    # #503: --stack scopes the mq-exporter DEPLOYMENT list to that stack (+ the shared
+    # svc), so observing one stack never deploys another stack's crash-looping exporter
+    # unit — while the ibmmq SCRAPE targets stay full-topology (a down target is benign).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    topo = tmp_path / "lab" / "topology.yaml"
+    stacks_yaml = (
+        "stacks:\n"
+        "  pcmk-ubuntu:\n"
+        "    short: PCMK\n"
+        "    qm: {vip: 10.10.1.200}\n"
+        "    alloc: {exporter_app_port: 9157}\n"
+        "  rdqm-rhel:\n"
+        "    short: RDQM\n"
+        "    qm: {vip: 10.10.1.201}\n"
+        "    alloc: {exporter_app_port: 9159}\n"
+    )
+    topo.write_text(topo.read_text() + stacks_yaml)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "targets", "--stack", "pcmk-ubuntu"])
+
+    assert result.exit_code == 0
+    # deployment list: only pcmk-ubuntu's app + the shared svc (commons), NOT rdqm-rhel
+    deploy = json.loads((tmp_path / "build" / "work" / "obs" / "mq-exporters.json").read_text())
+    assert {i["stack"] for i in deploy["mq_exporters"]} == {"pcmk-ubuntu", "commons"}
+    # the ibmmq scrape targets stay full-topology (both stacks + svc)
+    ibmmq = json.loads(
+        (tmp_path / "build" / "work" / "prometheus" / "targets" / "ibmmq.json").read_text()
+    )
+    assert {e["labels"]["stack"] for e in ibmmq} == {"pcmk-ubuntu", "rdqm-rhel", "commons"}
+
+
 # --- dashboard: renders the fleet board + the cluster cockpit boards from topology ---
 
 
