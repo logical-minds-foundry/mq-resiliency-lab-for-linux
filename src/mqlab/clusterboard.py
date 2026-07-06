@@ -363,6 +363,24 @@ _STALE_MAP = {
     "options": {"match": "null", "result": {"color": "text", "text": "STALE", "index": 9}},
 }
 
+# MQ channel/QM status squash: -1 no-status(grey) · 0 stopped(red) · 1
+# transitioning(yellow) · 2 running(green). Same coding dashboard.py uses.
+_STATUS_MAP: list[dict[str, Any]] = [
+    {
+        "type": "value",
+        "options": {
+            "-1": {"text": "No status", "color": "grey", "index": 0},
+            "0": {"text": "Stopped", "color": "red", "index": 1},
+            "1": {"text": "Transitioning", "color": "yellow", "index": 2},
+            "2": {"text": "Running", "color": "green", "index": 3},
+        },
+    },
+]
+
+
+def _qm_status_expr(qm: str) -> str:
+    return f'max(ibmmq_qmgr_status{{qmgr="{qm}"}}) or vector(-1)'
+
 
 def hero_tiles(ds_uid: str, y: int) -> list[dict[str, Any]]:
     """The top band: cluster health, nodes online, active QM owner, replication backlog.

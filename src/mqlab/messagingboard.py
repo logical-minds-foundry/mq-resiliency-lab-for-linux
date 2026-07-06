@@ -18,35 +18,24 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from mqlab.clusterboard import (
+    _STATUS_MAP,
     _ds,
     _log_level_var,
     _logs_panel,
+    _qm_status_expr,
     _row_header,
     _stat,
     _t,
     _timeseries,
 )
 from mqlab.paths import work
+from mqlab.qmboard import qm_board_uid
 from mqlab.stacks import lab_stacks
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from mqlab.stacks import Stack
-
-# MQ channel/QM status squash: -1 no-status(grey) · 0 stopped(red) · 1
-# transitioning(yellow) · 2 running(green). Same coding dashboard.py uses.
-_STATUS_MAP: list[dict[str, Any]] = [
-    {
-        "type": "value",
-        "options": {
-            "-1": {"text": "No status", "color": "grey", "index": 0},
-            "0": {"text": "Stopped", "color": "red", "index": 1},
-            "1": {"text": "Transitioning", "color": "yellow", "index": 2},
-            "2": {"text": "Running", "color": "green", "index": 3},
-        },
-    },
-]
 
 # Lab-constant object names in the app<->svc flow (the QM names are per-stack).
 _APP_SVRCONN = "APP.SVRCONN"
@@ -77,10 +66,6 @@ _RT_FAIL = "app_roundtrip_failures_total"
 _RT_BUCKET = "app_roundtrip_latency_ms_bucket"
 
 
-def _qm_status_expr(qm: str) -> str:
-    return f'max(ibmmq_qmgr_status{{qmgr="{qm}"}}) or vector(-1)'
-
-
 def _channel_status_expr(qm: str, channel: str) -> str:
     return f'max(ibmmq_channel_status_squash{{qmgr="{qm}",channel="{channel}"}}) or vector(-1)'
 
@@ -89,10 +74,11 @@ def _queue_depth_expr(qm: str, queue: str) -> str:
     return f'max(ibmmq_queue_depth{{qmgr="{qm}",queue="{queue}"}}) or vector(-1)'
 
 
-def _status_band(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str, Any]]:
+def _status_band(ds_uid: str, app_qm: str, svc_qm: str, short: str, y: int) -> list[dict[str, Any]]:
     """① Flow indicators (not depths): App/SVC QM up · round-trip success % · message
     rate · failure rate. Success% reads No data when idle (no `or vector(100)` fallback —
-    a fake 100% on no traffic is misleading)."""
+    a fake 100% on no traffic is misleading). The App QM tile also carries a data-link
+    drilling into that stack's per-QM state board (`lab-qm-<short>`, #489)."""
     success = f"100 * (1 - (sum(rate({_RT_FAIL}[5m])) / sum(rate({_RT_TOTAL}[5m]))))"
     # Each tile carries: a title, its PromQL, its x-offset and width, an optional
     # colour mapping, and an optional value unit.
@@ -103,10 +89,14 @@ def _status_band(ds_uid: str, app_qm: str, svc_qm: str, y: int) -> list[dict[str
         ("Message rate", f"sum(rate({_RT_TOTAL}[1m]))", 15, 5, None, "reqps"),
         ("Failure rate", f"sum(rate({_RT_FAIL}[1m]))", 20, 4, None, "reqps"),
     ]
-    return [
+    tiles = [
         _stat(t, e, ds_uid, x, y, mappings=m, unit=u, w=w, h=3, value_size=22)
         for t, e, x, w, m, u in specs
     ]
+    tiles[0]["fieldConfig"]["defaults"]["links"] = [
+        {"title": "QM state ↗", "url": f"/d/{qm_board_uid(short)}"}
+    ]
+    return tiles
 
 
 def _flow_strip(
@@ -255,6 +245,7 @@ def _title_banner(stack_name: str, app_qm: str, svc_qm: str, y: int) -> dict[str
 
 def render_messaging_board(
     stack_name: str,
+    short: str,
     app_qm: str,
     svc_qm: str,
     req_queue: str,
@@ -262,11 +253,13 @@ def render_messaging_board(
     loki_uid: str = "loki",
 ) -> dict[str, Any]:
     """Assemble the flow-oriented messaging board for one stack. `req_queue` is this
-    stack's request queue on the shared SVCQM ({SHORT}.SVC.REQUEST), #446."""
+    stack's request queue on the shared SVCQM ({SHORT}.SVC.REQUEST), #446. `short` is
+    the stack's own token (#351) — used only to drill the App QM status tile into that
+    stack's per-QM board (`lab-qm-<short>`, #489)."""
     panels = [
         _title_banner(stack_name, app_qm, svc_qm, y=0),
         _row_header("① Messaging status — QMs · success · rate · failures", y=2),
-        *_status_band(ds_uid, app_qm, svc_qm, y=3),
+        *_status_band(ds_uid, app_qm, svc_qm, short, y=3),
         _row_header("② The message flow — app-client ⇄ SVC", y=6),
         *_flow_strip(ds_uid, app_qm, svc_qm, req_queue, y=7),
         _row_header("⟳ Round-trip — throughput · failures · latency", y=11),
@@ -339,7 +332,7 @@ def write_messaging_dashboards() -> list[Path]:
     paths: list[Path] = []
     for stack in _messaging_stacks():
         board = render_messaging_board(
-            stack.name, stack.qm.qm_app, stack.qm.qm_svc, stack.qm.req_queue
+            stack.name, stack.short, stack.qm.qm_app, stack.qm.qm_svc, stack.qm.req_queue
         )
         path = messaging_dashboard_path(stack.name)
         path.parent.mkdir(parents=True, exist_ok=True)

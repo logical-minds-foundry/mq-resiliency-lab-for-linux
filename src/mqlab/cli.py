@@ -489,6 +489,12 @@ def obs_dashboard() -> None:
         write_messaging_dashboards()
         deps.renderer.command("render -> messaging boards (per stack)")
         deps.transcript.write("render -> messaging boards (per stack)")
+        # the per-QM state boards (#489)
+        from mqlab.qmboard import write_qm_dashboards
+
+        write_qm_dashboards()
+        deps.renderer.command("render -> per-QM boards")
+        deps.transcript.write("render -> per-QM boards")
         # The Watcher — the lab-state front-door board (#488)
         from mqlab.watcherboard import lab_watcher_dashboard, watcher_dashboard_path
 
@@ -700,6 +706,11 @@ def _obs_up_steps() -> list[CommandStep]:
     from mqlab.messagingboard import write_messaging_dashboards
 
     write_messaging_dashboards()
+
+    # the per-QM state boards (#489)
+    from mqlab.qmboard import write_qm_dashboards
+
+    write_qm_dashboards()
 
     # The Watcher — the lab-state front-door board (#488)
     from mqlab.watcherboard import lab_watcher_dashboard, watcher_dashboard_path
