@@ -15,6 +15,7 @@ from each stack's #351 short — no QM literal is hardcoded here.
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from mqlab.clusterboard import (
@@ -232,6 +233,19 @@ def _object_table(
     }
 
 
+def _events_panel(loki_uid: str, objects: list[str], y: int) -> dict[str, Any]:
+    """▤ MQ instrumentation events for THIS stack (#517). The mq-event-monitor collector
+    (#515) drains the queue managers' SYSTEM.ADMIN.*.EVENT queues and writes each event as
+    JSON tagged mq-events — a *separate* Loki stream from the diagnostic logs (the log panel
+    above filters unit=mq-events out). The affected object is eventSource.objectName, which
+    `| json` flattens to eventSource_objectName; scope it to this stack's QMs/queues/channels
+    so the feed shows only this stack's events (start/stop, channel, depth, and — nicely for a
+    live triage — the admin commands CMDEV(NODISPLAY) captures)."""
+    names = "|".join(re.escape(o) for o in objects)
+    sel = f'{{unit="mq-events"}} | json | eventSource_objectName=~`{names}`'
+    return _logs_panel("▤ MQ instrumentation events (this stack)", sel, loki_uid, y)
+
+
 def _title_banner(stack_name: str, app_qm: str, svc_qm: str, y: int) -> dict[str, Any]:
     content = f"## Messaging Layer · {stack_name} · app-client ⇄ {app_qm} ⇄ {svc_qm} ⇄ svc-sim"
     return {
@@ -273,7 +287,21 @@ def render_messaging_board(
             loki_uid,
             y=20,
         ),
-        _row_header("▦ Queues & channels", y=28),
+        _row_header("▤ MQ instrumentation events — this stack", y=28),
+        _events_panel(
+            loki_uid,
+            [
+                app_qm,
+                svc_qm,
+                req_queue,
+                _APP_REPLY,
+                _APP_SVRCONN,
+                _SVC_SVRCONN,
+                f"{app_qm}.{svc_qm}",
+            ],
+            y=29,
+        ),
+        _row_header("▦ Queues & channels", y=37),
         _object_table(
             ds_uid,
             f"{app_qm} — queues",
@@ -281,7 +309,7 @@ def render_messaging_board(
             "ibmmq_queue_depth",
             "queue",
             "Depth",
-            y=29,
+            y=38,
             x=0,
             w=12,
             drill_uid="lab-messaging-queue",
@@ -294,7 +322,7 @@ def render_messaging_board(
             "ibmmq_channel_status_squash",
             "channel",
             "Status",
-            y=29,
+            y=38,
             x=12,
             w=12,
             mappings=_STATUS_MAP,
