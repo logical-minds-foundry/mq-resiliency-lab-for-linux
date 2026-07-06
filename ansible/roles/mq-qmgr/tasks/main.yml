@@ -74,3 +74,40 @@
   register: mon
   changed_when: "'AMQ8005' in mon.stdout"
   failed_when: mon.rc not in [0, 10]
+
+# Enable ALL Multiplatforms instrumentation-event classes (#514, epic .github#31).
+# Everything on to start — pare back once real volume is known. CMDEV(NODISPLAY) captures
+# human admin/mutating commands for the events dashboard WITHOUT the exporter's DISPLAY /
+# Inquire-PCF poll flood (IBM Docs 9.4: NODISPLAY = command events except DISPLAY MQSC and
+# Inquire PCF). BRIDGEEV is deliberately absent — it is z/OS-only (IMS bridge). Events land
+# on SYSTEM.ADMIN.*.EVENT; the MQ.EVENT.MONITOR service (#515) drains them to JSON.
+- name: enable instrumentation events (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: evgate
+  changed_when: "'AMQ8005' in evgate.stdout"
+  failed_when: evgate.rc not in [0, 10]
+
+# Performance events (PERFMEV) fire only where a queue carries depth thresholds, so enabling
+# PERFMEV at the QMGR alone emits nothing. Set QDPMAXEV/QDPHIEV (+ QDEPTHHI %) on the arm's
+# application queue(s). Empty by default (mq_event_perf_queues) — a safe no-op where an arm
+# has no curated app queue; the real list is set per-arm at the site-playbook call site.
+- name: enable per-queue performance events on the app queue(s) (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QLOCAL({{ item }}) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  loop: "{{ mq_event_perf_queues | default([]) }}"
+  register: perfq
+  changed_when: "'AMQ8008' in perfq.stdout"
+  failed_when: perfq.rc not in [0, 10]
