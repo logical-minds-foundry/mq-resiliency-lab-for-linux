@@ -13,6 +13,9 @@ QM="${2:-PCMKAPP}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
+# TO_VIP is a raw IP on purpose: it defines the pacemaker floating-IP resource
+# (pcs resource create ... IPaddr2 ip=$TO_VIP), NOT a client CONNAME — do NOT FQDN-ify
+# it (#494). TO_PORTAL is an iSCSI fabric address, kept raw per the minimal-dependency rule.
 if [ "$DIR" = a2b ]; then
   TO_SAN=san-b; TO_PCMK=pcmk_b; TO_PORTAL=10.40.2.6; TO_VIP=10.10.2.200
   TO_NODES="pcmk-b1 pcmk-b2 pcmk-b3"; TO_IQNS="pcmk-b1 pcmk-b2 pcmk-b3"

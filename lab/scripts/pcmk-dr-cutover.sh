@@ -12,6 +12,10 @@ QM="${2:?usage: pcmk-dr-cutover.sh [a2b|b2a] <qm-name>}"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
+# TO_VIP / TO_VIP_EXT are raw IPs on purpose: they define the pacemaker floating-IP
+# resources (pcs resource create ... IPaddr2 ip=...), NOT client CONNAMEs — an FQDN
+# there would fail the cutover, so do NOT FQDN-ify them (#494). TO_PORTAL is an iSCSI
+# fabric address, kept raw per the minimal-dependency rule.
 if [ "$DIR" = a2b ]; then
   FROM_SAN=san-a; TO_SAN=san-b; FROM_PCMK=pcmk_a; TO_PCMK=pcmk_b
   TO_PORTAL=10.40.2.6; TO_VIP=10.10.2.200; TO_VIP_EXT=10.60.0.20

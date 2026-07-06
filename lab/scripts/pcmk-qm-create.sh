@@ -6,6 +6,8 @@
 # Usage: pcmk-qm-create.sh [QM=PCMKAPP] [VIP=10.10.1.200]
 set -euo pipefail
 QM="${1:-PCMKAPP}"
+# VIP is a raw IP on purpose: it defines the pacemaker floating-IP resource
+# (pcs resource create ... IPaddr2 ip=$VIP), NOT a client CONNAME — do NOT FQDN-ify (#494).
 VIP="${2:-10.10.1.200}"
 cd "$(dirname "$0")/../../ansible"
 
