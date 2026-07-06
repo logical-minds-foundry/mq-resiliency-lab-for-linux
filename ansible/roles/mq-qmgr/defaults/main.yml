@@ -1,0 +1,6 @@
+---
+# Application queues that should emit performance events (queue depth high / full).
+# Empty by default: PERFMEV is enabled at the QMGR (#514), but per-queue QDPMAXEV/QDPHIEV
+# thresholds only make sense on real app queues, so each arm sets its own list at the
+# site-playbook call site (e.g. ["PCMK.SVC.REQUEST"]). Empty = safe no-op.
+mq_event_perf_queues: []
