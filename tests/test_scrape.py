@@ -113,6 +113,38 @@ def test_mq_exporter_instances_app_per_stack_plus_one_shared_svc():
     assert all(i["channel"] == "MON.SVRCONN" for i in insts)
 
 
+def test_mq_exporter_instances_scoped_to_one_stack():
+    # #503: scoping to a stack yields only that stack's app exporter + the shared svc,
+    # never another stack's — so provisioning one stack deploys only its own unit.
+    from mqlab.scrape import mq_exporter_instances
+
+    scoped = mq_exporter_instances(MQ_TOPO, stack="pcmk-ubuntu")
+    assert {(i["qm"], i["role"]) for i in scoped} == {("PCMKAPP", "app"), ("SVCQM", "svc")}
+    assert all(i["stack"] != "nha-x" for i in scoped)
+
+
+def test_mq_exporter_instances_unscoped_matches_default():
+    # stack=None is the un-scoped full list (unchanged behaviour)
+    from mqlab.scrape import mq_exporter_instances
+
+    assert mq_exporter_instances(MQ_TOPO, stack=None) == mq_exporter_instances(MQ_TOPO)
+
+
+def test_mq_exporter_instances_scope_to_stack_without_app_yields_only_svc():
+    # a stack with no app exporter (reserved) still ensures the shared svc, never others
+    from mqlab.scrape import mq_exporter_instances
+
+    scoped = mq_exporter_instances(MQ_TOPO, stack="reserved")
+    assert [i["role"] for i in scoped] == ["svc"]
+
+
+def test_render_mq_exporters_scoped_to_one_stack():
+    from mqlab.scrape import render_mq_exporters
+
+    data = json.loads(render_mq_exporters(MQ_TOPO, stack="pcmk-ubuntu"))
+    assert {e["stack"] for e in data["mq_exporters"]} == {"pcmk-ubuntu", "commons"}
+
+
 def test_svc_exporter_conn_matches_its_qm_name_446_regression():
     """The svc instance's conn must resolve to the QM it names — the #446 bug was
     name (e.g. NHAUSVC) vs address (svc-sim answering as another QM) inconsistency."""
