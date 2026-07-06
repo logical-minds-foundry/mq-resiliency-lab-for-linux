@@ -71,6 +71,28 @@ def test_logs_panel_covers_both_app_and_svc_units():
     assert "mq-app-requester.*" in expr and "mq-svc-responder.*" in expr
 
 
+def test_board_has_a_per_stack_mq_events_panel():
+    # A dedicated MQ-instrumentation-events panel (#517): the {unit="mq-events"} JSON stream
+    # (separate from the logs), scoped to THIS stack's objects via eventSource.objectName.
+    d = render_messaging_board("pcmk-ubuntu", "PCMK", "PCMKAPP", "SVCQM", "PCMK.SVC.REQUEST")
+    ev = [
+        p
+        for p in d["panels"]
+        if p["type"] == "logs" and 'unit="mq-events"' in p["targets"][0]["expr"]
+    ]
+    assert len(ev) == 1, "expected exactly one mq-events panel"
+    expr = ev[0]["targets"][0]["expr"]
+    assert "| json" in expr  # parse the event JSON
+    assert "eventSource_objectName" in expr  # filter by the affected object (queue/channel/QM)
+    assert "PCMKAPP" in expr and "SVCQM" in expr  # scoped to this stack's QMs
+    # cross-stack: a different stack's events panel never carries this stack's app QM
+    other = render_messaging_board("rdqm-rhel", "RDQM", "RDQMAPP", "SVCQM", "RDQM.SVC.REQUEST")
+    other_ev = next(
+        p for p in other["panels"] if p["type"] == "logs" and "mq-events" in p["targets"][0]["expr"]
+    )
+    assert "PCMKAPP" not in other_ev["targets"][0]["expr"]
+
+
 def test_flow_strip_channel_tiles_use_status_squash():
     exprs = _exprs(render_messaging_board("s", "S", "APP", "SVC", "S.SVC.REQUEST"))
     assert any('ibmmq_channel_status_squash{qmgr="APP",channel="APP.SVRCONN"}' in e for e in exprs)

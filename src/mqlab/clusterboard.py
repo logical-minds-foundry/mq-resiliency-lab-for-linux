@@ -620,7 +620,12 @@ def _logs_panel(
 
 def log_row(loki_uid: str, y: int) -> dict[str, Any]:
     """The PCMK cluster-node log row (corosync/pacemaker/drbd/mq units on pcmk-/san- hosts)."""
-    sel = '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*"} |~ `${level}`'
+    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
+    # the .*mq.* wildcard would otherwise sweep it in.
+    sel = (
+        '{host=~"pcmk-.*|san-.*", unit=~"corosync.*|pacemaker.*|drbd.*|.*mq.*", '
+        'unit!="mq-events"} |~ `${level}`'
+    )
     return _logs_panel("▤ Cluster logs (severity: $level)", sel, loki_uid, y)
 
 
@@ -750,7 +755,12 @@ def _nativeha_log_row(
     the shared $level toggle. Note: MQ's own error log (AMQERR*.LOG) is file-based, not
     journald — so the QM's HA/CRR events only appear here once Alloy tails those files.
     prefix/qm select the arm (RHEL by default)."""
-    sel = f'{{host=~"{prefix}-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*"}} |~ `${{level}}`'
+    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
+    # the mq-.* wildcard would otherwise sweep it in.
+    sel = (
+        f'{{host=~"{prefix}-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*", '
+        'unit!="mq-events"} |~ `${level}`'
+    )
     note = (
         "Shows MQ-related journald units on the nha nodes. MQ's own error log "
         f"(/var/mqm/qmgrs/{qm}/errors/AMQERR*.LOG) is file-based, not journald, so it is "
@@ -1274,9 +1284,11 @@ def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     """RDQM logs: the Pacemaker/DRBD/MQ journald units on the rdqm-* hosts, severity-filtered
     by the shared $level toggle. Note: MQ's AMQERR error log is file-based, not journald, so
     the QM's own HA/DR events only appear once Alloy tails those files (same as the other arms)."""
+    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
+    # the mq-.* wildcard would otherwise sweep it in.
     sel = (
         '{host=~"rdqm-.*", unit=~"pacemaker.*|corosync.*|drbd.*|.*mqmonitor.*|.*amq.*'
-        '|.*ibmmq.*|mq-.*"} |~ `${level}`'
+        '|.*ibmmq.*|mq-.*", unit!="mq-events"} |~ `${level}`'
     )
     note = (
         "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes. MQ's own error log "

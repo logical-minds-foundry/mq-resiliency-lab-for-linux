@@ -130,6 +130,16 @@ def test_log_row_is_a_loki_logs_panel_scoped_to_cluster_nodes():
     assert "${level}" in expr  # severity is a dashboard toggle (#219)
 
 
+def test_cluster_log_panels_exclude_the_event_stream():
+    """The wildcard log selectors (.*mq.* / mq-.*) must not sweep in unit=mq-events (#517) —
+    events are a separate stream and belong on the events panel, not the log panels."""
+    from mqlab.clusterboard import _nativeha_log_row, _rdqm_log_row
+
+    for panel in (log_row("loki", y=0), _nativeha_log_row("loki", y=0), _rdqm_log_row("loki", y=0)):
+        expr = panel["targets"][0]["expr"]
+        assert 'unit!="mq-events"' in expr, expr
+
+
 def test_log_severity_toggle_defaults_to_warn():
     d = render_cluster_dashboard({}, arm="pcmk")
     level = next(v for v in d["templating"]["list"] if v["name"] == "level")
