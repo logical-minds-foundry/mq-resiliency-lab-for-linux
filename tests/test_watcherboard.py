@@ -9,6 +9,7 @@ style of tests/test_topology_integrity.py.
 from __future__ import annotations
 
 import json
+import re
 
 import yaml
 
@@ -92,13 +93,25 @@ def _exprs(panels: list[dict]) -> list[str]:
     return [t["expr"] for p in panels for t in p.get("targets", []) if "expr" in t]
 
 
-def _stripe_titles(panels: list[dict]) -> list[str]:
-    # a status-stripe tile is the background-coloured stat that opens each row
+def _stripes(panels: list[dict]) -> list[dict]:
+    # the state-only status block that opens each row (a background-coloured stat)
     return [
-        p["title"]
+        p
         for p in panels
         if p.get("type") == "stat" and p.get("options", {}).get("colorMode") == "background"
     ]
+
+
+def _row_labels(panels: list[dict]) -> list[str]:
+    # each row's identity now lives in its column-2 text tile as "**name**<br/>…" (the stripe
+    # itself is state-only, #505); the banner ("## …") and section rows are not identity tiles
+    labels: list[str] = []
+    for p in panels:
+        if p.get("type") == "text":
+            m = re.match(r"\*\*(.+?)\*\*", p.get("options", {}).get("content", ""))
+            if m:
+                labels.append(m.group(1))
+    return labels
 
 
 def test_uid_is_pinned():
@@ -108,14 +121,14 @@ def test_uid_is_pinned():
 
 def test_a_support_row_per_support_host_in_curated_order():
     d = build_watcher(FIXTURE)
-    # every commons support host has a status-stripe (its row), in the curated order
-    support = [p for p in d["panels"] if p["type"] == "stat"]
-    stripes = _stripe_titles(d["panels"])
+    # every commons support host has a row (identified by its column-2 label), in order
+    labels = _row_labels(d["panels"])
     for host in SUPPORT_HOSTS:
-        assert host in stripes, f"no support row for {host}"
+        assert host in labels, f"no support row for {host}"
     # the support hosts appear before the stack rows, in curated order
-    assert stripes[: len(SUPPORT_HOSTS)] == SUPPORT_HOSTS
-    assert support  # sanity
+    assert labels[: len(SUPPORT_HOSTS)] == SUPPORT_HOSTS
+    # one state-only stripe per row (support hosts + the two fixture stacks)
+    assert len(_stripes(d["panels"])) == len(SUPPORT_HOSTS) + 2
 
 
 def test_support_row_carries_all_instrument_columns():
@@ -158,15 +171,15 @@ def test_no_hardcoded_host_literals_hosts_come_from_groups():
     topo = json.loads(json.dumps(FIXTURE))
     topo["groups"]["obs_box"] = ["obs-renamed"]
     d = build_watcher(topo)
-    stripes = _stripe_titles(d["panels"])
-    assert "obs-renamed" in stripes and "obs" not in stripes
+    labels = _row_labels(d["panels"])
+    assert "obs-renamed" in labels and "obs" not in labels
 
 
 def test_a_stack_rollup_row_per_stack():
     d = build_watcher(FIXTURE)
-    stripes = _stripe_titles(d["panels"])
+    labels = _row_labels(d["panels"])
     # the stack rows follow the support rows; one per stack, keyed by stack name
-    assert "pcmk-ubuntu" in stripes and "rdqm-rhel" in stripes
+    assert "pcmk-ubuntu" in labels and "rdqm-rhel" in labels
 
 
 def test_stack_owner_resource_is_mechanism_correct():
@@ -227,19 +240,20 @@ def test_section_headers_and_banner_present():
 def test_empty_topology_still_renders_uid_and_headers():
     d = build_watcher(EMPTY)
     assert d["uid"] == "lab-watcher"
-    # no support/stack rows, but the board (banner + section headers) still renders
-    assert _stripe_titles(d["panels"]) == []
+    # no support/stack rows (no stripes, no identity labels), but banner + headers render
+    assert _row_labels(d["panels"]) == []
+    assert _stripes(d["panels"]) == []
     assert any(p["type"] == "row" for p in d["panels"])
 
 
 def test_edge_empty_support_group_and_groupless_stack():
     d = build_watcher(EDGE)
-    stripes = _stripe_titles(d["panels"])
+    labels = _row_labels(d["panels"])
     # the empty obs/probe/svc/app groups yield no support rows; infra still does
-    assert "infra-client" in stripes and "infra-svc" in stripes
-    assert "obs" not in stripes
+    assert "infra-client" in labels and "infra-svc" in labels
+    assert "obs" not in labels
     # a stack with no groups still emits its rollup row (object-driven)
-    assert "nativeha-rhel" in stripes
+    assert "nativeha-rhel" in labels
 
 
 def test_dashboard_path_is_under_work_grafana_dashboards():
@@ -251,13 +265,14 @@ def test_dashboard_path_is_under_work_grafana_dashboards():
 def test_real_topology_renders_a_valid_watcher_board():
     dash = json.loads(lab_watcher_dashboard())
     assert dash["uid"] == "lab-watcher"
-    stripes = _stripe_titles(dash["panels"])
+    labels = _row_labels(dash["panels"])
     # a support row for every real commons support host …
     for host in SUPPORT_HOSTS:
-        assert host in stripes, f"real topology: no support row for {host}"
-    # … and a rollup row for every real stack (pcmk / rdqm / nhar / nhau)
+        assert host in labels, f"real topology: no support row for {host}"
+    # … and a rollup row for every real stack (pcmk / rdqm / nhar / nhau) — including both
+    # native-ha stacks, which the old truncated stripe collapsed to an ambiguous "nati…"
     for stack in ("pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel", "nativeha-ubuntu"):
-        assert stack in stripes, f"real topology: no stack row for {stack}"
+        assert stack in labels, f"real topology: no stack row for {stack}"
 
 
 def test_site_node_count_dedups_by_member_before_summing():
@@ -352,3 +367,36 @@ def test_svc_domain_is_a_qm_health_pill_not_a_queue_depth():
     opts = _QMSTATUS_MAP[0]["options"]
     assert opts["2"]["text"] == "Running" and opts["2"]["color"] == "green"
     assert opts["-1"]["text"] == "No status"
+
+
+def test_status_stripes_carry_no_title_state_only_leftmost_column():
+    # #505: the leftmost column is a state-only block — no redundant, Grafana-truncated row
+    # name. Every support host and every stack stripe has an empty title.
+    d = build_watcher(FIXTURE)
+    stripes = _stripes(d["panels"])
+    assert len(stripes) == len(SUPPORT_HOSTS) + 2  # 6 support + 2 fixture stacks
+    for s in stripes:
+        assert s["title"] == "", s
+
+
+def _bold_texts(panels: list[dict]) -> str:
+    return " ".join(
+        p["options"]["content"]
+        for p in panels
+        if p.get("type") == "text" and p.get("options", {}).get("content", "").startswith("**")
+    )
+
+
+def test_stack_row_carries_its_full_name_in_column_two():
+    # #505: with the stripe title blanked, the stack name must live in column 2 alongside the
+    # mechanism ("**name**<br/>mechanism", mirroring the support rows).
+    blob = _bold_texts(build_watcher(FIXTURE)["panels"])
+    assert "**pcmk-ubuntu**<br/>pacemaker-san" in blob
+    assert "**rdqm-rhel**<br/>rdqm" in blob
+
+
+def test_both_native_ha_stacks_are_distinguishable_in_real_topology():
+    # #505 motivation: the old truncated stripe collapsed nativeha-rhel and nativeha-ubuntu
+    # to an ambiguous "nati…"; the column-2 name now tells them apart.
+    blob = _bold_texts(json.loads(lab_watcher_dashboard())["panels"])
+    assert "**nativeha-rhel**" in blob and "**nativeha-ubuntu**" in blob
