@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
 DASHBOARD_UID = "lab-watcher"  # pinned — referenced by mqlab obs open + docs
 
-_GREEN, _RED = "green", "red"
+_GREEN, _RED, _YELLOW, _GREY = "green", "red", "yellow", "grey"
 
 # 1 → green up, 0 → red down, no-data → STALE (fail-loud: a scrape target that is down
 # still has an `up` series reading 0, so the row shows DOWN rather than vanishing).
@@ -76,9 +76,9 @@ _QMSTATUS_MAP: list[dict[str, Any]] = [
     {
         "type": "value",
         "options": {
-            "-1": {"color": "grey", "text": "No status", "index": 0},
+            "-1": {"color": _GREY, "text": "No status", "index": 0},
             "0": {"color": _RED, "text": "Stopped", "index": 1},
-            "1": {"color": "yellow", "text": "Transitioning", "index": 2},
+            "1": {"color": _YELLOW, "text": "Transitioning", "index": 2},
             "2": {"color": _GREEN, "text": "Running", "index": 3},
         },
     },
@@ -91,7 +91,7 @@ _QMSTATUS_MAP: list[dict[str, Any]] = [
 _NEUTRAL: list[dict[str, Any]] = [{"color": "text", "value": None}]
 _UTIL: list[dict[str, Any]] = [
     {"color": _GREEN, "value": None},
-    {"color": "yellow", "value": 75},
+    {"color": _YELLOW, "value": 75},
     {"color": _RED, "value": 90},
 ]
 
@@ -151,7 +151,7 @@ _ROLE_SPEC: dict[str, RoleSpec] = {
         # so the pill stays populated (No status) when the exporter has nothing live (#502).
         domain_title="SVCQM",
         domain='max(ibmmq_qmgr_status{{qmgr="{svc}"}}) or vector(-1)',
-        domain_unit="short",
+        domain_unit="short",  # ignored when domain_mappings is set (a status pill, not a number)
         domain_mappings=_QMSTATUS_MAP,
     ),
     "app": RoleSpec(
