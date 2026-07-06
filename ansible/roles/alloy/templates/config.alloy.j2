@@ -10,9 +10,11 @@ loki.relabel "journal" {
     target_label  = "unit"
   }
 
-  // #282: MQ logs via syslog have no systemd unit. Fill `unit` from the syslog
-  // identifier ONLY when systemd_unit is empty, so cluster-daemon units (corosync,
-  // pacemaker, drbd) keep their existing `unit` label. MQ arrives as unit="ibm-mq".
+  // #282/#516: MQ logs AND events arrive via syslog with no systemd unit. Fill `unit`
+  // from the syslog identifier ONLY when systemd_unit is empty, so cluster-daemon units
+  // (corosync, pacemaker, drbd) keep their existing `unit` label. MQ core logs arrive as
+  // unit="ibm-mq"; the mq-event-monitor collector (#515) tags 'mq-events', so this same
+  // rule yields unit="mq-events" — a separate Loki stream from the logs, no new rule needed.
   rule {
     source_labels = ["__journal__systemd_unit", "__journal__syslog_identifier"]
     separator     = ";"
