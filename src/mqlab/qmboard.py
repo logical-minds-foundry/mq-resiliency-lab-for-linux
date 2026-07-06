@@ -363,7 +363,12 @@ def render_qm_board(
     # ① QM-level events: everything this QM emits (start/stop, config, and the CMDEV admin
     # commands) — scoped by eventData.queueMgrName (#526).
     panels.append(
-        _events_panel(loki_uid, f"▤ {app_qm} — all QM events", f'eventData_queueMgrName="{app_qm}"', y)
+        _events_panel(
+            loki_uid,
+            f"▤ {app_qm} — all QM events",
+            f'eventData_queueMgrName="{app_qm}"',
+            y,
+        )
     )
     y += 8  # logs panel (h=8)
 
@@ -374,7 +379,12 @@ def render_qm_board(
         panels.extend(_queue_block(ds_uid, app_qm, queue, y))
         y += 15  # header (1) + two rows of graphs (7 + 7)
         panels.append(
-            _events_panel(loki_uid, f"▤ {queue} — events", f'eventSource_objectName="{queue}"', y)
+            _events_panel(
+                loki_uid,
+                f"▤ {queue} — events",
+                f'eventSource_objectName="{queue}"',
+                y,
+            )
         )
         y += 8
 
@@ -389,7 +399,12 @@ def render_qm_board(
         panels.extend(_channel_block(ds_uid, app_qm, channel, role, y))
         y += 8  # header (1) + one row of graphs (7)
         panels.append(
-            _events_panel(loki_uid, f"▤ {channel} — events", f'eventSource_objectName="{channel}"', y)
+            _events_panel(
+                loki_uid,
+                f"▤ {channel} — events",
+                f'eventSource_objectName="{channel}"',
+                y,
+            )
         )
         y += 8
 
