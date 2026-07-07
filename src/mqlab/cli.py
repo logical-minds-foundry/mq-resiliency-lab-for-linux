@@ -542,6 +542,25 @@ def dns_render() -> None:
     typer.echo(f"rendered {len(files) + 1} DNS files -> {out_dir}")
 
 
+rest_app = typer.Typer(help="Canonical published mqweb REST endpoints (#39)", no_args_is_help=True)
+app.add_typer(rest_app, name="rest")
+
+
+@rest_app.command("render")
+def rest_render() -> None:
+    """Render mqweb REST endpoints (both sites) to build/work/rest/endpoints.json (#39)."""
+    from mqlab.rest import lab_rest_endpoints
+
+    out_dir = work("rest")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    recs = lab_rest_endpoints()
+    (out_dir / "endpoints.json").write_text(json.dumps(recs, indent=2, sort_keys=True) + "\n")
+    for rec in recs:
+        for site, urls in rec["endpoints"].items():
+            typer.echo(f"{rec['stack']:<16} {rec['kind']:<16} {site:<7} {' '.join(urls)}")
+    typer.echo(f"rendered {len(recs)} REST surfaces -> {out_dir}")
+
+
 def _render_reach_peers() -> Path:
     """Write work/obs/reach-peers.json (host -> net -> peers) from topology; return its path."""
     import json as _json

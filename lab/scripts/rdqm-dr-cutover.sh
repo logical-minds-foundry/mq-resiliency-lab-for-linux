@@ -19,17 +19,26 @@
 set -euo pipefail
 DIR="${1:-a2b}"
 QM="${2:-RDQMAPP}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
 
+# The RDQM floating IPs are declared once in lab/topology.yaml (rdqm-rhel qm.vip /
+# qm.vip_b) — the single source of truth. Read them here rather than duplicating
+# literals in this script (epic #39, #540).
+rdqm_vip() {
+  python3 -c "import yaml; print(yaml.safe_load(open('$SCRIPT_DIR/../topology.yaml'))['stacks']['rdqm-rhel']['qm']['$1'])"
+}
+
 if [ "$DIR" = a2b ]; then
-  FROM_PRIMARY=rdqm-a1; TO_PRIMARY=rdqm-b1; TO_VIP=10.10.2.100
+  FROM_PRIMARY=rdqm-a1; TO_PRIMARY=rdqm-b1; TO_VIP="$(rdqm_vip vip_b)"
 elif [ "$DIR" = b2a ]; then
-  FROM_PRIMARY=rdqm-b1; TO_PRIMARY=rdqm-a1; TO_VIP=10.10.1.100
+  FROM_PRIMARY=rdqm-b1; TO_PRIMARY=rdqm-a1; TO_VIP="$(rdqm_vip vip)"
 else
   echo "usage: rdqm-dr-cutover.sh [a2b|b2a] [QM=RDQMAPP]" >&2
   exit 2
 fi
+[ -n "$TO_VIP" ] || { echo "could not resolve TO_VIP from lab/topology.yaml (rdqm-rhel qm)" >&2; exit 1; }
 
 echo "=== 1. Make the live site ($FROM_PRIMARY) the DR secondary ==="
 run "$FROM_PRIMARY" "/opt/mqm/bin/rdqmdr -m $QM -s"
