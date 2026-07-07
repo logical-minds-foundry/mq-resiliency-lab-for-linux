@@ -1,6 +1,9 @@
 """Apply declarative MQ object definitions through pymqrest ensure_*.
 
-Usage: python -m mqlab.apply content/qm-main.yaml https://10.30.0.10:9443
+LEGACY (Phase-B). Current stacks apply QM content via Ansible runmqsc, not REST;
+this module is kept as a pymqrest usage example. For a QM's real REST address, use
+`mqlab rest render` (never a hardcoded IP).
+Usage: python -m mqlab.apply content/<qm>.yaml <base_url>
 Credentials from MQWEB_ADMIN_USER / MQWEB_ADMIN_PASSWORD (never committed).
 """
 
