@@ -1334,6 +1334,12 @@ drilling into its own cockpit board. Scrape targets are rendered from <strong>th
 shows <strong>red (<code>up == 0</code>)</strong> rather than vanishing. That is deliberate: a missing
 thing you can see beats a missing thing you can't. The predecessor <strong>Fleet — Node
 Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per node, at <code>/d/lab-fleet-node</code>.</p>
+<p><strong>mqweb is not the Watcher.</strong> The MQ <strong>admin REST API and Console</strong> (<code>mqweb</code>,
+<code>9443/HTTPS</code>) is a separate surface from the observability plane above. It is
+<strong>data-plane infrastructure</strong> co-located with each queue manager — reached at the
+QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
+which has no VIP) — <strong>not</strong> on the management / Watcher plane. <code>mqlab rest render</code>
+prints each queue manager's canonical REST endpoint(s) for both sites.</p>
 <p><code>obs up</code> brings up only the observer pair; to put host metrics on a running arm,
 overlay the fleet role onto its group:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>pcmk_a<span class="w">                                  </span><span class="c1"># boots the arm (arm64, KVM-fast)</span>

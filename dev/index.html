@@ -1053,17 +1053,16 @@ path.</p>
 <p>The whole lab is declared as code and rebuilt from scratch on demand: a
 <a href="https://github.com/vergil-project">Vergil</a> VM provides the host
 environment, a single <code>topology.yaml</code> describes the guest fleet and its
-networks, and Ansible plus a declarative content plane bring the MQ services
-up. Nothing is hand-built; everything is repeatable.</p>
+networks, and Ansible provisions everything from OS to running queue managers.
+Nothing is hand-built; everything is repeatable.</p>
 <h2 id="what-you-can-do-here">What you can do here<a class="headerlink" href="#what-you-can-do-here" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Stand up a standalone queue manager and prove a message path survives a
-  reboot.</li>
-<li>Form a 3-node <strong>RDQM</strong> HA group with synchronous replication and
-  automatic failover, then drive an asynchronous DR cutover to a second
-  site.</li>
-<li>Compare storage-replicated HA (RDQM) against shared-SAN HA (Pacemaker) on
-  the same network fabric.</li>
+<li>Form a 3-node HA group — <strong>RDQM</strong>, <strong>Pacemaker/SAN</strong>, or <strong>Native HA</strong> — with
+  automatic failover, and prove a live message path survives it.</li>
+<li>Drive an asynchronous <strong>DR / CRR</strong> cutover to a matching 3-node group at a
+  second site (3+3).</li>
+<li>Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
+  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.</li>
 </ul>
 <h2 id="start-here">Start here<a class="headerlink" href="#start-here" title="Permanent link">&para;</a></h2>
 <ul>
