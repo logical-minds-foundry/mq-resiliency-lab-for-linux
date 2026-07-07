@@ -8,18 +8,17 @@ path.
 The whole lab is declared as code and rebuilt from scratch on demand: a
 [Vergil](https://github.com/vergil-project) VM provides the host
 environment, a single `topology.yaml` describes the guest fleet and its
-networks, and Ansible plus a declarative content plane bring the MQ services
-up. Nothing is hand-built; everything is repeatable.
+networks, and Ansible provisions everything from OS to running queue managers.
+Nothing is hand-built; everything is repeatable.
 
 ## What you can do here
 
-- Stand up a standalone queue manager and prove a message path survives a
-  reboot.
-- Form a 3-node **RDQM** HA group with synchronous replication and
-  automatic failover, then drive an asynchronous DR cutover to a second
-  site.
-- Compare storage-replicated HA (RDQM) against shared-SAN HA (Pacemaker) on
-  the same network fabric.
+- Form a 3-node HA group — **RDQM**, **Pacemaker/SAN**, or **Native HA** — with
+  automatic failover, and prove a live message path survives it.
+- Drive an asynchronous **DR / CRR** cutover to a matching 3-node group at a
+  second site (3+3).
+- Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
+  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.
 
 ## Start here
 
