@@ -1,0 +1,83 @@
+---
+# Controller-side replication PKI (dynamic include, like lab-pki's entity.yml): a
+# self-signed CA plus one cert per RDQM node (CN=<hostname>, SAN=DNS:<hostname>,
+# DNS:<group-dns>). Kept behind include_tasks so it is resolved at run time — the
+# community.crypto modules are installed via ansible/requirements.yml at run time
+# but are not on ansible-lint's syntax-check path (same reason lab-pki isolates its
+# crypto here). All minting happens on the controller; CA keys never touch a node.
+
+- name: controller store for the replication CA + node certs
+  ansible.builtin.file:
+    path: "{{ rdqm_repl_ca_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: replication CA private key
+  community.crypto.openssl_privatekey:
+    path: "{{ rdqm_repl_ca_dir }}/ca.key"
+    size: "{{ rdqm_repl_key_bits }}"
+    type: RSA
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: replication CA CSR
+  community.crypto.openssl_csr:
+    path: "{{ rdqm_repl_ca_dir }}/ca.csr"
+    privatekey_path: "{{ rdqm_repl_ca_dir }}/ca.key"
+    common_name: "RDQM Replication CA"
+    basic_constraints: ["CA:TRUE"]
+    basic_constraints_critical: true
+    key_usage: ["keyCertSign", "cRLSign"]
+    key_usage_critical: true
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: replication CA certificate (self-signed)
+  community.crypto.x509_certificate:
+    path: "{{ rdqm_repl_ca_dir }}/ca.crt"
+    csr_path: "{{ rdqm_repl_ca_dir }}/ca.csr"
+    privatekey_path: "{{ rdqm_repl_ca_dir }}/ca.key"
+    provider: selfsigned
+    selfsigned_not_after: "+{{ rdqm_repl_ca_days }}d"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: "{{ inventory_hostname }} replication private key"
+  community.crypto.openssl_privatekey:
+    path: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.key"
+    size: "{{ rdqm_repl_key_bits }}"
+    type: RSA
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+
+- name: "{{ inventory_hostname }} replication CSR (SAN = hostname + group DNS)"
+  community.crypto.openssl_csr:
+    path: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.csr"
+    privatekey_path: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.key"
+    common_name: "{{ inventory_hostname }}"
+    subject_alt_name:
+      - "DNS:{{ inventory_hostname }}"
+      - "DNS:{{ rdqm_repl_group_dns }}"
+  delegate_to: localhost
+  become: false
+
+- name: "{{ inventory_hostname }} replication certificate (signed by the replication CA)"
+  community.crypto.x509_certificate:
+    path: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.crt"
+    csr_path: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.csr"
+    provider: ownca
+    ownca_path: "{{ rdqm_repl_ca_dir }}/ca.crt"
+    ownca_privatekey_path: "{{ rdqm_repl_ca_dir }}/ca.key"
+    ownca_not_after: "+{{ rdqm_repl_cert_days }}d"
+    mode: "0644"
+  delegate_to: localhost
+  become: false

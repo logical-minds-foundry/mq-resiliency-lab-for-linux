@@ -1,0 +1,73 @@
+---
+# Secure the RDQM HA + DR replication links with TLS (#545), an MQ 9.4.4+ feature
+# (our build is 9.4.5). Runs on every RDQM node BEFORE crtmqm, because the certs +
+# tlshd service must be in place before any DRBD TLS handshake. Procedure per IBM's
+# "Secure replication for DR/HA RDQM":
+#   1. one CA-signed cert per node, SAN = DNS:<hostname>,DNS:<group-dns> (default
+#      encrypted.remote, so crtmqm needs no -san);
+#   2. certs deployed root-owned to /etc/drbd.d;
+#   3. /etc/tlshd.conf points client+server at them; tlshd enabled + started.
+# crtmqm then gets -re (both links) / -reh (HA only) in rdqm-qm-create.sh.
+#
+# tlshd ships with the drbd-utils-9 packages rdqm-install already installs, so no
+# extra package is needed. The cert-minting is isolated in certs.yml (see there).
+
+- name: mint the replication CA + this node's cert on the controller
+  ansible.builtin.include_tasks: certs.yml
+
+# --- Node-side: deploy the CA + this node's cert/key, root-owned, to /etc/drbd.d ---
+- name: "replication cert dir {{ rdqm_repl_drbd_dir }} exists"
+  ansible.builtin.file:
+    path: "{{ rdqm_repl_drbd_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: deploy the replication CA certificate
+  ansible.builtin.copy:
+    src: "{{ rdqm_repl_ca_dir }}/ca.crt"
+    dest: "{{ rdqm_repl_drbd_dir }}/rdqm-repl-ca.crt"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: "deploy the {{ inventory_hostname }} replication certificate"
+  ansible.builtin.copy:
+    src: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.crt"
+    dest: "{{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.crt"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: "deploy the {{ inventory_hostname }} replication private key (root-only)"
+  ansible.builtin.copy:
+    src: "{{ rdqm_repl_ca_dir }}/{{ inventory_hostname }}.key"
+    dest: "{{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.key"
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+
+# --- Node-side: tlshd (kernel-TLS handshake daemon for DRBD) ---
+- name: render /etc/tlshd.conf (client + server point at this node's cert)
+  ansible.builtin.template:
+    src: tlshd.conf.j2
+    dest: /etc/tlshd.conf
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: restart tlshd
+
+- name: enable + start tlshd (must be running before crtmqm -re)
+  ansible.builtin.systemd:
+    name: tlshd
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

@@ -1,0 +1,20 @@
+# /etc/tlshd.conf -- kernel-TLS handshake daemon for DRBD (RDQM secure replication, #545).
+# DRBD can open the connection in either direction, so client and server carry the
+# same identity: this node's CA-signed cert + key, validated against the replication CA.
+# The system-wide crypto policy governs the TLS protocols/ciphers (update-crypto-policies).
+[debug]
+loglevel=0
+tls=0
+nl=0
+
+[authenticate]
+
+[authenticate.client]
+x509.truststore={{ rdqm_repl_drbd_dir }}/rdqm-repl-ca.crt
+x509.certificate={{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.key
+
+[authenticate.server]
+x509.truststore={{ rdqm_repl_drbd_dir }}/rdqm-repl-ca.crt
+x509.certificate={{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ rdqm_repl_drbd_dir }}/{{ inventory_hostname }}.key
