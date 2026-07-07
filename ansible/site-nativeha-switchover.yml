@@ -1,8 +1,10 @@
 # CRR planned switchover (#246 Phase 3): flip Live/Recovery roles so `target_live`
 # (a|b) is the Live site, the other Recovery. Group NAMES stay fixed (Live/Recovery
 # as labels from initial setup); only GroupRole flips — the spike-proven procedure.
-# Reuses crr.yml with swapped roles + restarts both groups. The arm's
-# `mqlab dr cutover`/`failback` verbs invoke this.
+# Reuses crr.yml with swapped roles + restarts both groups. Run this playbook
+# directly with `-e target_live=`; the planned `mqlab dr cutover`/`failback` verbs
+# (design: docs/specs/2026-06-14-mqlab-dr-commands-design.md; automation epic #38)
+# will wrap it once built.
 #   -e target_live=b   # cutover A -> B
 #   -e target_live=a   # failback B -> A
 
