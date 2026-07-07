@@ -67,6 +67,7 @@ nav:
       - Authoring standard: guides/guide-standard.md
       - Guide template: guides/_template.md
       - JSON diagnostic logging: guides/mq-json-logging-guide.md
+      - Instrumentation event monitoring: guides/mq-event-monitoring-guide.md
       - Metrics & monitoring configuration: guides/mq-metrics-config-guide.md
       - TCP configuration: guides/mq-tcp-config-guide.md
   - Architecture: architecture/index.md

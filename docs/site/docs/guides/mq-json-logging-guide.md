@@ -3,7 +3,9 @@
 - **MQ version:** 9.4 (stanza-based services available from 9.1.0)
 - **Status:** Active
 - **Last validated in lab:** 2026-07-06
-- **Related guides:** none yet (a log-shipping pipeline guide is planned)
+- **Related guides:** [Instrumentation event monitoring](mq-event-monitoring-guide.md)
+  — the complementary *event* stream (what the queue manager did) to this *log*
+  stream (why); a log-shipping pipeline guide is planned
 
 ---
 

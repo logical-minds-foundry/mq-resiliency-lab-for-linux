@@ -15,6 +15,11 @@ alternatives are ranked. Start a new guide by copying
 - **[JSON diagnostic logging](mq-json-logging-guide.md)** — make IBM MQ write its
   diagnostic messages as one JSON object per line, across the queue manager,
   clients, and mqweb.
+- **[Instrumentation event monitoring](mq-event-monitoring-guide.md)** — turn the
+  queue manager's instrumentation events (authority, channel, queue-depth,
+  config, command, start/stop) into a JSON feed with the IBM-supplied `amqsevt`
+  sample — no PCF-parsing code. The complementary *event* stream to the *log*
+  stream above.
 - **[Metrics & monitoring configuration](mq-metrics-config-guide.md)** — enable
   the queue-manager monitoring and statistics a metrics collector (e.g. the IBM MQ
   Prometheus exporter) needs, with coherent per-object inheritance.
