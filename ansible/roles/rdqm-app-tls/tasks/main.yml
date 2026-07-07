@@ -1,0 +1,37 @@
+---
+# TLS-enable the RDQM app queue manager ({{ qm_name }}) to parity with the pcmk and
+# Native HA arms (#410, #426). Runs once on the site-A primary; the keystore lands
+# under the QM's own data dir (/var/mqm/qmgrs/<qm> -> the DRBD-replicated volume
+# /var/mqm/vols/<qm>/qmgr/<qm>), so SSLKEYR follows the QM across HA node moves and
+# the DR cutover -- the RDQM-native equivalent of pcmk placing the keystore on the
+# shared LUN.
+#
+# Scope: the app-facing MQ channels only (APP.SVRCONN, MON.SVRCONN, and the inter-QM
+# SDR/RCVR to the SVC counterparty). The RDQM-internal DRBD replication link is NOT
+# secured here -- channel TLS for it is a v10 feature, a version-gated exception
+# tracked in #412.
+
+- name: "place the {{ qm_name }} keystore under the replicated QM data dir (TLS)"
+  ansible.builtin.include_role:
+    name: pki-distribute
+  vars:
+    pki_entity: "{{ qm_name }}"
+    pki_dest_dir: "/var/mqm/qmgrs/{{ qm_name }}/ssl"
+  # registers `pki_keyrpwd` (the keystore password, no_log) for the MQSC below.
+
+- name: "render the {{ qm_name }} TLS MQSC"
+  ansible.builtin.template:
+    src: app-tls.mqsc.j2
+    dest: /var/mqm/app-tls.mqsc
+    owner: mqm
+    group: mqm
+    mode: "0640"
+  become: true
+  no_log: true  # the rendered file carries KEYRPWD
+
+- name: "apply the {{ qm_name }} TLS MQSC (keystore + channel SSLCIPH + REFRESH SECURITY)"
+  ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/app-tls.mqsc'"
+  become: true
+  register: rdqm_app_tls_mqsc
+  changed_when: true
+  # runmqsc exits non-zero if any MQSC command errors -> the task fails loud.
