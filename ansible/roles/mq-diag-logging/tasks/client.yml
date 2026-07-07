@@ -17,7 +17,7 @@
     marker: "# {mark} MQ-DIAG-LOGGING (#282)"
     block: |
       DiagnosticSystemMessages:
-         Name=ClusterSyslog
+         Name=SystemSyslog
          Service=Syslog
          Ident={{ mq_diag_ident }}
          Severities={{ mq_diag_severities }}

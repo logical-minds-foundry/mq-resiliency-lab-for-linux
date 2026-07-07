@@ -112,6 +112,13 @@ manager or to retrofit one created before the template existed.**
    `DiagnosticSystemMessages` stanza to catch messages emitted when no
    queue-manager context exists — early errors, or a queue manager that cannot
    write its own logs.
+
+   > **Give it a `Name` distinct from the template's.** A diagnostic-service
+   > `Name` must be unique, and `crtmqm` validates the template-derived `qm.ini`
+   > `DiagnosticMessages` against this stanza. Reusing one `Name` across both
+   > fails RDQM's `crtmqm -sx` with `AMQ7059E` ("details ... conflict"). `Name` is
+   > an internal id — syslog output is tagged by `Ident` — so a distinct system
+   > name is invisible to log consumers.
 4. **Client applications (`mqclient.ini`).** Add a `DiagnosticSystemMessages`
    stanza for MQI/client processes (for example `runmqsc` in client mode, or
    sample apps). `mqclient.ini` is read from the application's directory, from
@@ -252,7 +259,7 @@ DiagnosticMessagesTemplate:
 ```ini
 DiagnosticSystemMessages:
    Service    = Syslog
-   Name       = JSONLogs
+   Name       = SystemJSONLogs
    Ident      = ibm-mq
    Severities = all
 ```
@@ -262,7 +269,7 @@ DiagnosticSystemMessages:
 ```ini
 DiagnosticSystemMessages:
    Service    = Syslog
-   Name       = JSONLogs
+   Name       = SystemJSONLogs
    Ident      = ibm-mq
    Severities = all
 ```
