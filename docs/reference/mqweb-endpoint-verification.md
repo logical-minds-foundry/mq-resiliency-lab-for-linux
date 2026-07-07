@@ -105,28 +105,41 @@ curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" https://10.10.1.100:9443/i
 | `rdqm-rhel` | | | | ☐ |
 | `pcmk-ubuntu` | | | | ☐ |
 
-## Step 4 — Native HA switchover
+## Step 4 — Native HA cross-site switchover (site A → B → A)
 
-Switch the active instance and confirm the active-instance resolution re-points to
-the new member's mqweb.
+Native HA has no floating VIP; its published surface is the per-site **candidate
+list** of instance data-plane addresses the renderer emits (Step 0). The switchover
+flips the Live↔Recovery group role across sites — the Native HA analog of Step 3.
+After it, the **site-B** candidate list answers and the newly-active instance's
+address must be one of `mqlab rest render`'s site-B addresses for that stack. The
+`site-nativeha-*-switchover.yml` playbooks drive it and **require `-e target_live=a|b`**
+(`b` = cutover A→B, `a` = fail back B→A).
 
 ```bash
-ansible-playbook ansible/site-nativeha-ubuntu-switchover.yml     # move the active instance
-ssh nha-ubuntu-a1 "su - mqm -c '/opt/mqm/bin/dspmq -m NHAUAPP -o nativeha -x'"   # new ROLE(Active) INSTANCE(...)
-curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" https://<new-active-node-ip>:9443/ibmmq/rest/v2/admin/qmgr | head
+# rhel arm (NHARAPP) shown; ubuntu arm: site-nativeha-ubuntu-switchover.yml + NHAUAPP
+ansible-playbook ansible/site-nativeha-switchover.yml -e target_live=b   # cutover A -> B
+# resolve the new active instance in site B, then probe its data-plane IP:
+ssh nha-rhel-b1 "su - mqm -c '/opt/mqm/bin/dspmq -m NHARAPP -o nativeha -x'"   # find ROLE(Active) INSTANCE(...)
+curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" https://<site-B-active-ip>:9443/ibmmq/rest/v2/admin/qmgr | head
+ansible-playbook ansible/site-nativeha-switchover.yml -e target_live=a   # fail back B -> A
 ```
 
-| Stack | Active moved to new instance? | New active's mqweb answers? | Result |
-|---|---|---|---|
-| `nativeha-ubuntu` | | | ☐ |
-| `nativeha-rhel` | | | ☐ |
+> **Replicas answer too.** Non-active instances' mqweb is up and REST returns the QM
+> with `"state":"replica"` (not an error, not unreachable). Resolution "follows the
+> active" by walking the rendered candidate list for the instance reporting
+> `"state":"running"` — the others reporting `"replica"` is expected, not a failure.
+
+| Stack | Site-B active answers after A→B? | Matches `mqlab rest render` site-B? | Site-A active answers after B→A? | Result |
+|---|---|---|---|---|
+| `nativeha-ubuntu` (NHAUAPP) | | | | ☐ |
+| `nativeha-rhel` (NHARAPP) | | | | ☐ |
 
 ## Sign-off
 
 - [ ] All Step 1 endpoints reachable + authenticated (both sites where applicable).
 - [ ] HA failover: REST follows the VIP (Step 2).
 - [ ] DR cutover: site-B endpoint answers and matches the renderer (Step 3).
-- [ ] Native HA switchover: resolution follows the active instance (Step 4).
+- [ ] Native HA cross-site switchover: site-B candidate answers, matches the renderer, resolution follows the active (Step 4).
 - [ ] Cold-rebuild basis confirmed.
 
 **Run by:** ______  **Date:** ______  **Lab build:** ______
