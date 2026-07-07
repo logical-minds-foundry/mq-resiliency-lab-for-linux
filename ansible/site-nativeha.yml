@@ -61,7 +61,7 @@
         su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}" <<'MQSC'
         DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
         START LISTENER(L1414)
-        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') HBINT(15) KAINT(15) REPLACE
+        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') HBINT(15) KAINT(15) REPLACE
         DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ') CERTLABL('{{ qm_name }}') MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)
         REFRESH SECURITY TYPE(CONNAUTH)
@@ -92,8 +92,9 @@
     # of the three holds the QM) — NOT another arm's range (.7x is pcmk-rhel).
     our_conn: "nha-rhel-a1-ext.client.com(1414),nha-rhel-a2-ext.client.com(1414),nha-rhel-a3-ext.client.com(1414)"
     # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
-    # lists the site-A instances. APP.SVRCONN is plaintext here -> app_tls false. (#429)
+    # lists the site-A instances. APP.SVRCONN is mutual-TLS here (matches pcmk), so
+    # the app requester connects over TLS -> app_tls true. (#411)
     app_conn: "nha-rhel-a1-data-a.client.com(1414),nha-rhel-a2-data-a.client.com(1414),nha-rhel-a3-data-a.client.com(1414)"
-    app_tls: false
+    app_tls: true
 
 - import_playbook: _nativeha-dr-replication.yml
