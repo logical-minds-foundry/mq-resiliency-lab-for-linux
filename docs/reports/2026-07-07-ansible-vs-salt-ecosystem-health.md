@@ -1,6 +1,6 @@
 # Ansible vs Salt — ecosystem health, and the decision to park Salt
 
-- **Issue:** #528
+- **Issue:** #528 · §7 migration-tooling addendum #533
 - **Date:** 2026-07-07
 - **Companion to:** #197 / `docs/reports/2026-06-16-ansible-to-salt-evaluation.md`
 - **Status:** final — research complete, **decision recorded: Salt is parked
@@ -9,11 +9,14 @@
   fetched, 87 candidate claims, top 25 adversarially fact-checked with 3-vote
   verification (**25/25 confirmed, 0 refuted**). Maintenance-health facts are
   snapshotted **2026-07-06** and will drift; re-check before acting on them.
+- **Addendum (§7, #533):** a second deep-research pass (5 angles, 13 sources, top
+  25 claims 3-vote-verified, **25/25 confirmed**) on whether an Ansible→Salt
+  converter exists — added 2026-07-07.
 
 Every load-bearing claim below is tagged **[data]** (what a cited source
 actually says) or **[judgment]** (our reasoning on top of it), per the project's
 sources-are-load-bearing standard. Citations are inline; the full source list is
-§8.
+§9.
 
 ## Contents
 
@@ -23,8 +26,9 @@ sources-are-load-bearing standard. Citations are inline; the full source list is
 4. [Ecosystem tooling deep-dive](#4-ecosystem-tooling-deep-dive)
 5. [Applying it to the lab (MQ + Pacemaker/Corosync + DRBD)](#5-applying-it-to-the-lab-mq--pacemakercorosync--drbd)
 6. [The decision and its rationale](#6-the-decision-and-its-rationale)
-7. [Caveats & what this does not rest on](#7-caveats--what-this-does-not-rest-on)
-8. [Sources](#8-sources)
+7. [Migration tooling: is there an Ansible→Salt converter?](#7-migration-tooling-is-there-an-ansiblesalt-converter)
+8. [Caveats & what this does not rest on](#8-caveats--what-this-does-not-rest-on)
+9. [Sources](#9-sources)
 
 ---
 
@@ -248,7 +252,91 @@ This supersedes #197's GO-on-content recommendation. #197 remains valid as the
 record of *what a port would cost*; this report is the record of *why we are not
 paying it*.
 
-## 7. Caveats & what this does not rest on
+## 7. Migration tooling: is there an Ansible→Salt converter?
+
+A second deep-research pass (2026-07-07, #533) asked the practical follow-on: with
+Salt parked in the lab but Ansible→Salt porting now happening piecemeal at the
+maintainer's employer, does any tool convert Ansible playbooks/roles/tasks/
+inventory into Salt SLS/pillar/roster? Same harness, same rigor (5 angles, 13
+sources, top 25 claims 3-vote-verified, **25/25 confirmed**).
+
+**Bottom line: no automated Ansible→Salt converter or transpiler exists
+(2024–2026). Piecemeal migration is a manual, idiom-by-idiom rewrite.** **[data]**
+This holds across primary Salt/Uyuni docs, GitHub API data, and multiple
+first-hand practitioner accounts in both directions.
+
+### 7.1 What exists is a runtime *bridge*, not a translator
+
+- **[data] `ansiblegate` — Salt's first-party Ansible bridge.** Salt ships official
+  execution + state modules that **run existing Ansible in place, from within
+  Salt**, at runtime — they never emit SLS/pillar/roster:
+  - `ansible.playbooks()` runs a whole playbook (by path or cloned git repo),
+    passing native `ansible_kwargs` (inventory, tags, extra_vars).
+  - `ansible.call()` invokes an individual Ansible module as-is.
+  - `ansible.targets()` **reads an existing Ansible inventory file directly**
+    (defaults to `/etc/ansible/hosts`, Salt 3005+); `salt.roster.ansible` likewise
+    consumes Ansible-format inventory for `salt-ssh`.
+  - It requires the real `ansible` / `ansible-playbook` binaries on `PATH` — it
+    wraps Ansible, it does not reimplement or translate it. Current in Salt
+    3005/3006/3007/master.
+- **[data] Uyuni's playbook discovery** (`discover_playbooks` +
+  `ansible.runplaybook`) is the same pattern, and its docs say so verbatim: *"This
+  tool does not convert or transpile Ansible playbooks into Salt SLS states.
+  Instead, it executes Ansible playbooks directly through Salt's wrapper."*
+- **[data] The one "ansible+salt" GitHub repo, `vzhestkov/ansible-salt`, is not a
+  converter and is dead.** It is a pair of plugins that run Ansible *through* a Salt
+  master's ZeroMQ transport — no playbook→SLS translation. A "Hack Week 25" PoC:
+  2 commits (both 2025-12-05), 0 stars, 0 releases, untouched since. Do not rely on
+  it.
+
+### 7.2 The closest thing to an accelerator is a mapping cheat-sheet
+
+**[data]** The community de-facto map (Network to Code) is conceptual, not
+automated:
+
+| Ansible | Salt |
+|---|---|
+| Playbook / tasks | SLS file |
+| Inventory + static vars | Pillar |
+| Facts (`gather_facts`) | Grains |
+| Control node / managed hosts | Master / Minion |
+
+**[judgment] Better still, we already have a lab-specific one:** the #197 §4
+translation matrix maps our *actual* idioms (`apt`/`dnf`→`pkg.installed`,
+`systemd`→`service.running`, `template`→`file.managed`+jinja,
+`shell`+`changed_when`→`cmd.run`+`onlyif`/`unless`, handlers→`watch`,
+`run_once`+`register`→orchestrate/mine) with confidence and effort weights. For
+piecemeal porting, that matrix is the reusable cheat-sheet.
+
+### 7.3 Why no converter exists (structural)
+
+**[judgment, supported by the evidence]** A lossless mechanical transpile is
+ill-posed: Ansible's ordered, imperative-ish task model + its Jinja dialect +
+inventory/facts do not map 1:1 onto Salt's declarative state model +
+grains/pillar/roster + Salt's own Jinja/YAML rendering. That is exactly why the
+tooling that does exist **bridges** (execute Ansible in place) rather than
+**translates** — the bridge is tractable, the translator is not. It is the same
+modelling gap #197's spike hit empirically as the `changed_when`→`unless`
+idempotency tax.
+
+### 7.4 Practical takeaway for piecemeal migration
+
+- **Don't hunt for a converter — there isn't one.** Budget each port as a manual
+  rewrite (#197 calibration: ~1–2 h per simple role, plus ~1–2 idempotency
+  frictions that only surface at apply time).
+- **Use `ansiblegate` as a coexistence bridge.** Where unconverted Ansible must
+  keep working *during* migration, invoke it from Salt (and let Salt read the
+  existing Ansible inventory) while translating SLS-native piece by piece behind it.
+  That is the one officially-supported accelerator.
+
+**Caveats specific to §7.** The "no converter exists" conclusion rests on strong
+primary sources for what *does* exist plus absence-of-evidence from 2024–2026
+search — a private/unindexed converter could exist, though the structural argument
+says a robust one would be hard to build. The practitioner accounts are
+single-anecdote, blog-grade (one is from 2020, predating Salt 3006+); they
+corroborate each other and the vendor docs but generalize weakly.
+
+## 8. Caveats & what this does not rest on
 
 - **[data] Time-sensitive.** All maintenance-health facts are snapshotted
   **2026-07-06**. If the Community Core Maintainer pilot revives Salt's tooling,
@@ -267,7 +355,7 @@ paying it*.
 - **[not established] `pytest-salt-factories`** maturity as a formula-testing tool
   is unverified (§4.3) — a genuine blind spot, not a negative finding.
 
-## 8. Sources
+## 9. Sources
 
 Primary sources carry the load; blogs/secondary are corroborated by primary docs.
 
@@ -292,3 +380,10 @@ Primary sources carry the load; blogs/secondary are corroborated by primary docs
 
 **Lab-specific**
 - `github.com/OndrejHome/ansible.ha-cluster-pacemaker` (primary) · LINBIT, DRBD+Pacemaker via Ansible — `linbit.com/en/deploy-drbd-pacemaker-cluster-using-ansible/` (vendor blog) · RIPE NCC dual-tool migration — `labs.ripe.net/.../how-were-migrating-our-configuration-management-system/` (blog)
+
+**Migration tooling (§7 addendum, #533)**
+- Salt `ansiblegate` state module — `docs.saltproject.io/en/latest/ref/states/all/salt.states.ansiblegate.html` (primary) · execution module — `docs.saltproject.io/en/latest/ref/modules/all/salt.modules.ansiblegate.html` (primary) · upstream source `github.com/saltstack/salt/blob/master/salt/states/ansiblegate.py` (primary)
+- Uyuni playbook discovery — `github.com/uyuni-project/uyuni/wiki/How-to-discover-Ansible-Playbooks-using-Salt` (primary)
+- `github.com/vzhestkov/ansible-salt` (primary; dead Hack Week PoC)
+- Network to Code, *Learn Salt with Ansible references* — `blog.networktocode.com/post/learn-salt-with-ansible-references/` (vendor blog; mapping cheat-sheet)
+- Practitioner accounts — `blog.hartwork.org/posts/replacing-ansible-with-salt-ssh-for-speed-and-for-good/` (blog, 2020) · `medium.com/@Tesonet/automation-from-ansible-to-saltstack-5cc530e4b4f6` (blog) · `doingstuff.dev/posts/homelab-switching-salt-to-ansible/` (blog; inverse direction) · SUSE Hack Week — `hackweek.opensuse.org/projects/learn-salt-by-converting-ansible-scripts-to-salt-states` (blog)
