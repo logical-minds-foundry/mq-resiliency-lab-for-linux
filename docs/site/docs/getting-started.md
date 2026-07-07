@@ -199,6 +199,13 @@ shows **red (`up == 0`)** rather than vanishing. That is deliberate: a missing
 thing you can see beats a missing thing you can't. The predecessor **Fleet — Node
 Health** board (`lab-fleet-node`) still renders a tile per node, at `/d/lab-fleet-node`.
 
+**mqweb is not the Watcher.** The MQ **admin REST API and Console** (`mqweb`,
+`9443/HTTPS`) is a separate surface from the observability plane above. It is
+**data-plane infrastructure** co-located with each queue manager — reached at the
+QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
+which has no VIP) — **not** on the management / Watcher plane. `mqlab rest render`
+prints each queue manager's canonical REST endpoint(s) for both sites.
+
 `obs up` brings up only the observer pair; to put host metrics on a running arm,
 overlay the fleet role onto its group:
 

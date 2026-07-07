@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Lab architecture — Native HA arm (HA + CRR)</title>
+<link rel="stylesheet" href="_diagram.css"/>
+</head><body>
+<h2>Native HA arm — log-replicated HA in a site, async CRR across the WAN</h2>
+<p class="subtitle">3 instances, log-based (raft) synchronous replication, automatic failover, RPO 0 in-site. No shared storage and <b>no VIP</b> — clients use a 3-instance CONNAME list + auto-reconnect. Two OS arms: <code>nha-ubuntu</code> and <code>nha-rhel</code>.</p>
+
+<div class="callout">
+  <b>No VIP, no shared disk.</b> Native HA replicates the recovery log across 3 instances over the heartbeat net; one instance is the raft <b>leader (Active)</b>. There is no floating IP — clients reach the QM by a comma-separated list of all three instance addresses and reconnect to whichever is Active. Cross-site resilience is a <b>separate, asynchronous CRR</b> relationship with a manual cutover — never a stretched sync group.
+</div>
+
+<div class="wrap">
+  <div class="panel">
+    <h3>The building block — one queue manager, 3-instance HA + async CRR</h3>
+    <p class="sub">QM <code>NHAUAPP</code> / <code>NHARAPP</code> — automatic HA inside DC-A, manual async CRR to DC-B.</p>
+    <div class="row">
+      <div class="box">
+        <h4>Data Center A — LIVE</h4>
+        <span class="net net-data">net-data-a · 10.10.1.11-13</span>
+        <span class="net net-priv">net-hb-a · raft log replication</span>
+        <div class="group">
+          <div class="glabel">Native HA group — 3 instances, synchronous, automatic failover</div>
+          <div class="nodes">
+            <div class="node active">nha-*-a1 ▶ <span class="tag">Active</span></div>
+            <div class="node">nha-*-a2</div>
+            <div class="node">nha-*-a3</div>
+          </div>
+        </div>
+        <div class="admin">
+          <div class="glabel">mqweb — admin REST/Console, per instance</div>
+          <span class="tag">Runs on all 3 instances (stateless). The <b>Active</b> instance's mqweb serves admin, reached at its <b>data-plane node IP</b> <code>:9443</code> — resolved at runtime (<code>dspmq -o nativeha</code>). Data-plane infrastructure, not the Watcher plane.</span>
+        </div>
+      </div>
+
+      <div class="wanlink">
+        <span class="net net-wan">net-wan</span>
+        <div class="arrow">⇒</div>
+        <small><b>async</b> CRR<br/>(manual<br/>cutover)</small>
+      </div>
+
+      <div class="box b">
+        <h4>Data Center B — CRR RECOVERY</h4>
+        <span class="net net-data">net-data-b · 10.10.2.11-13</span>
+        <span class="net net-priv">net-hb-b · raft log replication</span>
+        <div class="group dr">
+          <div class="glabel">CRR recovery — 3-instance group (3+3)</div>
+          <div class="nodes">
+            <div class="node">nha-*-b1</div>
+            <div class="node">nha-*-b2</div>
+            <div class="node">nha-*-b3</div>
+          </div>
+        </div>
+        <div class="admin">
+          <div class="glabel">mqweb — also per instance here</div>
+          <span class="tag">Present on every recovery instance; serves admin once this site is promoted.</span>
+        </div>
+      </div>
+    </div>
+    <div class="ok" style="margin-top:10px;">Inside a DC: <b>automatic</b> HA failover, RPO 0 (synchronous log replication). Between DCs: <b>manual</b> CRR cutover. As built: DC-B is a full 3-instance recovery group (3+3), on both the Ubuntu and RHEL arms.</div>
+  </div>
+</div>
+</body></html>

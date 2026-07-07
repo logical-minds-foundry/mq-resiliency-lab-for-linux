@@ -26,7 +26,7 @@
 
   <div class="panel">
     <h3>② Network fabric — the libvirt networks</h3>
-    <p class="sub">Per-site data + heartbeat, a cross-site WAN, application nets, and shared-SAN nets. Each can be severed to inject faults.</p>
+    <p class="sub">Per-site data + heartbeat, a cross-site WAN, the inter-business boundary, the SAN nets, and the management plane. Each can be severed to inject faults.</p>
     <div class="row">
       <div class="box">
         <h4>Data Center A</h4>
@@ -41,32 +41,40 @@
         <span class="net net-san">net-san-b · 10.40.2.0/24</span>
       </div>
       <div class="box b">
-        <h4>Cross-site &amp; application</h4>
-        <span class="net net-wan">net-wan · 10.99.0.0/24</span>
-        <span class="net net-data">net-client · 10.30.0.0/24</span>
-        <span class="net net-data">net-svc · 10.20.0.0/24</span>
+        <h4>Cross-site &amp; inter-business</h4>
+        <span class="net net-wan">net-wan · 10.99.0.0/24 · DR/CRR</span>
+        <span class="net net-ext">net-ext · 10.60.0.0/24 · to the SVC counterparty</span>
       </div>
+    </div>
+    <div class="admin">
+      <div class="glabel">Management plane — "the Watcher"</div>
+      <span class="net net-mgmt">net-mgmt · 10.50.0.0/24</span>
+      <span class="tag">observes every node &amp; carries Ansible control — non-transit; nothing routes through it</span>
     </div>
   </div>
 
   <div class="panel">
-    <h3>③ Node fleet — guests grouped by arm</h3>
-    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs.</p>
+    <h3>③ Node fleet — guests grouped by stack (3+3 per stack)</h3>
+    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs. Four registered HA/DR stacks, plus the counterparty, the app client, and the observability plane.</p>
     <div class="group">
-      <div class="glabel">Phase A — placeholder fleet (Ubuntu arm64)</div>
-      <div class="nodes"><div class="node">node-a1</div><div class="node">node-a2</div><div class="node">node-a3</div><div class="node">node-b1</div><div class="node">node-b2</div><div class="node">node-b3</div></div>
+      <div class="glabel">Pacemaker / SAN arm (Ubuntu) — shared-storage HA</div>
+      <div class="nodes"><div class="node">san-a</div><div class="node">pcmk-a1</div><div class="node">pcmk-a2</div><div class="node">pcmk-a3</div><span class="tag bsep">·B·</span><div class="node">san-b</div><div class="node">pcmk-b1</div><div class="node">pcmk-b2</div><div class="node">pcmk-b3</div></div>
     </div>
     <div class="group">
-      <div class="glabel">Phase B — standalone QM message path</div>
-      <div class="nodes"><div class="node">qm-main</div><div class="node">svc-sim</div><div class="node">app-client</div></div>
+      <div class="glabel">RDQM arm (RHEL) — replicated-storage HA</div>
+      <div class="nodes"><div class="node">rdqm-a1</div><div class="node">rdqm-a2</div><div class="node">rdqm-a3</div><span class="tag bsep">·B·</span><div class="node">rdqm-b1</div><div class="node">rdqm-b2</div><div class="node">rdqm-b3</div></div>
     </div>
     <div class="group">
-      <div class="glabel">Phase C — RDQM arm (RHEL 9.6 x86_64)</div>
-      <div class="nodes"><div class="node">rdqm-a1</div><div class="node">rdqm-a2</div><div class="node">rdqm-a3</div><div class="node">rdqm-b1</div><div class="node">rdqm-b2</div><div class="node">rdqm-b3</div></div>
+      <div class="glabel">Native HA arm (Ubuntu) — log-replicated HA (raft)</div>
+      <div class="nodes"><div class="node">nha-ubuntu-a1</div><div class="node">nha-ubuntu-a2</div><div class="node">nha-ubuntu-a3</div><span class="tag bsep">·B·</span><div class="node">nha-ubuntu-b1</div><div class="node">nha-ubuntu-b2</div><div class="node">nha-ubuntu-b3</div></div>
     </div>
     <div class="group">
-      <div class="glabel">Phase D — Pacemaker/SAN arm</div>
-      <div class="nodes"><div class="node">san-a</div><div class="node">pcmk-a1</div><div class="node">pcmk-a2</div><div class="node">pcmk-a3</div></div>
+      <div class="glabel">Native HA arm (RHEL) — log-replicated HA (raft)</div>
+      <div class="nodes"><div class="node">nha-rhel-a1</div><div class="node">nha-rhel-a2</div><div class="node">nha-rhel-a3</div><span class="tag bsep">·B·</span><div class="node">nha-rhel-b1</div><div class="node">nha-rhel-b2</div><div class="node">nha-rhel-b3</div></div>
+    </div>
+    <div class="group dr">
+      <div class="glabel">Counterparty, app &amp; observability</div>
+      <div class="nodes"><div class="node">svc-sim <span class="tag">SVC · net-ext</span></div><div class="node">app-client</div><div class="node">obs <span class="tag">Watcher</span></div><div class="node">mon-probe</div></div>
     </div>
   </div>
 
