@@ -11,10 +11,10 @@
       
       
       
-        <link rel="prev" href="../guide-standard/">
+        <link rel="prev" href="../mq-json-logging-guide/">
       
       
-        <link rel="next" href="../mq-json-logging-guide/">
+        <link rel="next" href="../mq-metrics-config-guide/">
       
       
         
@@ -25,7 +25,7 @@
     
     
       
-        <title>Guide template - MQ Resiliency Lab for Linux</title>
+        <title>Instrumentation event monitoring - MQ Resiliency Lab for Linux</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#ibm-mq-topic-what-it-does" class="md-skip">
+        <a href="#ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt" class="md-skip">
           Skip to content
         </a>
       
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Guide template
+              Instrumentation event monitoring
             
           </span>
         </div>
@@ -721,6 +721,62 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -740,7 +796,7 @@
   <span class="md-ellipsis">
     
   
-    Guide template
+    Instrumentation event monitoring
   
 
     
@@ -758,7 +814,7 @@
   <span class="md-ellipsis">
     
   
-    Guide template
+    Instrumentation event monitoring
   
 
     
@@ -850,10 +906,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+  <a href="#appendix-a-event-class-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Appendix A: Full parameter reference
+        Appendix A: Event-class reference
       
     </span>
   </a>
@@ -865,17 +921,6 @@
     <span class="md-ellipsis">
       
         Appendix B: Alternatives and tradeoffs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix C: Complete configuration examples
       
     </span>
   </a>
@@ -908,62 +953,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../mq-json-logging-guide/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    JSON diagnostic logging
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../mq-event-monitoring-guide/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Instrumentation event monitoring
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1179,10 +1168,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#appendix-a-full-parameter-reference" class="md-nav__link">
+  <a href="#appendix-a-event-class-reference" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Appendix A: Full parameter reference
+        Appendix A: Event-class reference
       
     </span>
   </a>
@@ -1194,17 +1183,6 @@
     <span class="md-ellipsis">
       
         Appendix B: Alternatives and tradeoffs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix C: Complete configuration examples
       
     </span>
   </a>
@@ -1250,49 +1228,326 @@
 
 
 
-<h1 id="ibm-mq-topic-what-it-does">IBM MQ &lt;topic&gt; — &lt;what it does&gt;<a class="headerlink" href="#ibm-mq-topic-what-it-does" title="Permanent link">&para;</a></h1>
-<!--
-Copy this file to `mq-<topic>-guide.md` and fill it in.
-Read `guide-standard.md` first. Declarative configuration only — no scripts.
-Numbered sections = the 2–3 page how-to. Lettered appendices = supporting depth.
-Delete any appendix you don't need, and delete these comments, when done.
--->
-
+<h1 id="ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt">IBM MQ instrumentation event monitoring — events as JSON via <code>amqsevt</code><a class="headerlink" href="#ibm-mq-instrumentation-event-monitoring-events-as-json-via-amqsevt" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>MQ version:</strong> 9.4</li>
+<li><strong>MQ version:</strong> 9.4 (<code>amqsevt</code> with JSON output on MQ for Multiplatforms)</li>
 <li><strong>Status:</strong> Draft</li>
-<li><strong>Last validated in lab:</strong> &lt;YYYY-MM-DD&gt;</li>
-<li><strong>Related guides:</strong> &lt;links, or "none yet"&gt;</li>
+<li><strong>Last validated in lab:</strong> pending (awaiting a cold-rebuild verification)</li>
+<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the
+  complementary <em>log</em> stream (why something happened) to this <em>event</em> stream
+  (what the queue manager did)</li>
 </ul>
 <hr />
 <h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
-<p>What this configures and who needs it. Two or three sentences.</p>
+<p>A queue manager continuously emits <strong>instrumentation events</strong> — authorization
+failures, channel start/stop, queue depth high/full, configuration changes,
+commands issued, queue-manager start/stop, and more — as <strong>binary PCF messages</strong>
+on the <code>SYSTEM.ADMIN.*.EVENT</code> queues. Historically, reading them meant writing
+the program that parsed PCF.</p>
+<p>This guide removes that entirely. IBM ships a sample, <strong><code>amqsevt</code></strong>, that reads
+the event queues and formats each message — including a structured <strong>JSON</strong> mode.
+Enable the events you care about, run <code>amqsevt -o json</code> as a managed collector,
+and you have an <strong>event-driven JSON feed with no parsing code</strong> — a thin
+translator, not an application. It is for anyone who wants MQ's own account of
+what a queue manager is doing as queryable JSON, alongside (not instead of) the
+diagnostic logs.</p>
 <h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
-<p>What is in and out of scope. The MQ version this applies from.</p>
+<p>In scope: the MQ-side configuration that <strong>produces</strong> the JSON event feed —
+enabling event classes on the queue manager (<code>ALTER QMGR</code>), the per-queue
+thresholds that make performance events fire, and running <code>amqsevt -o json</code> as a
+managed collector (an MQ <strong>service object</strong>).</p>
+<p>Out of scope: <strong>shipping, storing, or visualizing</strong> the JSON — that is your
+pipeline (a log collector, a store, a dashboard), the same boundary the
+<a href="../mq-json-logging-guide/">JSON logging guide</a> draws. This guide gets clean JSON
+onto your host's log stream; where it goes next is yours.</p>
+<p>Version floor: instrumentation events are core to MQ; the <code>amqsevt</code> sample and
+its <code>-o json</code> output are documented for <strong>MQ for Multiplatforms</strong>. Content is
+pinned to <strong>9.4</strong>. Enabling event classes takes effect immediately; the collector
+is a normal queue-manager service.</p>
 <h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
-<p>If there is one approach, state it. If there are several, rank them
-strongest → weakest, each with its compromise named. Recommend the best; let the
-reader own the tradeoff.</p>
+<p>Four decisions define a production-shaped event feed. Each is ranked with its
+compromise stated; your constraints may differ.</p>
+<ol>
+<li><strong>Use <code>amqsevt</code>, not a bespoke PCF reader.</strong> The sample ships prebuilt in the
+   MQ samples (<code>amqsevt</code>, with source <code>amqsevta.c</code>) and is included in the
+   redistributable client. It reads the event queues and emits JSON directly.
+   <em>Compromise:</em> it is a sample — you own its lifecycle as you deploy it — but it
+   removes all PCF-parsing code, which is the whole point.</li>
+<li><strong>Run it as an MQ service object (<code>CONTROL(QMGR)</code>), not an external client.</strong>
+   A <code>SERVICE</code> with <code>CONTROL(QMGR)</code> starts and stops with the queue manager and
+   runs in bindings mode, so under HA it <strong>travels with the queue manager</strong> to
+   wherever it is active — no floating-IP client connection, no "which instance
+   is live" logic. <em>Compromise:</em> one collector per queue manager, local to it;
+   a fleet-wide external collector is the alternative if you prefer central
+   deployment over travelling-with-the-QM (Appendix B).</li>
+<li><strong>Drain destructively (the default), not browse (<code>-b</code>).</strong> The collector <em>is</em>
+   the event consumer: a normal destructive get removes each event as it is read,
+   so the event queues never fill to <code>MAXDEPTH</code>. <em>Compromise:</em> a single consumer.
+   If more than one tool must read the same events, route events to a <strong>topic</strong>
+   (<code>amqsevt -t</code>) and fan out — do not browse, which leaves events on the queue
+   until it fills and MQ silently discards new ones.</li>
+<li><strong><code>CMDEV(NODISPLAY)</code>, not <code>CMDEV(ENABLED)</code>.</strong> Command events let you watch
+   administrative commands as they are issued — genuinely useful during a live
+   triage. <code>NODISPLAY</code> captures the mutating commands (<code>ALTER</code>, <code>DEFINE</code>,
+   <code>DELETE</code>, <code>STOP CHANNEL</code>, …) but excludes <code>DISPLAY</code>/inquire, so a polling
+   metrics collector does not drown the signal. <em>Compromise:</em> you lose visibility
+   of who is <em>reading</em> configuration; that is rarely what you want to watch.</li>
+</ol>
 <h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
-<p>Steps in prose, with minimal inline declarative config, for example:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">Stanza</span><span class="o">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">Attribute</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">value</span>
+<p><strong>Step 1 — enable the event classes on the queue manager.</strong> Turn on the classes
+you want with <code>ALTER QMGR</code>. To start broad and pare back once you know the
+volume, enable the full Multiplatforms set (Appendix A lists every class):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) +
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
 </code></pre></div>
+<p><code>BRIDGEEV</code> is deliberately absent — it is z/OS-only (Appendix A). There is no
+<code>COMMEV</code> class.</p>
+<p><strong>Step 2 — set the per-queue thresholds performance events need.</strong> <code>PERFMEV</code> at
+the queue-manager level emits nothing on its own; queue-depth events fire only
+where a queue carries thresholds. Set them on the application queues that matter:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
+</code></pre></div>
+<p><strong>Step 3 — define the collector as a queue-manager service.</strong> Define a <code>SERVICE</code>
+that runs <code>amqsevt -o json</code> against this queue manager. With no <code>-q</code>, <code>amqsevt</code>
+reads the standard <code>SYSTEM.ADMIN.*.EVENT</code> set; <code>-m</code> names the queue manager;
+<code>-o json</code> selects JSON. Point <code>STARTCMD</code> at a small launcher that runs <code>amqsevt</code>
+and forwards its standard output to your log pipeline, and make <code>STOPCMD</code> stop
+the process the queue manager started:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  CONTROL(QMGR) SERVTYPE(SERVER) +
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/path/to/your/launcher&#39;) STARTARG(&#39;&lt;qmgr-name&gt;&#39;) +
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;MQ_SERVER_PID&#39;) +
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR(&#39;Drain SYSTEM.ADMIN.*.EVENT to JSON&#39;)
+</code></pre></div>
+<p>The launcher itself is environment-specific and lives outside this guide (it is a
+few lines: run <code>amqsevt -m "$1" -o json</code> and send its output to wherever your
+host collects logs — journald, syslog, a file tailer). Two properties matter, and
+are why the launcher exists rather than putting the command inline:</p>
+<ul>
+<li><strong><code>exec</code> the collector</strong> so the process the queue manager tracks
+  (<code>MQ_SERVER_PID</code>) <em>is</em> <code>amqsevt</code>. Then <code>STOPCMD</code> stops the collector cleanly on
+  queue-manager shutdown, instead of leaving it orphaned.</li>
+<li><strong>Keep the output line-buffered</strong> so each JSON event reaches your pipeline
+  promptly rather than sitting in a block buffer.</li>
+</ul>
 <h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
-<p>The checks that prove success, described in prose — not as runnable commands.</p>
+<ul>
+<li><strong>The classes are enabled.</strong> Display the queue manager and confirm the event
+  attributes read as you set them — in particular <code>CMDEV(NODISPLAY)</code> and
+  <code>PERFMEV(ENABLED)</code>.</li>
+<li><strong>Events are being written.</strong> Provoke one (start or stop a channel, or push a
+  queue past its <code>QDEPTHHI</code>) and confirm the depth of the relevant
+  <code>SYSTEM.ADMIN.*.EVENT</code> queue moves — then returns to zero as the collector
+  drains it (proof the drain is destructive, not browsing).</li>
+<li><strong>The feed is JSON.</strong> Confirm the collector's output is one JSON object per
+  event, each carrying <code>eventSource</code> (with <code>objectName</code> — the affected queue,
+  channel, or queue manager — and <code>objectType</code>), <code>eventType</code>, <code>eventReason</code>,
+  <code>eventCreation</code>, and an <code>eventData</code> block (which includes <code>queueMgrName</code>). Those
+  are the fields you filter on downstream.</li>
+<li><strong>The service travels.</strong> On an HA queue manager, fail it over and confirm the
+  collector is running again on the newly active node. Behaviour varies by HA
+  mechanism — a Native HA takeover is not a <code>strmqm</code>, so start/stop events may
+  differ from a cold start; observe your own mechanism rather than assuming.</li>
+</ul>
 <h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
-<p>What cannot be turned off; known sharp edges.</p>
-<hr />
-<h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
-<p>Every setting, value, default, and meaning. A table works well.</p>
+<ul>
+<li><strong>Performance events need per-queue thresholds</strong> (Step 2). Enabling <code>PERFMEV</code>
+  alone is silent.</li>
+<li><strong><code>BRIDGEEV</code> is z/OS-only.</strong> Issuing it on a Multiplatforms queue manager is
+  rejected — do not include it (Appendix A).</li>
+<li><strong>Destructive drain is single-consumer by design.</strong> The event queues have one
+  reader. If you need more, fan out through a topic; do not add a second
+  destructive consumer, and do not switch to browse (Appendix B).</li>
+<li><strong>Browsing fills the queue.</strong> <code>-b</code> never removes events, so the queue climbs to
+  <code>MAXDEPTH</code> and MQ then discards new events silently. Use it only for a
+  short-lived look, never as the standing collector.</li>
+<li><strong>Event volume can be high</strong> with every class enabled and a busy queue manager.
+  Start broad to see the range, then pare back to the classes you act on. If your
+  host log layer rate-limits (e.g. journald defaults), raise or disable the limit
+  for the event source so bursts are not silently dropped.</li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">How this lab implements it</p>
+<p>This lab wires the feed end to end: an Ansible role deploys the <code>SERVICE</code>
+(its launcher forwards <code>amqsevt</code> JSON to <strong>journald</strong>), Grafana <strong>Alloy</strong>
+ships the journal to <strong>Loki</strong> under a distinct <code>unit="mq-events"</code> label
+(separate from the diagnostic-log stream), and the Grafana boards carry a
+per-object events panel — the queue-manager board shows every event for the
+queue manager, and each queue and channel shows the events for that specific
+object, filtered on <code>eventSource.objectName</code>. The end-to-end design and the
+lab-specific wiring are recorded in the event-monitoring epic spec
+(<code>logical-minds-foundry/.github</code>, <code>epics/31-event-monitoring/spec.md</code>).</p>
+</div>
+<h2 id="appendix-a-event-class-reference">Appendix A: Event-class reference<a class="headerlink" href="#appendix-a-event-class-reference" title="Permanent link">&para;</a></h2>
+<p>Every queue-manager event-control attribute. All are <code>ENABLED</code>/<code>DISABLED</code> except
+<code>CMDEV</code>, which also takes <code>NODISPLAY</code>. The set below is confirmed against the
+IBM MQ 9.4 <em>ALTER QMGR</em> reference; the platform column reflects its footnotes.</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Events</th>
+<th>Platform</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AUTHOREV</code></td>
+<td>Authorization (not-authorized) events</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>CHADEV</code></td>
+<td>Channel auto-definition events</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>CHLEV</code></td>
+<td>Channel start/stop/error events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>CMDEV</code></td>
+<td>Command events (<code>ENABLED</code> / <code>NODISPLAY</code> / <code>DISABLED</code>)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>CONFIGEV</code></td>
+<td>Configuration (object create/alter/delete) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>INHIBTEV</code></td>
+<td>Inhibit (get/put inhibited) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>LOCALEV</code></td>
+<td>Local error events (e.g. unknown object)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>LOGGEREV</code></td>
+<td>Recovery-log events</td>
+<td>Multiplatforms</td>
+</tr>
+<tr>
+<td><code>PERFMEV</code></td>
+<td>Performance events (queue depth, service interval) — <strong>needs per-queue thresholds</strong></td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>REMOTEEV</code></td>
+<td>Remote error events (remote-queue resolution)</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>SSLEV</code></td>
+<td>TLS (certificate / handshake) events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>STRSTPEV</code></td>
+<td>Queue-manager start/stop events</td>
+<td>All</td>
+</tr>
+<tr>
+<td><code>BRIDGEEV</code></td>
+<td>IMS-bridge events</td>
+<td><strong>z/OS only</strong> — exclude on Multiplatforms</td>
+</tr>
+</tbody>
+</table>
+<p>Per-queue attributes for performance events: <code>QDPMAXEV</code> (queue full), <code>QDPHIEV</code> /
+<code>QDPLOEV</code> with <code>QDEPTHHI</code> / <code>QDEPTHLO</code> (depth high/low), and <code>QSVCIEV</code> with
+<code>QSVCINT</code> (service interval).</p>
 <h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
-<p>The evidence behind the section 3 ranking.</p>
-<h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
-<p>The exhaustive stanza / MQSC blocks.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Options (strongest → weakest)</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reader</td>
+<td><strong><code>amqsevt</code> sample</strong> → a bespoke PCF-parsing application</td>
+<td>The sample emits JSON with zero parsing code; a custom app is only warranted for logic the sample cannot express</td>
+</tr>
+<tr>
+<td>Deployment</td>
+<td><strong>MQ <code>SERVICE</code>, <code>CONTROL(QMGR)</code></strong> → external client collector → external local daemon</td>
+<td>The service travels with the queue manager across failover; an external client must chase the active instance; a local daemon must coordinate with the active node</td>
+</tr>
+<tr>
+<td>Consumption</td>
+<td><strong>Destructive drain</strong> → topic fan-out (for multiple readers) → browse</td>
+<td>Drain keeps the queue clear with one reader; a topic serves several readers; browse fills the queue and then drops events silently</td>
+</tr>
+<tr>
+<td>Command events</td>
+<td><strong><code>CMDEV(NODISPLAY)</code></strong> → <code>CMDEV(ENABLED)</code> → <code>CMDEV(DISABLED)</code></td>
+<td><code>NODISPLAY</code> keeps admin commands and drops inquire noise; <code>ENABLED</code> is drowned by polling collectors; <code>DISABLED</code> loses the triage view</td>
+</tr>
+</tbody>
+</table>
 <h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
-<p>Symptom → cause → fix.</p>
+<p>Work the surfaces in order; the first one that is empty is your fault domain.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No events at all</td>
+<td>the class is not enabled on the queue manager</td>
+<td><code>ALTER QMGR</code> with the class <code>ENABLED</code>; re-check with <code>DISPLAY QMGR</code></td>
+</tr>
+<tr>
+<td>No performance events, other classes fine</td>
+<td><code>PERFMEV</code> enabled but no queue thresholds</td>
+<td>set <code>QDPMAXEV</code>/<code>QDPHIEV</code> (+ <code>QDEPTHHI</code>) on the queues</td>
+</tr>
+<tr>
+<td>Event queue depth climbs and never falls</td>
+<td>the collector is browsing (<code>-b</code>), or is not running</td>
+<td>run a destructive collector (no <code>-b</code>); confirm the service is started</td>
+</tr>
+<tr>
+<td><code>ALTER QMGR</code> rejected</td>
+<td><code>BRIDGEEV</code> included on Multiplatforms</td>
+<td>remove <code>BRIDGEEV</code> (z/OS only)</td>
+</tr>
+<tr>
+<td>Collector keeps running after the queue manager stops</td>
+<td><code>STOPCMD</code> cannot reach the real process</td>
+<td><code>exec</code> the collector in the launcher so <code>MQ_SERVER_PID</code> is <code>amqsevt</code></td>
+</tr>
+<tr>
+<td>Events lag, then arrive in bursts</td>
+<td>the collector's output is block-buffered</td>
+<td>line-buffer the collector's standard output in the launcher</td>
+</tr>
+<tr>
+<td>Bursts of events missing under load</td>
+<td>the OS log layer is rate-limiting</td>
+<td>raise or disable rate limiting for the event source</td>
+</tr>
+</tbody>
+</table>
 <h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
-<p>Pinned IBM Docs 9.4 topics.</p>
+<p>Search these topic titles in the IBM MQ 9.4 documentation at
+<a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>: <em>Sample program to monitor
+instrumentation events (amqsevt)</em>, <em>ALTER QMGR</em>, <em>ALTER queues</em>, <em>DEFINE SERVICE</em>,
+<em>Replaceable inserts on service definitions</em>, <em>Event types</em>, and <em>Instrumentation
+events</em>.</p>
 
 
 
