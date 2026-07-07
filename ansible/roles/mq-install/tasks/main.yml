@@ -22,8 +22,10 @@
 
 # Everything in ONE pass, BEFORE any QM exists: MQ's preinst refuses
 # additional debs once queue-manager shared resources are active, so the
-# sdk (pymqi bindings need cmqc.h) must land with the server set.
-- name: install server + sdk debs and python build deps
+# sdk (pymqi bindings need cmqc.h) must land with the server set. The samples
+# deb carries /opt/mqm/samp/bin/amqsevt, the event collector mq-event-monitor
+# runs on every QM host (#531) — must land pre-QM here, not bolted on later.
+- name: install server + sdk + samples debs and python build deps
   ansible.builtin.shell: |
     set -e
     apt-get update
@@ -31,7 +33,8 @@
     cd /tmp/MQServer
     apt-get install -y ./ibmmq-runtime_*.deb ./ibmmq-server_*.deb \
       ./ibmmq-java_*.deb ./ibmmq-jre_*.deb ./ibmmq-gskit_*.deb \
-      ./ibmmq-web_*.deb ./ibmmq-sdk_*.deb ./ibmmq-client_*.deb
+      ./ibmmq-web_*.deb ./ibmmq-sdk_*.deb ./ibmmq-client_*.deb \
+      ./ibmmq-samples_*.deb
   args:
     creates: /opt/mqm/inc/cmqc.h
   become: true
