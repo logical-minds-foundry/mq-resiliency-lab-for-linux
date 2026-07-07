@@ -22,3 +22,7 @@
       - { name: nha-ubuntu-a3, hb: 172.16.1.13, data: 10.10.1.13 }
   roles:
     - mq-nativeha
+
+# mqweb: stateless per-node admin REST/Console on every instance (design §1/§8.3, #39).
+- hosts: nha_ubuntu_a
+  roles: [mqweb]

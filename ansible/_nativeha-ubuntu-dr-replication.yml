@@ -28,6 +28,10 @@
   roles:
     - mq-nativeha
 
+# mqweb: stateless per-node admin REST/Console on every instance (design §1/§8.3, #39).
+- hosts: nha_ubuntu_b
+  roles: [mqweb]
+
 # 2. TLS (lab-pki .p12) on every instance of both groups.
 - hosts: nha_ubuntu_a:nha_ubuntu_b
   become: true
