@@ -191,7 +191,10 @@ the lowest-cost option that technically works.
   primary client deliverable. (Mechanics and the two-plane split in §8.)
 - **Enabling the MQ administrative REST API on every queue manager is a hard
   requirement** — it is the boundary between the Ansible/bootstrap bring-up plane
-  and the `pymqrest` content plane (§8.1).
+  and the `pymqrest` content plane (§8.1). "On every queue manager" means REST is
+  **available and addressable on the data plane**: mqweb is data-plane
+  infrastructure co-located with the QM, not a management-plane service (see §8.3
+  and epic #39).
 - **Security configuration is explicitly out of scope (for now).** We are testing
   **functionality and resiliency**, not the security of the configuration.
   Channels and the REST API run with whatever minimal/relaxed security is most
@@ -1154,6 +1157,18 @@ QM lands on them. So `mqweb` is **not** a cluster-managed resource that migrates
 it is an ordinary per-node service that is always running everywhere. *(This is
 the architecture the author has run in production for the analogous case; the
 exact RDQM mechanics are confirmed in the Phase-B/C lab, per trust-but-verify.)*
+
+**Plane classification (epic #39).** The REST endpoint is a **data-plane
+infrastructure** surface — the admin/content control surface co-located with the
+QM, reached at the QM's data-plane VIP (pcmk/RDQM, on **each** site: `vip` /
+`vip_b`) or, for Native HA (no VIP), the **active** instance's data-plane node IP,
+runtime-resolved. It is **not** a management/observability-plane service: `net-mgmt`
+is the Watcher, and mqweb is part of the infrastructure we *instrument*, not the
+instrumentation observing it. mqweb binds `httpHost=*` (so it also answers on mgmt),
+but its **canonical published address is the data plane**; refusing it on mgmt at
+the network layer is deferred to the firewall/plane-enforcement follow-on. `svc-sim`'s
+mqweb is the **counterparty** surface on `net-ext`, administered lab-only. See the
+plane taxonomy in `docs/reference/dns-fqdn-inventory.md`.
 
 A direct corollary, and part of the deliverable: the tooling must **install and
 package `mqweb` (and MQ, and the HA resource agents) as boot services** so that

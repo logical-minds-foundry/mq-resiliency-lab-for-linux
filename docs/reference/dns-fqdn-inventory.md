@@ -29,6 +29,27 @@ the var *value*, not scattered literals.
 Note: the VIP itself is still **bound** by IP (Pacemaker `IPaddr2` / `rdqmint`
 floating IP) — only the CONNAME *to* the VIP becomes a name.
 
+## mqweb admin REST/Console endpoint — data-plane infrastructure (#39)
+
+The `mqweb` admin REST/Console endpoint (`9443/HTTPS`, one per QM node) is a
+**data-plane infrastructure** surface — the control surface co-located with the QM,
+part of what the lab *instruments*, **not** part of the Watcher/observability plane
+observing it. It had drifted toward being treated as a management-plane service
+(undefined address, never classified here); epic #39 corrects that. Its canonical
+published address is on the data plane:
+
+| Stack | Published endpoint | Proposed FQDN |
+|---|---|---|
+| pcmk / RDQM | the QM's data-plane VIP `:9443`, **each site** (`vip` / `vip_b`) | `pcmk-vip-a/-b.client.com:9443` · `rdqm-vip-a/-b.client.com:9443` |
+| Native HA (no VIP) | the **active** instance's `net-data` node IP `:9443`, runtime-resolved (`dspmq -o nativeha`) | `nha-{ubuntu,rhel}-a{1,2,3}-data-a.client.com:9443` (candidate set) |
+| `svc-sim` (counterparty) | its `net-ext` address `:9443`, administered **lab-only** | `svc-sim-ext.service.com:9443` — outside "our data plane"; a real estate would not administer the counterparty's mqweb |
+
+mqweb binds `httpHost=*` (so it also answers on `net-mgmt`), but the address the lab
+**publishes and uses** is the data-plane one above. Enforcing this at the network
+layer — refusing `9443` on mgmt — is deferred to the firewall / plane-enforcement
+follow-on epic. The topology-derived source of truth for these endpoints is
+`mqlab rest render` (epic #39, task #537).
+
 ## Stay literal IP (with reason)
 
 | Surface | Location | Reason |
