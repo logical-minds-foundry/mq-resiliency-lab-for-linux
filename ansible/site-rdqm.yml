@@ -42,6 +42,26 @@
           {{ qm_name }} {{ qm_vip }} {{ svc_conn }}
       changed_when: true
 
+# TLS-enable the app QM (#410, #426): wire its lab-pki keystore and secure the
+# app-facing channels (APP.SVRCONN, MON.SVRCONN, inter-QM SDR/RCVR) to parity with
+# the pcmk/nativeha arms. Runs on the site-A primary AFTER qm-create (the QM + its
+# base/inter-QM objects exist) and BEFORE site-distributed-shared, so RDQMAPP is
+# already TLS-ready when the SVC counterparty (which pins our app-org cert) and the
+# app requester connect. The RDQM-internal DRBD replication link is out of scope --
+# its channel TLS is a v10 feature, tracked as a version-gated exception in #412.
+- name: TLS-enable the RDQM app QM (keystore + channel SSLCIPH)
+  hosts: rdqm_a
+  gather_facts: false
+  vars:
+    qm_name: "{{ qm_app }}"
+  tasks:
+    # run_once -> the site-A primary (first host of rdqm_a = rdqm-a1), the only node
+    # where the QM is active and runmqsc works; the keystore then replicates via DRBD.
+    - name: TLS-enable the app QM on the site-A primary
+      ansible.builtin.include_role:
+        name: rdqm-app-tls
+      run_once: true
+
 - import_playbook: site-distributed-shared.yml
   vars:
     our_qm: "{{ qm_app }}"
@@ -51,7 +71,8 @@
     # order and reconnects to whichever node currently runs the app QM, so the partner
     # link rides an HA failover without a second floating IP (#216 spike).
     our_conn: "rdqm-a1-ext.client.com(1414),rdqm-a2-ext.client.com(1414),rdqm-a3-ext.client.com(1414)"
-    # The app host reaches the app QM on its one data VIP. APP.SVRCONN is plaintext on
-    # this arm (rdqm TLS is NOT_YET, #426) -> app_tls false. (#429)
+    # The app host reaches the app QM on its one data VIP. APP.SVRCONN is now mutual
+    # TLS on this arm (rdqm-app-tls role above, #410/#426) -> app_tls true, matching
+    # pcmk/nativeha; the app-client keystore is already placed by mq-client. (#429)
     app_conn: "rdqm-vip-a.client.com(1414)"
-    app_tls: false
+    app_tls: true
