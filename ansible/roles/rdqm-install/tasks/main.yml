@@ -74,7 +74,7 @@
     dnf install -y \
       MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
       MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
-      MQSeriesSDK-*.rpm MQSeriesClient-*.rpm \
+      MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm \
       Advanced/RDQM/PreReqs/el9/pacemaker-2/*.rpm \
       Advanced/RDQM/PreReqs/el9/drbd-utils-9/*.rpm \
       {{ kmod_pick.stdout | trim }}
