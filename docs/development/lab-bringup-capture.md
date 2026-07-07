@@ -1,5 +1,13 @@
 # Lab bring-up — captured run (DRAFT, feeds the site documentation)
 
+> **SUPERSEDED (epic #39, #543).** Historical Phase-B capture of the single-QM
+> message path (`qm-main`/`svc-sim`, `QMAIN`/`QMSVC`, the legacy `10.30.0.x` /
+> `10.20.0.x` planes). That model predates the #351 four-stack topology;
+> provisioning is now Ansible `runmqsc`, and the `python -m mqlab.apply` +
+> `content/*.yaml` path shown in §3 has been **retired**. Kept for historical
+> reference only — do not run these commands. Canonical REST addresses come from
+> `mqlab rest render`.
+>
 > Working capture written *as the bring-up is executed* (2026-06-08, issue #53).
 > Not the definitive doc — the site-docs session owns that. This exists to
 > (a) record exactly what was required and what was run, and (b) surface where
