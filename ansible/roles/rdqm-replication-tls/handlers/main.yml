@@ -1,0 +1,6 @@
+---
+- name: restart tlshd
+  ansible.builtin.systemd:
+    name: tlshd
+    state: restarted
+  become: true

@@ -19,6 +19,17 @@
 - import_playbook: _rdqm-cluster-ha.yml
 - import_playbook: _rdqm-dr-replication.yml
 
+# Secure the RDQM HA + DR replication links with TLS (#545) — the last
+# optional-plaintext MQ path. Runs on every node of both HA groups AFTER the groups
+# are formed (drbd-utils, which ships tlshd, is installed) and BEFORE qm-create,
+# because the certs + tlshd service must be up before crtmqm -re opens a DRBD TLS
+# handshake. Per IBM "Secure replication for DR/HA RDQM".
+- name: secure RDQM replication links with TLS (certs + tlshd)
+  hosts: rdqm_a:rdqm_b
+  gather_facts: false
+  roles:
+    - rdqm-replication-tls
+
 # Folded qm-create (#350 Task 2 step 2): the replicated queue manager + its
 # inter-QM MQSC. Was the separate rdqm-qm-create.sh (`mqlab qm create`); now runs
 # inside provision so a cold bootstrap is one pass. The script keeps the

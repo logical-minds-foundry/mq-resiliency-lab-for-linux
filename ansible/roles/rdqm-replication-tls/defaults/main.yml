@@ -1,0 +1,21 @@
+---
+# RDQM replication-TLS (secure HA + DR replication links, an MQ 9.4.4+ feature).
+# Controller-side CA + per-node cert material, and the on-node paths tlshd reads.
+# Distinct from the MQ channel PKI (lab-pki): these are root-owned PEM certs that
+# DRBD's kernel-TLS handshake daemon (tlshd) uses, not the QM keystore. Per IBM:
+# "Secure replication for DR/HA RDQM".
+
+# Controller-side store for the replication CA + per-node key/cert (gitignored,
+# same build/state/secrets tree as lab-pki; re-generatable).
+rdqm_repl_ca_dir: "{{ playbook_dir }}/../build/state/secrets/pki/rdqm-repl"
+
+# Default group DNS name in each cert's SAN. Using IBM's default (encrypted.remote)
+# means crtmqm needs no -san option.
+rdqm_repl_group_dns: encrypted.remote
+
+# On-node directory tlshd reads the CA / node cert / node key from (IBM example path).
+rdqm_repl_drbd_dir: /etc/drbd.d
+
+rdqm_repl_key_bits: 4096
+rdqm_repl_ca_days: 3650
+rdqm_repl_cert_days: 730

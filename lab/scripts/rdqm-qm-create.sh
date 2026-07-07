@@ -61,24 +61,31 @@ fi
 
 if [ "$DR" = 1 ]; then
   echo "=== HA/DR detected (site-B group formed) — creating DR/HA RDQMAPP, secondaries first ==="
+  # Secure BOTH the HA and DR replication links with TLS (#545): -re. The per-node
+  # certs + tlshd service are provisioned by the rdqm-replication-tls role BEFORE this
+  # script runs; the cert SANs use the default group DNS name (encrypted.remote), so no
+  # -san is needed. Every crtmqm in the configuration must carry the same secure flag.
+  REPL_TLS="-re"
   # RDQM requires the HA secondaries created BEFORE the primary even for DR/HA — confirmed
   # live: `crtmqm -sx -rr p` on the primary errors "the secondary queue manager must first be
   # created" and prints the `-sxs -rr p -rl/-ri` command. (IBM's worked example implies the
   # primary auto-creates them; our MQ 9.4.5 build does not.) The DR flags ride on every crtmqm.
   # Site A = DR primary (-rr p): a2/a3 secondaries, then a1 primary.
-  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
   # Site B = DR secondary (-rr s): b2/b3 secondaries, then b1 primary.
-  run rdqm-b2,rdqm-b3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-b2,rdqm-b3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
   add_vip rdqm-a1 "$VIP"
   add_vip rdqm-b1 "$B_VIP"
   base_mqsc rdqm-a1
 else
   echo "=== HA-only (no site-B group) — creating site-A RDQMAPP ==="
+  # Secure the HA replication links with TLS (#545): -reh (this shape has no DR link).
+  REPL_TLS="-reh"
   # Secondaries FIRST, then the primary (verified HA-only order).
-  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -fs 3072M $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
+  run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -fs 3072M $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
   add_vip rdqm-a1 "$VIP"
   base_mqsc rdqm-a1
 fi
