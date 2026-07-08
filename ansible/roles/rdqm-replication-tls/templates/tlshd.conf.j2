@@ -2,8 +2,13 @@
 # DRBD can open the connection in either direction, so client and server carry the
 # same identity: this node's CA-signed cert + key, validated against the replication CA.
 # The system-wide crypto policy governs the TLS protocols/ciphers (update-crypto-policies).
+#
+# loglevel MUST be non-zero (#558): loglevel=0 silences tlshd entirely — no handshake
+# success, no handshake failure, no cert error reaches the journal — which hides
+# replication-security failures in the one place they're hardest to see. Level 1 logs
+# handshake outcomes + errors; raise (e.g. 9) for per-cert debug.
 [debug]
-loglevel=0
+loglevel={{ rdqm_repl_tlshd_loglevel }}
 tls=0
 nl=0
 
