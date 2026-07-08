@@ -3,6 +3,13 @@
 # copied into each new QM's qm.ini at crtmqm, so QMs inherit JSON-to-syslog;
 # DiagnosticSystemMessages covers QM-unknown / fallback errors. journald rate
 # limiting is disabled so Severities=all is never silently dropped.
+#
+# The two services MUST use distinct Names (#556): a diagnostic-service Name must be
+# unique, and crtmqm validates the template-derived qm.ini DiagnosticMessages against
+# the installation's DiagnosticSystemMessages. Reusing one Name with differing details
+# (the template excludes 9001,9002; the system stanza does not) fails RDQM's
+# `crtmqm -sx` with AMQ7059E ("details ... conflict"). Name is an internal id — syslog
+# output is tagged by Ident, so distinct Names are invisible to log consumers.
 - name: seed JSON diagnostic logging template + system stanza in mqs.ini
   ansible.builtin.blockinfile:
     path: /var/mqm/mqs.ini
@@ -15,7 +22,7 @@
          Severities={{ mq_diag_severities }}
          ExcludeMessage={{ mq_diag_exclude }}
       DiagnosticSystemMessages:
-         Name=ClusterSyslog
+         Name=SystemSyslog
          Service=Syslog
          Ident={{ mq_diag_ident }}
          Severities={{ mq_diag_severities }}
