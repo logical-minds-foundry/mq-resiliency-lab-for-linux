@@ -1441,17 +1441,25 @@ appear in the generated <code>qm.ini</code>.</p>
    <code>DiagnosticSystemMessages</code> stanza to catch messages emitted when no
    queue-manager context exists — early errors, or a queue manager that cannot
    write its own logs.</li>
-<li><strong>Client applications (<code>mqclient.ini</code>).</strong> Add a <code>DiagnosticSystemMessages</code>
+</ol>
+<blockquote>
+<p><strong>Give it a <code>Name</code> distinct from the template's.</strong> A diagnostic-service
+<code>Name</code> must be unique, and <code>crtmqm</code> validates the template-derived <code>qm.ini</code>
+<code>DiagnosticMessages</code> against this stanza. Reusing one <code>Name</code> across both
+fails RDQM's <code>crtmqm -sx</code> with <code>AMQ7059E</code> ("details ... conflict"). <code>Name</code> is
+an internal id — syslog output is tagged by <code>Ident</code> — so a distinct system
+name is invisible to log consumers.
+4. <strong>Client applications (<code>mqclient.ini</code>).</strong> Add a <code>DiagnosticSystemMessages</code>
    stanza for MQI/client processes (for example <code>runmqsc</code> in client mode, or
    sample apps). <code>mqclient.ini</code> is read from the application's directory, from
    <code>/var/mqm/mqclient.ini</code>, or from the path in the <code>MQCLNTCF</code> environment
-   variable.</li>
-<li><strong>MQ Console / REST server (mqweb).</strong> mqweb is WebSphere Liberty, not the
+   variable.
+5. <strong>MQ Console / REST server (mqweb).</strong> mqweb is WebSphere Liberty, not the
    diagnostic-service stanzas. Turn on JSON for its <code>messages.log</code> by adding a
    Liberty <code>&lt;logging&gt;</code> element to the server configuration (<code>mqwebuser.xml</code>), then
    restart the mqweb server. The element is shown in
-   <a href="#appendix-c-complete-configuration-examples">Appendix C</a>.</li>
-</ol>
+   <a href="#appendix-c-complete-configuration-examples">Appendix C</a>.</p>
+</blockquote>
 <h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>File style:</strong> find the newest <code>AMQERR0x.json</code> in the queue manager's <code>errors</code>
@@ -1623,14 +1631,14 @@ tradeoff is yours to weigh against your transport and platform mix.</p>
 <p><strong>System / installation diagnostics (<code>mqs.ini</code>):</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">SystemJSONLogs</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
 <p><strong>Client applications (<code>mqclient.ini</code>):</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="na">DiagnosticSystemMessages</span><span class="o">:</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">   </span><span class="na">Service</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Syslog</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">JSONLogs</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">   </span><span class="na">Name</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="s">SystemJSONLogs</span>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">   </span><span class="na">Ident</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="s">ibm-mq</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">   </span><span class="na">Severities</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">all</span>
 </code></pre></div>
