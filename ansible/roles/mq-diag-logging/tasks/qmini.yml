@@ -1,0 +1,29 @@
+---
+# Per-QM JSON diagnostic logging written DIRECTLY into a queue manager's qm.ini
+# (#282's "direct qm.ini" approach, reintroduced for #569). The template-inheritance
+# path (system.yml's DiagnosticMessagesTemplate, copied into qm.ini at crtmqm) is the
+# default for the plain-crtmqm arms, but RDQM's `crtmqm -sx` rejects that template as a
+# same-named ClusterSyslog conflict (AMQ7059E, #562), so the RDQM app QM gets its
+# per-QM DiagnosticMessages here instead — after creation, straight into its qm.ini.
+#
+# Generic + path-parameterised: the caller passes mq_qmini_path (the QM's qm.ini) and
+# owns making the change take effect (a qm.ini DiagnosticMessages edit needs a QM
+# restart) — this role does not know how to bounce a given arm's QM. The caller supplies
+# a handler name in mq_diag_qmini_notify (defaults to notifying nothing) to run that
+# arm's restart when — and only when — the stanza actually changes. The stanza fields come
+# from the role's lab-wide defaults, so this per-QM surface never drifts from the mqs.ini
+# template.
+- name: "seed the per-QM DiagnosticMessages stanza in {{ mq_qmini_path }}"
+  ansible.builtin.blockinfile:
+    path: "{{ mq_qmini_path }}"
+    marker: "# {mark} MQ-DIAG-QMGR (#282)"
+    block: |
+      DiagnosticMessages:
+         Name=ClusterSyslog
+         Service=Syslog
+         Ident={{ mq_diag_ident }}
+         Severities={{ mq_diag_severities }}
+         ExcludeMessage={{ mq_diag_exclude }}
+  become: true
+  become_user: mqm
+  notify: "{{ mq_diag_qmini_notify | default([]) }}"
