@@ -163,8 +163,8 @@ DiagnosticMessagesTemplate:
    Severities=all
    ExcludeMessage=9001,9002          # routine channel start/stop chatter (tunable)
 DiagnosticSystemMessages:
-   Name=ClusterSyslog
-   Service=Syslog
+   Name=SystemSyslog                 # distinct from the template's Name (#556): a diag-service
+   Service=Syslog                    # Name must be unique or crtmqm -sx fails AMQ7059E ("details conflict")
    Ident=ibm-mq
    Severities=all
 ```
@@ -185,7 +185,7 @@ DiagnosticMessages:
 # the existing TCP KeepAlive edit). NOTE: ExcludeMessage / SuppressMessage are not
 # honoured in mqclient.ini, so the client surface is severity-filtered only.
 DiagnosticSystemMessages:
-   Name=ClusterSyslog
+   Name=SystemSyslog
    Service=Syslog
    Ident=ibm-mq
    Severities=all
