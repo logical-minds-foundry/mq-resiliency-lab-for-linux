@@ -66,6 +66,45 @@
         name: rdqm-ssh-access
         tasks_from: remove
 
+# Restore per-QM JSON diagnostic logging for the RDQM app QM (#569, follow-up to #562).
+# #562 stops seeding the DiagnosticMessagesTemplate on RDQM (its `crtmqm -sx` rejects the
+# template as a same-named ClusterSyslog conflict, AMQ7059E), so RDQMAPP no longer inherits
+# a qm.ini DiagnosticMessages stanza — its OWN AMQERR events, including the HA/CRR/DR
+# state-change messages that are the whole point of #282 for an HA/DR arm, would miss JSON
+# syslog. Restore it the "direct qm.ini" way #282 dropped for the template arms: write the
+# stanza straight into the QM's qm.ini and bounce the QM so it takes effect. Runs on the
+# site-A primary (the qm.ini lives on the DRBD volume, mounted there) AFTER qm-create and
+# BEFORE the app/partner connect. Ordered before rdqm-app-tls so the QM's one restart
+# happens before TLS's runtime REFRESH SECURITY, not after it.
+- name: restore per-QM JSON diagnostic logging for the RDQM app QM (#569)
+  hosts: rdqm_a
+  gather_facts: false
+  vars:
+    qm_name: "{{ qm_app }}"
+    mq_qmini_path: "/var/mqm/qmgrs/{{ qm_app }}/qm.ini"
+    # Name of the handler below — mq-diag-logging/qmini notifies it on a real stanza change.
+    mq_diag_qmini_notify: bounce RDQMAPP for the qm.ini diagnostic change
+  handlers:
+    # A qm.ini DiagnosticMessages change only takes effect on QM start, so bounce RDQMAPP —
+    # but only when the stanza was actually written (a re-provision leaves it in place and
+    # skips the disruption; the handler fires on change, not every run). endmqm/strmqm are
+    # the RDQM/Pacemaker-aware managed commands (mqm is in haclient, per rdqm-install), so
+    # this is a clean admin restart, not a failover. Chained in one shell: if endmqm errors,
+    # strmqm never runs and the handler fails loud rather than leaving the QM half-restarted.
+    - name: bounce RDQMAPP for the qm.ini diagnostic change
+      ansible.builtin.shell: "su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }} && /opt/mqm/bin/strmqm {{ qm_name }}'"
+      become: true
+      changed_when: true
+  tasks:
+    # run_once -> the site-A primary (rdqm-a1): the only node where the QM is active and
+    # its qm.ini (a symlink into the DRBD-mounted volume) is present; the edit replicates
+    # via DRBD, mirroring the rdqm-app-tls keystore placement.
+    - name: seed the per-QM DiagnosticMessages stanza in RDQMAPP's qm.ini
+      ansible.builtin.include_role:
+        name: mq-diag-logging
+        tasks_from: qmini
+      run_once: true
+
 # TLS-enable the app QM (#410, #426): wire its lab-pki keystore and secure the
 # app-facing channels (APP.SVRCONN, MON.SVRCONN, inter-QM SDR/RCVR) to parity with
 # the pcmk/nativeha arms. Runs on the site-A primary AFTER qm-create (the QM + its
