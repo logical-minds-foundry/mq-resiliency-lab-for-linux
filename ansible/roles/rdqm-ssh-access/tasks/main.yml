@@ -3,7 +3,8 @@
 # mqweb starts — mqweb runs as mqm and would block the `usermod` home move ("user mqm
 # is currently used by process"). Placement: after rdqm-install, before the mqweb role
 # in _rdqm-cluster-ha.yml / _rdqm-dr-replication.yml. Removed post-create by
-# `include_role: name=rdqm-ssh-access, tasks_from=remove`.
+# `include_role: name=rdqm-ssh-access, tasks_from=remove`. Node tasks are privileged
+# (become: true, per-task like rdqm-replication-tls); keygen runs on the controller.
 
 - name: mint the shared mqm SSH keypair on the controller
   ansible.builtin.include_tasks: keygen.yml
@@ -13,6 +14,7 @@
     name: mqm
     home: "{{ mqm_home }}"
     move_home: false
+  become: true
 
 - name: create mqm home (not group/world-writable -> sshd StrictModes ok)
   ansible.builtin.file:
@@ -21,6 +23,7 @@
     owner: mqm
     group: mqm
     mode: "0755"
+  become: true
 
 - name: mqm .ssh dir
   ansible.builtin.file:
@@ -29,6 +32,7 @@
     owner: mqm
     group: mqm
     mode: "0700"
+  become: true
 
 - name: install mqm private key
   ansible.builtin.copy:
@@ -37,6 +41,7 @@
     owner: mqm
     group: mqm
     mode: "0600"
+  become: true
 
 - name: install mqm authorized_keys (full mesh)
   ansible.builtin.copy:
@@ -45,6 +50,7 @@
     owner: mqm
     group: mqm
     mode: "0600"
+  become: true
 
 - name: mqm ssh client config (accept host keys within the HA group)
   ansible.builtin.copy:
@@ -55,11 +61,21 @@
     content: |
       Host {{ rdqm_ssh_accept_hosts }}
         StrictHostKeyChecking accept-new
+  become: true
+
+- name: pre-seed mqm known_hosts for the HA-group peers (crtmqm SSH is strict)
+  ansible.builtin.shell: >-
+    ssh-keyscan -T 5 {{ rdqm_ssh_known_hosts_scan }}
+    > {{ mqm_home }}/.ssh/known_hosts 2>/dev/null
+  become: true
+  become_user: mqm
+  changed_when: true
 
 - name: SELinux-label mqm home + .ssh as ssh_home_t
   ansible.builtin.command: "restorecon -R {{ mqm_home }}"
   changed_when: false
   when: ansible_selinux.status | default('disabled') == 'enabled'
+  become: true
 
 - name: mqm sudo NOPASSWD for RDQM commands (IBM requirement)
   ansible.builtin.copy:
@@ -67,3 +83,4 @@
     mode: "0440"
     validate: "visudo -cf %s"
     content: "mqm ALL=(root) NOPASSWD: {{ rdqm_sudo_cmds }}\n"
+  become: true
