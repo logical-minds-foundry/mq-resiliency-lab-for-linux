@@ -134,10 +134,14 @@
       mqm hard nofile 10240
   become: true
 
-# JSON diagnostic logging (#282): seed the mqs.ini template + journald drop-in at
-# install time — BEFORE rdqm-qm-create.sh runs `crtmqm -sx` (RDQM creates its QM via
-# a script, not a role), so the RDQM app QM inherits the DiagnosticMessages stanza on creation.
-- name: seed JSON diagnostic logging (mqs.ini template + journald)
+# JSON diagnostic logging (#282): seed the mqs.ini DiagnosticSystemMessages + journald
+# drop-in at install time. The DiagnosticMessagesTemplate is deliberately NOT seeded on
+# RDQM (mq_diag_template=false, #562): RDQM's `crtmqm -sx` rejects the template as a
+# same-named ClusterSyslog conflict (AMQ7059E). Per-QM JSON logging for the RDQM app QM
+# is restored separately (post-create) — see the follow-up task.
+- name: seed JSON diagnostic logging (mqs.ini system stanza + journald; no template on RDQM)
   ansible.builtin.include_role:
     name: mq-diag-logging
     tasks_from: system
+  vars:
+    mq_diag_template: false

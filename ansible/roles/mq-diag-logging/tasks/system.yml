@@ -1,19 +1,21 @@
 ---
-# System-level JSON diagnostic logging (#282): the DiagnosticMessagesTemplate is
-# copied into each new QM's qm.ini at crtmqm, so QMs inherit JSON-to-syslog;
-# DiagnosticSystemMessages covers QM-unknown / fallback errors. journald rate
-# limiting is disabled so Severities=all is never silently dropped.
-#
-# The two services MUST use distinct Names (#556): a diagnostic-service Name must be
-# unique, and crtmqm validates the template-derived qm.ini DiagnosticMessages against
-# the installation's DiagnosticSystemMessages. Reusing one Name with differing details
-# (the template excludes 9001,9002; the system stanza does not) fails RDQM's
-# `crtmqm -sx` with AMQ7059E ("details ... conflict"). Name is an internal id — syslog
-# output is tagged by Ident, so distinct Names are invisible to log consumers.
-- name: seed JSON diagnostic logging template + system stanza in mqs.ini
+# System-level JSON diagnostic logging (#282). Two mqs.ini stanzas:
+#   * DiagnosticMessagesTemplate — copied into each new QM's qm.ini at crtmqm, so QMs
+#     inherit JSON-to-syslog. NOT seeded on RDQM (mq_diag_template=false, #562): RDQM's
+#     `crtmqm -sx` validates the template-derived qm.ini DiagnosticMessages against the
+#     mqs.ini DiagnosticMessagesTemplate and rejects the same-named service as a conflict
+#     (AMQ7059E "details ... conflict"), regardless of the details — proven live by
+#     removing the template. Plain crtmqm (pcmk/nativeha arms) does not do this
+#     validation, so the template is fine there. This supersedes the #556 distinct-Name
+#     theory, which the churned triage could not actually confirm. (RDQM per-QM logging
+#     is restored separately — see the follow-up task.)
+#   * DiagnosticSystemMessages — QM-unknown / fallback errors. Seeded on every arm.
+# journald rate limiting is disabled so Severities=all is never silently dropped.
+
+- name: seed the DiagnosticMessagesTemplate in mqs.ini (per-QM inheritance at crtmqm)
   ansible.builtin.blockinfile:
     path: /var/mqm/mqs.ini
-    marker: "# {mark} MQ-DIAG-LOGGING (#282)"
+    marker: "# {mark} MQ-DIAG-TEMPLATE (#282)"
     block: |
       DiagnosticMessagesTemplate:
          Name=ClusterSyslog
@@ -21,6 +23,15 @@
          Ident={{ mq_diag_ident }}
          Severities={{ mq_diag_severities }}
          ExcludeMessage={{ mq_diag_exclude }}
+  when: mq_diag_template | default(true)
+  become: true
+  become_user: mqm
+
+- name: seed the DiagnosticSystemMessages in mqs.ini (QM-unknown / fallback errors)
+  ansible.builtin.blockinfile:
+    path: /var/mqm/mqs.ini
+    marker: "# {mark} MQ-DIAG-SYSTEM (#282)"
+    block: |
       DiagnosticSystemMessages:
          Name=SystemSyslog
          Service=Syslog

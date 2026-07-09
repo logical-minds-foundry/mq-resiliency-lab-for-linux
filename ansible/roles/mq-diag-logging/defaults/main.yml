@@ -4,3 +4,7 @@
 mq_diag_ident: ibm-mq
 mq_diag_severities: all
 mq_diag_exclude: "9001,9002"   # routine channel start/stop chatter
+
+# Seed the DiagnosticMessagesTemplate (per-QM inheritance at crtmqm). Set false on RDQM
+# (#562): RDQM's `crtmqm -sx` rejects the template as a same-named ClusterSyslog conflict.
+mq_diag_template: true
