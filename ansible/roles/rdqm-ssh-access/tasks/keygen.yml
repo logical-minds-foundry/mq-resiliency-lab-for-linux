@@ -1,0 +1,24 @@
+---
+# Controller-side mqm SSH keypair (dynamic include, like rdqm-replication-tls/certs.yml
+# and lab-pki's entity.yml): one shared keypair for the RDQM mesh, minted once on the
+# controller. Behind include_tasks so community.crypto is resolved at run time and stays
+# off ansible-lint's syntax-check path. The private key never leaves controller +
+# nodes; it is removed from the nodes post-create (tasks/remove.yml).
+- name: controller store for the mqm SSH keypair
+  ansible.builtin.file:
+    path: "{{ rdqm_ssh_key_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: mqm SSH keypair
+  community.crypto.openssh_keypair:
+    path: "{{ rdqm_ssh_key_dir }}/id_rsa"
+    type: rsa
+    size: "{{ rdqm_ssh_key_bits }}"
+    comment: rdqm-mqm-coordinated-create
+  delegate_to: localhost
+  become: false
+  run_once: true

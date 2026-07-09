@@ -1,0 +1,23 @@
+---
+# RDQM HA prerequisite (#560): mqm passwordless SSH + sudo so `crtmqm -sx` can
+# auto-create the HA secondaries from one node — IBM's coordinated DR/HA create.
+# Enabled early in RDQM provisioning (before mqweb holds the mqm user) and removed
+# after qm-create — deliberately not standing access. Per IBM "Setting up
+# passwordless SSH and sudo access" and "Requirements for RDQM HA solution".
+
+# Controller-side store for the shared mqm SSH keypair (gitignored, same
+# build/state/secrets tree as the replication PKI; re-generatable).
+rdqm_ssh_key_dir: "{{ playbook_dir }}/../build/state/secrets/rdqm-ssh"
+rdqm_ssh_key_bits: 4096
+
+# IBM requires mqm's home to be a standard home. /var/mqm is group-writable AND
+# SELinux var_t, both of which break sshd (StrictModes + authorized_keys read).
+mqm_home: /home/mqm
+
+# Host patterns mqm SSH accepts keys for. crtmqm connects to peers over the
+# HA_Replication subnets (172.16.x); node names resolve to the data plane (10.10.x).
+rdqm_ssh_accept_hosts: "rdqm-* 10.10.1.* 10.10.2.* 172.16.1.* 172.16.2.*"
+
+# sudo NOPASSWD commands for the mqm user (IBM requirement — sudo is mandatory
+# even though the passwordless SSH itself is documented as optional).
+rdqm_sudo_cmds: "/opt/mqm/bin/crtmqm, /opt/mqm/bin/dltmqm, /opt/mqm/bin/rdqmadm, /opt/mqm/bin/rdqmstatus, /opt/mqm/bin/rdqmdr"

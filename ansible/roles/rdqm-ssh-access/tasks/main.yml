@@ -1,0 +1,69 @@
+---
+# Enable mqm passwordless SSH + sudo on the RDQM HA nodes (#560). MUST run before
+# mqweb starts — mqweb runs as mqm and would block the `usermod` home move ("user mqm
+# is currently used by process"). Placement: after rdqm-install, before the mqweb role
+# in _rdqm-cluster-ha.yml / _rdqm-dr-replication.yml. Removed post-create by
+# `include_role: name=rdqm-ssh-access, tasks_from=remove`.
+
+- name: mint the shared mqm SSH keypair on the controller
+  ansible.builtin.include_tasks: keygen.yml
+
+- name: move mqm home to /home/mqm (IBM prerequisite; /var/mqm breaks sshd)
+  ansible.builtin.user:
+    name: mqm
+    home: "{{ mqm_home }}"
+    move_home: false
+
+- name: create mqm home (not group/world-writable -> sshd StrictModes ok)
+  ansible.builtin.file:
+    path: "{{ mqm_home }}"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0755"
+
+- name: mqm .ssh dir
+  ansible.builtin.file:
+    path: "{{ mqm_home }}/.ssh"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0700"
+
+- name: install mqm private key
+  ansible.builtin.copy:
+    src: "{{ rdqm_ssh_key_dir }}/id_rsa"
+    dest: "{{ mqm_home }}/.ssh/id_rsa"
+    owner: mqm
+    group: mqm
+    mode: "0600"
+
+- name: install mqm authorized_keys (full mesh)
+  ansible.builtin.copy:
+    src: "{{ rdqm_ssh_key_dir }}/id_rsa.pub"
+    dest: "{{ mqm_home }}/.ssh/authorized_keys"
+    owner: mqm
+    group: mqm
+    mode: "0600"
+
+- name: mqm ssh client config (accept host keys within the HA group)
+  ansible.builtin.copy:
+    dest: "{{ mqm_home }}/.ssh/config"
+    owner: mqm
+    group: mqm
+    mode: "0600"
+    content: |
+      Host {{ rdqm_ssh_accept_hosts }}
+        StrictHostKeyChecking accept-new
+
+- name: SELinux-label mqm home + .ssh as ssh_home_t
+  ansible.builtin.command: "restorecon -R {{ mqm_home }}"
+  changed_when: false
+  when: ansible_selinux.status | default('disabled') == 'enabled'
+
+- name: mqm sudo NOPASSWD for RDQM commands (IBM requirement)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/mqm-rdqm
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: "mqm ALL=(root) NOPASSWD: {{ rdqm_sudo_cmds }}\n"

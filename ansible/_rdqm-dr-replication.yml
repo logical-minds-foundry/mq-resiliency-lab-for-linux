@@ -19,6 +19,12 @@
 - hosts: rdqm_b
   roles: [rdqm-install]
 
+# mqm passwordless SSH + sudo (#560) — site-B HA-group prerequisite for the coordinated
+# `crtmqm -sx -rr s` auto-create. BEFORE mqweb (which holds the mqm user). Mirrors the
+# site-A play; removed after qm-create in site-rdqm.yml.
+- hosts: rdqm_b
+  roles: [rdqm-ssh-access]
+
 # Stateless per-node mqweb on every site-B node's RDQMAPP — administers the local QM
 # whenever DR cutover lands it here. Mirrors the site-A play in _rdqm-cluster-ha.yml.
 - hosts: rdqm_b

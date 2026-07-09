@@ -1,0 +1,19 @@
+---
+# Tear down the mqm passwordless SSH + sudo access after QM creation (#560), so it is
+# not standing infrastructure — per IBM's removable guidance. Run via
+# `include_role: name=rdqm-ssh-access, tasks_from=remove`. Leaves mqm's home at
+# /home/mqm (harmless, and MQ data lives in /var/mqm regardless); strips only the key
+# material and the sudo grant.
+- name: remove mqm SSH key material + client config
+  ansible.builtin.file:
+    path: "{{ mqm_home }}/.ssh/{{ item }}"
+    state: absent
+  loop:
+    - authorized_keys
+    - id_rsa
+    - config
+
+- name: remove mqm sudo grant
+  ansible.builtin.file:
+    path: /etc/sudoers.d/mqm-rdqm
+    state: absent
