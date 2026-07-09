@@ -12,8 +12,10 @@
     - authorized_keys
     - id_rsa
     - config
+  become: true
 
 - name: remove mqm sudo grant
   ansible.builtin.file:
     path: /etc/sudoers.d/mqm-rdqm
     state: absent
+  become: true
