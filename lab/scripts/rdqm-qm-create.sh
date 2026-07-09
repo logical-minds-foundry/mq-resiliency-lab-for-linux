@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # lab/scripts/rdqm-qm-create.sh - create the replicated QM on a formed RDQM group.
 #
-# HA-only (site A): secondaries (-sxs) BEFORE the primary (-sx); both as root; floating
-# IP via rdqmint -f <addr> -l <interface>. Lab channel posture per spec 1.
+# Create order (#561): IBM's documented coordinated flow. A single `crtmqm -sx` per site,
+# run AS mqm, auto-creates that site's HA secondaries by SSH-ing to the peers as mqm and
+# running sudo crtmqm there (per IBM's 9.4 worked example,
+# build/cache/refs/ibm-docs/.../availability-drha-rdqm-worked-example). The mqm passwordless
+# SSH + sudo is provisioned by the rdqm-ssh-access role (#560) before mqweb, and removed
+# after this script. This replaces the old manual secondaries-first workaround, which forced
+# a full initial DRBD resync that never reached UpToDate on DR/HA and failed as
+# AMQ3879E/AMQ3817E (#559). Floating IP via rdqmint -f <addr> -l <interface>.
 #
-# HA/DR (3+3, #288): auto-detected when the site-B HA group (rdqm_b) is formed. Per IBM's
-# 9.4 worked example (build/cache/refs/ibm-docs/.../availability-drha-rdqm-worked-example), a
-# single `crtmqm -sx -rr p` on each site's primary auto-creates that site's secondaries and
-# the DR IPs go on the command line (net-wan, port 7001, async), so no rdqm.ini DR stanza is
-# needed. Site A is DR primary (-rr p); site B is DR secondary (-rr s). The QM's objects +
+# HA/DR (3+3, #288): auto-detected when the site-B HA group (rdqm_b) is formed. Site A is DR
+# primary (-rr p); site B is DR secondary (-rr s). The DR IPs go on the command line
+# (net-wan, port 7001, async), so no rdqm.ini DR stanza is needed. The QM's objects +
 # messages replicate to site B, which needs only its own floating IP.
 #
 # RDQM supports exactly ONE floating IP per queue manager (rdqmint, #216 spike: a second is
@@ -39,6 +43,13 @@ DR_PORT="7001"
 
 run() { ansible "$1" -b -m shell -a "$2"; }
 
+# Run a command as the mqm login user. The coordinated crtmqm create must run as mqm:
+# crtmqm self-sudos for its privileged work and SSHes to the HA peers AS mqm (over the
+# 172.16.x replication net) to auto-create that site's secondaries. The mqm passwordless
+# SSH + sudo is provisioned by the rdqm-ssh-access role (#560) before mqweb, and removed
+# after this script. `su - mqm` gives the login env (HOME=/home/mqm) mqm's SSH needs.
+run_mqm() { ansible "$1" -b -m shell -a "su - mqm -c \"$2\""; }
+
 # Add the single data-plane floating IP on a node, bound to the data-subnet interface.
 add_vip() {  # $1=node $2=vip
   local iface
@@ -59,33 +70,37 @@ if ansible rdqm-b1 -b -m shell -a "/opt/mqm/bin/rdqmstatus -n" >/dev/null 2>&1; 
   DR=1
 fi
 
+# Skip the create if the QM already exists on the site-A primary (idempotent re-provision).
+qm_exists() { run rdqm-a1 "/opt/mqm/bin/dspmq | grep -q 'QMNAME($QM)'" >/dev/null 2>&1; }
+
 if [ "$DR" = 1 ]; then
-  echo "=== HA/DR detected (site-B group formed) — creating DR/HA RDQMAPP, secondaries first ==="
-  # Secure BOTH the HA and DR replication links with TLS (#545): -re. The per-node
-  # certs + tlshd service are provisioned by the rdqm-replication-tls role BEFORE this
-  # script runs; the cert SANs use the default group DNS name (encrypted.remote), so no
-  # -san is needed. Every crtmqm in the configuration must carry the same secure flag.
+  echo "=== HA/DR detected (site-B group formed) — coordinated create (crtmqm auto-creates secondaries) ==="
+  # Secure BOTH the HA and DR replication links with TLS (#545): -re. The per-node certs +
+  # tlshd are provisioned by rdqm-replication-tls BEFORE this runs; the cert SANs use the
+  # default group DNS name (encrypted.remote), so no -san is needed.
   REPL_TLS="-re"
-  # RDQM requires the HA secondaries created BEFORE the primary even for DR/HA — confirmed
-  # live: `crtmqm -sx -rr p` on the primary errors "the secondary queue manager must first be
-  # created" and prints the `-sxs -rr p -rl/-ri` command. (IBM's worked example implies the
-  # primary auto-creates them; our MQ 9.4.5 build does not.) The DR flags ride on every crtmqm.
-  # Site A = DR primary (-rr p): a2/a3 secondaries, then a1 primary.
-  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
-  # Site B = DR secondary (-rr s): b2/b3 secondaries, then b1 primary.
-  run rdqm-b2,rdqm-b3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
+  if qm_exists; then
+    echo "=== $QM already exists on rdqm-a1 — skipping create ==="
+  else
+    # IBM's documented DR/HA create: ONE `crtmqm -sx` per site, run as mqm. crtmqm SSHes
+    # to that site's peers (over 172.16.x) as mqm and auto-creates the secondaries
+    # ("Secondary queue manager created on ..."). No manual -sxs.
+    run_mqm rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM"  # site A = DR primary, auto-creates a2/a3
+    run_mqm rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM"  # site B = DR secondary, auto-creates b2/b3
+  fi
   add_vip rdqm-a1 "$VIP"
   add_vip rdqm-b1 "$B_VIP"
   base_mqsc rdqm-a1
 else
-  echo "=== HA-only (no site-B group) — creating site-A RDQMAPP ==="
+  echo "=== HA-only (no site-B group) — coordinated create ==="
   # Secure the HA replication links with TLS (#545): -reh (this shape has no DR link).
   REPL_TLS="-reh"
-  # Secondaries FIRST, then the primary (verified HA-only order).
-  run rdqm-a2,rdqm-a3 "/opt/mqm/bin/crtmqm -fs 3072M -sxs $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
-  run rdqm-a1 "/opt/mqm/bin/crtmqm -sx -fs 3072M $REPL_TLS $QM || /opt/mqm/bin/dspmq -m $QM"
+  if qm_exists; then
+    echo "=== $QM already exists on rdqm-a1 — skipping create ==="
+  else
+    # Single `crtmqm -sx` on the site-A primary as mqm; auto-creates a2/a3.
+    run_mqm rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx $REPL_TLS $QM"
+  fi
   add_vip rdqm-a1 "$VIP"
   base_mqsc rdqm-a1
 fi
