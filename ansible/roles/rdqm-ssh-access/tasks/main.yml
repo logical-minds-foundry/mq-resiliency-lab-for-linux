@@ -63,6 +63,14 @@
         StrictHostKeyChecking accept-new
   become: true
 
+- name: pre-seed mqm known_hosts for the HA-group peers (crtmqm SSH is strict)
+  ansible.builtin.shell: >-
+    ssh-keyscan -T 5 {{ rdqm_ssh_known_hosts_scan }}
+    > {{ mqm_home }}/.ssh/known_hosts 2>/dev/null
+  become: true
+  become_user: mqm
+  changed_when: true
+
 - name: SELinux-label mqm home + .ssh as ssh_home_t
   ansible.builtin.command: "restorecon -R {{ mqm_home }}"
   changed_when: false

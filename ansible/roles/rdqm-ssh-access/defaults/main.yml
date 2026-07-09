@@ -18,6 +18,15 @@ mqm_home: /home/mqm
 # HA_Replication subnets (172.16.x); node names resolve to the data plane (10.10.x).
 rdqm_ssh_accept_hosts: "rdqm-* 10.10.1.* 10.10.2.* 172.16.1.* 172.16.2.*"
 
+# Peers to pre-seed into mqm's known_hosts. crtmqm's own SSH (for the coordinated
+# auto-create) uses STRICT host-key checking and does NOT honour the client config's
+# accept-new, so an unknown key makes it silently fall back to "secondary must first be
+# created". Seed the HA_Replication addresses it actually connects to (+ node names).
+# Lab topology constants, matching rdqm-qm-create.sh's hardcoded WAN/node lists.
+rdqm_ssh_known_hosts_scan: >-
+  172.16.1.31 172.16.1.32 172.16.1.33 172.16.2.41 172.16.2.42 172.16.2.43
+  rdqm-a1 rdqm-a2 rdqm-a3 rdqm-b1 rdqm-b2 rdqm-b3
+
 # sudo NOPASSWD commands for the mqm user (IBM requirement — sudo is mandatory
 # even though the passwordless SSH itself is documented as optional).
 rdqm_sudo_cmds: "/opt/mqm/bin/crtmqm, /opt/mqm/bin/dltmqm, /opt/mqm/bin/rdqmadm, /opt/mqm/bin/rdqmstatus, /opt/mqm/bin/rdqmdr"
