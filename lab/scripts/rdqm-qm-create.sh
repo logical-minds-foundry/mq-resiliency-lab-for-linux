@@ -110,6 +110,9 @@ fi
 # with the QM. QM_SVC is the shared counterparty (SVCQM); this stack's request queue
 # on it is SVC_REQ_QUEUE ({SHORT}.SVC.REQUEST) — both threaded in, not derived (#446).
 if [ -n "$SVC_CONN" ]; then
+  # RNAME must not be empty, else DEFINE QREMOTE(SVC.REQUEST) RNAME() is an MQSC syntax
+  # error (AMQ8405I). SVC_REQ_QUEUE ({SHORT}.SVC.REQUEST) is threaded from site-rdqm.yml (#574).
+  : "${SVC_REQ_QUEUE:?SVC_REQ_QUEUE (arg 5) is required when SVC_CONN is set — the QREMOTE RNAME would be empty}"
   run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 

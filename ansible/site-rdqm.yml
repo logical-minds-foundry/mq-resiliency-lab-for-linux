@@ -50,7 +50,7 @@
       ansible.builtin.command:
         cmd: >-
           bash {{ playbook_dir }}/../lab/scripts/rdqm-qm-create.sh
-          {{ qm_name }} {{ qm_vip }} {{ svc_conn }}
+          {{ qm_name }} {{ qm_vip }} {{ svc_conn }} {{ qm_svc }} {{ svc_req_queue }}
       changed_when: true
 
 # Remove the temporary mqm SSH + sudo access now the QMs are created (#560): the
