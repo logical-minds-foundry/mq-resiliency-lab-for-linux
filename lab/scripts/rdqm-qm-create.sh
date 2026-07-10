@@ -51,10 +51,21 @@ run() { ansible "$1" -b -m shell -a "$2"; }
 run_mqm() { ansible "$1" -b -m shell -a "su - mqm -c \"$2\""; }
 
 # Add the single data-plane floating IP on a node, bound to the data-subnet interface.
+# Idempotent + loud (#583): skip if the QM already carries this floating IP (a re-provision
+# re-runs this), otherwise add it and let a genuine rdqmint failure surface. The old blanket
+# `|| true` swallowed EVERY rdqmint error — masking the benign "already added" AMQ3873E on
+# re-runs, but equally hiding a real misconfiguration (wrong node/interface) behind silence.
 add_vip() {  # $1=node $2=vip
-  local iface
+  local iface vipstat
+  # rdqmstatus reports the QM's configured floating IP in the LOCAL node's block, whether
+  # this node is primary or secondary, so this idempotency check works on any site node.
+  vipstat=$(run "$1" "/opt/mqm/bin/rdqmstatus -m $QM" 2>/dev/null || true)
+  if [[ $vipstat == *"floating IP address:"*"$2"* ]]; then
+    echo "=== floating IP $2 already configured for $QM on $1 — skipping ==="
+    return 0
+  fi
   iface=$(ansible "$1" -m shell -a "ip -br addr | grep ${2%.*}\\. | cut -d' ' -f1" | tail -1)
-  run "$1" "/opt/mqm/bin/rdqmint -m $QM -a -f $2 -l $iface || true"
+  run "$1" "/opt/mqm/bin/rdqmint -m $QM -a -f $2 -l $iface"
 }
 
 # Resolve the site-A node currently running $QM (the HA primary). It floats across the
