@@ -7,7 +7,7 @@
 * The keystore lives under the QM's replicated data dir, so SSLKEYR follows the QM on
 * every HA node move and the DR cutover. KEYRPWD is persisted in qm.ini (QMs, unlike
 * MQI clients, need no sibling .sth stash).
-ALTER QMGR SSLKEYR('/var/mqm/qmgrs/{{ qm_name }}/ssl/key') KEYRPWD('{{ pki_keyrpwd.stdout }}') CERTLABL('{{ qm_name }}')
+ALTER QMGR SSLKEYR('{{ rdqm_datapath }}/ssl/key') KEYRPWD('{{ pki_keyrpwd.stdout }}') CERTLABL('{{ qm_name }}')
 * Real-time monitoring on, so the per-stack mq_prometheus exporter (#423) reports
 * channel and queue status -- matching the pcmk/nativeha QMGR posture.
 ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)

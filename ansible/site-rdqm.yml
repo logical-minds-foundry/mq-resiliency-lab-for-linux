@@ -76,12 +76,11 @@
 # site-A primary (the qm.ini lives on the DRBD volume, mounted there) AFTER qm-create and
 # BEFORE the app/partner connect. Ordered before rdqm-app-tls so the QM's one restart
 # happens before TLS's runtime REFRESH SECURITY, not after it.
-- name: restore per-QM JSON diagnostic logging for the RDQM app QM (#569)
+- name: restore per-QM JSON diagnostic logging for the RDQM app QM (#569, fixed by #581)
   hosts: rdqm_a
   gather_facts: false
   vars:
     qm_name: "{{ qm_app }}"
-    mq_qmini_path: "/var/mqm/qmgrs/{{ qm_app }}/qm.ini"
     # Name of the handler below — mq-diag-logging/qmini notifies it on a real stanza change.
     mq_diag_qmini_notify: bounce RDQMAPP for the qm.ini diagnostic change
   handlers:
@@ -96,18 +95,30 @@
       become: true
       changed_when: true
   tasks:
-    # run_once -> the site-A primary (rdqm-a1): the only node where the QM is active and
-    # its qm.ini (a symlink into the DRBD-mounted volume) is present; the edit replicates
-    # via DRBD, mirroring the rdqm-app-tls keystore placement.
-    - name: seed the per-QM DiagnosticMessages stanza in RDQMAPP's qm.ini
+    # RDQM runs the QM on exactly one node (the HA primary) and that node floats across
+    # rdqm_a — so the qm.ini edit must target the active node and its replicated DataPath,
+    # NOT a fixed rdqm-a1 or the non-existent /var/mqm/qmgrs/<QM> (#581, which is why the
+    # #569 stanza silently never landed). Resolve the active node + DataPath first;
+    # `when: rdqm_is_active` (unlike run_once) propagates through include_role.
+    - name: resolve the active RDQM node + its DataPath
+      ansible.builtin.include_role:
+        name: rdqm-active-node
+      vars:
+        rdqm_qm: "{{ qm_app }}"
+
+    - name: seed the per-QM DiagnosticMessages stanza in RDQMAPP's qm.ini (active node)
       ansible.builtin.include_role:
         name: mq-diag-logging
         tasks_from: qmini
-      run_once: true
+      vars:
+        # The QM's real qm.ini lives under its DataPath on the DRBD volume; the edit
+        # replicates via DRBD, mirroring the rdqm-app-tls keystore placement.
+        mq_qmini_path: "{{ rdqm_datapath }}/qm.ini"
+      when: rdqm_is_active
 
 # TLS-enable the app QM (#410, #426): wire its lab-pki keystore and secure the
 # app-facing channels (APP.SVRCONN, MON.SVRCONN, inter-QM SDR/RCVR) to parity with
-# the pcmk/nativeha arms. Runs on the site-A primary AFTER qm-create (the QM + its
+# the pcmk/nativeha arms. Runs on the active site-A node AFTER qm-create (the QM + its
 # base/inter-QM objects exist) and BEFORE site-distributed-shared, so RDQMAPP is
 # already TLS-ready when the SVC counterparty (which pins our app-org cert) and the
 # app requester connect. The RDQM-internal DRBD replication link is out of scope --
@@ -118,12 +129,25 @@
   vars:
     qm_name: "{{ qm_app }}"
   tasks:
-    # run_once -> the site-A primary (first host of rdqm_a = rdqm-a1), the only node
-    # where the QM is active and runmqsc works; the keystore then replicates via DRBD.
-    - name: TLS-enable the app QM on the site-A primary
+    # The QM's active node floats across rdqm_a and may have moved since qm-create (the
+    # #569 diagnostic bounce above restarts it), so re-resolve it here. The keystore +
+    # SSLKEYR go under the QM's replicated DataPath so they follow it across HA/DR moves
+    # — NOT /var/mqm/qmgrs/<QM>, which does not exist on RDQM (#581). `when: rdqm_is_active`
+    # (unlike run_once) propagates through include_role, so the role runs on the one
+    # active node and its keystore then replicates via DRBD.
+    - name: resolve the active RDQM node + its DataPath
+      ansible.builtin.include_role:
+        name: rdqm-active-node
+      vars:
+        rdqm_qm: "{{ qm_app }}"
+
+    - name: TLS-enable the app QM on the active node (keystore replicates via DRBD)
       ansible.builtin.include_role:
         name: rdqm-app-tls
-      run_once: true
+      # rdqm_datapath is a fact set by rdqm-active-node on the active host; the role
+      # reads it directly. (Do NOT re-pass it as `vars: {rdqm_datapath: "{{ rdqm_datapath }}"}`
+      # — a var defined in terms of itself is a recursive-template loop.)
+      when: rdqm_is_active
 
 - import_playbook: site-distributed-shared.yml
   vars:
