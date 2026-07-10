@@ -60,7 +60,11 @@ add_vip() {  # $1=node $2=vip
 # Lab MQSC posture (listener + app channel + a persistent test queue). On HA/DR these
 # objects replicate to site B with the QM, so they are defined once on the site-A primary.
 base_mqsc() {  # $1=node
-  run "$1" "printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nSTART LISTENER(L1414)\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') HBINT(15) KAINT(15) REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  run "$1" "printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') HBINT(15) KAINT(15) REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  # Start the listener only if not already running (#577): START LISTENER errors when it is,
+  # which broke the resume path (bootstrap --from provision). The DEFINEs above are idempotent
+  # via REPLACE; CONTROL(QMGR) also (re)starts the listener on QM start/failover.
+  run "$1" "printf 'DISPLAY LSSTATUS(L1414) STATUS\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' 2>/dev/null | grep -q 'STATUS(RUNNING)' || printf 'START LISTENER(L1414)\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 }
 
 # Auto-detect HA/DR: present iff the site-B HA group is formed (rdqm_b provisioned via
