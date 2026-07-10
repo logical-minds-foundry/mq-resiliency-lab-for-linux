@@ -150,15 +150,28 @@ def test_obs_dashboard_writes_file_from_topology(monkeypatch, tmp_path):
 
 
 def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
+    # Cockpits render one per provisioned stack (#59), each under its per-stack folder,
+    # with uid == filename stem == lab-<stack>-cluster.
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_monitoring(tmp_path)
+    topo = tmp_path / "lab" / "topology.yaml"
+    topo.write_text(
+        topo.read_text() + "stacks:\n"
+        "  rdqm-rhel:\n"
+        "    mechanism: rdqm\n"
+        "    os: rhel\n"
+        "    short: RDQM\n"
+        "    qm: {vip: 10.10.1.100}\n"
+        "    provision: ansible/site-rdqm.yml\n"
+    )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
 
     result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-rdqm-cluster.json"
-    assert json.loads(board.read_text())["uid"] == "lab-rdqm-cluster"
+    dashboards = tmp_path / "build" / "work" / "grafana" / "dashboards"
+    board = dashboards / "RDQM (RHEL)" / "lab-rdqm-rhel-cluster.json"
+    assert json.loads(board.read_text())["uid"] == "lab-rdqm-rhel-cluster"
 
 
 def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
@@ -180,7 +193,8 @@ def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
 
     assert result.exit_code == 0
-    board = tmp_path / "build" / "work" / "grafana" / "dashboards" / "lab-qm-pcmk.json"
+    dashboards = tmp_path / "build" / "work" / "grafana" / "dashboards"
+    board = dashboards / "PCMK (Ubuntu)" / "lab-qm-pcmk.json"
     assert json.loads(board.read_text())["uid"] == "lab-qm-pcmk"
 
 

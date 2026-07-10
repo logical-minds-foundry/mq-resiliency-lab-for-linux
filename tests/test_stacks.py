@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab.stacks import QmConfig, _svc_identity, lab_stacks, stack_members
+from mqlab.stacks import (
+    QmConfig,
+    _svc_identity,
+    dashboard_folder_for,
+    lab_stacks,
+    stack_members,
+)
 
 
 def test_qmconfig_derives_app_svc_and_channel_pair() -> None:
@@ -283,3 +289,23 @@ def test_qm_names_derive_from_short(monkeypatch, tmp_path):
     # each stack still owns a distinct request queue on that shared SVCQM
     assert stacks["pcmk-ubuntu"].qm.req_queue == "PCMK.SVC.REQUEST"
     assert stacks["nativeha-rhel"].qm.req_queue == "NHAR.SVC.REQUEST"
+
+
+def test_dashboard_folder_derives_from_mechanism_and_os(monkeypatch, tmp_path):
+    # Each stack folders under a "<Mechanism> (<OS>)" label derived from mechanism+os,
+    # so a new stack needs no separate folder literal (#59).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stacks = lab_stacks()
+    assert stacks["pcmk-ubuntu"].dashboard_folder == "PCMK (Ubuntu)"
+    assert stacks["rdqm-rhel"].dashboard_folder == "RDQM (RHEL)"
+    assert stacks["nativeha-rhel"].dashboard_folder == "Native HA (RHEL)"
+    assert stacks["nativeha-ubuntu"].dashboard_folder == "Native HA (Ubuntu)"
+
+
+def test_dashboard_folder_for_fails_loud_on_unlabelled_mechanism_or_os():
+    # A mechanism or OS with no folder label is a loud error, never a silent mis-folder.
+    with pytest.raises(ValueError, match="mechanism"):
+        dashboard_folder_for("no-such-mechanism", "ubuntu")
+    with pytest.raises(ValueError, match="os"):
+        dashboard_folder_for("native-ha", "no-such-os")

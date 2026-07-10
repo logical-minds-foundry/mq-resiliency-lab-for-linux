@@ -216,8 +216,8 @@ def test_stack_flow_and_drill_link():
     exprs = " ".join(_exprs(d["panels"]))
     assert "sum(rate(app_roundtrip_total[1m]))" in exprs
     links = [ln["url"] for p in d["panels"] for ln in p.get("links", [])]
-    assert "/d/lab-pcmk-cluster" in links  # pcmk cockpit
-    assert "/d/lab-rdqm-cluster" in links  # rdqm cockpit
+    assert "/d/lab-pcmk-ubuntu-cluster" in links  # pcmk cockpit
+    assert "/d/lab-rdqm-rhel-cluster" in links  # rdqm cockpit
 
 
 def test_object_driven_absence_never_reads_healthy():
@@ -313,10 +313,10 @@ def test_support_and_stack_column_grids_are_contiguous_and_sum_to_24():
 
 
 def test_real_topology_every_stack_drill_link_resolves_to_a_cockpit():
-    # every real stack row must resolve to a mapped cockpit uid — a "/d/" link with an
-    # empty uid (a stack missing from _COCKPIT_UID) is a silent dead link. Each stack row
-    # emits exactly one drill (linked) panel, in the same order as the stack registry, so
-    # zip the ordered drill-link URLs against the ordered stack names.
+    # every real stack row resolves to its cockpit uid, derived as lab-<stack>-cluster
+    # (#59) — one identifier, so there is no map to fall out of sync and no "/d/" dead
+    # link. Each stack row emits exactly one drill (linked) panel, in the same order as
+    # the stack registry, so zip the ordered drill-link URLs against the ordered names.
     dash = json.loads(lab_watcher_dashboard())
     real_stacks = list(
         yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text()).get("stacks", {})
@@ -325,7 +325,7 @@ def test_real_topology_every_stack_drill_link_resolves_to_a_cockpit():
     assert real_stacks, "real topology declares no stacks"
     assert len(drill_urls) == len(real_stacks)
     for stack, url in zip(real_stacks, drill_urls, strict=True):
-        assert url and url != "/d/", f"real topology: stack {stack} drill link uid is empty"
+        assert url == f"/d/lab-{stack}-cluster", f"stack {stack} drill link uid mismatch: {url}"
 
 
 def test_uptime_is_informational_never_a_health_colour():

@@ -20,9 +20,9 @@ from mqlab.qmboard import (
 FIXTURE = {
     "svc": {"short": "SVC", "conn": "10.60.0.50"},
     "stacks": {
-        "nha-x": {"short": "NHAX", "mechanism": "m", "os": "o", "provision": "ansible/x.yml"},
-        "other": {"short": "OTHR", "mechanism": "m", "os": "o", "provision": "ansible/o.yml"},
-        "reserved": {"short": "RSVD", "mechanism": "m", "os": "o", "provision": None},
+        "nha-x": {"short": "NHAX", "mechanism": "native-ha", "os": "ubuntu", "provision": "x.yml"},
+        "other": {"short": "OTHR", "mechanism": "native-ha", "os": "ubuntu", "provision": "o.yml"},
+        "reserved": {"short": "RSVD", "mechanism": "native-ha", "os": "ubuntu", "provision": None},
     },
 }
 
@@ -255,7 +255,7 @@ def test_write_renders_provisioned_stacks_only(monkeypatch, tmp_path):
 
     monkeypatch.setattr(qb, "_lab_topology", lambda: FIXTURE)
     monkeypatch.setattr(
-        qb, "qm_dashboard_path", lambda short: tmp_path / f"lab-qm-{short.lower()}.json"
+        qb, "qm_dashboard_path", lambda short, folder="": tmp_path / f"lab-qm-{short.lower()}.json"
     )
     paths = qb.write_qm_dashboards()
     names = sorted(p.name for p in paths)

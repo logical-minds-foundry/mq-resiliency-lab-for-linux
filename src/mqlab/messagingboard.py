@@ -348,9 +348,11 @@ def _messaging_stacks() -> list[Stack]:
     return [s for s in lab_stacks().values() if s.short and s.provision]
 
 
-def messaging_dashboard_path(stack_name: str) -> Path:
-    """Where a stack's rendered messaging board is written (gitignored)."""
-    return work("grafana", "dashboards", f"lab-messaging-{stack_name}.json")
+def messaging_dashboard_path(stack_name: str, folder: str = "") -> Path:
+    """Where a stack's rendered messaging board is written (gitignored build/work tree).
+    `folder` is the stack's per-stack dashboard folder (#59); the writer passes it so the
+    board lands beside its stack's other boards. Empty `folder` writes at the root."""
+    return work("grafana", "dashboards", folder, f"lab-messaging-{stack_name}.json")
 
 
 def write_messaging_dashboards() -> list[Path]:
@@ -362,7 +364,7 @@ def write_messaging_dashboards() -> list[Path]:
         board = render_messaging_board(
             stack.name, stack.short, stack.qm.qm_app, stack.qm.qm_svc, stack.qm.req_queue
         )
-        path = messaging_dashboard_path(stack.name)
+        path = messaging_dashboard_path(stack.name, stack.dashboard_folder)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(board, indent=2) + "\n")
         paths.append(path)

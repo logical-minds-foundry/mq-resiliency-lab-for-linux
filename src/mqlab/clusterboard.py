@@ -1,5 +1,5 @@
-"""Pure builders for the cluster-cockpit board (lab-pcmk-cluster). Data in → Grafana
-panel/dashboard dicts out, no I/O — mirrors dashboard.py. Engine = Table (spike §4.1)."""
+"""Pure builders for the per-stack cluster-cockpit boards (lab-<stack>-cluster). Data in
+→ Grafana panel/dashboard dicts out, no I/O — mirrors dashboard.py. Engine = Table."""
 
 from __future__ import annotations
 
@@ -9,9 +9,20 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from mqlab.paths import repo_root, work
+from mqlab.stacks import lab_stacks
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from mqlab.stacks import Stack
+
+
+def cockpit_uid(stack_name: str) -> str:
+    """The one identifier for a stack's cockpit board — its Grafana uid AND its
+    rendered filename stem: `lab-<stack>-cluster` (#59). Derived from the stack name
+    so there is no separate uid namespace to map back to a stack."""
+    return f"lab-{stack_name}-cluster"
+
 
 Column = tuple[str, str, str]  # (title, promql, mapping_kind)
 
@@ -175,14 +186,12 @@ _NHA_ARM_SPEC: dict[str, dict[str, str]] = {
         "qm": "NHARAPP",
         "groups": "nha_rhel_a|nha_rhel_b",
         "prefix": "nha-rhel",
-        "uid": "lab-nativeha-cluster",
         "title": "Native HA Cluster · Infrastructure View",
     },
     "nativeha-ubuntu": {
         "qm": "NHAUAPP",
         "groups": "nha_ubuntu_a|nha_ubuntu_b",
         "prefix": "nha-ubuntu",
-        "uid": "lab-nativeha-ubuntu-cluster",
         "title": "Native HA Cluster (Ubuntu) · Infrastructure View",
     },
 }
@@ -1368,7 +1377,7 @@ def rdqm_net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
 
 
 def _rdqm_board(ds_uid: str) -> dict[str, Any]:
-    """The RDQM cockpit (lab-rdqm-cluster), top-to-bottom: title banner · ① status band ·
+    """The RDQM cockpit (lab-rdqm-rhel-cluster), top-to-bottom: title banner · ① status band ·
     ② Site A/B instance matrices (with LIVE/RECOVERY chips) · ③ DRBD storage · ④ cross-site DR ·
     failover timeline · logs · perf · network. RDQM is the richest arm — Native-HA-style HA
     roles + cross-site DR AND a real DRBD storage section (#287). Each named section is its own
@@ -1417,7 +1426,7 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
         *rdqm_net_section(ds_uid, y=73),
     ]
     return {
-        "uid": "lab-rdqm-cluster",
+        "uid": cockpit_uid("rdqm-rhel"),
         "title": "RDQM Cluster · Infrastructure View",
         "schemaVersion": 39,
         "version": 0,
@@ -1431,13 +1440,13 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
 
 
 _ARM_NAMES = {
-    "pcmk": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
+    "pcmk-ubuntu": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
     "nativeha-rhel": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
     "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region · Ubuntu 24.04 LTS",
     "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr) · RHEL 9 (x86_64)",
 }
 _ARM_KIND = {
-    "pcmk": "PCMK Cluster",
+    "pcmk-ubuntu": "PCMK Cluster",
     "nativeha-rhel": "Native HA Cluster",
     "nativeha-ubuntu": "Native HA Cluster",
     "rdqm-rhel": "RDQM Cluster",
@@ -1505,7 +1514,7 @@ def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel") -> dict[str, Any]:
         *nativeha_net_section(ds_uid, y=51),
     ]
     return {
-        "uid": spec["uid"],
+        "uid": cockpit_uid(arm),
         "title": spec["title"],
         "schemaVersion": 39,
         "version": 0,
@@ -1520,7 +1529,7 @@ def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel") -> dict[str, Any]:
 
 def render_cluster_dashboard(
     topo: dict[str, Any],  # noqa: ARG001 - reserved: later PRs derive rows/sites from topology
-    arm: str = "pcmk",
+    arm: str = "pcmk-ubuntu",
     ds_uid: str = "prometheus",
 ) -> dict[str, Any]:
     """Assemble the cockpit board for the given arm. PCMK: hero + integrity + ② Compute / ③
@@ -1545,7 +1554,7 @@ def render_cluster_dashboard(
         *net_section(ds_uid, y=46),
     ]
     return {
-        "uid": "lab-pcmk-cluster",
+        "uid": cockpit_uid(arm),
         "title": "PCMK Cluster · Infrastructure View",
         "schemaVersion": 39,
         "version": 0,
@@ -1558,45 +1567,38 @@ def render_cluster_dashboard(
     }
 
 
-def cluster_dashboard_path() -> Path:
-    """Where the rendered cockpit board is written — beside lab-status.json (gitignored)."""
-    return work("grafana", "dashboards", "lab-pcmk-cluster.json")
+def _cockpit_stacks() -> list[Stack]:
+    """The stacks that get a cockpit board — every provisioned stack (#59). Rendering
+    only what is declared+provisioned keeps a partial topology (e.g. a single-stack
+    test seed, or a lab with one stack up) from emitting boards for absent stacks."""
+    return [s for s in lab_stacks().values() if s.provision]
 
 
-def lab_cluster_dashboard() -> str:
-    """Render the real lab/topology.yaml to cockpit dashboard JSON text."""
+def cluster_dashboard_paths_and_texts() -> list[tuple[Path, str]]:
+    """Render every provisioned stack's cockpit board from the real topology; return
+    (path, text) pairs without touching the filesystem (the pure seam the tests drive).
+    Each board's uid, filename and folder all derive from the one stack name (#59), so
+    there is no stack↔uid map to keep in sync."""
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return json.dumps(render_cluster_dashboard(topo), indent=2) + "\n"
+    out: list[tuple[Path, str]] = []
+    for stack in _cockpit_stacks():
+        board = render_cluster_dashboard(topo, arm=stack.name)
+        path = work(
+            "grafana",
+            "dashboards",
+            stack.dashboard_folder,
+            f"{cockpit_uid(stack.name)}.json",
+        )
+        out.append((path, json.dumps(board, indent=2) + "\n"))
+    return out
 
 
-def nativeha_dashboard_path() -> Path:
-    """Where the rendered Native HA cockpit board is written (gitignored)."""
-    return work("grafana", "dashboards", "lab-nativeha-cluster.json")
-
-
-def lab_nativeha_dashboard() -> str:
-    """Render the real lab/topology.yaml to the Native HA cockpit dashboard JSON text."""
-    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return json.dumps(render_cluster_dashboard(topo, arm="nativeha-rhel"), indent=2) + "\n"
-
-
-def nativeha_ubuntu_dashboard_path() -> Path:
-    """Where the rendered Native HA (Ubuntu) cockpit board is written (gitignored)."""
-    return work("grafana", "dashboards", "lab-nativeha-ubuntu-cluster.json")
-
-
-def lab_nativeha_ubuntu_dashboard() -> str:
-    """Render the real lab/topology.yaml to the Native HA (Ubuntu) cockpit dashboard JSON text."""
-    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return json.dumps(render_cluster_dashboard(topo, arm="nativeha-ubuntu"), indent=2) + "\n"
-
-
-def rdqm_dashboard_path() -> Path:
-    """Where the rendered RDQM cockpit board is written (gitignored)."""
-    return work("grafana", "dashboards", "lab-rdqm-cluster.json")
-
-
-def lab_rdqm_dashboard() -> str:
-    """Render the real lab/topology.yaml to the RDQM cockpit dashboard JSON text."""
-    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return json.dumps(render_cluster_dashboard(topo, arm="rdqm-rhel"), indent=2) + "\n"
+def write_cluster_dashboards() -> list[Path]:
+    """Render + write every provisioned stack's cockpit board, each under its per-stack
+    folder in build/work; return the written paths. One call from the cli render sites."""
+    paths: list[Path] = []
+    for path, text in cluster_dashboard_paths_and_texts():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        paths.append(path)
+    return paths

@@ -1,6 +1,6 @@
 """The Watcher (#488) — the lab-state board (lab-watcher). A pure builder: topology
 dict in → Grafana dashboard dict out, no I/O beyond reading the real topology in the
-`lab_watcher_dashboard()` entry (exactly like clusterboard.lab_cluster_dashboard).
+`lab_watcher_dashboard()` entry (like clusterboard's cluster_dashboard_paths_and_texts).
 
 Two object-driven sections, top-down, sharing an aligned column grid so the values
 read as columns (the dashboard.py convention — every support host and every stack
@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.clusterboard import _STALE_MAP, _row_header, _stat
+from mqlab.clusterboard import _STALE_MAP, _row_header, _stat, cockpit_uid
 from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
@@ -161,14 +161,6 @@ _ROLE_SPEC: dict[str, RoleSpec] = {
         domain="sum(rate(app_roundtrip_total[1m]))",
         domain_unit="reqps",
     ),
-}
-
-# Each stack's existing cockpit board (the drill ↗ target), keyed by stack name.
-_COCKPIT_UID: dict[str, str] = {
-    "pcmk-ubuntu": "lab-pcmk-cluster",
-    "rdqm-rhel": "lab-rdqm-cluster",
-    "nativeha-rhel": "lab-nativeha-cluster",
-    "nativeha-ubuntu": "lab-nativeha-ubuntu-cluster",
 }
 
 # The support-row column grid (x, w) — one shared layout so values pin into aligned
@@ -465,7 +457,7 @@ def _stack_row(name: str, cfg: dict[str, Any], y: int) -> list[dict[str, Any]]:
         w=dw,
         h=_ROW_H,
     )
-    drill["links"] = [{"title": "Cockpit ↗", "url": f"/d/{_COCKPIT_UID.get(name, '')}"}]
+    drill["links"] = [{"title": "Cockpit ↗", "url": f"/d/{cockpit_uid(name)}"}]
     return [stripe, mech, *site_a, *site_b, flow, drill]
 
 

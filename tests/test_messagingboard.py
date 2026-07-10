@@ -111,8 +111,8 @@ def test_dashboard_path_is_per_stack():
 
 def _stack_cfg(short, provision):
     return {
-        "mechanism": "m",
-        "os": "o",
+        "mechanism": "pacemaker-san",
+        "os": "ubuntu",
         "short": short,
         "provision": provision,
         "groups": [],
@@ -135,7 +135,9 @@ def test_write_messaging_dashboards_renders_provisioned_stacks_only(monkeypatch,
     }
     monkeypatch.setattr(stacks_mod, "_topology", lambda: topo)
     monkeypatch.setattr(
-        mb, "messaging_dashboard_path", lambda name: tmp_path / f"lab-messaging-{name}.json"
+        mb,
+        "messaging_dashboard_path",
+        lambda name, folder="": tmp_path / f"lab-messaging-{name}.json",
     )
     paths = mb.write_messaging_dashboards()
     # the reserved stack (provision: null) is filtered out; only the live one renders

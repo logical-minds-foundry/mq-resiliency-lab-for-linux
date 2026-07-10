@@ -1,4 +1,4 @@
-"""RDQM cluster-state collector for the lab-rdqm-cluster cockpit (#287).
+"""RDQM cluster-state collector for the lab-rdqm-rhel-cluster cockpit (#287).
 
 Stdlib-only (apart from reusing clusterstate.parse_drbd) so this exact module deploys
 verbatim to the rdqm nodes — the rdqm-state role lays down a minimal `mqlab` package
