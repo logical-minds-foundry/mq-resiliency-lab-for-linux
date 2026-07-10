@@ -9,7 +9,12 @@
 #     validation, so the template is fine there. This supersedes the #556 distinct-Name
 #     theory, which the churned triage could not actually confirm. (RDQM per-QM logging
 #     is restored separately — see the follow-up task.)
-#   * DiagnosticSystemMessages — QM-unknown / fallback errors. Seeded on every arm.
+#   * DiagnosticSystemMessages — QM-unknown / fallback errors. Also NOT seeded on RDQM
+#     (mq_diag_system=false, #576): RDQM's `crtmqm -sx` rejects it too, logging a bogus
+#     AMQ7824W ("the details supplied for service SystemSyslog conflict with … an existing
+#     service SystemSyslog") — RDQM re-processes the stanza during the replicated create.
+#     Non-fatal (the QM comes up green), but a bogus warning is a defect, so RDQM skips it
+#     (proven live: no stanza -> no warning). Seeded normally on the plain-crtmqm arms.
 # journald rate limiting is disabled so Severities=all is never silently dropped.
 
 - name: seed the DiagnosticMessagesTemplate in mqs.ini (per-QM inheritance at crtmqm)
@@ -37,6 +42,7 @@
          Service=Syslog
          Ident={{ mq_diag_ident }}
          Severities={{ mq_diag_severities }}
+  when: mq_diag_system | default(true)
   become: true
   become_user: mqm
 
