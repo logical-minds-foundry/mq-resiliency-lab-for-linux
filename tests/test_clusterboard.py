@@ -8,7 +8,6 @@ from mqlab.clusterboard import (
     fold_side,
     hero_tiles,
     integrity_panel,
-    lab_rdqm_dashboard,
     log_row,
     matrix,
     nativeha_status_band,
@@ -141,7 +140,7 @@ def test_cluster_log_panels_exclude_the_event_stream():
 
 
 def test_log_severity_toggle_defaults_to_warn():
-    d = render_cluster_dashboard({}, arm="pcmk")
+    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
     level = next(v for v in d["templating"]["list"] if v["name"] == "level")
     assert level["current"]["text"] == "WARN+"  # defaults to WARN+
     opts = {o["text"] for o in level["options"]}
@@ -149,7 +148,7 @@ def test_log_severity_toggle_defaults_to_warn():
 
 
 def test_board_annotations_are_holder_agnostic():
-    d = render_cluster_dashboard({}, arm="pcmk")
+    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
     anns = d["annotations"]["list"]
     owner = next(a for a in anns if "owner" in a["name"].lower())
     # holder-agnostic: counts owners per resource, never the holder-labelled series
@@ -160,8 +159,8 @@ def test_board_annotations_are_holder_agnostic():
 
 
 def test_board_has_uid_hero_integrity_and_the_two_matrices():
-    d = render_cluster_dashboard({}, arm="pcmk")
-    assert d["uid"] == "lab-pcmk-cluster"
+    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
+    assert d["uid"] == "lab-pcmk-ubuntu-cluster"
     by_title = {p["title"]: p for p in d["panels"]}
     # hero band + integrity + the two matrices all present
     assert "Cluster health" in by_title and "Integrity" in by_title
@@ -240,7 +239,7 @@ def test_nativeha_instance_cols_for_a_site():
 
 def test_nativeha_board_uid_sections_and_tags():
     d = render_cluster_dashboard({}, arm="nativeha-rhel")
-    assert d["uid"] == "lab-nativeha-cluster"
+    assert d["uid"] == "lab-nativeha-rhel-cluster"
     assert "nativeha-rhel" in d["tags"]
     by_title = {p.get("title", ""): p for p in d["panels"]}
     # matrices are labelled by FIXED site (A/B), never by the dynamic live/recovery role (#279)
@@ -267,8 +266,8 @@ def test_nativeha_board_uid_sections_and_tags():
 
 
 def test_pcmk_board_still_renders_unchanged():
-    d = render_cluster_dashboard({}, arm="pcmk")
-    assert d["uid"] == "lab-pcmk-cluster"
+    d = render_cluster_dashboard({}, arm="pcmk-ubuntu")
+    assert d["uid"] == "lab-pcmk-ubuntu-cluster"
     titles = [p.get("title", "") for p in d["panels"]]
     assert "② Compute — node × component" in titles
     assert "③ Storage — DRBD / SAN" in titles
@@ -277,7 +276,7 @@ def test_pcmk_board_still_renders_unchanged():
 def test_pcmk_board_scopes_shared_metrics_to_pcmk_groups():
     # cluster_node_online / cluster_quorate are emitted by every arm — on the PCMK board every
     # use must carry the pcmk group scope, else nha nodes leak in (#279).
-    blob = json.dumps(render_cluster_dashboard({}, arm="pcmk"))
+    blob = json.dumps(render_cluster_dashboard({}, arm="pcmk-ubuntu"))
     for m in re.finditer(r"cluster_(?:node_online|quorate)(\{[^}]*\})?", blob):
         sel = m.group(1) or ""
         assert "pcmk_a|pcmk_b" in sel, f"unscoped shared metric on PCMK board: {m.group(0)}"
@@ -472,7 +471,7 @@ def test_rdqm_site_badge_flips_live_recovery_by_dr_role():
 def test_rdqm_matrices_are_right_sized_and_fit_without_horizontal_scroll():
     """The ②/③ matrices fit their rows (no ~2 empty rows) and let columns shrink to fit
     the panel (a small minWidth) so no horizontal scrollbar appears (#300)."""
-    board = json.loads(lab_rdqm_dashboard())
+    board = render_cluster_dashboard({}, arm="rdqm-rhel")
     by_title = {p["title"]: p for p in board["panels"] if p.get("title")}
     # 3-node instance + pacemaker matrices are sized to their rows, not two rows taller
     for t in ("Site A", "Site B", "Pacemaker — Site A", "Pacemaker — Site B"):
@@ -488,7 +487,7 @@ def test_rdqm_matrices_are_right_sized_and_fit_without_horizontal_scroll():
 def test_rdqm_board_sections_are_contiguous_no_vertical_gaps():
     """Right-sizing must reflow the y-stack so sections stay snug — a matrix's successor
     sits immediately below it, never leaving the old padded gap (#300)."""
-    board = json.loads(lab_rdqm_dashboard())
+    board = render_cluster_dashboard({}, arm="rdqm-rhel")
     by_title = {p["title"]: p for p in board["panels"] if p.get("title")}
     site_a, site_b = by_title["Site A"], by_title["Site B"]
     # Site B begins exactly where Site A ends (no gap, no overlap)
@@ -674,7 +673,7 @@ def test_rdqm_board_has_a_pacemaker_resource_section():
 
 def test_rdqm_board_uid_sections_and_fixed_site_labels():
     d = render_cluster_dashboard({}, arm="rdqm-rhel")
-    assert d["uid"] == "lab-rdqm-cluster"
+    assert d["uid"] == "lab-rdqm-rhel-cluster"
     assert "rdqm-rhel" in d["tags"]
     by_title = {p.get("title", ""): p for p in d["panels"]}
     # matrices labelled by FIXED site (A/B), never by the dynamic live/recovery role
@@ -740,9 +739,9 @@ def test_rdqm_perf_uses_rdqm_groups_with_hb_and_wan():
 
 def test_pcmk_and_nativeha_boards_unchanged_by_rdqm_arm():
     # regression: adding the rdqm arm must not alter the PCMK / Native HA boards
-    pcmk = render_cluster_dashboard({}, arm="pcmk")
-    assert pcmk["uid"] == "lab-pcmk-cluster"
+    pcmk = render_cluster_dashboard({}, arm="pcmk-ubuntu")
+    assert pcmk["uid"] == "lab-pcmk-ubuntu-cluster"
     assert "③ Storage — DRBD / SAN" in [p.get("title", "") for p in pcmk["panels"]]
     nha = render_cluster_dashboard({}, arm="nativeha-rhel")
-    assert nha["uid"] == "lab-nativeha-cluster"
+    assert nha["uid"] == "lab-nativeha-rhel-cluster"
     assert "rdqm" not in json.dumps(nha)  # no rdqm plumbing leaked onto the nha board

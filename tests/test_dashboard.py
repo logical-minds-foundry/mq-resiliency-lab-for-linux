@@ -48,7 +48,7 @@ def test_pcmk_vm_rows_drill_link_to_the_cockpit():
     # the PCMK site rows link out to the dedicated cluster cockpit board (#219 §6.7)
     for title in ("PCMK · A — up", "PCMK · B — up"):
         links = ups[title].get("links", [])
-        assert any(link["url"] == "/d/lab-pcmk-cluster" for link in links)
+        assert any(link["url"] == "/d/lab-pcmk-ubuntu-cluster" for link in links)
     # a non-cluster row does not carry the cockpit drill-link
     assert not ups["App · SVC — up"].get("links")
 

@@ -456,33 +456,13 @@ def obs_dashboard() -> None:
         path.write_text(text)
         deps.renderer.command(f"render -> {path}")
         deps.transcript.write(f"render -> {path}")
-        from mqlab.clusterboard import (
-            cluster_dashboard_path,
-            lab_cluster_dashboard,
-            lab_nativeha_dashboard,
-            lab_nativeha_ubuntu_dashboard,
-            lab_rdqm_dashboard,
-            nativeha_dashboard_path,
-            nativeha_ubuntu_dashboard_path,
-            rdqm_dashboard_path,
-        )
+        # the per-stack cluster cockpit boards (#219/#279/#417/#287) — one per
+        # provisioned stack, each under its own folder (#59)
+        from mqlab.clusterboard import write_cluster_dashboards
 
-        cockpit = cluster_dashboard_path()
-        cockpit.write_text(lab_cluster_dashboard())
-        deps.renderer.command(f"render -> {cockpit}")
-        deps.transcript.write(f"render -> {cockpit}")
-        nha_cockpit = nativeha_dashboard_path()
-        nha_cockpit.write_text(lab_nativeha_dashboard())
-        deps.renderer.command(f"render -> {nha_cockpit}")
-        deps.transcript.write(f"render -> {nha_cockpit}")
-        nha_ubuntu_cockpit = nativeha_ubuntu_dashboard_path()
-        nha_ubuntu_cockpit.write_text(lab_nativeha_ubuntu_dashboard())
-        deps.renderer.command(f"render -> {nha_ubuntu_cockpit}")
-        deps.transcript.write(f"render -> {nha_ubuntu_cockpit}")
-        rdqm_cockpit = rdqm_dashboard_path()
-        rdqm_cockpit.write_text(lab_rdqm_dashboard())
-        deps.renderer.command(f"render -> {rdqm_cockpit}")
-        deps.transcript.write(f"render -> {rdqm_cockpit}")
+        for cockpit in write_cluster_dashboards():
+            deps.renderer.command(f"render -> {cockpit}")
+            deps.transcript.write(f"render -> {cockpit}")
         # the per-stack messaging-flow boards (#431)
         from mqlab.messagingboard import write_messaging_dashboards
 
@@ -698,28 +678,11 @@ def _obs_up_steps() -> list[CommandStep]:
     dash.parent.mkdir(parents=True, exist_ok=True)
     dash.write_text(lab_dashboard())
 
-    # the dedicated cluster cockpit boards, rendered beside lab-status: lab-pcmk-cluster (#219),
-    # lab-nativeha-cluster (#279), lab-nativeha-ubuntu-cluster (#417), and lab-rdqm-cluster (#287)
-    from mqlab.clusterboard import (
-        cluster_dashboard_path,
-        lab_cluster_dashboard,
-        lab_nativeha_dashboard,
-        lab_nativeha_ubuntu_dashboard,
-        lab_rdqm_dashboard,
-        nativeha_dashboard_path,
-        nativeha_ubuntu_dashboard_path,
-        rdqm_dashboard_path,
-    )
+    # the per-stack cluster cockpit boards (#219/#279/#417/#287) — one lab-<stack>-cluster
+    # per provisioned stack, each under its own folder (#59)
+    from mqlab.clusterboard import write_cluster_dashboards
 
-    cockpit = cluster_dashboard_path()
-    cockpit.parent.mkdir(parents=True, exist_ok=True)
-    cockpit.write_text(lab_cluster_dashboard())
-    nha_cockpit = nativeha_dashboard_path()
-    nha_cockpit.write_text(lab_nativeha_dashboard())
-    nha_ubuntu_cockpit = nativeha_ubuntu_dashboard_path()
-    nha_ubuntu_cockpit.write_text(lab_nativeha_ubuntu_dashboard())
-    rdqm_cockpit = rdqm_dashboard_path()
-    rdqm_cockpit.write_text(lab_rdqm_dashboard())
+    write_cluster_dashboards()
 
     # the per-stack messaging-flow boards (#431)
     from mqlab.messagingboard import write_messaging_dashboards

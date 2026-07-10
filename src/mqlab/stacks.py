@@ -21,6 +21,31 @@ import yaml
 
 from mqlab.paths import repo_root
 
+# Display labels for a stack's Grafana dashboard folder (#59). Derived from
+# mechanism+os so a new stack needs no separate folder literal — the folder title
+# is "<mechanism label> (<OS label>)", e.g. "Native HA (RHEL)".
+_MECH_LABEL = {
+    "pacemaker-san": "PCMK",
+    "rdqm": "RDQM",
+    "native-ha": "Native HA",
+}
+_OS_LABEL = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
+
+
+def dashboard_folder_for(mechanism: str, os: str) -> str:
+    """The Grafana dashboard folder label for a HA mechanism + OS (#59): "<Mechanism>
+    (<OS>)", e.g. "Native HA (RHEL)". Fail loud on an unlabelled mechanism/os rather than
+    silently mis-foldering a board."""
+    try:
+        mech = _MECH_LABEL[mechanism]
+    except KeyError as exc:
+        raise ValueError(f"no dashboard-folder label for mechanism {mechanism!r}") from exc
+    try:
+        os_label = _OS_LABEL[os]
+    except KeyError as exc:
+        raise ValueError(f"no dashboard-folder label for os {os!r}") from exc
+    return f"{mech} ({os_label})"
+
 
 @dataclass(frozen=True)
 class QmConfig:
@@ -97,6 +122,12 @@ class Stack:
     provision: str | None
     secrets: list[str]
     alloc: dict[str, Any]
+
+    @property
+    def dashboard_folder(self) -> str:
+        """The Grafana folder this stack's dashboards live under (#59), e.g.
+        "Native HA (RHEL)" — derived from mechanism+os (see dashboard_folder_for)."""
+        return dashboard_folder_for(self.mechanism, self.os)
 
 
 def _topology() -> dict[str, Any]:

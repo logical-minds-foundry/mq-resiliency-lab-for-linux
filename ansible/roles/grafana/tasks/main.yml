@@ -30,7 +30,6 @@
   loop:
     - /etc/grafana/provisioning/datasources
     - /etc/grafana/provisioning/dashboards
-    - /var/lib/grafana/dashboards
 
 - name: provision the prometheus datasource
   ansible.builtin.template:
@@ -46,84 +45,32 @@
     mode: "0644"
   notify: restart grafana
 
-- name: deploy the rendered lab dashboard
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-status.json"
-    dest: /var/lib/grafana/dashboards/lab-status.json
-    owner: grafana
-    group: grafana
-    mode: "0644"
-  notify: restart grafana
+# Deploy the whole rendered dashboard tree exactly as mqlab laid it out (#59):
+# each stack's boards under its "<Mechanism> (<OS>)" folder, the Watcher at the
+# root. Grafana's foldersFromFilesStructure provider then mirrors that directory
+# tree into Grafana folders. The dir is reset first so a reorg (a board changing
+# folders) never leaves a stale flat copy behind for Grafana to import twice.
+- name: reset the provisioned dashboards dir so a folder reorg leaves no stale copies (#59)
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: absent
 
-- name: deploy the rendered cluster cockpit dashboard (#219)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-pcmk-cluster.json"
-    dest: /var/lib/grafana/dashboards/lab-pcmk-cluster.json
+- name: recreate the provisioned dashboards dir (#59)
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: directory
     owner: grafana
     group: grafana
-    mode: "0644"
-  notify: restart grafana
+    mode: "0755"
 
-- name: deploy the rendered Native HA cockpit dashboard (#279)
+- name: deploy the rendered dashboards, preserving the per-stack folder tree (#59)
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-nativeha-cluster.json"
-    dest: /var/lib/grafana/dashboards/lab-nativeha-cluster.json
+    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/"
+    dest: /var/lib/grafana/dashboards/
     owner: grafana
     group: grafana
     mode: "0644"
-  notify: restart grafana
-
-- name: deploy the rendered Native HA (Ubuntu) cockpit dashboard (#417)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-nativeha-ubuntu-cluster.json"
-    dest: /var/lib/grafana/dashboards/lab-nativeha-ubuntu-cluster.json
-    owner: grafana
-    group: grafana
-    mode: "0644"
-  notify: restart grafana
-
-- name: deploy the rendered RDQM cockpit dashboard (#287)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-rdqm-cluster.json"
-    dest: /var/lib/grafana/dashboards/lab-rdqm-cluster.json
-    owner: grafana
-    group: grafana
-    mode: "0644"
-  notify: restart grafana
-
-# the per-stack messaging-flow boards (#431) — one lab-messaging-<stack>.json each,
-# rendered by mqlab; copy whichever exist.
-- name: deploy the rendered messaging-flow cockpit dashboards (#431)
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
-    owner: grafana
-    group: grafana
-    mode: "0644"
-  with_fileglob:
-    - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-messaging-*.json"
-  notify: restart grafana
-
-# per-QM state boards (#489) — one lab-qm-<short>.json per app QM, rendered by
-# mqlab; copy whichever exist.
-- name: deploy the rendered per-QM state dashboards (#489)
-  ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "/var/lib/grafana/dashboards/{{ item | basename }}"
-    owner: grafana
-    group: grafana
-    mode: "0644"
-  with_fileglob:
-    - "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-qm-*.json"
-  notify: restart grafana
-
-- name: deploy the rendered Watcher dashboard — the lab-state front door (#488)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/lab-watcher.json"
-    dest: /var/lib/grafana/dashboards/lab-watcher.json
-    owner: grafana
-    group: grafana
-    mode: "0644"
+    directory_mode: "0755"
   notify: restart grafana
 
 - name: systemd drop-in dir for grafana-server

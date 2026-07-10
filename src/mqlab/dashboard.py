@@ -316,7 +316,7 @@ def render_dashboard(topo: dict[str, Any]) -> dict[str, Any]:
         panels.append(_row(f"VMs · {label}", y))
         y += 1
         # the PCMK site rows drill into the dedicated cluster cockpit (#219)
-        link = "/d/lab-pcmk-cluster" if label.startswith("PCMK") else None
+        link = "/d/lab-pcmk-ubuntu-cluster" if label.startswith("PCMK") else None
         panels.append(_up_panel(label, sel, y, link_url=link))
         panels.append(_cpu_panel(label, sel, y))
         y += 4

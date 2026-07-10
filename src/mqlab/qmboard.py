@@ -40,6 +40,7 @@ from mqlab.clusterboard import (
     _timeseries,
 )
 from mqlab.paths import repo_root, work
+from mqlab.stacks import dashboard_folder_for
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -430,14 +431,17 @@ def _lab_topology() -> dict[str, Any]:
     return data
 
 
-def qm_dashboard_path(short: str) -> Path:
-    """Where a QM's rendered board is written (gitignored build/work tree)."""
-    return work("grafana", "dashboards", f"{qm_board_uid(short)}.json")
+def qm_dashboard_path(short: str, folder: str = "") -> Path:
+    """Where a QM's rendered board is written (gitignored build/work tree). `folder` is
+    the owning stack's per-stack dashboard folder (#59); the writer passes it so the board
+    lands beside its stack's other boards. Empty `folder` writes at the root."""
+    return work("grafana", "dashboards", folder, f"{qm_board_uid(short)}.json")
 
 
 def qm_dashboard_paths_and_texts() -> list[tuple[Path, str]]:
     """Render every provisioned app QM's board from the real topology; return (path, text)
-    pairs without touching the filesystem (the pure seam the smoke test drives)."""
+    pairs without touching the filesystem (the pure seam the smoke test drives). Each board
+    lands under its stack's per-stack folder (#59)."""
     topo = _lab_topology()
     out: list[tuple[Path, str]] = []
     for name, cfg in (topo.get("stacks") or {}).items():
@@ -446,7 +450,8 @@ def qm_dashboard_paths_and_texts() -> list[tuple[Path, str]]:
             continue
         board = render_qm_board(topo, name, cfg)
         text = json.dumps(board, indent=2) + "\n"
-        out.append((qm_dashboard_path(cfg["short"]), text))
+        folder = dashboard_folder_for(cfg["mechanism"], cfg["os"])
+        out.append((qm_dashboard_path(cfg["short"], folder), text))
     return out
 
 
