@@ -57,6 +57,30 @@ add_vip() {  # $1=node $2=vip
   run "$1" "/opt/mqm/bin/rdqmint -m $QM -a -f $2 -l $iface || true"
 }
 
+# Resolve the site-A node currently running $QM (the HA primary). It floats across the
+# group and — critically on the resume path, where crtmqm is skipped (qm_exists) — is not
+# necessarily rdqm-a1. runmqsc / rdqmint config must target it or fail AMQ8146E. Bash
+# analog of the rdqm-active-node Ansible role (#582/#581). Retry briefly so a QM that is
+# mid-start right after crtmqm is not misread as absent; fail loud if none settles.
+active_a_node() {
+  local n i out
+  for i in $(seq 1 30); do
+    for n in rdqm-a1 rdqm-a2 rdqm-a3; do
+      # Capture then match in-shell (no `| grep -q`: under `set -o pipefail` grep -q
+      # closes the pipe early, SIGPIPEs ansible, and the pipeline reports failure even on
+      # a match). STATUS(Running) — with the closing paren — is unique to the active node;
+      # STATUS(Running elsewhere) is a standby and does not contain the literal.
+      out=$(ansible "$n" -b -m shell -a "/opt/mqm/bin/dspmq -m $QM -o status" 2>/dev/null || true)
+      if [[ $out == *"STATUS(Running)"* ]]; then
+        echo "$n"; return 0
+      fi
+    done
+    sleep 5
+  done
+  echo "ERROR: no site-A node (rdqm-a1/a2/a3) is running $QM" >&2
+  return 1
+}
+
 # Lab MQSC posture (listener + app channel + a persistent test queue). On HA/DR these
 # objects replicate to site B with the QM, so they are defined once on the site-A primary.
 base_mqsc() {  # $1=node
@@ -92,9 +116,10 @@ if [ "$DR" = 1 ]; then
     run_mqm rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM"  # site A = DR primary, auto-creates a2/a3
     run_mqm rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM"  # site B = DR secondary, auto-creates b2/b3
   fi
-  add_vip rdqm-a1 "$VIP"
-  add_vip rdqm-b1 "$B_VIP"
-  base_mqsc rdqm-a1
+  A_PRIMARY=$(active_a_node)  # the site-A node running the QM (not necessarily a1 on a resume)
+  add_vip "$A_PRIMARY" "$VIP"
+  add_vip rdqm-b1 "$B_VIP"    # site B is the DR secondary (QM stopped there); FIP on its group head
+  base_mqsc "$A_PRIMARY"
 else
   echo "=== HA-only (no site-B group) — coordinated create ==="
   # Secure the HA replication links with TLS (#545): -reh (this shape has no DR link).
@@ -105,8 +130,9 @@ else
     # Single `crtmqm -sx` on the site-A primary as mqm; auto-creates a2/a3.
     run_mqm rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx $REPL_TLS $QM"
   fi
-  add_vip rdqm-a1 "$VIP"
-  base_mqsc rdqm-a1
+  A_PRIMARY=$(active_a_node)  # the site-A node running the QM (not necessarily a1 on a resume)
+  add_vip "$A_PRIMARY" "$VIP"
+  base_mqsc "$A_PRIMARY"
 fi
 
 # Our-side inter-QM MQSC to the SVC counterparty (#147), only when a counterparty
@@ -117,8 +143,8 @@ if [ -n "$SVC_CONN" ]; then
   # RNAME must not be empty, else DEFINE QREMOTE(SVC.REQUEST) RNAME() is an MQSC syntax
   # error (AMQ8405I). SVC_REQ_QUEUE ({SHORT}.SVC.REQUEST) is threaded from site-rdqm.yml (#574).
   : "${SVC_REQ_QUEUE:?SVC_REQ_QUEUE (arg 5) is required when SVC_CONN is set — the QREMOTE RNAME would be empty}"
-  run rdqm-a1 "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  run "$A_PRIMARY" "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 
-run rdqm-a1 "/opt/mqm/bin/rdqmstatus -m $QM"
+run "$A_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM"
 [ "$DR" = 1 ] && run rdqm-b1 "/opt/mqm/bin/rdqmstatus -m $QM" || true
