@@ -1,10 +1,12 @@
 ---
 # TLS-enable the RDQM app queue manager ({{ qm_name }}) to parity with the pcmk and
-# Native HA arms (#410, #426). Runs once on the site-A primary; the keystore lands
-# under the QM's own data dir (/var/mqm/qmgrs/<qm> -> the DRBD-replicated volume
-# /var/mqm/vols/<qm>/qmgr/<qm>), so SSLKEYR follows the QM across HA node moves and
-# the DR cutover -- the RDQM-native equivalent of pcmk placing the keystore on the
-# shared LUN.
+# Native HA arms (#410, #426). Runs once on the active site-A node (the HA primary,
+# which floats — the caller resolves it via the rdqm-active-node role and gates this
+# with when: rdqm_is_active, #581). The keystore lands under the QM's replicated
+# DataPath ({{ rdqm_datapath }} = /var/mqm/vols/<lc-qm>/qmgr/<lc-qm>, the DRBD volume),
+# so SSLKEYR follows the QM across HA node moves and the DR cutover -- the RDQM-native
+# equivalent of pcmk placing the keystore on the shared LUN. (NOT /var/mqm/qmgrs/<qm>,
+# which does not exist on RDQM — that was the #581 bug.)
 #
 # Scope: the app-facing MQ channels only (APP.SVRCONN, MON.SVRCONN, and the inter-QM
 # SDR/RCVR to the SVC counterparty). The RDQM-internal DRBD replication link is NOT
@@ -16,7 +18,7 @@
     name: pki-distribute
   vars:
     pki_entity: "{{ qm_name }}"
-    pki_dest_dir: "/var/mqm/qmgrs/{{ qm_name }}/ssl"
+    pki_dest_dir: "{{ rdqm_datapath }}/ssl"
   # registers `pki_keyrpwd` (the keystore password, no_log) for the MQSC below.
 
 - name: "render the {{ qm_name }} TLS MQSC"

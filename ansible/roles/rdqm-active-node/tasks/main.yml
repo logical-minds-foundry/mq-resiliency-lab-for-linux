@@ -1,0 +1,60 @@
+---
+# Resolve which site-A node currently runs the RDQM app queue manager (the HA primary)
+# and that QM's replicated DataPath, for the post-create config plays (app-TLS keystore,
+# per-QM diagnostics). RDQM runs the QM on exactly ONE node at a time and that node
+# FLOATS across rdqm_a on failover/restart — so config must never assume rdqm-a1, and
+# must be written under the QM's DataPath (the DRBD-replicated volume,
+# /var/mqm/vols/<lc-qm>/qmgr/<lc-qm>), NOT /var/mqm/qmgrs/<QM>, which does not exist on
+# RDQM (#581).
+#
+# Include with `hosts: rdqm_a` and `vars: {rdqm_qm: <name>}`. Sets, on every host in the
+# play:
+#   rdqm_is_active  — bool; true on the one node running {{ rdqm_qm }}
+#   rdqm_datapath   — the QM's DataPath (derived on the active node)
+# Callers gate their include_role with `when: rdqm_is_active`: a per-host conditional
+# DOES propagate through include_role (unlike run_once), so the role runs on exactly the
+# active node.
+- name: "read local {{ rdqm_qm }} status on each site-A node"
+  ansible.builtin.command: "/opt/mqm/bin/dspmq -m {{ rdqm_qm }} -o status"
+  become: true
+  register: _rdqm_dspmq
+  changed_when: false
+  # dspmq prints STATUS(Running) on the active node and STATUS(Running elsewhere) on the
+  # standbys. Wait out any (re)start window (post-create, or after the #569 diagnostic
+  # bounce) so a mid-start STATUS(Starting) is not misread as "no primary"; a QM that is
+  # down everywhere fails loud here (not as a downstream AMQ8146E).
+  until: "'STATUS(Running' in _rdqm_dspmq.stdout"
+  retries: 30
+  delay: 5
+
+- name: "mark whether THIS node is the active {{ rdqm_qm }} instance"
+  ansible.builtin.set_fact:
+    # The literal 'STATUS(Running)' (closing paren) is unique to the active node;
+    # 'STATUS(Running elsewhere)' does not contain it.
+    rdqm_is_active: "{{ ('STATUS(Running)' in _rdqm_dspmq.stdout) | bool }}"
+
+- name: "assert exactly one site-A node runs {{ rdqm_qm }} (never silently skip config)"
+  ansible.builtin.assert:
+    that:
+      - "groups['rdqm_a'] | map('extract', hostvars, 'rdqm_is_active') | select('equalto', true) | list | length == 1"
+    fail_msg: >-
+      Expected exactly one rdqm_a node with {{ rdqm_qm }} STATUS(Running), found
+      {{ groups['rdqm_a'] | map('extract', hostvars, 'rdqm_is_active') | select('equalto', true) | list | length }};
+      RDQM HA has not settled on a single primary.
+  run_once: true
+
+- name: "derive {{ rdqm_qm }} replicated DataPath on the active node"
+  ansible.builtin.shell: |
+    set -o pipefail
+    su mqm -c "/opt/mqm/bin/dspmqinf {{ rdqm_qm }}" | awk -F= '/DataPath/{print $2; exit}'
+  args:
+    executable: /bin/bash
+  become: true
+  register: _rdqm_datapath
+  changed_when: false
+  when: rdqm_is_active
+
+- name: "record the {{ rdqm_qm }} DataPath (keystore + qm.ini live here)"
+  ansible.builtin.set_fact:
+    rdqm_datapath: "{{ _rdqm_datapath.stdout | trim }}"
+  when: rdqm_is_active
