@@ -66,6 +66,97 @@
         name: rdqm-ssh-access
         tasks_from: remove
 
+# Reconcile the RDQM replication after the coordinated create (#559). On a COLD create the
+# site-B HA group comes up in DRBD split-brain: a secondary boots with a divergent generation
+# UUID, so the handshake asks the b1 Primary to become SyncTarget ("I shall become SyncTarget,
+# but I am primary!"), the cluster-wide state change aborts, the group never reaches UpToDate,
+# and — because HA never goes healthy — the stacked DR resource (<qm>.dr) is never brought up,
+# leaving DR "Remote unavailable". The divergence is almost certainly the RDQM cold-create bug
+# tracked for the IBM report (#563); this step is the mechanized work-around that makes a cold
+# rebuild come up green, and it logs loudly (HEAL/DR-UP lines naming #559) rather than hiding it.
+# SAFE BY CONSTRUCTION: it runs immediately post-create, when the secondaries hold only fresh,
+# disposable data, and it only ever discards on a *Secondary* whose disk is not UpToDate — never
+# the Primary's authoritative copy. Idempotent: a healthy group (site A, or a re-provision) is a
+# no-op. Verified live 2026-07-11 (the manual form of these exact steps took a stuck cold rebuild
+# to HA Normal + DR Normal on both sites).
+- name: reconcile RDQM replication after the coordinated create (heal cold-create split-brain + bring up DR) (#559)
+  hosts: rdqm_a:rdqm_b
+  become: true
+  gather_facts: false
+  vars:
+    qm_res: "{{ qm_app | lower }}"
+  tasks:
+    - name: "heal any non-UpToDate HA secondary — discard local + resync from the Primary (#559)"
+      ansible.builtin.shell: |
+        set -uo pipefail
+        RES="{{ qm_res }}"
+        role=$(drbdadm role "$RES" 2>/dev/null | head -1 || true)
+        disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
+        # SAFETY: only ever heal a Secondary; NEVER discard the Primary's authoritative data.
+        [ "$role" = "Secondary" ] || { echo "SKIP $RES: role=$role (only secondaries are healed)"; exit 0; }
+        [ "$disk" != "UpToDate" ] || { echo "SKIP $RES: secondary already UpToDate"; exit 0; }
+        echo "HEAL $RES (#559 cold-create split-brain): secondary disk=$disk -> discard local, resync from Primary"
+        drbdadm disconnect "$RES" || true
+        drbdadm connect --discard-my-data "$RES" || true
+        sleep 3
+        disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
+        # Inconsistent == resync in progress (good). Any other non-UpToDate state is still
+        # stuck (e.g. Outdated where a peer's split-brain blocked the cluster-wide change) -> force it.
+        case "$disk" in
+          UpToDate|Inconsistent) : ;;
+          *) echo "HEAL $RES: still $disk after reconnect -> invalidate to force resync"; drbdadm invalidate "$RES" ;;
+        esac
+      args:
+        executable: /bin/bash
+      register: rdqm_ha_heal
+      changed_when: "'HEAL ' in rdqm_ha_heal.stdout"
+
+    - name: "bring up the stacked DR resource if the split-brain left it down (#559)"
+      ansible.builtin.shell: |
+        set -uo pipefail
+        RES="{{ qm_res }}.dr"
+        [ -f "/etc/drbd.d/$RES.res" ] || { echo "SKIP $RES: not configured on this node"; exit 0; }
+        # The stacked DR resource lives on the HA *Primary* only (the config file is present on
+        # every site node, but it can only be brought up where the base resource is Primary).
+        base_role=$(drbdadm role "{{ qm_res }}" 2>/dev/null | head -1 || true)
+        [ "$base_role" = "Primary" ] || { echo "SKIP $RES: not the HA primary here (role=$base_role)"; exit 0; }
+        drbdadm status "$RES" >/dev/null 2>&1 && { echo "SKIP $RES: DR resource already up"; exit 0; }
+        echo "DR-UP $RES (#559): DR resource configured but down -> bringing up"
+        # Retry: the DR up needs the HA cluster state to have settled after the heal above.
+        for _ in $(seq 1 12); do
+          drbdadm up "$RES" 2>/dev/null || true
+          if drbdadm status "$RES" >/dev/null 2>&1; then echo "DR-UP $RES: up"; exit 0; fi
+          sleep 5
+        done
+        echo "DR-UP $RES: FAILED to bring up after retries" >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      register: rdqm_dr_up
+      # Only the bring-up path emits "DR-UP"; both SKIP paths do not -> a healthy/re-provision run is unchanged.
+      changed_when: "'DR-UP' in rdqm_dr_up.stdout"
+
+    - name: "wait until HA + DR replication are healthy (fail loud; never leave a silent split-brain) (#559)"
+      ansible.builtin.shell: |
+        set -uo pipefail
+        RES="{{ qm_res }}"
+        role=$(drbdadm role "$RES" 2>/dev/null | head -1 || true)
+        disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
+        # Every node gates its own HA disk reaching UpToDate.
+        [ "$disk" = "UpToDate" ] || { echo "HA $RES disk=$disk (not yet UpToDate)"; exit 1; }
+        # The HA-primary additionally gates the DR resource being up (connected/syncing).
+        if [ "$role" = "Primary" ] && [ -f "/etc/drbd.d/$RES.dr.res" ]; then
+          drbdadm status "$RES.dr" >/dev/null 2>&1 || { echo "DR $RES.dr not up"; exit 1; }
+        fi
+        echo "OK $RES: HA UpToDate (role $role)"
+      args:
+        executable: /bin/bash
+      register: rdqm_repl_ready
+      changed_when: false
+      until: rdqm_repl_ready.rc == 0
+      retries: 60
+      delay: 10
+
 # Restore per-QM JSON diagnostic logging for the RDQM app QM (#569, follow-up to #562).
 # #562 stops seeding the DiagnosticMessagesTemplate on RDQM (its `crtmqm -sx` rejects the
 # template as a same-named ClusterSyslog conflict, AMQ7059E), so RDQMAPP no longer inherits
