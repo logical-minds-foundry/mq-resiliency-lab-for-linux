@@ -144,9 +144,16 @@
         disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
         # Every node gates its own HA disk reaching UpToDate.
         [ "$disk" = "UpToDate" ] || { echo "HA $RES disk=$disk (not yet UpToDate)"; exit 1; }
-        # The HA-primary additionally gates the DR resource being up (connected/syncing).
+        # The HA-primary additionally gates the DR LINK actually connecting/syncing — not just
+        # the DR resource being loaded. A resource that is up but stuck 'Connecting' (peer side
+        # down) would otherwise pass this gate and leave DR silently 'Remote unavailable' (#591).
         if [ "$role" = "Primary" ] && [ -f "/etc/drbd.d/$RES.dr.res" ]; then
           drbdadm status "$RES.dr" >/dev/null 2>&1 || { echo "DR $RES.dr not up"; exit 1; }
+          drc=$(drbdadm cstate "$RES.dr" 2>/dev/null | head -1 || true)
+          case "$drc" in
+            Connected|SyncSource|SyncTarget|PausedSync*|Verify*) : ;;  # connected or actively (re)syncing
+            *) echo "DR $RES.dr connection=$drc (not connected — peer DR resource down?)"; exit 1 ;;
+          esac
         fi
         echo "OK $RES: HA UpToDate (role $role)"
       args:
