@@ -5,3 +5,8 @@
 collections:
   - name: community.crypto
     version: ">=2.20.0"
+  # profile_tasks + timer callbacks for per-task/per-play timing in the bootstrap logs
+  # (ansible has no task timestamps by default), enabled in ansible.cfg — the timing-audit
+  # instrumentation for the ~1h16m RDQM build (#594).
+  - name: ansible.posix
+    version: ">=1.5.0"
