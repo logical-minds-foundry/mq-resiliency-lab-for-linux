@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
+import yaml
 from rich.console import Console
 
 from mqlab import buildenv, parity
@@ -133,6 +134,23 @@ def _galaxy_install_step() -> CommandStep:
     return CommandStep("ansible collections", Command(argv, cwd=repo_root()))  # noqa: S607
 
 
+def _verify_galaxy_collections() -> None:
+    """Hard post-condition on the galaxy prereq (#596): every collection declared in
+    ansible/requirements.yml must be present under the collections_path afterwards, else
+    abort loudly. The install step is a fresh-volume prerequisite and `run_steps` only
+    aborts on a step that runs and errors, so a newly-added collection could otherwise go
+    silently missing — its callback/plugins then merely WARN at load and the run proceeds
+    broken (this cost a ~76-minute instrumented rebuild when ansible.posix didn't land)."""
+    data = yaml.safe_load((repo_root() / "ansible" / "requirements.yml").read_text())
+    names = [c["name"] for c in data["collections"]]
+    root = repo_root() / "build" / "cache" / "ansible_collections"
+    missing = [n for n in names if not (root / n.replace(".", "/", 1)).is_dir()]
+    if missing:
+        raise StepFailedError(
+            "ansible collections — missing after install: " + ", ".join(missing), 1
+        )
+
+
 def _pki_ensure_step() -> CommandStep:
     _render_pki_entities()
     return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
@@ -228,6 +246,10 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
         steps.append(_pki_ensure_step())
     if steps:
         _execute("prerequisites", steps, step_mode=step)
+    if "galaxy" in kinds:
+        # Hard-fail if a required collection did not actually land (#596) — the install
+        # above can be a no-op on an existing cache when requirements.yml gains a collection.
+        _verify_galaxy_collections()
 
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-

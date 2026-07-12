@@ -393,11 +393,38 @@ def test_ensure_for_stack_provision_pulls_galaxy_mq_pki(monkeypatch, tmp_path):
     mq: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: mq.append("mq"))
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    # the real filesystem check is covered by its own tests below
+    monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: None)
     labels = _capture_execute(monkeypatch)
     cli._ensure_prereqs_for_stack(stack, _phase("provision"), step=False)
     assert mq == ["mq"]
     # galaxy + PKI run through the step runner, galaxy before PKI (PKI needs crypto)
     assert labels == ["ansible collections", "pki ensure"]
+
+
+def _write_requirements(tmp_path, *names):
+    (tmp_path / "ansible").mkdir(parents=True, exist_ok=True)
+    body = "collections:\n" + "".join(f"  - name: {n}\n" for n in names)
+    (tmp_path / "ansible" / "requirements.yml").write_text(body)
+
+
+def test_verify_galaxy_collections_passes_when_all_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _write_requirements(tmp_path, "community.crypto", "ansible.posix")
+    acol = tmp_path / "build" / "cache" / "ansible_collections"
+    for ns, nm in (("community", "crypto"), ("ansible", "posix")):
+        (acol / ns / nm).mkdir(parents=True)
+    cli._verify_galaxy_collections()  # no raise
+
+
+def test_verify_galaxy_collections_hard_fails_when_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _write_requirements(tmp_path, "community.crypto", "ansible.posix")
+    acol = tmp_path / "build" / "cache" / "ansible_collections"
+    (acol / "community" / "crypto").mkdir(parents=True)  # ansible.posix absent
+    with pytest.raises(cli.StepFailedError) as exc:
+        cli._verify_galaxy_collections()
+    assert "ansible.posix" in str(exc.value)
 
 
 def test_ensure_for_stack_observe_pulls_only_pki(monkeypatch, tmp_path):
