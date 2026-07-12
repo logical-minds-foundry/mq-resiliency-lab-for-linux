@@ -47,3 +47,22 @@ Cite the cached text as the primary source (it *is* the IBM page body), with the
 so it isn't covered by `vrg-validate`'s `src/`+`tests/` lint/type/coverage gates);
 first collection target is the scattered **TLS/SSL** topics. See the repo memory
 `ibm-docs-fetch-bypass` and the link-hygiene practice (#224).
+
+## `sample-host-resources.sh` — host CPU/I-O/memory timeline during a bootstrap (#594)
+
+The bootstrap runtime ballooned to ~1h16m and the host Cloud VM is oversubscribed
+(8 vCPU / 31 GB running 12 nested lab VMs = ~20 nested vCPU). Ansible now emits
+per-task timings (`profile_tasks`, enabled in `ansible.cfg`), but that tells us *what*
+is slow, not *why*. This sampler adds the **host resource timeline** so each slow phase
+can be classified CPU- vs I/O- vs memory-bound — the evidence for a rightsizing decision.
+
+```bash
+# launch in the background just before a rebuild; stop it after
+tools/sample-host-resources.sh 5 &        # 5s interval; log lands under build/temp/
+mqlab bootstrap rdqm-rhel
+kill %1
+```
+
+Read `wa`/`blk` high → I/O-bound; `id` low with `wa` low → CPU-bound; `memavailMB`
+approaching 0 → memory-bound. Cross the timeline against the `profile_tasks` slowest-task
+summary to find the top sinks.
