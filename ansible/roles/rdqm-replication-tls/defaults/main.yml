@@ -19,3 +19,8 @@ rdqm_repl_drbd_dir: /etc/drbd.d
 rdqm_repl_key_bits: 4096
 rdqm_repl_ca_days: 3650
 rdqm_repl_cert_days: 730
+
+# tlshd logging verbosity (#558). Non-zero so the kernel-TLS handshake daemon is never
+# silent: 0 hides all handshake/cert diagnostics (a replication-security blind spot);
+# 1 logs handshake outcomes + errors; raise (e.g. 9) for per-cert debug.
+rdqm_repl_tlshd_loglevel: 1
