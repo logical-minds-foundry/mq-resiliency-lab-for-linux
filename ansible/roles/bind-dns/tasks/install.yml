@@ -1,0 +1,23 @@
+---
+# BAKE (#602): the install-time half of the bind-dns role — the BIND9 package and
+# the authoritative-zone directory scaffolding. NO zone data and NO per-host
+# named.conf (both are per-run renders keyed by inventory_hostname — see
+# configure.yml). This is the `bind-dns-install` split the task calls for, kept as a
+# `tasks_from: install` entry point (matching the repo's mq-exporter idiom) rather
+# than a separate role dir, so the zone/config handlers stay in one role. A
+# single-host `bake` play consumes this via `tasks_from: install`.
+- name: install BIND9
+  ansible.builtin.apt:
+    name: bind9
+    state: present
+    update_cache: true
+  become: true
+
+- name: authoritative zone directory
+  ansible.builtin.file:
+    path: /etc/bind/zones
+    state: directory
+    owner: root
+    group: bind
+    mode: "0750"
+  become: true

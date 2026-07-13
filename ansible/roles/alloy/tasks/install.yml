@@ -1,0 +1,61 @@
+---
+# BAKE (#602): the install-time half of the alloy role — the alloy binary, its
+# config/data dirs, and the systemd unit. Deliberately excludes the rendered
+# config.alloy (which carries the per-run mqweb-tail toggle and the loki endpoint)
+# and the service start — those are the configure half. A single-host `bake` play
+# consumes this via `tasks_from: install`; the normal per-run path runs it as the
+# first half of main.yml.
+- name: unzip (needed to unpack the alloy release archive)
+  # ansible.builtin.package (not apt) so this works on both Debian/Ubuntu (apt) and RHEL
+  # (dnf) arms — the alloy release ships as a .zip on every arch. apt-only here silently
+  # broke logs on every RHEL arm (nativeha-rhel / rdqm-rhel / pcmk-rhel) (#279).
+  ansible.builtin.package:
+    name: unzip
+    state: present
+
+- name: download + unpack alloy
+  ansible.builtin.unarchive:
+    src: "{{ alloy_url }}"
+    dest: /tmp
+    remote_src: true
+    creates: "/tmp/{{ alloy_pkg }}"
+
+- name: install the alloy binary
+  ansible.builtin.copy:
+    src: "/tmp/{{ alloy_pkg }}"
+    dest: /usr/local/bin/alloy
+    mode: "0755"
+    remote_src: true
+
+- name: alloy config + data dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/alloy
+    - /var/lib/alloy
+
+- name: install the systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/alloy.service
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Grafana Alloy (journald -> Loki)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      # root: read the system journal without extra group wiring. Acceptable in
+      # an ephemeral, mgmt-plane-only lab.
+      User=root
+      ExecStart=/usr/local/bin/alloy run --storage.path=/var/lib/alloy /etc/alloy/config.alloy
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  # No `notify: restart alloy` here (unlike the monolithic role): the service is only
+  # started by configure.yml, AFTER config.alloy is deployed — alloy's ExecStart reads
+  # /etc/alloy/config.alloy and fails to start without it. The unit content is static,
+  # so nothing is lost on the per-run path (a config change there still notifies).

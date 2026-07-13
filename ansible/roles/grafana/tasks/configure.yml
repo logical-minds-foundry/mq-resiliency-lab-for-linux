@@ -1,0 +1,47 @@
+---
+# CONFIGURE (#602): the per-run half of the grafana role — the topology-rendered
+# dashboard tree (build/work/grafana/dashboards/, rendered per lab by mqlab) and the
+# admin-password env drop-in (a per-run SECRET, injected from the lab secret, never
+# baked). Both notify `restart grafana` so a per-run apply picks them up.
+
+# Deploy the whole rendered dashboard tree exactly as mqlab laid it out (#59):
+# each stack's boards under its "<Mechanism> (<OS>)" folder, the Watcher at the
+# root. Grafana's foldersFromFilesStructure provider then mirrors that directory
+# tree into Grafana folders. The dir is reset first so a reorg (a board changing
+# folders) never leaves a stale flat copy behind for Grafana to import twice.
+- name: reset the provisioned dashboards dir so a folder reorg leaves no stale copies (#59)
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: absent
+
+- name: recreate the provisioned dashboards dir (#59)
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+
+- name: deploy the rendered dashboards, preserving the per-stack folder tree (#59)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/"
+    dest: /var/lib/grafana/dashboards/
+    owner: grafana
+    group: grafana
+    mode: "0644"
+    directory_mode: "0755"
+  notify: restart grafana
+
+- name: grafana env drop-in — admin password (+ anonymous access in the lab, #258)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/grafana-server.service.d/admin.conf
+    mode: "0600"
+    content: |
+      [Service]
+      Environment=GF_SECURITY_ADMIN_PASSWORD={{ grafana_admin_password }}
+      {% if grafana_anonymous | bool %}
+      Environment=GF_AUTH_ANONYMOUS_ENABLED=true
+      Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
+      {% endif %}
+  notify: restart grafana
