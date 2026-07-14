@@ -860,12 +860,20 @@ def commons_down(step: _StepFlag = False) -> None:
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
-# Boxes built locally (not on Vagrant Cloud) -> their build script. build-box.sh
-# REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box add`)
-# and only does the ISO build on a truly first-ever run — ~45-90 min under TCG
-# (arm64 Mac), minutes under KVM on a native-x86 host (#276/#291/#327).
+# Boxes built locally (not on Vagrant Cloud) -> their build script. Each builder
+# REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box
+# add`) and only does the expensive work on a truly first-ever (or stale) run.
+#   * rhel/9.6-x86_64 -> build-box.sh: the base-OS builder (DVD+kickstart -> box);
+#     ~45-90 min under TCG (arm64 Mac), minutes under KVM (native x86) (#276/#291/#327).
+#   * the fat boxes -> build-fatbox.sh: provision-then-snapshot builder that bakes
+#     provisioning into the box on top of a base (the RHEL fat box's base is
+#     rhel/9.6-x86_64 above; the Ubuntu fat boxes' base is the cloud image). It is
+#     box-parameterized — mqlab invokes it with `--box <name>` (#603, epic .github#70).
 _LOCAL_BOX_BUILDERS = {
     "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
+    "mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh",
+    "obs-ubuntu2404": "lab/boxes/build-fatbox.sh",
+    "infra-ubuntu2404": "lab/boxes/build-fatbox.sh",
 }
 
 
@@ -906,26 +914,21 @@ def _guests_need_dvd(guests: list[str]) -> bool:
 def _box_build_steps(
     needed: dict[str, str], present: dict[str, str], facts: HostFacts
 ) -> list[CommandStep]:
-    # The local-built box is RHEL x86_64; build_domain_virt is the single authority
-    # for whether that build runs under KVM (native x86 host) or TCG (#327).
+    # build_domain_virt is the single authority for whether the build runs under KVM
+    # (native x86 host) or TCG (#327). The base-OS builder (build-box.sh) takes only
+    # the virt flags; the box-parameterized fat-box builder (build-fatbox.sh) also
+    # takes `--box <name>` so one script serves every fat box (#603).
     domain_type, cpu_mode = build_domain_virt(facts)
-    return [
-        CommandStep(
-            f"box {box}",
-            Command(  # noqa: S607
-                [
-                    "bash",
-                    str(repo_root() / script),
-                    "--domain-type",
-                    domain_type,
-                    "--cpu-mode",
-                    cpu_mode,
-                ]
-            ),
-        )
-        for box, script in sorted(needed.items())
-        if box not in present
-    ]
+    steps: list[CommandStep] = []
+    for box, script in sorted(needed.items()):
+        if box in present:
+            continue
+        argv = ["bash", str(repo_root() / script)]
+        if script.endswith("build-fatbox.sh"):
+            argv += ["--box", box]
+        argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
+        steps.append(CommandStep(f"box {box}", Command(argv)))  # noqa: S607
+    return steps
 
 
 def _ensure_local_boxes(guests: list[str]) -> None:
