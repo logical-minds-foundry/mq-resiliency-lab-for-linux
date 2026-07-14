@@ -84,7 +84,8 @@ def _topology() -> dict[str, Any]:
 
 
 def _commons_members() -> list[str]:
-    """Hosts of the shared commons set (commons: groups — obs_box + probe + svc + app).
+    """Hosts of the shared commons set (commons: groups — obs_box + probe + svc + app
+    + infra).
 
     Read the same way stack_members reads a stack's groups, so the commons VMs the
     vms phase must bring up come from one source (topology), not a literal.
@@ -100,6 +101,21 @@ def _commons_members() -> list[str]:
             if host not in members:
                 members.append(host)
     return members
+
+
+# Commons groups that run no MQ — infrastructure-only nodes (DNS + core services,
+# #606). They still boot in the vms phase (via _commons_members / all_vms) but carry
+# no MQ SDK, so the MQ-media (tarball) enumeration in cli must exclude their hosts:
+# their platform (infra-ubuntu2404) has no MQ tarball arch mapping by design (#634).
+_NON_MQ_COMMONS_GROUPS = frozenset({"infra"})
+
+
+def _non_mq_commons_hosts() -> set[str]:
+    """Hosts of the commons groups that run no MQ (_NON_MQ_COMMONS_GROUPS), read from
+    topology the same way _commons_members reads a group's hosts. The MQ-media
+    enumeration excludes these — infra is a DNS/core-services box, not an MQ node."""
+    all_groups: dict[str, list[str]] = _topology().get("groups") or {}
+    return {host for g in _NON_MQ_COMMONS_GROUPS for host in (all_groups.get(g) or [])}
 
 
 def all_vms(stack: Stack) -> list[str]:

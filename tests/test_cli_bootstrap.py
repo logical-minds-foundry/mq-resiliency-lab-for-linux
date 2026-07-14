@@ -494,6 +494,78 @@ def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# #634: the infra commons group runs no MQ and must be excluded from the MQ-media
+# (tarball) enumeration. Its nodes carry the infra-ubuntu2404 platform (#606), which
+# has no MQ tarball arch mapping by design — enumerating it hard-fails the prereq.
+# --------------------------------------------------------------------------- #
+# A topology where the infra commons group's hosts are repointed to infra-ubuntu2404
+# (post-#606), alongside a stack whose provision installs MQ on obs/svc/app/probe.
+INFRA_TOPO = (
+    "nodes:\n"
+    "  rdqm-a1: {nics: {net-mgmt: 10.50.0.71}}\n"
+    "  rdqm-a2: {nics: {net-mgmt: 10.50.0.72}}\n"
+    "  rdqm-a3: {nics: {net-mgmt: 10.50.0.73}}\n"
+    "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
+    "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
+    "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
+    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
+    "  infra-client: {platform: infra-ubuntu2404, nics: {net-mgmt: 10.50.0.4}}\n"
+    "  infra-svc: {platform: infra-ubuntu2404, nics: {net-mgmt: 10.50.0.5}}\n"
+    "groups:\n"
+    "  rdqm_a:  [rdqm-a1, rdqm-a2, rdqm-a3]\n"
+    "  obs_box: [obs]\n"
+    "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
+    "  infra:   [infra-client, infra-svc]\n"
+    "stacks:\n"
+    "  rdqm-rhel:\n"
+    "    mechanism: rdqm\n"
+    "    os: rhel\n"
+    "    short: RDQM\n"
+    "    cluster_group: rdqm_a\n"
+    "    groups: [rdqm_a]\n"
+    "    provision: ansible/site-rdqm.yml\n"
+    "    qm: { vip: 10.10.1.201, vip_ext: 10.60.0.11, svc_conn: 10.60.0.50 }\n"
+    "    alloc:\n"
+    "      exporter_app_port: 9159\n"
+    "      exporter_svc_port: 9158\n"
+    "      app_unit: app-rdqm\n"
+    "      svc_port: 1414\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
+    "commons:\n"
+    "  groups: [obs_box, probe, svc, app, infra]\n"
+    "  provision: ansible/site-obs.yml\n"
+)
+
+
+def _seed_infra(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(INFRA_TOPO)
+
+
+def test_commons_mq_platforms_excludes_infra(monkeypatch, tmp_path):
+    """The infra commons group is infrastructure-only (DNS/core services): its
+    infra-ubuntu2404 platform is excluded from the MQ-media enumeration, while the
+    MQ-bearing commons (obs/svc/app/probe) platform is still included."""
+    _seed_infra(monkeypatch, tmp_path)
+    plats = cli._commons_mq_platforms()
+    assert "infra-ubuntu2404" not in plats
+    assert any(p.startswith("ubuntu2404") for p in plats)
+
+
+def test_stack_mq_platforms_excludes_infra(monkeypatch, tmp_path):
+    """_stack_mq_platforms unions the commons enumeration, so excluding infra there
+    fixes the stack enumeration too (rdqm-rhel's media prereq no longer hard-fails)."""
+    _seed_infra(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("rdqm-rhel")
+    plats = cli._stack_mq_platforms(stack)
+    assert "infra-ubuntu2404" not in plats
+    assert any(p.startswith("ubuntu2404") for p in plats)
+
+
+# --------------------------------------------------------------------------- #
 # failure -> resume hint
 # --------------------------------------------------------------------------- #
 def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):
