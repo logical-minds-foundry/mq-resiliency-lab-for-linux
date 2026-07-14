@@ -1,0 +1,43 @@
+---
+# CONFIGURE (#602): the per-run half of the bind-dns role — the generated zone data
+# and the per-host named.conf.{options,local} (keyed by inventory_hostname), rendered
+# per lab by `mqlab dns render` into build/work/dns/. These cannot be baked (they are
+# topology- and host-specific), so they stay in the per-run path, then named is
+# (re)started to serve them.
+- name: install the zone files
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/bind/zones/{{ item | basename }}"
+    owner: root
+    group: bind
+    mode: "0644"
+  loop: "{{ query('fileglob', bind_dns_src + '/*.zone') }}"
+  become: true
+  notify: reload named
+
+- name: install this node's forwarders/options
+  ansible.builtin.copy:
+    src: "{{ bind_dns_src }}/named.conf.options.{{ inventory_hostname }}"
+    dest: /etc/bind/named.conf.options
+    owner: root
+    group: bind
+    mode: "0644"
+  become: true
+  notify: reload named
+
+- name: install this node's zone declarations
+  ansible.builtin.copy:
+    src: "{{ bind_dns_src }}/named.conf.local.{{ inventory_hostname }}"
+    dest: /etc/bind/named.conf.local
+    owner: root
+    group: bind
+    mode: "0644"
+  become: true
+  notify: reload named
+
+- name: BIND9 enabled and started
+  ansible.builtin.systemd:
+    name: named
+    enabled: true
+    state: started
+  become: true

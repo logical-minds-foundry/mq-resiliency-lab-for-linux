@@ -1,0 +1,60 @@
+---
+# Bake the obs-ubuntu2404 box image (#602, epic .github#70 Task 1).
+#
+# ADDITIVE FOUNDATION: installs only the image-bakeable software for the
+# observability box — the Grafana/Prometheus/Loki stack binaries + static config,
+# the fleet agents' binaries, and the (slow, cgo) mq_prometheus exporter build. It
+# drops NO topology-rendered scrape targets or dashboards and bakes NO admin-password
+# secret; those stay in the per-run (configure) path (site-obs.yml et al.), which this
+# playbook does not touch. Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-obs.yml
+#
+# Full proof (MQ media for the exporter's cgo SDK) rides the actual box build later.
+#
+# See docs/development/box-bake-manifest.md for the authoritative classification.
+- name: Bake obs-ubuntu2404 (install-only; no rendered targets/dashboards, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # Skip the per-run TLS ops keystore (pki-distribute) inside the mq-exporter build;
+    # the exporter binary + MQ SDK are baked, the keystore is dropped per-run.
+    mq_exporter_tls: false
+  tasks:
+    # Fleet agents' binaries (same as every box). node-exporter is all-install;
+    # alloy is split → install half only.
+    - name: node metrics agent (node-exporter, full role — static config)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install
+
+    # The obs stack. loki is all-install (static config → full role). prometheus and
+    # grafana are split: bake only their install half (binaries/package + STATIC
+    # config), never the per-run topology render (prometheus targets, grafana
+    # dashboards) nor grafana's admin-password secret drop-in.
+    - name: loki + logcli (full role — static config)
+      ansible.builtin.include_role:
+        name: loki
+
+    - name: prometheus (install half — binary + static prometheus.yml + rules + unit)
+      ansible.builtin.include_role:
+        name: prometheus
+        tasks_from: install
+
+    - name: grafana (install half — package + static datasource/provider + service)
+      ansible.builtin.include_role:
+        name: grafana
+        tasks_from: install
+
+    # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
+    # toolchain — exactly the work worth baking once. This is Ubuntu-only (it pulls
+    # the full MQ via the Ubuntu-deb mq-install role and apt golang), so it lives on
+    # the obs/probe box, NOT the RHEL rdqm box (verified #602). The per-instance
+    # exporter units + TLS CCDT/keystore stay per-run (site-obs.yml instance loop).
+    - name: build mq_prometheus (+ MQ SDK for the cgo build)
+      ansible.builtin.include_role:
+        name: mq-exporter
+        tasks_from: build

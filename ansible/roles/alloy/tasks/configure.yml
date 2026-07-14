@@ -1,0 +1,18 @@
+---
+# CONFIGURE (#602): the per-run half of the alloy role — the rendered config.alloy
+# (it carries the per-QM-node mqweb-tail toggle, #282, and the loki push endpoint)
+# and the service start. config.alloy must exist before alloy can run, so the enable
+# + start lives here, not in the bakeable install half.
+- name: deploy alloy config (journald -> loki)
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    mode: "0644"
+  notify: restart alloy
+
+- name: enable + start alloy
+  ansible.builtin.systemd:
+    name: alloy
+    enabled: true
+    state: started
+    daemon_reload: true

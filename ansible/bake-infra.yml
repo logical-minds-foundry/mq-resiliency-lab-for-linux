@@ -1,0 +1,32 @@
+---
+# Bake the infra-ubuntu2404 box image (#602, epic .github#70 Task 1).
+#
+# ADDITIVE FOUNDATION: installs only the image-bakeable software for the infra box —
+# BIND9 (package + zone-dir scaffolding) and the fleet agents' binaries. It drops NO
+# zone data and NO per-host named.conf (both are per-run renders keyed by hostname);
+# those stay in the per-run (configure) path (site-dns.yml), which this playbook does
+# not touch. Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-infra.yml
+#
+# See docs/development/box-bake-manifest.md for the authoritative classification.
+- name: Bake infra-ubuntu2404 (install-only; no zones, no per-host named.conf)
+  hosts: bake
+  become: true
+  tasks:
+    # bind-dns is the one role with a real bake/configure SPLIT (it is keyed by
+    # inventory_hostname for its per-host named.conf, which breaks a lone bake host).
+    # Bake only its install half: bind9 package + /etc/bind/zones scaffolding.
+    - name: BIND9 install half only (package + zone-dir scaffolding)
+      ansible.builtin.include_role:
+        name: bind-dns
+        tasks_from: install
+
+    # Fleet agents' binaries. node-exporter is all-install; alloy install half only.
+    - name: node metrics agent (node-exporter, full role — static config)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install

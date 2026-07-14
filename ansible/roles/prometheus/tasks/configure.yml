@@ -1,0 +1,24 @@
+---
+# CONFIGURE (#602): the per-run half of the prometheus role — the topology-rendered
+# scrape targets. These are rendered per lab from topology (`mqlab obs targets`) into
+# build/work/prometheus/targets/, so they are NOT bakeable into an image and stay in
+# the per-run path. A `restart prometheus` picks them up (file_sd would also poll).
+- name: deploy the topology-rendered node targets
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/work/prometheus/targets/node.json"
+    dest: /etc/prometheus/targets/node.json
+    owner: prometheus
+    group: prometheus
+    mode: "0644"
+  notify: restart prometheus
+
+# The ibmmq file_sd list — one exporter pair per stack on the alloc ports (#423),
+# rendered per-stack from topology (mqlab obs targets).
+- name: deploy the topology-rendered ibmmq targets
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../build/work/prometheus/targets/ibmmq.json"
+    dest: /etc/prometheus/targets/ibmmq.json
+    owner: prometheus
+    group: prometheus
+    mode: "0644"
+  notify: restart prometheus

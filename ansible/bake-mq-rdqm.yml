@@ -1,0 +1,52 @@
+---
+# Bake the mq-rdqm-rhel9 box image (#602, epic .github#70 Task 1).
+#
+# ADDITIVE FOUNDATION: this installs only the image-bakeable software for the RDQM
+# RHEL 9 box — the slow, per-run-invariant install work that a golden image should
+# carry. It creates NO queue managers, forms NO cluster, drops NO lab config, and
+# holds NO secrets; all of that stays in the per-run (configure) path (site-rdqm.yml
+# et al.), which this playbook does not touch. Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-mq-rdqm.yml
+#
+# Full proof of correctness (MQ media + install DVD present) rides the actual box
+# build in a later task; here the bake is structurally single-host and coupling-free.
+#
+# See docs/development/box-bake-manifest.md for the authoritative per-role
+# bake-vs-configure classification and the rationale for every include below.
+- name: Bake mq-rdqm-rhel9 (install-only; no lab config, no QMs, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # No TLS keystore work at bake — pki-distribute is a per-run/secret concern.
+    # (Belt-and-braces: nothing in this play triggers pki, but keep it explicit.)
+    mq_exporter_tls: false
+  tasks:
+    # `acl` for unprivileged become — the _rdqm-cluster-ha.yml prerequisite, hoisted
+    # to bake (coupling-free, dnf on RHEL). NOTE: RDQM does NOT use rhel-ha-repo —
+    # its Pacemaker/DRBD stack comes from the MQ Advanced tar's PreReqs (rdqm-install),
+    # not the HighAvailability repo (that repo is the pcmk-rhel arm's, verified #602).
+    - name: acl package (unprivileged become prereq)
+      ansible.builtin.dnf:
+        name: acl
+        state: present
+
+    # THE big install: MQ server set + SDK + samples + web, plus the bundled
+    # LINBIT/DRBD + Pacemaker stack and MQSeriesRDQM, in one pre-QM pass. Also seeds
+    # the #282/#569 journald diagnostic drop-in (mq-diag-logging system, journald-only
+    # on RDQM) as its last step — the "DiagnosticMessages default" baked into the image.
+    # Coupling-free (no run_once/delegate/groups); depends on the install DVD + MQ media.
+    - name: MQ + RDQM (DRBD/Pacemaker) install + journald diagnostic seed
+      ansible.builtin.include_role:
+        name: rdqm-install
+
+    # Fleet observability agents' binaries — baked so the observe phase does not pay
+    # the download/unpack cost per run. node-exporter is all-install (static config);
+    # alloy is split, so only its install half (binary + unit) is baked here.
+    - name: node metrics agent (node-exporter, full role — static config)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install
