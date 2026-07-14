@@ -411,3 +411,73 @@ def test_teardown_no_tty_under_step_exits_2(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel", "--step"])
 
     assert result.exit_code == 2
+
+
+# --------------------------------------------------------------------------- #
+# #636: teardown forgets Vagrant's per-machine metadata so a stale box_meta
+# cannot shadow the fat box on the next `vagrant up`.
+# --------------------------------------------------------------------------- #
+def _make_machine_dir(tmp_path, guest: str):
+    """Create a fake Vagrant per-machine data dir (with a box_meta) for `guest`."""
+    d = tmp_path / "build" / "state" / "vagrant" / "machines" / guest / "libvirt"
+    d.mkdir(parents=True)
+    (d / "box_meta").write_text('{"name":"cloud-image/ubuntu-24.04"}')
+    return d
+
+
+def test_vagrant_machine_dir_points_under_shared_state(monkeypatch, tmp_path):
+    """_vagrant_machine_dir resolves to build/state/vagrant/machines/<guest>."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    assert cli._vagrant_machine_dir("rdqm-a1") == (
+        tmp_path / "build" / "state" / "vagrant" / "machines" / "rdqm-a1"
+    )
+
+
+def test_forget_machine_step_removes_the_machine_dir(monkeypatch, tmp_path):
+    """_forget_machine_step builds an `rm -rf <machine dir>` command."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    step = cli._forget_machine_step("rdqm-a1")
+    machine_dir = str(tmp_path / "build" / "state" / "vagrant" / "machines" / "rdqm-a1")
+    assert step.command.argv == ["rm", "-rf", machine_dir]
+    assert step.label == "rdqm-a1 forget vagrant machine"
+
+
+def test_plan_destroy_forgets_metadata_for_running_guest(monkeypatch, tmp_path):
+    """A running guest whose metadata survives gets force-off + undefine + forget."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _make_machine_dir(tmp_path, "rdqm-a1")
+    steps, notes = cli._plan_destroy(["rdqm-a1"], {"lab_rdqm-a1": "running"})
+    assert [s.label for s in steps] == [
+        "rdqm-a1 force-off",
+        "rdqm-a1 undefine",
+        "rdqm-a1 forget vagrant machine",
+    ]
+    assert notes == []
+
+
+def test_plan_destroy_forgets_metadata_for_shutoff_guest(monkeypatch, tmp_path):
+    """A shut-off guest is undefined directly, then its metadata is forgotten."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _make_machine_dir(tmp_path, "rdqm-a1")
+    steps, _ = cli._plan_destroy(["rdqm-a1"], {"lab_rdqm-a1": "shut off"})
+    assert [s.label for s in steps] == [
+        "rdqm-a1 undefine",
+        "rdqm-a1 forget vagrant machine",
+    ]
+
+
+def test_plan_destroy_forgets_stale_metadata_of_absent_domain(monkeypatch, tmp_path):
+    """The #636 bug scenario: the domain is already gone but its box_meta lingers.
+    teardown must still forget it (a note AND a forget step, no destroy steps)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _make_machine_dir(tmp_path, "rdqm-a1")
+    steps, notes = cli._plan_destroy(["rdqm-a1"], {})
+    assert [s.label for s in steps] == ["rdqm-a1 forget vagrant machine"]
+    assert notes == ["rdqm-a1: already gone"]
+
+
+def test_plan_destroy_no_forget_step_when_no_metadata(monkeypatch, tmp_path):
+    """A running guest with no surviving metadata gets no forget step (quiet path)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    steps, _ = cli._plan_destroy(["rdqm-a1"], {"lab_rdqm-a1": "running"})
+    assert [s.label for s in steps] == ["rdqm-a1 force-off", "rdqm-a1 undefine"]
