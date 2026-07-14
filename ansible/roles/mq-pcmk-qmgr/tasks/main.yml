@@ -148,9 +148,12 @@
 
     - name: refresh the authorization service
       ansible.builtin.shell: |
+        set -o pipefail
         su mqm -c 'strmqm {{ qm_name }}' || true
         printf 'REFRESH SECURITY TYPE(AUTHSERV)\n' | su mqm -c 'runmqsc {{ qm_name }}'
         su mqm -c 'endmqm -w {{ qm_name }}'
+      args:
+        executable: /bin/bash
       run_once: true
       changed_when: true
 
