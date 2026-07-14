@@ -991,6 +991,26 @@ def _undefine_step(g: str) -> CommandStep:
     return CommandStep(f"{g} undefine", cmd)
 
 
+def _vagrant_machine_dir(g: str) -> Path:
+    """Vagrant's per-machine state dir for guest `g` under the shared #355 dotfile."""
+    return state("vagrant", "machines", g)
+
+
+def _forget_machine_step(g: str) -> CommandStep:
+    # Delete Vagrant's per-machine metadata (box_meta + id + …) after the domain is
+    # gone. teardown removes the libvirt domain with `virsh undefine`, but that leaves
+    # Vagrant's data dir untouched — and its box_meta pins the guest to the box it was
+    # FIRST created with. On the next `vagrant up`, Vagrant core reloads box_meta over
+    # the Vagrantfile's box (vagrant/vagrantfile.rb: config.vm.box = box_meta["name"]),
+    # so a guest first stood up on a BASE box reboots from that base box forever —
+    # never the baked fat box the resolved topology now assigns. Its stale-box fallback
+    # only fires when the referenced box is GONE, and the base box is still registered.
+    # Forgetting the metadata makes the guest brand-new so `vagrant up` reads the box
+    # from the Vagrantfile (#636, epic .github#70).
+    cmd = Command(["rm", "-rf", str(_vagrant_machine_dir(g))])  # noqa: S607
+    return CommandStep(f"{g} forget vagrant machine", cmd)
+
+
 # State-aware destroy planner (#99): given the live state, act only where needed and
 # emit advisory notes for the rest. Idempotency = looking before you leap. (The
 # create/up/down planners retired with the vm lifecycle commands in #350; bootstrap's
@@ -1007,6 +1027,12 @@ def _plan_destroy(guests: list[str], states: dict[str, str]) -> tuple[list[Comma
             steps.extend([_forceoff_step(g), _undefine_step(g)])
         else:
             steps.append(_undefine_step(g))  # shut off: remove directly
+        # Forget Vagrant's per-machine metadata whenever it survives on disk — even for
+        # an already-gone domain — so a stale box_meta cannot shadow the fat box on the
+        # next `vagrant up` (#636). Guarded on existence to stay quiet when there is
+        # nothing to clean (a genuinely fresh guest).
+        if _vagrant_machine_dir(g).exists():
+            steps.append(_forget_machine_step(g))
     return steps, notes
 
 
