@@ -39,7 +39,14 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
-from mqlab.phases import PHASES, _commons_members, all_vms, build_states, first_unsatisfied
+from mqlab.phases import (
+    PHASES,
+    _commons_members,
+    _non_mq_commons_hosts,
+    all_vms,
+    build_states,
+    first_unsatisfied,
+)
 from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
 from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
@@ -158,9 +165,17 @@ def _pki_ensure_step() -> CommandStep:
 
 def _commons_mq_platforms() -> set[str]:
     """Distinct MQ guest platforms among the commons VMs (svc/app run MQ; the probe
-    runs the MQ exporters). Host-resolved via lab_guests (native-preferred, #276)."""
+    runs the MQ exporters). Host-resolved via lab_guests (native-preferred, #276).
+
+    Excludes the infrastructure-only commons groups (_non_mq_commons_hosts, #634):
+    infra is a DNS/core-services box that runs no MQ, so its platform carries no MQ
+    tarball arch mapping — enumerating it would hard-fail the media prereq. The vms
+    phase still boots those VMs (via _commons_members); only the media enum skips them.
+    """
     platforms = lab_guests()
-    return {platforms[host] for host in _commons_members() if host in platforms}
+    excluded = _non_mq_commons_hosts()
+    mq_hosts = [h for h in _commons_members() if h in platforms and h not in excluded]
+    return {platforms[h] for h in mq_hosts}
 
 
 def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
