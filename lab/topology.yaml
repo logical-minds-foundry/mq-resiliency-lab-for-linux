@@ -32,6 +32,16 @@ boxes:
     box: mq-rdqm-rhel9
     arch: x86_64
     dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
+  # The fat obs box (#605, epic .github#70): the cloud-image/ubuntu-24.04 base with the
+  # observability stack (prometheus/grafana/loki binaries + node-exporter + alloy) and the
+  # slow cgo mq_prometheus exporter build + MQ SDK BAKED IN (lab/boxes/build-fatbox.sh
+  # --box obs-ubuntu2404). The obs node boots this instead of the host-resolved Ubuntu
+  # platform so a bootstrap skips the stack install; the per-run path only renders the
+  # topology targets/dashboards (site-obs.yml, configure halves). x86_64 because the box
+  # is a baked x86 artifact (no DVD — Ubuntu registers online).
+  obs-ubuntu2404:
+    box: obs-ubuntu2404
+    arch: x86_64
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -55,6 +65,7 @@ nodes:
   # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters, plus
   # net-ext to reach the SVC counterparty QM across the inter-business WAN (#182). ---
   obs:
+    platform: obs-ubuntu2404  # boot the baked obs stack (#605); NICs/resources unchanged
     cpus: 2
     memory: 4096
     nics: { net-mgmt: 10.50.0.2 }

@@ -191,6 +191,16 @@ if [ "$BASE_KIND" = rhel ]; then
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 
+# The obs bake's mq-exporter build pulls the full MQ (client libs + SDK for the cgo build)
+# via the Ubuntu mq-install role, which — like rdqm-install — reads its tarball from
+# mq_media_dir. Point it at the host-durable main-worktree cache too (the worktree's build/
+# is empty). Ubuntu registers online, so no DVD is attached. (#605)
+if [ "$BAKE" = obs ]; then
+  ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz >/dev/null 2>&1 \
+    || { echo "ERROR: UbuntuLinuxX64 MQ media not found under $MAIN_ROOT/build/cache/mq for the obs bake" >&2; exit 1; }
+  BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
+fi
+
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
 BUILD_XML="$(mktemp)"

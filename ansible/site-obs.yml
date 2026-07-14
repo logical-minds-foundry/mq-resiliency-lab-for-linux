@@ -1,12 +1,46 @@
 # Observability pair (#103). Run via `mqlab obs up`, or directly:
 #   ansible-playbook site-obs.yml
-- hosts: obs_box:probe
+#
+# The obs node boots the baked obs-ubuntu2404 box (#605, epic .github#70); mon-probe does
+# NOT (host-resolved Ubuntu platform). So the two are split: probe runs the FULL install,
+# obs runs only the per-run configure halves of the baked roles.
+
+# probe (mon-probe) is un-baked — full node-exporter + alloy install.
+- hosts: probe
   become: true
   roles: [node-exporter, alloy]
 
+# obs is baked (obs-ubuntu2404, #605): node-exporter + loki are baked WHOLE (static config
+# → nothing per-run, skipped), and alloy/prometheus/grafana bake their install half, so
+# per-run we run ONLY their configure halves — alloy's rendered config.alloy + start,
+# prometheus' topology-rendered scrape targets, grafana's rendered dashboard tree + the
+# admin-password secret drop-in. The binaries/package + static config are all baked.
 - hosts: obs_box
   become: true
-  roles: [prometheus, grafana, loki]
+  tasks:
+    # Base-OS refresh at instance-build (spec §4.5.1) — the Ubuntu analogue of #604's dnf
+    # update: a frozen box may miss base-OS security updates baked weeks ago. Normally a
+    # near no-op against an already-current mirror. noqa package-latest: a base-OS refresh
+    # is deliberately a full upgrade — that is the whole point of the instance-build update.
+    - name: base-OS refresh at instance-build (frozen box may ship stale packages)  # noqa: package-latest
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+
+    - name: alloy configure (per-run config.alloy + start)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: configure
+
+    - name: prometheus configure (per-run topology scrape targets)
+      ansible.builtin.include_role:
+        name: prometheus
+        tasks_from: configure
+
+    - name: grafana configure (per-run dashboard tree + admin-password secret)
+      ansible.builtin.include_role:
+        name: grafana
+        tasks_from: configure
 
 # MQ-service exporters on the probe: client-mode mq_prometheus, one app + one svc
 # instance PER STACK (#423), each on the stack's alloc port and scraped by Prometheus
