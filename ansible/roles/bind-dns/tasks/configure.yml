@@ -5,21 +5,9 @@
 # topology- and host-specific), so they stay in the per-run path, then named is
 # (re)started to serve them.
 
-# Base-OS refresh at instance-build (#606, Ubuntu analogue of #604's dnf-update per
-# spec §4.5.1): the infra-ubuntu2404 box freezes its apt package set at bake time, so
-# refresh it on first boot to pick up security updates a frozen image would otherwise
-# miss. Unlike the RDQM box there is NO kernel-matched kmod to protect (bind9 /
-# node-exporter / alloy are all userspace), so nothing is held back. On a bare Ubuntu
-# node (un-baked main.yml path) this is a harmless up-front refresh; idempotent either
-# way (changed only when packages actually move).
-# noqa package-latest: a base-OS refresh is deliberately an unqualified upgrade — that
-# is the whole point of the instance-build update.
-- name: base-OS refresh at instance-build (apt update + upgrade)  # noqa: package-latest
-  ansible.builtin.apt:
-    update_cache: true
-    upgrade: dist
-  become: true
-
+# NOTE (#639): the instance-build base-OS refresh (apt update + upgrade:dist, spec §4.5.1)
+# was removed — a blanket upgrade fights the pinned baked stack. OS currency now comes from
+# rebuilding the box, not updating at boot.
 - name: install the zone files
   ansible.builtin.copy:
     src: "{{ item }}"

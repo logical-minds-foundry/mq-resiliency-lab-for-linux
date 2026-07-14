@@ -18,15 +18,9 @@
 - hosts: obs_box
   become: true
   tasks:
-    # Base-OS refresh at instance-build (spec §4.5.1) — the Ubuntu analogue of #604's dnf
-    # update: a frozen box may miss base-OS security updates baked weeks ago. Normally a
-    # near no-op against an already-current mirror. noqa package-latest: a base-OS refresh
-    # is deliberately a full upgrade — that is the whole point of the instance-build update.
-    - name: base-OS refresh at instance-build (frozen box may ship stale packages)  # noqa: package-latest
-      ansible.builtin.apt:
-        update_cache: true
-        upgrade: dist
-
+    # NOTE (#639): the instance-build base-OS refresh (apt update + upgrade:dist, spec
+    # §4.5.1) was removed — a blanket upgrade fights the pinned baked stack. OS currency
+    # now comes from rebuilding the box, not updating at boot.
     - name: alloy configure (per-run config.alloy + start)
       ansible.builtin.include_role:
         name: alloy
