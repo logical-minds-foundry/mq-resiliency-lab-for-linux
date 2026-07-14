@@ -37,6 +37,12 @@ def test_tarball_name_maps_version_and_arch():
         m.tarball_name("9.4.5.0", "rhel96-x86_64")
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
+    # The fat RDQM box platform (#604) takes the same LinuxX64 tarball as rhel96-x86_64,
+    # so the rdqm_a/rdqm_b nodes repointed at it still resolve their MQ media.
+    assert (
+        m.tarball_name("9.4.5.0", "mq-rdqm-rhel9")
+        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    )
 
 
 def test_tarball_name_unknown_platform_raises():

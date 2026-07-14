@@ -1,0 +1,56 @@
+# RDQM install — PER-RUN (configure) half (#604, epic .github#70). Everything keyed to
+# the specific lab instance, so it runs at bootstrap even on the baked mq-rdqm-rhel9 box
+# (which already carries the install half). Three concerns:
+#   1. base-OS refresh at instance-build (spec §4.5.1) — so a frozen box does not ship
+#      stale packages;
+#   2. load the DRBD kernel module for this boot;
+#   3. build the drbdpool VG on THIS instance's fresh extra disk (/dev/vdb) — the baked
+#      box's VG lived on the throwaway build disk and is gone, so it must be (re)created
+#      here on every instance.
+#
+# Ensure the DVD dnf repo is mounted first: on a baked box the fstab entry + repo file are
+# baked, but the mount may not be up yet this boot; on a fresh rhel/9.6 box install.yml
+# already mounted it. Idempotent either way.
+- name: ensure the install DVD is mounted (offline dnf source)
+  ansible.builtin.shell: |
+    set -e
+    mkdir -p /media/rhel
+    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro,nofail 0 0' >> /etc/fstab
+    mountpoint -q /media/rhel || mount /media/rhel
+  become: true
+  changed_when: false
+
+# Base-OS update at instance-build (spec §4.5.1): refresh the frozen box from the DVD repo.
+# EXCLUDE the kernel: RDQM's kmod-drbd is compiled for the exact running kernel (install.yml
+# picks the matching kmod), so a kernel bump would break the DRBD module — IBM requires a
+# matching kmod-drbd for any kernel change. The offline DVD is the same GA content the box
+# was baked from, so this is normally a no-op; the hook exists so a refreshed repo/DVD can
+# deliver security updates without a kernel-vs-kmod mismatch.
+# noqa package-latest: a base-OS refresh is deliberately `state: latest` on everything
+# (bar the kernel) — that is the whole point of the instance-build update (spec §4.5.1).
+- name: base-OS update at instance-build (kernel held back to preserve the drbd kmod match)  # noqa: package-latest
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    exclude: "kernel*"
+  become: true
+
+- name: drbd module loads against this kernel
+  ansible.builtin.command: modprobe drbd
+  become: true
+  changed_when: false
+
+# Idempotence by vgs probe, NOT a /dev/drbdpool creates-guard: that path
+# only exists while the VG has LVs, so it vanishes when QMs are deleted
+# and the task re-fires onto an existing PV.
+- name: drbdpool volume group on the extra disk
+  ansible.builtin.shell: |
+    set -e
+    if ! vgs drbdpool >/dev/null 2>&1; then
+      pvcreate /dev/vdb
+      vgcreate drbdpool /dev/vdb
+      echo VG-CREATED
+    fi
+  register: drbdpool_vg
+  changed_when: "'VG-CREATED' in drbdpool_vg.stdout"
+  become: true

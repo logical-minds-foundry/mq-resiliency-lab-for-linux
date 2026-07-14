@@ -55,11 +55,13 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# --box selects the base box + arch; the bake playbook is derived (ansible/bake-<box>.yml).
+# --box selects the base box + arch + the box's bake playbook (ansible/bake-<BAKE>.yml).
+# The playbook stem (#602: bake-mq-rdqm / bake-obs / bake-infra) is shorter than the box
+# name, so it is mapped explicitly rather than derived from $BOX.
 case "$BOX" in
-  mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64" ;;
-  obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04" ;;
-  infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04" ;;
+  mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64";        BAKE=mq-rdqm ;;
+  obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=obs ;;
+  infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac
@@ -75,11 +77,15 @@ esac
 # Cache lives on the HOST-DURABLE main-worktree build/ so it survives base-VM
 # rebuilds (#57). git-common-dir points at the main repo's .git from any
 # worktree; its parent is the main worktree root. LAB_BOX_CACHE_DIR overrides it.
+# MAIN_ROOT is the host-durable main-worktree root (git-common-dir's parent from any
+# worktree). The box cache lives under it AND so do the bake inputs the BUILD path needs
+# (the MQ media + the install DVD) — a feature worktree's own build/ is empty, so the bake
+# must source them from here, not from the worktree the playbook runs in (#604).
+common_dir="$(git rev-parse --git-common-dir)"
+MAIN_ROOT="$(cd "$(dirname "$common_dir")" && pwd)"
 if [ -n "${LAB_BOX_CACHE_DIR:-}" ]; then
   CACHE_DIR="$LAB_BOX_CACHE_DIR"
 else
-  common_dir="$(git rev-parse --git-common-dir)"
-  MAIN_ROOT="$(cd "$(dirname "$common_dir")" && pwd)"
   CACHE_DIR="$MAIN_ROOT/build/state/boxes"
 fi
 mkdir -p "$CACHE_DIR"
@@ -129,21 +135,17 @@ if [ "$action" = REUSE ]; then
   exit 0
 fi
 
-# --- Expensive path (BUILD / FORCE-BUILD): boot base -> bake -> snapshot. ---
-# Self-contained provision-then-snapshot. It references ansible/bake-<box>.yml +
-# ansible/inventory/bake-host.ini (produced by #602). End-to-end box correctness
-# — the domain boots, the bake converges, the snapshot registers — is exercised
-# and hardened in #604, not here; this task ships the recipe and its cache/
-# staleness decision surface.
-BAKE_PLAYBOOK="../../ansible/bake-${BOX}.yml"
-BAKE_INVENTORY="../../ansible/inventory/bake-host.ini"
-for f in "$BAKE_PLAYBOOK" "$BAKE_INVENTORY"; do
-  test -f "$f" || { echo "ERROR: bake input not found: $f (produced by #602)" >&2; exit 1; }
-done
+# --- Expensive path (BUILD / FORCE-BUILD): boot the base box, run the box's bake playbook
+#     against it OVER SSH, then snapshot the result into the CACHE (#604 hardens this path).
+BAKE_PLAYBOOK="../../ansible/bake-${BAKE}.yml"
+test -f "$BAKE_PLAYBOOK" \
+  || { echo "ERROR: bake playbook not found: $BAKE_PLAYBOOK (produced by #602)" >&2; exit 1; }
 
 BUILD_DOM="fatbox-${BOX}-build"
-IMG="/var/lib/libvirt/images/${BUILD_DOM}.qcow2"
 POOL_IMG="/var/lib/libvirt/images"
+IMG="${POOL_IMG}/${BUILD_DOM}.qcow2"
+CONSOLE="${POOL_IMG}/${BUILD_DOM}-console.log"
+VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
 
 # 1. Ensure the base box is present: the RHEL base is itself locally built
 #    (rhel96/build-box.sh); the Ubuntu base comes from Vagrant Cloud (idempotent
@@ -154,18 +156,43 @@ else
   vagrant box list | grep -q "^${BASE_BOX} " || vagrant box add "$BASE_BOX"
 fi
 
-# 2. Resolve the base box's disk image (the vagrant-libvirt box layout) and cut a
-#    qcow2 overlay so the bake mutates scratch, never the shared base image.
-BASE_DIR="$HOME/.vagrant.d/boxes/$(echo "$BASE_BOX" | tr '/' '-VAGRANTSLASH-')"
+# 2. Resolve the base box's disk image and COPY it into the pool as the transient build
+#    disk. A full copy (not a backing-file overlay) keeps qemu off the home-dir base image
+#    — libvirt's dynamic ownership + per-domain AppArmor only cover pool paths — and is
+#    itself scratch: the bake mutates the copy, the shared base box is untouched.
+BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
 BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
 test -n "$BASE_IMG" || { echo "ERROR: base box image not found under $BASE_DIR" >&2; exit 1; }
 ../scripts/net-up.sh vagrant-libvirt
 virsh -c qemu:///system destroy "$BUILD_DOM" 2>/dev/null || true
 virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true
-sudo qemu-img create -f qcow2 -F qcow2 -b "$BASE_IMG" "$IMG"
+sudo rm -f "$IMG"
+sudo cp "$BASE_IMG" "$IMG"
 
-# 3. Define + boot a transient build domain over the overlay (same virt knobs the
-#    lab uses), then run the box's bake playbook against it.
+# 3. RHEL bakes need the install DVD attached as a cdrom: rdqm-install builds its offline
+#    dnf repo from it (BaseOS+AppStream) to resolve the MQ rpms' base-OS deps. Stage it into
+#    the pool (symlink/copy per source fs) and attach on the sata bus (q35 has no IDE),
+#    mirroring the lab Vagrantfile + rhel96 build-domain. The bake runs the WORKTREE's
+#    playbook (whose build/ is empty), so point the MQ media at the host-durable
+#    main-worktree cache (mq_media_dir role default, #604). Ubuntu fat boxes attach no DVD.
+CDROM_XML=""
+BAKE_EXTRA_VARS=()
+if [ "$BASE_KIND" = rhel ]; then
+  DVD_SRC="$MAIN_ROOT/build/state/rhel-9.6-x86_64-dvd.iso"
+  test -f "$DVD_SRC" || { echo "ERROR: install DVD not found: $DVD_SRC" >&2; exit 1; }
+  DVD_POOL="${POOL_IMG}/rhel-9.6-x86_64-dvd.iso"
+  ../scripts/stage-iso-into-pool.sh "$DVD_SRC" "$DVD_POOL"
+  CDROM_XML="<disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='${DVD_POOL}'/>
+      <target dev='sda' bus='sata'/>
+      <readonly/>
+    </disk>"
+  BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
+fi
+
+# 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
+#    `virsh shutdown` powers it off cleanly).
 BUILD_XML="$(mktemp)"
 cat > "$BUILD_XML" <<XML
 <domain type='${DOMAIN_TYPE}'>
@@ -173,23 +200,26 @@ cat > "$BUILD_XML" <<XML
   <memory unit='MiB'>2048</memory>
   <vcpu>2</vcpu>
   <os><type arch='x86_64' machine='q35'>hvm</type></os>
+  <features><acpi/></features>
   <cpu mode='${CPU_MODE}'/>
+  <on_poweroff>destroy</on_poweroff>
   <devices>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
       <source file='${IMG}'/>
       <target dev='vda' bus='virtio'/>
     </disk>
+    ${CDROM_XML}
     <interface type='network'>
       <source network='vagrant-libvirt'/>
       <model type='virtio'/>
     </interface>
     <serial type='file'>
-      <source path='${POOL_IMG}/${BUILD_DOM}-console.log'/>
+      <source path='${CONSOLE}'/>
       <target port='0'/>
     </serial>
     <console type='file'>
-      <source path='${POOL_IMG}/${BUILD_DOM}-console.log'/>
+      <source path='${CONSOLE}'/>
       <target type='serial' port='0'/>
     </console>
   </devices>
@@ -197,10 +227,51 @@ cat > "$BUILD_XML" <<XML
 XML
 virsh -c qemu:///system define "$BUILD_XML"
 virsh -c qemu:///system start "$BUILD_DOM"
-ansible-playbook -i "$BAKE_INVENTORY" "$BAKE_PLAYBOOK"
 
-# 4. Power off (wait for shut off), then package the overlay into the CACHE. A
-#    compressed convert flattens the base+overlay chain and sheds bake scratch.
+# 5. Wait for the guest to take a DHCP lease on vagrant-libvirt, discover its IP, then wait
+#    for sshd. The base box ships Vagrant's insecure key for the vagrant user (the lab sets
+#    config.ssh.insert_key=false) with passwordless sudo, so the bake connects as vagrant
+#    and becomes root — the lab's per-node access, but to this one build VM.
+MAC="$(virsh -c qemu:///system domiflist "$BUILD_DOM" | awk '/vagrant-libvirt/ {print $NF}')"
+BUILD_IP=""
+for _ in $(seq 1 60); do
+  BUILD_IP="$(virsh -c qemu:///system net-dhcp-leases vagrant-libvirt 2>/dev/null \
+    | awk -v m="$MAC" 'tolower($0) ~ tolower(m) {print $5}' | cut -d/ -f1 | head -n1)"
+  [ -n "$BUILD_IP" ] && break
+  sleep 5
+done
+test -n "$BUILD_IP" || { echo "ERROR: no DHCP lease for $BUILD_DOM (mac $MAC) after 5m" >&2; exit 1; }
+echo "build VM $BUILD_DOM is $BUILD_IP; waiting for sshd..."
+SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes)
+ssh_up=0
+for _ in $(seq 1 60); do
+  if ssh -i "$VAGRANT_KEY" "${SSH_OPTS[@]}" "vagrant@${BUILD_IP}" true 2>/dev/null; then ssh_up=1; break; fi
+  sleep 5
+done
+[ "$ssh_up" = 1 ] || { echo "ERROR: sshd on $BUILD_IP never came up after 5m" >&2; exit 1; }
+
+# 6. Generate a one-host dynamic inventory placing the build VM in the `bake` group, and run
+#    the box's bake playbook against it over SSH (NOT the local-connection bake-host.ini,
+#    which would install onto THIS host). Run from ansible/ so ansible.cfg applies; point the
+#    collections path at the main-worktree cache (the worktree's build/ is empty).
+BUILD_INV="$(mktemp)"
+cat > "$BUILD_INV" <<INV
+[bake]
+${BUILD_DOM} ansible_host=${BUILD_IP}
+
+[bake:vars]
+ansible_user=vagrant
+ansible_connection=ssh
+ansible_ssh_private_key_file=${VAGRANT_KEY}
+ansible_ssh_common_args=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+INV
+( cd ../../ansible \
+  && ANSIBLE_HOST_KEY_CHECKING=False ANSIBLE_COLLECTIONS_PATH="$MAIN_ROOT/build/cache" \
+     ansible-playbook -i "$BUILD_INV" "bake-${BAKE}.yml" \
+       ${BAKE_EXTRA_VARS[@]+"${BAKE_EXTRA_VARS[@]}"} )
+
+# 7. Power off (wait for shut off), then package the disk into the CACHE. A
+#    compressed convert flattens the image and sheds bake scratch.
 virsh -c qemu:///system shutdown "$BUILD_DOM"
 while [ "$(virsh -c qemu:///system domstate "$BUILD_DOM" 2>/dev/null || true)" != "shut off" ]; do
   sleep 5
@@ -214,8 +285,8 @@ tar -C "$WORK" -czf "$CACHE" metadata.json box.img
 printf '%s\n' "$CURRENT_HASH" > "$HASH_FILE"   # stamp the manifest hash beside the box
 vagrant box add --force "$BOX" "$CACHE"
 
-# 5. Cleanup: tear down the transient build domain + scratch (cache is kept).
+# 8. Cleanup: tear down the transient build domain + scratch (cache + staged DVD are kept).
 virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true
-sudo rm -f "$IMG" "$POOL_IMG/${BUILD_DOM}-console.log"
-rm -rf "$WORK" "$BUILD_XML"
+sudo rm -f "$IMG" "$CONSOLE"
+rm -rf "$WORK" "$BUILD_XML" "$BUILD_INV"
 echo "box ready (built + cached): $BOX -> $CACHE"

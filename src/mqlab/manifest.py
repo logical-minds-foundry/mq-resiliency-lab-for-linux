@@ -23,6 +23,10 @@ _ARCH_SUFFIX = {
     "ubuntu2404-arm64": "UbuntuLinuxARM64",
     "ubuntu2404-x86_64": "UbuntuLinuxX64",
     "rhel96-x86_64": "LinuxX64",
+    # The fat RDQM box platform (#604) is RHEL x86_64, so it takes the same LinuxX64
+    # tarball as rhel96-x86_64 — the bake (build-fatbox.sh) consumes it, and the
+    # stack-prereq ensure keeps it cached for the repointed rdqm_a/rdqm_b nodes.
+    "mq-rdqm-rhel9": "LinuxX64",
     "alma9-x86_64": "LinuxX64",
 }
 
