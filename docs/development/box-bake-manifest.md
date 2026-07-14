@@ -117,6 +117,24 @@ Verified by reading each role's `tasks/main.yml`:
 4. **`node-exporter` and `loki` are baked as full roles** (not split): their config
    is static, so the whole role is effectively install.
 
+## Naming note: `rdqm-install` = "MQ product **+** RDQM stack"
+
+`rdqm-install` installs the **entire MQ product** (server/SDK/samples/web) *plus*
+the bundled DRBD/Pacemaker/MQSeriesRDQM in one pre-QM pass — it is not just the
+RDQM add-on. The name is nonetheless accurate: it is the install path **for an
+RDQM node** (which requires MQ), and it is used *only* by the RDQM plays. **Native
+HA does not use it** — `nha-rhel` installs via `mq-nativeha/tasks/install-RedHat.yml`
+(its own MQ-product install), so no DRBD is ever baked into a native-HA image.
+
+The real smell this surfaces is duplication, not misnaming: the MQ-product install
+(fetch LinuxX64 tar → `mqlicense -accept` → install) is copied across
+`rdqm-install`, `mq-nativeha` (RedHat + Debian), `mq-install`, and `mq-client`,
+with no shared building block. Baking makes it visible — `mq-rdqm-rhel9` bakes MQ
+via `rdqm-install` while the follow-on `mq-nativeha-rhel9` box would bake the same
+product via `mq-nativeha`. Extracting a shared `mq-product-install` `tasks_from`
+is deferred to the follow-on brainstorm (`logical-minds-foundry/.github#72`), where
+the nativeha/pcmk box generalization forces the duplication into the open.
+
 ## Full-apply proof is deferred
 
 Per the epic plan, full proof of correctness (MQ media + install DVD present, a real
