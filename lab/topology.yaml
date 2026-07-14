@@ -57,6 +57,19 @@ boxes:
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
 defaults: { cpus: 1, memory: 1024 }
 
+# boot_batch — the vms phase boots the stack's VMs in contiguous batches of at most N
+# per `vagrant up` (#638) instead of all at once. vagrant-libvirt has no native "N at a
+# time" (all-parallel by default, or fully serial via --no-parallel), so mqlab chunks
+# the ordered node list and issues one `vagrant up <batch>` per group — preserving the
+# HADR bring-up order (SANs first, site-A before site-B; batches are contiguous slices,
+# never reordered). Rationale: booting all 12 fat boxes at once (multi-GB image copies +
+# the RDQM drbdpool vdb creates) spikes host disk I/O hard enough to time a heavy guest
+# (infra-client, 4 NICs) out on SSH ('inaccessible') while its siblings come up, and it
+# only worsens as nodes/stacks are added. This is the speed<->reliability dial: smaller
+# N = fewer concurrent boots = more reliable but a bit slower; larger N = faster but
+# reintroduces the contention. Must be a positive integer; defaults to 4 when unset.
+boot_batch: 4
+
 nodes:
   # --- SVC service VM + app client (the distributed message path) ---
   svc-sim:

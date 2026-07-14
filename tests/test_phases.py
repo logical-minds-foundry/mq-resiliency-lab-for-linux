@@ -14,7 +14,14 @@ from pathlib import Path
 import pytest
 
 from mqlab.orchestrator import CommandStep
-from mqlab.phases import PHASES, build_states, first_unsatisfied
+from mqlab.phases import (
+    _DEFAULT_BOOT_BATCH,
+    PHASES,
+    _batch_guests,
+    _boot_batch,
+    build_states,
+    first_unsatisfied,
+)
 from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import lab_stacks
 
@@ -198,16 +205,47 @@ def test_net_build_steps_define_autostart_start(monkeypatch, tmp_path):
     assert by_label["net-mgmt start"].command.argv[-2:] == ["net-start", "net-mgmt"]
 
 
+# The seeded topology's ordered VM list for pcmk-ubuntu: stack members (groups
+# [san_a, pcmk_a, pcmk_b]) then commons (obs_box/probe/svc/app), deduped — the exact
+# HADR bring-up order the vms phase must batch WITHOUT reordering.
+_EXPECTED_VMS = [
+    "san-a",
+    "pcmk-a1",
+    "pcmk-a2",
+    "pcmk-a3",
+    "pcmk-b1",
+    "obs",
+    "mon-probe",
+    "svc-sim",
+    "app-client",
+]
+
+
+def _seed_boot_batch(tmp_path, value) -> None:
+    """Seed the base topology plus an explicit `boot_batch: <value>` line."""
+    _seed(tmp_path)
+    (tmp_path / "lab" / "topology.yaml").write_text(f"{TOPO}boot_batch: {value}\n")
+
+
+def _batched_targets(steps) -> list[str]:
+    """Flatten the per-batch `vagrant up <batch>` steps back into one ordered list,
+    asserting each step is a well-formed vagrant-up call."""
+    flat: list[str] = []
+    for step in steps:
+        argv = step.command.argv
+        assert argv[0] == "vagrant"
+        assert argv[1] == "up"
+        flat.extend(argv[2:])
+    return flat
+
+
 def test_vms_build_steps_vagrant_up_members_and_commons(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
-    argv = steps[0].command.argv
-    assert argv[0] == "vagrant"
-    assert argv[1] == "up"
-    targets = argv[2:]
-    # stack members + commons VMs (obs_box/probe/svc/app), in order, deduped
+    # Batches concatenate back to the full ordered VM set (members + commons), deduped.
+    targets = _batched_targets(steps)
     assert "pcmk-a1" in targets
     assert "pcmk-b1" in targets
     assert "obs" in targets
@@ -215,6 +253,101 @@ def test_vms_build_steps_vagrant_up_members_and_commons(monkeypatch, tmp_path):
     # svc-sim and app-client are shared commons (spec §6); all_vms must include them
     assert "svc-sim" in targets
     assert "app-client" in targets
+
+
+def test_vms_build_steps_batches_default_n_preserving_order(monkeypatch, tmp_path):
+    """The default (unset boot_batch) chunks the ordered list into ceil(L/4) batches,
+    each a contiguous slice — no reordering (#638)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)  # no boot_batch → default 4
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[1].build_steps(stack, None)
+    # 9 VMs, N=4 → ceil(9/4) = 3 batches, contiguous chunks in order.
+    assert [s.command.argv[2:] for s in steps] == [
+        _EXPECTED_VMS[0:4],
+        _EXPECTED_VMS[4:8],
+        _EXPECTED_VMS[8:9],
+    ]
+    # Concatenation preserves the authoritative HADR order exactly.
+    assert _batched_targets(steps) == _EXPECTED_VMS
+    # Multi-batch runs carry a [i/n] progress label for a readable transcript.
+    assert [s.label for s in steps] == [
+        "pcmk-ubuntu vms up [1/3]",
+        "pcmk-ubuntu vms up [2/3]",
+        "pcmk-ubuntu vms up [3/3]",
+    ]
+
+
+def test_vms_build_steps_custom_boot_batch(monkeypatch, tmp_path):
+    """A topology `boot_batch: 2` yields ceil(9/2) = 5 ordered contiguous batches."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_boot_batch(tmp_path, 2)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[1].build_steps(stack, None)
+    assert len(steps) == 5
+    assert [s.command.argv[2:] for s in steps] == [
+        _EXPECTED_VMS[0:2],
+        _EXPECTED_VMS[2:4],
+        _EXPECTED_VMS[4:6],
+        _EXPECTED_VMS[6:8],
+        _EXPECTED_VMS[8:9],
+    ]
+    assert _batched_targets(steps) == _EXPECTED_VMS
+
+
+def test_vms_build_steps_serial_when_batch_one(monkeypatch, tmp_path):
+    """boot_batch: 1 is fully serial — one guest per `vagrant up`, order preserved."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_boot_batch(tmp_path, 1)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[1].build_steps(stack, None)
+    assert len(steps) == len(_EXPECTED_VMS)
+    assert all(len(s.command.argv[2:]) == 1 for s in steps)
+    assert _batched_targets(steps) == _EXPECTED_VMS
+
+
+def test_vms_build_steps_single_batch_when_n_ge_len(monkeypatch, tmp_path):
+    """A boot_batch >= the VM count collapses to one `vagrant up` (old all-at-once),
+    labelled without the [i/n] progress suffix."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_boot_batch(tmp_path, 99)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[1].build_steps(stack, None)
+    assert len(steps) == 1
+    assert steps[0].label == "pcmk-ubuntu vms up"
+    assert steps[0].command.argv[2:] == _EXPECTED_VMS
+
+
+@pytest.mark.parametrize("bad", [0, -3, "four", 2.5, True])
+def test_boot_batch_rejects_non_positive_int(monkeypatch, tmp_path, bad):
+    """A garbled dial fails loud rather than silently dropping/reordering VMs."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_boot_batch(tmp_path, bad)
+    with pytest.raises(ValueError, match="boot_batch must be a positive integer"):
+        _boot_batch()
+
+
+def test_boot_batch_defaults_when_unset(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)  # no boot_batch key
+    assert _boot_batch() == _DEFAULT_BOOT_BATCH
+
+
+@pytest.mark.parametrize(
+    ("items", "size", "expected"),
+    [
+        ([], 4, []),  # empty list → no batches
+        (["a"], 4, [["a"]]),  # L < N → one batch
+        (["a", "b", "c"], 3, [["a", "b", "c"]]),  # N == L → one batch
+        (["a", "b", "c"], 9, [["a", "b", "c"]]),  # N > L → one batch
+        (["a", "b", "c"], 1, [["a"], ["b"], ["c"]]),  # N == 1 → serial
+        (["a", "b", "c", "d", "e"], 2, [["a", "b"], ["c", "d"], ["e"]]),  # remainder
+        (["a", "b", "c", "d"], 2, [["a", "b"], ["c", "d"]]),  # exact multiple
+    ],
+)
+def test_batch_guests_contiguous_chunks(items, size, expected):
+    """_batch_guests emits ceil(L/N) contiguous, in-order chunks for every edge case."""
+    assert _batch_guests(items, size) == expected
 
 
 def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):

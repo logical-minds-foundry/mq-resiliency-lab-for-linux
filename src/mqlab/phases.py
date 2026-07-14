@@ -185,11 +185,67 @@ def _net_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG00
 # --------------------------------------------------------------------------- #
 # vms phase
 # --------------------------------------------------------------------------- #
+# Default vms-phase boot batch size when the topology omits `boot_batch` (#638).
+# Deliberately conservative: booting all 12 fat boxes at once (multi-GB image copies
+# + the RDQM drbdpool vdb creates) spikes host disk I/O hard enough to time a heavy
+# guest (infra-client, 4 NICs) out on SSH ('inaccessible') while its siblings come up.
+_DEFAULT_BOOT_BATCH = 4
+
+
+def _boot_batch() -> int:
+    """The vms-phase boot batch size N — topology `boot_batch`, default 4 (#638).
+
+    vagrant-libvirt has no native "N at a time" (all-parallel by default, or fully
+    serial via --no-parallel), so the vms phase chunks the ordered VM list and issues
+    one `vagrant up <batch>` per group of at most N. This is the deliberate
+    speed<->reliability dial: **smaller N = fewer concurrent boots = more reliable but
+    a bit slower**; larger N = faster but reintroduces the disk-I/O contention that
+    flaked the all-at-once boot. Ordering is always preserved (batches are contiguous
+    chunks of the ordered list), so the HADR bring-up order still holds.
+
+    Fails loud (no silent clamp) on a non-positive or non-integer value — a garbled
+    dial would otherwise silently drop VMs from the boot (a negative step yields empty
+    chunks) or reorder them, which is exactly the failure this knob exists to prevent.
+    """
+    value = _topology().get("boot_batch", _DEFAULT_BOOT_BATCH)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        msg = f"topology boot_batch must be a positive integer, got {value!r}"
+        raise ValueError(msg)
+    return value
+
+
+def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
+    """Split an ordered guest list into contiguous batches of at most `size`.
+
+    Batches are contiguous slices in the original order — never reordered — so the
+    HADR bring-up order (SANs first, site-A before site-B) is preserved across the
+    per-batch `vagrant up` calls. Emits ceil(len/size) batches: a list shorter than one
+    batch yields a single batch, size==1 yields one guest per batch (fully serial), and
+    size>=len yields a single batch (the old all-at-once behaviour).
+    """
+    return [guests[i : i + size] for i in range(0, len(guests), size)]
+
+
 def _vms_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
-    """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs."""
+    """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs, in
+    contiguous batches of at most `boot_batch` (#638).
+
+    One `vagrant up <batch>` per group of <= N, over the topology's ordered VM list, so
+    the fat boxes don't all copy their multi-GB images at once. See `_boot_batch` for
+    the speed<->reliability tradeoff and `_batch_guests` for the ordering guarantee.
+    """
     vms = _all_vms(stack)
-    cmd = Command(["vagrant", "up", *vms], cwd=repo_root() / "lab")
-    return [CommandStep(f"{stack.name} vms up", cmd)]
+    batches = _batch_guests(vms, _boot_batch())
+    steps: list[CommandStep] = []
+    for index, batch in enumerate(batches, start=1):
+        cmd = Command(["vagrant", "up", *batch], cwd=repo_root() / "lab")
+        label = (
+            f"{stack.name} vms up"
+            if len(batches) == 1
+            else f"{stack.name} vms up [{index}/{len(batches)}]"
+        )
+        steps.append(CommandStep(label, cmd))
+    return steps
 
 
 def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
