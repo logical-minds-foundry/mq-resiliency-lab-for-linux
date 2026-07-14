@@ -1,0 +1,225 @@
+---
+# Stage 2 authorization validation (#74 / #630): induced-denial + positive +
+# post-failover, run against the live, authorized pcmk-ubuntu arm (Tasks 1-4
+# applied). This is the harness CODE only; the live RUN + cold rebuild is the
+# separate validation task #618. Interim scripted checks -- first consumers of the
+# #38 live-lab validation pattern (induce a condition, assert the observable).
+#
+# Scope: N1 + N3 (+ positives + post-failover). N2 (unmapped cert -> back-stop),
+# N4 (assert-ownership) and N5 (undeliverable/DLQ) are the Part B validation-
+# hardening task #617, each coupled to its research -- NOT implemented here.
+#
+# Variable-driven: qm_app (supplied by the topology/phases like site-pcmk.yml),
+# tls_cipher (group_vars/all/tls.yml), and the VIP CONNAMEs. Override any var with
+# `-e` to pin a specific node/keystore on the live arm.
+#
+# ============================================================================
+# KNOWN-UNKNOWNS -- verify on the live arm (#618); defaults below are grounded in
+# the current roles, NOT guessed, but three points need a live confirmation:
+#
+#   (1) mon_keyrepo -- the OU=ops identity (mqmon) needs an OU=ops client keystore.
+#       The only one in the lab is `mq_prometheus`, placed by roles/mq-exporter
+#       (tasks/build.yml) into /var/mqm/ssl/mq_prometheus/ (stem .../key, owner
+#       mqm) on the mon-probe host -- it is NOT staged on the `app` host by current
+#       provisioning. So the N1 probe as written (hosts: app) will not find this
+#       keystore until the live arm either (a) stages an OU=ops keystore on the app
+#       host readable by the probe user, or (b) re-homes the N1 probe to mon-probe.
+#       RESOLVE ON #618 -- do not assume the file is present on the app host.
+#
+#   (2) The positive flow uses `app_requester.py --count 1` (a bounded one-shot).
+#       app_requester.py has NO `--once` flag (the plan's placeholder); --count 1
+#       does exactly one request/reply and exits 0 on success, non-zero on failure.
+#       Its TLS args (keyrepo/certlabel) are the app-requester role defaults.
+#
+#   (3) Client sync path: scripts are copied per-file to /home/vagrant/ and run via
+#       the pymqi venv /home/vagrant/mqvenv/bin/python (roles/mq-client +
+#       roles/app-requester), NOT a /opt/mqlab checkout. The stage-probe task below
+#       mirrors roles/app-requester's copy idiom. Confirm the venv+path on #618.
+# ============================================================================
+
+- name: Stage 2 authorization -- negative (N1 + N3) + positive
+  hosts: app
+  become: false # run as the connecting user (vagrant), who owns the venv + app keystore
+  vars:
+    app_qm: "{{ qm_app }}" # supplied by the topology/phases, as in site-pcmk.yml
+    # Data-plane CONNAME: both site VIPs as a reconnect list (matches site-pcmk.yml
+    # app_conn) so a one-shot connect reaches the QM on whichever node is active.
+    app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
+    venv_python: /home/vagrant/mqvenv/bin/python
+    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
+    probe_dest: /home/vagrant/authz_probe.py
+    app_requester: /home/vagrant/app_requester.py # placed by roles/app-requester
+    # app-client keystore (OU=apps): stem /home/vagrant/ssl/key, label app-client,
+    # owner vagrant -- placed on the app host by roles/mq-client (#250). Grounded.
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    # mq_prometheus keystore (OU=ops): see KNOWN-UNKNOWN (1) above -- placed on
+    # mon-probe by roles/mq-exporter, NOT the app host. Verify/stage on #618.
+    mon_keyrepo: /var/mqm/ssl/mq_prometheus/key
+    mon_certlabel: mq_prometheus
+  tasks:
+    - name: stage the authz probe on the app host (alongside app_requester.py)
+      ansible.builtin.copy:
+        src: "{{ probe_src }}"
+        dest: "{{ probe_dest }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+
+    # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to
+    # APP.REPLY -- monitoring is read-only (dsp/inq/sub, no put/get). Expect 2035.
+    # NB: depends on KNOWN-UNKNOWN (1) -- the OU=ops keystore being available here.
+    - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - MON.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ mon_keyrepo }}"
+          - --certlabel
+          - "{{ mon_certlabel }}"
+          - --queue
+          - APP.REPLY
+          - --op
+          - put
+          - --expect
+          - "2035"
+      changed_when: false
+
+    # NEGATIVE N3: mqapp (OU=apps via APP.SVRCONN) may PUT SVC.REQUEST but is DENIED
+    # an MQGET from it -- least privilege within the app's own queues. Expect 2035.
+    - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - APP.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+          - --queue
+          - SVC.REQUEST
+          - --op
+          - get
+          - --expect
+          - "2035"
+      changed_when: false
+
+    # POSITIVE: the app trade flow still completes end-to-end (one round-trip).
+    # --count 1 is the one-shot (see KNOWN-UNKNOWN (2)); exit 0 == a reply returned.
+    - name: POSITIVE -- app trade flow still works (app_requester round-trip)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ app_requester }}"
+          - --count
+          - "1"
+          - --qm
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+      changed_when: false
+      register: tradeflow
+      failed_when: tradeflow.rc != 0
+
+# POST-FAILOVER: move the QM to another Pacemaker node, then re-run one negative +
+# the positive on the new active node. Resource/group names (mq_group, mq_qm) match
+# roles/mq-pcmk-qmgr; the mq_vip floats with the group so app_conn still resolves.
+- name: force a Pacemaker failover
+  hosts: pcmk_a
+  become: true
+  run_once: true
+  tasks:
+    - name: move mq_group to another node
+      ansible.builtin.command: pcs resource move mq_group
+      changed_when: true
+
+    - name: wait for the QM to settle on the new node
+      ansible.builtin.command: pcs resource status mq_qm
+      register: mq_qm_status
+      until: "'Started' in mq_qm_status.stdout"
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: clear the move constraint (let Pacemaker place it freely again)
+      ansible.builtin.command: pcs resource clear mq_group
+      changed_when: true
+
+- name: re-run authorization checks after failover
+  hosts: app
+  become: false
+  vars:
+    app_qm: "{{ qm_app }}"
+    app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
+    venv_python: /home/vagrant/mqvenv/bin/python
+    probe_dest: /home/vagrant/authz_probe.py
+    app_requester: /home/vagrant/app_requester.py
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    mon_keyrepo: /var/mqm/ssl/mq_prometheus/key # see KNOWN-UNKNOWN (1)
+    mon_certlabel: mq_prometheus
+  tasks:
+    - name: N1 (post-failover) -- mqmon still denied an MQPUT (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - MON.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ mon_keyrepo }}"
+          - --certlabel
+          - "{{ mon_certlabel }}"
+          - --queue
+          - APP.REPLY
+          - --op
+          - put
+          - --expect
+          - "2035"
+      changed_when: false
+
+    - name: POSITIVE (post-failover) -- app trade flow still works
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ app_requester }}"
+          - --count
+          - "1"
+          - --qm
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+      changed_when: false
+      register: tradeflow_postfailover
+      failed_when: tradeflow_postfailover.rc != 0
