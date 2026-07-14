@@ -15,7 +15,7 @@
   ansible.builtin.shell: |
     set -e
     mkdir -p /media/rhel
-    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro 0 0' >> /etc/fstab
+    grep -q '/media/rhel' /etc/fstab || echo '/dev/sr0 /media/rhel iso9660 ro,nofail 0 0' >> /etc/fstab
     mountpoint -q /media/rhel || mount /media/rhel
   become: true
   changed_when: false

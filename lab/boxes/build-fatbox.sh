@@ -55,11 +55,13 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# --box selects the base box + arch; the bake playbook is derived (ansible/bake-<box>.yml).
+# --box selects the base box + arch + the box's bake playbook (ansible/bake-<BAKE>.yml).
+# The playbook stem (#602: bake-mq-rdqm / bake-obs / bake-infra) is shorter than the box
+# name, so it is mapped explicitly rather than derived from $BOX.
 case "$BOX" in
-  mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64" ;;
-  obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04" ;;
-  infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04" ;;
+  mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64";        BAKE=mq-rdqm ;;
+  obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=obs ;;
+  infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac
@@ -135,7 +137,7 @@ fi
 
 # --- Expensive path (BUILD / FORCE-BUILD): boot the base box, run the box's bake playbook
 #     against it OVER SSH, then snapshot the result into the CACHE (#604 hardens this path).
-BAKE_PLAYBOOK="../../ansible/bake-${BOX}.yml"
+BAKE_PLAYBOOK="../../ansible/bake-${BAKE}.yml"
 test -f "$BAKE_PLAYBOOK" \
   || { echo "ERROR: bake playbook not found: $BAKE_PLAYBOOK (produced by #602)" >&2; exit 1; }
 
@@ -158,7 +160,7 @@ fi
 #    disk. A full copy (not a backing-file overlay) keeps qemu off the home-dir base image
 #    — libvirt's dynamic ownership + per-domain AppArmor only cover pool paths — and is
 #    itself scratch: the bake mutates the copy, the shared base box is untouched.
-BASE_DIR="$HOME/.vagrant.d/boxes/$(echo "$BASE_BOX" | tr '/' '-VAGRANTSLASH-')"
+BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
 BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
 test -n "$BASE_IMG" || { echo "ERROR: base box image not found under $BASE_DIR" >&2; exit 1; }
 ../scripts/net-up.sh vagrant-libvirt
@@ -265,7 +267,7 @@ ansible_ssh_common_args=-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/n
 INV
 ( cd ../../ansible \
   && ANSIBLE_HOST_KEY_CHECKING=False ANSIBLE_COLLECTIONS_PATH="$MAIN_ROOT/build/cache" \
-     ansible-playbook -i "$BUILD_INV" "bake-${BOX}.yml" \
+     ansible-playbook -i "$BUILD_INV" "bake-${BAKE}.yml" \
        ${BAKE_EXTRA_VARS[@]+"${BAKE_EXTRA_VARS[@]}"} )
 
 # 7. Power off (wait for shut off), then package the disk into the CACHE. A
