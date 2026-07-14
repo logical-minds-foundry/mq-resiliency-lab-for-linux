@@ -12,12 +12,12 @@
 
 # The heavy MQ + RDQM (DRBD/Pacemaker) install is BAKED into the mq-rdqm-rhel9 box
 # (ansible/bake-mq-rdqm.yml), so per-run we run ONLY rdqm-install's configure half:
-# base-OS update, drbd module load, and the drbdpool VG on this instance's fresh extra
-# disk. This is the #604 strip — the bake roles do not re-run at bootstrap.
+# drbd module load and the drbdpool VG on this instance's fresh extra disk. This is
+# the #604 strip — the bake roles do not re-run at bootstrap.
 - hosts: rdqm_a
   become: true
   tasks:
-    - name: RDQM per-instance configure (base-OS update + drbd module + drbdpool VG)
+    - name: RDQM per-instance configure (drbd module + drbdpool VG)
       ansible.builtin.include_role:
         name: rdqm-install
         tasks_from: configure
