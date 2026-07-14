@@ -43,6 +43,12 @@ def test_tarball_name_maps_version_and_arch():
         m.tarball_name("9.4.5.0", "mq-rdqm-rhel9")
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
+    # The fat obs box platform (#605) takes the same UbuntuLinuxX64 tarball as
+    # ubuntu2404-x86_64, so the obs node repointed at it resolves via the commons ensure.
+    assert (
+        m.tarball_name("9.4.5.0", "obs-ubuntu2404")
+        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
+    )
 
 
 def test_tarball_name_unknown_platform_raises():

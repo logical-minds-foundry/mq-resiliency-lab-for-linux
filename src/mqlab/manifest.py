@@ -27,6 +27,12 @@ _ARCH_SUFFIX = {
     # tarball as rhel96-x86_64 — the bake (build-fatbox.sh) consumes it, and the
     # stack-prereq ensure keeps it cached for the repointed rdqm_a/rdqm_b nodes.
     "mq-rdqm-rhel9": "LinuxX64",
+    # The fat obs box platform (#605) is Ubuntu x86_64, so it takes the same
+    # UbuntuLinuxX64 tarball as ubuntu2404-x86_64. The obs node is a commons member,
+    # so _commons_mq_platforms feeds this into tarball_name; it resolves to the one
+    # Ubuntu tarball svc/app/probe already need (the bake consumed it for the baked
+    # mq_prometheus cgo build against the MQ SDK).
+    "obs-ubuntu2404": "UbuntuLinuxX64",
     "alma9-x86_64": "LinuxX64",
 }
 

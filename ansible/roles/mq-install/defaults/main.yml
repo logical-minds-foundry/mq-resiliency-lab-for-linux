@@ -1,0 +1,11 @@
+---
+# mq-install role defaults (#605, epic .github#70).
+#
+# mq_media_dir: where the MQ-for-Developers Ubuntu tarball lives. Defaults to the
+# repo's host-durable build cache resolved from playbook_dir (the normal per-run
+# path, run from the main worktree's ansible/). The fat-box builder overrides it
+# (-e mq_media_dir=<main-worktree>/build/cache/mq) because a bake runs the playbook
+# from a feature worktree whose build/ is empty — the media lives only in the shared
+# main-worktree build/. Mirrors rdqm-install's #604 default so both MQ-install paths
+# source their media the same way (see lab/boxes/build-fatbox.sh).
+mq_media_dir: "{{ playbook_dir }}/../build/cache/mq"
