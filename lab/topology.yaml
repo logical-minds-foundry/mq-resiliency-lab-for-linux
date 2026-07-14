@@ -21,6 +21,17 @@ boxes:
     box: rhel/9.6-x86_64
     arch: x86_64
     dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
+  # The fat RDQM box (#604, epic .github#70): the rhel/9.6 base with MQ + RDQM
+  # (DRBD/Pacemaker, kernel-matched kmod-drbd) + node-exporter + alloy + the #569 journald
+  # diagnostic default BAKED IN (lab/boxes/build-fatbox.sh --box mq-rdqm-rhel9). The RDQM
+  # nodes boot this instead of rhel96-x86_64 so a bootstrap skips the ~hour of heavy
+  # installs. Instances still attach the DVD: the per-run configure half runs a base-OS
+  # dnf update from it and (re)mounts it as the offline repo. The box kernel matches its
+  # baked kmod-drbd by construction (baked from this exact base) — no separate kernel pin.
+  mq-rdqm-rhel9:
+    box: mq-rdqm-rhel9
+    arch: x86_64
+    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -65,37 +76,37 @@ nodes:
 
   # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
   rdqm-a1:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.31, net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31, net-ext: 10.60.0.31 }
   rdqm-a2:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.32, net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32, net-ext: 10.60.0.32 }
   rdqm-a3:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.33, net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33, net-ext: 10.60.0.33 }
   rdqm-b1:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.41, net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
   rdqm-b2:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.42, net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
   rdqm-b3:
-    platform: rhel96-x86_64
+    platform: mq-rdqm-rhel9
     cpus: 2
     memory: 2048
     extra_disk: 10

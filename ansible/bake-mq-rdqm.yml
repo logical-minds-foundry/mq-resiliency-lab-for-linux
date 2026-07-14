@@ -35,9 +35,14 @@
     # the #282/#569 journald diagnostic drop-in (mq-diag-logging system, journald-only
     # on RDQM) as its last step — the "DiagnosticMessages default" baked into the image.
     # Coupling-free (no run_once/delegate/groups); depends on the install DVD + MQ media.
+    # tasks_from: install bakes ONLY the install half — the per-instance drbdpool VG
+    # (needs a fresh /dev/vdb), the drbd module load, and the base-OS dnf update live in
+    # the role's configure half and run per-run, so the bake needs no extra disk (#604).
+    # mq_media_dir is overridden by build-fatbox.sh to the main-worktree media cache.
     - name: MQ + RDQM (DRBD/Pacemaker) install + journald diagnostic seed
       ansible.builtin.include_role:
         name: rdqm-install
+        tasks_from: install
 
     # Fleet observability agents' binaries — baked so the observe phase does not pay
     # the download/unpack cost per run. node-exporter is all-install (static config);
