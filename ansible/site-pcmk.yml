@@ -20,6 +20,14 @@
 - import_playbook: _pcmk-cluster-ha.yml
 - import_playbook: _pcmk-dr-replication.yml
 
+# Stage 2 authorization (#74): the OAM service principals (mqapp/mqmon/mqsvc)
+# must exist on EVERY app-QM node before any setmqaut grant, and on both HA + DR
+# sites so authorization survives failover (the substrate-consistency invariant).
+- name: authz service accounts on every app-QM node (HA + DR)
+  hosts: pcmk_a:pcmk_b
+  become: true
+  roles: [mq-authz-accounts]
+
 # Folded qm-create (#350 Task 2 step 2): the Pacemaker-managed queue manager and
 # its fs -> vip -> qm resource group, plus the our-side inter-QM MQSC. Was the
 # separate site-pcmk-qm.yml (`mqlab qm create`); now runs inside provision so a

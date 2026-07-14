@@ -1,0 +1,47 @@
+---
+# Stage 2 internal authorization (#74) — single source for accounts, DN→account
+# maps, and OAM grant sets. Mirrors tls.yml. Arm-agnostic: the DNs are identical
+# across arms (partial-DN PKI); only per-arm channel names differ (chl_to_app).
+# NOTE: the SSLPEERMAP DNs are FINER than the Stage-1 channel SSLPEER (org-only):
+# Stage 2 reads the OU to tell mqapp (OU=apps) from mqmon (OU=ops).
+
+authz_accounts:
+  - { name: mqapp, group: mqapp }
+  - { name: mqmon, group: mqmon }
+  - { name: mqsvc, group: mqsvc }
+
+# DN→account maps. channel is a literal for SVRCONNs; the inter-QM receiver is the
+# chl_to_app VARIABLE (resolved by the template).
+authz_chlauth_maps:
+  - { channel: "APP.SVRCONN", sslpeer: "O=app-org,OU=apps", mcauser: mqapp }
+  - { channel: "MON.SVRCONN", sslpeer: "O=app-org,OU=ops",  mcauser: mqmon }
+  - { channel: "{{ chl_to_app }}", sslpeer: "{{ tls_peer_svc }}", mcauser: mqsvc }
+
+# Minimal grant sets (starting hypothesis; hardened by the induced tests).
+authz_grants:
+  # client app: put requests, get replies
+  - { group: mqapp, object_type: qmgr,  object: "",            authorities: "+connect +inq" }
+  - { group: mqapp, object_type: queue, object: "SVC.REQUEST", authorities: "+put" }
+  - { group: mqapp, object_type: queue, object: "APP.REPLY",   authorities: "+get +inq +browse" }
+  # monitoring: read-only — connect + inquire + subscribe metric topics; NO put/get.
+  # NOTE (to narrow — do NOT ship the root grant): SYSTEM.BASE.TOPIC is the topic-tree
+  # ROOT and over-grants (subscribe to everything), against the least-privilege thesis.
+  # It is a PLACEHOLDER: the exact topic object scoping the $SYS/MQ resource-monitoring
+  # tree is pinned against the LIVE exporter in Task 5, then substituted here.
+  - { group: mqmon, object_type: qmgr,  object: "",                 authorities: "+connect +inq" }
+  - { group: mqmon, object_type: topic, object: "SYSTEM.BASE.TOPIC", authorities: "+sub" }
+  - { group: mqmon, object_type: queue, object: "APP.REPLY",        authorities: "+dsp +inq" }
+  - { group: mqmon, object_type: queue, object: "SVC.REQUEST",      authorities: "+dsp +inq" }
+  # service app (counterparty receiver MCA): put reply, put DLQ; nothing else
+  - { group: mqsvc, object_type: qmgr,  object: "",                authorities: "+connect" }
+  - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put" }
+  - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put" }
+
+# DLQ the receiver MCA falls back to. INTERIM (pending the per-channel-vs-QM-level
+# DLQ research, Part B): grant +put on the QM-wide DLQ + set it as DEADQ (authz.mqsc.j2)
+# so an undeliverable reply can't stall the RCVR channel — a resiliency lab must not
+# ship a known channel-stall. The research owns the FINAL shape (a dedicated
+# per-counterparty DLQ vs this shared one); the N5 induced test (validation-hardening
+# follow-up) confirms the fallback works and FEEDS the research — it does not
+# rubber-stamp this interim.
+mqsvc_dlq: "SYSTEM.DEAD.LETTER.QUEUE"

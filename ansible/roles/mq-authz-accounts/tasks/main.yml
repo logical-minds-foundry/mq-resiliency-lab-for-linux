@@ -1,0 +1,23 @@
+---
+# Idempotent OAM principals (#74). Group-based OAM authorizes by PRIMARY GROUP,
+# so each account is a system user in its own private group, no shell/password.
+# Must exist on EVERY node the QM can land on (HA + DR) or authorization breaks
+# after failover — the substrate-consistency invariant (spec §6).
+- name: authz groups
+  ansible.builtin.group:
+    name: "{{ item.group }}"
+    system: true
+  loop: "{{ authz_accounts }}"
+  loop_control: { label: "{{ item.group }}" }
+
+- name: authz service accounts (no shell, no login)
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    password: "!"
+    password_lock: true
+  loop: "{{ authz_accounts }}"
+  loop_control: { label: "{{ item.name }}" }

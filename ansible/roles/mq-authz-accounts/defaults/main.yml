@@ -1,0 +1,3 @@
+---
+# mq-authz-accounts: create the OAM service principals. Overridden by authz.yml.
+authz_accounts: []
