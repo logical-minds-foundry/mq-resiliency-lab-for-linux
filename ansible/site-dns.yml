@@ -17,10 +17,20 @@
       ansible.builtin.wait_for_connection:
         timeout: 180
 
-- name: serve DNS on the infra nodes
+# The BIND9 install (package + /etc/bind/zones scaffolding) is BAKED into the
+# infra-ubuntu2404 box (ansible/bake-infra.yml), so per-run we run ONLY bind-dns's
+# configure half: the base-OS apt refresh, the topology-rendered zone data, and this
+# node's named.conf.{options,local} (keyed by inventory_hostname). This is the #606
+# strip — the baked install half does not re-run at bootstrap. (node-exporter + alloy
+# are baked whole and re-run idempotently in the observe phase, observability.yml.)
+- name: serve DNS on the infra nodes (baked box carries bind9; run only configure)
   hosts: infra
   become: true
-  roles: [bind-dns]
+  tasks:
+    - name: BIND9 per-run configure (base-OS refresh + zones + per-host named.conf)
+      ansible.builtin.include_role:
+        name: bind-dns
+        tasks_from: configure
 
 - name: point every guest's resolver at the lab nameserver
   hosts: all
