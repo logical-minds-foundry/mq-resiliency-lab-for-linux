@@ -42,6 +42,16 @@ boxes:
   obs-ubuntu2404:
     box: obs-ubuntu2404
     arch: x86_64
+  # The fat infra box (#606, epic .github#70): the cloud-image/ubuntu-24.04 base with
+  # BIND9 (package + /etc/bind/zones scaffolding) + node-exporter + alloy BAKED IN
+  # (lab/boxes/build-fatbox.sh --box infra-ubuntu2404). The infra nodes boot this
+  # instead of the bare Ubuntu image so a bootstrap skips those installs; the per-run
+  # configure half (zone data + per-host named.conf, base-OS apt refresh) still runs.
+  # arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked binaries are
+  # arch-specific and the box is baked on x86_64. No DVD (Ubuntu uses the online archive).
+  infra-ubuntu2404:
+    box: infra-ubuntu2404
+    arch: x86_64
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -80,8 +90,10 @@ nodes:
   # guests on the mgmt + both site data planes; infra-svc is the mock service.com
   # nameserver on the inter-business WAN. Default (small) footprint — BIND is light. ---
   infra-client:
+    platform: infra-ubuntu2404  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
     nics: { net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-data-b: 10.10.2.8, net-ext: 10.60.0.8 }
   infra-svc:
+    platform: infra-ubuntu2404  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
     org: service  # the mock service.com nameserver
     nics: { net-mgmt: 10.50.0.9, net-ext: 10.60.0.9 }
 
