@@ -32,16 +32,25 @@ authz_grants:
   - { group: mqmon, object_type: topic, object: "SYSTEM.BASE.TOPIC", authorities: "+sub" }
   - { group: mqmon, object_type: queue, object: "APP.REPLY",        authorities: "+dsp +inq" }
   - { group: mqmon, object_type: queue, object: "SVC.REQUEST",      authorities: "+dsp +inq" }
-  # service app (counterparty receiver MCA): put reply, put DLQ; nothing else
-  - { group: mqsvc, object_type: qmgr,  object: "",                authorities: "+connect" }
-  - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put" }
+  # service app (counterparty receiver MCA): put reply, put DLQ; nothing else.
+  # +setall (on the qmgr object AND APP.REPLY) is REQUIRED (#613): a non-privileged
+  # receiving MCA opens the destination queue with MQOO_SET_ALL_CONTEXT to reinstate
+  # message context under PUTAUT(DEF) too (not just CTX) — without +setall the inbound
+  # RCVR MQPUT fails 2035 and replies divert to the DLQ, breaking the trade flow. This
+  # is a corroborated doc-deduction (two primary 9.4 pages + APAR IT21537); N4 (#618)
+  # confirms it empirically. +setall is scoped to APP.REPLY + the qmgr object — still
+  # far short of mqm.
+  - { group: mqsvc, object_type: qmgr,  object: "",                authorities: "+connect +setall" }
+  - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put +setall" }
   - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put" }
 
-# DLQ the receiver MCA falls back to. INTERIM (pending the per-channel-vs-QM-level
-# DLQ research, Part B): grant +put on the QM-wide DLQ + set it as DEADQ (authz.mqsc.j2)
-# so an undeliverable reply can't stall the RCVR channel — a resiliency lab must not
-# ship a known channel-stall. The research owns the FINAL shape (a dedicated
-# per-counterparty DLQ vs this shared one); the N5 induced test (validation-hardening
-# follow-up) confirms the fallback works and FEEDS the research — it does not
-# rubber-stamp this interim.
+# DLQ the receiver MCA falls back to. FINAL/minimal (#614): a per-channel /
+# per-remote-QM DLQ is NOT an MQ 9.4 feature — DEADQ is a queue-manager-level
+# attribute (one per QM) and USEDLQ is only a boolean toggle over that single DLQ.
+# So +put on the QM-wide DLQ (set as DEADQ in authz.mqsc.j2) is the architecturally
+# required grant for a receiver MCA to dead-letter at all under USEDLQ(YES) — not a
+# stand-in for a future dedicated queue. It is already minimal (+put on exactly one
+# queue) and cannot be scoped narrower because no per-channel DLQ exists.
+# Per-counterparty segregation, if ever wanted, is a downstream runmqdlq handler
+# concern, not a grant change.
 mqsvc_dlq: "SYSTEM.DEAD.LETTER.QUEUE"
