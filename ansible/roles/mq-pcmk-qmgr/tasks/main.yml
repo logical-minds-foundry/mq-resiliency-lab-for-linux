@@ -70,8 +70,8 @@
         su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
         printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\n
         START LISTENER(L1414)\n
-        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('"'"'{{ tls_peer_client }}'"'"') HBINT(15) KAINT(15) REPLACE\n
-        DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('"'"'mqm'"'"') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('"'"'{{ tls_peer_client }}'"'"') REPLACE\n
+        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('"'"'{{ tls_peer_client }}'"'"') HBINT(15) KAINT(15) REPLACE\n
+        DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('"'"'{{ tls_peer_client }}'"'"') REPLACE\n
         ALTER QMGR CHLAUTH(DISABLED) CONNAUTH('"'"' '"'"')\n
         REFRESH SECURITY TYPE(CONNAUTH)\n
         ALTER QMGR SSLKEYR('"'"'/mqshared/ssl/key'"'"') KEYRPWD('"'"'{{ pki_keyrpwd.stdout }}'"'"') CERTLABL('"'"'{{ qm_name }}'"'"')\n
@@ -106,6 +106,52 @@
         su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
       run_once: true
       when: svc_conn is defined
+      changed_when: true
+
+    # 2c. Stage 2 authorization (#74): applied AFTER the channels + inter-QM objects
+    #     exist, so the maps/back-stop reference real channels. Atomic runmqsc batch
+    #     before endmqm, so no legitimate channel bounces through the deny-all window.
+    #     This is what flips CHLAUTH to ENABLED — blank MCAUSER on the SVRCONNs is
+    #     only safe once the back-stop + SSLPEERMAP maps are in place.
+    - name: render the authorization MQSC (CHLAUTH + maps)
+      ansible.builtin.template:
+        src: authz.mqsc.j2
+        dest: /var/mqm/authz.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      run_once: true
+
+    - name: apply the authorization MQSC
+      ansible.builtin.shell: |
+        su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
+        su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/authz.mqsc'
+        su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
+      run_once: true
+      changed_when: true
+
+    # 2d. setmqaut grants (#74): the minimal least-privilege authority surface, one
+    #     invocation per grant. -t qmgr grants omit -n. Records live on the LUN so
+    #     they follow the QM on failover.
+    - name: apply setmqaut grants (least-privilege OAM)
+      ansible.builtin.command:
+        cmd: >
+          su mqm -c "/opt/mqm/bin/setmqaut -m {{ qm_name }}
+          {% if item.object_type != 'qmgr' %}-n {{ item.object }} {% endif %}-t {{ item.object_type }}
+          -g {{ item.group }} {{ item.authorities }}"
+      loop: "{{ authz_grants }}"
+      loop_control: { label: "{{ item.group }} -> {{ item.object_type }} {{ item.object }}" }
+      run_once: true
+      register: setmqaut_res
+      changed_when: true
+      failed_when: setmqaut_res.rc != 0
+
+    - name: refresh the authorization service
+      ansible.builtin.shell: |
+        su mqm -c 'strmqm {{ qm_name }}' || true
+        printf 'REFRESH SECURITY TYPE(AUTHSERV)\n' | su mqm -c 'runmqsc {{ qm_name }}'
+        su mqm -c 'endmqm -w {{ qm_name }}'
+      run_once: true
       changed_when: true
 
     # 3. Teach the other nodes the QM definition, then release the mount.

@@ -1,0 +1,11 @@
+* Stage 2 authorization (#74) for {{ qm_name }} — arm-agnostic; fan-out reuses this.
+* Enable CHLAUTH, deny-all back-stop FIRST, then per-channel SSLPEERMAP maps.
+* The only path to an identity is a map; anything unmatched hits the back-stop.
+ALTER QMGR CHLAUTH(ENABLED)
+* Wire the receiver fallback DLQ so an undeliverable message has somewhere to go.
+ALTER QMGR DEADQ({{ mqsvc_dlq }})
+SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) ACTION(REPLACE)
+{% for m in authz_chlauth_maps %}
+SET CHLAUTH('{{ m.channel }}') TYPE(SSLPEERMAP) SSLPEER('{{ m.sslpeer }}') USERSRC(MAP) MCAUSER('{{ m.mcauser }}') ACTION(REPLACE)
+{% endfor %}
+REFRESH SECURITY TYPE(CONNAUTH)
