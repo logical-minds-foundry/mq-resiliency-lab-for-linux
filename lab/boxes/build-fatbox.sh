@@ -280,6 +280,23 @@ INV
      ansible-playbook -i "$BUILD_INV" "bake-${BAKE}.yml" \
        ${BAKE_EXTRA_VARS[@]+"${BAKE_EXTRA_VARS[@]}"} )
 
+# 6b. Golden-image hygiene: RESET /etc/machine-id so every clone regenerates a UNIQUE
+#     machine-id on first boot (#654). A baked, fixed /etc/machine-id makes systemd
+#     derive an identical DHCP DUID/client-id on every clone of the box; libvirt's
+#     dnsmasq keys leases on client-id, so two clones of the SAME Ubuntu fat box
+#     (infra-client + infra-svc, both infra-ubuntu2404) are handed one IP despite
+#     distinct MACs — the collision corrupts vagrant's private-net netplan render and
+#     `netplan apply` fails, killing the vms phase before provision. Emptying (not
+#     removing) /etc/machine-id plus dropping the dbus copy is the documented systemd
+#     first-boot trigger: an empty-but-present file makes systemd provision a fresh
+#     machine-id on the clone's first boot. Done generically for EVERY box — correct
+#     hygiene even for RHEL, which keys DHCP on MAC and dodges this particular
+#     collision. Must run AFTER the bake and BEFORE the snapshot, over the same SSH the
+#     bake used (vagrant user, passwordless sudo).
+echo "resetting /etc/machine-id on $BUILD_DOM for per-clone uniqueness (#654)..."
+ssh -i "$VAGRANT_KEY" "${SSH_OPTS[@]}" "vagrant@${BUILD_IP}" \
+  'sudo truncate -s 0 /etc/machine-id && sudo rm -f /var/lib/dbus/machine-id'
+
 # 7. Power off (wait for shut off), then package the disk into the CACHE. A
 #    compressed convert flattens the image and sheds bake scratch.
 virsh -c qemu:///system shutdown "$BUILD_DOM"
