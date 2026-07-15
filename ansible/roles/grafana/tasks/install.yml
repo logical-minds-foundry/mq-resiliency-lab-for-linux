@@ -57,9 +57,15 @@
     state: directory
     mode: "0755"
 
-- name: enable + start grafana
+# The service enable+start moved to configure.yml (#642): a baked service must NOT
+# auto-start on boot in a pre-config state. The grafana deb also auto-enables
+# grafana-server on install, so leave it explicitly disabled + stopped here to keep
+# the baked image inert — the per-run configure half enables + starts it. On the
+# un-baked full-role path (main.yml), configure re-enables it right after, so the end
+# state is unchanged.
+- name: grafana disabled + stopped at bake (inert until per-run configure)
   ansible.builtin.systemd:
     name: grafana-server
-    enabled: true
-    state: started
+    enabled: false
+    state: stopped
     daemon_reload: true

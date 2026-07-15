@@ -31,13 +31,16 @@
         name: alloy
         tasks_from: install
 
-    # The obs stack. loki is all-install (static config → full role). prometheus and
-    # grafana are split: bake only their install half (binaries/package + STATIC
-    # config), never the per-run topology render (prometheus targets, grafana
-    # dashboards) nor grafana's admin-password secret drop-in.
-    - name: loki + logcli (full role — static config)
+    # The obs stack — bake only the INSTALL halves so the box boots INERT (#642): the
+    # binaries/package + STATIC config are baked, but the services are NOT enabled or
+    # started (no boot-time auto-start in a pre-config state). loki, prometheus, and
+    # grafana are all enabled + started per-run in the observe phase (site-obs.yml). The
+    # bake never lays down the per-run renders (prometheus targets, grafana dashboards)
+    # nor grafana's admin-password secret drop-in.
+    - name: loki + logcli (install half — binary + static config + unit, no start)
       ansible.builtin.include_role:
         name: loki
+        tasks_from: install
 
     - name: prometheus (install half — binary + static prometheus.yml + rules + unit)
       ansible.builtin.include_role:

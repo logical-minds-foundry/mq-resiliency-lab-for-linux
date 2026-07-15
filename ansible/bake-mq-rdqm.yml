@@ -44,10 +44,23 @@
         name: rdqm-install
         tasks_from: install
 
+    # PHASED-STARTUP EXCEPTIONS (#642): two services are deliberately left ENABLED at
+    # bake because they are definitively benign — no per-run config, cannot boot in a
+    # broken pre-config state, race nothing:
+    #   * rdqm.service — IBM's rpm-shipped `oneshot` RDQM reboot daemon
+    #     (ExecStart=/var/mqm/rdqm/rdqmd -s, After=pacemaker.service), auto-enabled by
+    #     MQSeriesRDQM above. It is production-intended to start at boot for reboot
+    #     survival; disabling it would remove that with no measured gain and pull
+    #     cluster-lifecycle management into the codebase. Verified benign: the #639
+    #     green cold rebuild had it enabled-at-bake and formed the cluster cleanly.
+    #   * node_exporter (below) — static host-metrics exporter, no per-run config.
+    # Everything WITH a real per-run config dependency (alloy) is baked inert instead.
+    #
     # Fleet observability agents' binaries — baked so the observe phase does not pay
-    # the download/unpack cost per run. node-exporter is all-install (static config);
-    # alloy is split, so only its install half (binary + unit) is baked here.
-    - name: node metrics agent (node-exporter, full role — static config)
+    # the download/unpack cost per run. node-exporter is all-install (static config,
+    # left enabled — benign exception); alloy is split, so only its install half
+    # (binary + unit) is baked here (inert — it needs a per-run config.alloy).
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
       ansible.builtin.include_role:
         name: node-exporter
 

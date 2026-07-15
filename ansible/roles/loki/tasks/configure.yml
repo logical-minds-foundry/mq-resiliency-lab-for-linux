@@ -1,0 +1,13 @@
+---
+# CONFIGURE (#642, epic .github#70): the per-run half of loki — enable + start. Split
+# out of the bakeable install half so the baked obs box stays inert (no boot-time
+# auto-start, #642). loki carries only static config (all bakeable), so the per-run
+# work is just bringing the service up. Unlike node-exporter (re-run fleet-wide by
+# observability.yml), loki lives ONLY on the obs box and is not otherwise re-applied
+# per-run, so site-obs.yml invokes this configure half explicitly on obs_box.
+- name: enable + start loki
+  ansible.builtin.systemd:
+    name: loki
+    enabled: true
+    state: started
+    daemon_reload: true

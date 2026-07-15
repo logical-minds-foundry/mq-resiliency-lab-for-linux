@@ -3,6 +3,17 @@
 # dashboard tree (build/work/grafana/dashboards/, rendered per lab by mqlab) and the
 # admin-password env drop-in (a per-run SECRET, injected from the lab secret, never
 # baked). Both notify `restart grafana` so a per-run apply picks them up.
+#
+# The service enable+start also lives here (#642): moved out of the bakeable install
+# half so the baked obs box stays inert (no boot-time auto-start in a pre-config
+# state). Enable first; the dashboards + admin-password drop-in then restart the
+# running service to pick them up.
+- name: enable + start grafana
+  ansible.builtin.systemd:
+    name: grafana-server
+    enabled: true
+    state: started
+    daemon_reload: true
 
 # Deploy the whole rendered dashboard tree exactly as mqlab laid it out (#59):
 # each stack's boards under its "<Mechanism> (<OS>)" folder, the Watcher at the

@@ -1,4 +1,13 @@
 ---
+# node-exporter is deliberately baked WHOLE and left ENABLED at bake (#642 benign
+# exception, alongside rdqm.service): it is a static host-metrics exporter with NO
+# per-run config (#602 classified it "baked whole, static config"). It serves valid
+# metrics from boot, races nothing, and cannot come up in a broken pre-config state, so
+# it is exempt from the phased-startup disable→start-per-run treatment that applies to
+# services with real per-run config dependencies (named, alloy, grafana/prometheus/
+# loki). Leaving it enabled keeps it off the per-run start-management surface. The
+# observe phase (observability.yml, `hosts: all`) re-applies this whole role per-run,
+# which is idempotent.
 - name: node_exporter system user
   ansible.builtin.user:
     name: node_exporter

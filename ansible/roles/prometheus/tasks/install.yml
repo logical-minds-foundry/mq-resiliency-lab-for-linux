@@ -78,10 +78,6 @@
       [Install]
       WantedBy=multi-user.target
   notify: restart prometheus
-
-- name: enable + start prometheus
-  ansible.builtin.systemd:
-    name: prometheus
-    enabled: true
-    state: started
-    daemon_reload: true
+# NOTE (#642): the service enable+start moved to configure.yml — a baked service must
+# NOT auto-start on boot in a pre-config state. The unit is installed here (bakeable)
+# but stays inert until the per-run configure half enables + starts it.
