@@ -43,17 +43,31 @@
 
 # pymqi for the responder, built against /opt/mqm (mq-install provides the SDK +
 # build deps). Owned by mqm so the bindings service can run as mqm.
-- name: pymqi venv for the responder
-  ansible.builtin.shell: |
-    set -e
-    python3 -m venv /var/mqm/rvenv
-    /var/mqm/rvenv/bin/pip install --quiet pymqi
-  args:
+# venv creation (no network) is split from the pip install (hits PyPI) so the
+# retry below re-runs ONLY the fetch: a `creates:` guard keyed on the venv would
+# skip the retry after the venv exists but the flaked install left pymqi absent.
+- name: pymqi venv for the responder (create; no network)
+  ansible.builtin.command:
+    cmd: python3 -m venv /var/mqm/rvenv
     creates: /var/mqm/rvenv/bin/python
+  become: true
+  become_user: mqm
+
+# Per-run PyPI fetch: retry so a rate-limited parallel-boot DNS burst (#648) does
+# not fail the one-shot cold rebuild. The pip module is idempotent (no-op once
+# satisfied), so retries are safe and a settled index resolves fine.
+- name: install pymqi into the responder venv
+  ansible.builtin.pip:
+    name: pymqi
+    virtualenv: /var/mqm/rvenv
   environment:
     LD_LIBRARY_PATH: /opt/mqm/lib64
   become: true
   become_user: mqm
+  register: pymqi_install
+  until: pymqi_install is succeeded
+  retries: 5
+  delay: 10
 
 # TLS (#250): the responder is a SVRCONN *client* (client-mode to localhost), so
 # it needs its own cert + a .sth stash, distinct from the SVC QM's server keystore
