@@ -16,15 +16,24 @@
     update_cache: true
   become: true
 
+# Per-run GitHub fetch: retry so a rate-limited parallel-boot DNS burst (#648)
+# does not fail the one-shot cold rebuild. The git module is idempotent (a settled
+# checkout re-runs as a no-op), so retries are safe and steady-state resolves fine.
 - name: fetch mq-metric-samples source
   ansible.builtin.git:
     repo: https://github.com/ibm-messaging/mq-metric-samples.git
     dest: /usr/local/src/mq-metric-samples
     version: "{{ mq_exporter_ref }}"
   become: true
+  register: mq_samples_git
+  until: mq_samples_git is succeeded
+  retries: 5
+  delay: 10
 
 # cgo against /opt/mqm — the whole reason the node carries the full MQ SDK.
-# Idempotent: `creates` skips the (slow, network-fetching) build on re-runs.
+# Idempotent: `creates` skips the (slow, network-fetching) build on re-runs. The
+# build also pulls Go modules from the network, so it gets the same #648 retry:
+# on a flake the binary is not created, so `creates` lets the retry re-run it.
 - name: build mq_prometheus
   ansible.builtin.command:
     cmd: go build -o /usr/local/bin/mq_prometheus ./cmd/mq_prometheus
@@ -35,6 +44,10 @@
     CGO_LDFLAGS: -L/opt/mqm/lib64
     GOFLAGS: -mod=mod
   become: true
+  register: mq_prometheus_build
+  until: mq_prometheus_build is succeeded
+  retries: 5
+  delay: 10
 
 # TLS (#250): one app-org ops keystore (+ .sth stash) for the exporter, shared by
 # every per-QM instance on this probe. Placed once; pki-distribute is idempotent.
