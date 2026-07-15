@@ -38,13 +38,25 @@
     creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
   become: true
 
-- name: pymqi venv
-  ansible.builtin.shell: |
-    set -e
-    python3 -m venv /home/vagrant/mqvenv
-    /home/vagrant/mqvenv/bin/pip install pymqi
-  args:
+# venv creation (no network) is split from the pip install (hits PyPI) so the
+# retry below re-runs ONLY the fetch: a `creates:` guard keyed on the venv would
+# skip the retry after the venv exists but the flaked install left pymqi absent.
+- name: pymqi venv (create; no network)
+  ansible.builtin.command:
+    cmd: python3 -m venv /home/vagrant/mqvenv
     creates: /home/vagrant/mqvenv/bin/python
+
+# Per-run PyPI fetch: retry so a rate-limited parallel-boot DNS burst (#648) does
+# not fail the one-shot cold rebuild. The pip module is idempotent (no-op once
+# satisfied), so retries are safe and a settled index resolves fine.
+- name: install pymqi into the venv
+  ansible.builtin.pip:
+    name: pymqi
+    virtualenv: /home/vagrant/mqvenv
+  register: pymqi_install
+  until: pymqi_install is succeeded
+  retries: 5
+  delay: 10
 
 - name: JSON diagnostic logging for client apps (mqclient.ini) (#282)
   ansible.builtin.include_role:
