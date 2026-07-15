@@ -92,14 +92,47 @@ active_a_node() {
   return 1
 }
 
+# Run an MQSC command block on the active site-A primary, retrying on a transient failure
+# (#657). Right after the coordinated create the pacemaker-managed RDQM cluster is still
+# settling — microseconds after crtmqm the first runmqsc client connection can drop
+# mid-command (AMQ8145E "Connection broken"), even though the QM is already Running (the
+# active_a_node gate above). The intermittent flake is the last gap to a clean one-shot
+# rebuild. Every MQSC block passed here is idempotent (all DEFINEs use REPLACE, ALTER/REFRESH
+# are set-state, the listener START is DISPLAY-guarded), so a full re-run — or a mid-run
+# retry — is harmless. Re-resolve the active primary each attempt: an HA relocation while the
+# cluster settles may have moved the QM to another site-A node (active_a_node, #582), and a
+# runmqsc against a standby fails AMQ8146E. Fail loud after exhausting attempts — a persistent
+# failure is a real fault, not a transient one, and must not be swallowed (#583).
+run_mqsc_retry() {  # $1=label  $2=MQSC command (run on the current active site-A primary)
+  local label="$1" cmd="$2" node i
+  local attempts=5 delay=5
+  for (( i=1; i<=attempts; i++ )); do
+    node=$(active_a_node)  # re-resolve each try; a relocation may have moved the primary
+    if run "$node" "$cmd"; then
+      [ "$i" -gt 1 ] && echo "=== $label: runmqsc succeeded on attempt $i/$attempts ($node) ==="
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ]; then
+      echo "=== $label: runmqsc attempt $i/$attempts on $node failed (transient connection-broken? AMQ8145E) — re-resolving the active primary and retrying in ${delay}s ===" >&2
+      sleep "$delay"
+    fi
+  done
+  echo "ERROR: $label: runmqsc still failing after $attempts attempts on the site-A primary (last target $node)" >&2
+  return 1
+}
+
 # Lab MQSC posture (listener + app channel + a persistent test queue). On HA/DR these
 # objects replicate to site B with the QM, so they are defined once on the site-A primary.
-base_mqsc() {  # $1=node
-  run "$1" "printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') HBINT(15) KAINT(15) REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+# Each runmqsc block is wrapped in run_mqsc_retry (#657) — it re-resolves and targets the
+# active primary itself, so no node arg is threaded in here.
+base_mqsc() {
+  run_mqsc_retry "base MQSC (listener + APP.SVRCONN + CHLAUTH/CONNAUTH + HA.TEST)" \
+    "printf 'DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE\nDEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('\\''mqm'\\'') HBINT(15) KAINT(15) REPLACE\nALTER QMGR CHLAUTH(DISABLED) CONNAUTH('\\'' '\\'')\nREFRESH SECURITY TYPE(CONNAUTH)\nDEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
   # Start the listener only if not already running (#577): START LISTENER errors when it is,
   # which broke the resume path (bootstrap --from provision). The DEFINEs above are idempotent
   # via REPLACE; CONTROL(QMGR) also (re)starts the listener on QM start/failover.
-  run "$1" "printf 'DISPLAY LSSTATUS(L1414) STATUS\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' 2>/dev/null | grep -q 'STATUS(RUNNING)' || printf 'START LISTENER(L1414)\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  run_mqsc_retry "listener start (L1414)" \
+    "printf 'DISPLAY LSSTATUS(L1414) STATUS\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' 2>/dev/null | grep -q 'STATUS(RUNNING)' || printf 'START LISTENER(L1414)\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 }
 
 # Auto-detect HA/DR: present iff the site-B HA group is formed (rdqm_b provisioned via
@@ -130,7 +163,7 @@ if [ "$DR" = 1 ]; then
   A_PRIMARY=$(active_a_node)  # the site-A node running the QM (not necessarily a1 on a resume)
   add_vip "$A_PRIMARY" "$VIP"
   add_vip rdqm-b1 "$B_VIP"    # site B is the DR secondary (QM stopped there); FIP on its group head
-  base_mqsc "$A_PRIMARY"
+  base_mqsc
 else
   echo "=== HA-only (no site-B group) — coordinated create ==="
   # Secure the HA replication links with TLS (#545): -reh (this shape has no DR link).
@@ -143,7 +176,7 @@ else
   fi
   A_PRIMARY=$(active_a_node)  # the site-A node running the QM (not necessarily a1 on a resume)
   add_vip "$A_PRIMARY" "$VIP"
-  base_mqsc "$A_PRIMARY"
+  base_mqsc
 fi
 
 # Our-side inter-QM MQSC to the SVC counterparty (#147), only when a counterparty
@@ -154,7 +187,10 @@ if [ -n "$SVC_CONN" ]; then
   # RNAME must not be empty, else DEFINE QREMOTE(SVC.REQUEST) RNAME() is an MQSC syntax
   # error (AMQ8405I). SVC_REQ_QUEUE ({SHORT}.SVC.REQUEST) is threaded from site-rdqm.yml (#574).
   : "${SVC_REQ_QUEUE:?SVC_REQ_QUEUE (arg 5) is required when SVC_CONN is set — the QREMOTE RNAME would be empty}"
-  run "$A_PRIMARY" "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+  # Wrapped in run_mqsc_retry (#657): this is the same create->configure boundary, so the
+  # runmqsc connection can transiently break here too. All DEFINEs use REPLACE = idempotent.
+  run_mqsc_retry "SVC inter-QM MQSC (QREMOTE/XMITQ/SDR/RCVR)" \
+    "printf 'DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE\nDEFINE QREMOTE(SVC.REQUEST) RNAME($SVC_REQ_QUEUE) RQMNAME($QM_SVC) XMITQ($QM_SVC) REPLACE\nDEFINE QLOCAL($QM_SVC) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA($QM.$QM_SVC) REPLACE\nDEFINE CHANNEL($QM.$QM_SVC) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('\\''$SVC_CONN(1414)'\\'') XMITQ($QM_SVC) SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE\nDEFINE CHANNEL($QM_SVC.$QM) CHLTYPE(RCVR) TRPTYPE(TCP) REPLACE\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 fi
 
 run "$A_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM"
