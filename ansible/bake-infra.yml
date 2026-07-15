@@ -21,8 +21,11 @@
         name: bind-dns
         tasks_from: install
 
-    # Fleet agents' binaries. node-exporter is all-install; alloy install half only.
-    - name: node metrics agent (node-exporter, full role — static config)
+    # Fleet agents. node-exporter is baked WHOLE and left ENABLED (#642 benign
+    # exception): static host-metrics exporter, no per-run config, races nothing, cannot
+    # boot in a broken pre-config state. alloy is inert (install half only) — it needs a
+    # per-run config.alloy, so its enable+start is deferred to the observe phase.
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
       ansible.builtin.include_role:
         name: node-exporter
 

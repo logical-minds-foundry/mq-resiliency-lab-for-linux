@@ -10,17 +10,28 @@
   become: true
   roles: [node-exporter, alloy]
 
-# obs is baked (obs-ubuntu2404, #605): node-exporter + loki are baked WHOLE (static config
-# → nothing per-run, skipped), and alloy/prometheus/grafana bake their install half, so
-# per-run we run ONLY their configure halves — alloy's rendered config.alloy + start,
-# prometheus' topology-rendered scrape targets, grafana's rendered dashboard tree + the
-# admin-password secret drop-in. The binaries/package + static config are all baked.
+# obs is baked (obs-ubuntu2404, #605): every service is baked INERT (install half only,
+# #642) — the binaries/package + static config are baked, but nothing auto-starts on
+# boot in a pre-config state. So per-run we run the configure halves that enable + start
+# them: loki (static config, just enable+start), alloy (rendered config.alloy + start),
+# prometheus (topology-rendered scrape targets), grafana (rendered dashboard tree + the
+# admin-password secret drop-in). node_exporter is the one benign exception — baked
+# enabled (static host-metrics, no per-run config) and re-applied by observability.yml.
 - hosts: obs_box
   become: true
   tasks:
     # NOTE (#639): the instance-build base-OS refresh (apt update + upgrade:dist, spec
     # §4.5.1) was removed — a blanket upgrade fights the pinned baked stack. OS currency
     # now comes from rebuilding the box, not updating at boot.
+
+    # loki is on the obs box ONLY and is not re-applied fleet-wide by observability.yml,
+    # so its per-run enable+start lives here (#642). A data store — bring it up before
+    # grafana's Loki datasource is queried.
+    - name: loki configure (per-run enable + start)
+      ansible.builtin.include_role:
+        name: loki
+        tasks_from: configure
+
     - name: alloy configure (per-run config.alloy + start)
       ansible.builtin.include_role:
         name: alloy

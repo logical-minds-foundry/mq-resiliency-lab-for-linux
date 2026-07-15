@@ -21,3 +21,16 @@
     group: bind
     mode: "0750"
   become: true
+
+# The bind9 deb auto-enables + starts named on install, so a baked box would boot
+# named BEFORE its per-run zones + named.conf exist — the pre-config default-state
+# race this phased-startup fix targets (#642): named eating first-boot resources and
+# racing sshd is the measured infra-ubuntu2404 SSH flake. Leave named explicitly
+# disabled + stopped in the bake half; the per-run configure half enables + starts it
+# once the rendered zones and this node's named.conf are in place.
+- name: named disabled + stopped at bake (inert until per-run configure)
+  ansible.builtin.systemd:
+    name: named
+    enabled: false
+    state: stopped
+  become: true

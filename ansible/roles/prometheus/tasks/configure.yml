@@ -3,6 +3,17 @@
 # scrape targets. These are rendered per lab from topology (`mqlab obs targets`) into
 # build/work/prometheus/targets/, so they are NOT bakeable into an image and stay in
 # the per-run path. A `restart prometheus` picks them up (file_sd would also poll).
+#
+# The service enable+start also lives here (#642): moved out of the bakeable install
+# half so the baked obs box stays inert (no boot-time auto-start in a pre-config
+# state). Enable first, then the targets restart the running service.
+- name: enable + start prometheus
+  ansible.builtin.systemd:
+    name: prometheus
+    enabled: true
+    state: started
+    daemon_reload: true
+
 - name: deploy the topology-rendered node targets
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/work/prometheus/targets/node.json"
