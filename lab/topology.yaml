@@ -52,6 +52,18 @@ boxes:
   infra-ubuntu2404:
     box: infra-ubuntu2404
     arch: x86_64
+  # The fat MQ-commons box (#659, epic .github#70): the cloud-image/ubuntu-24.04 base with
+  # the Ubuntu MQ product (server + client + SDK + samples debs) + node-exporter + alloy +
+  # the slow cgo mq_prometheus exporter build + acl BAKED IN (lab/boxes/build-fatbox.sh
+  # --box mq-ubuntu2404). The three shared Ubuntu MQ commons (svc-sim, app-client,
+  # mon-probe) boot this instead of the host-resolved Ubuntu platform so a bootstrap skips
+  # ~15-20 min of per-run installs (MQ debs, alloy, mq_prometheus, the acl stall); the
+  # per-run configure half (QMs/channels on svc, the app-requester, the exporter instances)
+  # still runs. arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked
+  # binaries are arch-specific and the box is baked on x86_64. No DVD (Ubuntu online archive).
+  mq-ubuntu2404:
+    box: mq-ubuntu2404
+    arch: x86_64
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -73,12 +85,14 @@ boot_batch: 4
 nodes:
   # --- SVC service VM + app client (the distributed message path) ---
   svc-sim:
+    platform: mq-ubuntu2404  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
     cpus: 2
     memory: 2048
     org: service  # the mocked counterparty — the service.com side of net-ext
     # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP (#147).
     nics: { net-mgmt: 10.50.0.50, net-ext: 10.60.0.50 }
   app-client:
+    platform: mq-ubuntu2404  # boot the baked MQ-commons box (#659) — MQ client+SDK/node-exporter/alloy/acl pre-installed
     # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B VIPs
     # (10.10.2.x) -- so the app, a reconnectable client given both VIPs, rides a
     # cross-site DR cutover and keeps producing on the survivor.
@@ -93,6 +107,7 @@ nodes:
     memory: 4096
     nics: { net-mgmt: 10.50.0.2 }
   mon-probe:
+    platform: mq-ubuntu2404  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
     cpus: 1
     memory: 1024
     nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }

@@ -33,6 +33,11 @@ _ARCH_SUFFIX = {
     # Ubuntu tarball svc/app/probe already need (the bake consumed it for the baked
     # mq_prometheus cgo build against the MQ SDK).
     "obs-ubuntu2404": "UbuntuLinuxX64",
+    # The fat MQ-commons box platform (#659) is Ubuntu x86_64, so it takes the same
+    # UbuntuLinuxX64 tarball as ubuntu2404-x86_64. svc/app/probe are repointed to it and
+    # are MQ commons, so _commons_mq_platforms feeds this into tarball_name; the bake
+    # consumed the same tarball for the MQ deb install + the mq_prometheus cgo SDK.
+    "mq-ubuntu2404": "UbuntuLinuxX64",
     "alma9-x86_64": "LinuxX64",
 }
 

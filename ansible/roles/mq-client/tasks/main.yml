@@ -1,11 +1,23 @@
 # Client node: MQ client/sdk debs + a pymqi venv for the requester.
 # Ubuntu tar suffix tracks the guest arch (host-resolved, #276): ARM64 on the Mac
 # dev path, X64 on an x86 host. (The host-side fetch/manifest map mirrors this.)
+
+# Skip-if-baked (#648/#659): app-client boots the mq-ubuntu2404 fat box, whose baked MQ
+# product (server set = client + SDK) leaves /opt/mqm/inc/cmqc.h present. Gate the ~700MB
+# tar copy + unpack on that INSTALLED marker so the baked box skips it every run; keying
+# only on /tmp/MQServer (wiped on boot) re-copied + re-unpacked the tarball each run. The
+# un-baked client path (no fat box) still installs from scratch.
+- name: check for an already-installed MQ (skip the baked install)
+  ansible.builtin.stat:
+    path: /opt/mqm/inc/cmqc.h
+  register: mq_installed
+
 - name: copy MQ tar to node
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
     dest: /tmp/mqadv.tar.gz
     mode: "0644"
+  when: not mq_installed.stat.exists
 
 - name: unpack
   ansible.builtin.unarchive:
@@ -13,6 +25,7 @@
     dest: /tmp
     remote_src: true
     creates: /tmp/MQServer
+  when: not mq_installed.stat.exists
 
 - name: accept developer licence
   ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
