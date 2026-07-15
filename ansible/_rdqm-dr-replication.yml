@@ -17,13 +17,13 @@
         name: acl
 
 # As on site A: the heavy MQ + RDQM install is baked into mq-rdqm-rhel9, so per-run we
-# run ONLY rdqm-install's configure half (base-OS update + drbd module + drbdpool VG on
-# this instance's fresh extra disk). The DVD dnf repo it (re)mounts is what makes
+# run ONLY rdqm-install's configure half (drbd module + drbdpool VG on this instance's
+# fresh extra disk). The DVD dnf repo it (re)mounts is what makes
 # `mqlab obs instrument` find packages like unzip on rdqm_b later (#288, #604).
 - hosts: rdqm_b
   become: true
   tasks:
-    - name: RDQM per-instance configure (base-OS update + drbd module + drbdpool VG)
+    - name: RDQM per-instance configure (drbd module + drbdpool VG)
       ansible.builtin.include_role:
         name: rdqm-install
         tasks_from: configure
