@@ -1161,6 +1161,15 @@ freely.</p>
 </code></pre></div>
 <p>All working state lives under the gitignored <code>build/</code> directory, mounted
 from the host. Nothing else in the VM is precious.</p>
+<p>Guests boot <strong>pre-baked, per-role box images</strong> rather than installing everything
+on every bring-up: MQ, the RDQM/observability stacks, and the OSS agents are
+baked once into a golden box per role, so a bring-up only does the fast,
+instance-specific configuration. That is why the walkthrough below is minutes,
+not the better part of an hour. The baked boxes persist across a VM rebuild
+(they live on the persistent data disk), so "rebuild" comes in tiers of very
+different cost — see the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md">box model &amp; rebuild tiers</a>
+developer note.</p>
 <h2 id="2-drive-the-lab-with-mqlab">2. Drive the lab with <code>mqlab</code><a class="headerlink" href="#2-drive-the-lab-with-mqlab" title="Permanent link">&para;</a></h2>
 <p>The lab is driven by <strong><code>mqlab</code></strong>, an operator orchestrator that does the
 opposite of most tooling: rather than hiding the mechanics, it <strong>shows</strong> them.
