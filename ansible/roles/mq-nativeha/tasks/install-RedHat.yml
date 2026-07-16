@@ -2,6 +2,20 @@
 # with base-OS deps from the attached install DVD (offline, unregistered guest).
 # OS-adapter for the OS-agnostic mq-nativeha role (#246) — proven in the Phase-0
 # spike. Phase 2 adds install-Debian.yml; the formation logic (main.yml) is shared.
+#
+# Skip-if-baked (#648/#659, applied to the native-HA RHEL adapter for #88): the
+# mq-nativeha-rhel9 fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is already
+# present. Gate the ~2 GiB developer-tar copy + unpack on that marker — WITHOUT it a
+# baked node re-copies the tarball EVERY bootstrap (the #659 offender, since /tmp is
+# wiped on boot). The dnf install / setmqinst steps keep their own `creates:` guards
+# (idempotent no-ops when baked). The DVD mount + repo drop stay UNGUARDED so the offline
+# BaseOS+AppStream repo remains available to the per-run configure half (spec §4.4). An
+# un-baked base-box node (Phase-0) still installs from scratch.
+- name: check for an already-installed MQ (skip the baked tar copy/unpack)
+  ansible.builtin.stat:
+    path: /opt/mqm/inc/cmqc.h
+  register: mq_installed
+
 - name: mount the install DVD (BaseOS+AppStream)
   ansible.builtin.shell: |
     set -e
@@ -28,9 +42,12 @@
 
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/cache/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    # mq_media_dir (role default = the per-run path) is overridden by the fat-box bake to
+    # the host-durable main-worktree cache (#604) — see roles/mq-nativeha/defaults/main.yml.
+    src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     dest: /tmp/mqadv.tar.gz
     mode: "0644"
+  when: not mq_installed.stat.exists
 
 - name: unpack
   ansible.builtin.unarchive:
@@ -38,6 +55,7 @@
     dest: /tmp
     remote_src: true
     creates: /tmp/MQServer
+  when: not mq_installed.stat.exists
 
 - name: accept developer licence
   ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept

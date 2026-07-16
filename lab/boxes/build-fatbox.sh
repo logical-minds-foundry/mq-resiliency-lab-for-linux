@@ -37,7 +37,8 @@ usage() {
 usage: build-fatbox.sh --box <name> --domain-type <kvm|qemu> \
                        --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
 
-  --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404.
+  --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404,
+                   mq-nativeha-rhel9.
   --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies them
   (it computes them from host facts via platforms.build_domain_virt, #327).
 USAGE
@@ -63,6 +64,7 @@ case "$BOX" in
   obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=obs ;;
   infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
   mq-ubuntu2404)    BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=mq-ubuntu ;;
+  mq-nativeha-rhel9) BASE_KIND=rhel;  BASE_BOX="rhel/9.6-x86_64";        BAKE=nativeha-rhel ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac
