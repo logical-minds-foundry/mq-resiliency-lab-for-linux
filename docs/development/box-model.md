@@ -228,3 +228,14 @@ is present at its canonical `build/state/` location and matches a **pinned SHA-2
 for the RHEL version. On a missing or mismatched ISO it emits fail-loud guidance —
 the version, the Red Hat download URL, and the destination path — and stops before a
 doomed build. No credential handling ever enters the tool; it only checks and guides.
+
+Concretely, `box.verify_rhel_dvd(version)` runs from the build core (`build_boxes`)
+whenever the RHEL base box is about to be **built or force-built** — never on a
+REUSE, since a cached box attaches no ISO. It resolves the ISO exactly as
+`stage-rhel-iso.sh` does (`MQLAB_RHEL_ISO` → `RHEL_ISO` → the `build/state/`
+default) and compares its SHA-256 against `box.RHEL_DVD_SHA256`, a version→checksum
+map the **operator** fills in from Red Hat's published value (the checksum is never
+fabricated in-tree). The verdict is three-way: a **missing** ISO blocks the build,
+a **pinned-but-mismatched** ISO blocks it, and an **unpinned** version emits a loud
+`NOTICE` and **proceeds** — verification stays off until someone pins the checksum,
+so turning the check on never regresses the pre-existing no-SHA cold rebuild.
