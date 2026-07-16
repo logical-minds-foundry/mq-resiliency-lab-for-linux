@@ -905,6 +905,29 @@ def parse_box_list(text: str) -> dict[str, str]:
     return out
 
 
+# The box sub-app (epic .github#91). Imported here — AFTER _LOCAL_BOX_BUILDERS,
+# which box.FLEET derives from — to keep the cli<->box import cycle well-ordered.
+from mqlab import box  # noqa: E402
+
+box_app = typer.Typer(
+    help="baked-box fleet: status/build/rebuild/clean the five local-built boxes",
+    no_args_is_help=True,
+)
+app.add_typer(box_app, name="box")
+
+
+_BoxNames = Annotated[
+    list[str] | None, typer.Argument(help="box names to show (default: the whole fleet)")
+]
+
+
+@box_app.command("status")
+def box_status(boxes: _BoxNames = None) -> None:
+    """Show the baked-box fleet: cache/age/hash/registration + REUSE/BUILD/STALE/FORCE decision."""
+    names = boxes or list(box.FLEET)
+    typer.echo(box.render_status(names))
+
+
 def _resolved_nodes() -> dict[str, Any]:
     """The rendered resolved topology's nodes (build/work/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml
@@ -918,7 +941,7 @@ def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
     """Local-built boxes the given guests need -> build script."""
     nodes = _resolved_nodes()
     boxes = {(nodes.get(g) or {}).get("box") for g in guests}
-    return {box: script for box, script in _LOCAL_BOX_BUILDERS.items() if box in boxes}
+    return {name: script for name, script in _LOCAL_BOX_BUILDERS.items() if name in boxes}
 
 
 def _guests_need_dvd(guests: list[str]) -> bool:
@@ -936,14 +959,14 @@ def _box_build_steps(
     # takes `--box <name>` so one script serves every fat box (#603).
     domain_type, cpu_mode = build_domain_virt(facts)
     steps: list[CommandStep] = []
-    for box, script in sorted(needed.items()):
-        if box in present:
+    for name, script in sorted(needed.items()):
+        if name in present:
             continue
         argv = ["bash", str(repo_root() / script)]
         if script.endswith("build-fatbox.sh"):
-            argv += ["--box", box]
+            argv += ["--box", name]
         argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
-        steps.append(CommandStep(f"box {box}", Command(argv)))  # noqa: S607
+        steps.append(CommandStep(f"box {name}", Command(argv)))  # noqa: S607
     return steps
 
 
