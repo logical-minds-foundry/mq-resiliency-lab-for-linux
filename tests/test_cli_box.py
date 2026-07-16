@@ -8,15 +8,40 @@ tests never touch real git/fs/virsh/vagrant.
 
 from __future__ import annotations
 
+import io
+
+import pytest
+import typer
+from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import box, cli
 from mqlab.hostfacts import X86_64, HostFacts
+from mqlab.orchestrator import StepFailedError
+from mqlab.render import Renderer
 from mqlab.runner import Command
+from mqlab.transcript import Transcript, transcript_path
+from tests.fakes import RecordingRunner
 
 runner = CliRunner()
 
 _FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+
+
+class _NoPause:
+    def wait(self) -> None:
+        return None
+
+
+def _fake_deps() -> cli.Deps:
+    # run_steps is stubbed in the build_boxes tests, so these are never exercised;
+    # they exist only to satisfy the typed Deps contract (mirrors test_cli_vm._deps).
+    return cli.Deps(
+        runner=RecordingRunner(results=[]),
+        renderer=Renderer(Console(file=io.StringIO(), force_terminal=False, width=80)),
+        transcript=Transcript(transcript_path("box-build", "20260716T000000Z")),
+        pauser=_NoPause(),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -243,3 +268,108 @@ def test_box_status_explicit_boxes(monkeypatch):
     result = runner.invoke(cli.app, ["box", "status", "mq-rdqm-rhel9"])
     assert result.exit_code == 0
     assert captured["names"] == ["mq-rdqm-rhel9"]
+
+
+# --------------------------------------------------------------------------- #
+# build_boxes core (epic .github#91, T2)                                       #
+# --------------------------------------------------------------------------- #
+def _stub_build_env(monkeypatch, steps_sink):
+    monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
+    monkeypatch.setattr(box, "run_steps", lambda steps, **kw: steps_sink.extend(steps))
+
+
+def test_build_boxes_force_adds_rebuild_flag(monkeypatch):
+    captured: list = []
+    _stub_build_env(monkeypatch, captured)
+    box.build_boxes(["mq-rdqm-rhel9"], force=True)
+    argv = captured[0].command.argv
+    assert "--box" in argv and "mq-rdqm-rhel9" in argv and "--rebuild-box" in argv
+
+
+def test_build_boxes_non_force_omits_rebuild_flag(monkeypatch):
+    captured: list = []
+    _stub_build_env(monkeypatch, captured)
+    box.build_boxes(["mq-rdqm-rhel9"], force=False)
+    argv = captured[0].command.argv
+    assert "--box" in argv and "mq-rdqm-rhel9" in argv
+    assert "--rebuild-box" not in argv
+
+
+def test_build_boxes_raises_typer_exit_on_step_failure(monkeypatch):
+    monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
+
+    def _boom(steps, **kw):
+        raise StepFailedError("box mq-rdqm-rhel9", 7)
+
+    monkeypatch.setattr(box, "run_steps", _boom)
+    with pytest.raises(typer.Exit) as excinfo:
+        box.build_boxes(["mq-rdqm-rhel9"], force=False)
+    assert excinfo.value.exit_code == 7
+
+
+# --------------------------------------------------------------------------- #
+# _select_boxes + `box build`/`box rebuild` verbs                              #
+# --------------------------------------------------------------------------- #
+def test_select_boxes_all_returns_whole_fleet():
+    assert cli._select_boxes(None, all_=True) == list(box.FLEET)
+    # --all wins even when names are also given (a superset request).
+    assert cli._select_boxes(["mq-rdqm-rhel9"], all_=True) == list(box.FLEET)
+
+
+def test_select_boxes_explicit_validated():
+    assert cli._select_boxes(["mq-rdqm-rhel9", "obs-ubuntu2404"], all_=False) == [
+        "mq-rdqm-rhel9",
+        "obs-ubuntu2404",
+    ]
+
+
+def test_select_boxes_none_without_all_exits_2():
+    with pytest.raises(typer.Exit) as excinfo:
+        cli._select_boxes(None, all_=False)
+    assert excinfo.value.exit_code == 2
+
+
+def test_select_boxes_unknown_name_exits_2():
+    with pytest.raises(typer.Exit) as excinfo:
+        cli._select_boxes(["no-such-box"], all_=False)
+    assert excinfo.value.exit_code == 2
+
+
+def test_box_build_verb_issues_non_force(monkeypatch):
+    calls: dict = {}
+    monkeypatch.setattr(
+        cli.box, "build_boxes", lambda names, *, force: calls.update(names=names, force=force)
+    )
+    result = runner.invoke(cli.app, ["box", "build", "mq-rdqm-rhel9"])
+    assert result.exit_code == 0
+    assert calls == {"names": ["mq-rdqm-rhel9"], "force": False}
+
+
+def test_box_rebuild_verb_issues_force(monkeypatch):
+    calls: dict = {}
+    monkeypatch.setattr(
+        cli.box, "build_boxes", lambda names, *, force: calls.update(names=names, force=force)
+    )
+    result = runner.invoke(cli.app, ["box", "rebuild", "mq-rdqm-rhel9"])
+    assert result.exit_code == 0
+    assert calls == {"names": ["mq-rdqm-rhel9"], "force": True}
+
+
+def test_box_build_all_targets_whole_fleet(monkeypatch):
+    calls: dict = {}
+    monkeypatch.setattr(
+        cli.box, "build_boxes", lambda names, *, force: calls.update(names=names, force=force)
+    )
+    result = runner.invoke(cli.app, ["box", "build", "--all"])
+    assert result.exit_code == 0
+    assert calls == {"names": list(box.FLEET), "force": False}
+
+
+def test_box_build_no_selection_exits_2(monkeypatch):
+    monkeypatch.setattr(
+        cli.box, "build_boxes", lambda names, *, force: pytest.fail("must not build")
+    )
+    result = runner.invoke(cli.app, ["box", "build"])
+    assert result.exit_code == 2
