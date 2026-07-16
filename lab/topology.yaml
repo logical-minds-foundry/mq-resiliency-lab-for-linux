@@ -25,9 +25,12 @@ boxes:
   # (DRBD/Pacemaker, kernel-matched kmod-drbd) + node-exporter + alloy + the #569 journald
   # diagnostic default BAKED IN (lab/boxes/build-fatbox.sh --box mq-rdqm-rhel9). The RDQM
   # nodes boot this instead of rhel96-x86_64 so a bootstrap skips the ~hour of heavy
-  # installs. Instances still attach the DVD: the per-run configure half runs a base-OS
-  # dnf update from it and (re)mounts it as the offline repo. The box kernel matches its
-  # baked kmod-drbd by construction (baked from this exact base) — no separate kernel pin.
+  # installs. Instances still attach the DVD: the per-run configure half (re)mounts it as
+  # the offline BaseOS+AppStream repo for dep resolution. The instance-build base-OS dnf
+  # update was removed (#639/#641) — OS currency comes from rebuilding the box, not
+  # updating at boot; this also keeps the kernel from drifting off the baked kmod-drbd.
+  # The box kernel matches its baked kmod-drbd by construction (baked from this exact
+  # base) — no separate kernel pin.
   mq-rdqm-rhel9:
     box: mq-rdqm-rhel9
     arch: x86_64
