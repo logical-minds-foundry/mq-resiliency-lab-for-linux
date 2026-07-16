@@ -373,6 +373,8 @@ def test_box_build_no_selection_exits_2(monkeypatch):
     )
     result = runner.invoke(cli.app, ["box", "build"])
     assert result.exit_code == 2
+
+
 # --- cold-boot staleness nudge prepended to the status header (epic .github#91 T6) ---
 def test_box_status_prepends_cold_boot_notice(monkeypatch):
     monkeypatch.setattr(cli.box, "render_status", lambda names: "BOX  ...\nTABLE")
