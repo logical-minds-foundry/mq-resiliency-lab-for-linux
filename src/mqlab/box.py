@@ -12,10 +12,12 @@ so tests never touch real git/fs/virsh/vagrant.
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import typer
 
@@ -25,9 +27,6 @@ from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
 from mqlab.platforms import build_domain_virt
 from mqlab.runner import Command, SubprocessRunner
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -48,6 +47,9 @@ class BoxSpec:
 # filename mirrors build-box.sh's `rhel-9.6-x86_64-libvirt.box`.
 _BASE_BOX = "rhel/9.6-x86_64"
 _BASE_ARTIFACT = "rhel-9.6-x86_64-libvirt.box"
+# The RHEL version the base box bakes from ("9.6"), parsed from _BASE_BOX so the
+# DVD-verify locus and the fleet name stay in lockstep.
+_RHEL_VERSION = _BASE_BOX.split("/", 1)[1].split("-", 1)[0]
 
 # Actions the builders' --dry-run may report. Ordered so the longer FORCE-BUILD
 # is matched before its BUILD substring.
@@ -207,6 +209,107 @@ def render_status(names: list[str]) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# RHEL DVD verify-and-guide (epic .github#91, T4)                              #
+# --------------------------------------------------------------------------- #
+# Pinned RHEL DVD SHA-256 checksums, keyed by RHEL version. Each value is the
+# checksum Red Hat publishes beside the DVD on the Customer Portal download page
+# (Downloads -> Red Hat Enterprise Linux -> the "x86_64 DVD ISO" row's SHA-256).
+# Pinning a version turns on integrity verification of the operator-supplied ISO
+# before the expensive base-box BUILD.
+#
+# 9.6 is DELIBERATELY LEFT UNPINNED: the real Red Hat checksum is NOT fabricated
+# here. The operator pastes it in from Red Hat's published value. Until a version
+# is pinned, verify_rhel_dvd emits a loud NOTICE and PROCEEDS (integrity
+# unverified) — the lab built the RHEL box with no SHA check before this
+# preflight existed, and hard-blocking on unpinned would regress that working
+# cold rebuild.
+RHEL_DVD_SHA256: dict[str, str] = {
+    # "9.6": "<paste Red Hat's published rhel-9.6-x86_64-dvd.iso SHA-256 here>",
+}
+
+# Red Hat's authenticated RHEL download page (operator-supplied; no credential
+# handling ever enters the tool — we only check the ISO and guide).
+_RHEL_DVD_URL = "https://access.redhat.com/downloads/content/rhel"
+
+
+def _rhel_dvd_path() -> Path:
+    """Canonical path to the operator-supplied RHEL DVD ISO.
+
+    Honors MQLAB_RHEL_ISO then RHEL_ISO exactly like lab/scripts/stage-rhel-iso.sh;
+    otherwise defaults to the shared state/ bucket at
+    state("rhel-9.6-x86_64-dvd.iso")."""
+    override = os.environ.get("MQLAB_RHEL_ISO") or os.environ.get("RHEL_ISO")
+    if override:
+        return Path(override)
+    return state("rhel-9.6-x86_64-dvd.iso")
+
+
+def _sha256_file(path: Path) -> str:
+    """The file's SHA-256, streamed in 1 MiB chunks (the DVD is ~12.7 GB)."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_rhel_dvd(version: str) -> None:
+    """Preflight the RHEL DVD before the base-box BUILD (fail-loud).
+
+    - MISSING file          -> typer.Exit(2) with actionable guidance (version,
+                               Red Hat download URL, destination path).
+    - pinned but MISMATCHED -> typer.Exit(2), fail-loud (corrupt / wrong ISO).
+    - UNPINNED version      -> loud NOTICE, then return (integrity unverified).
+    - pinned and MATCHED    -> return.
+    """
+    path = _rhel_dvd_path()
+    if not path.is_file():
+        typer.echo(
+            f"mqlab box: RHEL {version} DVD ISO not found at {path}.\n"
+            f"  The RHEL DVD is operator-supplied — Red Hat gates it behind auth.\n"
+            f"  Download the '{version} x86_64 DVD ISO' from {_RHEL_DVD_URL}\n"
+            f"  and place it at {path} (or point MQLAB_RHEL_ISO / RHEL_ISO at it).",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    pinned = RHEL_DVD_SHA256.get(version)
+    if not pinned:
+        typer.echo(
+            f"NOTICE: RHEL {version} DVD checksum not pinned in RHEL_DVD_SHA256 — "
+            f"integrity not verified; pin it to enable verification.",
+            err=True,
+        )
+        return
+
+    actual = _sha256_file(path)
+    if actual != pinned:
+        typer.echo(
+            f"mqlab box: RHEL {version} DVD ISO at {path} failed SHA-256 verification.\n"
+            f"  expected {pinned}\n"
+            f"  actual   {actual}\n"
+            f"  The ISO is corrupt or the wrong file. Re-download the "
+            f"'{version} x86_64 DVD ISO' from {_RHEL_DVD_URL}.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+
+def _rhel_base_needs_dvd(name: str, *, force: bool) -> bool:
+    """Whether building `name` will consume the RHEL DVD.
+
+    Only the RHEL base box (build-box.sh) attaches the ISO — the fat boxes bake
+    from the already-built base box. And only a real build needs it: a REUSE of a
+    cached base box attaches no ISO. A forced rebuild always rebuilds, so it
+    always needs the DVD (and short-circuits the extra dry-run)."""
+    if name != _BASE_BOX:
+        return False
+    if force:
+        return True
+    return box_decision(name).action != "REUSE"
+
+
+# --------------------------------------------------------------------------- #
 # Mutating verbs — the shared build/rebuild core (epic .github#91, T2)         #
 # --------------------------------------------------------------------------- #
 def build_boxes(names: list[str], *, force: bool) -> None:
@@ -220,6 +323,9 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     bootstrap's `_ensure_local_boxes`, so both drive one path. Raises typer.Exit
     with the failing step's exit code on any builder non-zero (StepFailedError).
     """
+    for name in names:
+        if _rhel_base_needs_dvd(name, force=force):
+            verify_rhel_dvd(_RHEL_VERSION)
     needed = {name: FLEET[name].builder for name in names}
     steps = cli._box_build_steps(needed, {}, probe(), force=force)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
