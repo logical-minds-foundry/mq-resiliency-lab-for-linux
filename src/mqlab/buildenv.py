@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,15 @@ if TYPE_CHECKING:
 BUCKETS = ("cache", "state", "work", "temp")
 SHARED = ("cache", "state")  # symlinked back to main in a worktree
 LOCAL = ("work", "temp")  # always real, per-checkout
+
+# Write-once marker of the last scorched-earth /vergil rebuild (epic .github#91
+# T6): the first `ensure` after a fresh box lays it down; its age drives the
+# cold-boot staleness nudge (see coldboot.py). Lives in the shared state bucket.
+COLD_BOOT_STAMP = ".cold-boot-stamp"
+
+
+def _now_iso() -> str:  # pragma: no cover - real clock (injected in tests)
+    return datetime.now(tz=UTC).isoformat()
 
 
 class BuildEnvError(RuntimeError):
@@ -54,7 +64,22 @@ def _make_bucket(path: Path) -> None:
     (path / ".gitkeep").touch()
 
 
-def ensure(repo: Path, *, run: Callable[[list[str]], str] = _git) -> None:
+def _stamp_cold_boot(shared_build: Path, now_iso: Callable[[], str]) -> None:
+    """Write-once cold-boot stamp in the shared state bucket. A fresh /vergil has
+    no stamp, so the first `ensure` creates one; an existing stamp is never
+    overwritten — its age measures time since the last scorched-earth rebuild."""
+    stamp = shared_build / "state" / COLD_BOOT_STAMP
+    if stamp.exists():
+        return
+    stamp.write_text(now_iso())
+
+
+def ensure(
+    repo: Path,
+    *,
+    run: Callable[[list[str]], str] = _git,
+    now_iso: Callable[[], str] = _now_iso,
+) -> None:
     """Wire repo/build/* . In a worktree, cache/ and state/ symlink back to main;
     work/ and temp/ are always real local dirs. Idempotent; fails loud if a worktree
     already holds a real (non-symlink) shared bucket."""
@@ -80,6 +105,11 @@ def ensure(repo: Path, *, run: Callable[[list[str]], str] = _git) -> None:
                 f"{main / bucket}. Move/remove it, then re-run `mqlab build ensure`."
             )
         target.symlink_to(main / bucket)
+
+    # Stamp the cold-boot marker in the shared state bucket (write-once) so the
+    # staleness nudge can age it. `main` is that bucket's real home (the main
+    # checkout's build/, even from a worktree).
+    _stamp_cold_boot(main, now_iso)
 
     # Auto-heal a lab created before #355: relocate lab/.vagrant into the shared state
     # bucket so vagrant finds the running lab instead of orphaning it. No-op otherwise.
