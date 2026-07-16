@@ -566,6 +566,39 @@ def test_stack_mq_platforms_excludes_infra(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# cold-boot staleness nudge in the preflight (epic .github#91 T6)
+# --------------------------------------------------------------------------- #
+def test_bootstrap_surfaces_cold_boot_notice(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=True, observe=True),
+    )
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: "NOTICE: this box is 40 days old.")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0  # advisory — an old stamp never blocks the run
+    assert "NOTICE: this box is 40 days old." in result.output
+
+
+def test_bootstrap_silent_when_no_cold_boot_nudge(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=True, observe=True),
+    )
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: None)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0
+    assert "NOTICE" not in result.output
+
+
+# --------------------------------------------------------------------------- #
 # failure -> resume hint
 # --------------------------------------------------------------------------- #
 def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):

@@ -13,7 +13,7 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, parity
+from mqlab import buildenv, coldboot, parity
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_platforms,
@@ -291,9 +291,18 @@ def _prepare_lab() -> None:
         raise typer.Exit(code=1) from exc
 
 
+def _emit_cold_boot_nudge() -> None:
+    """Surface the banded cold-boot staleness NOTICE when there is one (epic
+    .github#91 T6). Advisory only — never blocks, never raises."""
+    message = coldboot.nudge()
+    if message:
+        typer.echo(message)
+
+
 @app.command("doctor")
 def doctor() -> None:
     """Check this host can run the lab (arch, KVM, required tools)."""
+    _emit_cold_boot_nudge()
     ok, report = summarise(_doctor_checks())
     typer.echo(report)
     raise typer.Exit(code=0 if ok else 1)
@@ -927,6 +936,7 @@ _AllBoxes = Annotated[bool, typer.Option("--all", help="operate on the whole fle
 def box_status(boxes: _BoxNames = None) -> None:
     """Show the baked-box fleet: cache/age/hash/registration + REUSE/BUILD/STALE/FORCE decision."""
     names = boxes or list(box.FLEET)
+    _emit_cold_boot_nudge()  # prepend the cold-boot staleness NOTICE, if any (T6)
     typer.echo(box.render_status(names))
 
 
@@ -1611,6 +1621,7 @@ def _bootstrap_run(
     and prints a resume hint naming the failing phase."""
     stack = _lookup_stack_or_exit(stack_name)
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
+    _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
     deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         # The vms phase's `vagrant up` step carries env=None, so it inherits this

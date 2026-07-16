@@ -373,3 +373,22 @@ def test_box_build_no_selection_exits_2(monkeypatch):
     )
     result = runner.invoke(cli.app, ["box", "build"])
     assert result.exit_code == 2
+
+
+# --- cold-boot staleness nudge prepended to the status header (epic .github#91 T6) ---
+def test_box_status_prepends_cold_boot_notice(monkeypatch):
+    monkeypatch.setattr(cli.box, "render_status", lambda names: "BOX  ...\nTABLE")
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: "NOTICE: this box is 40 days old.")
+    result = runner.invoke(cli.app, ["box", "status"])
+    assert result.exit_code == 0  # advisory only — never blocks
+    # the NOTICE is prepended, before the table header
+    assert result.stdout.index("NOTICE") < result.stdout.index("TABLE")
+
+
+def test_box_status_silent_when_no_cold_boot_nudge(monkeypatch):
+    monkeypatch.setattr(cli.box, "render_status", lambda names: "TABLE")
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: None)
+    result = runner.invoke(cli.app, ["box", "status"])
+    assert result.exit_code == 0
+    assert "NOTICE" not in result.stdout
+    assert "TABLE" in result.stdout
