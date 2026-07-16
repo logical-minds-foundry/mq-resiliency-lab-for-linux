@@ -14,6 +14,7 @@ tmp path via LAB_BOX_CACHE_DIR so no host-durable state is touched.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -247,3 +248,128 @@ def test_manifest_hash_requires_a_box():
         ["bash", str(_MANIFEST)], capture_output=True, text=True, check=False
     )
     assert result.returncode != 0
+
+
+def test_manifest_hash_rejects_unknown_box():
+    # #649: the box->bake-stem map is closed; an unmapped box is a hard error, not
+    # a silent empty digest. (Pre-#649 the script dereferenced bake-<full-box>.yml,
+    # which existed for NO box, so the bake inputs were silently omitted instead.)
+    result = subprocess.run(  # noqa: S603
+        ["bash", str(_MANIFEST), "no-such-box"], capture_output=True, text=True, check=False
+    )
+    assert result.returncode != 0
+    assert "no-such-box" in (result.stderr + result.stdout)
+
+
+# --------------------------------------------------------------------------- #
+# _manifest-hash.sh — bake-playbook + transitive bake-role coverage (#649)    #
+#                                                                             #
+# Two bugs fixed here. (a) The script was invoked with the FULL box name and   #
+# dereferenced ansible/bake-<full-box>.yml (e.g. bake-mq-rdqm-rhel9.yml) - a   #
+# file that exists for NO box; the real playbooks are stem-named               #
+# (bake-mq-rdqm.yml). So `[ -f "$BAKE" ]` never fired and even the bake        #
+# PLAYBOOK content was omitted from the digest. (b) The real bake work lives   #
+# in the ROLES the playbook imports (tasks/templates/defaults), which the      #
+# digest never covered - so #642's inert-service edit didn't flip the hash and #
+# build-fatbox.sh wrongly REUSEd. These build a minimal repo the script can    #
+# hash (it reads inputs relative to itself) and prove a bake-playbook edit, a   #
+# baked-role edit, and a transitively-included-role edit each flip the hash,    #
+# while a role no bake playbook reaches leaves it stable.                       #
+# --------------------------------------------------------------------------- #
+def _fake_bake_repo(tmp_path: Path) -> Path:
+    """A minimal repo tree _manifest-hash.sh can hash: the real script, a
+    versions.yml, a stem-named bake-infra.yml that include_role's `baked-role`,
+    and three roles - `baked-role` (which itself pulls in `nested-role`) and an
+    unrelated `unbaked-role` no bake playbook references. Box `infra-ubuntu2404`
+    maps to the `infra` bake stem, matching bake-infra.yml (the box->stem map the
+    script shares with build-fatbox.sh)."""
+    root = tmp_path / "repo"
+    boxes = root / "lab" / "boxes"
+    boxes.mkdir(parents=True)
+    shutil.copy(_MANIFEST, boxes / "_manifest-hash.sh")
+
+    ans = root / "ansible"
+    (ans / "group_vars" / "all").mkdir(parents=True)
+    (ans / "group_vars" / "all" / "versions.yml").write_text("mq_version: '9.4.0'\n")
+    (ans / "bake-infra.yml").write_text(
+        "- name: bake\n"
+        "  hosts: bake\n"
+        "  tasks:\n"
+        "    - name: install baked-role\n"
+        "      ansible.builtin.include_role:\n"
+        "        name: baked-role\n"
+    )
+    roles = ans / "roles"
+    for r in ("baked-role", "nested-role", "unbaked-role"):
+        (roles / r / "tasks").mkdir(parents=True)
+    # baked-role transitively pulls in nested-role via a nested include_role.
+    (roles / "baked-role" / "tasks" / "main.yml").write_text(
+        "- name: do the install work\n"
+        "  ansible.builtin.command: 'true'\n"
+        "- name: pull nested\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: nested-role\n"
+    )
+    (roles / "nested-role" / "tasks" / "main.yml").write_text(
+        "- name: nested work\n  ansible.builtin.command: 'true'\n"
+    )
+    (roles / "unbaked-role" / "tasks" / "main.yml").write_text(
+        "- name: unrelated work\n  ansible.builtin.command: 'true'\n"
+    )
+    return root
+
+
+def _hash_in(root: Path, box: str = "infra-ubuntu2404") -> str:
+    out = subprocess.run(  # noqa: S603
+        ["bash", str(root / "lab" / "boxes" / "_manifest-hash.sh"), box],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return out.stdout.strip()
+
+
+def _role_task(root: Path, role: str) -> Path:
+    return root / "ansible" / "roles" / role / "tasks" / "main.yml"
+
+
+def _append(path: Path, text: str) -> None:
+    path.write_text(path.read_text() + text)
+
+
+def test_manifest_hash_flips_on_bake_playbook_change(tmp_path):
+    # Bug (a): the bake playbook content must actually enter the digest.
+    root = _fake_bake_repo(tmp_path)
+    before = _hash_in(root)
+    assert len(before) == 64
+    _append(root / "ansible" / "bake-infra.yml", "    # a bake-recipe tweak\n")
+    assert _hash_in(root) != before
+
+
+def test_manifest_hash_flips_on_baked_role_task_change(tmp_path):
+    # Bug (b), the headline acceptance: editing a baked role's task file flips it.
+    root = _fake_bake_repo(tmp_path)
+    before = _hash_in(root)
+    _append(_role_task(root, "baked-role"), "\n# bake change\n")
+    assert _hash_in(root) != before
+
+
+def test_manifest_hash_flips_on_transitively_included_role(tmp_path):
+    # A role reached only through a NESTED include_role (baked-role -> nested-role)
+    # must also enter the digest - the mq-exporter->mq-install / rdqm-install->
+    # mq-diag-logging shape a direct-only parse would miss.
+    root = _fake_bake_repo(tmp_path)
+    before = _hash_in(root)
+    _append(_role_task(root, "nested-role"), "\n# nested change\n")
+    assert _hash_in(root) != before
+
+
+def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
+    # No-op is stable, and a role NO bake playbook reaches (a per-run configure
+    # role) does NOT invalidate the box - the precision that keeps configure-role
+    # edits from spuriously rebuilding every fat box.
+    root = _fake_bake_repo(tmp_path)
+    before = _hash_in(root)
+    assert _hash_in(root) == before  # deterministic no-op
+    _append(_role_task(root, "unbaked-role"), "\n# unrelated\n")
+    assert _hash_in(root) == before
