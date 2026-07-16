@@ -55,11 +55,34 @@ def test_tarball_name_maps_version_and_arch():
         m.tarball_name("9.4.5.0", "mq-ubuntu2404")
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
     )
+    # The fat native-HA RHEL box platform (#667/#668) takes the same LinuxX64 tarball as
+    # rhel96-x86_64, so the nha-rhel-* nodes repointed at it resolve their MQ media.
+    assert (
+        m.tarball_name("9.4.5.0", "mq-nativeha-rhel9")
+        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    )
 
 
 def test_tarball_name_unknown_platform_raises():
     with pytest.raises(ValueError, match="no MQ tarball arch mapping"):
         m.tarball_name("9.4.5.0", "solaris-sparc")
+
+
+def test_every_topology_mq_platform_resolves_to_a_tarball():
+    # #685 regression guard: repointing nodes to a NEW fat-box platform (as #668 did for
+    # mq-nativeha-rhel9) must also add it to _ARCH_SUFFIX, or the bootstrap's MQ-media
+    # prereq dies with ValueError before any VM boots. The topology-resolution tests never
+    # exercise this path — only a bootstrap (or this test) does. Walk exactly the platforms
+    # the stack + commons prereq ensures enumerate and assert each resolves.
+    from mqlab import cli
+    from mqlab.stacks import lab_stacks
+
+    platforms = set(cli._commons_mq_platforms())
+    for stack in lab_stacks().values():
+        platforms |= cli._stack_mq_platforms(stack)
+    assert "mq-nativeha-rhel9" in platforms  # the #668 repoint is represented
+    for platform in sorted(platforms):
+        m.tarball_name(m.DEFAULT_MQ_VERSION, platform)  # must not raise ValueError
 
 
 def test_obs_overlay_reads_shared_manifest(manifests):

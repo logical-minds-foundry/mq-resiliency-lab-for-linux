@@ -27,6 +27,12 @@ _ARCH_SUFFIX = {
     # tarball as rhel96-x86_64 — the bake (build-fatbox.sh) consumes it, and the
     # stack-prereq ensure keeps it cached for the repointed rdqm_a/rdqm_b nodes.
     "mq-rdqm-rhel9": "LinuxX64",
+    # The fat native-HA RHEL box platform (#667, epic .github#88) is RHEL x86_64, so it
+    # takes the same LinuxX64 tarball as rhel96-x86_64 / mq-rdqm-rhel9. The six nha-rhel-*
+    # nodes are repointed to it (#668) and run MQ, so _stack_mq_platforms feeds it into
+    # tarball_name; the bake consumed the tarball for the baked base-MQ install and the
+    # stack-prereq ensure keeps it cached for the repointed nha_rhel_a/nha_rhel_b nodes.
+    "mq-nativeha-rhel9": "LinuxX64",
     # The fat obs box platform (#605) is Ubuntu x86_64, so it takes the same
     # UbuntuLinuxX64 tarball as ubuntu2404-x86_64. The obs node is a commons member,
     # so _commons_mq_platforms feeds this into tarball_name; it resolves to the one
