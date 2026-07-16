@@ -19,6 +19,16 @@ vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity verg
 All working state lives under the gitignored `build/` directory, mounted
 from the host. Nothing else in the VM is precious.
 
+Guests boot **pre-baked, per-role box images** rather than installing everything
+on every bring-up: MQ, the RDQM/observability stacks, and the OSS agents are
+baked once into a golden box per role, so a bring-up only does the fast,
+instance-specific configuration. That is why the walkthrough below is minutes,
+not the better part of an hour. The baked boxes persist across a VM rebuild
+(they live on the persistent data disk), so "rebuild" comes in tiers of very
+different cost — see the
+[box model & rebuild tiers](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)
+developer note.
+
 ## 2. Drive the lab with `mqlab`
 
 The lab is driven by **`mqlab`**, an operator orchestrator that does the

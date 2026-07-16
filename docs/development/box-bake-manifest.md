@@ -4,6 +4,10 @@ Authoritative classification of every Ansible role along the **bake / configure*
 line, for the lab-bootstrap-performance epic (`logical-minds-foundry/.github#70`,
 Task 1 / #602).
 
+> For the wider picture this classification serves — the box taxonomy, the
+> `build-fatbox.sh` build pipeline, and the three rebuild tiers — see
+> [`box-model.md`](box-model.md).
+
 ## The bake/configure line
 
 The epic builds four box images — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
@@ -27,9 +31,9 @@ This document is the classification. The **bake playbooks**
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
 > skips (making `site-rdqm.yml` / `site-obs.yml` / `site-dns.yml` skip the baked
-> install) land in later tasks (#603–#605). The `main.yml` of every split role
-> still runs install **and** configure in sequence, so the per-run path reaches
-> the same end state it did before.
+> install) landed in later tasks (#603–#606, #659). The `main.yml` of every split
+> role still runs install **and** configure in sequence, so the per-run path
+> reaches the same end state it did before.
 
 ## Single-host bakeability
 
@@ -59,6 +63,26 @@ re-home them). This satisfies the task's "extract `bind-dns-install`" intent whi
 staying DRY and behavior-preserving.
 
 Roles split this way: **`prometheus`, `grafana`, `alloy`, `bind-dns`**.
+
+## Phased startup — baked inert, started per-run
+
+Baking a service's *software* does not mean baking it *running*. A service that
+comes up on first boot before its per-run config exists would crash-loop or race
+the configure step, so the rule is: **bake the install half, leave the service
+inert** (unit present, not started), and let the per-run configure half drop the
+instance config and start it. This is why the split roles above bake only their
+install halves (e.g. `alloy` needs a per-run `config.alloy`; on the obs box
+`loki`/`prometheus`/`grafana` are started by `site-obs.yml`).
+
+Two services are the deliberate **benign exceptions**, left *enabled* at bake
+(#642) because they have no per-run config dependency and cannot boot in a broken
+pre-config state:
+
+- **`node_exporter`** — static host-metrics exporter; baked whole and enabled, so
+  a clone's tiles go green as soon as it boots.
+- **`rdqm.service`** — IBM's rpm-shipped `oneshot` RDQM reboot daemon
+  (auto-enabled by `MQSeriesRDQM`); production-intended for reboot survival and
+  verified benign, so it is left enabled rather than forced inert.
 
 ## Per-box bake sets
 
