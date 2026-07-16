@@ -53,6 +53,7 @@ case "$BOX" in
   obs-ubuntu2404)   BAKE_STEM=obs ;;
   infra-ubuntu2404) BAKE_STEM=infra ;;
   mq-ubuntu2404)    BAKE_STEM=mq-ubuntu ;;
+  mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel ;;
   *) echo "ERROR: unknown box: '${BOX}'" >&2; exit 2 ;;
 esac
 

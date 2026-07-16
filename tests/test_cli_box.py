@@ -22,13 +22,14 @@ _FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
 # --------------------------------------------------------------------------- #
 # Fleet definition                                                            #
 # --------------------------------------------------------------------------- #
-def test_fleet_has_five_local_boxes():
+def test_fleet_has_six_local_boxes():
     assert set(box.FLEET) == {
         "rhel/9.6-x86_64",
         "mq-rdqm-rhel9",
         "obs-ubuntu2404",
         "infra-ubuntu2404",
         "mq-ubuntu2404",
+        "mq-nativeha-rhel9",
     }
 
 

@@ -1,0 +1,60 @@
+---
+# Bake the mq-nativeha-rhel9 box image (#667, epic .github#88). The RHEL native-HA peer
+# of bake-mq-rdqm.yml: it bakes the per-run-invariant install work the six nha-rhel-*
+# nodes pay EVERY bootstrap on the bare rhel/9.6 base — base IBM MQ (NO RDQM/DRBD, NO
+# kernel pin: Native HA replicates in the raft log) + acl + node-exporter + alloy.
+#
+# ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue
+# managers, forms NO Native HA group, appends NO peer set, links NO mqmonitor@ unit and
+# holds NO secrets/keystores — all of that stays in the per-run (configure) path
+# (site-nativeha.yml -> mq-nativeha main.yml/crr.yml/tls.yml), which this playbook does
+# NOT touch. Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-nativeha-rhel.yml
+#
+# Full proof (the RHEL MQ media for the rpm install + the install DVD) rides the actual
+# box build (build-fatbox.sh --box mq-nativeha-rhel9), which overrides the media path to
+# the host-durable main-worktree cache. See docs/development/box-bake-manifest.md for the
+# authoritative per-role bake-vs-configure classification.
+- name: Bake mq-nativeha-rhel9 (install adapter only; no QMs, no formation, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # No TLS keystore work at bake — pki / mq-nativeha tls.yml is a per-run/secret
+    # concern (mirrors bake-mq-rdqm.yml / bake-mq-ubuntu.yml).
+    mq_exporter_tls: false
+  tasks:
+    # `acl` for unprivileged become — the site-nativeha.yml prerequisite, hoisted to bake
+    # (coupling-free, dnf on RHEL). Baked (not fetched per-run over a rate-limited
+    # parallel-boot DNS burst) — the #659 acl-stall kill, RHEL side.
+    - name: acl package (unprivileged become prereq)
+      ansible.builtin.dnf:
+        name: acl
+        state: present
+
+    # THE big install: base IBM MQ (server + client + SDK + samples + web, NO RDQM) via
+    # the native-HA OS adapter's INSTALL body only (tasks_from: install-RedHat) — the way
+    # bake-mq-rdqm.yml bakes rdqm-install with tasks_from: install. main.yml's
+    # crtmqm / peer-set / mqmonitor@ formation is a per-run concern and MUST NOT run at
+    # bake. MQSeriesSamples (baked here) ships /opt/mqm/samp/mqmonitor@.service, which
+    # main.yml links per QM at configure time. Coupling-free (no run_once/delegate/groups);
+    # depends on the install DVD + MQ media. The per-run install-RedHat.yml now SKIPS the
+    # tar copy/unpack via a stat-of-cmqc.h guard (#659), so the media is copied once — here.
+    - name: base IBM MQ (native-HA RHEL install adapter — install body only)
+      ansible.builtin.include_role:
+        name: mq-nativeha
+        tasks_from: install-RedHat
+
+    # PHASED-STARTUP (#642): node-exporter is baked WHOLE and left ENABLED — a definitively
+    # benign exception (static host-metrics exporter, no per-run config, races nothing,
+    # cannot boot in a broken pre-config state). Unlike bake-mq-rdqm.yml there is NO
+    # rdqm.service benign exception here — Native HA has no RDQM reboot daemon. alloy is
+    # baked INERT — only its install half (binary + unit); it needs a per-run config.alloy
+    # rendered in the observe phase, so its enable+start is deferred.
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install

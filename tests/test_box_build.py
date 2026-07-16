@@ -53,10 +53,25 @@ def test_needed_local_boxes_resolves_fat_infra_box(monkeypatch):
     assert needed["infra-ubuntu2404"].endswith("build-fatbox.sh")
 
 
+def test_needed_local_boxes_resolves_fat_nativeha_rhel_box(monkeypatch):
+    # #88/#667: the six nha-rhel-* nodes resolve to the mq-nativeha-rhel9 fat box.
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    needed = cli._needed_local_boxes(["nha-rhel-a1"])
+    assert needed["mq-nativeha-rhel9"].endswith("build-fatbox.sh")
+
+
 def test_local_box_builders_registry_covers_base_and_fat_boxes():
     reg = cli._LOCAL_BOX_BUILDERS
     assert reg["rhel/9.6-x86_64"].endswith("rhel96/build-box.sh")  # base-OS builder
-    for fat in ("mq-rdqm-rhel9", "obs-ubuntu2404", "infra-ubuntu2404", "mq-ubuntu2404"):
+    for fat in (
+        "mq-rdqm-rhel9",
+        "obs-ubuntu2404",
+        "infra-ubuntu2404",
+        "mq-ubuntu2404",
+        "mq-nativeha-rhel9",
+    ):
         assert reg[fat].endswith("build-fatbox.sh")
 
 
@@ -241,6 +256,16 @@ def test_manifest_hash_is_stable_and_box_specific():
     assert a == _manifest_hash("mq-rdqm-rhel9")  # deterministic
     assert a != _manifest_hash("obs-ubuntu2404")  # box (bake playbook) enters the hash
     assert len(a) == 64  # sha256 hex digest
+
+
+def test_manifest_hash_covers_nativeha_rhel_box():
+    # #88/#667 + the #649-class guard: the mq-nativeha-rhel9 -> nativeha-rhel stem map
+    # must fire (not an unknown-box error, not a silent empty digest), digesting its own
+    # bake-nativeha-rhel.yml + role closure — a deterministic 64-char, box-specific hash.
+    h = _manifest_hash("mq-nativeha-rhel9")
+    assert len(h) == 64
+    assert h == _manifest_hash("mq-nativeha-rhel9")  # deterministic
+    assert h != _manifest_hash("mq-rdqm-rhel9")  # its own bake playbook enters the hash
 
 
 def test_manifest_hash_requires_a_box():
