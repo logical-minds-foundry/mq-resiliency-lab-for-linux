@@ -51,7 +51,7 @@ _ACTIONS = ("FORCE-BUILD", "STALE", "BUILD", "REUSE")
 
 
 def _build_fleet() -> dict[str, BoxSpec]:
-    """The five-box fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source)."""
+    """The six-box fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source)."""
     fleet: dict[str, BoxSpec] = {}
     for name, builder in cli._LOCAL_BOX_BUILDERS.items():
         if name == _BASE_BOX:
