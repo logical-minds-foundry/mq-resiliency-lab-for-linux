@@ -1,0 +1,72 @@
+---
+# Bake the mq-ubuntu2404 box image (#659, epic .github#70 — the last install-elimination
+# lever). This is the Ubuntu peer of bake-mq-rdqm.yml: it bakes the slow, per-run-invariant
+# install work the three un-baked Ubuntu MQ commons (svc-sim, app-client, mon-probe) were
+# still paying EVERY bootstrap on the plain cloud-image base — MQ + node-exporter + alloy +
+# the cgo mq_prometheus build + acl.
+#
+# ADDITIVE FOUNDATION: installs only the image-bakeable software. It creates NO queue
+# managers, forms NO channels, deploys NO app-requester, drops NO per-run renders (alloy
+# config.alloy, exporter CCDT/units) and holds NO secrets/keystores; all of that stays in
+# the per-run (configure) path — site-distributed-shared.yml (svc/app), site-obs.yml +
+# observability.yml (probe/commons) — which this playbook does not touch. Run against a
+# single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-mq-ubuntu.yml
+#
+# Full proof (the Ubuntu MQ media for the deb install + the cgo SDK) rides the actual box
+# build (build-fatbox.sh --box mq-ubuntu2404), which overrides mq_media_dir to the
+# host-durable main-worktree cache. See docs/development/box-bake-manifest.md for the
+# authoritative per-role bake-vs-configure classification.
+- name: Bake mq-ubuntu2404 (install-only; no QMs, no channels, no renders, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # Skip the per-run TLS ops keystore (pki-distribute) inside the mq-exporter build;
+    # the exporter binary + MQ SDK are baked, the keystore is a per-run/secret concern
+    # dropped in the observe phase (mirrors bake-obs.yml / bake-mq-rdqm.yml).
+    mq_exporter_tls: false
+  tasks:
+    # `acl` for unprivileged become — the site-distributed-shared.yml prerequisite,
+    # hoisted to bake (coupling-free, apt on Ubuntu). This is the #659 acl-stall kill:
+    # baked (not fetched per-run over a rate-limited parallel-boot DNS burst).
+    - name: acl package (unprivileged become prereq)
+      ansible.builtin.apt:
+        name: acl
+        state: present
+
+    # THE big install: the Ubuntu MQ product via the deb path — the server set includes
+    # the client + SDK + samples, so ONE install serves both svc (needs the server, runs a
+    # QM) and app (needs the client libs + SDK for pymqi). No QM is created (mq-install is
+    # install-only). Coupling-free; reads its tarball from mq_media_dir (overridden by
+    # build-fatbox.sh to the main-worktree cache). The per-run mq-install/mq-client roles
+    # now SKIP this via a stat-of-/opt/mqm/inc/cmqc.h guard (#648-style skip-if-baked).
+    - name: MQ product (server + client + SDK + samples debs)
+      ansible.builtin.include_role:
+        name: mq-install
+
+    # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
+    # toolchain — exactly the work worth baking once (mon-probe paid ~2.8 min/run). The
+    # build half installs full MQ (idempotent no-op now — cmqc.h is present from mq-install
+    # above), fetches + builds mq_prometheus into /usr/local/bin, and — with mq_exporter_tls
+    # false — drops NO keystore. The per-instance exporter units + CCDT/keystore stay
+    # per-run (site-obs.yml instance loop). The per-run build's `creates:` guard on the
+    # baked /usr/local/bin/mq_prometheus makes it skip the rebuild.
+    - name: build mq_prometheus (+ MQ SDK / Go toolchain for the cgo build)
+      ansible.builtin.include_role:
+        name: mq-exporter
+        tasks_from: build
+
+    # Fleet observability agents' binaries — baked so the observe phase does not pay the
+    # download/unpack cost per run. node-exporter is baked WHOLE and left ENABLED (#642
+    # benign exception, alongside rdqm.service): a static host-metrics exporter with no
+    # per-run config that races nothing and cannot boot in a broken pre-config state. alloy
+    # is baked INERT — only its install half (binary + unit), NOT the service: it needs a
+    # per-run config.alloy (rendered in the observe phase), so its enable+start is deferred.
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install

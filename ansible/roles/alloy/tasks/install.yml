@@ -5,6 +5,18 @@
 # and the service start — those are the configure half. A single-host `bake` play
 # consumes this via `tasks_from: install`; the normal per-run path runs it as the
 # first half of main.yml.
+# Skip-if-baked (#648/#659): the fat boxes bake this install half, so /usr/local/bin/alloy
+# is already present. The download+install guarded ONLY on the /tmp unpack dir (wiped on
+# boot), so a baked box re-fetched the alloy release from GitHub EVERY run (~4.8 min, the
+# #659 offender) — a per-run external fetch that flaked the one-shot cold rebuild when the
+# libvirt gateway rate-limited bursty parallel-boot DNS. Stat the INSTALLED binary and gate
+# the fetch on it: a baked box (every fat box the observe phase re-applies alloy to) skips
+# it; the from-scratch (un-baked) path still downloads + installs.
+- name: check for an already-installed alloy binary (skip the baked download)
+  ansible.builtin.stat:
+    path: /usr/local/bin/alloy
+  register: alloy_installed
+
 - name: unzip (needed to unpack the alloy release archive)
   # ansible.builtin.package (not apt) so this works on both Debian/Ubuntu (apt) and RHEL
   # (dnf) arms — the alloy release ships as a .zip on every arch. apt-only here silently
@@ -12,6 +24,7 @@
   ansible.builtin.package:
     name: unzip
     state: present
+  when: not alloy_installed.stat.exists
 
 - name: download + unpack alloy
   ansible.builtin.unarchive:
@@ -19,6 +32,7 @@
     dest: /tmp
     remote_src: true
     creates: "/tmp/{{ alloy_pkg }}"
+  when: not alloy_installed.stat.exists
 
 - name: install the alloy binary
   ansible.builtin.copy:
@@ -26,6 +40,7 @@
     dest: /usr/local/bin/alloy
     mode: "0755"
     remote_src: true
+  when: not alloy_installed.stat.exists
 
 - name: alloy config + data dirs
   ansible.builtin.file:

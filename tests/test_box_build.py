@@ -55,7 +55,7 @@ def test_needed_local_boxes_resolves_fat_infra_box(monkeypatch):
 def test_local_box_builders_registry_covers_base_and_fat_boxes():
     reg = cli._LOCAL_BOX_BUILDERS
     assert reg["rhel/9.6-x86_64"].endswith("rhel96/build-box.sh")  # base-OS builder
-    for fat in ("mq-rdqm-rhel9", "obs-ubuntu2404", "infra-ubuntu2404"):
+    for fat in ("mq-rdqm-rhel9", "obs-ubuntu2404", "infra-ubuntu2404", "mq-ubuntu2404"):
         assert reg[fat].endswith("build-fatbox.sh")
 
 

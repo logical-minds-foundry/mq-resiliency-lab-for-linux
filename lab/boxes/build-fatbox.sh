@@ -37,7 +37,7 @@ usage() {
 usage: build-fatbox.sh --box <name> --domain-type <kvm|qemu> \
                        --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
 
-  --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404.
+  --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404.
   --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies them
   (it computes them from host facts via platforms.build_domain_virt, #327).
 USAGE
@@ -62,6 +62,7 @@ case "$BOX" in
   mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64";        BAKE=mq-rdqm ;;
   obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=obs ;;
   infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
+  mq-ubuntu2404)    BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=mq-ubuntu ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac
@@ -191,13 +192,14 @@ if [ "$BASE_KIND" = rhel ]; then
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 
-# The obs bake's mq-exporter build pulls the full MQ (client libs + SDK for the cgo build)
-# via the Ubuntu mq-install role, which — like rdqm-install — reads its tarball from
-# mq_media_dir. Point it at the host-durable main-worktree cache too (the worktree's build/
-# is empty). Ubuntu registers online, so no DVD is attached. (#605)
-if [ "$BAKE" = obs ]; then
+# The Ubuntu MQ bakes (obs, mq-ubuntu) install the full MQ via the Ubuntu mq-install role
+# — the obs box for the mq_prometheus cgo build's SDK, the mq-ubuntu box for the svc/app/
+# probe commons' server+client+SDK. Like rdqm-install, mq-install reads its tarball from
+# mq_media_dir; point it at the host-durable main-worktree cache (the worktree's build/ is
+# empty). Ubuntu registers online, so no DVD is attached. (#605, #659)
+if [ "$BAKE" = obs ] || [ "$BAKE" = mq-ubuntu ]; then
   ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz >/dev/null 2>&1 \
-    || { echo "ERROR: UbuntuLinuxX64 MQ media not found under $MAIN_ROOT/build/cache/mq for the obs bake" >&2; exit 1; }
+    || { echo "ERROR: UbuntuLinuxX64 MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake" >&2; exit 1; }
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 

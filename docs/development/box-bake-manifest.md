@@ -6,9 +6,10 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The epic builds three box images — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
-`infra-ubuntu2404` — and wants each to carry, as a **baked golden image**, the
-slow install work that never varies per run, so a per-run bootstrap can skip it.
+The epic builds four box images — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
+`infra-ubuntu2404`, and `mq-ubuntu2404` (#659) — and wants each to carry, as a
+**baked golden image**, the slow install work that never varies per run, so a
+per-run bootstrap can skip it.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -19,8 +20,9 @@ slow install work that never varies per run, so a per-run bootstrap can skip it.
   scrape targets / dashboards / DNS zones, and per-host config.
 
 This document is the classification. The **bake playbooks**
-(`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`) and
-the single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
+(`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
+`ansible/bake-mq-ubuntu.yml`) and the single-host inventory
+(`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
@@ -87,6 +89,28 @@ Roles split this way: **`prometheus`, `grafana`, `alloy`, `bind-dns`**.
 | `bind-dns` | ✅ install half | The one real SPLIT: bind9 package + `/etc/bind/zones` scaffolding baked; zone data + per-host `named.conf.{options,local}` (keyed by `inventory_hostname`, rendered by `mqlab dns render`) + service start stay per-run. |
 | `node-exporter` | ✅ full | All-install. |
 | `alloy` | ✅ install half | As above. |
+
+### `mq-ubuntu2404` → `ansible/bake-mq-ubuntu.yml` (#659)
+
+The Ubuntu peer of `bake-mq-rdqm.yml`, for the three shared Ubuntu MQ commons
+(`svc-sim`, `app-client`, `mon-probe`), repointed to this box so a bootstrap skips
+their ~15–20 min of per-run installs.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-distributed-shared.yml`. Baked, not fetched per-run — kills the #659 acl stall. |
+| `mq-install` | ✅ full | The Ubuntu MQ product via the deb path — the **server set includes client + SDK + samples**, so one install serves svc (server + QM), app (client + SDK for pymqi), and the exporter's cgo SDK. No QM created. |
+| `mq-exporter` (`build`) | ✅ build entry | The slow cgo `mq_prometheus` build + Go toolchain (mon-probe paid ~2.8 min/run). Its `mq-install` include is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
+| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+
+Per-run skips are enforced by #648-style **skip-if-baked** guards rather than a
+role split: `mq-install`/`mq-client` gate the ~700 MB tar copy + unpack on a stat
+of the installed `/opt/mqm/inc/cmqc.h`, and `alloy`'s install half gates the
+GitHub download on a stat of `/usr/local/bin/alloy`. The `mq_prometheus` cgo build
+already `creates:`-guards on its baked binary. So the repointed commons run only
+per-run config + service start (QMs/channels, the app-requester, exporter
+instances, `config.alloy`), never the baked installs.
 
 ## Stays configure (per-run) — never baked
 
