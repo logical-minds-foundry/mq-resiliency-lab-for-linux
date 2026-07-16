@@ -58,6 +58,14 @@ shape: images stay on the ephemeral boot disk, and the boot disk is sized to fit
 (cloud: `boot_disk = "100GiB"`, #388). **Persistent disks hold persistent data
 only — never VM overlays.**
 
+This persistent-vs-ephemeral split is exactly what makes the **baked-box rebuild
+tiers** cheap. The baked per-role box images live in `state/boxes/` on the
+persistent disk, while the image pool is ephemeral — so a `vrg-vm rebuild` wipes
+the pool but keeps the baked boxes, and the lab re-registers them from cache
+instead of re-baking. See [`box-model.md`](box-model.md) for the box taxonomy,
+the build pipeline, and the three rebuild tiers (nuclear / VM rebuild / stack
+loop).
+
 ## The `mqlab build` commands
 
 | Command | What it does |
