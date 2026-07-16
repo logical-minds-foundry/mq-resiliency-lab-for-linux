@@ -35,6 +35,26 @@ def test_doctor_fails_nonzero(monkeypatch):
     assert "enable KVM" in result.stdout
 
 
+# --- cold-boot staleness nudge surfaced in doctor (epic .github#91 T6) ---
+def test_doctor_surfaces_cold_boot_notice(monkeypatch):
+    monkeypatch.setattr(cli, "probe", lambda: X86)
+    monkeypatch.setattr(cli, "run_checks", lambda facts, which: [Check("kvm", True, "ok")])
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: "NOTICE: this box is 40 days old.")
+    result = runner.invoke(cli.app, ["doctor"])
+    assert result.exit_code == 0  # advisory only — never blocks
+    assert "NOTICE: this box is 40 days old." in result.stdout
+    assert "kvm" in result.stdout  # the normal doctor report still renders
+
+
+def test_doctor_silent_when_no_cold_boot_nudge(monkeypatch):
+    monkeypatch.setattr(cli, "probe", lambda: X86)
+    monkeypatch.setattr(cli, "run_checks", lambda facts, which: [Check("kvm", True, "ok")])
+    monkeypatch.setattr(cli.coldboot, "nudge", lambda: None)
+    result = runner.invoke(cli.app, ["doctor"])
+    assert result.exit_code == 0
+    assert "NOTICE" not in result.stdout
+
+
 # --- _prepare_lab (the real function, captured at import) ---
 def test_prepare_lab_in_vergil_skips_gate_and_renders(monkeypatch):
     rendered = {}

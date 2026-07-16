@@ -35,6 +35,19 @@ boxes:
     box: mq-rdqm-rhel9
     arch: x86_64
     dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
+  # The fat native-HA RHEL box (#667, epic .github#88): the rhel/9.6 base with base IBM MQ
+  # (server + client + SDK + samples) + node-exporter + alloy + the mqmonitor@ sample unit
+  # BAKED IN (lab/boxes/build-fatbox.sh --box mq-nativeha-rhel9). The six nha-rhel-* nodes
+  # boot this instead of bare rhel96-x86_64 so a bootstrap skips the MQ install; the per-run
+  # configure half (crtmqm, the NativeHAInstance peer set, the mqmonitor@ lifecycle, TLS/CRR)
+  # still runs. Instances still attach the DVD: the configure half (re)mounts it as the
+  # offline BaseOS+AppStream repo for dep resolution. UNLIKE mq-rdqm-rhel9 there is NO kernel
+  # pin and NO extra_disk — Native HA replicates in MQ's raft log (no DRBD kmod, no drbdpool).
+  # OS currency comes from rebuilding the box (#639), not updating at boot.
+  mq-nativeha-rhel9:
+    box: mq-nativeha-rhel9
+    arch: x86_64
+    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
   # The fat obs box (#605, epic .github#70): the cloud-image/ubuntu-24.04 base with the
   # observability stack (prometheus/grafana/loki binaries + node-exporter + alloy) and the
   # slow cgo mq_prometheus exporter build + MQ SDK BAKED IN (lab/boxes/build-fatbox.sh
@@ -232,32 +245,32 @@ nodes:
   # peer arm (nha-ubuntu-*, #417) is below. HA replication on net-hb-a; CRR over net-wan.
   # Host octets .9x — kept clear of the pcmk-rhel arm's .7x block (both RHEL/TCG).
   nha-rhel-a1:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.91, net-data-a: 10.10.1.91, net-hb-a: 172.16.1.91, net-wan: 10.99.0.91, net-ext: 10.60.0.91 }
   nha-rhel-a2:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.92, net-data-a: 10.10.1.92, net-hb-a: 172.16.1.92, net-wan: 10.99.0.92, net-ext: 10.60.0.92 }
   nha-rhel-a3:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.93, net-data-a: 10.10.1.93, net-hb-a: 172.16.1.93, net-wan: 10.99.0.93, net-ext: 10.60.0.93 }
   nha-rhel-b1:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.94, net-data-b: 10.10.2.91, net-hb-b: 172.16.2.91, net-wan: 10.99.0.94 }
   nha-rhel-b2:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.95, net-data-b: 10.10.2.92, net-hb-b: 172.16.2.92, net-wan: 10.99.0.95 }
   nha-rhel-b3:
-    platform: rhel96-x86_64
+    platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.96, net-data-b: 10.10.2.93, net-hb-b: 172.16.2.93, net-wan: 10.99.0.96 }

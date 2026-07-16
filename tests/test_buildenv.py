@@ -129,6 +129,35 @@ def test_ensure_worktree_refuses_real_dir_in_shared_bucket(tmp_path):
         b.ensure(wt, run=_real_git(wt, main))
 
 
+# --- cold-boot stamp (write-once, epic .github#91 T6) ---
+def test_ensure_writes_cold_boot_stamp_when_absent(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    b.ensure(main, run=_real_git(main, main), now_iso=lambda: "2026-01-01T00:00:00+00:00")
+    stamp = main / "build" / "state" / b.COLD_BOOT_STAMP
+    assert stamp.read_text() == "2026-01-01T00:00:00+00:00"
+
+
+def test_ensure_does_not_overwrite_existing_stamp(tmp_path):
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    b.ensure(main, run=_real_git(main, main), now_iso=lambda: "2026-01-01T00:00:00+00:00")
+    # a second ensure (later clock) must NOT overwrite the write-once stamp
+    b.ensure(main, run=_real_git(main, main), now_iso=lambda: "2026-06-01T00:00:00+00:00")
+    stamp = main / "build" / "state" / b.COLD_BOOT_STAMP
+    assert stamp.read_text() == "2026-01-01T00:00:00+00:00"
+
+
+def test_ensure_stamps_shared_state_from_a_worktree(tmp_path):
+    # in a worktree the stamp lands in the MAIN checkout's shared state bucket
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    wt = tmp_path / "wt"
+    (wt / ".git").mkdir(parents=True)
+    b.ensure(wt, run=_real_git(wt, main), now_iso=lambda: "2026-01-01T00:00:00+00:00")
+    assert (main / "build" / "state" / b.COLD_BOOT_STAMP).read_text() == "2026-01-01T00:00:00+00:00"
+
+
 # --- clean ---
 def test_clean_nukes_work_temp_and_stray_keeps_cache_state(tmp_path):
     main = tmp_path / "main"
