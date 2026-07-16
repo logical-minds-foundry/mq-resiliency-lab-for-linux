@@ -920,6 +920,7 @@ app.add_typer(box_app, name="box")
 _BoxNames = Annotated[
     list[str] | None, typer.Argument(help="box names to show (default: the whole fleet)")
 ]
+_AllBoxes = Annotated[bool, typer.Option("--all", help="operate on the whole fleet")]
 
 
 @box_app.command("status")
@@ -927,6 +928,40 @@ def box_status(boxes: _BoxNames = None) -> None:
     """Show the baked-box fleet: cache/age/hash/registration + REUSE/BUILD/STALE/FORCE decision."""
     names = boxes or list(box.FLEET)
     typer.echo(box.render_status(names))
+
+
+def _select_boxes(names: list[str] | None, all_: bool) -> list[str]:
+    """Resolve a mutating verb's box selection: the whole fleet for --all, else the
+    validated explicit names. Fail loud (exit 2) when neither is given or a name is
+    not in the fleet — so a typo never silently no-ops. Shared by build/rebuild/clean."""
+    if all_:
+        return list(box.FLEET)
+    if not names:
+        typer.echo(
+            f"mqlab box: name at least one box or pass --all (fleet: {', '.join(box.FLEET)})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    unknown = [n for n in names if n not in box.FLEET]
+    if unknown:
+        typer.echo(
+            f"mqlab box: unknown box(es): {', '.join(unknown)} (fleet: {', '.join(box.FLEET)})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return names
+
+
+@box_app.command("build")
+def box_build(boxes: _BoxNames = None, all_: _AllBoxes = False) -> None:
+    """Ensure each box is present: REUSE a valid cache, else bake."""
+    box.build_boxes(_select_boxes(boxes, all_), force=False)
+
+
+@box_app.command("rebuild")
+def box_rebuild(boxes: _BoxNames = None, all_: _AllBoxes = False) -> None:
+    """Force a fresh bake (--rebuild-box), overwriting the cache — the box-rebake-in-place tier."""
+    box.build_boxes(_select_boxes(boxes, all_), force=True)
 
 
 def _resolved_nodes() -> dict[str, Any]:
@@ -952,12 +987,13 @@ def _guests_need_dvd(guests: list[str]) -> bool:
 
 
 def _box_build_steps(
-    needed: dict[str, str], present: dict[str, str], facts: HostFacts
+    needed: dict[str, str], present: dict[str, str], facts: HostFacts, *, force: bool = False
 ) -> list[CommandStep]:
     # build_domain_virt is the single authority for whether the build runs under KVM
     # (native x86 host) or TCG (#327). The base-OS builder (build-box.sh) takes only
     # the virt flags; the box-parameterized fat-box builder (build-fatbox.sh) also
-    # takes `--box <name>` so one script serves every fat box (#603).
+    # takes `--box <name>` so one script serves every fat box (#603). force appends
+    # --rebuild-box so the builder overwrites its cache — the `box rebuild` tier (#91).
     domain_type, cpu_mode = build_domain_virt(facts)
     steps: list[CommandStep] = []
     for name, script in sorted(needed.items()):
@@ -967,33 +1003,37 @@ def _box_build_steps(
         if script.endswith("build-fatbox.sh"):
             argv += ["--box", name]
         argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
+        if force:
+            argv.append("--rebuild-box")
         steps.append(CommandStep(f"box {name}", Command(argv)))  # noqa: S607
     return steps
 
 
 def _ensure_local_boxes(guests: list[str]) -> None:
     """Make the RHEL substrate ready before `vagrant up`, so a fresh box bootstraps
-    without manual steps (#276/#291): build/register any local-built box not yet in
-    `vagrant box list` (REUSE from cache when present, ~minutes), and stage the DVD
-    ISO into the libvirt pool (idempotent). No-op for cloud Ubuntu boxes."""
+    without manual steps (#276/#291): build/register any local-built box the guests
+    need (REUSE from cache when present, ~minutes), and stage the DVD ISO into the
+    libvirt pool (idempotent). No-op for cloud Ubuntu boxes.
+
+    Box building delegates to box.build_boxes — the same core `mqlab box build`
+    drives — so bootstrap and the CLI share one path (epic .github#91). The
+    builder makes the REUSE-vs-BUILD decision, so a delegated build over a valid
+    cache stays cheap. The DVD staging step is preserved here."""
     needed = _needed_local_boxes(guests)
-    need_dvd = _guests_need_dvd(guests)
-    if not needed and not need_dvd:
-        return
+    if needed:
+        box.build_boxes(sorted(needed), force=False)
+    if _guests_need_dvd(guests):
+        _stage_rhel_dvd()
+
+
+def _stage_rhel_dvd() -> None:
+    """Stage the RHEL DVD ISO into the libvirt pool (idempotent), fail-loud."""
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    deps = build_deps("box-build", timestamp)
+    deps = build_deps("dvd-stage", timestamp)
     try:
-        steps: list[CommandStep] = []
-        if needed:
-            cmd = Command(  # noqa: S607
-                ["vagrant", "box", "list"], cwd=repo_root() / "lab", env=_vagrant_env()
-            )
-            steps += _box_build_steps(needed, _probe(deps, cmd, parse_box_list), probe())
-        if need_dvd:
-            stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
-            steps.append(CommandStep("stage rhel dvd", stage))
+        stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
         run_steps(
-            steps,
+            [CommandStep("stage rhel dvd", stage)],
             runner=deps.runner,
             renderer=deps.renderer,
             transcript=deps.transcript,

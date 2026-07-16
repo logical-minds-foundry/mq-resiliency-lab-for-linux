@@ -141,53 +141,40 @@ def test_box_build_steps_passes_tcg_args_on_arm(monkeypatch, tmp_path):
     assert steps[0].command.argv[-4:] == ["--domain-type", "qemu", "--cpu-mode", "maximum"]
 
 
-def test_ensure_local_boxes_builds_missing(monkeypatch, tmp_path):
+def test_box_build_steps_skips_present(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+    steps = cli._box_build_steps(
+        {
+            "mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh",
+            "obs-ubuntu2404": "lab/boxes/build-fatbox.sh",
+        },
+        {"mq-rdqm-rhel9": "(libvirt, 0)"},  # already registered -> skipped
+        facts,
+    )
+    assert [s.label for s in steps] == ["box obs-ubuntu2404"]
+
+
+# --- ensure_local_boxes now delegates box building to box.build_boxes (#91, T2),
+#     keeping the DVD staging step inline. Bootstrap + `mqlab box build` share one core.
+def test_ensure_local_boxes_delegates_to_build_core(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    calls: dict = {}
     monkeypatch.setattr(
-        cli, "probe", lambda: HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+        cli.box, "build_boxes", lambda names, *, force: calls.update(names=names, force=force)
     )
-    runner = RecordingRunner(
-        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([])]
-    )
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     _real_ensure_local_boxes(["rdqm-a1"])
-    argvs = [c.argv for c in runner.recorded]
-    assert argvs[0] == ["vagrant", "box", "list"]
-    assert argvs[1] == [
-        "bash",
-        str(tmp_path / "lab/boxes/rhel96/build-box.sh"),
-        "--domain-type",
-        "kvm",
-        "--cpu-mode",
-        "host-passthrough",
-    ]
-
-
-def test_ensure_local_boxes_noop_when_box_present(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
-    runner = RecordingRunner(results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"])])
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    _real_ensure_local_boxes(["rdqm-a1"])
-    assert [c.argv for c in runner.recorded] == [["vagrant", "box", "list"]]  # probe only, no build
+    assert calls == {"names": ["rhel/9.6-x86_64"], "force": False}
 
 
 def test_ensure_local_boxes_noop_when_no_local_box(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_resolved(tmp_path, "nodes:\n  obs: {box: cloud-image/ubuntu-24.04}\n")
-    _real_ensure_local_boxes(["obs"])  # no local box needed -> returns before any command
-
-
-def test_ensure_local_boxes_build_failure_exits(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
-    runner = RecordingRunner(
-        results=[ScriptedResult(["There are no installed boxes!"]), ScriptedResult([], exit_code=1)]
-    )
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
-    with pytest.raises(typer.Exit):
-        _real_ensure_local_boxes(["rdqm-a1"])
+    built: list = []
+    monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: built.append(names))
+    _real_ensure_local_boxes(["obs"])  # no local box + no dvd -> no build, no staging
+    assert built == []
 
 
 def test_guests_need_dvd(monkeypatch, tmp_path):
@@ -201,27 +188,39 @@ def test_guests_need_dvd(monkeypatch, tmp_path):
     assert cli._guests_need_dvd(["obs"]) is False
 
 
-def test_ensure_local_boxes_stages_dvd_when_box_present(monkeypatch, tmp_path):
+def test_ensure_local_boxes_stages_dvd(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
-    # box already installed -> no build; but the DVD must still be staged
-    runner = RecordingRunner(
-        results=[ScriptedResult(["rhel/9.6-x86_64  (libvirt, 0)"]), ScriptedResult([])]
-    )
+    # box building is delegated away; only the DVD staging remains inline here
+    monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: None)
+    runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     _real_ensure_local_boxes(["rdqm-a1"])
-    argvs = [c.argv for c in runner.recorded]
-    assert argvs[0] == ["vagrant", "box", "list"]
-    assert argvs[1] == ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+    assert [c.argv for c in runner.recorded] == [
+        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+    ]
 
 
-def test_ensure_local_boxes_dvd_only_skips_box_probe(monkeypatch, tmp_path):
+def test_ensure_local_boxes_dvd_only_skips_build(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    # a (hypothetical) cloud box with a dvd -> no local box, but the dvd staging runs
+    # a (hypothetical) cloud box with a dvd -> no local box to build, but the dvd is staged
     _seed_resolved(tmp_path, "nodes:\n  n1: {box: cloud-image/ubuntu-24.04, dvd: /pool/x.iso}\n")
+    built: list = []
+    monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: built.append(names))
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     _real_ensure_local_boxes(["n1"])
+    assert built == []
     assert [c.argv for c in runner.recorded] == [
         ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
-    ]  # no `vagrant box list` probe
+    ]
+
+
+def test_ensure_local_boxes_dvd_stage_failure_exits(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
+    monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: None)
+    runner = RecordingRunner(results=[ScriptedResult([], exit_code=1)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
+    with pytest.raises(typer.Exit):
+        _real_ensure_local_boxes(["rdqm-a1"])

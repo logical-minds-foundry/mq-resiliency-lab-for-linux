@@ -14,10 +14,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+import typer
 
 from mqlab import cli
 from mqlab.hostfacts import probe
+from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
 from mqlab.platforms import build_domain_virt
 from mqlab.runner import Command, SubprocessRunner
@@ -200,3 +204,36 @@ def render_status(names: list[str]) -> str:
     header = f"{'BOX':<18} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
     rows = [_fmt_row(box_decision(name)) for name in names]
     return "\n".join([header, *rows])
+
+
+# --------------------------------------------------------------------------- #
+# Mutating verbs — the shared build/rebuild core (epic .github#91, T2)         #
+# --------------------------------------------------------------------------- #
+def build_boxes(names: list[str], *, force: bool) -> None:
+    """Ensure (or force-rebake) each named box, fail-loud.
+
+    For every name, issue that box's builder as one CommandStep — reusing
+    cli._box_build_steps (the single source of truth for the builder argv),
+    which appends `--rebuild-box` when force. A non-force build is cheap over a
+    valid cache: the builder itself makes the REUSE-vs-BUILD decision, so this
+    never re-derives that logic. Shared by `box build`/`box rebuild` and by
+    bootstrap's `_ensure_local_boxes`, so both drive one path. Raises typer.Exit
+    with the failing step's exit code on any builder non-zero (StepFailedError).
+    """
+    needed = {name: FLEET[name].builder for name in names}
+    steps = cli._box_build_steps(needed, {}, probe(), force=force)
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = cli.build_deps("box-build", timestamp)
+    try:
+        run_steps(
+            steps,
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
