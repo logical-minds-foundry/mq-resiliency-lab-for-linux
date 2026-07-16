@@ -171,3 +171,60 @@ OS currency now comes from **rebuilding the box**, not from updating at boot. Th
 base-OS security updates is refused until it is re-baked from a fresh base. This
 keeps the running lab reproducible and the RDQM kernel/module pin intact, while
 still bounding how stale a box's base OS can get.
+
+## 6. The RHEL DVD: one-time download, static archive, auto-stage
+
+Every artifact the boxes bake is anonymously fetchable — IBM MQ and all the
+Ubuntu/OSS pieces — with **one exception**: the RHEL 9.6 DVD ISO (~12.7 GB) that
+both RHEL box flavors attach as their offline BaseOS+AppStream dnf repo (§1). Red
+Hat gates it behind authentication, and no automated credential-free fetch was ever
+found. It is **operator-supplied**, and it is needed only on a **nuclear** rebuild
+(a wiped `/vergil` — a VM rebuild and the stack loop both reuse the cached copy in
+`build/state/`, per §4). Three mechanisms cooperate so this one manual artifact
+costs the operator as little as possible.
+
+### One-time download into a static archive
+
+The operator downloads the DVD **once per RHEL version** from Red Hat and keeps it
+in a **stable local archive directory** — not an ad-hoc `build/` copy that a wipe
+would take with it. The default archive is `~/dev/software/rhel-dvds/`; override it
+with the `MQLAB_RHEL_DVD_ARCHIVE` environment variable. The archived ISO must carry
+the lab's canonical filename (`rhel-9.6-x86_64-dvd.iso`) so it lands where the rest
+of the tooling looks. New RHEL versions are just new ISOs dropped into the same
+directory.
+
+### Auto-stage on VM build (host-side rsync)
+
+Because `vrg-vm create`/`rebuild` runs natively on the macOS host — the one place
+with access to both the local archive and the (cloud) build volume —
+`lab/scripts/stage-rhel-dvd-from-archive.sh` syncs the archive into `build/state/`:
+
+```bash
+lab/scripts/stage-rhel-dvd-from-archive.sh            # rsync archive -> build/state/
+lab/scripts/stage-rhel-dvd-from-archive.sh --dry-run  # show the planned rsync, copy nothing
+```
+
+It is an idempotent `rsync -a --ignore-existing`: an already-staged same-name ISO is
+never re-copied, so re-runs are cheap despite the blob size, and it fails loud if the
+archive directory is absent or holds no `*.iso`. It resolves `build/state/` through
+the **main worktree** (git-common-dir), exactly as `stage-rhel-iso.sh` does, so it
+works the same from any worktree. It is credential-less — the download is the only
+step that touches Red Hat, and that stays manual.
+
+The intent is for this script to run **automatically at the end of every VM build**,
+declared as a post-build hook in `vergil.toml`. That hook is **not yet active**:
+`vrg-vm` has no post-build-hook key today, so `vergil.toml` carries the declaration
+as a clearly-commented, inert placeholder pending the cross-org capability
+(vergil-project/vergil-tooling#2407, referenced in epic
+`logical-minds-foundry/.github#91`). **Until it ships, run the script by hand after a
+nuclear rebuild.**
+
+### The `mqlab box` verify-and-guide backstop
+
+The auto-stage is a convenience, not a guarantee — a first-ever run, a fresh archive
+dir, or a not-yet-active hook can all leave the DVD missing. So the RHEL base-box
+BUILD path (the sole DVD consumer) has a backstop: `mqlab box` **verifies** the ISO
+is present at its canonical `build/state/` location and matches a **pinned SHA-256**
+for the RHEL version. On a missing or mismatched ISO it emits fail-loud guidance —
+the version, the Red Hat download URL, and the destination path — and stops before a
+doomed build. No credential handling ever enters the tool; it only checks and guides.

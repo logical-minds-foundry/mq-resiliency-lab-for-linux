@@ -65,6 +65,26 @@ vagrant_plugins = ["vagrant-libvirt"]
 # effect on the next `vrg-vm rebuild`.
 port_forwards = ["3000|10.50.0.2:3000"]
 
+# --- Post-build hook: RHEL DVD auto-stage (PLACEHOLDER — INERT, NOT YET ACTIVE) ---
+# Intent: at the END of every `vrg-vm create`/`rebuild`, run the host-side RHEL DVD
+# auto-stage so a wiped /vergil never forces a manual DVD re-copy. The script is
+# committed at lab/scripts/stage-rhel-dvd-from-archive.sh (an idempotent rsync from the
+# operator's static local DVD archive into build/state/); the flow is documented in
+# docs/development/box-model.md.
+#
+# This block is DELIBERATELY ALL COMMENTS — it declares NO active key. vrg-vm today
+# reads only packages, vagrant_plugins, apt_repos, port_forwards, and sizing; it has no
+# post-build-hook key. Adding a real key now would be parsed by vrg-vm and could break
+# VM provisioning, so the wiring stays a comment until the capability ships.
+# Tracked cross-org: vergil-project/vergil-tooling#2407 (referenced in epic
+# logical-minds-foundry/.github#91). When it lands, replace this block with the real key
+# that issue specifies — the intended shape is roughly:
+#
+#   post_build_hook = "lab/scripts/stage-rhel-dvd-from-archive.sh"
+#
+# Until then, run that script by hand after a nuclear rebuild (see box-model.md).
+# ----------------------------------------------------------------------------------
+
 [vm.vergil-user.instances.local]
 # Big-beefy local Lima box on the Mac (arm64). No backend key = local Lima.
 # Inherits packages/nested/forwards/cpus/memory from [vm.vergil-user] above.
