@@ -974,6 +974,29 @@ def box_rebuild(boxes: _BoxNames = None, all_: _AllBoxes = False) -> None:
     box.build_boxes(_select_boxes(boxes, all_), force=True)
 
 
+_YesRebakeAll = Annotated[
+    bool,
+    typer.Option("--yes-rebake-all", help="confirm cleaning the whole fleet (forces a re-bake)"),
+]
+
+
+@box_app.command("clean")
+def box_clean(boxes: _BoxNames = None, all_: _AllBoxes = False, yes: _YesRebakeAll = False) -> None:
+    """Make pristine: remove the durable .box (+ .manifest-hash) and deregister; build re-bakes."""
+    # clean is destructive+expensive: an unguarded --all forces a full fleet
+    # re-bake. Require an explicit --yes-rebake-all to confirm it; a single named
+    # box just cleans (fast, targeted).
+    if all_ and not yes:
+        typer.echo(
+            "mqlab box: refusing to clean --all (forces a full fleet re-bake). "
+            "Re-run with --all --yes-rebake-all.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    removed = box.clean_boxes(_select_boxes(boxes, all_))
+    typer.echo("removed: " + ", ".join(removed))
+
+
 def _resolved_nodes() -> dict[str, Any]:
     """The rendered resolved topology's nodes (build/work/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml

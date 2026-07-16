@@ -343,3 +343,55 @@ def build_boxes(names: list[str], *, force: bool) -> None:
         raise typer.Exit(code=exc.exit_code) from exc
     finally:
         deps.transcript.close()
+
+
+# --------------------------------------------------------------------------- #
+# Mutating verb — the clean core (epic .github#91, T3)                          #
+# --------------------------------------------------------------------------- #
+def _vagrant_box_remove(name: str) -> None:
+    """Deregister a box from Vagrant (`vagrant box remove <name>`).
+
+    An already-absent registration is the desired end state, so a "not
+    installed" non-zero is swallowed (clean is idempotent); any OTHER non-zero
+    surfaces fail-loud — the tool's own output plus its exit code."""
+    cmd = Command(
+        ["vagrant", "box", "remove", name],
+        cwd=repo_root() / "lab",
+        env=cli._vagrant_env(),
+    )
+    lines: list[str] = []
+    code = SubprocessRunner().run(cmd, lines.append)
+    if code == 0:
+        return
+    output = "\n".join(lines)
+    if "not installed" in output.lower():
+        return
+    typer.echo(output, err=True)
+    raise typer.Exit(code=code)
+
+
+def clean_boxes(names: list[str]) -> list[str]:
+    """Make each named box PRISTINE and return what was removed, for the caller
+    to echo.
+
+    Per box: unlink its durable cache artifact under build/state/boxes and (when
+    it carries one) its `<name>.manifest-hash`, then deregister it from Vagrant.
+    An absent file is silently skipped (idempotent) — only what actually existed
+    is reported. The next `box build` re-bakes from scratch; this is the
+    destructive/expensive verb the `--all` guard protects."""
+    cache_dir = _boxes_cache_dir()
+    removed: list[str] = []
+    for name in names:
+        spec = FLEET[name]
+        artifact = cache_dir / spec.cache_artifact
+        if artifact.is_file():
+            artifact.unlink()
+            removed.append(str(artifact))
+        if spec.has_manifest_hash:
+            manifest = cache_dir / f"{name}.manifest-hash"
+            if manifest.is_file():
+                manifest.unlink()
+                removed.append(str(manifest))
+        _vagrant_box_remove(name)
+        removed.append(f"vagrant box '{name}'")
+    return removed
