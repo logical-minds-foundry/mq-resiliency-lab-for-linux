@@ -392,3 +392,115 @@ def test_box_status_silent_when_no_cold_boot_nudge(monkeypatch):
     assert result.exit_code == 0
     assert "NOTICE" not in result.stdout
     assert "TABLE" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# `box clean` — pristine cache removal + deregister (epic .github#91, T3)       #
+# --------------------------------------------------------------------------- #
+def test_clean_removes_cache_and_deregisters(monkeypatch, tmp_path):
+    (tmp_path / "mq-rdqm-rhel9.box").write_text("x")
+    (tmp_path / "mq-rdqm-rhel9.manifest-hash").write_text("h")
+    monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
+    removed_regs: list[str] = []
+    monkeypatch.setattr(box, "_vagrant_box_remove", lambda n: removed_regs.append(n))
+    removed = box.clean_boxes(["mq-rdqm-rhel9"])
+    assert not (tmp_path / "mq-rdqm-rhel9.box").exists()
+    assert not (tmp_path / "mq-rdqm-rhel9.manifest-hash").exists()
+    assert removed_regs == ["mq-rdqm-rhel9"]
+    # the removed report names both files and the deregistration.
+    assert str(tmp_path / "mq-rdqm-rhel9.box") in removed
+    assert str(tmp_path / "mq-rdqm-rhel9.manifest-hash") in removed
+    assert any("mq-rdqm-rhel9" in item and "vagrant" in item for item in removed)
+
+
+def test_clean_skips_absent_artifacts(monkeypatch, tmp_path):
+    # A fat box with NEITHER file present: nothing to unlink, but it is still
+    # deregistered and reported (idempotent). Covers the absent-file branches.
+    monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
+    removed_regs: list[str] = []
+    monkeypatch.setattr(box, "_vagrant_box_remove", lambda n: removed_regs.append(n))
+    removed = box.clean_boxes(["obs-ubuntu2404"])
+    assert removed_regs == ["obs-ubuntu2404"]
+    assert removed == ["vagrant box 'obs-ubuntu2404'"]
+
+
+def test_clean_base_box_has_no_manifest_hash(monkeypatch, tmp_path):
+    # The base box carries no manifest-hash: only its .box artifact is removed;
+    # a stray same-stem file is left untouched. Covers has_manifest_hash False.
+    (tmp_path / "rhel-9.6-x86_64-libvirt.box").write_text("x")
+    stray = tmp_path / "rhel/9.6-x86_64.manifest-hash"
+    monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
+    monkeypatch.setattr(box, "_vagrant_box_remove", lambda n: None)
+    removed = box.clean_boxes(["rhel/9.6-x86_64"])
+    assert not (tmp_path / "rhel-9.6-x86_64-libvirt.box").exists()
+    assert not stray.exists()  # never created — manifest-hash path skipped
+    assert str(tmp_path / "rhel-9.6-x86_64-libvirt.box") in removed
+
+
+def test_vagrant_box_remove_success(monkeypatch):
+    class _FakeRunner:
+        def run(self, command, on_line):
+            on_line("Removing box 'mq-rdqm-rhel9'")
+            return 0
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _FakeRunner())
+    box._vagrant_box_remove("mq-rdqm-rhel9")  # returns, no raise
+
+
+def test_vagrant_box_remove_not_installed_is_swallowed(monkeypatch):
+    class _FakeRunner:
+        def run(self, command, on_line):
+            on_line("Box 'mq-rdqm-rhel9' with provider 'libvirt' is not installed!")
+            return 1
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _FakeRunner())
+    box._vagrant_box_remove("mq-rdqm-rhel9")  # idempotent: swallowed, no raise
+
+
+def test_vagrant_box_remove_other_error_fails_loud(monkeypatch):
+    class _FakeRunner:
+        def run(self, command, on_line):
+            on_line("some other vagrant failure")
+            return 3
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _FakeRunner())
+    with pytest.raises(typer.Exit) as excinfo:
+        box._vagrant_box_remove("mq-rdqm-rhel9")
+    assert excinfo.value.exit_code == 3
+
+
+def test_box_clean_all_without_flag_exits_2_and_removes_nothing(monkeypatch):
+    monkeypatch.setattr(
+        cli.box, "clean_boxes", lambda names: pytest.fail("must not clean without confirmation")
+    )
+    result = runner.invoke(cli.app, ["box", "clean", "--all"])
+    assert result.exit_code == 2
+    assert "refusing to clean --all" in result.output
+
+
+def test_box_clean_all_with_flag_cleans_whole_fleet(monkeypatch):
+    seen: dict = {}
+
+    def _fake_clean(names):
+        seen["names"] = names
+        return ["a", "b"]
+
+    monkeypatch.setattr(cli.box, "clean_boxes", _fake_clean)
+    result = runner.invoke(cli.app, ["box", "clean", "--all", "--yes-rebake-all"])
+    assert result.exit_code == 0
+    assert seen["names"] == list(box.FLEET)
+    assert "removed: a, b" in result.stdout
+
+
+def test_box_clean_single_named_box_no_flag(monkeypatch):
+    seen: dict = {}
+
+    def _fake_clean(names):
+        seen["names"] = names
+        return ["/x/mq-rdqm-rhel9.box"]
+
+    monkeypatch.setattr(cli.box, "clean_boxes", _fake_clean)
+    result = runner.invoke(cli.app, ["box", "clean", "mq-rdqm-rhel9"])
+    assert result.exit_code == 0
+    assert seen["names"] == ["mq-rdqm-rhel9"]
+    assert "removed: /x/mq-rdqm-rhel9.box" in result.stdout
