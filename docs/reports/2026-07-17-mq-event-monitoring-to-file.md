@@ -9,9 +9,10 @@ setup; everything after it is reference.**
 
 ## Quick start
 
-Five steps. Placeholders: `<QM>` = queue-manager name, `<event-log-path>` = the
-file your monitoring agent will watch (must be writable by `mqm`, readable by the
-agent).
+Five steps. Placeholders: `<QM>` = queue-manager name; `<launcher-path>` = where
+you install the collector launcher (e.g. `/opt/mq-event-monitor/run.sh`);
+`<event-log-path>` = the file your monitoring agent will watch (must be writable
+by `mqm`, readable by the agent).
 
 **1. Ensure the MQ samples are installed** — they provide `amqsevt` (it is *not*
 in the base MQ runtime):
@@ -20,8 +21,8 @@ in the base MQ runtime):
 ls /opt/mqm/samp/bin/amqsevt || rpm -ivh MQSeriesSamples-9.4.*.rpm
 ```
 
-**2. Install the collector launcher** at `/opt/mq-event-monitor/run.sh`, owned
-`mqm:mqm`, mode `0755`. Its entire contents:
+**2. Install the collector launcher** at `<launcher-path>`, owned `mqm:mqm`,
+mode `0755`. Its entire contents:
 
 ```bash
 #!/bin/bash
@@ -29,8 +30,7 @@ exec stdbuf -oL /opt/mqm/samp/bin/amqsevt -m "$1" -o json
 ```
 
 ```bash
-mkdir -p /opt/mq-event-monitor
-install -o mqm -g mqm -m 0755 run.sh /opt/mq-event-monitor/run.sh
+install -D -o mqm -g mqm -m 0755 run.sh <launcher-path>    # -D creates parent dirs
 ```
 
 **3. Enable events on the queue manager** (`runmqsc <QM>`):
@@ -50,7 +50,7 @@ ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
 ```mqsc
 DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
   CONTROL(QMGR) SERVTYPE(SERVER) +
-  STARTCMD('/opt/mq-event-monitor/run.sh') STARTARG('+QMNAME+') +
+  STARTCMD('<launcher-path>') STARTARG('+QMNAME+') +
   STDOUT('<event-log-path>') +
   STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+') +
   DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on a file')
