@@ -92,27 +92,32 @@ tail -f <event-log-path>              # one JSON object per event
 Done. The queue manager starts and stops the collector automatically, and the
 JSON event feed is appended to `<event-log-path>`.
 
-> **Not self-contained — three things must be owned outside this (details in
+> **Not self-contained — four things must be owned outside this (details in
 > Follow-on requirements below).** The launcher appends, so a restart or failover
-> does **not** lose data. But the pipeline is not complete until something
-> **(1) forwards** the file and keeps up, **(2) rotates** it, and **(3) monitors
-> the collector service and restarts it if it dies**. (1) and (2) go away with a
-> syslog sink; **(3) does not** — a running queue manager does not mean its
-> services are running.
+> does **not** lose data. But you must also **(1) monitor & forward** the file
+> (checkpointing its read position), **(2) rotate** it, **(3) monitor & restart the
+> collector service**, and **(4) set per-queue event thresholds on every queue that
+> matters**. (1) and (2) go away with a syslog sink; **(3) and (4) do not.**
 
 ---
 
 ## Follow-on requirements — not production-ready until these are owned
 
 This document produces the JSON event feed; a working end-to-end pipeline needs
-three more things, owned outside it. `amqsevt` drains the event queues
+four more things, owned outside it. `amqsevt` drains the event queues
 **destructively** — once an event is written to the file it exists **nowhere else
-in MQ** — which is what makes all three load-bearing, not optional.
+in MQ** — which is what makes the file-handling requirements below load-bearing
+rather than optional.
 
-1. **Forward the file — and keep up.** Something must tail the data file and
-   forward it continuously, checkpointing by offset so a restart resumes where it
-   left off. If nothing forwards it, events just accumulate; if the forwarder
-   falls behind or is down, the backlog is the only copy that exists.
+1. **Monitor the file — and checkpoint its read position.** Something must tail
+   the data file and forward it continuously, and it must **persist its read
+   offset**. If that monitor itself crashes and restarts without knowing where it
+   had reached, it will either **re-read the whole file and re-send everything** —
+   duplicate events, some possibly very old — or seek to the end and **drop**
+   everything written while it was down. So the monitor's own crash/restart
+   behaviour is part of this requirement, not an afterthought. And if nothing
+   monitors the file, or it falls behind, the backlog sitting in the file is the
+   only copy that exists.
 2. **Rotate the file.** The launcher appends forever, so the data file grows
    without bound and must be rotated externally. The collector holds it open with
    **no reopen-on-signal**, so rotation must be **copy-truncate** (copy aside, then
@@ -130,17 +135,26 @@ in MQ** — which is what makes all three load-bearing, not optional.
    services are running.** Monitoring a queue manager is more than "is the listener
    port up" — the status of its important services is part of its health, and this
    collector is now one of them.
+4. **Enable the events and thresholds on every queue that matters — and keep
+   doing it.** The queue-manager `ALTER` in step 3 turns the event *classes* on,
+   but performance events (queue full, depth high/low) fire only where a queue
+   carries the thresholds. Every application queue **and every transmission
+   queue** in use must have the appropriate per-queue attributes set (`QDPMAXEV` /
+   `QDPHIEV` with `QDEPTHHI`, etc.), and every queue added later must get them too
+   — otherwise those queues are silently invisible to the feed. This per-queue
+   tuning is a standing requirement, not a one-time step.
 
 **What syslog would and would not change.** Requirements (1) and (2) exist only
 because the sink is a file; a syslog sink inherits the platform's existing
 forwarding and rotation and removes both — which is why syslog is the simpler
-design and the standing recommendation. **Requirement (3) remains either way:**
-even forwarding through syslog, `amqsevt` is still a service that can die and must
-be monitored. The site chose a file; that choice adds (1) and (2) on top of the
-unavoidable (3).
+design and the standing recommendation. **Requirements (3) and (4) remain either
+way:** the collector is still a service that can die and must be monitored, and
+the per-queue thresholds are MQ-side configuration independent of where the events
+go. The site chose a file; that choice adds (1) and (2) on top of the unavoidable
+(3) and (4).
 
-*(Tuning, not a blocker: with every event class enabled on a busy queue manager the
-feed can be high-volume — start broad, then pare back the classes you act on.)*
+*(Volume, not a blocker: with every event class enabled on a busy queue manager the
+feed can be high — start broad, then pare back the classes you act on.)*
 
 ---
 ---
