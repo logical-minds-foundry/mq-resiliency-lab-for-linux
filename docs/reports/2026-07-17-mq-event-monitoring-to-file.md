@@ -17,11 +17,13 @@ that work and states the cost.
 
 ## Quick start
 
-Five steps. Placeholders: `<QM>` = queue-manager name; `<launcher-path>` = where
-you install the collector launcher (e.g. `/opt/mq-event-monitor/run.sh`);
-`<event-log-path>` = the **data file** the launcher appends to and your agent
-watches (writable by `mqm`, readable by the agent). The service also writes
-diagnostics to `<event-log-path>.svc` / `.svc.err` — a catch-all, not the data.
+Five steps. Placeholders: `<QM>` = queue-manager name; `<launcher-path>` = the
+full path where **you** install the launcher script — choose a location per your
+site's convention for scripts like this, and give the file a descriptive name
+such as `mq-event-monitor.sh` (not a generic `run.sh`); `<event-log-path>` = the
+**data file** the launcher appends to and your agent watches (writable by `mqm`,
+readable by the agent). The service also writes diagnostics to
+`<event-log-path>.svc` / `.svc.err` — a catch-all, not the data.
 
 **1. Ensure the MQ samples are installed** — they provide `amqsevt` (it is *not*
 in the base MQ runtime):
@@ -30,8 +32,9 @@ in the base MQ runtime):
 ls /opt/mqm/samp/bin/amqsevt || rpm -ivh MQSeriesSamples-9.4.*.rpm
 ```
 
-**2. Install the collector launcher** at `<launcher-path>`, owned `mqm:mqm`,
-mode `0755`. Its entire contents — it **appends** the JSON to the data file:
+**2. Install the collector launcher** — a one-line script (name it descriptively,
+e.g. `mq-event-monitor.sh`). Its entire contents — it **appends** the JSON to the
+data file:
 
 ```bash
 #!/bin/bash
@@ -41,8 +44,11 @@ mode `0755`. Its entire contents — it **appends** the JSON to the data file:
 exec /opt/mqm/samp/bin/amqsevt -m "$1" -o json >> <event-log-path>
 ```
 
+Install it wherever your site keeps such scripts, owned `mqm:mqm`, mode `0755`
+(the collector runs as `mqm`):
+
 ```bash
-install -D -o mqm -g mqm -m 0755 run.sh <launcher-path>    # -D creates parent dirs
+install -D -o mqm -g mqm -m 0755 mq-event-monitor.sh <launcher-path>   # -D creates parent dirs
 ```
 
 **3. Enable events on the queue manager** (`runmqsc <QM>`):
@@ -134,8 +140,8 @@ The launcher named by `STARTCMD` is a one-line script. `$1` is the queue-manager
 name from `STARTARG('+QMNAME+')`. Two properties matter:
 
 - **`exec`** replaces the launcher shell so the process the queue manager tracks
-  (`MQ_SERVER_PID`) *is* `amqsevt`. Without it, `STOPCMD` would kill the shell and
-  orphan the collector.
+  (`MQ_SERVER_PID`) *is* `amqsevt` — which is what makes the `STOPCMD` below act
+  directly on the collector.
 - **Append (`>>`)** writes each event to the data file in append mode. This is
   deliberately **not** the service's `STDOUT`: testing showed the service
   **truncates** its `STDOUT` file on every (re)start (Appendix C), which would
