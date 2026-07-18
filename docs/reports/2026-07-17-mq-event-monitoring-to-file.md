@@ -20,12 +20,10 @@ chosen a file; this document makes that work and states the cost.
 ## Quick start
 
 Five steps. Placeholders: `<QM>` = queue-manager name; `<launcher-path>` = the
-full path where **you** install the launcher script — choose a location per your
-site's convention for scripts like this, and give the file a descriptive name
-such as `mq-event-monitor.sh` (not a generic `run.sh`); `<event-log-path>` = the
-**data file** the launcher appends to and your agent watches (writable by `mqm`,
-readable by the agent). The service also writes diagnostics to
-`<event-log-path>.svc` / `.svc.err` — a catch-all, not the data.
+full path where you install the launcher script (`mq-event-monitor.sh`);
+`<event-log-path>` = the **data file** the launcher appends to and your agent
+watches (writable by `mqm`, readable by the agent). The service also writes
+diagnostics to `<event-log-path>.svc` / `.svc.err` — a catch-all, not the data.
 
 **1. Ensure the MQ samples are installed** — they provide `amqsevt` (it is *not*
 in the base MQ runtime):
@@ -34,9 +32,8 @@ in the base MQ runtime):
 ls /opt/mqm/samp/bin/amqsevt || rpm -ivh MQSeriesSamples-9.4.*.rpm
 ```
 
-**2. Install the collector launcher** — a one-line script (name it descriptively,
-e.g. `mq-event-monitor.sh`). Its entire contents — it **appends** the JSON to the
-data file:
+**2. Install the collector launcher** (`mq-event-monitor.sh`) — a one-line script.
+Its entire contents — it **appends** the JSON to the data file:
 
 ```bash
 #!/bin/bash
