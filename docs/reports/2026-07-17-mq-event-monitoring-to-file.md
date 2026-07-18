@@ -100,28 +100,29 @@ JSON event feed is appended to `<event-log-path>`.
 
 ## Follow-on requirements — not production-ready until these are owned
 
+> **This is a best-effort feed, not exactly-once.** `amqsevt` consumes each event
+> and then writes it; the two are **not one transaction**, so a process crash, a
+> full disk, or a monitor restart can **drop or duplicate** events. A file *widens*
+> these windows; syslog *narrows* them; only a transactional consumer — one that
+> gets the event under syncpoint and commits only after the downstream forward is
+> acknowledged — eliminates them, and `amqsevt` is not that. **If lossless delivery
+> of these events is a hard requirement, this pattern is the wrong tool.**
+
 This document produces the JSON event feed; a working end-to-end pipeline needs
 four more things, owned outside it. `amqsevt` drains the event queues
 **destructively** — once an event is written to the file it exists **nowhere else
-in MQ** — which is what makes the file-handling requirements below load-bearing
-rather than optional.
+in MQ** — which is what makes the requirements below load-bearing rather than
+optional.
 
-1. **Monitor the file — and checkpoint its read position.** Something must tail
-   the data file and forward it continuously, and it must **persist its read
-   offset**. If that monitor itself crashes and restarts without knowing where it
-   had reached, it will either **re-read the whole file and re-send everything** —
-   duplicate events, some possibly very old — or seek to the end and **drop**
-   everything written while it was down. So the monitor's own crash/restart
-   behaviour is part of this requirement, not an afterthought. And if nothing
-   monitors the file, or it falls behind, the backlog sitting in the file is the
-   only copy that exists.
-2. **Rotate the file.** The launcher appends forever, so the data file grows
-   without bound and must be rotated externally. The collector holds it open with
-   **no reopen-on-signal**, so rotation must be **copy-truncate** (copy aside, then
-   truncate in place, which the open handle keeps writing to) — **never**
-   rename-and-recreate, which strands the collector on the old inode. Size the
-   cadence so the small copy-truncate window (the one residual loss window) is
-   acceptable.
+1. **Monitor and forward the file — checkpointing its position.** Something must
+   tail the data file and forward it continuously, persisting its read offset so
+   its *own* restart resumes in place rather than re-sending or skipping (per the
+   caveat above). If nothing forwards it, or it falls behind, the backlog in the
+   file is the only copy that exists.
+2. **Rotate the file.** It grows without bound, so it must be rotated externally.
+   The collector holds it open with **no reopen-on-signal**, so rotation must be
+   **copy-truncate** — never rename-and-recreate, which strands the collector on
+   the old inode.
 3. **Monitor the collector service — and restart it if it dies.** An MQ service
    has **no restart logic of its own.** `CONTROL(QMGR)` starts it when the queue
    manager starts, but if the collector process crashes — for example `amqsevt`
