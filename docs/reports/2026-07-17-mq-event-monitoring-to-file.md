@@ -242,10 +242,7 @@ active.
 
 **Ownership and location:** the collector runs as `mqm`, so both the data file and
 the `.svc`/`.svc.err` files must be writable by `mqm`, and the **data file**
-readable by the agent. On RHEL with SELinux enforcing, a path outside the MQ data
-tree may need an appropriate file context; placing the files where the agent
-already has a labelled, watched location avoids that — confirm with whoever owns
-the agent.
+readable by the agent.
 
 **Verify (Quick start step 5):** `DISPLAY QMGR` confirms the classes read back as
 set; provoke an event (start/stop a channel, or push a queue past `QDEPTHHI`) and
