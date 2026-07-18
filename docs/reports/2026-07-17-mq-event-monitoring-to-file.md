@@ -148,9 +148,8 @@ name from `STARTARG('+QMNAME+')`. Two properties matter:
   discard any events written but not yet forwarded. Appending in the launcher
   avoids that.
 
-`stdbuf` is **not** used: on 9.4.5, `amqsevt` flushes per event (validated —
-Appendix C). If a different build shows events arriving in bursts, prepend
-`stdbuf -oL` to force line-buffering.
+`amqsevt` flushes its output per event (verified on 9.4.5 — Appendix C), so each
+event reaches the file promptly; there are no buffering concerns to handle.
 
 ## R4. Enabling event classes (Quick start step 3)
 
@@ -178,8 +177,7 @@ active.
   silently lost to `/dev/null`; they are **not** the data.
 - **`+QMNAME+` / `+MQ_SERVER_PID+`** are replaceable inserts; MQ substitutes the
   queue-manager name and the started PID at run time. The `+` delimiters are
-  **required** — without them MQ passes the literal token, a silent trap
-  (Appendix C).
+  **required** — without them MQ passes the literal token, not the value.
 - **`STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+')`** stops the exact process
   the queue manager started; clean because the launcher `exec`s `amqsevt` (R3).
 
@@ -268,7 +266,7 @@ JSON `eventType` / `eventReason`.
 | Low | Configuration change | `CONFIGEV` | An object was created/altered/deleted — audit trail. |
 | Low | Command issued (mutating) | `CMDEV(NODISPLAY)` | Who changed what, during a live triage. |
 
-## Appendix C — Evaluation notes: dead ends, traps, and the standing trade-off
+## Appendix C — Evaluation notes: dead ends and the standing trade-off
 
 This design was shaped by live testing on IBM MQ **9.4.5** (RHEL 9.6, 3-node
 Native HA). What follows is the record of what we verified, what we rejected and
@@ -277,8 +275,8 @@ warnings.
 
 ### Verified in the lab (observed behaviour)
 
-- `amqsevt -o json` emits **one JSON object per event** and **flushes per event** —
-  no `stdbuf` needed on 9.4.5.
+- `amqsevt -o json` emits **one JSON object per event** and **flushes per event**,
+  so events reach the file promptly — no buffering to handle on 9.4.5.
 - MQ **word-splits** a space-separated `STARTARG` into separate arguments and
   expands `+QMNAME+`, so `amqsevt` can be driven directly from a service.
 - `STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+')` stops the collector cleanly.
@@ -302,20 +300,6 @@ warnings.
 > queue-manager-stop event itself — that you most want during an incident. The
 > launcher's append (`>>`) closes this hole; that one line of shell is the reason
 > the launcher exists.
-
-### Trap — the `STOPARG` delimiters
-
-> `STOPARG('MQ_SERVER_PID')` **without** the `+…+` delimiters is silently broken:
-> MQ passes the literal string `MQ_SERVER_PID` to `/bin/kill`, so the `STOP` is
-> "accepted" (`AMQ8732I`) but the process **keeps running**. It only stops because
-> a queue-manager shutdown breaks its connection — meaning an explicit
-> `STOP SERVICE` leaks the process. Always use `+MQ_SERVER_PID+`. (Confirmed live.)
-
-### Note — `stdbuf`
-
-An earlier draft used `stdbuf -oL` to force prompt flushing. Validation showed
-9.4.5 flushes per event, so it is omitted. Re-add `stdbuf -oL` only if a build
-shows events arriving in bursts.
 
 ### The standing trade-off — read this
 
