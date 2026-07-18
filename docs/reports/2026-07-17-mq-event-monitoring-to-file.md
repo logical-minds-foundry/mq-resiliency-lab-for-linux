@@ -100,13 +100,15 @@ JSON event feed is appended to `<event-log-path>`.
 
 ## Follow-on requirements — not production-ready until these are owned
 
-> **This is a best-effort feed, not exactly-once.** `amqsevt` consumes each event
-> and then writes it; the two are **not one transaction**, so a process crash, a
-> full disk, or a monitor restart can **drop or duplicate** events. A file *widens*
-> these windows; syslog *narrows* them; only a transactional consumer — one that
-> gets the event under syncpoint and commits only after the downstream forward is
-> acknowledged — eliminates them, and `amqsevt` is not that. **If lossless delivery
-> of these events is a hard requirement, this pattern is the wrong tool.**
+> **This is a best-effort feed, not exactly-once.** `amqsevt` gets each event
+> **non-transactionally** — the instant it reads a message, that message is gone
+> from the queue — and then writes it. So if the collector crashes, or the disk
+> fills and the write fails, after the get but before the write lands, that event
+> is **dropped, permanently**: consumed, never written, no second copy. A file
+> *widens* this window; syslog *narrows* it; only a transactional consumer — one
+> that gets the event under syncpoint and commits only after the downstream forward
+> is acknowledged — closes it, and `amqsevt` is not that. **If lossless delivery of
+> these events is a hard requirement, this pattern is the wrong tool.**
 
 This document produces the JSON event feed; a working end-to-end pipeline needs
 four more things, owned outside it. `amqsevt` drains the event queues
@@ -115,10 +117,13 @@ in MQ** — which is what makes the requirements below load-bearing rather than
 optional.
 
 1. **Monitor and forward the file — checkpointing its position.** Something must
-   tail the data file and forward it continuously, persisting its read offset so
-   its *own* restart resumes in place rather than re-sending or skipping (per the
-   caveat above). If nothing forwards it, or it falls behind, the backlog in the
-   file is the only copy that exists.
+   tail the data file and forward it continuously, persisting its read offset. A
+   monitor that restarts without a saved offset re-reads from the top and
+   **re-sends everything (duplicate events)**, or seeks to the end and **drops**
+   what arrived while it was down — so checkpointing is the requirement. This is
+   the one place duplicates can arise; the collector itself only ever drops (the
+   caveat above). If nothing forwards the file, or it falls behind, the backlog in
+   the file is the only copy that exists.
 2. **Rotate the file.** It grows without bound, so it must be rotated externally.
    The collector holds it open with **no reopen-on-signal**, so rotation must be
    **copy-truncate** — never rename-and-recreate, which strands the collector on
