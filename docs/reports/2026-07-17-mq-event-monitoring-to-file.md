@@ -9,7 +9,7 @@ reference.**
 **Validation status:** the mechanism below was exercised on a live IBM MQ
 **9.4.5** queue manager (RHEL 9.6, 3-node Native HA) in a resiliency lab.
 **Appendix C** records exactly what was verified, the dead ends found, and the
-standing trade-off — read it before deploying. Note up front: a file sink is
+standing trade-off. Note up front: a file sink is
 **not** a self-contained solution — it needs external forwarding, rotation, *and*
 health-monitoring of the collector service (see **Follow-on requirements**). A
 syslog sink would remove the first two; the third remains either way. The site has
@@ -56,8 +56,12 @@ install -D -o mqm -g mqm -m 0755 mq-event-monitor.sh <launcher-path>   # -D crea
 ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
   INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) +
   REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
+```
 
-* Performance events also need per-queue thresholds — repeat per app queue:
+Performance events also need per-queue thresholds — set these on each application
+(and transmission) queue that matters:
+
+```mqsc
 ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
 ```
 
@@ -91,13 +95,6 @@ tail -f <event-log-path>              # one JSON object per event
 
 Done. The queue manager starts and stops the collector automatically, and the
 JSON event feed is appended to `<event-log-path>`.
-
-> **Not self-contained — four things must be owned outside this (details in
-> Follow-on requirements below).** The launcher appends, so a restart or failover
-> does **not** lose data. But you must also **(1) monitor & forward** the file
-> (checkpointing its read position), **(2) rotate** it, **(3) monitor & restart the
-> collector service**, and **(4) set per-queue event thresholds on every queue that
-> matters**. (1) and (2) go away with a syslog sink; **(3) and (4) do not.**
 
 ---
 
