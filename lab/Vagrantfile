@@ -63,7 +63,17 @@ Vagrant.configure("2") do |config|
         node.vm.network :private_network,
           :libvirt__network_name => net,
           :ip => ip,
-          :libvirt__dhcp_enabled => false
+          :libvirt__dhcp_enabled => false,
+          # Force NetworkManager to own every lab NIC (#690). Vagrant's RedHat
+          # configure_networks (legacy network-scripts path on RHEL9) otherwise
+          # decides NM_CONTROLLED per-NIC by probing live NM state mid-boot — a
+          # race — and when it lands "no" its recovery is /sbin/ifup, which does
+          # not exist on NetworkManager-only RHEL9, leaving that NIC with no IP.
+          # Setting nm_controlled here short-circuits the probe (configure_networks
+          # only probes when the key is absent), so NM_CONTROLLED=yes is written
+          # deterministically. No-op on the Ubuntu arms: their netplan cap ignores
+          # this option. See triage .github#102.
+          :nm_controlled => true
       end
     end
   end

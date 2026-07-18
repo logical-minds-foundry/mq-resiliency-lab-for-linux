@@ -27,6 +27,31 @@
     name: mq-diag-logging
     tasks_from: system
 
+# Preflight (#690): this node's heartbeat NIC MUST hold its replication IP before
+# we write ReplicationAddress and form the group. Vagrant's RedHat
+# configure_networks has historically left a NIC unconfigured after a lost
+# NM_CONTROLLED race (now forced at the Vagrantfile layer). Assert it loudly here
+# rather than let the group silently fail to reach quorum. See triage .github#102.
+- name: resolve this node's Native HA heartbeat IP
+  ansible.builtin.set_fact:
+    nha_my_hb: "{{ (nha_site_nodes | selectattr('name', 'equalto', inventory_hostname) | first).hb }}"
+
+- name: read this node's live IPv4 addresses
+  ansible.builtin.command: ip -o -4 addr show
+  register: nha_ipaddr
+  changed_when: false
+
+- name: assert the heartbeat NIC holds its replication IP (#690)
+  ansible.builtin.assert:
+    that:
+      - "nha_my_hb in nha_ipaddr.stdout"
+    fail_msg: >-
+      Heartbeat NIC is missing its replication IP {{ nha_my_hb }} on
+      {{ inventory_hostname }} — the Native HA group cannot form quorum. This is
+      the Vagrant NM_CONTROLLED race (triage .github#102); rebuild so the NIC
+      gets its address.
+    success_msg: "Heartbeat NIC holds {{ nha_my_hb }} — replication net ready"
+
 - name: create the Native HA instance (this node)
   ansible.builtin.command: >
     crtmqm -lr {{ inventory_hostname }} -lf 8192 -lp 10 -ls 10 -p 1414 {{ qm_name }}
