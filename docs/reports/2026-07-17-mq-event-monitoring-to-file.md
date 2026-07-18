@@ -5,14 +5,23 @@ instrumentation events to a **file** as JSON, via a managed queue-manager
 service, for a file-monitoring agent to pick up. **The Quick start is the whole
 setup; everything after it is reference.**
 
+**Validation status:** the mechanism below was exercised on a live IBM MQ
+**9.4.5** queue manager (RHEL 9.6, 3-node Native HA) in a resiliency lab.
+**Appendix C** records exactly what was verified, the dead ends found, and the
+standing trade-off — read it before deploying. Note up front: a file sink is
+**not** a self-contained solution (it needs external monitoring *and* rotation);
+a syslog sink would avoid both. The site has chosen a file; this document makes
+that work and states the cost.
+
 ---
 
 ## Quick start
 
 Five steps. Placeholders: `<QM>` = queue-manager name; `<launcher-path>` = where
 you install the collector launcher (e.g. `/opt/mq-event-monitor/run.sh`);
-`<event-log-path>` = the file your monitoring agent will watch (must be writable
-by `mqm`, readable by the agent).
+`<event-log-path>` = the **data file** the launcher appends to and your agent
+watches (writable by `mqm`, readable by the agent). The service also writes
+diagnostics to `<event-log-path>.svc` / `.svc.err` — a catch-all, not the data.
 
 **1. Ensure the MQ samples are installed** — they provide `amqsevt` (it is *not*
 in the base MQ runtime):
@@ -22,11 +31,14 @@ ls /opt/mqm/samp/bin/amqsevt || rpm -ivh MQSeriesSamples-9.4.*.rpm
 ```
 
 **2. Install the collector launcher** at `<launcher-path>`, owned `mqm:mqm`,
-mode `0755`. Its entire contents:
+mode `0755`. Its entire contents — it **appends** the JSON to the data file:
 
 ```bash
 #!/bin/bash
-exec stdbuf -oL /opt/mqm/samp/bin/amqsevt -m "$1" -o json
+# Append (>>) the JSON event stream to the data file. Append — NOT the service's
+# STDOUT, which truncates on every restart (see Appendix C). exec => the process
+# the queue manager tracks (MQ_SERVER_PID) is amqsevt, so STOPCMD stops it cleanly.
+exec /opt/mqm/samp/bin/amqsevt -m "$1" -o json >> <event-log-path>
 ```
 
 ```bash
@@ -45,18 +57,22 @@ ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
 ```
 
 **4. Define and start the collector service** (`runmqsc <QM>`) — set
-`<event-log-path>`:
+`<launcher-path>` and `<event-log-path>`:
 
 ```mqsc
 DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
   CONTROL(QMGR) SERVTYPE(SERVER) +
   STARTCMD('<launcher-path>') STARTARG('+QMNAME+') +
-  STDOUT('<event-log-path>') +
+  STDOUT('<event-log-path>.svc') STDERR('<event-log-path>.svc.err') +
   STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+') +
-  DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on a file')
+  DESCR('Append SYSTEM.ADMIN.*.EVENT as JSON to the event data file')
 
 START SERVICE(MQ.EVENT.MONITOR)
 ```
+
+The `STDOUT`/`STDERR` files are a **diagnostic catch** (so stray output or
+`amqsevt` errors are not lost to `/dev/null`) — the event **data** is the
+launcher's append target, `<event-log-path>`.
 
 **5. Verify:**
 
@@ -68,13 +84,16 @@ DISPLAY SVSTATUS(MQ.EVENT.MONITOR)    * expect RUNNING with a PID
 tail -f <event-log-path>              # one JSON object per event
 ```
 
-Done. The queue manager now starts and stops the collector automatically, and the
-JSON event feed appears in `<event-log-path>`.
+Done. The queue manager starts and stops the collector automatically, and the
+JSON event feed is appended to `<event-log-path>`.
 
-> **One dependency this does not solve: file rotation.** The collector holds the
-> file open for its lifetime and cannot reopen it, so rotation must be
-> **copy-truncate** or must **bounce the service** — never a plain
-> rename-and-recreate. See R6.
+> **This is not a self-contained solution — two things must be owned outside it.**
+> The launcher **appends**, so a restart or failover does **not** lose data
+> (unlike letting the service own the file, which truncates — Appendix C). But the
+> data file then (1) **grows without bound** until something **rotates** it, and
+> (2) does nothing useful unless **something watches it and keeps up**. Both are
+> the site's responsibility. A syslog sink would remove both by inheriting the
+> platform's existing log management. See R6 and Appendix C.
 
 ---
 ---
@@ -94,13 +113,14 @@ historically meant writing a PCF-parsing program.
 
 IBM ships a sample, **`amqsevt`**, that reads those queues and formats each
 message, including a structured **JSON** mode. Run it as a managed queue-manager
-service with its output redirected to a file, and you have an event-driven JSON
-feed with no parsing code — a thin translator, not an application.
+service whose launcher **appends** each event to a file, and you have an
+event-driven JSON feed with no parsing code — a thin translator, not an
+application.
 
 **In scope:** installing the sample, enabling the event classes, and defining the
-collector as a queue-manager `SERVICE` whose standard output is redirected to a
-file. **Out of scope (see R6):** rotating that file, shipping its contents
-downstream, and configuring the agent that watches it.
+collector as a queue-manager `SERVICE` whose launcher appends JSON to a file.
+**Out of scope (see R6):** watching/forwarding that file, and rotating it. Both
+are required for a working end-to-end pipeline; neither is solved here.
 
 ## R2. Installing the samples (Quick start step 1)
 
@@ -110,18 +130,21 @@ package and installs to `/opt/mqm/samp/bin/amqsevt`. On RHEL the package is
 
 ## R3. The collector launcher (Quick start step 2)
 
-The launcher named by `STARTCMD` exists only to `exec` the collector
-line-buffered; the `SERVICE` object's `STDOUT` attribute does the file
-redirection. `$1` is the queue-manager name passed by `STARTARG('+QMNAME+')`. Two
-properties are why it exists rather than naming `amqsevt` directly in `STARTCMD`:
+The launcher named by `STARTCMD` is a one-line script. `$1` is the queue-manager
+name from `STARTARG('+QMNAME+')`. Two properties matter:
 
 - **`exec`** replaces the launcher shell so the process the queue manager tracks
   (`MQ_SERVER_PID`) *is* `amqsevt`. Without it, `STOPCMD` would kill the shell and
   orphan the collector.
-- **Line-buffering** (`stdbuf -oL`) — output to a regular file is block-buffered
-  by default, so under low event volume a JSON line could sit in the buffer for a
-  long time before it reaches the file. Line-buffering makes each event land
-  promptly, which matters if you alert on these events.
+- **Append (`>>`)** writes each event to the data file in append mode. This is
+  deliberately **not** the service's `STDOUT`: testing showed the service
+  **truncates** its `STDOUT` file on every (re)start (Appendix C), which would
+  discard any events written but not yet forwarded. Appending in the launcher
+  avoids that.
+
+`stdbuf` is **not** used: on 9.4.5, `amqsevt` flushes per event (validated —
+Appendix C). If a different build shows events arriving in bursts, prepend
+`stdbuf -oL` to force line-buffering.
 
 ## R4. Enabling event classes (Quick start step 3)
 
@@ -139,47 +162,60 @@ Full class reference: **Appendix A**. Events worth alerting on first:
 
 ## R5. The collector service (Quick start step 4)
 
-Run `amqsevt -o json` as a `SERVICE` with `CONTROL(QMGR)`, so the queue manager
-starts and stops it and it runs wherever the queue manager is active. The service
-object's `STDOUT` attribute owns the redirection.
+Run `amqsevt -o json` (via the launcher) as a `SERVICE` with `CONTROL(QMGR)`, so
+the queue manager starts and stops it and it runs wherever the queue manager is
+active.
 
-- **`STDOUT('<event-log-path>')`** — the file your agent watches. `STDERR` can
-  point at a companion `.err` file for diagnostics.
+- **`STDOUT`/`STDERR` are diagnostic only.** The launcher sends the event data to
+  `<event-log-path>` (append), so these files are a catch-all — `amqsevt`'s stderr
+  lands in `.svc.err`; the `.svc` file is normally empty. They exist so nothing is
+  silently lost to `/dev/null`; they are **not** the data.
 - **`+QMNAME+` / `+MQ_SERVER_PID+`** are replaceable inserts; MQ substitutes the
   queue-manager name and the started PID at run time. The `+` delimiters are
-  required — without them MQ passes the literal token.
+  **required** — without them MQ passes the literal token, a silent trap
+  (Appendix C).
 - **`STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+')`** stops the exact process
   the queue manager started; clean because the launcher `exec`s `amqsevt` (R3).
 
-**Output file — ownership and location:** the collector runs as `mqm`, so
-`<event-log-path>` must be writable by `mqm` and readable by the agent. On RHEL
-with SELinux enforcing, a path outside the MQ data tree may need an appropriate
-file context; placing the file where the agent already has a labelled, watched
-location avoids that — confirm with whoever owns the agent.
+**Ownership and location:** the collector runs as `mqm`, so both the data file and
+the `.svc`/`.svc.err` files must be writable by `mqm`, and the **data file**
+readable by the agent. On RHEL with SELinux enforcing, a path outside the MQ data
+tree may need an appropriate file context; placing the files where the agent
+already has a labelled, watched location avoids that — confirm with whoever owns
+the agent.
 
 **Verify (Quick start step 5):** `DISPLAY QMGR` confirms the classes read back as
 set; provoke an event (start/stop a channel, or push a queue past `QDEPTHHI`) and
 watch the relevant `SYSTEM.ADMIN.*.EVENT` queue depth rise then fall to zero as
 the collector drains it (proof the drain is destructive, not browsing); confirm
-each JSON object carries `eventSource` (`objectName`, `objectType`), `eventType`,
-`eventReason`, `eventCreation`, and an `eventData` block.
+each appended JSON object carries `eventSource` (`objectName`, `objectType`),
+`eventType`, `eventReason`, `eventCreation`, and an `eventData` block.
 
-## R6. Acknowledged dependencies (not solved here)
+## R6. Acknowledged dependencies — why this is not self-contained
 
-1. **File rotation — with a specific constraint.** The collector holds the output
-   file **open for its entire lifetime**, and `amqsevt` has **no
-   reopen-on-signal**. So rotation **cannot rename-and-recreate** the file — that
-   strands the collector writing to the old (now-invisible) inode while the new
-   file stays empty. Rotation must be **copy-truncate style** (copy aside, then
-   truncate in place, which the open handle keeps writing to) **or** must
-   **bounce the service** (`STOP SERVICE` / `START SERVICE`) so the collector
-   reopens the file. (MQ appends to `STDOUT` across restarts, so a bounce
-   preserves prior content — confirm on your build if a rotate-by-bounce scheme
-   relies on it.)
-2. **Shipping downstream.** The file-monitoring agent tails the file and forwards
-   its contents; its watch list and everything past it are the agent's concern.
+`amqsevt` drains the event queues **destructively**: once an event is written to
+the file it exists **nowhere else in MQ**. That makes the two obligations below
+load-bearing, not optional.
+
+1. **Something must watch the file — and keep up.** If nothing forwards it, events
+   simply accumulate; if the watcher falls behind or is down, the backlog builds
+   and (until it is read) is the only copy. The site's file-monitoring agent must
+   tail and forward continuously, checkpointing by offset so a restart resumes
+   where it left off.
+2. **Rotation — the file grows without bound.** The launcher appends forever, so
+   the data file must be rotated externally. The collector holds it open with **no
+   reopen-on-signal**, so rotation must be **copy-truncate** (copy aside, then
+   truncate in place, which the open handle keeps writing to) — **never**
+   rename-and-recreate, which strands the collector on the old inode. Size the
+   rotation cadence so the small copy-truncate window (the one residual loss
+   window) is acceptable.
 3. **Event volume.** With every class enabled on a busy queue manager the feed can
-   be high-volume. Start broad, then pare back the classes you actually act on.
+   be high-volume. Start broad, then pare back the classes you act on.
+
+Obligations (1) and (2) are exactly what a **syslog** sink would remove — sending
+`amqsevt` to syslog reuses the platform's existing log rotation and forwarding, so
+there is **zero incremental file management**. This document takes the file route
+the site chose; Appendix C records that trade-off in full.
 
 ---
 
@@ -226,7 +262,71 @@ JSON `eventType` / `eventReason`.
 | Low | Configuration change | `CONFIGEV` | An object was created/altered/deleted — audit trail. |
 | Low | Command issued (mutating) | `CMDEV(NODISPLAY)` | Who changed what, during a live triage. |
 
-## Appendix C — References
+## Appendix C — Evaluation notes: dead ends, traps, and the standing trade-off
+
+This design was shaped by live testing on IBM MQ **9.4.5** (RHEL 9.6, 3-node
+Native HA). What follows is the record of what we verified, what we rejected and
+why, and the trade-off the file approach leaves standing. Treat the boxed items as
+warnings.
+
+### Verified in the lab (observed behaviour)
+
+- `amqsevt -o json` emits **one JSON object per event** and **flushes per event** —
+  no `stdbuf` needed on 9.4.5.
+- MQ **word-splits** a space-separated `STARTARG` into separate arguments and
+  expands `+QMNAME+`, so `amqsevt` can be driven directly from a service.
+- `STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+')` stops the collector cleanly.
+- The service **`STDOUT` file is truncated on every (re)start** — it is *not*
+  appended to.
+
+### Rests on standard behaviour (not separately re-run)
+
+- The launcher's `>>` opens the data file `O_APPEND`, so a restart **appends**
+  rather than truncates. This is standard shell/OS behaviour, not MQ-specific — it
+  is why the launcher, rather than the service `STDOUT`, owns the data file.
+
+### Dead end — letting the service own the data file (the truncation trap)
+
+> The tidiest-looking design is **no launcher at all**: point the service's
+> `STDOUT` straight at the data file. **Rejected.** The service **truncates**
+> `STDOUT` on every restart and every Native-HA failover, so any events written
+> but not yet forwarded at that instant are **lost — silently and unrecoverably**,
+> because the drain is destructive (no second copy exists). Worse, the events most
+> at risk are exactly the pre-incident ones — queue-full, channel errors, the
+> queue-manager-stop event itself — that you most want during an incident. The
+> launcher's append (`>>`) closes this hole; that one line of shell is the reason
+> the launcher exists.
+
+### Trap — the `STOPARG` delimiters
+
+> `STOPARG('MQ_SERVER_PID')` **without** the `+…+` delimiters is silently broken:
+> MQ passes the literal string `MQ_SERVER_PID` to `/bin/kill`, so the `STOP` is
+> "accepted" (`AMQ8732I`) but the process **keeps running**. It only stops because
+> a queue-manager shutdown breaks its connection — meaning an explicit
+> `STOP SERVICE` leaks the process. Always use `+MQ_SERVER_PID+`. (Confirmed live.)
+
+### Note — `stdbuf`
+
+An earlier draft used `stdbuf -oL` to force prompt flushing. Validation showed
+9.4.5 flushes per event, so it is omitted. Re-add `stdbuf -oL` only if a build
+shows events arriving in bursts.
+
+### The standing trade-off — read this
+
+Append closes the truncation hole, but it does **not** make the file approach
+self-contained. It leaves **two obligations** the site must own:
+
+1. **something must watch the file and keep up** (§R6.1), and
+2. **the file grows without bound and must be rotated** (§R6.2, copy-truncate).
+
+**Both vanish with a syslog sink.** Sending `amqsevt` to syslog reuses the
+platform's existing log rotation and forwarding — the events land in files that
+are already monitored and already rotated, so there is **zero incremental file
+management** to build or own. That is the strategic recommendation. The site has
+chosen a file instead; this document makes that choice work and states its cost so
+the decision is made with eyes open.
+
+## Appendix D — References
 
 In the IBM MQ 9.4 documentation (<https://www.ibm.com/docs/en/ibm-mq/9.4>), see:
 *Sample program to monitor instrumentation events (amqsevt)*, *ALTER QMGR*,
