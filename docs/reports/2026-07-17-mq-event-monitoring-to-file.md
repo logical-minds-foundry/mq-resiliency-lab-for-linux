@@ -2,16 +2,18 @@
 
 IBM MQ 9.4 for Multiplatforms (Linux / RHEL). Directs a queue manager's
 instrumentation events to a **file** as JSON, via a managed queue-manager
-service, for a file-monitoring agent to pick up. **The Quick start is the whole
-setup; everything after it is reference.**
+service, for a file-monitoring agent to pick up. **The Quick start is the setup; the
+Follow-on requirements after it are mandatory before production; the rest is
+reference.**
 
 **Validation status:** the mechanism below was exercised on a live IBM MQ
 **9.4.5** queue manager (RHEL 9.6, 3-node Native HA) in a resiliency lab.
 **Appendix C** records exactly what was verified, the dead ends found, and the
 standing trade-off — read it before deploying. Note up front: a file sink is
-**not** a self-contained solution (it needs external monitoring *and* rotation);
-a syslog sink would avoid both. The site has chosen a file; this document makes
-that work and states the cost.
+**not** a self-contained solution — it needs external forwarding, rotation, *and*
+health-monitoring of the collector service (see **Follow-on requirements**). A
+syslog sink would remove the first two; the third remains either way. The site has
+chosen a file; this document makes that work and states the cost.
 
 ---
 
@@ -93,13 +95,55 @@ tail -f <event-log-path>              # one JSON object per event
 Done. The queue manager starts and stops the collector automatically, and the
 JSON event feed is appended to `<event-log-path>`.
 
-> **This is not a self-contained solution — two things must be owned outside it.**
-> The launcher **appends**, so a restart or failover does **not** lose data
-> (unlike letting the service own the file, which truncates — Appendix C). But the
-> data file then (1) **grows without bound** until something **rotates** it, and
-> (2) does nothing useful unless **something watches it and keeps up**. Both are
-> the site's responsibility. A syslog sink would remove both by inheriting the
-> platform's existing log management. See R6 and Appendix C.
+> **Not self-contained — three things must be owned outside this (details in
+> Follow-on requirements below).** The launcher appends, so a restart or failover
+> does **not** lose data. But the pipeline is not complete until something
+> **(1) forwards** the file and keeps up, **(2) rotates** it, and **(3) monitors
+> the collector service and restarts it if it dies**. (1) and (2) go away with a
+> syslog sink; **(3) does not** — a running queue manager does not mean its
+> services are running.
+
+---
+
+## Follow-on requirements — not production-ready until these are owned
+
+This document produces the JSON event feed; a working end-to-end pipeline needs
+three more things, owned outside it. `amqsevt` drains the event queues
+**destructively** — once an event is written to the file it exists **nowhere else
+in MQ** — which is what makes all three load-bearing, not optional.
+
+1. **Forward the file — and keep up.** Something must tail the data file and
+   forward it continuously, checkpointing by offset so a restart resumes where it
+   left off. If nothing forwards it, events just accumulate; if the forwarder
+   falls behind or is down, the backlog is the only copy that exists.
+2. **Rotate the file.** The launcher appends forever, so the data file grows
+   without bound and must be rotated externally. The collector holds it open with
+   **no reopen-on-signal**, so rotation must be **copy-truncate** (copy aside, then
+   truncate in place, which the open handle keeps writing to) — **never**
+   rename-and-recreate, which strands the collector on the old inode. Size the
+   cadence so the small copy-truncate window (the one residual loss window) is
+   acceptable.
+3. **Monitor the collector service — and restart it if it dies.** An MQ service
+   has **no restart logic of its own.** `CONTROL(QMGR)` starts it when the queue
+   manager starts, but if the collector process crashes — for example `amqsevt`
+   meets an event it cannot parse and core-dumps — **nothing restarts it; it
+   simply dies, and the feed stops silently.** The service is therefore a moving
+   part that must be health-monitored, alerted on, and restarted on failure. This
+   is not specific to this collector: **a running queue manager does not imply its
+   services are running.** Monitoring a queue manager is more than "is the listener
+   port up" — the status of its important services is part of its health, and this
+   collector is now one of them.
+
+**What syslog would and would not change.** Requirements (1) and (2) exist only
+because the sink is a file; a syslog sink inherits the platform's existing
+forwarding and rotation and removes both — which is why syslog is the simpler
+design and the standing recommendation. **Requirement (3) remains either way:**
+even forwarding through syslog, `amqsevt` is still a service that can die and must
+be monitored. The site chose a file; that choice adds (1) and (2) on top of the
+unavoidable (3).
+
+*(Tuning, not a blocker: with every event class enabled on a busy queue manager the
+feed can be high-volume — start broad, then pare back the classes you act on.)*
 
 ---
 ---
@@ -125,8 +169,9 @@ application.
 
 **In scope:** installing the sample, enabling the event classes, and defining the
 collector as a queue-manager `SERVICE` whose launcher appends JSON to a file.
-**Out of scope (see R6):** watching/forwarding that file, and rotating it. Both
-are required for a working end-to-end pipeline; neither is solved here.
+**Out of scope (see Follow-on requirements):** forwarding that file, rotating it,
+and monitoring the collector service. All are required for a working end-to-end
+pipeline; none is solved here.
 
 ## R2. Installing the samples (Quick start step 1)
 
@@ -194,32 +239,6 @@ watch the relevant `SYSTEM.ADMIN.*.EVENT` queue depth rise then fall to zero as
 the collector drains it (proof the drain is destructive, not browsing); confirm
 each appended JSON object carries `eventSource` (`objectName`, `objectType`),
 `eventType`, `eventReason`, `eventCreation`, and an `eventData` block.
-
-## R6. Acknowledged dependencies — why this is not self-contained
-
-`amqsevt` drains the event queues **destructively**: once an event is written to
-the file it exists **nowhere else in MQ**. That makes the two obligations below
-load-bearing, not optional.
-
-1. **Something must watch the file — and keep up.** If nothing forwards it, events
-   simply accumulate; if the watcher falls behind or is down, the backlog builds
-   and (until it is read) is the only copy. The site's file-monitoring agent must
-   tail and forward continuously, checkpointing by offset so a restart resumes
-   where it left off.
-2. **Rotation — the file grows without bound.** The launcher appends forever, so
-   the data file must be rotated externally. The collector holds it open with **no
-   reopen-on-signal**, so rotation must be **copy-truncate** (copy aside, then
-   truncate in place, which the open handle keeps writing to) — **never**
-   rename-and-recreate, which strands the collector on the old inode. Size the
-   rotation cadence so the small copy-truncate window (the one residual loss
-   window) is acceptable.
-3. **Event volume.** With every class enabled on a busy queue manager the feed can
-   be high-volume. Start broad, then pare back the classes you act on.
-
-Obligations (1) and (2) are exactly what a **syslog** sink would remove — sending
-`amqsevt` to syslog reuses the platform's existing log rotation and forwarding, so
-there is **zero incremental file management**. This document takes the file route
-the site chose; Appendix C records that trade-off in full.
 
 ---
 
@@ -304,17 +323,15 @@ warnings.
 ### The standing trade-off — read this
 
 Append closes the truncation hole, but it does **not** make the file approach
-self-contained. It leaves **two obligations** the site must own:
+self-contained — it leaves the three **Follow-on requirements** the site must own:
+forward the file, rotate it, and monitor/restart the collector service.
 
-1. **something must watch the file and keep up** (§R6.1), and
-2. **the file grows without bound and must be rotated** (§R6.2, copy-truncate).
-
-**Both vanish with a syslog sink.** Sending `amqsevt` to syslog reuses the
-platform's existing log rotation and forwarding — the events land in files that
-are already monitored and already rotated, so there is **zero incremental file
-management** to build or own. That is the strategic recommendation. The site has
-chosen a file instead; this document makes that choice work and states its cost so
-the decision is made with eyes open.
+The first two exist only because the sink is a file: **a syslog sink removes both**
+by reusing the platform's existing forwarding and rotation, which is why syslog is
+the simpler design and the standing recommendation. The third — health-monitoring
+the collector service — **remains either way**, because an MQ service does not
+restart itself. The site has chosen a file; this document makes that choice work
+and states its cost so the decision is made with eyes open.
 
 ## Appendix D — References
 
