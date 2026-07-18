@@ -294,12 +294,11 @@ JSON `eventType` / `eventReason`.
 | Low | Configuration change | `CONFIGEV` | An object was created/altered/deleted — audit trail. |
 | Low | Command issued (mutating) | `CMDEV(NODISPLAY)` | Who changed what, during a live triage. |
 
-## Appendix C — Evaluation notes: dead ends and the standing trade-off
+## Appendix C — Evaluation notes: what was verified, and the dead end
 
 This design was shaped by live testing on IBM MQ **9.4.5** (RHEL 9.6, 3-node
-Native HA). What follows is the record of what we verified, what we rejected and
-why, and the trade-off the file approach leaves standing. Treat the boxed items as
-warnings.
+Native HA). What follows is the record of what we verified and what we rejected,
+and why. Treat the boxed item as a warning.
 
 ### Verified in the lab (observed behaviour)
 
@@ -328,19 +327,6 @@ warnings.
 > queue-manager-stop event itself — that you most want during an incident. The
 > launcher's append (`>>`) closes this hole; that one line of shell is the reason
 > the launcher exists.
-
-### The standing trade-off — read this
-
-Append closes the truncation hole, but it does **not** make the file approach
-self-contained — it leaves the three **Follow-on requirements** the site must own:
-forward the file, rotate it, and monitor/restart the collector service.
-
-The first two exist only because the sink is a file: **a syslog sink removes both**
-by reusing the platform's existing forwarding and rotation, which is why syslog is
-the simpler design and the standing recommendation. The third — health-monitoring
-the collector service — **remains either way**, because an MQ service does not
-restart itself. The site has chosen a file; this document makes that choice work
-and states its cost so the decision is made with eyes open.
 
 ## Appendix D — References
 
