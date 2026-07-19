@@ -14,7 +14,7 @@ For the exhaustive per-role bake-vs-configure classification, see
 [`box-bake-manifest.md`](box-bake-manifest.md); for where the baked artifacts
 live on disk, see [`build-layout.md`](build-layout.md).
 
-## 1. The four baked boxes
+## 1. The five baked boxes
 
 Each box is a **minimal per-role fat box** — it carries only the install surface
 that role needs, nothing more. The taxonomy is **role × platform**:
@@ -25,28 +25,33 @@ that role needs, nothing more. The taxonomy is **role × platform**:
 | `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the slow cgo `mq_prometheus` build + MQ SDK |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the cgo `mq_prometheus` build + `acl` |
+| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-ubuntu2404` box: its server-set install carries the client and SDK too, so a
 single baked image serves the simulated upstream (server + QM), the application
 client (client + SDK for pymqi), and the probe's exporter (cgo SDK).
 
-### The two RHEL9 flavors (the kernel-pin dilemma)
+### The RHEL9 flavors (the kernel-pin dilemma)
 
-There are **two RHEL 9.6 box flavors** in the topology, and the difference is the
+There are **two *fat* RHEL 9.6 boxes plus the bare base**, and the split is the
 answer to a kernel-pin problem:
 
-- **`mq-rdqm-rhel9`** — the *fat* RHEL box. RDQM's DRBD kernel module
+- **`mq-rdqm-rhel9`** — the fat RDQM box. RDQM's DRBD kernel module
   (`kmod-drbd`) must match the running kernel exactly. Baking it solves the pin
   **by construction**: the box is baked from this exact base, so its kernel and
   its baked `kmod-drbd` are matched from birth — there is no separate kernel pin
   to maintain, and no way for a boot-time update to drift the kernel out from
   under the module (see §5).
-- **`rhel96-x86_64`** — the *bare* RHEL 9.6 base box, booted un-baked by the RHEL
-  arms that are **not yet** baked (`pcmk-rhel-*`, `san-a-rhel`, `nha-rhel-*`).
-  These still pay the full per-run install. Baking them is deferred to the
-  follow-on epic `logical-minds-foundry/.github#72`, which generalizes the fat-box
-  pattern to the Pacemaker and Native-HA RHEL arms.
+- **`mq-nativeha-rhel9`** — the fat Native-HA box. Native HA replicates in MQ's
+  own raft log, not DRBD, so there is **no kernel module and no pin** — it bakes
+  the base MQ product on the stock `rhel/9.6` base (no RDQM/Pacemaker stack, no
+  `extra_disk`). The two fat RHEL boxes are distinct not by kernel flavor but
+  because native HA omits the entire RDQM/DRBD stack.
+- **`rhel96-x86_64`** — the *bare* RHEL 9.6 base box, still booted un-baked by the
+  RHEL arms that are **not yet** baked (`pcmk-rhel-*`, `san-a-rhel`). These still
+  pay the full per-run install; baking the Pacemaker RHEL arm is deferred to a
+  follow-on epic. (The Native-HA RHEL arm was baked in `logical-minds-foundry/.github#88`.)
 
 Both attach the RHEL install DVD as a cdrom — it doubles as a complete offline
 BaseOS+AppStream dnf repo for the unregistered guests.
@@ -143,7 +148,7 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all four boxes (and re-acquires the entitlement-gated
+  the BUILD path and re-bakes all five boxes (and re-acquires the entitlement-gated
   state media). This is the only tier that pays the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;
   the image pool and registered Vagrant boxes are gone, but the `.box` cache on the
@@ -158,6 +163,28 @@ ephemeral boot disk. Redirecting it onto the persistent disk (#376) left orphane
 overlays surviving a rebuild and breaking the next `vagrant up`; it was reverted
 in #385/#386. Persistent disks hold persistent data only — never VM overlays. See
 [`build-layout.md`](build-layout.md) for the full disk-lifecycle rationale.
+
+### Targeted box rebake: the `mqlab box` CLI
+
+The three tiers above are coarse — they turn on which *disk* gets wiped. Between
+them sits a finer, everyday need: **rebuild one box in place**, wiping no disk and
+leaving the rest of the fleet alone (a role's install changed, or a box drifted
+past its staleness band). That is the `mqlab box` CLI (epic
+`logical-minds-foundry/.github#91`) — a thin orchestration layer over
+`build-fatbox.sh`/`build-box.sh`; it never re-implements the bake or staleness
+decision, it renders and drives the shell builder's own:
+
+| Verb | What it does |
+|------|--------------|
+| `mqlab box status [BOXES…]` | read-only fleet table: per-box `CACHED` / `AGE` / `HASH` (match\|mismatch) / `REGISTERED` / `DECISION` (REUSE\|BUILD\|STALE\|FORCE). No side effects. |
+| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. `--all` for the whole fleet. Shares the ensure-box core with `bootstrap`. |
+| `mqlab box rebuild [BOXES…]` | **force a fresh bake in place** (`--rebuild-box`), overwriting the cache — the targeted "rebake one box" operation, no disk wipe. |
+| `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
+
+A **cold-boot staleness nudge** rides these surfaces: a write-once stamp records
+the last full cold boot, and `box status` / `doctor` / `bootstrap` emit a banded
+NOTICE as it ages — a reminder to nuke-and-rebake periodically rather than let the
+fleet rot. (An automated build cadence is a follow-on.)
 
 ## 5. OS currency comes from rebuilding the box
 
