@@ -133,7 +133,7 @@ fi
 
 # --- Cheap path: register the cached box and we are done. ---
 if [ "$action" = REUSE ]; then
-  vagrant box add --force "$BOX" "$CACHE"
+  vagrant box add --provider libvirt --force "$BOX" "$CACHE"
   echo "box ready (from cache): $BOX"
   exit 0
 fi
@@ -152,11 +152,18 @@ VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
 
 # 1. Ensure the base box is present: the RHEL base is itself locally built
 #    (rhel96/build-box.sh); the Ubuntu base comes from Vagrant Cloud (idempotent
-#    add — an already-present box is left as-is).
+#    add — an already-present box is left as-is). --provider libvirt is REQUIRED: the
+#    cloud-image base ships multiple providers, so a bare `vagrant box add` drops into an
+#    interactive provider menu that BLOCKS ON INPUT — deadlocking any non-interactive/CI
+#    bootstrap on a multi-provider host (e.g. macOS with libvirt+qemu+virtualbox), which the
+#    fat-box dependency makes every `mqlab bootstrap` hit on a host with no cached boxes.
+#    build-fatbox is a libvirt tool (base box.img read from */libvirt/*, transient VM via
+#    virsh), so libvirt is always correct; a no-op on the Linux/KVM path (libvirt is the only
+#    provider there).
 if [ "$BASE_KIND" = rhel ]; then
   ./rhel96/build-box.sh --domain-type "$DOMAIN_TYPE" --cpu-mode "$CPU_MODE"
 else
-  vagrant box list | grep -q "^${BASE_BOX} " || vagrant box add "$BASE_BOX"
+  vagrant box list | grep -q "^${BASE_BOX} " || vagrant box add --provider libvirt "$BASE_BOX"
 fi
 
 # 2. Resolve the base box's disk image and COPY it into the pool as the transient build
@@ -314,7 +321,7 @@ mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
 tar -C "$WORK" -czf "$CACHE" metadata.json box.img
 printf '%s\n' "$CURRENT_HASH" > "$HASH_FILE"   # stamp the manifest hash beside the box
-vagrant box add --force "$BOX" "$CACHE"
+vagrant box add --provider libvirt --force "$BOX" "$CACHE"
 
 # 8. Cleanup: tear down the transient build domain + scratch (cache + staged DVD are kept).
 virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true
