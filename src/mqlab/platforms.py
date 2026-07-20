@@ -125,6 +125,27 @@ def build_domain_virt(facts: HostFacts) -> tuple[str, str]:
     return ("kvm", CPU_KVM) if kvm else ("qemu", CPU_TCG)
 
 
+def box_build_arch(entry: dict[str, Any], facts: HostFacts) -> str:
+    """The build/guest arch for a fat/base box (design D1, #103).
+
+    A box that pins its arch (RHEL: ``arch: x86_64``) keeps it on every host; an
+    un-pinned box (host-resolved Ubuntu fat box) tracks the host. Pure and
+    display-safe — never raises — mirroring resolve(). build-fatbox.sh consumes
+    the result via --arch; it does not re-derive it.
+    """
+    return entry.get("arch") or facts.arch
+
+
+def is_foreign_box_build(entry: dict[str, Any], facts: HostFacts) -> bool:
+    """True when this box pins an arch other than the host's — a build that would
+    be fully emulated (e.g. the RHEL box on Apple Silicon). The orchestrator
+    refuses it (design D11, #103); this predicate stays pure so status paths can
+    call it safely.
+    """
+    pinned = entry.get("arch")
+    return bool(pinned) and pinned != facts.arch
+
+
 def render_resolved(topo: dict[str, Any], facts: HostFacts) -> str:
     nodes = {name: asdict(node) for name, node in resolve(topo, facts).items()}
     return yaml.safe_dump({"nodes": nodes}, sort_keys=True)

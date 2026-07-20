@@ -153,3 +153,27 @@ def test_build_domain_virt_x86_host_without_kvm_falls_back_to_tcg():
 def test_build_domain_virt_arm_host_is_foreign_tcg():
     # x86_64 guest on an arm64 Mac is foreign-arch — must be TCG.
     assert p.build_domain_virt(ARM_KVM) == ("qemu", "maximum")
+
+
+def test_box_build_arch_rhel_is_x86_on_any_host():
+    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    assert p.box_build_arch(rhel, X86_KVM) == "x86_64"
+    assert p.box_build_arch(rhel, ARM_KVM) == "x86_64"  # still x86 on the Mac
+
+
+def test_box_build_arch_unpinned_ubuntu_tracks_host():
+    ubuntu = {"box": "cloud-image/ubuntu-24.04"}  # no arch pin
+    assert p.box_build_arch(ubuntu, X86_KVM) == "x86_64"
+    assert p.box_build_arch(ubuntu, ARM_KVM) == "aarch64"
+
+
+def test_is_foreign_box_build_true_for_rhel_on_arm():
+    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    assert p.is_foreign_box_build(rhel, ARM_KVM) is True
+    assert p.is_foreign_box_build(rhel, X86_KVM) is False
+
+
+def test_is_foreign_box_build_false_for_unpinned_ubuntu():
+    ubuntu = {"box": "cloud-image/ubuntu-24.04"}  # host-resolved — matches any host
+    assert p.is_foreign_box_build(ubuntu, ARM_KVM) is False
+    assert p.is_foreign_box_build(ubuntu, X86_KVM) is False
