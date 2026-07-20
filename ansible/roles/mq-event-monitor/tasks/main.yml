@@ -1,7 +1,7 @@
 ---
-# MQ event collector (#515, epic .github#31): amqsevt as an MQ SERVICE object. Runs in
-# bindings mode, started/stopped by the QM (CONTROL(QMGR)) so it travels with the queue
-# manager across failover. Drains SYSTEM.ADMIN.*.EVENT destructively to JSON on journald.
+# MQ event monitoring — host prep (#515). Runs on EVERY node the QM can fail over to:
+# assert the collector's deps and install the run.sh wrapper. The QM-level MQSC (enable +
+# SERVICE define) is service.yml, run once on the active instance. Requires: qmgr_name.
 - name: assert the amqsevt sample binary is present
   ansible.builtin.stat:
     path: "{{ mq_event_amqsevt_bin }}"
@@ -39,23 +39,3 @@
     dest: "{{ mq_event_run_dir }}/run.sh"
     mode: "0755"
   become: true
-
-# Define the service and start it now. CONTROL(QMGR) auto-starts it on future QM starts,
-# but the QM is already running at provision time, so START SERVICE kicks it off now.
-# STOPCMD kills MQ_SERVER_PID — MQ's replaceable insert for the started process's PID —
-# so QM shutdown stops the collector (the wrapper execs amqsevt, so that PID is amqsevt).
-- name: define + start the MQ event-monitor service (idempotent)
-  ansible.builtin.shell: |
-    set -o pipefail
-    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('%s/run.sh') STARTARG('%s') STOPCMD('/bin/kill') STOPARG('MQ_SERVER_PID') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
-      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
-      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: mqm
-  register: svc
-  # rc 0 = the define+start block ran an action; rc 10 = warning only (e.g. service already
-  # running on a re-provision) = no change. Avoids asserting fragile AMQ message codes.
-  changed_when: svc.rc == 0
-  failed_when: svc.rc not in [0, 10]

@@ -1,0 +1,88 @@
+---
+# MQ event monitoring — QM-level MQSC (#514 enable + #515 SERVICE define). Runs ONCE on
+# the active instance; the objects replicate (raft / DRBD / shared LUN) and travel with
+# the QM. Host-prep (main.yml: wrapper + asserts) must have run on every failover-capable
+# node first. Requires: qmgr_name; optional mq_event_perf_queues.
+#
+# Every MQSC step here MUST APPLY, and asserts it did — it never merely "does not error".
+# The old `failed_when: rc not in [0, 10]` tolerance silently swallowed a hard rejection
+# (LOGGEREV on a circular-logging QM aborted the whole ALTER, so no event class ever
+# enabled — #721). A must-apply command that fails now fails loudly, and the collector's
+# RUNNING state is proven, not assumed.
+
+# LOGGEREV(ENABLED) dropped from the class list: it is only valid on a linear-logging queue
+# manager, and this lab is circular-logging everywhere — ALTER QMGR ... LOGGEREV(ENABLED)
+# is rejected WHOLESALE (AMQ8518E) and NO class applies. Revisit only if linear logging is
+# ever adopted. A clean ALTER of the remaining 11 classes returns rc 0 + AMQ8005I.
+- name: enable instrumentation events (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: evgate
+  changed_when: "'AMQ8005' in evgate.stdout"
+  # Must apply cleanly: rc 0 AND AMQ8005I (queue manager changed). Anything else — e.g. an
+  # invalid attribute rejecting the whole ALTER — is a real failure and must surface.
+  failed_when: evgate.rc != 0 or 'AMQ8005' not in evgate.stdout
+
+- name: enable per-queue performance events on the app queue(s) (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QLOCAL({{ item }}) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  loop: "{{ mq_event_perf_queues | default([]) }}"
+  register: perfq
+  changed_when: "'AMQ8008' in perfq.stdout"
+  # The ALTER QLOCAL must apply: rc 0 AND AMQ8008I (queue changed). A missing queue or any
+  # other rejection must surface, not be tolerated.
+  failed_when: perfq.rc != 0 or 'AMQ8008' not in perfq.stdout
+
+# Define the service and start it now. CONTROL(QMGR) auto-starts it on future QM starts.
+# STOPCMD kills MQ_SERVER_PID (the started process = amqsevt, since run.sh execs it) so
+# QM shutdown stops the collector cleanly. DEFINE ... REPLACE always emits AMQ8625I; a
+# START on an already-active service reports the AMQ8737W warning (rc 10) — a legitimate
+# re-provision no-op. We assert the DEFINE landed (AMQ8625I) here and prove the collector
+# is actually RUNNING in the next task; we do NOT fall back to a blanket rc tolerance that
+# would re-hide a genuine define/start failure.
+- name: define + start the MQ event-monitor service
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('%s/run.sh') STARTARG('%s') STOPCMD('/bin/kill') STOPARG('MQ_SERVER_PID') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
+      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: svc
+  # Changed on a fresh start; a re-provision where the service is already active carries the
+  # AMQ8737W warning and is a no-op.
+  changed_when: "'AMQ8737' not in svc.stdout"
+  # The DEFINE must succeed (AMQ8625I). rc 10 is NOT blanket-tolerated — it is accepted only
+  # because the START-already-active warning carries it, and only when the define landed. A
+  # genuine define rejection produces no AMQ8625I and fails here; the RUNNING check below is
+  # the authoritative end-state gate.
+  failed_when: "'AMQ8625' not in svc.stdout"
+
+# Prove the end state rather than trusting the define/start rc: the collector MUST be
+# RUNNING. A genuine define/start failure leaves it not-RUNNING and fails loudly here.
+- name: verify the event-monitor service is running
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "DISPLAY SVSTATUS({{ mq_event_service_name }})\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: svcstat
+  changed_when: false
+  failed_when: svcstat.rc != 0 or 'STATUS(RUNNING)' not in svcstat.stdout

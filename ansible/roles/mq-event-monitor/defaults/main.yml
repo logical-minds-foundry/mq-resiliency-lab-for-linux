@@ -4,3 +4,18 @@ mq_event_amqsevt_bin: /opt/mqm/samp/bin/amqsevt
 mq_event_syslog_tag: mq-events
 mq_event_run_dir: /opt/mq-event-monitor
 mq_event_service_name: MQ.EVENT.MONITOR
+
+# Max single-message size (bytes) passed to `logger`. logger defaults to RFC 3164's 1 KiB and
+# SPLITS any longer input line into multiple syslog/journald entries — which shreds a full
+# CONFIG event (a whole-object dump, ~4 KB on a QMGR) into ~1 KiB fragments, none valid JSON.
+# 32 KiB holds the largest event our enabled classes emit with wide margin, and stays under
+# journald's default LineMax (48 KiB); mq-diag-logging's drop-in only disables rate-limiting,
+# so that 48 KiB ceiling is unchanged. Proven in the lab: at the 1 KiB default the config
+# event splits into 4 unparseable entries; at 32 KiB it lands as one parseable entry.
+mq_event_logger_max_size: 32768
+
+# Application queues that should emit performance events (queue depth high / full).
+# Empty by default: PERFMEV is enabled at the QMGR, but per-queue QDPMAXEV/QDPHIEV
+# thresholds only make sense on real app queues, so each arm sets its own list at the
+# include call site (e.g. ["PCMK.SVC.REQUEST"]). Empty = safe no-op.
+mq_event_perf_queues: []
