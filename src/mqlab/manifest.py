@@ -48,6 +48,11 @@ _OS_PREFIX = {
     # svc/app/probe repoint to it and are MQ commons, so _commons_mq_platforms feeds this
     # into tarball_name; the bake consumed the host-arch Ubuntu tarball + the MQ SDK.
     "mq-ubuntu2404": "UbuntuLinux",
+    # The fat native-HA Ubuntu box platform (#103 T6) is Ubuntu, host-resolved (no `arch:`
+    # pin — the OS-as-only-variable peer of mq-nativeha-rhel9). The six nha-ubuntu-* nodes
+    # are repointed to it and run MQ, so _stack_mq_platforms feeds it into tarball_name;
+    # the arch resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud).
+    "mq-nativeha-ubuntu": "UbuntuLinux",
     "alma9-x86_64": "Linux",
 }
 

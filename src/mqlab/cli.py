@@ -909,6 +909,7 @@ _LOCAL_BOX_BUILDERS = {
     "infra-ubuntu2404": "lab/boxes/build-fatbox.sh",
     "mq-ubuntu2404": "lab/boxes/build-fatbox.sh",
     "mq-nativeha-rhel9": "lab/boxes/build-fatbox.sh",
+    "mq-nativeha-ubuntu": "lab/boxes/build-fatbox.sh",
 }
 
 
