@@ -236,16 +236,25 @@ if [ "$BASE_KIND" = rhel ]; then
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 
-# The Ubuntu MQ bakes (obs, mq-ubuntu) install the full MQ via the Ubuntu mq-install role
-# — the obs box for the mq_prometheus cgo build's SDK, the mq-ubuntu box for the svc/app/
-# probe commons' server+client+SDK. Like rdqm-install, mq-install reads its tarball from
-# mq_media_dir; point it at the host-durable main-worktree cache (the worktree's build/ is
-# empty). Ubuntu registers online, so no DVD is attached. (#605, #659)
-if [ "$BAKE" = obs ] || [ "$BAKE" = mq-ubuntu ]; then
-  ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz >/dev/null 2>&1 \
-    || { echo "ERROR: UbuntuLinuxX64 MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake" >&2; exit 1; }
-  BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
-fi
+# The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — obs for the
+# mq_prometheus cgo build's SDK, mq-ubuntu for the svc/app/probe commons, and the HA arms
+# (nativeha-ubuntu, pcmk-ubuntu) for their cluster nodes' server. (infra is BIND9 — no MQ.)
+# Like rdqm-install, mq-install reads its tarball from mq_media_dir; point it at the
+# host-durable main-worktree cache (the worktree's build/ is empty). The deb tarball is
+# arch-specific, so the pre-flight matches the --arch this bake builds for — ARM64 on
+# Apple Silicon, X64 on x86 (#103/#727): a stale X64 literal here hard-failed every arm64
+# bake. Ubuntu registers online, so no DVD is attached. (#605, #659)
+case "$BAKE" in
+  obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu)
+    case "$ARCH" in
+      aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;
+      *) MQ_MEDIA_TOKEN=UbuntuLinuxX64 ;;  # $ARCH already validated to aarch64|x86_64
+    esac
+    ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-"${MQ_MEDIA_TOKEN}".tar.gz >/dev/null 2>&1 \
+      || { echo "ERROR: ${MQ_MEDIA_TOKEN} MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake (--arch ${ARCH})" >&2; exit 1; }
+    BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
+    ;;
+esac
 
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
