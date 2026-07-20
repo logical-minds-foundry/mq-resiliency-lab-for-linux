@@ -82,7 +82,7 @@ def _build_fleet(
     facts: HostFacts | None = None,
     registry: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, BoxSpec]:
-    """The six-box fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source).
+    """The fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source).
 
     Each fat box's build/guest arch comes from the single authority
     platforms.box_build_arch(<its topology `boxes:` entry>, facts) (#103 D1) — RHEL

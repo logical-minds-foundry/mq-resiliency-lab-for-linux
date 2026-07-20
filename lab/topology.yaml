@@ -80,6 +80,18 @@ boxes:
   # the cloud), so the guest arch is not pinned. No DVD (Ubuntu online archive).
   mq-ubuntu2404:
     box: mq-ubuntu2404
+  # The fat native-HA Ubuntu box (#103 T6, epic .github#103): the cloud-image/ubuntu-24.04
+  # base with base IBM MQ (server + client + SDK + samples debs) + node-exporter + alloy
+  # BAKED IN (lab/boxes/build-fatbox.sh --box mq-nativeha-ubuntu) — the OS-as-only-variable
+  # peer of mq-nativeha-rhel9. The six nha-ubuntu-* nodes boot this instead of the bare
+  # host-resolved Ubuntu platform so a bootstrap skips the MQ install; the per-run configure
+  # half (crtmqm, the NativeHAInstance peer set, the mqmonitor@ lifecycle, TLS/CRR) still
+  # runs. host-resolved (#103) — arch tracks the host: the box is baked natively per host
+  # (arm64 on Apple Silicon, x86_64 on the cloud), so the guest arch is NOT pinned. UNLIKE
+  # mq-nativeha-rhel9 there is NO DVD (Ubuntu registers online) and — like both Native HA
+  # arms — NO extra_disk (raft-log replication, not DRBD).
+  mq-nativeha-ubuntu:
+    box: mq-nativeha-ubuntu
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -282,31 +294,39 @@ nodes:
   # arm (rdqm .3x/.4x, pcmk .5x/.6x, pcmk-rhel .7x, nha-rhel .9x) so this arm can
   # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
   #
-  # Platform is host-resolved (#276, no `platform:` key) — NOT pinned to x86 like
-  # nha-rhel. On the Apple-Silicon dev host these run native arm64 (so the two
-  # Ubuntu stacks are usable side-by-side); on an x86 host they track x86_64. All
-  # three instances share one arch either way, which is all Native HA requires.
+  # They boot the baked mq-nativeha-ubuntu fat box (#103 T6) so a bootstrap skips the MQ
+  # install — the OS-as-only-variable peer of the x86-pinned nha-rhel arm. Host-arch
+  # resolution is preserved AT THE BOX LAYER (the mq-nativeha-ubuntu box carries no `arch:`
+  # pin): on the Apple-Silicon dev host these run native arm64 (so the two Ubuntu stacks
+  # are usable side-by-side); on an x86 host they track x86_64. All three instances share
+  # one arch either way, which is all Native HA requires.
   nha-ubuntu-a1:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.11, net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11, net-wan: 10.99.0.11, net-ext: 10.60.0.11 }
   nha-ubuntu-a2:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.12, net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12, net-wan: 10.99.0.12, net-ext: 10.60.0.12 }
   nha-ubuntu-a3:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.13, net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13, net-wan: 10.99.0.13, net-ext: 10.60.0.13 }
   nha-ubuntu-b1:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.14, net-data-b: 10.10.2.11, net-hb-b: 172.16.2.11, net-wan: 10.99.0.14 }
   nha-ubuntu-b2:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.15, net-data-b: 10.10.2.12, net-hb-b: 172.16.2.12, net-wan: 10.99.0.15 }
   nha-ubuntu-b3:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }

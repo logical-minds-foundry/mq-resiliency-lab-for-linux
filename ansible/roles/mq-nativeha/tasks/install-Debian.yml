@@ -7,11 +7,25 @@
 # network access, so there is no offline-repo dance — apt resolves the debs' OS
 # deps directly. The tar arch suffix tracks the guest arch (host-resolved, #276):
 # ARM64 on the Apple-Silicon dev host, X64 on an x86 host — mirroring mq-install.
+#
+# Skip-if-baked (#103 T6, mirroring install-RedHat.yml #648/#659): the
+# mq-nativeha-ubuntu fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is
+# already present. Gate the ~2 GiB developer-tar copy + unpack on that marker —
+# WITHOUT it a baked node re-copies the tarball EVERY bootstrap (the #659 offender,
+# since /tmp is wiped on boot). The apt install / setmqinst / ulimits steps keep
+# their own `creates:` / idempotent guards (no-ops when baked). An un-baked base-box
+# node (Phase-0) still installs from scratch.
+- name: check for an already-installed MQ (skip the baked tar copy/unpack)
+  ansible.builtin.stat:
+    path: /opt/mqm/inc/cmqc.h
+  register: mq_installed
+
 - name: copy MQ Ubuntu tar to node
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
     dest: /tmp/mqadv.tar.gz
     mode: "0644"
+  when: not mq_installed.stat.exists
 
 - name: unpack
   ansible.builtin.unarchive:
@@ -19,6 +33,7 @@
     dest: /tmp
     remote_src: true
     creates: /tmp/MQServer
+  when: not mq_installed.stat.exists
 
 - name: accept developer licence
   ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept

@@ -62,7 +62,7 @@ def test_tarball_name_ubuntu_fat_box_tracks_host_arch():
     # through the same box_build_arch authority the box builder consumes, so it stages
     # UbuntuLinuxARM64 on Apple Silicon and UbuntuLinuxX64 on the cloud — bake + acquire
     # agree by construction, never the baked-in x86 literal of the old box-name mapping.
-    for platform in ("mq-ubuntu2404", "obs-ubuntu2404"):
+    for platform in ("mq-ubuntu2404", "obs-ubuntu2404", "mq-nativeha-ubuntu"):
         assert (
             m.tarball_name("9.4.5.0", platform, facts=ARM)
             == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
@@ -100,6 +100,7 @@ def test_every_topology_mq_platform_resolves_to_a_tarball():
     for stack in lab_stacks().values():
         platforms |= cli._stack_mq_platforms(stack)
     assert "mq-nativeha-rhel9" in platforms  # the #668 repoint is represented
+    assert "mq-nativeha-ubuntu" in platforms  # the #103 T6 repoint is represented
     for platform in sorted(platforms):
         m.tarball_name(m.DEFAULT_MQ_VERSION, platform)  # must not raise ValueError
 
