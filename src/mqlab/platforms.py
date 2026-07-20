@@ -87,7 +87,7 @@ def _provider(
     box: dict[str, Any],
     facts: HostFacts,
 ) -> ResolvedNode:
-    guest = box["arch"]
+    guest = box_build_arch(box, facts)
     if guest == AARCH64 and facts.arch == X86_64:
         raise PlatformError(f"node {name}: emulating ARM on x86 is unsupported")
     kvm = guest == facts.arch and facts.kvm

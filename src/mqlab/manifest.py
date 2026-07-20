@@ -12,40 +12,47 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.paths import manifests_root
+from mqlab.hostfacts import AARCH64, X86_64, probe
+from mqlab.paths import manifests_root, repo_root
+from mqlab.platforms import box_build_arch
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Arch suffix in the MQ-for-Developers tarball name, per VM platform. The Ubuntu
-# platform a node uses is host-resolved (#276), so both arches map here.
-_ARCH_SUFFIX = {
-    "ubuntu2404-arm64": "UbuntuLinuxARM64",
-    "ubuntu2404-x86_64": "UbuntuLinuxX64",
-    "rhel96-x86_64": "LinuxX64",
-    # The fat RDQM box platform (#604) is RHEL x86_64, so it takes the same LinuxX64
-    # tarball as rhel96-x86_64 — the bake (build-fatbox.sh) consumes it, and the
-    # stack-prereq ensure keeps it cached for the repointed rdqm_a/rdqm_b nodes.
-    "mq-rdqm-rhel9": "LinuxX64",
-    # The fat native-HA RHEL box platform (#667, epic .github#88) is RHEL x86_64, so it
-    # takes the same LinuxX64 tarball as rhel96-x86_64 / mq-rdqm-rhel9. The six nha-rhel-*
-    # nodes are repointed to it (#668) and run MQ, so _stack_mq_platforms feeds it into
-    # tarball_name; the bake consumed the tarball for the baked base-MQ install and the
-    # stack-prereq ensure keeps it cached for the repointed nha_rhel_a/nha_rhel_b nodes.
-    "mq-nativeha-rhel9": "LinuxX64",
-    # The fat obs box platform (#605) is Ubuntu x86_64, so it takes the same
-    # UbuntuLinuxX64 tarball as ubuntu2404-x86_64. The obs node is a commons member,
-    # so _commons_mq_platforms feeds this into tarball_name; it resolves to the one
-    # Ubuntu tarball svc/app/probe already need (the bake consumed it for the baked
-    # mq_prometheus cgo build against the MQ SDK).
-    "obs-ubuntu2404": "UbuntuLinuxX64",
-    # The fat MQ-commons box platform (#659) is Ubuntu x86_64, so it takes the same
-    # UbuntuLinuxX64 tarball as ubuntu2404-x86_64. svc/app/probe are repointed to it and
-    # are MQ commons, so _commons_mq_platforms feeds this into tarball_name; the bake
-    # consumed the same tarball for the MQ deb install + the mq_prometheus cgo SDK.
-    "mq-ubuntu2404": "UbuntuLinuxX64",
-    "alma9-x86_64": "LinuxX64",
+    from mqlab.hostfacts import HostFacts
+
+# The OS-family segment of the MQ-for-Developers tarball name, per VM platform. RHEL
+# and AlmaLinux take the generic "Linux" build; Ubuntu takes "UbuntuLinux". The ARCH
+# segment is resolved SEPARATELY (below), through the same box_build_arch authority the
+# box builder consumes (#103 D10) — so a host-resolved Ubuntu fat box (no `arch:` pin)
+# picks up the build host's arch instead of the old baked-in x86 literal, and RHEL
+# (x86-pinned) stays LinuxX64 on every host. Membership here is also the known-platform
+# gate: an absent platform is an error, not a silent default.
+_OS_PREFIX = {
+    "ubuntu2404-arm64": "UbuntuLinux",
+    "ubuntu2404-x86_64": "UbuntuLinux",
+    "rhel96-x86_64": "Linux",
+    # The fat RDQM box platform (#604) is RHEL x86_64 — same LinuxX64 tarball as
+    # rhel96-x86_64; the bake consumes it, the stack-prereq ensure keeps it cached for
+    # the repointed rdqm_a/rdqm_b nodes.
+    "mq-rdqm-rhel9": "Linux",
+    # The fat native-HA RHEL box platform (#667, epic .github#88) is RHEL x86_64 — same
+    # LinuxX64 tarball. The six nha-rhel-* nodes are repointed to it (#668) and run MQ,
+    # so _stack_mq_platforms feeds it into tarball_name.
+    "mq-nativeha-rhel9": "Linux",
+    # The fat obs box platform (#605) is Ubuntu, now host-resolved (#103 D3): it takes
+    # the same Ubuntu tarball svc/app/probe already need for this host's arch. The obs
+    # node is a commons member, so _commons_mq_platforms feeds this into tarball_name.
+    "obs-ubuntu2404": "UbuntuLinux",
+    # The fat MQ-commons box platform (#659) is Ubuntu, now host-resolved (#103 D3):
+    # svc/app/probe repoint to it and are MQ commons, so _commons_mq_platforms feeds this
+    # into tarball_name; the bake consumed the host-arch Ubuntu tarball + the MQ SDK.
+    "mq-ubuntu2404": "UbuntuLinux",
+    "alma9-x86_64": "Linux",
 }
+
+# Canonical arch (hostfacts) -> the arch token in the MQ-for-Developers tarball name.
+_MQ_ARCH_TOKEN = {AARCH64: "ARM64", X86_64: "X64"}
 
 # Canonical MQ-for-Developers version. The #350 stack/commons bootstrap ensures a
 # platform's tarball at this version. Mirrors scripts/fetch-mq.sh's VER. (#333)
@@ -61,12 +68,28 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def tarball_name(mq_version: str, platform: str) -> str:
+def _box_registry() -> dict[str, dict[str, Any]]:
+    """The `boxes:` registry from lab/topology.yaml (box/platform name -> entry)."""
+    data = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    boxes: dict[str, dict[str, Any]] = data.get("boxes", {})
+    return boxes
+
+
+def tarball_name(mq_version: str, platform: str, facts: HostFacts | None = None) -> str:
+    """The MQ-for-Developers tarball filename for a platform on this host (#103 D10).
+
+    The OS family is a static per-platform property; the ARCH is resolved through the
+    box_build_arch authority against the platform's box-registry entry — so a pinned box
+    (RHEL x86_64) keeps its arch and an un-pinned Ubuntu fat box tracks the build host.
+    Acquisition and the bake therefore agree by construction. Facts default to probe().
+    """
     try:
-        suffix = _ARCH_SUFFIX[platform]
+        prefix = _OS_PREFIX[platform]
     except KeyError as exc:
         raise ValueError(f"no MQ tarball arch mapping for platform {platform!r}") from exc
-    return f"{mq_version}-IBM-MQ-Advanced-for-Developers-{suffix}.tar.gz"
+    facts = facts if facts is not None else probe()
+    arch = box_build_arch(_box_registry().get(platform, {}), facts)
+    return f"{mq_version}-IBM-MQ-Advanced-for-Developers-{prefix}{_MQ_ARCH_TOKEN[arch]}.tar.gz"
 
 
 _OBS_VAR_MAP = {
