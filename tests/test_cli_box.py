@@ -16,7 +16,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import box, cli
-from mqlab.hostfacts import X86_64, HostFacts
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.orchestrator import StepFailedError
 from mqlab.render import Renderer
 from mqlab.runner import Command
@@ -69,9 +69,60 @@ def test_fleet_is_derived_from_cli_builders():
 
 
 def test_cache_artifact_names():
+    # Cache filenames are uniformly arch-suffixed (#103 D4). Every fat box in the
+    # shipped topology is x86_64-pinned today, so the module-level FLEET is
+    # deterministic regardless of host; the base box keeps its already-arch-tagged
+    # literal artifact.
     assert box.FLEET["rhel/9.6-x86_64"].cache_artifact == "rhel-9.6-x86_64-libvirt.box"
-    assert box.FLEET["mq-rdqm-rhel9"].cache_artifact == "mq-rdqm-rhel9.box"
-    assert box.FLEET["obs-ubuntu2404"].cache_artifact == "obs-ubuntu2404.box"
+    assert box.FLEET["mq-rdqm-rhel9"].cache_artifact == "mq-rdqm-rhel9-x86_64.box"
+    assert box.FLEET["obs-ubuntu2404"].cache_artifact == "obs-ubuntu2404-x86_64.box"
+
+
+# --------------------------------------------------------------------------- #
+# _build_fleet arch derivation (#103 D4/D5, T4)                               #
+# --------------------------------------------------------------------------- #
+def _synthetic_registry() -> dict[str, dict]:
+    """A topology `boxes:` registry with the Ubuntu fat boxes host-resolved
+    (un-pinned) and the RHEL fat boxes arch-pinned — the post-#103 shape, so the
+    arm64 branch is reachable without depending on the topology un-pin (T5)."""
+    return {
+        "mq-rdqm-rhel9": {"box": "mq-rdqm-rhel9", "arch": "x86_64"},
+        "mq-nativeha-rhel9": {"box": "mq-nativeha-rhel9", "arch": "x86_64"},
+        "obs-ubuntu2404": {"box": "obs-ubuntu2404"},
+        "infra-ubuntu2404": {"box": "infra-ubuntu2404"},
+        "mq-ubuntu2404": {"box": "mq-ubuntu2404"},
+    }
+
+
+def test_build_fleet_fat_boxes_carry_arch_x86():
+    facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+    fleet = box._build_fleet(facts, _synthetic_registry())
+    assert fleet["mq-ubuntu2404"].arch == "x86_64"
+    assert fleet["mq-ubuntu2404"].cache_artifact == "mq-ubuntu2404-x86_64.box"
+    assert fleet["mq-rdqm-rhel9"].arch == "x86_64"
+    assert fleet["mq-rdqm-rhel9"].cache_artifact == "mq-rdqm-rhel9-x86_64.box"
+    # The base box keeps its literal (already arch-tagged) artifact + x86_64 arch.
+    assert fleet["rhel/9.6-x86_64"].arch == "x86_64"
+    assert fleet["rhel/9.6-x86_64"].cache_artifact == "rhel-9.6-x86_64-libvirt.box"
+
+
+def test_build_fleet_unpinned_ubuntu_tracks_host_arm64():
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    fleet = box._build_fleet(facts, _synthetic_registry())
+    # Un-pinned Ubuntu fat box tracks the host arch (arm64 on Apple Silicon).
+    assert fleet["mq-ubuntu2404"].arch == "aarch64"
+    assert fleet["mq-ubuntu2404"].cache_artifact == "mq-ubuntu2404-aarch64.box"
+    # Pinned RHEL fat boxes stay x86_64 even on the Mac.
+    assert fleet["mq-rdqm-rhel9"].arch == "x86_64"
+    assert fleet["mq-rdqm-rhel9"].cache_artifact == "mq-rdqm-rhel9-x86_64.box"
+    assert fleet["mq-nativeha-rhel9"].arch == "x86_64"
+    assert fleet["mq-nativeha-rhel9"].cache_artifact == "mq-nativeha-rhel9-x86_64.box"
+
+
+def test_manifest_hash_artifact_is_arch_suffixed():
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    fleet = box._build_fleet(facts, _synthetic_registry())
+    assert fleet["mq-ubuntu2404"].manifest_hash_artifact == "mq-ubuntu2404-aarch64.manifest-hash"
 
 
 # --------------------------------------------------------------------------- #
@@ -196,7 +247,7 @@ def test_registered_boxes_parses_vagrant_list(monkeypatch):
 def test_cache_present(monkeypatch, tmp_path):
     monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
     assert box._cache_present("mq-rdqm-rhel9") is False
-    (tmp_path / "mq-rdqm-rhel9.box").write_text("x")
+    (tmp_path / "mq-rdqm-rhel9-x86_64.box").write_text("x")
     assert box._cache_present("mq-rdqm-rhel9") is True
 
 
@@ -239,6 +290,8 @@ def test_render_status_covers_every_cell(monkeypatch):
     monkeypatch.setattr(box, "box_decision", lambda name: decisions[name])
     out = box.render_status(list(decisions))
     assert "BOX" in out and "DECISION" in out
+    assert "ARCH" in out  # the arch column header (#103 T4)
+    assert "aarch64" in out or "x86_64" in out  # a rendered arch cell from FLEET
     assert "rhel/9.6-x86_64" in out
     assert "N/A" in out  # base box hash column
     assert "mismatch" in out  # fat box BUILD + cache present
@@ -398,18 +451,19 @@ def test_box_status_silent_when_no_cold_boot_nudge(monkeypatch):
 # `box clean` — pristine cache removal + deregister (epic .github#91, T3)       #
 # --------------------------------------------------------------------------- #
 def test_clean_removes_cache_and_deregisters(monkeypatch, tmp_path):
-    (tmp_path / "mq-rdqm-rhel9.box").write_text("x")
-    (tmp_path / "mq-rdqm-rhel9.manifest-hash").write_text("h")
+    # Both the cache artifact and its manifest-hash are arch-suffixed (#103 D4).
+    (tmp_path / "mq-rdqm-rhel9-x86_64.box").write_text("x")
+    (tmp_path / "mq-rdqm-rhel9-x86_64.manifest-hash").write_text("h")
     monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
     removed_regs: list[str] = []
     monkeypatch.setattr(box, "_vagrant_box_remove", lambda n: removed_regs.append(n))
     removed = box.clean_boxes(["mq-rdqm-rhel9"])
-    assert not (tmp_path / "mq-rdqm-rhel9.box").exists()
-    assert not (tmp_path / "mq-rdqm-rhel9.manifest-hash").exists()
+    assert not (tmp_path / "mq-rdqm-rhel9-x86_64.box").exists()
+    assert not (tmp_path / "mq-rdqm-rhel9-x86_64.manifest-hash").exists()
     assert removed_regs == ["mq-rdqm-rhel9"]
     # the removed report names both files and the deregistration.
-    assert str(tmp_path / "mq-rdqm-rhel9.box") in removed
-    assert str(tmp_path / "mq-rdqm-rhel9.manifest-hash") in removed
+    assert str(tmp_path / "mq-rdqm-rhel9-x86_64.box") in removed
+    assert str(tmp_path / "mq-rdqm-rhel9-x86_64.manifest-hash") in removed
     assert any("mq-rdqm-rhel9" in item and "vagrant" in item for item in removed)
 
 

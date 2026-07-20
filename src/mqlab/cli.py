@@ -389,8 +389,11 @@ def build_status() -> None:
 
 @build_app.command("migrate")
 def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -> None:
-    """Move existing top-level build/ contents into buckets (idempotent)."""
+    """Move existing top-level build/ contents into buckets + rename the per-host box
+    cache to the arch-suffixed `<box>-<arch>.box` scheme (idempotent, #103 D5)."""
     for src, dst in buildenv.migrate(repo_root(), dry_run=dry_run):
+        typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
+    for src, dst in box.migrate_box_cache(dry_run=dry_run):
         typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
 
 
