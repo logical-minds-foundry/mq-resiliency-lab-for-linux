@@ -158,6 +158,8 @@ def _dry_run(cache_dir: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return _run(
         "--box",
         "mq-rdqm-rhel9",
+        "--arch",
+        "x86_64",  # RHEL is x86_64 always (#103); mqlab supplies --arch
         "--domain-type",
         "kvm",
         "--cpu-mode",
@@ -176,10 +178,12 @@ def _manifest_hash(box: str) -> str:
 
 
 def _seed_cached_box(cache_dir: Path, box: str, *, age_days: int = 0) -> Path:
+    # The cache is arch-suffixed <box>-<arch>.box (#103 D4); these decision-surface
+    # tests all drive the x86_64 RHEL box, so seed the -x86_64 entry the script keys on.
     cache_dir.mkdir(parents=True, exist_ok=True)
-    boxfile = cache_dir / f"{box}.box"
+    boxfile = cache_dir / f"{box}-x86_64.box"
     boxfile.write_text("fake box tarball\n")
-    (cache_dir / f"{box}.manifest-hash").write_text(_manifest_hash(box) + "\n")
+    (cache_dir / f"{box}-x86_64.manifest-hash").write_text(_manifest_hash(box) + "\n")
     if age_days:
         subprocess.run(  # noqa: S603
             ["touch", "-d", f"{age_days} days ago", str(boxfile)], check=True
@@ -204,7 +208,7 @@ def test_dry_run_reuse_when_matching_hash_cached(tmp_path):
 def test_dry_run_rebuild_on_hash_mismatch(tmp_path):
     cache_dir = tmp_path / "boxes"
     _seed_cached_box(cache_dir, "mq-rdqm-rhel9")
-    (cache_dir / "mq-rdqm-rhel9.manifest-hash").write_text("stale-different-hash\n")
+    (cache_dir / "mq-rdqm-rhel9-x86_64.manifest-hash").write_text("stale-different-hash\n")
     result = _dry_run(cache_dir)
     assert result.returncode == 0
     assert "BUILD" in result.stdout
@@ -242,6 +246,8 @@ def test_stale_refused_without_rebuild_flag(tmp_path):
     result = _run(
         "--box",
         "mq-rdqm-rhel9",
+        "--arch",
+        "x86_64",
         "--domain-type",
         "kvm",
         "--cpu-mode",
