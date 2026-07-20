@@ -258,13 +258,25 @@ esac
 
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
+# aarch64 needs UEFI (AAVMF) firmware: on the arm 'virt' machine ACPI requires UEFI (#736),
+# whereas x86/q35 boots on SeaBIOS. Mirror the running lab guests' loader/nvram
+# (platforms.AAVMF_LOADER); cleanup already `undefine --nvram`, so the per-domain VARS goes.
+if [ "$ARCH" = aarch64 ]; then
+  OS_XML="<os>
+    <type arch='${ARCH}' machine='${MACHINE}'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/AAVMF/AAVMF_CODE.fd</loader>
+    <nvram template='/usr/share/AAVMF/AAVMF_VARS.fd'>/var/lib/libvirt/qemu/nvram/${BUILD_DOM}_VARS.fd</nvram>
+  </os>"
+else
+  OS_XML="<os><type arch='${ARCH}' machine='${MACHINE}'>hvm</type></os>"
+fi
 BUILD_XML="$(mktemp)"
 cat > "$BUILD_XML" <<XML
 <domain type='${DOMAIN_TYPE}'>
   <name>${BUILD_DOM}</name>
   <memory unit='MiB'>2048</memory>
   <vcpu>2</vcpu>
-  <os><type arch='${ARCH}' machine='${MACHINE}'>hvm</type></os>
+  ${OS_XML}
   <features><acpi/></features>
   <cpu mode='${CPU_MODE}'/>
   <on_poweroff>destroy</on_poweroff>
