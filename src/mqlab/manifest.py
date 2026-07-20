@@ -53,6 +53,12 @@ _OS_PREFIX = {
     # are repointed to it and run MQ, so _stack_mq_platforms feeds it into tarball_name;
     # the arch resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud).
     "mq-nativeha-ubuntu": "UbuntuLinux",
+    # The fat pcmk-ubuntu box platform (#103 T7) is Ubuntu, host-resolved (no `arch:` pin).
+    # The six Pacemaker cluster nodes (pcmk-a1..3, pcmk-b1..3) are repointed to it and run
+    # MQ via roles/mq-install, so _stack_mq_platforms feeds it into tarball_name; the arch
+    # resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud). The SAN
+    # targets carry no MQ payload and are NOT here (host-resolved base box, D8).
+    "pcmk-ubuntu": "UbuntuLinux",
     "alma9-x86_64": "Linux",
 }
 
