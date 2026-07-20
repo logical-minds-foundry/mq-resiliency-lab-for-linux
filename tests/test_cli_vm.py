@@ -120,6 +120,7 @@ def _seed_resolved(tmp_path, body):
 
 def test_box_build_steps_passes_kvm_args(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", dict)
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
     assert [s.command.argv for s in steps] == [
@@ -136,6 +137,7 @@ def test_box_build_steps_passes_kvm_args(monkeypatch, tmp_path):
 
 def test_box_build_steps_passes_tcg_args_on_arm(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", dict)
     facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
     steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
     assert steps[0].command.argv[-4:] == ["--domain-type", "qemu", "--cpu-mode", "maximum"]
@@ -143,6 +145,7 @@ def test_box_build_steps_passes_tcg_args_on_arm(monkeypatch, tmp_path):
 
 def test_box_build_steps_skips_present(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", dict)
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps(
         {
@@ -153,6 +156,51 @@ def test_box_build_steps_skips_present(monkeypatch, tmp_path):
         facts,
     )
     assert [s.label for s in steps] == ["box obs-ubuntu2404"]
+
+
+def test_box_build_steps_passes_arch_for_ubuntu_fat_box(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_box_registry", lambda: {"mq-ubuntu2404": {"box": "cloud-image/ubuntu-24.04"}}
+    )
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    steps = cli._box_build_steps({"mq-ubuntu2404": "lab/boxes/build-fatbox.sh"}, {}, facts)
+    argv = steps[0].command.argv
+    assert "--box" in argv and "mq-ubuntu2404" in argv
+    assert argv[argv.index("--arch") + 1] == "aarch64"
+
+
+def test_box_registry_reads_source_topology(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        "boxes:\n"
+        "  mq-ubuntu2404: {box: cloud-image/ubuntu-24.04}\n"
+        "  mq-rdqm-rhel9: {box: rhel/9.6-x86_64, arch: x86_64}\n"
+        "nodes: {}\n"
+    )
+    registry = cli._box_registry()
+    assert registry["mq-ubuntu2404"] == {"box": "cloud-image/ubuntu-24.04"}
+    assert registry["mq-rdqm-rhel9"]["arch"] == "x86_64"
+
+
+def test_box_registry_defaults_empty_without_boxes_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text("nodes: {}\n")
+    assert cli._box_registry() == {}
+
+
+def test_box_build_steps_refuses_rhel_on_arm(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli,
+        "_box_registry",
+        lambda: {"mq-rdqm-rhel9": {"box": "rhel/9.6-x86_64", "arch": "x86_64"}},
+    )
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    with pytest.raises(cli.StepFailedError, match="x86"):
+        cli._box_build_steps({"mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh"}, {}, facts)
 
 
 # --- ensure_local_boxes now delegates box building to box.build_boxes (#91, T2),

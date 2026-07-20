@@ -77,6 +77,7 @@ def test_local_box_builders_registry_covers_base_and_fat_boxes():
 
 def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", lambda: {"mq-rdqm-rhel9": {"arch": "x86_64"}})
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps({"mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh"}, {}, facts)
     assert [s.command.argv for s in steps] == [
@@ -85,6 +86,8 @@ def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
             str(tmp_path / "lab/boxes/build-fatbox.sh"),
             "--box",
             "mq-rdqm-rhel9",
+            "--arch",
+            "x86_64",
             "--domain-type",
             "kvm",
             "--cpu-mode",
@@ -95,6 +98,7 @@ def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
 
 def test_box_build_steps_base_builder_has_no_box_flag(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", dict)
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
     assert "--box" not in steps[0].command.argv  # base-OS builder is not box-parameterized
@@ -154,6 +158,8 @@ def _dry_run(cache_dir: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     return _run(
         "--box",
         "mq-rdqm-rhel9",
+        "--arch",
+        "x86_64",  # RHEL is x86_64 always (#103); mqlab supplies --arch
         "--domain-type",
         "kvm",
         "--cpu-mode",
@@ -172,10 +178,12 @@ def _manifest_hash(box: str) -> str:
 
 
 def _seed_cached_box(cache_dir: Path, box: str, *, age_days: int = 0) -> Path:
+    # The cache is arch-suffixed <box>-<arch>.box (#103 D4); these decision-surface
+    # tests all drive the x86_64 RHEL box, so seed the -x86_64 entry the script keys on.
     cache_dir.mkdir(parents=True, exist_ok=True)
-    boxfile = cache_dir / f"{box}.box"
+    boxfile = cache_dir / f"{box}-x86_64.box"
     boxfile.write_text("fake box tarball\n")
-    (cache_dir / f"{box}.manifest-hash").write_text(_manifest_hash(box) + "\n")
+    (cache_dir / f"{box}-x86_64.manifest-hash").write_text(_manifest_hash(box) + "\n")
     if age_days:
         subprocess.run(  # noqa: S603
             ["touch", "-d", f"{age_days} days ago", str(boxfile)], check=True
@@ -200,7 +208,7 @@ def test_dry_run_reuse_when_matching_hash_cached(tmp_path):
 def test_dry_run_rebuild_on_hash_mismatch(tmp_path):
     cache_dir = tmp_path / "boxes"
     _seed_cached_box(cache_dir, "mq-rdqm-rhel9")
-    (cache_dir / "mq-rdqm-rhel9.manifest-hash").write_text("stale-different-hash\n")
+    (cache_dir / "mq-rdqm-rhel9-x86_64.manifest-hash").write_text("stale-different-hash\n")
     result = _dry_run(cache_dir)
     assert result.returncode == 0
     assert "BUILD" in result.stdout
@@ -238,6 +246,8 @@ def test_stale_refused_without_rebuild_flag(tmp_path):
     result = _run(
         "--box",
         "mq-rdqm-rhel9",
+        "--arch",
+        "x86_64",
         "--domain-type",
         "kvm",
         "--cpu-mode",
@@ -266,6 +276,18 @@ def test_manifest_hash_covers_nativeha_rhel_box():
     assert len(h) == 64
     assert h == _manifest_hash("mq-nativeha-rhel9")  # deterministic
     assert h != _manifest_hash("mq-rdqm-rhel9")  # its own bake playbook enters the hash
+
+
+def test_manifest_hash_covers_ubuntu_ha_boxes():
+    # #103 T6/T7: the mq-nativeha-ubuntu -> nativeha-ubuntu and pcmk-ubuntu -> pcmk-ubuntu
+    # stem maps must fire (box status/build/bake for both broke on an unknown-box error
+    # without them), each digesting its own bake playbook + role closure — a deterministic
+    # 64-char, box-specific hash.
+    for box in ("mq-nativeha-ubuntu", "pcmk-ubuntu"):
+        h = _manifest_hash(box)
+        assert len(h) == 64
+        assert h == _manifest_hash(box)  # deterministic
+    assert _manifest_hash("mq-nativeha-ubuntu") != _manifest_hash("pcmk-ubuntu")
 
 
 def test_manifest_hash_requires_a_box():

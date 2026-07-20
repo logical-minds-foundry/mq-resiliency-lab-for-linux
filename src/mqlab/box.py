@@ -18,35 +18,47 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 
 from mqlab import cli
-from mqlab.hostfacts import probe
+from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
-from mqlab.platforms import build_domain_virt
+from mqlab.platforms import box_build_arch, box_build_domain_virt, build_domain_virt
 from mqlab.runner import Command, SubprocessRunner
 
 
 @dataclass(frozen=True)
 class BoxSpec:
-    """One local-built box: its builder script, durable cache artifact, and
-    whether it carries a manifest-hash (False only for the base OS box, which is
-    built once from the DVD and has no bake-recipe hash to compare)."""
+    """One local-built box: its builder script, build/guest arch, durable cache
+    artifact, and whether it carries a manifest-hash (False only for the base OS
+    box, which is built once from the DVD and has no bake-recipe hash to compare)."""
 
     name: str
     builder: str  # builder script path, relative to repo root
+    arch: str  # build/guest arch (#103 D1): RHEL x86_64; Ubuntu tracks the host
     cache_artifact: str  # durable filename under build/state/boxes/
     has_manifest_hash: bool
+
+    @property
+    def manifest_hash_artifact(self) -> str:
+        """The manifest-hash filename beside the cache artifact — arch-suffixed to
+        match `<box>-<arch>.box` (#103 D4). Only meaningful for fat boxes
+        (has_manifest_hash True); the base box carries none."""
+        return f"{self.name}-{self.arch}.manifest-hash"
 
 
 # The base OS box is built once from the credentialed RHEL DVD (build-box.sh);
 # the fat boxes are provision-then-snapshot bakes (build-fatbox.sh) whose cache
-# is keyed `<box>.box` beside a `<box>.manifest-hash`. The base box's cache
-# filename mirrors build-box.sh's `rhel-9.6-x86_64-libvirt.box`.
+# is keyed `<box>-<arch>.box` beside a `<box>-<arch>.manifest-hash` (#103 D4). The
+# base box's cache filename mirrors build-box.sh's `rhel-9.6-x86_64-libvirt.box`.
 _BASE_BOX = "rhel/9.6-x86_64"
 _BASE_ARTIFACT = "rhel-9.6-x86_64-libvirt.box"
+# The base box is RHEL — x86_64 always; its arch is the trailing token of _BASE_BOX
+# ("rhel/9.6-x86_64"), kept in lockstep with the arch-tagged base artifact.
+_BASE_ARCH = _BASE_BOX.rsplit("-", 1)[1]
 # The RHEL version the base box bakes from ("9.6"), parsed from _BASE_BOX so the
 # DVD-verify locus and the fleet name stay in lockstep.
 _RHEL_VERSION = _BASE_BOX.split("/", 1)[1].split("-", 1)[0]
@@ -56,17 +68,48 @@ _RHEL_VERSION = _BASE_BOX.split("/", 1)[1].split("-", 1)[0]
 _ACTIONS = ("FORCE-BUILD", "STALE", "BUILD", "REUSE")
 
 
-def _build_fleet() -> dict[str, BoxSpec]:
-    """The six-box fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source)."""
+def _load_box_registry() -> dict[str, dict[str, Any]]:
+    """The `boxes:` registry from lab/topology.yaml (box name -> entry). The entry
+    carries the optional `arch:` pin that box_build_arch reads (#103)."""
+    import yaml
+
+    data = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    registry: dict[str, dict[str, Any]] = data.get("boxes", {})
+    return registry
+
+
+def _build_fleet(
+    facts: HostFacts | None = None,
+    registry: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, BoxSpec]:
+    """The fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source).
+
+    Each fat box's build/guest arch comes from the single authority
+    platforms.box_build_arch(<its topology `boxes:` entry>, facts) (#103 D1) — RHEL
+    is x86_64-pinned, an un-pinned Ubuntu box tracks the host — and its cache
+    artifact is arch-suffixed `<box>-<arch>.box` (D4). The base box keeps its literal
+    already-arch-tagged artifact. facts/registry are injected for testing; they
+    default to the live host facts and the shipped topology registry."""
+    facts = facts or probe()
+    registry = registry if registry is not None else _load_box_registry()
     fleet: dict[str, BoxSpec] = {}
     for name, builder in cli._LOCAL_BOX_BUILDERS.items():
         if name == _BASE_BOX:
             fleet[name] = BoxSpec(
-                name=name, builder=builder, cache_artifact=_BASE_ARTIFACT, has_manifest_hash=False
+                name=name,
+                builder=builder,
+                arch=_BASE_ARCH,
+                cache_artifact=_BASE_ARTIFACT,
+                has_manifest_hash=False,
             )
         else:
+            arch = box_build_arch(registry.get(name, {}), facts)
             fleet[name] = BoxSpec(
-                name=name, builder=builder, cache_artifact=f"{name}.box", has_manifest_hash=True
+                name=name,
+                builder=builder,
+                arch=arch,
+                cache_artifact=f"{name}-{arch}.box",
+                has_manifest_hash=True,
             )
     return fleet
 
@@ -100,14 +143,24 @@ def _capture(cmd: Command) -> str:
 def _run_builder_dry_run(name: str) -> str:
     """Shell the box's builder with --dry-run and return its decision output.
 
-    Mirrors cli._box_build_steps: fat boxes are box-parameterized (`--box`); the
-    base-OS builder is not. Virtualization flags come from the single authority,
-    build_domain_virt(probe())."""
+    Mirrors cli._box_build_steps: fat boxes are box-parameterized (`--box`) and
+    carry a required `--arch` (post-#701); the base-OS builder is neither. The
+    domain virt is guest-arch-aware — box_build_domain_virt(spec.arch) for fat
+    boxes (native KVM for an arm64 Ubuntu box), build_domain_virt for the x86
+    base box (#731/#732)."""
     spec = FLEET[name]
-    domain_type, cpu_mode = build_domain_virt(probe())
+    facts = probe()
     argv = ["bash", str(repo_root() / spec.builder)]
     if spec.builder.endswith("build-fatbox.sh"):
-        argv += ["--box", name]
+        # Fat boxes are box-parameterized and arch-native: pass the box's build
+        # arch (--arch, required by build-fatbox.sh post-#701) and derive the
+        # domain virt from that arch, so an arm64 Ubuntu box builds under native
+        # KVM rather than TCG (#731/#732). Mirrors cli._box_build_steps.
+        domain_type, cpu_mode = box_build_domain_virt(spec.arch, facts)
+        argv += ["--box", name, "--arch", spec.arch]
+    else:
+        # Base-OS box (build-box.sh): always an x86_64 guest.
+        domain_type, cpu_mode = build_domain_virt(facts)
     argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode, "--dry-run"]
     cmd = Command(argv, cwd=repo_root() / "lab", env=cli._vagrant_env())
     return _capture(cmd)
@@ -193,6 +246,7 @@ def _fmt_hash(spec: BoxSpec, hash_match: bool | None) -> str:
 def _fmt_row(d: BoxDecision) -> str:
     return (
         f"{d.name:<18} "
+        f"{FLEET[d.name].arch:<8} "
         f"{('yes' if d.cached else 'no'):<7} "
         f"{(f'{d.age_days}d' if d.age_days is not None else '-'):<6} "
         f"{_fmt_hash(FLEET[d.name], d.hash_match):<9} "
@@ -203,9 +257,45 @@ def _fmt_row(d: BoxDecision) -> str:
 
 def render_status(names: list[str]) -> str:
     """Render the fleet status table for the given box names."""
-    header = f"{'BOX':<18} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
+    header = (
+        f"{'BOX':<18} {'ARCH':<8} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
+    )
     rows = [_fmt_row(box_decision(name)) for name in names]
     return "\n".join([header, *rows])
+
+
+# --------------------------------------------------------------------------- #
+# Per-host cache migration to the arch-suffixed scheme (#103 D5, T4)           #
+# --------------------------------------------------------------------------- #
+def migrate_box_cache(
+    boxes_dir: Path | None = None, *, dry_run: bool = False
+) -> list[tuple[str, str]]:
+    """Rename each legacy fat-box cache entry to the arch-suffixed scheme, in place.
+
+    Pre-#103 the cache keyed boxes purely by name (`<box>.box` + `<box>.manifest-hash`);
+    the arch-native scheme keys them `<box>-<arch>.box` (#103 D4). The cache is per-host
+    single-arch (D5) and every legacy fat box was x86_64-pinned, so each legacy name maps
+    to its `-x86_64` form. Idempotent: a no-op once renamed, and it never clobbers an
+    existing target (a mixed old/new cache is left for the operator to resolve). Returns
+    the (src, dst) pairs it renamed (or, under dry_run, would rename). Defaults to the
+    durable box cache dir; boxes_dir is injected for testing."""
+    cache_dir = boxes_dir if boxes_dir is not None else _boxes_cache_dir()
+    renamed: list[tuple[str, str]] = []
+    for spec in FLEET.values():
+        if not spec.has_manifest_hash:
+            continue  # the base box artifact is already arch-tagged
+        moves = (
+            (f"{spec.name}.box", f"{spec.name}-x86_64.box"),
+            (f"{spec.name}.manifest-hash", f"{spec.name}-x86_64.manifest-hash"),
+        )
+        for legacy, new in moves:
+            src = cache_dir / legacy
+            dst = cache_dir / new
+            if src.is_file() and not dst.exists():
+                renamed.append((str(src), str(dst)))
+                if not dry_run:
+                    src.rename(dst)
+    return renamed
 
 
 # --------------------------------------------------------------------------- #
@@ -388,7 +478,7 @@ def clean_boxes(names: list[str]) -> list[str]:
             artifact.unlink()
             removed.append(str(artifact))
         if spec.has_manifest_hash:
-            manifest = cache_dir / f"{name}.manifest-hash"
+            manifest = cache_dir / spec.manifest_hash_artifact
             if manifest.is_file():
                 manifest.unlink()
                 removed.append(str(manifest))

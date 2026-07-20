@@ -106,11 +106,28 @@ def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
     g = topo["groups"]
     assert set(g["nha_ubuntu_a"]) == {"nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"}
     assert set(g["nha_ubuntu_b"]) == {"nha-ubuntu-b1", "nha-ubuntu-b2", "nha-ubuntu-b3"}
-    # Unlike the RHEL arm (pinned to the mq-nativeha-rhel9 fat box), the Ubuntu nodes are host-arch
-    # resolved (#276) — they carry NO explicit platform key, so they track the host
-    # arch (native arm64 on the Mac) and can coexist with pcmk-ubuntu (#417).
-    for host in g["nha_ubuntu_a"] + g["nha_ubuntu_b"]:
-        assert "platform" not in topo["nodes"][host]
+    # The nodes now boot the baked mq-nativeha-ubuntu fat box (#103 T6), but host-arch
+    # resolution is PRESERVED — it just moved to the box layer: unlike the x86-pinned
+    # mq-nativeha-rhel9 box, the mq-nativeha-ubuntu box carries NO `arch:` pin, so it
+    # tracks the host arch (native arm64 on the Mac) and can coexist with pcmk-ubuntu.
+    assert "arch" not in topo["boxes"]["mq-nativeha-ubuntu"]
+
+
+def test_nativeha_ubuntu_nodes_boot_the_baked_fat_box():
+    # #103 T6: the six nha-ubuntu-* nodes boot the baked, host-resolved mq-nativeha-ubuntu
+    # fat box (not the bare host-resolved Ubuntu base), so a bootstrap skips the MQ install.
+    # No extra_disk — Native HA replicates in MQ's raft log, not DRBD (mirrors the RHEL arm).
+    nodes = _topology()["nodes"]
+    for h in (
+        "nha-ubuntu-a1",
+        "nha-ubuntu-a2",
+        "nha-ubuntu-a3",
+        "nha-ubuntu-b1",
+        "nha-ubuntu-b2",
+        "nha-ubuntu-b3",
+    ):
+        assert nodes[h]["platform"] == "mq-nativeha-ubuntu"
+        assert "extra_disk" not in nodes[h]
 
 
 def test_nativeha_ubuntu_stack_parses_without_a_vip():
