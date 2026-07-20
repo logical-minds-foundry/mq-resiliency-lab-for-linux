@@ -1,0 +1,48 @@
+---
+# MQ event monitoring — QM-level MQSC (#514 enable + #515 SERVICE define). Runs ONCE on
+# the active instance; the objects replicate (raft / DRBD / shared LUN) and travel with
+# the QM. Host-prep (main.yml: wrapper + asserts) must have run on every failover-capable
+# node first. Requires: qmgr_name; optional mq_event_perf_queues.
+- name: enable instrumentation events (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: evgate
+  changed_when: "'AMQ8005' in evgate.stdout"
+  failed_when: evgate.rc not in [0, 10]
+
+- name: enable per-queue performance events on the app queue(s) (#514)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "ALTER QLOCAL({{ item }}) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)\n" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  loop: "{{ mq_event_perf_queues | default([]) }}"
+  register: perfq
+  changed_when: "'AMQ8008' in perfq.stdout"
+  failed_when: perfq.rc not in [0, 10]
+
+# Define the service and start it now. CONTROL(QMGR) auto-starts it on future QM starts.
+# STOPCMD kills MQ_SERVER_PID (the started process = amqsevt, since run.sh execs it) so
+# QM shutdown stops the collector cleanly.
+- name: define + start the MQ event-monitor service (idempotent)
+  ansible.builtin.shell: |
+    set -o pipefail
+    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('%s/run.sh') STARTARG('%s') STOPCMD('/bin/kill') STOPARG('MQ_SERVER_PID') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
+      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
+      | /opt/mqm/bin/runmqsc {{ qmgr_name }}
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: mqm
+  register: svc
+  changed_when: svc.rc == 0
+  failed_when: svc.rc not in [0, 10]
