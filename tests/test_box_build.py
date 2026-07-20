@@ -278,6 +278,18 @@ def test_manifest_hash_covers_nativeha_rhel_box():
     assert h != _manifest_hash("mq-rdqm-rhel9")  # its own bake playbook enters the hash
 
 
+def test_manifest_hash_covers_ubuntu_ha_boxes():
+    # #103 T6/T7: the mq-nativeha-ubuntu -> nativeha-ubuntu and pcmk-ubuntu -> pcmk-ubuntu
+    # stem maps must fire (box status/build/bake for both broke on an unknown-box error
+    # without them), each digesting its own bake playbook + role closure — a deterministic
+    # 64-char, box-specific hash.
+    for box in ("mq-nativeha-ubuntu", "pcmk-ubuntu"):
+        h = _manifest_hash(box)
+        assert len(h) == 64
+        assert h == _manifest_hash(box)  # deterministic
+    assert _manifest_hash("mq-nativeha-ubuntu") != _manifest_hash("pcmk-ubuntu")
+
+
 def test_manifest_hash_requires_a_box():
     result = subprocess.run(  # noqa: S603
         ["bash", str(_MANIFEST)], capture_output=True, text=True, check=False
