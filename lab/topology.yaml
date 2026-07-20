@@ -53,21 +53,21 @@ boxes:
   # slow cgo mq_prometheus exporter build + MQ SDK BAKED IN (lab/boxes/build-fatbox.sh
   # --box obs-ubuntu2404). The obs node boots this instead of the host-resolved Ubuntu
   # platform so a bootstrap skips the stack install; the per-run path only renders the
-  # topology targets/dashboards (site-obs.yml, configure halves). x86_64 because the box
-  # is a baked x86 artifact (no DVD — Ubuntu registers online).
+  # topology targets/dashboards (site-obs.yml, configure halves). host-resolved (#103) —
+  # arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
+  # x86_64 on the cloud), so the guest arch is not pinned (no DVD — Ubuntu registers online).
   obs-ubuntu2404:
     box: obs-ubuntu2404
-    arch: x86_64
   # The fat infra box (#606, epic .github#70): the cloud-image/ubuntu-24.04 base with
   # BIND9 (package + /etc/bind/zones scaffolding) + node-exporter + alloy BAKED IN
   # (lab/boxes/build-fatbox.sh --box infra-ubuntu2404). The infra nodes boot this
   # instead of the bare Ubuntu image so a bootstrap skips those installs; the per-run
   # configure half (zone data + per-host named.conf, base-OS apt refresh) still runs.
-  # arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked binaries are
-  # arch-specific and the box is baked on x86_64. No DVD (Ubuntu uses the online archive).
+  # host-resolved (#103) — arch tracks the host: the baked binaries are arch-specific but
+  # the box is baked natively per host (arm64 on Apple Silicon, x86_64 on the cloud), so
+  # the guest arch is not pinned. No DVD (Ubuntu uses the online archive).
   infra-ubuntu2404:
     box: infra-ubuntu2404
-    arch: x86_64
   # The fat MQ-commons box (#659, epic .github#70): the cloud-image/ubuntu-24.04 base with
   # the Ubuntu MQ product (server + client + SDK + samples debs) + node-exporter + alloy +
   # the slow cgo mq_prometheus exporter build + acl BAKED IN (lab/boxes/build-fatbox.sh
@@ -75,11 +75,11 @@ boxes:
   # mon-probe) boot this instead of the host-resolved Ubuntu platform so a bootstrap skips
   # ~15-20 min of per-run installs (MQ debs, alloy, mq_prometheus, the acl stall); the
   # per-run configure half (QMs/channels on svc, the app-requester, the exporter instances)
-  # still runs. arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked
-  # binaries are arch-specific and the box is baked on x86_64. No DVD (Ubuntu online archive).
+  # still runs. host-resolved (#103) — arch tracks the host: the baked binaries (incl. the
+  # arch-specific MQ debs) are baked natively per host (arm64 on Apple Silicon, x86_64 on
+  # the cloud), so the guest arch is not pinned. No DVD (Ubuntu online archive).
   mq-ubuntu2404:
     box: mq-ubuntu2404
-    arch: x86_64
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).

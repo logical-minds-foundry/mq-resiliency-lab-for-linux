@@ -177,3 +177,18 @@ def test_is_foreign_box_build_false_for_unpinned_ubuntu():
     ubuntu = {"box": "cloud-image/ubuntu-24.04"}  # host-resolved — matches any host
     assert p.is_foreign_box_build(ubuntu, ARM_KVM) is False
     assert p.is_foreign_box_build(ubuntu, X86_KVM) is False
+
+
+def test_resolve_unpinned_ubuntu_fat_box_tracks_host():
+    # #103 D3/D10: an un-pinned Ubuntu fat box (no `arch:` in its registry entry)
+    # resolves its guest arch from the host — native arm64 on Apple Silicon, x86_64
+    # on the cloud — via the box_build_arch authority, so resolve()/ResolvedNode work
+    # without a pin. RHEL fat boxes keep their explicit pin (tested above).
+    topo = {
+        "boxes": {"mq-ubuntu2404": {"box": "mq-ubuntu2404"}},  # host-resolved, no pin
+        "defaults": {"cpus": 1, "memory": 1024},
+        "nodes": {"svc": {"platform": "mq-ubuntu2404", "nics": {"net-mgmt": "10.50.0.50"}}},
+    }
+    arm = p.resolve(topo, ARM_KVM)["svc"]
+    assert (arm.arch, arm.driver) == (AARCH64, "kvm")  # native arm64 on the Mac
+    assert p.resolve(topo, X86_KVM)["svc"].arch == X86_64  # tracks x86 on the cloud

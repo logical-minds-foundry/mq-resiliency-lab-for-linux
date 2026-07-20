@@ -10,7 +10,8 @@ DEST="$(cd "$(dirname "$0")/.." && pwd)/build/cache/mq"
 mkdir -p "$DEST"
 
 # The Ubuntu suffix tracks the host arch (= the native Ubuntu guest arch); LinuxX64
-# (x86_64 RHEL/RDQM) is fetched on every host. This mirrors manifest._ARCH_SUFFIX.
+# (x86_64 RHEL/RDQM) is fetched on every host. This mirrors manifest.tarball_name's
+# host-arch resolution for the un-pinned Ubuntu fat boxes (#103 D10).
 case "$(uname -m)" in
   aarch64 | arm64) UBU="UbuntuLinuxARM64" ;;
   x86_64 | amd64) UBU="UbuntuLinuxX64" ;;
