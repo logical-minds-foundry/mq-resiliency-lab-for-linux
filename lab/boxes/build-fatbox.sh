@@ -29,24 +29,31 @@ REFUSE_DAYS="${REFUSE_DAYS:-14}"
 FORCE="${LAB_REBUILD_BOX:-0}"
 DRY_RUN=0
 BOX=""
+ARCH=""
 DOMAIN_TYPE=""
 CPU_MODE=""
 
 usage() {
   cat >&2 <<'USAGE'
-usage: build-fatbox.sh --box <name> --domain-type <kvm|qemu> \
+usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --domain-type <kvm|qemu> \
                        --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
 
   --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404,
                    mq-nativeha-rhel9.
-  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies them
-  (it computes them from host facts via platforms.build_domain_virt, #327).
+  --arch is REQUIRED and one of aarch64/x86_64 (the canonical hostfacts arch): it
+  selects the guest build-domain arch/machine + emulator and the base-box add
+  architecture, and keys the per-host cache <box>-<arch>.box (#103 D1/D4). RHEL is
+  x86_64 always; an un-pinned Ubuntu box tracks the host.
+  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies all three
+  (it computes them from host facts via platforms.box_build_arch/build_domain_virt,
+  #327/#103).
 USAGE
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --box) BOX="${2:-}"; shift ;;
+    --arch) ARCH="${2:-}"; shift ;;
     --rebuild-box) FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
@@ -76,6 +83,21 @@ case "$CPU_MODE" in
   host-passthrough|maximum) ;;
   *) echo "ERROR: --cpu-mode must be 'host-passthrough' or 'maximum' (got '${CPU_MODE}')" >&2; usage; exit 2 ;;
 esac
+# --arch carries the canonical hostfacts arch (aarch64/x86_64), the SAME token box.py keys
+# the cache on (<box>-<arch>.box, #103 D4) — do not conflate it with Vagrant's vocabulary.
+# It drives the guest build-domain arch/machine + emulator below; MACHINE is q35 on x86_64
+# and virt on aarch64 (the libvirt board each arch boots).
+case "$ARCH" in
+  x86_64)  MACHINE=q35 ;;
+  aarch64) MACHINE=virt ;;
+  *) echo "ERROR: --arch must be 'aarch64' or 'x86_64' (got '${ARCH}')" >&2; usage; exit 2 ;;
+esac
+# Vagrant's `box add --architecture` speaks arm64/amd64, NOT aarch64/x86_64 — map ONLY at
+# that seam (the two arch vocabularies must not be conflated, #103).
+case "$ARCH" in
+  aarch64) VAGRANT_ARCH=arm64 ;;
+  x86_64)  VAGRANT_ARCH=amd64 ;;
+esac
 
 # Cache lives on the HOST-DURABLE main-worktree build/ so it survives base-VM
 # rebuilds (#57). git-common-dir points at the main repo's .git from any
@@ -92,8 +114,11 @@ else
   CACHE_DIR="$MAIN_ROOT/build/state/boxes"
 fi
 mkdir -p "$CACHE_DIR"
-CACHE="$CACHE_DIR/${BOX}.box"
-HASH_FILE="$CACHE_DIR/${BOX}.manifest-hash"
+# Arch-suffixed, per-host cache (#103 D4/D5). MUST match box.py's cache_artifact
+# (`f"{name}-{arch}.box"`) byte-for-byte so `mqlab box status` and `build migrate`
+# agree with what this script writes.
+CACHE="$CACHE_DIR/${BOX}-${ARCH}.box"
+HASH_FILE="$CACHE_DIR/${BOX}-${ARCH}.manifest-hash"
 
 CURRENT_HASH="$(./_manifest-hash.sh "$BOX")"
 
@@ -163,7 +188,8 @@ VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
 if [ "$BASE_KIND" = rhel ]; then
   ./rhel96/build-box.sh --domain-type "$DOMAIN_TYPE" --cpu-mode "$CPU_MODE"
 else
-  vagrant box list | grep -q "^${BASE_BOX} " || vagrant box add --provider libvirt "$BASE_BOX"
+  vagrant box list | grep -q "^${BASE_BOX} " \
+    || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" "$BASE_BOX"
 fi
 
 # 2. Resolve the base box's disk image and COPY it into the pool as the transient build
@@ -171,7 +197,14 @@ fi
 #    — libvirt's dynamic ownership + per-domain AppArmor only cover pool paths — and is
 #    itself scratch: the bake mutates the copy, the shared base box is untouched.
 BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
-BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
+# An architecture-aware `box add` lays the image down under an arch-partitioned path
+# (…/<version>/<VAGRANT_ARCH>/libvirt/box.img), so scope the find to this arch first —
+# that is what keeps the arm64 and x86_64 base images from being confused on a host that
+# has cached both. Fall back to the un-scoped find for a legacy single-arch box dir.
+BASE_IMG="$(find "$BASE_DIR" -name box.img -path "*/${VAGRANT_ARCH}/*" -path '*/libvirt/*' | sort | tail -n1)"
+if [ -z "$BASE_IMG" ]; then
+  BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
+fi
 test -n "$BASE_IMG" || { echo "ERROR: base box image not found under $BASE_DIR" >&2; exit 1; }
 ../scripts/net-up.sh vagrant-libvirt
 virsh -c qemu:///system destroy "$BUILD_DOM" 2>/dev/null || true
@@ -220,11 +253,12 @@ cat > "$BUILD_XML" <<XML
   <name>${BUILD_DOM}</name>
   <memory unit='MiB'>2048</memory>
   <vcpu>2</vcpu>
-  <os><type arch='x86_64' machine='q35'>hvm</type></os>
+  <os><type arch='${ARCH}' machine='${MACHINE}'>hvm</type></os>
   <features><acpi/></features>
   <cpu mode='${CPU_MODE}'/>
   <on_poweroff>destroy</on_poweroff>
   <devices>
+    <emulator>/usr/bin/qemu-system-${ARCH}</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
       <source file='${IMG}'/>
