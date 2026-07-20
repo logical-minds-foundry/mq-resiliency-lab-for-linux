@@ -26,7 +26,7 @@ from mqlab import cli
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
-from mqlab.platforms import box_build_arch, build_domain_virt
+from mqlab.platforms import box_build_arch, box_build_domain_virt, build_domain_virt
 from mqlab.runner import Command, SubprocessRunner
 
 
@@ -143,14 +143,24 @@ def _capture(cmd: Command) -> str:
 def _run_builder_dry_run(name: str) -> str:
     """Shell the box's builder with --dry-run and return its decision output.
 
-    Mirrors cli._box_build_steps: fat boxes are box-parameterized (`--box`); the
-    base-OS builder is not. Virtualization flags come from the single authority,
-    build_domain_virt(probe())."""
+    Mirrors cli._box_build_steps: fat boxes are box-parameterized (`--box`) and
+    carry a required `--arch` (post-#701); the base-OS builder is neither. The
+    domain virt is guest-arch-aware — box_build_domain_virt(spec.arch) for fat
+    boxes (native KVM for an arm64 Ubuntu box), build_domain_virt for the x86
+    base box (#731/#732)."""
     spec = FLEET[name]
-    domain_type, cpu_mode = build_domain_virt(probe())
+    facts = probe()
     argv = ["bash", str(repo_root() / spec.builder)]
     if spec.builder.endswith("build-fatbox.sh"):
-        argv += ["--box", name]
+        # Fat boxes are box-parameterized and arch-native: pass the box's build
+        # arch (--arch, required by build-fatbox.sh post-#701) and derive the
+        # domain virt from that arch, so an arm64 Ubuntu box builds under native
+        # KVM rather than TCG (#731/#732). Mirrors cli._box_build_steps.
+        domain_type, cpu_mode = box_build_domain_virt(spec.arch, facts)
+        argv += ["--box", name, "--arch", spec.arch]
+    else:
+        # Base-OS box (build-box.sh): always an x86_64 guest.
+        domain_type, cpu_mode = build_domain_virt(facts)
     argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode, "--dry-run"]
     cmd = Command(argv, cwd=repo_root() / "lab", env=cli._vagrant_env())
     return _capture(cmd)
