@@ -47,7 +47,7 @@ def _fake_deps() -> cli.Deps:
 # --------------------------------------------------------------------------- #
 # Fleet definition                                                            #
 # --------------------------------------------------------------------------- #
-def test_fleet_has_seven_local_boxes():
+def test_fleet_has_eight_local_boxes():
     assert set(box.FLEET) == {
         "rhel/9.6-x86_64",
         "mq-rdqm-rhel9",
@@ -56,6 +56,7 @@ def test_fleet_has_seven_local_boxes():
         "mq-ubuntu2404",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu",
+        "pcmk-ubuntu",
     }
 
 

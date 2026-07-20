@@ -39,7 +39,7 @@ usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --domain-type <kvm|q
                        --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
 
   --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404,
-                   mq-nativeha-rhel9, mq-nativeha-ubuntu.
+                   mq-nativeha-rhel9, mq-nativeha-ubuntu, pcmk-ubuntu.
   --arch is REQUIRED and one of aarch64/x86_64 (the canonical hostfacts arch): it
   selects the guest build-domain arch/machine + emulator and the base-box add
   architecture, and keys the per-host cache <box>-<arch>.box (#103 D1/D4). RHEL is
@@ -73,6 +73,7 @@ case "$BOX" in
   mq-ubuntu2404)    BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=mq-ubuntu ;;
   mq-nativeha-rhel9) BASE_KIND=rhel;  BASE_BOX="rhel/9.6-x86_64";        BAKE=nativeha-rhel ;;
   mq-nativeha-ubuntu) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=nativeha-ubuntu ;;
+  pcmk-ubuntu)      BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=pcmk-ubuntu ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac

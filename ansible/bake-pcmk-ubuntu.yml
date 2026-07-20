@@ -1,0 +1,67 @@
+---
+# Bake the pcmk-ubuntu box image (#103 T7, epic .github#103). The Pacemaker/SAN peer of
+# bake-nativeha-ubuntu.yml: it bakes the per-run-invariant install work the six Pacemaker
+# CLUSTER nodes (pcmk-a1..3, pcmk-b1..3) otherwise pay EVERY bootstrap on the bare
+# cloud-image/ubuntu-24.04 base — base IBM MQ (server + client + SDK + samples debs, NO
+# RDQM/DRBD) + acl + node-exporter + alloy.
+#
+# CLUSTER NODES ONLY (design D7/D8): this bakes the MQ product install the Pacemaker cluster
+# nodes run via roles/mq-install (the SAME role _pcmk-cluster-ha.yml drives on pcmk_a/pcmk_b).
+# It does NOT touch the SAN targets san-a/san-b — they carry no IBM-MQ payload, so they stay
+# host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic #108) and are not
+# baked here.
+#
+# ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue managers,
+# forms NO Pacemaker cluster, configures NO STONITH/fencing, logs into NO iSCSI target,
+# defines NO resource group and holds NO secrets/keystores — all of that stays in the per-run
+# (configure) path (site-pcmk.yml -> iscsi-initiator / pcmk-cluster / pcmk-stonith /
+# mq-pcmk-qmgr), which this playbook does NOT touch. Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-pcmk-ubuntu.yml
+#
+# The Ubuntu MQ media for the deb install rides the actual box build
+# (build-fatbox.sh --box pcmk-ubuntu), which stages the host-arch developer tarball into the
+# shared cache the install role reads. See docs/development/box-bake-manifest.md for the
+# authoritative per-role bake-vs-configure classification.
+- name: Bake pcmk-ubuntu (install adapter only; no QMs, no cluster, no SAN, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # No TLS keystore work at bake — pki / per-QM TLS is a per-run/secret concern
+    # (mirrors bake-nativeha-ubuntu.yml / bake-mq-ubuntu.yml).
+    mq_exporter_tls: false
+  tasks:
+    # `acl` for unprivileged become — the site-pcmk.yml prerequisite, hoisted to bake
+    # (coupling-free, apt on Ubuntu). Baked (not fetched per-run over a rate-limited
+    # parallel-boot DNS burst) — the #659 acl-stall kill, pcmk side.
+    - name: acl package (unprivileged become prereq)
+      ansible.builtin.apt:
+        name: acl
+        state: present
+
+    # THE big install: base IBM MQ (server + client + SDK + samples, NO RDQM) via the
+    # install-only mq-install role — the WAY the Pacemaker cluster nodes install MQ in
+    # _pcmk-cluster-ha.yml (`- hosts: pcmk_a` / `pcmk_b` -> `roles: [mq-install]`). The role
+    # is purely product install (unpack debs, licence, setmqinst, ulimits); crtmqm /
+    # resource-group / cluster formation is a per-run concern and lives in mq-pcmk-qmgr, NOT
+    # here. Coupling-free (no run_once/delegate/groups); depends on the host-arch Ubuntu MQ
+    # media. mq-install ALREADY carries the stat-of-cmqc.h skip-if-baked guard (#648/#659)
+    # and the arch-derived tarball, so a baked pcmk-ubuntu node short-circuits the ~700MB tar
+    # copy/unpack + install — the media is copied once, here.
+    - name: base IBM MQ (Pacemaker cluster-node install adapter — install body only)
+      ansible.builtin.include_role:
+        name: mq-install
+
+    # PHASED-STARTUP (#642): node-exporter is baked WHOLE and left ENABLED — a definitively
+    # benign exception (static host-metrics exporter, no per-run config, races nothing,
+    # cannot boot in a broken pre-config state). Like bake-nativeha-ubuntu.yml there is NO
+    # rdqm.service benign exception — the Pacemaker arm has no RDQM reboot daemon. alloy is
+    # baked INERT — only its install half (binary + unit); it needs a per-run config.alloy
+    # rendered in the observe phase, so its enable+start is deferred.
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install

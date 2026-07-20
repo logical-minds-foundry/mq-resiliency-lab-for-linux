@@ -910,6 +910,7 @@ _LOCAL_BOX_BUILDERS = {
     "mq-ubuntu2404": "lab/boxes/build-fatbox.sh",
     "mq-nativeha-rhel9": "lab/boxes/build-fatbox.sh",
     "mq-nativeha-ubuntu": "lab/boxes/build-fatbox.sh",
+    "pcmk-ubuntu": "lab/boxes/build-fatbox.sh",
 }
 
 
@@ -930,7 +931,7 @@ def parse_box_list(text: str) -> dict[str, str]:
 from mqlab import box  # noqa: E402
 
 box_app = typer.Typer(
-    help="baked-box fleet: status/build/rebuild/clean the five local-built boxes",
+    help="baked-box fleet: status/build/rebuild/clean the eight local-built boxes",
     no_args_is_help=True,
 )
 app.add_typer(box_app, name="box")
