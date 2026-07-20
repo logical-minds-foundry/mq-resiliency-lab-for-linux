@@ -4,10 +4,11 @@
 - **Status:** Draft
 - **Last validated in lab:** 2026-07-20 — the enable command (11 classes) and the
   `amqsevt -o json_compact` collector mechanics were exercised on IBM MQ 9.4.5
-  (RHEL 9.6). See the companion report
-  [`2026-07-20-mq-event-monitoring-to-file.md`](../../../reports/2026-07-20-mq-event-monitoring-to-file.md)
-  and its `STDOUT`-append evidence report. (Full cold-rebuild verification across
-  all arms is tracked under the event-monitoring rollout epic.)
+  (RHEL 9.6). See the companion reports in the repo:
+  `docs/reports/2026-07-20-mq-event-monitoring-to-file.md` and
+  `docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md` (the
+  `STDOUT`-append proof). (Full cold-rebuild verification across all arms is
+  tracked under the event-monitoring rollout epic.)
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md) — the
   complementary *log* stream (why something happened) to this *event* stream
   (what the queue manager did)
