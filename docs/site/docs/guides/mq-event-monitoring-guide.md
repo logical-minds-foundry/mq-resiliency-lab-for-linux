@@ -2,7 +2,13 @@
 
 - **MQ version:** 9.4 (`amqsevt` with JSON output on MQ for Multiplatforms)
 - **Status:** Draft
-- **Last validated in lab:** pending (awaiting a cold-rebuild verification)
+- **Last validated in lab:** 2026-07-20 — the enable command (11 classes) and the
+  `amqsevt -o json_compact` collector mechanics were exercised on IBM MQ 9.4.5
+  (RHEL 9.6). See the companion reports in the repo:
+  `docs/reports/2026-07-20-mq-event-monitoring-to-file.md` and
+  `docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md` (the
+  `STDOUT`-append proof). (Full cold-rebuild verification across all arms is
+  tracked under the event-monitoring rollout epic.)
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md) — the
   complementary *log* stream (why something happened) to this *event* stream
   (what the queue manager did)
@@ -19,8 +25,8 @@ the program that parsed PCF.
 
 This guide removes that entirely. IBM ships a sample, **`amqsevt`**, that reads
 the event queues and formats each message — including a structured **JSON** mode.
-Enable the events you care about, run `amqsevt -o json` as a managed collector,
-and you have an **event-driven JSON feed with no parsing code** — a thin
+Enable the events you care about, run `amqsevt -o json_compact` as a managed
+collector, and you have an **event-driven JSON feed with no parsing code** — a thin
 translator, not an application. It is for anyone who wants MQ's own account of
 what a queue manager is doing as queryable JSON, alongside (not instead of) the
 diagnostic logs.
@@ -29,8 +35,8 @@ diagnostic logs.
 
 In scope: the MQ-side configuration that **produces** the JSON event feed —
 enabling event classes on the queue manager (`ALTER QMGR`), the per-queue
-thresholds that make performance events fire, and running `amqsevt -o json` as a
-managed collector (an MQ **service object**).
+thresholds that make performance events fire, and running `amqsevt -o json_compact`
+as a managed collector (an MQ **service object**).
 
 Out of scope: **shipping, storing, or visualizing** the JSON — that is your
 pipeline (a log collector, a store, a dashboard), the same boundary the
@@ -80,12 +86,16 @@ volume, enable the full Multiplatforms set (Appendix A lists every class):
 
 ```mqsc
 ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
-  INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) +
-  REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
+  INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) +
+  SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
 ```
 
 `BRIDGEEV` is deliberately absent — it is z/OS-only (Appendix A). There is no
-`COMMEV` class.
+`COMMEV` class. **`LOGGEREV` is also omitted:** it is valid only on a
+**linear-logging** queue manager; on a circular-logging one MQ raises `AMQ8518E`
+and — because `ALTER QMGR` is atomic — **rejects the whole statement**, leaving no
+classes enabled. Add `LOGGEREV(ENABLED)` only where the queue manager uses linear
+logging.
 
 **Step 2 — set the per-queue thresholds performance events need.** `PERFMEV` at
 the queue-manager level emits nothing on its own; queue-depth events fire only
@@ -96,29 +106,37 @@ ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
 ```
 
 **Step 3 — define the collector as a queue-manager service.** Define a `SERVICE`
-that runs `amqsevt -o json` against this queue manager. With no `-q`, `amqsevt`
-reads the standard `SYSTEM.ADMIN.*.EVENT` set; `-m` names the queue manager;
-`-o json` selects JSON. Point `STARTCMD` at a small launcher that runs `amqsevt`
-and forwards its standard output to your log pipeline, and make `STOPCMD` stop
-the process the queue manager started:
+that runs `amqsevt -o json_compact` against this queue manager. With no `-q`,
+`amqsevt` reads the standard `SYSTEM.ADMIN.*.EVENT` set; `-m` names the queue
+manager; **`-o json_compact` emits one JSON object per line**. Use `json_compact`,
+not the pretty `-o json`: line-oriented pipelines (`logger`/journald, syslog, a
+file tailer) treat every line as a separate record, so a multi-line pretty event is
+split into fragments; one-object-per-line keeps each event a single record. Point
+`STARTCMD` at a small launcher that runs `amqsevt` and forwards its standard output
+to your log pipeline, and make `STOPCMD` stop the process the queue manager started:
 
 ```mqsc
 DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
   CONTROL(QMGR) SERVTYPE(SERVER) +
-  STARTCMD('/path/to/your/launcher') STARTARG('<qmgr-name>') +
-  STOPCMD('/bin/kill') STOPARG('MQ_SERVER_PID') +
+  STARTCMD('/path/to/your/launcher') STARTARG('+QMNAME+') +
+  STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+') +
   DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON')
 ```
 
+The `+QMNAME+` / `+MQ_SERVER_PID+` replaceable inserts **require the `+`
+delimiters** — without them MQ passes the literal token, not the value, and
+`STOPCMD` cannot reach the collector.
+
 The launcher itself is environment-specific and lives outside this guide (it is a
-few lines: run `amqsevt -m "$1" -o json` and send its output to wherever your
-host collects logs — journald, syslog, a file tailer). Two properties matter, and
-are why the launcher exists rather than putting the command inline:
+few lines: run `amqsevt -m "$1" -o json_compact` and send its output to wherever
+your host collects logs — journald, syslog, a file tailer). Two properties matter,
+and are why the launcher exists rather than putting the command inline:
 
 - **`exec` the collector** so the process the queue manager tracks
   (`MQ_SERVER_PID`) *is* `amqsevt`. Then `STOPCMD` stops the collector cleanly on
   queue-manager shutdown, instead of leaving it orphaned.
-- **Keep the output line-buffered** so each JSON event reaches your pipeline
+- **Line-delimited output** (`-o json_compact`) so each event is one line — one
+  record to journald/syslog/a file reader — and `stdbuf -oL` keeps it flushed
   promptly rather than sitting in a block buffer.
 
 ## 5. Verify it worked
@@ -183,7 +201,7 @@ IBM MQ 9.4 *ALTER QMGR* reference; the platform column reflects its footnotes.
 | `CONFIGEV`  | Configuration (object create/alter/delete) events | All |
 | `INHIBTEV`  | Inhibit (get/put inhibited) events | All |
 | `LOCALEV`   | Local error events (e.g. unknown object) | All |
-| `LOGGEREV`  | Recovery-log events | Multiplatforms |
+| `LOGGEREV`  | Recovery-log events — **linear-logging QMs only** (rejected on circular; omit) | Multiplatforms |
 | `PERFMEV`   | Performance events (queue depth, service interval) — **needs per-queue thresholds** | All |
 | `REMOTEEV`  | Remote error events (remote-queue resolution) | All |
 | `SSLEV`     | TLS (certificate / handshake) events | All |
@@ -213,6 +231,8 @@ Work the surfaces in order; the first one that is empty is your fault domain.
 | No performance events, other classes fine | `PERFMEV` enabled but no queue thresholds | set `QDPMAXEV`/`QDPHIEV` (+ `QDEPTHHI`) on the queues |
 | Event queue depth climbs and never falls | the collector is browsing (`-b`), or is not running | run a destructive collector (no `-b`); confirm the service is started |
 | `ALTER QMGR` rejected | `BRIDGEEV` included on Multiplatforms | remove `BRIDGEEV` (z/OS only) |
+| `ALTER QMGR` rejected, no classes enabled | `LOGGEREV(ENABLED)` on a **circular-logging** QM (`AMQ8518E`) — the atomic `ALTER` is rejected whole | remove `LOGGEREV` (linear-logging only); re-check with `DISPLAY QMGR` |
+| Events arrive split across many log records / fragments | pretty `-o json` (multi-line) into a line-oriented pipeline (`logger`, syslog, file) | use `-o json_compact` — one JSON object per line, one record per event |
 | Collector keeps running after the queue manager stops | `STOPCMD` cannot reach the real process | `exec` the collector in the launcher so `MQ_SERVER_PID` is `amqsevt` |
 | Events lag, then arrive in bursts | the collector's output is block-buffered | line-buffer the collector's standard output in the launcher |
 | Bursts of events missing under load | the OS log layer is rate-limiting | raise or disable rate limiting for the event source |
