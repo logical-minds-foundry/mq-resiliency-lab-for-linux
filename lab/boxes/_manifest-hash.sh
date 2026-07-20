@@ -54,6 +54,8 @@ case "$BOX" in
   infra-ubuntu2404) BAKE_STEM=infra ;;
   mq-ubuntu2404)    BAKE_STEM=mq-ubuntu ;;
   mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel ;;
+  mq-nativeha-ubuntu) BAKE_STEM=nativeha-ubuntu ;;
+  pcmk-ubuntu)      BAKE_STEM=pcmk-ubuntu ;;
   *) echo "ERROR: unknown box: '${BOX}'" >&2; exit 2 ;;
 esac
 
