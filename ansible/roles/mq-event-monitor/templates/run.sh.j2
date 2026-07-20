@@ -13,5 +13,17 @@
 # '{{ mq_event_syslog_tag }}', beside the MQ core logs (tag 'ibm-mq'); when amqsevt exits,
 # the logger reader sees EOF and exits too.
 #
+# `-o json_compact` (NOT `-o json`): logger is line-oriented — one input line becomes one
+# journald entry. json_compact emits each event as a single-line JSON object, so logger
+# writes exactly one journald entry per event, each entry a complete parseable object.
+# Pretty `-o json` spans ~60 lines per event and would be shredded across that many
+# entries, none of them valid JSON.
+#
+# `logger --size {{ mq_event_logger_max_size }}`: json_compact is necessary but NOT sufficient.
+# logger's default max message is RFC 3164's 1 KiB and it SPLITS a longer input line into
+# multiple entries — so a full CONFIG event (whole-object dump, ~4 KB) would still be shredded
+# into ~1 KiB fragments. Raising the size to hold the largest event keeps it one entry, one
+# parseable object. (See mq_event_logger_max_size in defaults; proven in the lab.)
+#
 # $1 is the queue-manager name, passed by the service's STARTARG.
-exec stdbuf -oL {{ mq_event_amqsevt_bin }} -m "$1" -o json > >(exec logger -t {{ mq_event_syslog_tag }})
+exec stdbuf -oL {{ mq_event_amqsevt_bin }} -m "$1" -o json_compact > >(exec logger --size {{ mq_event_logger_max_size }} -t {{ mq_event_syslog_tag }})
