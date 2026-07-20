@@ -69,13 +69,16 @@ def test_fleet_is_derived_from_cli_builders():
 
 
 def test_cache_artifact_names():
-    # Cache filenames are uniformly arch-suffixed (#103 D4). Every fat box in the
-    # shipped topology is x86_64-pinned today, so the module-level FLEET is
-    # deterministic regardless of host; the base box keeps its already-arch-tagged
-    # literal artifact.
+    # Cache filenames are uniformly arch-suffixed (#103 D4). Only the host-INDEPENDENT
+    # boxes are asserted against the module-level FLEET (built from real host facts):
+    # the base box keeps its already-arch-tagged literal, and the RHEL fat boxes are
+    # arch-pinned x86_64 on every host. The Ubuntu fat boxes are host-resolved after
+    # the T5 un-pin (#703), so their cache name tracks the host arch — covered
+    # deterministically by the injected-facts tests below (via _synthetic_registry),
+    # not here where probe() would make the assertion host-dependent.
     assert box.FLEET["rhel/9.6-x86_64"].cache_artifact == "rhel-9.6-x86_64-libvirt.box"
     assert box.FLEET["mq-rdqm-rhel9"].cache_artifact == "mq-rdqm-rhel9-x86_64.box"
-    assert box.FLEET["obs-ubuntu2404"].cache_artifact == "obs-ubuntu2404-x86_64.box"
+    assert box.FLEET["mq-nativeha-rhel9"].cache_artifact == "mq-nativeha-rhel9-x86_64.box"
 
 
 # --------------------------------------------------------------------------- #
