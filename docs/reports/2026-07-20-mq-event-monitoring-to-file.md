@@ -8,9 +8,10 @@ reference.**
 
 ## Changelog — corrections to the version dated 2026-07-17
 
-This version corrects three defects in the 2026-07-17 document. The first two were
-**load-bearing**: the earlier recipe, followed verbatim on a circular-logging queue
-manager, configured **nothing**.
+This version corrects three defects in the 2026-07-17 document, changes the output
+format for easier file consumption, and adds a captured-examples reference appendix.
+The first two corrections were **load-bearing**: the earlier recipe, followed
+verbatim on a circular-logging queue manager, configured **nothing**.
 
 1. **Removed `LOGGEREV(ENABLED)` from the event-enable command.** `LOGGEREV` is
    valid only on a **linear-logging** queue manager; on a circular-logging queue
@@ -29,16 +30,27 @@ manager, configured **nothing**.
    data file and run `amqsevt` as the `STARTCMD`. See the companion evidence report
    `2026-07-20-mq-service-stdout-open-mode-evidence.md`.
 3. **Expanded the event-loss discussion** to state the HA-failover window
-   explicitly (below), and noted that the JSON is **pretty-printed multi-line**,
-   not one-object-per-line.
+   explicitly (below).
+4. **Switched the output to compact, line-delimited JSON** (`amqsevt -o
+   json_compact`, replacing `-o json`). For a **file** sink you want one JSON
+   object per line (JSONL) so a downstream parser can read it line by line;
+   `-o json` emits **pretty-printed, multi-line** objects, which are awkward to
+   parse from a flat file. (A syslog sink would frame each event per line for you;
+   a raw file does not, so the format has to do it.) Verified: `-o json_compact`
+   emits exactly one JSON object per line.
+5. **Added Appendix D — captured event examples.** Real JSON for each event class
+   that can be forced in the lab, pretty-printed as reference material. IBM
+   publishes no formal JSON schema for `amqsevt` output, so these captured examples
+   are the de-facto reference for the field shapes you will actually receive.
 
 **Validation status:** the corrected mechanism was exercised end-to-end on a live
 IBM MQ **9.4.5** queue manager (RHEL 9.6) on **2026-07-20** — the 11-class enable
-applied cleanly, the launcher-less service ran `amqsevt -m <QM> -o json` and
-appended JSON events to the data file, and forced events (not-authorized 2035,
-queue-full, config/command) were observed in the file. The `STDOUT` append
-behaviour is separately proven in the evidence report cited above. **Appendix C**
-records what was verified.
+applied cleanly, the launcher-less service ran `amqsevt -m <QM> -o json_compact`
+and appended **line-delimited JSON (one object per line)** to the data file; forced
+events (not-authorized 2035, queue-full, config/command) were observed as valid
+JSONL, and the file **appended across a service restart** (same inode, no
+truncation). The `STDOUT` append behaviour is separately proven in the evidence
+report cited above. **Appendix C** records what was verified.
 
 ---
 
@@ -82,7 +94,7 @@ to the data file (no wrapper needed):
 ```mqsc
 DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
   CONTROL(QMGR) SERVTYPE(SERVER) +
-  STARTCMD('/opt/mqm/samp/bin/amqsevt') STARTARG('-m +QMNAME+ -o json') +
+  STARTCMD('/opt/mqm/samp/bin/amqsevt') STARTARG('-m +QMNAME+ -o json_compact') +
   STDOUT('<event-log-path>') STDERR('<event-log-path>.err') +
   STOPCMD('/bin/kill') STOPARG('+MQ_SERVER_PID+') +
   DESCR('Append SYSTEM.ADMIN.*.EVENT as JSON to the event data file')
@@ -91,7 +103,7 @@ START SERVICE(MQ.EVENT.MONITOR)
 ```
 
 `STARTARG` is word-split by MQ and `+QMNAME+` is expanded, so the running process
-is `amqsevt -m <QM> -o json`. Its **stdout** (the JSON event stream) is appended to
+is `amqsevt -m <QM> -o json_compact`. Its **stdout** (the JSON event stream) is appended to
 `<event-log-path>`; its **stderr** goes to `<event-log-path>.err` (a diagnostic
 catch, normally empty). `+MQ_SERVER_PID+` is the started `amqsevt` PID, so
 `STOPCMD` stops the collector cleanly.
@@ -103,16 +115,16 @@ DISPLAY SVSTATUS(MQ.EVENT.MONITOR)    * expect RUNNING with a PID
 ```
 
 ```bash
-tail -f <event-log-path>              # JSON objects, one event each (pretty-printed, multi-line)
+tail -f <event-log-path>              # one JSON object per line (JSONL)
 ```
 
 Done. The queue manager starts and stops the collector automatically, and the JSON
 event feed is appended to `<event-log-path>`.
 
-> **Note on format:** `amqsevt -o json` emits **pretty-printed, multi-line** JSON
-> objects concatenated together — *not* line-delimited JSON (one object per line).
-> A consumer that assumes one JSON object per line will break; parse the stream as
-> concatenated JSON objects (or post-process to JSONL if your pipeline needs it).
+> **Note on format:** `-o json_compact` emits **one JSON object per line** (JSONL),
+> so a downstream consumer can read the file line by line. (`amqsevt` also offers
+> `-o json` — pretty-printed, multi-line — and `-o json_array`; for a **file** sink,
+> `json_compact` is the one you want.)
 
 ---
 
@@ -256,13 +268,13 @@ Full class reference: **Appendix A**. Events worth alerting on first: **Appendix
 
 ## R5. The collector service (Quick start step 3)
 
-Run `amqsevt -o json` as a `SERVICE` with `CONTROL(QMGR)`, so the queue manager
-starts and stops it and it runs wherever the queue manager is active.
+Run `amqsevt -o json_compact` as a `SERVICE` with `CONTROL(QMGR)`, so the queue
+manager starts and stops it and it runs wherever the queue manager is active.
 
-- **`STARTARG('-m +QMNAME+ -o json')`** — MQ **word-splits** the space-separated
+- **`STARTARG('-m +QMNAME+ -o json_compact')`** — MQ **word-splits** the space-separated
   argument string into separate arguments and expands `+QMNAME+` to the
-  queue-manager name, so the running process is `amqsevt -m <QM> -o json`. The `+`
-  delimiters are **required** — without them MQ passes the literal token.
+  queue-manager name, so the running process is `amqsevt -m <QM> -o json_compact`.
+  The `+` delimiters are **required** — without them MQ passes the literal token.
 - **`STDOUT('<event-log-path>')`** is the **event data** (append). **`STDERR`**
   (`<event-log-path>.err`) is a diagnostic catch — `amqsevt`'s stderr — so nothing
   is silently lost to `/dev/null`; it is normally empty and is **not** the data.
@@ -338,9 +350,12 @@ This design was shaped and corrected by live testing on IBM MQ **9.4.5** (RHEL
 - The 11-class enable (no `LOGGEREV`) applies cleanly on a circular-logging queue
   manager; the verbatim 12-class command with `LOGGEREV(ENABLED)` is rejected
   atomically (`AMQ8518E`), leaving all classes disabled.
-- `amqsevt -o json` emits **one JSON object per event** and **flushes per event**,
-  so events reach the file promptly on 9.4.5. Output is **pretty-printed
-  multi-line** JSON (not line-delimited).
+- `amqsevt` valid `-o` formats are `json`, `json_compact`, and `json_array`.
+  **`-o json_compact` emits exactly one JSON object per line** (JSONL) — verified: 9
+  queued events produced 9 lines, each parsing as standalone JSON. The default
+  `-o json` is **pretty-printed multi-line** (the same 9 events spanned 615 lines),
+  which is why the file recipe uses `json_compact`. `amqsevt` flushes per event, so
+  events reach the file promptly on 9.4.5.
 - MQ **word-splits** a space-separated `STARTARG` and expands `+QMNAME+`, so
   `amqsevt` can be driven directly as the service `STARTCMD` — no launcher.
 - **An MQ `SERVER` service opens its `STDOUT` file `O_APPEND` and does not
@@ -358,7 +373,292 @@ A second `amqsevt` cannot read the event queues while the first holds them
 (`MQRC_OBJECT_IN_USE`, 2042). A too-fast `STOP`→`START` can transiently hit this
 before the old reader releases the queue; let the stop complete before restarting.
 
-## Appendix D — References
+## Appendix D — Captured event examples (the de-facto schema)
+
+IBM publishes **no formal JSON schema** for `amqsevt` output. The envelope is a
+convention of the sample, and the `eventData` keys vary by event (they are the
+PCF/MQI parameter names, camelCased; keys are **unordered** and **conditionally
+present**). The examples below are **real events captured on IBM MQ 9.4.5** (RHEL
+9.6, circular logging) on 2026-07-20, one representative per event class we can
+force in the lab, pretty-printed (`-o json`). They are the practical reference for
+what you will actually receive. **Not captured:** `CHADEV` (channel auto-definition
+— not used here, so it should not occur) and `SSLEV` (needs a staged TLS fault);
+`LOGGEREV` does not apply (circular logging).
+
+**The five-key envelope** is common to every event: `eventSource` (which
+`SYSTEM.ADMIN.*.EVENT` queue it came from), `eventType` (the class — *Queue Mgr
+Event* 44, *Perfm Event* 45, *Channel Event* 46, *Config Event* 43, *Command Event*
+99), `eventReason` (the specific reason name + code), `eventCreation` (timestamp +
+epoch), and `eventData` (the per-event payload). Filter/alert on `eventType` /
+`eventReason`.
+
+### D.1 Queue Manager Active — `STRSTPEV` (reason 2222)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Queue Mgr Event", "value" : 44 },
+"eventReason" : { "name" : "Queue Mgr Active", "value" : 2222 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:25Z", "epoch" : 1784560585 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "hostName" : "nha-rhel-a3",
+  "reasonQualifier" : "Failover Not Permitted"
+}
+}
+```
+
+Fired when the queue manager becomes active (here a standalone QM, hence
+`reasonQualifier: Failover Not Permitted`; on a Native HA queue manager expect a
+paired stop/start across nodes on failover).
+
+### D.2 Not Authorized — `AUTHOREV` (reason 2035)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Queue Mgr Event", "value" : 44 },
+"eventReason" : { "name" : "Not Authorized", "value" : 2035 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:17:56Z", "epoch" : 1784560676 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "reasonQualifier" : "Conn Not Authorized",
+  "userIdentifier" : "nobody",
+  "applType" : "Unix",
+  "applName" : "amqsput",
+  "connTag" : "0000...0000"
+}
+}
+```
+
+The high-value security event: `userIdentifier` and `applName` identify who was
+refused, `reasonQualifier` why (here a connection authority failure). (`connTag` is
+a fixed-width connection tag, all-zeros when none — elided above.)
+
+### D.3 Unknown Object Name — `LOCALEV` (reason 2085)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Queue Mgr Event", "value" : 44 },
+"eventReason" : { "name" : "Unknown Object Name", "value" : 2085 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:31Z", "epoch" : 1784560591 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "applType" : "Unix",
+  "applName" : "amqsput",
+  "queueName" : "A.MISSING.QUEUE"
+}
+}
+```
+
+An application opened a name that does not exist (`queueName`).
+
+### D.4 Put Inhibited — `INHIBTEV` (reason 2051)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Queue Mgr Event", "value" : 44 },
+"eventReason" : { "name" : "Put Inhibited", "value" : 2051 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:37Z", "epoch" : 1784560597 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "queueName" : "EVT.INH",
+  "applType" : "Unix",
+  "applName" : "amqsput"
+}
+}
+```
+
+A put (or `Get Inhibited` 2016 for a get) was attempted against an inhibited queue.
+
+### D.5 Queue Full — `PERFMEV` (reason 2053)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.PERFM.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Perfm Event", "value" : 45 },
+"eventReason" : { "name" : "Queue Full", "value" : 2053 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:44Z", "epoch" : 1784560604 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "baseObjectName" : "EVT.FULL",
+  "timeSinceReset" : 2,
+  "highQueueDepth" : 1,
+  "msgEnqCount" : 1,
+  "msgDeqCount" : 0
+}
+}
+```
+
+Note the performance-event fields — `baseObjectName` (the queue), `highQueueDepth`,
+`msgEnqCount`/`msgDeqCount` — differ from the QMGR events above. Requires the
+per-queue threshold (`QDPMAXEV`).
+
+### D.6 Queue Depth High — `PERFMEV` (reason 2224)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.PERFM.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Perfm Event", "value" : 45 },
+"eventReason" : { "name" : "Queue Depth High", "value" : 2224 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:50Z", "epoch" : 1784560610 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "baseObjectName" : "EVT.HI",
+  "timeSinceReset" : 2,
+  "highQueueDepth" : 5,
+  "msgEnqCount" : 5,
+  "msgDeqCount" : 0
+}
+}
+```
+
+Early-warning backlog signal (requires `QDPHIEV` + `QDEPTHHI`).
+
+### D.7 Config — Create Object — `CONFIGEV` (reason 2367)
+
+Config events dump the object's **full** attribute set — useful as an audit record,
+but large. This is the canonical shape (a queue create); change/command events
+below reuse the same `eventData` block and are shown abbreviated.
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.CONFIG.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Config Event", "value" : 43 },
+"eventReason" : { "name" : "Config Create Object", "value" : 2367 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:16:55Z", "epoch" : 1784560615 },
+"correlationID" : "414D5120455654434150202020202020CA3B5E6A49260040",
+"eventData" : {
+  "eventUserId" : "mqm",
+  "eventOrigin" : "Console",
+  "eventQueueMgr" : "EVTCAP",
+  "objectType" : "Queue",
+  "queueName" : "EVT.CFG",
+  "queueType" : "Local",
+  "creationDate" : "2026-07-20",
+  "creationTime" : "15.16.55",
+  "maxQueueDepth" : 5000,
+  "maxMsgLength" : 4194304,
+  "inhibitGet" : "Get Allowed",
+  "inhibitPut" : "Put Allowed",
+  "queueDepthHighLimit" : 80,
+  "queueDepthMaxEvent" : "Enabled",
+  "definitionType" : "Predefined"
+  /* … ~50 further attributes: defPriority, defPersistence, shareability,
+     msgDeliverySequence, usage, triggerControl, npmClass, defBind, … — the full
+     queue definition, all present verbatim in the captured event … */
+}
+}
+```
+
+`correlationID` ties the config event to the command event that caused it (same ID,
+next example).
+
+### D.8 Config — Change Object — `CONFIGEV` (reason 2368)
+
+A change emits a **Before/After pair**, distinguished by `objectState`; each carries
+the same full attribute block as D.7 (elided here). The diff below is
+`queueDesc: "" → "event demo"`.
+
+```json
+{ "eventType": { "name": "Config Event", "value": 43 },
+  "eventReason": { "name": "Config Change Object", "value": 2368 },
+  "objectState": "Before Change",
+  "correlationID": "414D5120…53260040",
+  "eventData": { "queueName": "EVT.CFG", "queueDesc": "", "alterationTime": "15.16.55" /* …full block… */ } }
+
+{ "eventType": { "name": "Config Event", "value": 43 },
+  "eventReason": { "name": "Config Change Object", "value": 2368 },
+  "objectState": "After Change",
+  "correlationID": "414D5120…53260040",
+  "eventData": { "queueName": "EVT.CFG", "queueDesc": "event demo", "alterationTime": "15.17.00" /* …full block… */ } }
+```
+
+### D.9 Command — `CMDEV` (reason 2412)
+
+Every mutating MQSC command emits a command event (with `CMDEV(NODISPLAY)`,
+`DISPLAY`/inquire is excluded). It records **who ran what**, and shares the
+`correlationID` with the config event it triggered.
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.COMMAND.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Command Event", "value" : 99 },
+"eventReason" : { "name" : "Command MQSC", "value" : 2412 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:17:00Z", "epoch" : 1784560620 },
+"correlationID" : "414D5120455654434150202020202020CA3B5E6A53260040",
+"eventData" : {
+  "commandContext" : {
+    "eventUserId" : "mqm",
+    "eventOrigin" : "Console",
+    "eventQueueMgr" : "EVTCAP",
+    "command" : "Change Queue"
+  },
+  "commandData" : {
+    "queueName" : "EVT.CFG",
+    "queueType" : "Local",
+    "queueDesc" : "event demo"
+  }
+}
+}
+```
+
+Note the nested `commandContext` / `commandData` — a different `eventData` shape
+from the other classes.
+
+### D.10 Remote error — `REMOTEEV` (Unknown Xmit Queue, reason 2196)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Queue Mgr Event", "value" : 44 },
+"eventReason" : { "name" : "Unknown Xmit Queue", "value" : 2196 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:17:11Z", "epoch" : 1784560631 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "queueName" : "EVT.RMT",
+  "xmitQueueName" : "NO.XMIT",
+  "applType" : "Unix",
+  "applName" : "amqsput"
+}
+}
+```
+
+A remote (`QREMOTE`) resolution failure. The exact reason depends on the fault — a
+missing transmission queue gives `Unknown Xmit Queue` (2196), as here; a missing
+remote queue manager gives `Unknown Remote Qmgr` (2087). `queueName` +
+`xmitQueueName` identify the broken definition.
+
+### D.11 Channel Blocked — `CHLEV` (reason 2577)
+
+```json
+{
+"eventSource" : { "objectName": "SYSTEM.ADMIN.CHANNEL.EVENT", "objectType" : "Queue", "queueMgr" : "EVTCAP"},
+"eventType"   : { "name" : "Channel Event", "value" : 46 },
+"eventReason" : { "name" : "Channel Blocked", "value" : 2577 },
+"eventCreation" : { "timeStamp" : "2026-07-20T15:17:20Z", "epoch" : 1784560640 },
+"eventData" : {
+  "queueMgrName" : "EVTCAP",
+  "connectionName" : "localhost (127.0.0.1)",
+  "connectionNameList" : [ "localhost" ],
+  "reasonQualifier" : "Channel Blocked Noaccess",
+  "channelName" : "SYSTEM.DEF.SVRCONN",
+  "clientUserId" : "mqm",
+  "applName" : "amqsputc",
+  "applType" : "Unix"
+}
+}
+```
+
+A CHLAUTH rule blocked an inbound connection (`channelName`, `connectionName`,
+`clientUserId`). Note: a clean *Channel Started/Stopped* (2282/2283) comes from
+**running MCA sender/receiver channels**, not SVRCONN client connect/disconnect
+(which do not emit start/stop) — so *Channel Blocked* is the representative
+`CHLEV` here; expect *Started*/*Stopped* on your message channels in production.
+
+## Appendix E — References
 
 In the IBM MQ 9.4 documentation (<https://www.ibm.com/docs/en/ibm-mq/9.4>), see:
 *Sample program to monitor instrumentation events (amqsevt)*, *ALTER QMGR*,
