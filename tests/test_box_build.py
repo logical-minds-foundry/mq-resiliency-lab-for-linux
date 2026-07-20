@@ -77,6 +77,7 @@ def test_local_box_builders_registry_covers_base_and_fat_boxes():
 
 def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", lambda: {"mq-rdqm-rhel9": {"arch": "x86_64"}})
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps({"mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh"}, {}, facts)
     assert [s.command.argv for s in steps] == [
@@ -85,6 +86,8 @@ def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
             str(tmp_path / "lab/boxes/build-fatbox.sh"),
             "--box",
             "mq-rdqm-rhel9",
+            "--arch",
+            "x86_64",
             "--domain-type",
             "kvm",
             "--cpu-mode",
@@ -95,6 +98,7 @@ def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
 
 def test_box_build_steps_base_builder_has_no_box_flag(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_box_registry", dict)
     facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
     steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
     assert "--box" not in steps[0].command.argv  # base-OS builder is not box-parameterized

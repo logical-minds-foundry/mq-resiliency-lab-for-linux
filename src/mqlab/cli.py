@@ -47,7 +47,13 @@ from mqlab.phases import (
     build_states,
     first_unsatisfied,
 )
-from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
+from mqlab.platforms import (
+    PlatformError,
+    box_build_arch,
+    build_domain_virt,
+    ensure_resolved,
+    is_foreign_box_build,
+)
 from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -1006,6 +1012,18 @@ def _resolved_nodes() -> dict[str, Any]:
     return nodes
 
 
+def _box_registry() -> dict[str, dict[str, Any]]:
+    """The `boxes:` registry from lab/topology.yaml (box name -> entry).
+
+    The resolved topology (#276) carries only `nodes:`; the box registry with each
+    box's optional `arch:` pin lives in the source topology, so read it there."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    boxes: dict[str, dict[str, Any]] = data.get("boxes", {})
+    return boxes
+
+
 def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
     """Local-built boxes the given guests need -> build script."""
     nodes = _resolved_nodes()
@@ -1028,13 +1046,26 @@ def _box_build_steps(
     # takes `--box <name>` so one script serves every fat box (#603). force appends
     # --rebuild-box so the builder overwrites its cache — the `box rebuild` tier (#91).
     domain_type, cpu_mode = build_domain_virt(facts)
+    registry = _box_registry()
     steps: list[CommandStep] = []
     for name, script in sorted(needed.items()):
         if name in present:
             continue
+        entry = registry.get(name, {})
+        # DEPRECATED, not removed (#103 D11): emulated cross-arch box builds (e.g. the
+        # RHEL box on Apple Silicon) are refused here. The emulated build path in
+        # build-fatbox.sh + build_domain_virt's TCG branch is retained for a future
+        # standalone non-HA/DR RHEL lab; re-enable by lifting this guard.
+        if is_foreign_box_build(entry, facts):
+            raise StepFailedError(
+                f"box {name} pins arch {entry['arch']} but this host is {facts.arch}: "
+                f"emulated cross-arch box builds are disabled (#103 D11). "
+                f"Build it on the x86 host.",
+                2,
+            )
         argv = ["bash", str(repo_root() / script)]
         if script.endswith("build-fatbox.sh"):
-            argv += ["--box", name]
+            argv += ["--box", name, "--arch", box_build_arch(entry, facts)]
         argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
         if force:
             argv.append("--rebuild-box")
