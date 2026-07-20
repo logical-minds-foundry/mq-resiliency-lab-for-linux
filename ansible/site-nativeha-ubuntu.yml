@@ -23,11 +23,17 @@
     qm_svc_name: "{{ qm_svc }}"
     svc_conn: "svc-sim-ext.service.com"
   tasks:
+    # Match the per-instance detail line 'INSTANCE(<node>) ROLE(Active)', NOT the local
+    # summary line 'ROLE(Active) INSTANCE(<node>)': dspmq -x is delegated to nha_ubuntu_a[0]
+    # (a1), and the summary line reports only a1's OWN role — so the old summary-order grep
+    # found the active only while a1 itself was active, and timed out (empty) whenever the
+    # active had drifted to a2/a3. The detail lines list every instance from any node, so
+    # this resolves the active regardless of which instance answers (#722).
     - name: find the active Native HA instance
       ansible.builtin.shell: |
         set -o pipefail
         su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x" \
-          | grep -oE 'ROLE\(Active\) INSTANCE\(nha-ubuntu-a[0-9]\)' \
+          | grep -oE 'INSTANCE\(nha-ubuntu-a[0-9]\) ROLE\(Active\)' \
           | grep -oE 'nha-ubuntu-a[0-9]' | head -1 || true
       args:
         executable: /bin/bash
@@ -75,6 +81,21 @@
       until: mqsc.rc in [0, 10]
       retries: 30
       delay: 5
+
+    # Enable classes + define/start the collector on the ACTIVE instance; Native HA
+    # replicates the SERVICE/QMGR objects to all instances via raft. runmqsc only works
+    # on the active instance — a passive replica rejects it with AMQ8478E (Standby queue
+    # manager, rc 20), so a bare run_once (which targets groups['nha_ubuntu_a'][0]) fails
+    # whenever the active instance is a2/a3. delegate_to is not valid on include_role, so
+    # we target the active instance with a when-guard on active_host (the run_once set_fact
+    # above, broadcast to all hosts): the role runs exactly once, on the active instance.
+    - name: event monitoring — enable classes + define/start collector (active, once) (#114)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+        tasks_from: service
+      vars:
+        qmgr_name: "{{ qm_name }}"
+      when: inventory_hostname == active_host
 
 - import_playbook: site-distributed-shared.yml
   vars:

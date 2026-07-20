@@ -27,6 +27,12 @@
     name: mq-diag-logging
     tasks_from: system
 
+- name: event monitoring — host prep (wrapper on every failover-capable node) (#114)
+  ansible.builtin.include_role:
+    name: mq-event-monitor
+  vars:
+    qmgr_name: "{{ qm_name }}"
+
 # Preflight (#690): this node's heartbeat NIC MUST hold its replication IP before
 # we write ReplicationAddress and form the group. Vagrant's RedHat
 # configure_networks has historically left a NIC unconfigured after a lost
