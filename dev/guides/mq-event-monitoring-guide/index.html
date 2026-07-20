@@ -1232,7 +1232,13 @@
 <ul>
 <li><strong>MQ version:</strong> 9.4 (<code>amqsevt</code> with JSON output on MQ for Multiplatforms)</li>
 <li><strong>Status:</strong> Draft</li>
-<li><strong>Last validated in lab:</strong> pending (awaiting a cold-rebuild verification)</li>
+<li><strong>Last validated in lab:</strong> 2026-07-20 — the enable command (11 classes) and the
+  <code>amqsevt -o json_compact</code> collector mechanics were exercised on IBM MQ 9.4.5
+  (RHEL 9.6). See the companion reports in the repo:
+  <code>docs/reports/2026-07-20-mq-event-monitoring-to-file.md</code> and
+  <code>docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md</code> (the
+  <code>STDOUT</code>-append proof). (Full cold-rebuild verification across all arms is
+  tracked under the event-monitoring rollout epic.)</li>
 <li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the
   complementary <em>log</em> stream (why something happened) to this <em>event</em> stream
   (what the queue manager did)</li>
@@ -1246,16 +1252,16 @@ on the <code>SYSTEM.ADMIN.*.EVENT</code> queues. Historically, reading them mean
 the program that parsed PCF.</p>
 <p>This guide removes that entirely. IBM ships a sample, <strong><code>amqsevt</code></strong>, that reads
 the event queues and formats each message — including a structured <strong>JSON</strong> mode.
-Enable the events you care about, run <code>amqsevt -o json</code> as a managed collector,
-and you have an <strong>event-driven JSON feed with no parsing code</strong> — a thin
+Enable the events you care about, run <code>amqsevt -o json_compact</code> as a managed
+collector, and you have an <strong>event-driven JSON feed with no parsing code</strong> — a thin
 translator, not an application. It is for anyone who wants MQ's own account of
 what a queue manager is doing as queryable JSON, alongside (not instead of) the
 diagnostic logs.</p>
 <h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
 <p>In scope: the MQ-side configuration that <strong>produces</strong> the JSON event feed —
 enabling event classes on the queue manager (<code>ALTER QMGR</code>), the per-queue
-thresholds that make performance events fire, and running <code>amqsevt -o json</code> as a
-managed collector (an MQ <strong>service object</strong>).</p>
+thresholds that make performance events fire, and running <code>amqsevt -o json_compact</code>
+as a managed collector (an MQ <strong>service object</strong>).</p>
 <p>Out of scope: <strong>shipping, storing, or visualizing</strong> the JSON — that is your
 pipeline (a log collector, a store, a dashboard), the same boundary the
 <a href="../mq-json-logging-guide/">JSON logging guide</a> draws. This guide gets clean JSON
@@ -1298,37 +1304,48 @@ compromise stated; your constraints may differ.</p>
 you want with <code>ALTER QMGR</code>. To start broad and pare back once you know the
 volume, enable the full Multiplatforms set (Appendix A lists every class):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  INHIBTEV(ENABLED) LOCALEV(ENABLED) LOGGEREV(ENABLED) PERFMEV(ENABLED) +
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>  INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) +
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>  SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)
 </code></pre></div>
 <p><code>BRIDGEEV</code> is deliberately absent — it is z/OS-only (Appendix A). There is no
-<code>COMMEV</code> class.</p>
+<code>COMMEV</code> class. <strong><code>LOGGEREV</code> is also omitted:</strong> it is valid only on a
+<strong>linear-logging</strong> queue manager; on a circular-logging one MQ raises <code>AMQ8518E</code>
+and — because <code>ALTER QMGR</code> is atomic — <strong>rejects the whole statement</strong>, leaving no
+classes enabled. Add <code>LOGGEREV(ENABLED)</code> only where the queue manager uses linear
+logging.</p>
 <p><strong>Step 2 — set the per-queue thresholds performance events need.</strong> <code>PERFMEV</code> at
 the queue-manager level emits nothing on its own; queue-depth events fire only
 where a queue carries thresholds. Set them on the application queues that matter:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ALTER QLOCAL(YOUR.APP.QUEUE) QDPMAXEV(ENABLED) QDPHIEV(ENABLED) QDEPTHHI(80)
 </code></pre></div>
 <p><strong>Step 3 — define the collector as a queue-manager service.</strong> Define a <code>SERVICE</code>
-that runs <code>amqsevt -o json</code> against this queue manager. With no <code>-q</code>, <code>amqsevt</code>
-reads the standard <code>SYSTEM.ADMIN.*.EVENT</code> set; <code>-m</code> names the queue manager;
-<code>-o json</code> selects JSON. Point <code>STARTCMD</code> at a small launcher that runs <code>amqsevt</code>
-and forwards its standard output to your log pipeline, and make <code>STOPCMD</code> stop
-the process the queue manager started:</p>
+that runs <code>amqsevt -o json_compact</code> against this queue manager. With no <code>-q</code>,
+<code>amqsevt</code> reads the standard <code>SYSTEM.ADMIN.*.EVENT</code> set; <code>-m</code> names the queue
+manager; <strong><code>-o json_compact</code> emits one JSON object per line</strong>. Use <code>json_compact</code>,
+not the pretty <code>-o json</code>: line-oriented pipelines (<code>logger</code>/journald, syslog, a
+file tailer) treat every line as a separate record, so a multi-line pretty event is
+split into fragments; one-object-per-line keeps each event a single record. Point
+<code>STARTCMD</code> at a small launcher that runs <code>amqsevt</code> and forwards its standard output
+to your log pipeline, and make <code>STOPCMD</code> stop the process the queue manager started:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  CONTROL(QMGR) SERVTYPE(SERVER) +
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/path/to/your/launcher&#39;) STARTARG(&#39;&lt;qmgr-name&gt;&#39;) +
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;MQ_SERVER_PID&#39;) +
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/path/to/your/launcher&#39;) STARTARG(&#39;+QMNAME+&#39;) +
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;+MQ_SERVER_PID+&#39;) +
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR(&#39;Drain SYSTEM.ADMIN.*.EVENT to JSON&#39;)
 </code></pre></div>
+<p>The <code>+QMNAME+</code> / <code>+MQ_SERVER_PID+</code> replaceable inserts <strong>require the <code>+</code>
+delimiters</strong> — without them MQ passes the literal token, not the value, and
+<code>STOPCMD</code> cannot reach the collector.</p>
 <p>The launcher itself is environment-specific and lives outside this guide (it is a
-few lines: run <code>amqsevt -m "$1" -o json</code> and send its output to wherever your
-host collects logs — journald, syslog, a file tailer). Two properties matter, and
-are why the launcher exists rather than putting the command inline:</p>
+few lines: run <code>amqsevt -m "$1" -o json_compact</code> and send its output to wherever
+your host collects logs — journald, syslog, a file tailer). Two properties matter,
+and are why the launcher exists rather than putting the command inline:</p>
 <ul>
 <li><strong><code>exec</code> the collector</strong> so the process the queue manager tracks
   (<code>MQ_SERVER_PID</code>) <em>is</em> <code>amqsevt</code>. Then <code>STOPCMD</code> stops the collector cleanly on
   queue-manager shutdown, instead of leaving it orphaned.</li>
-<li><strong>Keep the output line-buffered</strong> so each JSON event reaches your pipeline
+<li><strong>Line-delimited output</strong> (<code>-o json_compact</code>) so each event is one line — one
+  record to journald/syslog/a file reader — and <code>stdbuf -oL</code> keeps it flushed
   promptly rather than sitting in a block buffer.</li>
 </ul>
 <h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
@@ -1429,7 +1446,7 @@ IBM MQ 9.4 <em>ALTER QMGR</em> reference; the platform column reflects its footn
 </tr>
 <tr>
 <td><code>LOGGEREV</code></td>
-<td>Recovery-log events</td>
+<td>Recovery-log events — <strong>linear-logging QMs only</strong> (rejected on circular; omit)</td>
 <td>Multiplatforms</td>
 </tr>
 <tr>
@@ -1524,6 +1541,16 @@ IBM MQ 9.4 <em>ALTER QMGR</em> reference; the platform column reflects its footn
 <td><code>ALTER QMGR</code> rejected</td>
 <td><code>BRIDGEEV</code> included on Multiplatforms</td>
 <td>remove <code>BRIDGEEV</code> (z/OS only)</td>
+</tr>
+<tr>
+<td><code>ALTER QMGR</code> rejected, no classes enabled</td>
+<td><code>LOGGEREV(ENABLED)</code> on a <strong>circular-logging</strong> QM (<code>AMQ8518E</code>) — the atomic <code>ALTER</code> is rejected whole</td>
+<td>remove <code>LOGGEREV</code> (linear-logging only); re-check with <code>DISPLAY QMGR</code></td>
+</tr>
+<tr>
+<td>Events arrive split across many log records / fragments</td>
+<td>pretty <code>-o json</code> (multi-line) into a line-oriented pipeline (<code>logger</code>, syslog, file)</td>
+<td>use <code>-o json_compact</code> — one JSON object per line, one record per event</td>
 </tr>
 <tr>
 <td>Collector keeps running after the queue manager stops</td>
