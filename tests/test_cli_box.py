@@ -191,6 +191,23 @@ def test_box_decision_force_build(monkeypatch):
     assert d.hash_match is None  # not evaluated on a forced rebuild
 
 
+def test_dry_run_passes_arch_for_fat_box(monkeypatch):
+    # Regression (#731): the dry-run must supply --arch, which build-fatbox.sh
+    # requires post-#701 — else it usage-dies and box_decision cannot parse.
+    # Assert against FLEET[name].arch (same host) so this holds on x86 CI and arm64.
+    captured = {}
+
+    def _fake_capture(cmd):
+        captured["argv"] = cmd.argv
+        return "action: REUSE (age 1d, hash match)"
+
+    monkeypatch.setattr(box, "_capture", _fake_capture)
+    box._run_builder_dry_run("mq-nativeha-ubuntu")
+    argv = captured["argv"]
+    assert "--arch" in argv
+    assert argv[argv.index("--arch") + 1] == box.FLEET["mq-nativeha-ubuntu"].arch
+
+
 def test_box_decision_base_box_hash_is_none(monkeypatch):
     monkeypatch.setattr(box, "_run_builder_dry_run", lambda name: "decision:  REUSE")
     monkeypatch.setattr(box, "_cache_present", lambda name: True)

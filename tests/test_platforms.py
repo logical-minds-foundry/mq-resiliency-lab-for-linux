@@ -155,6 +155,25 @@ def test_build_domain_virt_arm_host_is_foreign_tcg():
     assert p.build_domain_virt(ARM_KVM) == ("qemu", "maximum")
 
 
+def test_box_build_domain_virt_native_arm_ubuntu_is_kvm():
+    # #732: an arm64 Ubuntu box on the arm64 host is NATIVE — KVM, not TCG.
+    assert p.box_build_domain_virt("aarch64", ARM_KVM) == ("kvm", "host-passthrough")
+
+
+def test_box_build_domain_virt_native_x86_is_kvm():
+    assert p.box_build_domain_virt("x86_64", X86_KVM) == ("kvm", "host-passthrough")
+
+
+def test_box_build_domain_virt_foreign_x86_on_arm_is_tcg():
+    # x86 box (RHEL) on the arm64 Mac — foreign guest, must be TCG.
+    assert p.box_build_domain_virt("x86_64", ARM_KVM) == ("qemu", "maximum")
+
+
+def test_box_build_domain_virt_native_arch_without_kvm_is_tcg():
+    # native arch but no usable /dev/kvm (e.g. x86 CI) — TCG.
+    assert p.box_build_domain_virt("x86_64", X86_NOKVM) == ("qemu", "maximum")
+
+
 def test_box_build_arch_rhel_is_x86_on_any_host():
     rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
     assert p.box_build_arch(rhel, X86_KVM) == "x86_64"
