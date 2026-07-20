@@ -29,24 +29,31 @@ REFUSE_DAYS="${REFUSE_DAYS:-14}"
 FORCE="${LAB_REBUILD_BOX:-0}"
 DRY_RUN=0
 BOX=""
+ARCH=""
 DOMAIN_TYPE=""
 CPU_MODE=""
 
 usage() {
   cat >&2 <<'USAGE'
-usage: build-fatbox.sh --box <name> --domain-type <kvm|qemu> \
+usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --domain-type <kvm|qemu> \
                        --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
 
   --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404, mq-ubuntu2404,
-                   mq-nativeha-rhel9.
-  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies them
-  (it computes them from host facts via platforms.build_domain_virt, #327).
+                   mq-nativeha-rhel9, mq-nativeha-ubuntu, pcmk-ubuntu.
+  --arch is REQUIRED and one of aarch64/x86_64 (the canonical hostfacts arch): it
+  selects the guest build-domain arch/machine + emulator and the base-box add
+  architecture, and keys the per-host cache <box>-<arch>.box (#103 D1/D4). RHEL is
+  x86_64 always; an un-pinned Ubuntu box tracks the host.
+  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies all three
+  (it computes them from host facts via platforms.box_build_arch/build_domain_virt,
+  #327/#103).
 USAGE
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --box) BOX="${2:-}"; shift ;;
+    --arch) ARCH="${2:-}"; shift ;;
     --rebuild-box) FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
@@ -65,6 +72,8 @@ case "$BOX" in
   infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
   mq-ubuntu2404)    BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=mq-ubuntu ;;
   mq-nativeha-rhel9) BASE_KIND=rhel;  BASE_BOX="rhel/9.6-x86_64";        BAKE=nativeha-rhel ;;
+  mq-nativeha-ubuntu) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=nativeha-ubuntu ;;
+  pcmk-ubuntu)      BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=pcmk-ubuntu ;;
   "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
   *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
 esac
@@ -75,6 +84,21 @@ esac
 case "$CPU_MODE" in
   host-passthrough|maximum) ;;
   *) echo "ERROR: --cpu-mode must be 'host-passthrough' or 'maximum' (got '${CPU_MODE}')" >&2; usage; exit 2 ;;
+esac
+# --arch carries the canonical hostfacts arch (aarch64/x86_64), the SAME token box.py keys
+# the cache on (<box>-<arch>.box, #103 D4) — do not conflate it with Vagrant's vocabulary.
+# It drives the guest build-domain arch/machine + emulator below; MACHINE is q35 on x86_64
+# and virt on aarch64 (the libvirt board each arch boots).
+case "$ARCH" in
+  x86_64)  MACHINE=q35 ;;
+  aarch64) MACHINE=virt ;;
+  *) echo "ERROR: --arch must be 'aarch64' or 'x86_64' (got '${ARCH}')" >&2; usage; exit 2 ;;
+esac
+# Vagrant's `box add --architecture` speaks arm64/amd64, NOT aarch64/x86_64 — map ONLY at
+# that seam (the two arch vocabularies must not be conflated, #103).
+case "$ARCH" in
+  aarch64) VAGRANT_ARCH=arm64 ;;
+  x86_64)  VAGRANT_ARCH=amd64 ;;
 esac
 
 # Cache lives on the HOST-DURABLE main-worktree build/ so it survives base-VM
@@ -92,8 +116,11 @@ else
   CACHE_DIR="$MAIN_ROOT/build/state/boxes"
 fi
 mkdir -p "$CACHE_DIR"
-CACHE="$CACHE_DIR/${BOX}.box"
-HASH_FILE="$CACHE_DIR/${BOX}.manifest-hash"
+# Arch-suffixed, per-host cache (#103 D4/D5). MUST match box.py's cache_artifact
+# (`f"{name}-{arch}.box"`) byte-for-byte so `mqlab box status` and `build migrate`
+# agree with what this script writes.
+CACHE="$CACHE_DIR/${BOX}-${ARCH}.box"
+HASH_FILE="$CACHE_DIR/${BOX}-${ARCH}.manifest-hash"
 
 CURRENT_HASH="$(./_manifest-hash.sh "$BOX")"
 
@@ -163,7 +190,8 @@ VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
 if [ "$BASE_KIND" = rhel ]; then
   ./rhel96/build-box.sh --domain-type "$DOMAIN_TYPE" --cpu-mode "$CPU_MODE"
 else
-  vagrant box list | grep -q "^${BASE_BOX} " || vagrant box add --provider libvirt "$BASE_BOX"
+  vagrant box list | grep -q "^${BASE_BOX} " \
+    || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" "$BASE_BOX"
 fi
 
 # 2. Resolve the base box's disk image and COPY it into the pool as the transient build
@@ -171,7 +199,14 @@ fi
 #    — libvirt's dynamic ownership + per-domain AppArmor only cover pool paths — and is
 #    itself scratch: the bake mutates the copy, the shared base box is untouched.
 BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
-BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
+# An architecture-aware `box add` lays the image down under an arch-partitioned path
+# (…/<version>/<VAGRANT_ARCH>/libvirt/box.img), so scope the find to this arch first —
+# that is what keeps the arm64 and x86_64 base images from being confused on a host that
+# has cached both. Fall back to the un-scoped find for a legacy single-arch box dir.
+BASE_IMG="$(find "$BASE_DIR" -name box.img -path "*/${VAGRANT_ARCH}/*" -path '*/libvirt/*' | sort | tail -n1)"
+if [ -z "$BASE_IMG" ]; then
+  BASE_IMG="$(find "$BASE_DIR" -name box.img -path '*/libvirt/*' | sort | tail -n1)"
+fi
 test -n "$BASE_IMG" || { echo "ERROR: base box image not found under $BASE_DIR" >&2; exit 1; }
 ../scripts/net-up.sh vagrant-libvirt
 virsh -c qemu:///system destroy "$BUILD_DOM" 2>/dev/null || true
@@ -201,30 +236,52 @@ if [ "$BASE_KIND" = rhel ]; then
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 
-# The Ubuntu MQ bakes (obs, mq-ubuntu) install the full MQ via the Ubuntu mq-install role
-# — the obs box for the mq_prometheus cgo build's SDK, the mq-ubuntu box for the svc/app/
-# probe commons' server+client+SDK. Like rdqm-install, mq-install reads its tarball from
-# mq_media_dir; point it at the host-durable main-worktree cache (the worktree's build/ is
-# empty). Ubuntu registers online, so no DVD is attached. (#605, #659)
-if [ "$BAKE" = obs ] || [ "$BAKE" = mq-ubuntu ]; then
-  ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz >/dev/null 2>&1 \
-    || { echo "ERROR: UbuntuLinuxX64 MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake" >&2; exit 1; }
-  BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
-fi
+# The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — obs for the
+# mq_prometheus cgo build's SDK, mq-ubuntu for the svc/app/probe commons, and the HA arms
+# (nativeha-ubuntu, pcmk-ubuntu) for their cluster nodes' server. (infra is BIND9 — no MQ.)
+# Like rdqm-install, mq-install reads its tarball from mq_media_dir; point it at the
+# host-durable main-worktree cache (the worktree's build/ is empty). The deb tarball is
+# arch-specific, so the pre-flight matches the --arch this bake builds for — ARM64 on
+# Apple Silicon, X64 on x86 (#103/#727): a stale X64 literal here hard-failed every arm64
+# bake. Ubuntu registers online, so no DVD is attached. (#605, #659)
+case "$BAKE" in
+  obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu)
+    case "$ARCH" in
+      aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;
+      *) MQ_MEDIA_TOKEN=UbuntuLinuxX64 ;;  # $ARCH already validated to aarch64|x86_64
+    esac
+    ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-"${MQ_MEDIA_TOKEN}".tar.gz >/dev/null 2>&1 \
+      || { echo "ERROR: ${MQ_MEDIA_TOKEN} MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake (--arch ${ARCH})" >&2; exit 1; }
+    BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
+    ;;
+esac
 
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
+# aarch64 needs UEFI (AAVMF) firmware: on the arm 'virt' machine ACPI requires UEFI (#736),
+# whereas x86/q35 boots on SeaBIOS. Mirror the running lab guests' loader/nvram
+# (platforms.AAVMF_LOADER); cleanup already `undefine --nvram`, so the per-domain VARS goes.
+if [ "$ARCH" = aarch64 ]; then
+  OS_XML="<os>
+    <type arch='${ARCH}' machine='${MACHINE}'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/AAVMF/AAVMF_CODE.fd</loader>
+    <nvram template='/usr/share/AAVMF/AAVMF_VARS.fd'>/var/lib/libvirt/qemu/nvram/${BUILD_DOM}_VARS.fd</nvram>
+  </os>"
+else
+  OS_XML="<os><type arch='${ARCH}' machine='${MACHINE}'>hvm</type></os>"
+fi
 BUILD_XML="$(mktemp)"
 cat > "$BUILD_XML" <<XML
 <domain type='${DOMAIN_TYPE}'>
   <name>${BUILD_DOM}</name>
   <memory unit='MiB'>2048</memory>
   <vcpu>2</vcpu>
-  <os><type arch='x86_64' machine='q35'>hvm</type></os>
+  ${OS_XML}
   <features><acpi/></features>
   <cpu mode='${CPU_MODE}'/>
   <on_poweroff>destroy</on_poweroff>
   <devices>
+    <emulator>/usr/bin/qemu-system-${ARCH}</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
       <source file='${IMG}'/>

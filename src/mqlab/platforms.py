@@ -87,7 +87,7 @@ def _provider(
     box: dict[str, Any],
     facts: HostFacts,
 ) -> ResolvedNode:
-    guest = box["arch"]
+    guest = box_build_arch(box, facts)
     if guest == AARCH64 and facts.arch == X86_64:
         raise PlatformError(f"node {name}: emulating ARM on x86 is unsupported")
     kvm = guest == facts.arch and facts.kvm
@@ -112,17 +112,48 @@ def _provider(
     )
 
 
-def build_domain_virt(facts: HostFacts) -> tuple[str, str]:
-    """(domain_type, cpu_mode) for the local x86_64 RHEL box build.
+def box_build_domain_virt(box_arch: str, facts: HostFacts) -> tuple[str, str]:
+    """(domain_type, cpu_mode) for a box build of the given guest arch (#103/#732).
 
-    KVM when the host natively virtualizes x86_64; TCG otherwise (foreign-arch
-    arm64 Mac, or an x86 host without usable /dev/kvm). Pure and display-safe —
-    never raises — mirroring resolve(). The single authority for the box-build
-    domain's virtualization (design D1); build-box.sh consumes the result, it
-    does not re-derive it.
+    KVM when the box's build arch is native to the host and /dev/kvm is usable;
+    TCG for a foreign-arch guest (e.g. the x86 RHEL box on an arm64 Mac) or when
+    KVM is absent. This is the guest-arch-aware authority the fat-box builder
+    consumes — an arm64 Ubuntu box on Apple Silicon builds under native KVM, not
+    TCG. Pure and display-safe — never raises — mirroring resolve().
     """
-    kvm = facts.arch == X86_64 and facts.kvm
+    kvm = box_arch == facts.arch and facts.kvm
     return ("kvm", CPU_KVM) if kvm else ("qemu", CPU_TCG)
+
+
+def build_domain_virt(facts: HostFacts) -> tuple[str, str]:
+    """(domain_type, cpu_mode) for the local x86_64 base-OS RHEL box build.
+
+    The base box (build-box.sh) is always an x86_64 guest, so this is the
+    ``box_arch == X86_64`` case of box_build_domain_virt: KVM on a native-x86 host,
+    TCG on the arm64 Mac (foreign-arch) or without usable /dev/kvm (#327).
+    """
+    return box_build_domain_virt(X86_64, facts)
+
+
+def box_build_arch(entry: dict[str, Any], facts: HostFacts) -> str:
+    """The build/guest arch for a fat/base box (design D1, #103).
+
+    A box that pins its arch (RHEL: ``arch: x86_64``) keeps it on every host; an
+    un-pinned box (host-resolved Ubuntu fat box) tracks the host. Pure and
+    display-safe — never raises — mirroring resolve(). build-fatbox.sh consumes
+    the result via --arch; it does not re-derive it.
+    """
+    return entry.get("arch") or facts.arch
+
+
+def is_foreign_box_build(entry: dict[str, Any], facts: HostFacts) -> bool:
+    """True when this box pins an arch other than the host's — a build that would
+    be fully emulated (e.g. the RHEL box on Apple Silicon). The orchestrator
+    refuses it (design D11, #103); this predicate stays pure so status paths can
+    call it safely.
+    """
+    pinned = entry.get("arch")
+    return bool(pinned) and pinned != facts.arch
 
 
 def render_resolved(topo: dict[str, Any], facts: HostFacts) -> str:

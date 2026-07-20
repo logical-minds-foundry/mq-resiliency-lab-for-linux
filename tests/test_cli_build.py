@@ -76,10 +76,16 @@ def test_build_migrate_dry_run_and_real(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli.buildenv, "migrate", lambda repo, *, dry_run: [("/a/mq", "/a/cache/mq")]
     )
+    # migrate also renames the per-host box cache to the arch-suffixed scheme (#103 T4).
+    monkeypatch.setattr(
+        cli.box, "migrate_box_cache", lambda *, dry_run: [("/b/x.box", "/b/x-x86_64.box")]
+    )
     dry = runner.invoke(cli.app, ["build", "migrate", "--dry-run"])
     assert "PLAN /a/mq -> /a/cache/mq" in dry.stdout
+    assert "PLAN /b/x.box -> /b/x-x86_64.box" in dry.stdout
     real = runner.invoke(cli.app, ["build", "migrate"])
     assert "MOVED /a/mq -> /a/cache/mq" in real.stdout
+    assert "MOVED /b/x.box -> /b/x-x86_64.box" in real.stdout
 
 
 # --- the real seams delegate to buildenv with repo_root() ---

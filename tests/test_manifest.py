@@ -3,6 +3,10 @@ from __future__ import annotations
 import pytest
 
 from mqlab import manifest as m
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
+
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
 
 
 def _write(tmp_path, rel, text):
@@ -25,40 +29,55 @@ def manifests(tmp_path, monkeypatch):
 
 
 def test_tarball_name_maps_version_and_arch():
+    # Arch-explicit / x86-pinned platforms are facts-independent — the pin decides.
     assert (
-        m.tarball_name("9.4.5.0", "ubuntu2404-arm64")
+        m.tarball_name("9.4.5.0", "ubuntu2404-arm64", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
     )
     assert (
-        m.tarball_name("9.4.5.0", "ubuntu2404-x86_64")
+        m.tarball_name("9.4.5.0", "ubuntu2404-x86_64", facts=ARM)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
     )
     assert (
-        m.tarball_name("9.4.5.0", "rhel96-x86_64")
+        m.tarball_name("9.4.5.0", "rhel96-x86_64", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
     # The fat RDQM box platform (#604) takes the same LinuxX64 tarball as rhel96-x86_64,
     # so the rdqm_a/rdqm_b nodes repointed at it still resolve their MQ media.
     assert (
-        m.tarball_name("9.4.5.0", "mq-rdqm-rhel9")
+        m.tarball_name("9.4.5.0", "mq-rdqm-rhel9", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
-    )
-    # The fat obs box platform (#605) takes the same UbuntuLinuxX64 tarball as
-    # ubuntu2404-x86_64, so the obs node repointed at it resolves via the commons ensure.
-    assert (
-        m.tarball_name("9.4.5.0", "obs-ubuntu2404")
-        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
-    )
-    # The fat MQ-commons box platform (#659) takes the same UbuntuLinuxX64 tarball too, so
-    # the svc/app/probe nodes repointed at it resolve their MQ media via the commons ensure.
-    assert (
-        m.tarball_name("9.4.5.0", "mq-ubuntu2404")
-        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
     )
     # The fat native-HA RHEL box platform (#667/#668) takes the same LinuxX64 tarball as
     # rhel96-x86_64, so the nha-rhel-* nodes repointed at it resolve their MQ media.
     assert (
-        m.tarball_name("9.4.5.0", "mq-nativeha-rhel9")
+        m.tarball_name("9.4.5.0", "mq-nativeha-rhel9", facts=X86)
+        == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    )
+
+
+def test_tarball_name_ubuntu_fat_box_tracks_host_arch():
+    # #103 D10 (the arm64 crux): the un-pinned Ubuntu fat boxes (obs/mq-ubuntu2404) have
+    # ONE platform name but TWO arch-variant tarballs. Acquisition resolves the arch
+    # through the same box_build_arch authority the box builder consumes, so it stages
+    # UbuntuLinuxARM64 on Apple Silicon and UbuntuLinuxX64 on the cloud — bake + acquire
+    # agree by construction, never the baked-in x86 literal of the old box-name mapping.
+    for platform in ("mq-ubuntu2404", "obs-ubuntu2404", "mq-nativeha-ubuntu"):
+        assert (
+            m.tarball_name("9.4.5.0", platform, facts=ARM)
+            == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
+        )
+        assert (
+            m.tarball_name("9.4.5.0", platform, facts=X86)
+            == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
+        )
+
+
+def test_tarball_name_rhel_fat_box_stays_x64_on_arm():
+    # RHEL is x86-pinned (#103 D11): even resolved under arm64 facts its tarball stays
+    # LinuxX64 — the pin, not the host, decides. (Guards against over-eager host-tracking.)
+    assert (
+        m.tarball_name("9.4.5.0", "mq-nativeha-rhel9", facts=ARM)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
 
@@ -81,6 +100,7 @@ def test_every_topology_mq_platform_resolves_to_a_tarball():
     for stack in lab_stacks().values():
         platforms |= cli._stack_mq_platforms(stack)
     assert "mq-nativeha-rhel9" in platforms  # the #668 repoint is represented
+    assert "mq-nativeha-ubuntu" in platforms  # the #103 T6 repoint is represented
     for platform in sorted(platforms):
         m.tarball_name(m.DEFAULT_MQ_VERSION, platform)  # must not raise ValueError
 

@@ -153,3 +153,61 @@ def test_build_domain_virt_x86_host_without_kvm_falls_back_to_tcg():
 def test_build_domain_virt_arm_host_is_foreign_tcg():
     # x86_64 guest on an arm64 Mac is foreign-arch — must be TCG.
     assert p.build_domain_virt(ARM_KVM) == ("qemu", "maximum")
+
+
+def test_box_build_domain_virt_native_arm_ubuntu_is_kvm():
+    # #732: an arm64 Ubuntu box on the arm64 host is NATIVE — KVM, not TCG.
+    assert p.box_build_domain_virt("aarch64", ARM_KVM) == ("kvm", "host-passthrough")
+
+
+def test_box_build_domain_virt_native_x86_is_kvm():
+    assert p.box_build_domain_virt("x86_64", X86_KVM) == ("kvm", "host-passthrough")
+
+
+def test_box_build_domain_virt_foreign_x86_on_arm_is_tcg():
+    # x86 box (RHEL) on the arm64 Mac — foreign guest, must be TCG.
+    assert p.box_build_domain_virt("x86_64", ARM_KVM) == ("qemu", "maximum")
+
+
+def test_box_build_domain_virt_native_arch_without_kvm_is_tcg():
+    # native arch but no usable /dev/kvm (e.g. x86 CI) — TCG.
+    assert p.box_build_domain_virt("x86_64", X86_NOKVM) == ("qemu", "maximum")
+
+
+def test_box_build_arch_rhel_is_x86_on_any_host():
+    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    assert p.box_build_arch(rhel, X86_KVM) == "x86_64"
+    assert p.box_build_arch(rhel, ARM_KVM) == "x86_64"  # still x86 on the Mac
+
+
+def test_box_build_arch_unpinned_ubuntu_tracks_host():
+    ubuntu = {"box": "cloud-image/ubuntu-24.04"}  # no arch pin
+    assert p.box_build_arch(ubuntu, X86_KVM) == "x86_64"
+    assert p.box_build_arch(ubuntu, ARM_KVM) == "aarch64"
+
+
+def test_is_foreign_box_build_true_for_rhel_on_arm():
+    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    assert p.is_foreign_box_build(rhel, ARM_KVM) is True
+    assert p.is_foreign_box_build(rhel, X86_KVM) is False
+
+
+def test_is_foreign_box_build_false_for_unpinned_ubuntu():
+    ubuntu = {"box": "cloud-image/ubuntu-24.04"}  # host-resolved — matches any host
+    assert p.is_foreign_box_build(ubuntu, ARM_KVM) is False
+    assert p.is_foreign_box_build(ubuntu, X86_KVM) is False
+
+
+def test_resolve_unpinned_ubuntu_fat_box_tracks_host():
+    # #103 D3/D10: an un-pinned Ubuntu fat box (no `arch:` in its registry entry)
+    # resolves its guest arch from the host — native arm64 on Apple Silicon, x86_64
+    # on the cloud — via the box_build_arch authority, so resolve()/ResolvedNode work
+    # without a pin. RHEL fat boxes keep their explicit pin (tested above).
+    topo = {
+        "boxes": {"mq-ubuntu2404": {"box": "mq-ubuntu2404"}},  # host-resolved, no pin
+        "defaults": {"cpus": 1, "memory": 1024},
+        "nodes": {"svc": {"platform": "mq-ubuntu2404", "nics": {"net-mgmt": "10.50.0.50"}}},
+    }
+    arm = p.resolve(topo, ARM_KVM)["svc"]
+    assert (arm.arch, arm.driver) == (AARCH64, "kvm")  # native arm64 on the Mac
+    assert p.resolve(topo, X86_KVM)["svc"].arch == X86_64  # tracks x86 on the cloud

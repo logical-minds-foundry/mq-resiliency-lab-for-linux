@@ -53,21 +53,21 @@ boxes:
   # slow cgo mq_prometheus exporter build + MQ SDK BAKED IN (lab/boxes/build-fatbox.sh
   # --box obs-ubuntu2404). The obs node boots this instead of the host-resolved Ubuntu
   # platform so a bootstrap skips the stack install; the per-run path only renders the
-  # topology targets/dashboards (site-obs.yml, configure halves). x86_64 because the box
-  # is a baked x86 artifact (no DVD — Ubuntu registers online).
+  # topology targets/dashboards (site-obs.yml, configure halves). host-resolved (#103) —
+  # arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
+  # x86_64 on the cloud), so the guest arch is not pinned (no DVD — Ubuntu registers online).
   obs-ubuntu2404:
     box: obs-ubuntu2404
-    arch: x86_64
   # The fat infra box (#606, epic .github#70): the cloud-image/ubuntu-24.04 base with
   # BIND9 (package + /etc/bind/zones scaffolding) + node-exporter + alloy BAKED IN
   # (lab/boxes/build-fatbox.sh --box infra-ubuntu2404). The infra nodes boot this
   # instead of the bare Ubuntu image so a bootstrap skips those installs; the per-run
   # configure half (zone data + per-host named.conf, base-OS apt refresh) still runs.
-  # arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked binaries are
-  # arch-specific and the box is baked on x86_64. No DVD (Ubuntu uses the online archive).
+  # host-resolved (#103) — arch tracks the host: the baked binaries are arch-specific but
+  # the box is baked natively per host (arm64 on Apple Silicon, x86_64 on the cloud), so
+  # the guest arch is not pinned. No DVD (Ubuntu uses the online archive).
   infra-ubuntu2404:
     box: infra-ubuntu2404
-    arch: x86_64
   # The fat MQ-commons box (#659, epic .github#70): the cloud-image/ubuntu-24.04 base with
   # the Ubuntu MQ product (server + client + SDK + samples debs) + node-exporter + alloy +
   # the slow cgo mq_prometheus exporter build + acl BAKED IN (lab/boxes/build-fatbox.sh
@@ -75,11 +75,36 @@ boxes:
   # mon-probe) boot this instead of the host-resolved Ubuntu platform so a bootstrap skips
   # ~15-20 min of per-run installs (MQ debs, alloy, mq_prometheus, the acl stall); the
   # per-run configure half (QMs/channels on svc, the app-requester, the exporter instances)
-  # still runs. arch is pinned x86_64 (unlike host-resolved Ubuntu nodes): the baked
-  # binaries are arch-specific and the box is baked on x86_64. No DVD (Ubuntu online archive).
+  # still runs. host-resolved (#103) — arch tracks the host: the baked binaries (incl. the
+  # arch-specific MQ debs) are baked natively per host (arm64 on Apple Silicon, x86_64 on
+  # the cloud), so the guest arch is not pinned. No DVD (Ubuntu online archive).
   mq-ubuntu2404:
     box: mq-ubuntu2404
-    arch: x86_64
+  # The fat native-HA Ubuntu box (#103 T6, epic .github#103): the cloud-image/ubuntu-24.04
+  # base with base IBM MQ (server + client + SDK + samples debs) + node-exporter + alloy
+  # BAKED IN (lab/boxes/build-fatbox.sh --box mq-nativeha-ubuntu) — the OS-as-only-variable
+  # peer of mq-nativeha-rhel9. The six nha-ubuntu-* nodes boot this instead of the bare
+  # host-resolved Ubuntu platform so a bootstrap skips the MQ install; the per-run configure
+  # half (crtmqm, the NativeHAInstance peer set, the mqmonitor@ lifecycle, TLS/CRR) still
+  # runs. host-resolved (#103) — arch tracks the host: the box is baked natively per host
+  # (arm64 on Apple Silicon, x86_64 on the cloud), so the guest arch is NOT pinned. UNLIKE
+  # mq-nativeha-rhel9 there is NO DVD (Ubuntu registers online) and — like both Native HA
+  # arms — NO extra_disk (raft-log replication, not DRBD).
+  mq-nativeha-ubuntu:
+    box: mq-nativeha-ubuntu
+  # The fat pcmk-ubuntu box (#103 T7, epic .github#103): the cloud-image/ubuntu-24.04
+  # base with base IBM MQ (server + client + SDK + samples debs) + node-exporter + alloy
+  # BAKED IN (lab/boxes/build-fatbox.sh --box pcmk-ubuntu). The six Pacemaker CLUSTER nodes
+  # (pcmk-a1..3, pcmk-b1..3) boot this instead of the bare host-resolved Ubuntu platform so
+  # a bootstrap skips the MQ product install; the per-run configure half (iSCSI initiators,
+  # Pacemaker cluster formation, STONITH, the mq-pcmk-qmgr resource group, TLS/CRR) still
+  # runs. Only the static PRODUCT install is baked — no QM, no cluster, no SAN. host-resolved
+  # (#103) — arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
+  # x86_64 on the cloud), so the guest arch is NOT pinned. No DVD (Ubuntu registers online).
+  # The SAN targets (san-a/san-b) carry NO MQ payload, so they are NOT repointed here — they
+  # stay host-resolved on the base box (design D8, deferred to the SAN-hosts epic #108).
+  pcmk-ubuntu:
+    box: pcmk-ubuntu
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -183,15 +208,23 @@ nodes:
   san-a:
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.5, net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
+  # The six Pacemaker CLUSTER nodes boot the baked pcmk-ubuntu fat box (#103 T7) so a
+  # bootstrap skips the MQ product install; the per-run cluster/SAN/STONITH/QM formation
+  # still runs. host-arch resolution is preserved AT THE BOX LAYER (the pcmk-ubuntu box
+  # carries no `arch:` pin). The SAN targets san-a/san-b are NOT repointed — no MQ payload,
+  # so they stay host-resolved on the base Ubuntu box (design D8).
   pcmk-a1:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51, net-ext: 10.60.0.51 }
   pcmk-a2:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52, net-ext: 10.60.0.52 }
   pcmk-a3:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53, net-ext: 10.60.0.53 }
@@ -204,14 +237,17 @@ nodes:
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.6, net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
   pcmk-b1:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61, net-ext: 10.60.0.61 }
   pcmk-b2:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62, net-ext: 10.60.0.62 }
   pcmk-b3:
+    platform: pcmk-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
@@ -282,31 +318,39 @@ nodes:
   # arm (rdqm .3x/.4x, pcmk .5x/.6x, pcmk-rhel .7x, nha-rhel .9x) so this arm can
   # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
   #
-  # Platform is host-resolved (#276, no `platform:` key) — NOT pinned to x86 like
-  # nha-rhel. On the Apple-Silicon dev host these run native arm64 (so the two
-  # Ubuntu stacks are usable side-by-side); on an x86 host they track x86_64. All
-  # three instances share one arch either way, which is all Native HA requires.
+  # They boot the baked mq-nativeha-ubuntu fat box (#103 T6) so a bootstrap skips the MQ
+  # install — the OS-as-only-variable peer of the x86-pinned nha-rhel arm. Host-arch
+  # resolution is preserved AT THE BOX LAYER (the mq-nativeha-ubuntu box carries no `arch:`
+  # pin): on the Apple-Silicon dev host these run native arm64 (so the two Ubuntu stacks
+  # are usable side-by-side); on an x86 host they track x86_64. All three instances share
+  # one arch either way, which is all Native HA requires.
   nha-ubuntu-a1:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.11, net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11, net-wan: 10.99.0.11, net-ext: 10.60.0.11 }
   nha-ubuntu-a2:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.12, net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12, net-wan: 10.99.0.12, net-ext: 10.60.0.12 }
   nha-ubuntu-a3:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.13, net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13, net-wan: 10.99.0.13, net-ext: 10.60.0.13 }
   nha-ubuntu-b1:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.14, net-data-b: 10.10.2.11, net-hb-b: 172.16.2.11, net-wan: 10.99.0.14 }
   nha-ubuntu-b2:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.15, net-data-b: 10.10.2.12, net-hb-b: 172.16.2.12, net-wan: 10.99.0.15 }
   nha-ubuntu-b3:
+    platform: mq-nativeha-ubuntu
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }

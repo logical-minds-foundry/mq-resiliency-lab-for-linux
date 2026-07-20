@@ -47,7 +47,14 @@ from mqlab.phases import (
     build_states,
     first_unsatisfied,
 )
-from mqlab.platforms import PlatformError, build_domain_virt, ensure_resolved
+from mqlab.platforms import (
+    PlatformError,
+    box_build_arch,
+    box_build_domain_virt,
+    build_domain_virt,
+    ensure_resolved,
+    is_foreign_box_build,
+)
 from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
@@ -383,8 +390,11 @@ def build_status() -> None:
 
 @build_app.command("migrate")
 def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -> None:
-    """Move existing top-level build/ contents into buckets (idempotent)."""
+    """Move existing top-level build/ contents into buckets + rename the per-host box
+    cache to the arch-suffixed `<box>-<arch>.box` scheme (idempotent, #103 D5)."""
     for src, dst in buildenv.migrate(repo_root(), dry_run=dry_run):
+        typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
+    for src, dst in box.migrate_box_cache(dry_run=dry_run):
         typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
 
 
@@ -900,6 +910,8 @@ _LOCAL_BOX_BUILDERS = {
     "infra-ubuntu2404": "lab/boxes/build-fatbox.sh",
     "mq-ubuntu2404": "lab/boxes/build-fatbox.sh",
     "mq-nativeha-rhel9": "lab/boxes/build-fatbox.sh",
+    "mq-nativeha-ubuntu": "lab/boxes/build-fatbox.sh",
+    "pcmk-ubuntu": "lab/boxes/build-fatbox.sh",
 }
 
 
@@ -920,7 +932,7 @@ def parse_box_list(text: str) -> dict[str, str]:
 from mqlab import box  # noqa: E402
 
 box_app = typer.Typer(
-    help="baked-box fleet: status/build/rebuild/clean the five local-built boxes",
+    help="baked-box fleet: status/build/rebuild/clean the eight local-built boxes",
     no_args_is_help=True,
 )
 app.add_typer(box_app, name="box")
@@ -1006,6 +1018,18 @@ def _resolved_nodes() -> dict[str, Any]:
     return nodes
 
 
+def _box_registry() -> dict[str, dict[str, Any]]:
+    """The `boxes:` registry from lab/topology.yaml (box name -> entry).
+
+    The resolved topology (#276) carries only `nodes:`; the box registry with each
+    box's optional `arch:` pin lives in the source topology, so read it there."""
+    import yaml as _yaml
+
+    data = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    boxes: dict[str, dict[str, Any]] = data.get("boxes", {})
+    return boxes
+
+
 def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
     """Local-built boxes the given guests need -> build script."""
     nodes = _resolved_nodes()
@@ -1022,19 +1046,36 @@ def _guests_need_dvd(guests: list[str]) -> bool:
 def _box_build_steps(
     needed: dict[str, str], present: dict[str, str], facts: HostFacts, *, force: bool = False
 ) -> list[CommandStep]:
-    # build_domain_virt is the single authority for whether the build runs under KVM
-    # (native x86 host) or TCG (#327). The base-OS builder (build-box.sh) takes only
-    # the virt flags; the box-parameterized fat-box builder (build-fatbox.sh) also
-    # takes `--box <name>` so one script serves every fat box (#603). force appends
-    # --rebuild-box so the builder overwrites its cache — the `box rebuild` tier (#91).
-    domain_type, cpu_mode = build_domain_virt(facts)
+    # The domain virt (KVM vs TCG) is guest-arch-aware, per box: a fat box builds
+    # under native KVM when its build arch is the host's, else TCG (#732). The base-OS
+    # builder (build-box.sh) takes only the virt flags (always an x86_64 guest); the
+    # box-parameterized fat-box builder (build-fatbox.sh) also takes `--box <name>` +
+    # the required `--arch` so one script serves every fat box on either host (#603/#103).
+    # force appends --rebuild-box so the builder overwrites its cache (`box rebuild`, #91).
+    registry = _box_registry()
     steps: list[CommandStep] = []
     for name, script in sorted(needed.items()):
         if name in present:
             continue
+        entry = registry.get(name, {})
+        # DEPRECATED, not removed (#103 D11): emulated cross-arch box builds (e.g. the
+        # RHEL box on Apple Silicon) are refused here. The emulated build path in
+        # build-fatbox.sh + box_build_domain_virt's TCG branch is retained for a future
+        # standalone non-HA/DR RHEL lab; re-enable by lifting this guard.
+        if is_foreign_box_build(entry, facts):
+            raise StepFailedError(
+                f"box {name} pins arch {entry['arch']} but this host is {facts.arch}: "
+                f"emulated cross-arch box builds are disabled (#103 D11). "
+                f"Build it on the x86 host.",
+                2,
+            )
         argv = ["bash", str(repo_root() / script)]
         if script.endswith("build-fatbox.sh"):
-            argv += ["--box", name]
+            box_arch = box_build_arch(entry, facts)
+            domain_type, cpu_mode = box_build_domain_virt(box_arch, facts)
+            argv += ["--box", name, "--arch", box_arch]
+        else:
+            domain_type, cpu_mode = build_domain_virt(facts)  # x86_64 base-OS box
         argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
         if force:
             argv.append("--rebuild-box")
