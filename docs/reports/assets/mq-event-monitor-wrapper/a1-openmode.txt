@@ -1,0 +1,66 @@
+# A1 — event-queue open mode (NHAUAPP, active nha-ubuntu-a3), 2026-07-21T20:37:12Z
+# amqsevta.c opens with MQOO_INPUT_AS_Q_DEF -> actual mode = queue DEFSOPT
+[ERROR]: Task failed: Module failed: The command exited with a non-zero return code.
+Origin: <adhoc 'shell' task>
+
+{'action': 'shell', 'args': {'_raw_params': 'su - mqm -c \'printf "DISPLAY QLOCAL(SYSTEM.ADMIN.QMGR.EVENT) DEFSOPT [...]
+
+nha-ubuntu-a3 | FAILED | rc=10 >>
+5724-H72 (C) Copyright IBM Corp. 1994, 2026.
+Starting MQSC for queue manager NHAUAPP.
+
+
+     1 : DISPLAY QLOCAL(SYSTEM.ADMIN.QMGR.EVENT) DEFSOPT DEFTYPE
+AMQ8409I: Display Queue details.
+   QUEUE(SYSTEM.ADMIN.QMGR.EVENT)          TYPE(QLOCAL)
+   DEFSOPT(EXCL)                           DEFTYPE(PREDEFINED)
+     2 : DISPLAY QSTATUS(SYSTEM.ADMIN.QMGR.EVENT) TYPE(HANDLE) OPENOPTS OPENINPT APPLTAG
+AMQ8405I: Syntax error detected at or near end of command segment below:-
+DISPLAY QSTATUS(SYSTEM.ADMIN.QMGR.EVENT) TYPE(HANDLE) OPENOPTS
+
+AMQ8427I: Valid syntax for the MQSC command:
+
+  DISPLAY QSTATUS( q_name ) TYPE( QUEUE )
+
+     [ WHERE( filter_keyword operator filter_value ) ]
+
+     [ CURDEPTH ] [ CURFSIZE ] [ CURMAXFS ] [ IPPROCS  ] [ MEDIALOG ]
+     [ LGETDATE ] [ LGETTIME ] [ LPUTDATE ] [ LPUTTIME ] [ MONITOR  ]
+     [ MONQ     ] [ MSGAGE   ] [ OPPROCS  ] [ QTIME    ] [ UNCOM    ]
+
+
+  DISPLAY QSTATUS( q_name ) TYPE ( HANDLE )
+
+     [ WHERE( filter_keyword operator filter_value ) ]
+
+     [ OPENTYPE ( ALL | INPUT | OUTPUT ) ]
+     [ APPLDESC ] [ APPLTAG  ] [ APPLTYPE ] [ ASTATE   ] [ BROWSE   ]
+     [ CHANNEL  ] [ CONNAME  ] [ HSTATE   ] [ INPUT    ] [ INQUIRE  ]
+     [ OUTPUT   ] [ PID      ] [ QMURID   ] [ SET      ] [ TID      ]
+     [ URID     ] [ URTYPE   ] [ USERID   ]
+2 MQSC commands read.
+One command has a syntax error.
+All valid MQSC commands were processed.The command exited with a non-zero return code.
+
+# --- live handle corroboration (DISPLAY QSTATUS ... TYPE(HANDLE) ALL) ---
+nha-ubuntu-a3 | CHANGED | rc=0 >>
+5724-H72 (C) Copyright IBM Corp. 1994, 2026.
+Starting MQSC for queue manager NHAUAPP.
+
+
+     1 : DISPLAY QSTATUS(SYSTEM.ADMIN.QMGR.EVENT) TYPE(HANDLE) ALL
+AMQ8450I: Display queue status details.
+   QUEUE(SYSTEM.ADMIN.QMGR.EVENT)          TYPE(HANDLE)
+   APPLDESC( )                             APPLTAG(amqsevt)
+   APPLTYPE(USER)                          BROWSE(NO)
+   CHANNEL( )                              CONNAME( )
+   ASTATE(NONE)                            HSTATE(INACTIVE)
+   INPUT(EXCL)                             INQUIRE(NO)
+   OUTPUT(NO)                              PID(5562) 
+   QMURID(0.0)                             SET(NO)
+   TID(1)                               
+   URID(XA_FORMATID[] XA_GTRID[] XA_BQUAL[])
+   URTYPE(QMGR)                            USERID(mqm)
+One MQSC command read.
+No commands have a syntax error.
+All valid MQSC commands were processed.

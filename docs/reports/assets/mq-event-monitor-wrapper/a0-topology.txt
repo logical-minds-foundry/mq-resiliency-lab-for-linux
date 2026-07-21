@@ -1,0 +1,11 @@
+# A0 — MQ SERVICE spawn topology (nha-ubuntu-a3, active NHAUAPP instance), 2026-07-21T20:33:35Z
+# Columns: PID PPID PGID SID USER ARGS
+nha-ubuntu-a3 | CHANGED | rc=0 >>
+   5455    5441    5455    5455 mqm      /opt/mqm/bin/amqzmgr0 -m NHAUAPP
+   5513    5455    5455    5455 mqm      /opt/mqm/bin/amqpcsea NHAUAPP
+   5562    5455    5455    5455 mqm      /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+
+# amqsevt(5562): PGID=5455 != PID -> NOT a group leader (shares amqzmgr0's group)
+# amqzmgr0(5455): PGID=SID=PID=5455 -> the MQ service manager IS the group/session leader
+# => MQ starts STARTCMD as a child in amqzmgr0's group, not as its own leader.
+# => setsid execs in place (no fork); wrapper becomes its own leader, MQ_SERVER_PID==PGID. Mechanism viable.
