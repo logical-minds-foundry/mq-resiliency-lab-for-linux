@@ -214,6 +214,28 @@
         mq_qmini_path: "{{ rdqm_datapath }}/qm.ini"
       when: rdqm_is_active
 
+    # Event monitoring (#514 enable + #515 collector), the lab-wide standard (epic .github#114).
+    # Host-prep runs on EVERY rdqm node (any node can become primary on an HA/DR move, so the
+    # run.sh wrapper must be present everywhere the SERVICE could STARTCMD it). The journald
+    # rate-limit drop-in the host-prep asserts is baked into the box (rdqm-install `install`).
+    - name: event monitoring — host prep (wrapper on every rdqm node) (#114)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+      vars:
+        qmgr_name: "{{ qm_app }}"
+
+    # The QM-level MQSC (enable classes + define/start the collector SERVICE) runs ONCE on the
+    # active RDQM node — mirroring the mq-diag-logging/qmini gating above. The SERVICE object
+    # lands in RDQMAPP on the DRBD-replicated DataPath and follows the QM across HA/DR moves;
+    # CONTROL(QMGR) auto-starts it on the node RDQM lands the QM on (wrapper present, above).
+    - name: event monitoring — enable classes + define/start collector (active RDQM node) (#114)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+        tasks_from: service
+      vars:
+        qmgr_name: "{{ qm_app }}"
+      when: rdqm_is_active
+
 # TLS-enable the app QM (#410, #426): wire its lab-pki keystore and secure the
 # app-facing channels (APP.SVRCONN, MON.SVRCONN, inter-QM SDR/RCVR) to parity with
 # the pcmk/nativeha arms. Runs on the active site-A node AFTER qm-create (the QM + its
