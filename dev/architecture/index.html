@@ -1156,7 +1156,8 @@ that serves connected MQ clients. Reserving the word "service" for the external
 counterparty avoids the ambiguity the two layers would otherwise create.</p>
 </blockquote>
 <h2 id="layer-1-the-host-and-its-vms">Layer 1 — The host and its VMs<a class="headerlink" href="#layer-1-the-host-and-its-vms" title="Permanent link">&para;</a></h2>
-<p>The lab lives on an Apple-silicon Mac running Vergil identities. Each
+<p>The lab lives on a build host — an Apple-silicon Mac or an x86 Linux
+machine — running Vergil identities. Each
 identity has a <code>base</code> VM and may have a repo-scoped VM. The <code>vergil-user</code>
 identity (where work happens) carries a <code>base</code> VM <strong>and</strong> a repo-scoped VM
 for this project — that repo-scoped VM is the lab ("the big special one"),
