@@ -142,6 +142,16 @@
     # 2d. setmqaut grants (#74): the minimal least-privilege authority surface, one
     #     invocation per grant. -t qmgr grants omit -n. Records live on the LUN so
     #     they follow the QM on failover.
+    # setmqaut needs the QM RUNNING (AMQ7028E otherwise); the authorization MQSC
+    # above ended with `endmqm -w`, so start it first. The refresh-auth task below
+    # strmqm/endmqm-cycles again, so the QM still ends stopped for the Pacemaker handover.
+    - name: start the QM for the setmqaut grants
+      ansible.builtin.shell: su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
+      args:
+        executable: /bin/bash
+      run_once: true
+      changed_when: true
+
     - name: apply setmqaut grants (least-privilege OAM)
       ansible.builtin.command:
         cmd: >
