@@ -29,7 +29,7 @@
       - { name: pcmk-b2, hb: 172.16.2.62 }
       - { name: pcmk-b3, hb: 172.16.2.63 }
     fence_hypervisor_ip: 192.168.121.1
-    fence_hypervisor_user: pmoore
+    fence_hypervisor_user: "{{ lookup('env', 'USER') }}"
   roles: [pcmk-cluster]
 - hosts: pcmk_b
   vars: *b_vars
