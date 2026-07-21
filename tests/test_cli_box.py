@@ -350,8 +350,22 @@ def test_box_status_explicit_boxes(monkeypatch):
 # --------------------------------------------------------------------------- #
 def _stub_build_env(monkeypatch, steps_sink):
     monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box, "ensure_resolved", lambda: None)
     monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
     monkeypatch.setattr(box, "run_steps", lambda steps, **kw: steps_sink.extend(steps))
+
+
+def test_build_boxes_renders_resolved_topology(monkeypatch):
+    # #737: box build must render build/work/lab/topology.resolved.yaml before the
+    # builder's final `vagrant box add` loads the Vagrantfile (which guards on it) —
+    # standalone `box build` otherwise dies at box registration on a fresh checkout.
+    called: list = []
+    monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box, "ensure_resolved", lambda: called.append(True))
+    monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
+    monkeypatch.setattr(box, "run_steps", lambda steps, **kw: None)
+    box.build_boxes(["mq-rdqm-rhel9"], force=False)
+    assert called == [True]
 
 
 def test_build_boxes_force_adds_rebuild_flag(monkeypatch):
@@ -373,6 +387,7 @@ def test_build_boxes_non_force_omits_rebuild_flag(monkeypatch):
 
 def test_build_boxes_raises_typer_exit_on_step_failure(monkeypatch):
     monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box, "ensure_resolved", lambda: None)
     monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
 
     def _boom(steps, **kw):

@@ -15,7 +15,7 @@ path <bucket>` is the same authority for shell and other non-Python consumers.
 | Bucket   | Scope  | Lifecycle (when `clean` removes it)        | Holds |
 |----------|--------|---------------------------------------------|-------|
 | `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), doc refs (`refs/`), `ansible_collections/` |
-| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/`, `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the `vagrant/` dotfile (domain↔vagrant mapping + keys), the operator-curated `rhel-ha/` package repo, manifest selection pins |
+| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/` (arch-suffixed `<box>-<arch>.box` + `<box>-<arch>.manifest-hash` pairs), `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the `vagrant/` dotfile (domain↔vagrant mapping + keys), the operator-curated `rhel-ha/` package repo, manifest selection pins |
 | `work/`  | local  | **every** `mqlab build clean`               | deterministic renders — `inventory.ini`, `lab/topology.resolved.yaml`, `box-versions.json`, `versions.json`, `grafana/`, `prometheus/`, `obs/`, `salt/`, manifest overlays |
 | `temp/`  | local  | **every** `mqlab build clean`               | scratch, junk, and the screenshot handoff dir |
 
@@ -60,7 +60,9 @@ only — never VM overlays.**
 
 This persistent-vs-ephemeral split is exactly what makes the **baked-box rebuild
 tiers** cheap. The baked per-role box images live in `state/boxes/` on the
-persistent disk, while the image pool is ephemeral — so a `vrg-vm rebuild` wipes
+persistent disk — each keyed by arch as a `<box>-<arch>.box` +
+`<box>-<arch>.manifest-hash` pair — while the image pool is ephemeral, so a
+`vrg-vm rebuild` wipes
 the pool but keeps the baked boxes, and the lab re-registers them from cache
 instead of re-baking. See [`box-model.md`](box-model.md) for the box taxonomy,
 the build pipeline, and the three rebuild tiers (nuclear / VM rebuild / stack
