@@ -14,18 +14,31 @@ For the exhaustive per-role bake-vs-configure classification, see
 [`box-bake-manifest.md`](box-bake-manifest.md); for where the baked artifacts
 live on disk, see [`build-layout.md`](build-layout.md).
 
-## 1. The five baked boxes
+## 1. The eight local-built boxes
 
-Each box is a **minimal per-role fat box** — it carries only the install surface
-that role needs, nothing more. The taxonomy is **role × platform**:
+The lab builds **eight boxes locally**: the bare `rhel/9.6-x86_64` base box plus
+**seven per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
+carries only the install surface that role needs, nothing more. The taxonomy is
+**role × platform × host-arch**:
 
-| Box | Base | Role(s) that boot it | Bakes |
-|-----|------|----------------------|-------|
-| `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
-| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the slow cgo `mq_prometheus` build + MQ SDK |
-| `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the cgo `mq_prometheus` build + `acl` |
-| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| Box | Base | Arch | Role(s) that boot it | Bakes |
+|-----|------|------|----------------------|-------|
+| `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
+| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the slow cgo `mq_prometheus` build + MQ SDK |
+| `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
+| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the cgo `mq_prometheus` build + `acl` |
+| `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
+
+**Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
+each builds natively for whatever architecture the host runs — `aarch64` on an
+Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
+The two RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`) are **`x86_64`-only**;
+building either on an ARM host is **refused**, not emulated (design D11) — their
+RHEL DVD and MQ's LinuxX64 tarball are x86_64 artifacts. The Pacemaker arm's SAN
+targets (`san-a`/`san-b`) carry no MQ payload, so they stay on the bare Ubuntu base
+and are not baked.
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-ubuntu2404` box: its server-set install carries the client and SDK too, so a
@@ -115,7 +128,9 @@ Two services are the deliberate **benign exceptions**, left enabled at bake
 
 The baked `.box` artifacts live in **`build/state/boxes/`** on the persistent
 `/vergil` data disk (resolved via the *main* worktree, so every git worktree
-shares one cache). Each box has a sibling `<box>.manifest-hash` stamp. Because
+shares one cache). Each box is keyed by arch — `<box>-<arch>.box` (e.g.
+`mq-nativeha-ubuntu-aarch64.box`, `mq-rdqm-rhel9-x86_64.box`) beside a sibling
+`<box>-<arch>.manifest-hash` stamp. Because
 `state/` outlives the VM, a baked box survives a VM rebuild without a re-bake —
 this is the pivot the rebuild tiers in §4 turn on.
 
@@ -148,8 +163,9 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all five boxes (and re-acquires the entitlement-gated
-  state media). This is the only tier that pays the full bake cost.
+  the BUILD path and re-bakes all seven fat boxes (plus the base box, and
+  re-acquires the entitlement-gated state media). This is the only tier that pays
+  the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;
   the image pool and registered Vagrant boxes are gone, but the `.box` cache on the
   persistent `/vergil` disk is untouched. `build-fatbox.sh` hits REUSE and just
@@ -176,8 +192,8 @@ decision, it renders and drives the shell builder's own:
 
 | Verb | What it does |
 |------|--------------|
-| `mqlab box status [BOXES…]` | read-only fleet table: per-box `CACHED` / `AGE` / `HASH` (match\|mismatch) / `REGISTERED` / `DECISION` (REUSE\|BUILD\|STALE\|FORCE). No side effects. |
-| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. `--all` for the whole fleet. Shares the ensure-box core with `bootstrap`. |
+| `mqlab box status [BOXES…]` | read-only fleet table: per-box `ARCH` / `CACHED` / `AGE` / `HASH` (match\|mismatch) / `REGISTERED` / `DECISION` (REUSE\|BUILD\|STALE\|FORCE). The `ARCH` column shows each box's resolved build arch (host-resolved for the Ubuntu boxes, `x86_64` for the RHEL boxes). No side effects. |
+| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet. Shares the ensure-box core with `bootstrap`. |
 | `mqlab box rebuild [BOXES…]` | **force a fresh bake in place** (`--rebuild-box`), overwriting the cache — the targeted "rebake one box" operation, no disk wipe. |
 | `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
 
@@ -222,9 +238,10 @@ directory.
 
 ### Auto-stage on VM build (host-side rsync)
 
-Because `vrg-vm create`/`rebuild` runs natively on the macOS host — the one place
-with access to both the local archive and the (cloud) build volume —
-`lab/scripts/stage-rhel-dvd-from-archive.sh` syncs the archive into `build/state/`:
+Because `vrg-vm create`/`rebuild` runs natively on the build host — arm64 (Apple
+silicon) or x86, the one place with access to both the local archive and the
+(cloud) build volume — `lab/scripts/stage-rhel-dvd-from-archive.sh` syncs the
+archive into `build/state/`:
 
 ```bash
 lab/scripts/stage-rhel-dvd-from-archive.sh            # rsync archive -> build/state/

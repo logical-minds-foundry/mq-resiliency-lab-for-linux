@@ -21,7 +21,8 @@ counterparty (`svc-sim`) over distributed queuing. Everything shown here is
 
 ## Layer 1 — The host and its VMs
 
-The lab lives on an Apple-silicon Mac running Vergil identities. Each
+The lab lives on a build host — an Apple-silicon Mac or an x86 Linux
+machine — running Vergil identities. Each
 identity has a `base` VM and may have a repo-scoped VM. The `vergil-user`
 identity (where work happens) carries a `base` VM **and** a repo-scoped VM
 for this project — that repo-scoped VM is the lab ("the big special one"),

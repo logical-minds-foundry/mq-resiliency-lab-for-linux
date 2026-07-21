@@ -10,11 +10,14 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The epic builds four box images — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
-`infra-ubuntu2404`, and `mq-ubuntu2404` (#659); the follow-on native-HA-RHEL
-baking epic (`logical-minds-foundry/.github#88`) adds a fifth,
-`mq-nativeha-rhel9` (#667). Each carries, as a **baked golden image**, the slow
-install work that never varies per run, so a per-run bootstrap can skip it.
+The lab bakes **seven fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
+`infra-ubuntu2404`, and `mq-ubuntu2404` (#659) from the bootstrap-performance
+epic; `mq-nativeha-rhel9` (#667) from the follow-on native-HA-RHEL baking epic
+(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu` (#103 T6) and
+`pcmk-ubuntu` (#103 T7) from the arch-native box-building epic
+(`logical-minds-foundry/.github#103`). Each carries, as a **baked golden image**,
+the slow install work that never varies per run, so a per-run bootstrap can skip
+it.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -26,7 +29,8 @@ install work that never varies per run, so a per-run bootstrap can skip it.
 
 This document is the classification. The **bake playbooks**
 (`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
-`ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`) and the
+`ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`,
+`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`) and the
 single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
@@ -151,6 +155,39 @@ already `creates:`-guards on its baked binary. So the repointed commons run only
 per-run config + service start (QMs/channels, the app-requester, exporter
 instances, `config.alloy`), never the baked installs.
 
+### `mq-nativeha-ubuntu` → `ansible/bake-nativeha-ubuntu.yml` (#103 T6, epic .github#103)
+
+The Ubuntu OS-as-only-variable peer of `bake-nativeha-rhel.yml`, for the six
+`nha-ubuntu-*` nodes (`nha-ubuntu-a1..3`, `nha-ubuntu-b1..3`) repointed to this box
+so a bootstrap skips their per-run base-MQ install. Native HA replicates in the
+raft log, so — like the RHEL native-HA box — **no DRBD/RDQM and no kernel pin** are
+baked. Host-resolved: the box bakes natively per host (arm64 or x86), so its guest
+arch is not pinned.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-nativeha-ubuntu.yml` — the Ubuntu-side #659 acl-stall kill. |
+| `mq-nativeha` (`tasks_from: install-Debian`) | ✅ install half | Base IBM MQ (server + client + SDK + samples debs, **no** RDQM) via the native-HA OS adapter's **install body only** — the Ubuntu peer of the RHEL box's `install-RedHat`. `main.yml`'s `crtmqm` / peer-set / `mqmonitor@` **formation stays per-run** (see "Stays configure" below). The per-run `install-Debian.yml` skip-if-baked-guards the tar copy/unpack on a stat of `/opt/mqm/inc/cmqc.h` (#103 T6), so the host-arch Ubuntu MQ media is copied once — here. |
+| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a native-HA box. |
+| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+
+### `pcmk-ubuntu` → `ansible/bake-pcmk-ubuntu.yml` (#103 T7, epic .github#103)
+
+The Pacemaker/SAN peer, for the six Pacemaker **cluster** nodes (`pcmk-a1..3`,
+`pcmk-b1..3`) repointed to this box so a bootstrap skips their per-run base-MQ
+install. It bakes the MQ product install the cluster nodes run via `mq-install`
+(the same role `_pcmk-cluster-ha.yml` drives on `pcmk_a`/`pcmk_b`). It does **not**
+touch the SAN targets (`san-a`/`san-b`) — they carry no IBM-MQ payload, so they
+stay host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic
+#108). Host-resolved: baked natively per host (arm64 or x86), guest arch not pinned.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-pcmk.yml` — the pcmk-side #659 acl-stall kill. |
+| `mq-install` | ✅ full | The Ubuntu MQ product via the deb path (server + client + SDK + samples; unpack debs, licence, `setmqinst`, ulimits) — the way the Pacemaker cluster nodes install MQ in `_pcmk-cluster-ha.yml` (`roles: [mq-install]`). **No** RDQM/DRBD, **no** QM created; `crtmqm` / resource-group / cluster formation stay per-run (`mq-pcmk-qmgr`). Already carries the stat-of-`cmqc.h` skip-if-baked guard (#648/#659) and the arch-derived tarball, so the ~700 MB tar copy/unpack + install runs once — here. |
+| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a Pacemaker box. |
+| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+
 ## Stays configure (per-run) — never baked
 
 The whole configure surface: queue-manager and cluster creation
@@ -168,8 +205,8 @@ binary is installed by `rdqm-install`).
 > `mqmonitor@` linking, in `main.yml`) is per-run. Its `install-RedHat` product
 > install is **baked** into `mq-nativeha-rhel9` (bake-set above), exactly as
 > `rdqm-install`'s product install is baked into `mq-rdqm-rhel9`. The role's
-> `install-Debian` half stays per-run until the Ubuntu native-HA arm is baked
-> (`logical-minds-foundry/.github#103`).
+> `install-Debian` half is now **baked** into `mq-nativeha-ubuntu` too (#103 T6,
+> bake-set above), so on both native-HA arms only the per-run formation remains.
 
 ## Deviations from the epic plan's classification head-start
 
@@ -197,16 +234,16 @@ HA does not use it** — `nha-rhel` installs via `mq-nativeha/tasks/install-RedH
 (its own MQ-product install), so no DRBD is ever baked into a native-HA image.
 
 The real smell this surfaces is duplication, not misnaming: the MQ-product install
-(fetch LinuxX64 tar → `mqlicense -accept` → install) is copied across
+(fetch the arch-correct tar → `mqlicense -accept` → install) is copied across
 `rdqm-install`, `mq-nativeha` (RedHat + Debian), `mq-install`, and `mq-client`,
-with no shared building block. Baking makes it visible — `mq-rdqm-rhel9` bakes MQ
-via `rdqm-install`, and `mq-nativeha-rhel9` now bakes the same product via
-`mq-nativeha` (`tasks_from: install-RedHat`, bake-set above). Extracting a shared
-`mq-product-install` `tasks_from` remains open: the duplication is now baked into
-two boxes, and baking the remaining Ubuntu arms (native-HA-Ubuntu + pcmk) will add
-more copies — a natural cleanup for the arch-native box-building epic
-(`logical-minds-foundry/.github#103`), where that generalization forces the
-duplication into the open.
+with no shared building block. Baking makes it visible — the product install is now
+baked into **five** boxes: `mq-rdqm-rhel9` (via `rdqm-install`), `mq-nativeha-rhel9`
+and `mq-nativeha-ubuntu` (via `mq-nativeha` `install-RedHat`/`install-Debian`), and
+`mq-ubuntu2404` and `pcmk-ubuntu` (via `mq-install`). Now that the arch-native
+box-building epic (`logical-minds-foundry/.github#103`) has baked the remaining
+Ubuntu arms, that duplication is fully in the open across every box — so extracting
+a shared `mq-product-install` `tasks_from` is the live cleanup this surfaces, no
+longer a future one.
 
 ## Full-apply proof is deferred
 
