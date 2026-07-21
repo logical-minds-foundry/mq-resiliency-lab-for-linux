@@ -181,6 +181,14 @@ fault drills never sever, so the dashboard stays live exactly when something
 breaks. A second node, **`mon-probe`**, carries the data-net NICs for the MQ
 client exporters that land in a later slice.
 
+Metrics are only half the picture. Every queue manager also ships **MQ
+instrumentation events** — authority failures, channel start/stop, queue-depth
+alarms, and the rest — as `json_compact` JSONL to journald (tag `mq-events`) via
+the shared `mq-event-monitor` role, standard on **every** QM. **Alloy** ships that
+stream to **Loki**, and Grafana surfaces the events alongside the metrics, so the
+boards show both what the fleet is *doing* (metrics) and what MQ is *reporting*
+(events).
+
 Bring the pair up and provision it — one verb, provisioned as code:
 
 ```bash

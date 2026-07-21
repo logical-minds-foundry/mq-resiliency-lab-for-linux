@@ -97,3 +97,23 @@ and RDQM arms (each site, `vip` / `vip_b`), or the **active instance's node IP**
 for the Native HA arms (which have no VIP; the active member is resolved at
 runtime). The topology-derived source of truth for every queue manager's REST
 endpoint is `mqlab rest render`.
+
+## The event feed — MQ instrumentation events (every queue manager)
+
+Every queue manager also runs the **`mq-event-monitor`** MQ SERVICE — an
+`amqsevt` collector defined `CONTROL(QMGR)`, so it starts and stops **with** the
+queue manager and travels with the active instance across HA failover. It
+captures MQ instrumentation events (the standard event classes — authority,
+connection, channel, queue-depth, command, configuration, and the rest) and
+emits them as **`json_compact`** JSONL to journald under the tag **`mq-events`**
+(a small launcher pipes the stream through `logger --size 32768` so long events
+are not truncated). **Alloy** ships the journald stream to **Loki**, and Grafana
+surfaces it alongside the node/MQ metrics — the *event* half of the Watcher's
+picture, complementing the metrics half.
+
+This is a **de-facto standard, not a single-QM proof of concept**: the shared
+`mq-event-monitor` Ansible role configures it identically on **every** queue
+manager — all four HA/DR arms (RDQM, Pacemaker/SAN, and both Native HA arms) plus
+the shared `SVCQM` counterparty. Like mqweb, the collector is **data-plane
+infrastructure co-located with the queue manager it instruments** — but its
+output is what the observability plane consumes.

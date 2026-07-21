@@ -170,7 +170,13 @@ on a defect.
   data file and run `amqsevt` as the `STARTCMD`; MQ appends. This deletes the
   launcher script, its install step, and the `.svc`/`.svc.err` split
   (`amqsevt`'s own stderr → `STDERR('<data-file>.err')` keeps diagnostics
-  separate).
+  separate). This applies to the **file-sink** variant. The lab's production
+  rollout — the shared `mq-event-monitor` role, now standard on every queue
+  manager — deliberately **keeps** a launcher, *not* to avoid truncation but
+  because it ships to **journald** rather than a file: it pipes
+  `amqsevt -o json_compact` through `logger --size 32768` (tag `mq-events`),
+  which a bare `STARTCMD` cannot do. The `O_APPEND` finding above stands either
+  way.
 - **What this does *not* fix — the real loss windows remain.** `amqsevt` consumes
   events **non-transactionally** (destructive get, then write), so a crash between
   the get and the write loses that event permanently. And on **HA failover** the
