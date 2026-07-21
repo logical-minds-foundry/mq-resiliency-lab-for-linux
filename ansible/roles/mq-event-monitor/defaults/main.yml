@@ -14,6 +14,19 @@ mq_event_service_name: MQ.EVENT.MONITOR
 # event splits into 4 unparseable entries; at 32 KiB it lands as one parseable entry.
 mq_event_logger_max_size: 32768
 
+# Resilient wrapper (.github#122). Crash-restart sleep. Kept intentionally SHORTER than the
+# queue manager's stale-handle reap window (measured at a consistent ~29s in #760/A3): on a
+# crash the restarting amqsevt re-opens the EXCLUSIVE event queue and hits 2042 for the first
+# ~2 tries, then succeeds on the ~3rd once the QM has reaped the dead handle. That fail-twice-
+# then-succeed pattern is a DELIBERATE, at-no-cost operational tell that the retry path is alive
+# and working (per #122 review) — recovery lands at ~30s either way, gated by the reap.
+mq_event_sleep_secs: 10
+# Bounded open-retry: how long to keep retrying a persistently-failing amqsevt (e.g. a 2042 that
+# never clears because a queue is genuinely held by a live owner) before the wrapper exits
+# non-zero — loud — so the SERVICE goes down visibly rather than looping forever. 0 = retry
+# forever. Order ~30min; comfortably clears the ~29s reap while still surfacing a real wedge.
+mq_event_open_retry_secs: 1800
+
 # Application queues that should emit performance events (queue depth high / full).
 # Empty by default: PERFMEV is enabled at the QMGR, but per-queue QDPMAXEV/QDPHIEV
 # thresholds only make sense on real app queues, so each arm sets its own list at the

@@ -1,0 +1,25 @@
+#!/bin/sh
+# shellcheck disable=SC1083  # {{ … }} are Jinja template braces, substituted by Ansible before this runs
+# SERVICE STOPCMD helper for the resilient event-monitor wrapper (.github#122).
+#
+# The stop must reap the WHOLE process group led by run.sh — the wrapper, its amqsevt child, and the
+# logger — not just one process; otherwise killing the wrapper would orphan amqsevt, and killing
+# amqsevt alone would just be restarted by the loop. Reaping the group means SIGTERM to the NEGATIVE
+# pgid. Two lab-proven facts (#761 smoke) shape this helper:
+#   1. MQ does NOT substitute the MQ_SERVER_PID token in STOPARG on this build — an argv-capture
+#      STOPCMD received the LITERAL string "MQ_SERVER_PID". (The old #114 `kill MQ_SERVER_PID` was
+#      thus a no-op on an explicit STOP; it only ever "worked" because amqsevt self-exits when the QM
+#      quiesces.) So we cannot get the pid from MQ — the SERVICE passes STOPARG('<QM>') (a literal)
+#      and this helper DISCOVERS the live wrapper for that QM instead.
+#   2. /bin/kill is procps-ng, which needs `--` to treat a leading-dash `-<pgid>` as a process group
+#      rather than an option (a bare `kill -TERM -<pgid>` silently no-ops).
+#
+# run.sh is its own group leader (setsid; #760/A0), so its pid == its pgid; we resolve the pgid
+# explicitly in case setsid is ever forced to fork.
+#
+# $1 = queue-manager name.
+QM="$1"
+pid=$(pgrep -f "{{ mq_event_run_dir }}/run.sh ${QM}" | head -1)
+[ -n "$pid" ] || exit 0                          # no wrapper running -> nothing to stop
+pgid=$(ps -o pgid= -p "$pid" | tr -d ' ')
+exec /bin/kill -TERM -- "-${pgid}"

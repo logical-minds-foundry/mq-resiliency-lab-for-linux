@@ -1,0 +1,31 @@
+=== B1 + checkpoint: wrapper + amqsevt up; MQ_SERVER_PID == wrapper PGID ===
+stable amqsevt = 36965
+  36869    5455   36869 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  36965   36869   36869 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+MQ_SERVER_PID=36869  wrapper_PGID=36869
+  B1/CHECKPOINT PASS
+  events flowing? (recent mq-events JSON count):
+56
+=== B2 clean stop (STOP SERVICE must reap BOTH, no orphan) ===
+AMQ8732I: Request to stop Service accepted.
+  B2 PASS: no orphan — wrapper + amqsevt both reaped
+     1 : DISPLAY SVSTATUS(MQ.EVENT.MONITOR)
+AMQ8147E: IBM MQ object MQ.EVENT.MONITOR not found.
+=== B3 crash recovery through the 2042 window ===
+AMQ8733I: Request to start Service accepted.
+  stable amqsevt before crash: 37388
+  kill -9 37388; watching wrapper restart it (reap ~29s, sleep 10s)...
+  B3 PASS: wrapper restarted amqsevt (new pid 37607)
+  --- run.sh lifecycle in journald (fail-retry-succeed, incl. 2042) ---
+run.sh[35728]: amqsevt exited rc=0 after 0s (fast) [MQCLOSE (object handle) ended with reason code MQRC_HOBJ_ERROR [2019]]; restarting in 10s
+run.sh[36869]: starting event collector for NHAUAPP (pgid 36869)
+run.sh[36869]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[37304]: starting event collector for NHAUAPP (pgid 37304)
+run.sh[37304]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[37304]: amqsevt exited rc=137 after 3s (fast); restarting in 10s
+run.sh[37304]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[37304]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+=== final process state (healthy) ===
+  37304    5455   37304 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  37607   37304   37304 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+
