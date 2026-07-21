@@ -136,12 +136,37 @@
       # Only the bring-up path emits "DR-UP"; both SKIP paths do not -> a healthy/re-provision run is unchanged.
       changed_when: "'DR-UP' in rdqm_dr_up.stdout"
 
-    - name: "wait until HA + DR replication are healthy (fail loud; never leave a silent split-brain) (#559)"
+    - name: "wait until HA + DR replication are healthy — self-heal StandAlone peers, don't just poll (fail loud; never leave a silent split-brain) (#559, #746)"
       ansible.builtin.shell: |
         set -uo pipefail
         RES="{{ qm_res }}"
         role=$(drbdadm role "$RES" 2>/dev/null | head -1 || true)
         disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
+        # SELF-HEAL, don't just poll (#746). The one-shot post-create heal above resolves the
+        # FIRST cold-create split-brain, but on the DR-secondary site (site B) that is not
+        # enough: resolving one split-brain can drop peer connections back to StandAlone, and
+        # because the heal only ever acts on Secondaries, a StandAlone HA *Primary* (the sync
+        # source b2/b3 need) is never reconnected. The old gate then just read dstate/cstate and
+        # spun the full 60x budget with the peers still StandAlone (rdqm-b2 Inconsistent,
+        # quorum:no) — the exact #746 failure. So on EVERY retry, reconcile any StandAlone/severed
+        # HA peer BEFORE gating on disk state, escalating reconnect across the whole budget:
+        #   - a not-UpToDate Secondary: discard its (disposable, just-created) data + resync
+        #     from the Primary (drbdadm connect --discard-my-data) — safe by the same
+        #     construction as the #559 heal (only ever a Secondary that is not UpToDate).
+        #   - the Primary, or an already-UpToDate node: plain reconnect — NEVER discards the
+        #     Primary's authoritative copy; just re-establishes a severed link.
+        # Only fires while a peer is actually StandAlone; once Connected/(re)syncing it is a
+        # no-op, so a healthy group or a mid-resync node is left untouched.
+        if drbdadm cstate "$RES" 2>/dev/null | grep -q 'StandAlone'; then
+          if [ "$role" = "Secondary" ] && [ "$disk" != "UpToDate" ]; then
+            echo "RECONNECT $RES (#746): Secondary disk=$disk with StandAlone peer -> discard-my-data + reconnect"
+            drbdadm disconnect "$RES" || true
+            drbdadm connect --discard-my-data "$RES" || true
+          else
+            echo "RECONNECT $RES (#746): role=$role disk=$disk with StandAlone peer -> reconnect (no discard)"
+            drbdadm connect "$RES" || true
+          fi
+        fi
         # Every node gates its own HA disk reaching UpToDate.
         [ "$disk" = "UpToDate" ] || { echo "HA $RES disk=$disk (not yet UpToDate)"; exit 1; }
         # The HA-primary additionally gates the DR LINK actually connecting/syncing — not just
@@ -150,6 +175,13 @@
         if [ "$role" = "Primary" ] && [ -f "/etc/drbd.d/$RES.dr.res" ]; then
           drbdadm status "$RES.dr" >/dev/null 2>&1 || { echo "DR $RES.dr not up"; exit 1; }
           drc=$(drbdadm cstate "$RES.dr" 2>/dev/null | head -1 || true)
+          # Self-heal a StandAlone DR link too, rather than only failing on it (#591, #746):
+          # reconnect (no discard — the DR primary holds the authoritative copy) and let the
+          # next retry re-check. A genuinely down peer still fails loud when the budget runs out.
+          if [ "$drc" = "StandAlone" ]; then
+            echo "RECONNECT $RES.dr (#746): DR link StandAlone -> reconnect (no discard)"
+            drbdadm connect "$RES.dr" || true
+          fi
           case "$drc" in
             Connected|SyncSource|SyncTarget|PausedSync*|Verify*) : ;;  # connected or actively (re)syncing
             *) echo "DR $RES.dr connection=$drc (not connected — peer DR resource down?)"; exit 1 ;;
