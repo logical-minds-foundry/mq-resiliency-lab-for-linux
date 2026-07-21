@@ -26,7 +26,12 @@ from mqlab import cli
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
-from mqlab.platforms import box_build_arch, box_build_domain_virt, build_domain_virt
+from mqlab.platforms import (
+    box_build_arch,
+    box_build_domain_virt,
+    build_domain_virt,
+    ensure_resolved,
+)
 from mqlab.runner import Command, SubprocessRunner
 
 
@@ -413,6 +418,11 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     bootstrap's `_ensure_local_boxes`, so both drive one path. Raises typer.Exit
     with the failing step's exit code on any builder non-zero (StepFailedError).
     """
+    # The builder's final `vagrant box add` loads the lab Vagrantfile, which guards
+    # on build/work/lab/topology.resolved.yaml (#276). Render it up front so a
+    # standalone `box build` doesn't die at box registration on a fresh checkout
+    # (#737); idempotent when bootstrap already rendered it.
+    ensure_resolved()
     for name in names:
         if _rhel_base_needs_dvd(name, force=force):
             verify_rhel_dvd(_RHEL_VERSION)

@@ -110,6 +110,7 @@ def test_verify_dvd_pass(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 def _stub_build_env(monkeypatch, verified):
     monkeypatch.setattr(box, "probe", lambda: _FACTS)
+    monkeypatch.setattr(box, "ensure_resolved", lambda: None)
     monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
     monkeypatch.setattr(box, "run_steps", lambda steps, **kw: None)
     monkeypatch.setattr(box, "verify_rhel_dvd", lambda version: verified.append(version))
