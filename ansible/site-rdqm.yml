@@ -158,13 +158,35 @@
         # Only fires while a peer is actually StandAlone; once Connected/(re)syncing it is a
         # no-op, so a healthy group or a mid-resync node is left untouched.
         if drbdadm cstate "$RES" 2>/dev/null | grep -q 'StandAlone'; then
-          if [ "$role" = "Secondary" ] && [ "$disk" != "UpToDate" ]; then
-            echo "RECONNECT $RES (#746): Secondary disk=$disk with StandAlone peer -> discard-my-data + reconnect"
-            drbdadm disconnect "$RES" || true
-            drbdadm connect --discard-my-data "$RES" || true
-          else
-            echo "RECONNECT $RES (#746): role=$role disk=$disk with StandAlone peer -> reconnect (no discard)"
-            drbdadm connect "$RES" || true
+          # Reconnect a StandAlone/severed HA peer with a PLAIN connect — never disconnect,
+          # never blanket-discard. A DRBD link re-forms only when BOTH ends leave StandAlone;
+          # this gate runs on every node each retry, so a plain connect per node is sufficient
+          # and DRBD elects the sync source automatically once the peers are Connected.
+          #
+          # The first #746 fix ran `disconnect` + `connect --discard-my-data` on any
+          # not-UpToDate Secondary. That was proven live (2026-07-21) to CAUSE the hang it was
+          # meant to fix: `drbdadm disconnect` is bilateral — it tore the DR-secondary active
+          # node (b1) out of the *whole* HA mesh (b2/b3 -> StandAlone), and `--discard-my-data`
+          # threw away the b1 copy *while it was receiving the authoritative DR sync from site A*
+          # and was the future sync source for b2/b3. Only b1 then reconnected, leaving an
+          # asymmetric StandAlone(b2/b3) <-> Connecting(b1) deadlock, one UpToDate node, quorum:no
+          # — the exact #746 failure. A plain connect on the StandAlone side healed that stuck
+          # lab to 3x UpToDate + quorum in ~60s.
+          echo "RECONNECT $RES (#746): StandAlone peer (role=$role disk=$disk) -> plain connect (both ends leave StandAlone)"
+          drbdadm connect "$RES" || true
+          # Escalation for a GENUINE split-brain only: if a plain connect is rejected and the
+          # link stays StandAlone, a not-UpToDate Secondary on this (DR-secondary) site holds a
+          # non-authoritative, just-created copy and may safely discard it to resync — the same
+          # guard as the #559 heal (only ever a Secondary that is not UpToDate; never the
+          # authoritative Primary/UpToDate copy).
+          sleep 2
+          if drbdadm cstate "$RES" 2>/dev/null | grep -q 'StandAlone'; then
+            role=$(drbdadm role "$RES" 2>/dev/null | head -1 || true)
+            disk=$(drbdadm dstate "$RES" 2>/dev/null | cut -d/ -f1 || true)
+            if [ "$role" = "Secondary" ] && [ "$disk" != "UpToDate" ]; then
+              echo "RECONNECT $RES (#746): still StandAlone after plain connect -> split-brain, discard-my-data (non-authoritative Secondary disk=$disk)"
+              drbdadm connect --discard-my-data "$RES" || true
+            fi
           fi
         fi
         # Every node gates its own HA disk reaching UpToDate.
