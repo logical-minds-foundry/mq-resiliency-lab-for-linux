@@ -100,11 +100,18 @@ zone     = "us-east1-b"        # reservation mq-lab-n2-8 (#405); us-central1 N2 
 instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running; must match the reservation's machine type
 cpus   = 8                    # match n2-standard-8 (overrides the base 12) — declaring more than the
 memory = "32GiB"              # machine type provides warns about under-capacity; this is all the reservation gives (#405)
-volume   = "200GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`)
-boot_disk = "100GiB"          # EPHEMERAL boot disk — holds libvirt's default image pool (/var/lib/libvirt/images).
+volume   = "400GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`).
+                              # Doubled 200→400 GiB alongside the boot disk (.github#120): headroom for the
+                              # growing RHEL-DVD/box-archive footprint on the data mount.
+boot_disk = "200GiB"          # EPHEMERAL boot disk — holds libvirt's default image pool (/var/lib/libvirt/images).
                               # Default ~29 GiB filled during full-HADR bring-up → QEMU ENOSPC pauses (#375); images
-                              # stay on the boot disk (#386 reverted the data-disk redirect), so size it to fit
-                              # (~38 GiB peak + OS + qcow2 growth + headroom). Cloud-only; local is the roomy Mac box.
+                              # stay on the boot disk (#386 reverted the data-disk redirect — the persistent /vergil
+                              # disk is never wiped on rebuild, so orphaned lab_*.img volumes wedged every next
+                              # `vagrant up`; that's why we grow the disk rather than relocate the pool). Doubled
+                              # 100→200 GiB (.github#120): the boot disk holds BOTH per-run images AND the 8-fat-box
+                              # vagrant cache and hit 78% during the #114 rollout — a leaked image could wedge the
+                              # host. Sized for the box cache + a couple concurrent stacks with margin. Cloud-only;
+                              # local is the roomy Mac box.
 
 [vm.anonymous]
 # Credential-less identity for isolated lab bootstrap testing (no GitHub/Claude
