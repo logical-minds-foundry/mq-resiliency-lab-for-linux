@@ -104,7 +104,7 @@
       - { name: pcmk-rhel-a2, hb: 172.16.1.72 }
       - { name: pcmk-rhel-a3, hb: 172.16.1.73 }
     fence_hypervisor_ip: 192.168.121.1
-    fence_hypervisor_user: pmoore
+    fence_hypervisor_user: "{{ lookup('env', 'USER') }}"
   roles: [pcmk-cluster]
 
 - hosts: pcmk_rhel_a
