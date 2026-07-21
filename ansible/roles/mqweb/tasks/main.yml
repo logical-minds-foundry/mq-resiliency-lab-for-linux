@@ -47,25 +47,31 @@
     daemon_reload: true
   become: true
 
-# Start non-blocking: Liberty is slow to come up (minutes under x86 TCG), and a
-# blocking `state: started` makes provision wait on — and time out with — the
-# systemd job. --no-block returns immediately; REST becomes ready asynchronously
-# (the message path does not depend on it). Idempotent: starting an already-active
-# unit is a no-op.
+# Set mqweb (Liberty) properties BEFORE starting it (#741): Liberty reads its config
+# at startup, so httpHost must be set first to take effect. Setting it while mqweb is
+# stopped is also instant — running setmqweb *during* the slow startup made it contend
+# for ~12 min and drop the SSH connection, which surfaced (confusingly) as an
+# ansible-core result-deserialization error. The default-guarded `changed_when` plus
+# `failed_when: false` keep this non-fatal even if the result is ever malformed.
+- name: bind mqweb to all interfaces
+  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
+  become: true
+  become_user: mqm
+  register: setmqweb
+  changed_when: "'MQWB' not in (setmqweb.stderr | default(''))"
+  failed_when: false
+
+# Start non-blocking: Liberty is slow to come up (minutes under x86 TCG, and on a
+# fresh arm64 node), and a blocking `state: started` makes provision wait on — and
+# time out with — the systemd job. --no-block returns immediately; REST becomes ready
+# asynchronously (the message path does not depend on it). Idempotent: starting an
+# already-active unit is a no-op.
 - name: start mqweb without blocking on its (slow) readiness
   ansible.builtin.systemd:
     name: mqweb.service
     state: started
     no_block: true
   become: true
-
-- name: bind mqweb to all interfaces
-  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
-  become: true
-  become_user: mqm
-  register: setmqweb
-  changed_when: "'MQWB' not in setmqweb.stderr"
-  failed_when: false
 
 # Liberty reads its keyStore/ssl config at startup, so a cert/config change needs
 # a restart to take effect. --no-block keeps provision from waiting on the slow
