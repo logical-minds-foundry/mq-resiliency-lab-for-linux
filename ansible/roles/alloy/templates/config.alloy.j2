@@ -14,11 +14,35 @@ loki.relabel "journal" {
   // from the syslog identifier ONLY when systemd_unit is empty, so cluster-daemon units
   // (corosync, pacemaker, drbd) keep their existing `unit` label. MQ core logs arrive as
   // unit="ibm-mq"; the mq-event-monitor collector (#515) tags 'mq-events', so this same
-  // rule yields unit="mq-events" — a separate Loki stream from the logs, no new rule needed.
+  // rule yields unit="mq-events" — a separate Loki stream from the logs.
+  // #742: the syslog identifier field is `__journal_syslog_identifier` — ONE underscore
+  // between "journal" and "syslog". Alloy names each journal label `__journal_` + the
+  // lowercased field name, so the trusted `_SYSTEMD_UNIT` (leading underscore) becomes
+  // `__journal__systemd_unit` (two), but the app-set `SYSLOG_IDENTIFIER` (no leading
+  // underscore) becomes `__journal_syslog_identifier` (one). The original two-underscore
+  // spelling named a field that never exists, so this fallback silently never fired.
   rule {
-    source_labels = ["__journal__systemd_unit", "__journal__syslog_identifier"]
+    source_labels = ["__journal__systemd_unit", "__journal_syslog_identifier"]
     separator     = ";"
     regex         = ";(.+)"
+    replacement   = "$1"
+    target_label  = "unit"
+  }
+
+  // #742: On Native HA the queue manager — and the mq-event-monitor collector (#515),
+  // which runs as an MQ SERVICE inside the QM's systemd cgroup — log under the QM's own
+  // unit (e.g. mqmonitor@NHARAPP.service), so their journal entries carry a NON-empty
+  // _SYSTEMD_UNIT. The systemd_unit-empty fallback above therefore never fires for them
+  // and they are mislabeled unit="mqmonitor@<QM>.service" — hiding MQ core logs and the
+  // #516 mq-events boards. Force `unit` from the syslog identifier for the known MQ
+  // identifiers (ibm-mq core logs, mq-events collector), regardless of the owning systemd
+  // unit. Anchored + scoped to just these two identifiers, so cluster-daemon units
+  // (corosync, pacemaker, drbd) and ibm-mqweb are untouched; on the non-NHA arms (empty
+  // systemd_unit) this restates the same unit value rule 2 sets — idempotent. Uses the
+  // one-underscore `__journal_syslog_identifier` (see the field-naming note on rule 2).
+  rule {
+    source_labels = ["__journal_syslog_identifier"]
+    regex         = "(ibm-mq|mq-events)"
     replacement   = "$1"
     target_label  = "unit"
   }
