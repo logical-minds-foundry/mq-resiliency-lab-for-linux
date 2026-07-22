@@ -22,7 +22,7 @@ from typing import Any
 
 import typer
 
-from mqlab import cli
+from mqlab import cli, venvsync
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import StepFailedError, run_steps
 from mqlab.paths import repo_root, state
@@ -418,6 +418,10 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     bootstrap's `_ensure_local_boxes`, so both drive one path. Raises typer.Exit
     with the failing step's exit code on any builder non-zero (StepFailedError).
     """
+    # Sync the dev venv to uv.lock before the bake spawns venv-dependent tools
+    # (build-fatbox.sh -> ansible-playbook); a stale venv otherwise dies deep in
+    # the subprocess with `command not found` (exit 127) (#776).
+    venvsync.ensure_venv_current()
     # The builder's final `vagrant box add` loads the lab Vagrantfile, which guards
     # on build/work/lab/topology.resolved.yaml (#276). Render it up front so a
     # standalone `box build` doesn't die at box registration on a fresh checkout

@@ -13,7 +13,7 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, coldboot, parity
+from mqlab import buildenv, coldboot, parity, venvsync
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_platforms,
@@ -1696,6 +1696,7 @@ def _bootstrap_run(
     observe) from the first unsatisfied one, so a re-run resumes. --only/--from
     override the selection. Each phase fails loud: a step failure halts the run
     and prints a resume hint naming the failing phase."""
+    venvsync.ensure_venv_current()  # sync dev venv to uv.lock before subprocesses spawn (#776)
     stack = _lookup_stack_or_exit(stack_name)
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
@@ -1829,6 +1830,7 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
     before the commons-VM destroy block. Today's commons are single-instance
     shared VMs only.
     """
+    venvsync.ensure_venv_current()  # sync dev venv to uv.lock before subprocesses spawn (#776)
     stack = _lookup_stack_or_exit(stack_name)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("teardown", timestamp)
