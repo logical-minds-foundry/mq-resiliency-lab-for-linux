@@ -37,6 +37,16 @@ def _neutralize_build_ensure(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _neutralize_venv_sync(monkeypatch):
+    """Neutralise venvsync.ensure_venv_current in every test — the lab-lifecycle
+    verbs (bootstrap/teardown/box build) call it up front and it shells `uv sync`
+    (#776), which must not run in unit tests. Patching the module attribute covers
+    every call site (cli + box reference the same module object). The helper's own
+    behaviour is tested directly in tests/test_venvsync.py."""
+    monkeypatch.setattr(cli.venvsync, "ensure_venv_current", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_box_gc(monkeypatch):
     """Neutralise the box base-image GC hook in every test — after a bake or a
     teardown it shells `virsh vol-list`/`vol-delete` against the libvirt pool (#759),
