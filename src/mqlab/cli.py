@@ -1009,6 +1009,19 @@ def box_clean(boxes: _BoxNames = None, all_: _AllBoxes = False, yes: _YesRebakeA
     typer.echo("removed: " + ", ".join(removed))
 
 
+_GcDryRun = Annotated[
+    bool, typer.Option("--dry-run", help="report what would be reclaimed, delete nothing")
+]
+
+
+@box_app.command("gc")
+def box_gc(  # pragma: no cover - thin delegator; logic covered via box.gc_orphaned_images
+    dry_run: _GcDryRun = False,
+) -> None:
+    """Reclaim orphaned box base images from re-bakes: keep newest per box, drop older (#759)."""
+    typer.echo(box.gc_summary(box.gc_orphaned_images(dry_run=dry_run)))
+
+
 def _resolved_nodes() -> dict[str, Any]:
     """The rendered resolved topology's nodes (build/work/lab/topology.resolved.yaml, #276)."""
     import yaml as _yaml
@@ -1856,6 +1869,12 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
             step_mode=step,
             pauser=deps.pauser,
         )
+        # The destroyed overlays freed their box base images; reclaim any now-orphaned
+        # older ones (keep the newest per box). Best-effort — never fail a teardown on
+        # a GC hiccup, but a failure is reported, not swallowed (#759).
+        gc_result = box.gc_orphaned_images_best_effort()
+        if gc_result and gc_result.deleted:
+            deps.renderer.note(box.gc_summary(gc_result))
     except StepFailedError as exc:
         raise typer.Exit(code=exc.exit_code) from exc
     except NoTTYError as exc:

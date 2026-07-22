@@ -170,6 +170,36 @@ def test_teardown_keeps_commons_when_other_stack_up(monkeypatch, tmp_path):
     assert not commons_destroy, f"expected no commons-destroy steps, got: {commons_destroy}"
 
 
+def test_teardown_reclaims_orphaned_box_images(monkeypatch, tmp_path):
+    """After the destroys free their overlays, teardown GCs orphaned box base
+    images and notes what it reclaimed (#759). Overrides conftest's GC stub."""
+    _seed(monkeypatch, tmp_path)
+    _stub_probe_states(monkeypatch)
+    monkeypatch.setattr(cli, "_other_stacks_up", lambda deps, exclude: True)
+    buf = io.StringIO()
+    deps = cli.Deps(
+        runner=RecordingRunner(results=[]),
+        renderer=Renderer(Console(file=buf, force_terminal=False, width=200)),
+        transcript=Transcript(transcript_path("teardown", "20260627T000000Z")),
+        pauser=_NoPause(),
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
+    _capture_steps(monkeypatch)  # capture the destroy steps without running them
+    gc = cli.box.GcResult(
+        deleted=["mq-rdqm-rhel9_vagrant_box_image_0_1_box.img"],
+        freed_bytes=1024**3,
+        kept_newest=["mq-rdqm-rhel9_vagrant_box_image_0_2_box.img"],
+        skipped_in_use=[],
+        dry_run=False,
+    )
+    monkeypatch.setattr(cli.box, "gc_orphaned_images_best_effort", lambda: gc)
+
+    result = CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"])
+
+    assert result.exit_code == 0
+    assert "box gc: deleted 1" in buf.getvalue()
+
+
 def test_teardown_commons_flag_forces_commons_destroy(monkeypatch, tmp_path):
     """--commons forces commons destruction even when another stack is still up."""
     _seed(monkeypatch, tmp_path)

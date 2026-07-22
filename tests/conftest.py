@@ -34,3 +34,12 @@ def _neutralize_build_ensure(monkeypatch):
     (#286), which must not run in unit tests. The build commands test it via their own
     seams; _prepare_lab's call is covered with this stub in place."""
     monkeypatch.setattr(cli, "_build_ensure", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _neutralize_box_gc(monkeypatch):
+    """Neutralise the box base-image GC hook in every test — after a bake or a
+    teardown it shells `virsh vol-list`/`vol-delete` against the libvirt pool (#759),
+    which must not run in unit tests. Dedicated tests override this stub to cover the
+    GC logic (box.gc_orphaned_images) and the hooks firing."""
+    monkeypatch.setattr(cli.box, "gc_orphaned_images_best_effort", lambda: None)
