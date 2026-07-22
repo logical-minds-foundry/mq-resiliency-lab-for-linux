@@ -1322,6 +1322,13 @@ across the whole fleet over the host-only <strong><code>net-mgmt</code></strong>
 fault drills never sever, so the dashboard stays live exactly when something
 breaks. A second node, <strong><code>mon-probe</code></strong>, carries the data-net NICs for the MQ
 client exporters that land in a later slice.</p>
+<p>Metrics are only half the picture. Every queue manager also ships <strong>MQ
+instrumentation events</strong> — authority failures, channel start/stop, queue-depth
+alarms, and the rest — as <code>json_compact</code> JSONL to journald (tag <code>mq-events</code>) via
+the shared <code>mq-event-monitor</code> role, standard on <strong>every</strong> QM. <strong>Alloy</strong> ships that
+stream to <strong>Loki</strong>, and Grafana surfaces the events alongside the metrics, so the
+boards show both what the fleet is <em>doing</em> (metrics) and what MQ is <em>reporting</em>
+(events).</p>
 <p>Bring the pair up and provision it — one verb, provisioned as code:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>up<span class="w">        </span><span class="c1"># render scrape targets + inventory, create obs + mon-probe, provision</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>status<span class="w">    </span><span class="c1"># are the pair up? which targets are scraped, up/down?</span>

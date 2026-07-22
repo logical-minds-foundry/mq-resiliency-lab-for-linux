@@ -991,6 +991,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#the-event-feed-mq-instrumentation-events-every-queue-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The event feed — MQ instrumentation events (every queue manager)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1118,6 +1129,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#the-event-feed-mq-instrumentation-events-every-queue-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The event feed — MQ instrumentation events (every queue manager)
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1222,6 +1244,23 @@ and RDQM arms (each site, <code>vip</code> / <code>vip_b</code>), or the <strong
 for the Native HA arms (which have no VIP; the active member is resolved at
 runtime). The topology-derived source of truth for every queue manager's REST
 endpoint is <code>mqlab rest render</code>.</p>
+<h2 id="the-event-feed-mq-instrumentation-events-every-queue-manager">The event feed — MQ instrumentation events (every queue manager)<a class="headerlink" href="#the-event-feed-mq-instrumentation-events-every-queue-manager" title="Permanent link">&para;</a></h2>
+<p>Every queue manager also runs the <strong><code>mq-event-monitor</code></strong> MQ SERVICE — an
+<code>amqsevt</code> collector defined <code>CONTROL(QMGR)</code>, so it starts and stops <strong>with</strong> the
+queue manager and travels with the active instance across HA failover. It
+captures MQ instrumentation events (the standard event classes — authority,
+connection, channel, queue-depth, command, configuration, and the rest) and
+emits them as <strong><code>json_compact</code></strong> JSONL to journald under the tag <strong><code>mq-events</code></strong>
+(a small launcher pipes the stream through <code>logger --size 32768</code> so long events
+are not truncated). <strong>Alloy</strong> ships the journald stream to <strong>Loki</strong>, and Grafana
+surfaces it alongside the node/MQ metrics — the <em>event</em> half of the Watcher's
+picture, complementing the metrics half.</p>
+<p>This is a <strong>de-facto standard, not a single-QM proof of concept</strong>: the shared
+<code>mq-event-monitor</code> Ansible role configures it identically on <strong>every</strong> queue
+manager — all four HA/DR arms (RDQM, Pacemaker/SAN, and both Native HA arms) plus
+the shared <code>SVCQM</code> counterparty. Like mqweb, the collector is <strong>data-plane
+infrastructure co-located with the queue manager it instruments</strong> — but its
+output is what the observability plane consumes.</p>
 
 
 
