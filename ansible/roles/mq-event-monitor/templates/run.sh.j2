@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC1083  # {{ … }} are Jinja template braces, substituted by Ansible before this runs
+# shellcheck disable=SC1083  # Jinja double-brace substitutions are rendered by Ansible before this runs
 # MQ event collector launcher — self-healing wrapper (.github#122, epic .github#31). Started by
 # the queue manager as an MQ SERVICE object (CONTROL(QMGR)), so it travels with the QM across
 # every failover.
