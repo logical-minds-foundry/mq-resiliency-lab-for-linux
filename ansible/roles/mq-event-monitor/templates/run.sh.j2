@@ -1,29 +1,79 @@
 #!/bin/bash
-# MQ event collector launcher (#515, epic .github#31). Started by the queue manager as
-# an MQ SERVICE object (CONTROL(QMGR)), so it travels with the QM across every failover.
+# shellcheck disable=SC1083  # {{ … }} are Jinja template braces, substituted by Ansible before this runs
+# MQ event collector launcher — self-healing wrapper (.github#122, epic .github#31). Started by
+# the queue manager as an MQ SERVICE object (CONTROL(QMGR)), so it travels with the QM across
+# every failover.
 #
-# `exec` matters: it replaces this shell so the process the QM tracks (MQ_SERVER_PID) IS
-# amqsevt. The service's STOPCMD is `kill MQ_SERVER_PID`, so QM shutdown then stops the
-# collector cleanly. A naive `amqsevt | logger` would leave the QM tracking the shell and
-# ORPHAN the pipeline on stop — the collector would keep draining after the QM went away.
+# LAUNCHED UNDER setsid: the SERVICE STARTCMD is `setsid -w -- {{ mq_event_run_dir }}/run.sh <QM>`
+# (see tasks/service.yml). MQ spawns the STARTCMD process as a child of amqzmgr0, NOT as a group
+# leader (proven in #760/A0), so `setsid` calls setsid(2) in place and execs THIS script, which
+# becomes its own session/process-group leader with PGID == its PID. amqsevt then
+# runs as our child in that group. The SERVICE STOPCMD is the run-dir `stop.sh` helper, which
+# SIGTERMs the NEGATIVE pgid — so a QM/service stop reaps BOTH this wrapper and amqsevt in one shot.
+# (The helper exists because MQ won't substitute MQ_SERVER_PID at all on this build, so stop.sh
+# discovers this wrapper by QM name via pgrep; procps-ng /bin/kill also needs `--`. See stop.sh.j2.)
+# (Positive `kill MQ_SERVER_PID`, as the old exec-model used, could only ever kill one process; and
+# a negative kill without setsid would have hit amqzmgr0's group — which is why setsid is load-bearing.)
 #
-# Destructive drain (no -b): amqsevt is the single event consumer; each event processed
-# once. No -q → the standard SYSTEM.ADMIN.*.EVENT set. `stdbuf -oL` keeps stdout
-# line-buffered so JSON reaches journald promptly. Output → journald tagged
-# '{{ mq_event_syslog_tag }}', beside the MQ core logs (tag 'ibm-mq'); when amqsevt exits,
-# the logger reader sees EOF and exits too.
+# WHY A WRAPPER: amqsevt is a non-transactional PCF-parsing sample with NO signal handlers
+# (#760/A1) and NO restart of its own — an MQ SERVICE is start-once, unlike systemd. A corrupt
+# event message can crash it, silently ending event monitoring until the next QM start. This loop
+# restores it: on any amqsevt exit the wrapper (still alive) logs, sleeps, and re-runs it.
 #
-# `-o json_compact` (NOT `-o json`): logger is line-oriented — one input line becomes one
-# journald entry. json_compact emits each event as a single-line JSON object, so logger
-# writes exactly one journald entry per event, each entry a complete parseable object.
-# Pretty `-o json` spans ~60 lines per event and would be shredded across that many
-# entries, none of them valid JSON.
+# CLEAN STOP vs CRASH — falls out of the mechanism, with NO in-script signal trap:
+#   * STOPCMD -> the group SIGTERM hits the wrapper AND amqsevt; the wrapper terminates on the
+#               DEFAULT SIGTERM disposition and never reaches the loop again. No orphan.
+#   * crash   -> amqsevt exits on its own; the wrapper is still alive -> log, sleep, restart.
 #
-# `logger --size {{ mq_event_logger_max_size }}`: json_compact is necessary but NOT sufficient.
-# logger's default max message is RFC 3164's 1 KiB and it SPLITS a longer input line into
-# multiple entries — so a full CONFIG event (whole-object dump, ~4 KB) would still be shredded
-# into ~1 KiB fragments. Raising the size to hold the largest event keeps it one entry, one
-# parseable object. (See mq_event_logger_max_size in defaults; proven in the lab.)
+# 2042 ON RESTART (deliberately visible): amqsevt opens the event queue for EXCLUSIVE input
+# (SYSTEM.ADMIN.QMGR.EVENT is DEFSOPT(EXCL); #760/A1) and the QM takes a consistent ~29s to reap a
+# dead handle (#760/A3). A fast restart re-opens before the reap and amqsevt exits with 2042; with
+# SLEEP (~10s) < reap the loop retries ~3x, hitting 2042 twice, then succeeds once the QM reaps.
+# That fail-twice-then-succeed pattern is a DELIBERATE, no-cost operational tell that the retry path
+# is alive (#122 review) — recovery lands at ~30s either way, gated by the reap. A restart that
+# keeps failing FAST past OPEN_RETRY (a queue genuinely held by a live owner) makes the wrapper exit
+# non-zero so the SERVICE goes DOWN visibly (fail loud) rather than looping forever.
 #
-# $1 is the queue-manager name, passed by the service's STARTARG.
-exec stdbuf -oL {{ mq_event_amqsevt_bin }} -m "$1" -o json_compact > >(exec logger --size {{ mq_event_logger_max_size }} -t {{ mq_event_syslog_tag }})
+# Output: amqsevt stdout is pure single-line JSON (`-o json_compact`) -> its own `logger` so each
+# event is exactly one journald entry (`--size` holds the largest event whole; see defaults).
+# amqsevt diagnostics go to STDERR (statusStream=stderr in json mode; #760/A1) -> captured so the
+# wrapper can surface the MQ reason (e.g. "...2042") on a failed run without polluting the JSON.
+# The wrapper's own lifecycle lines use a direct `logger`, not the amqsevt pipe (dead on exit).
+#
+# $1 is the queue-manager name (the SERVICE STARTARG).
+set -u
+QM="$1"
+TAG="{{ mq_event_syslog_tag }}"
+SLEEP={{ mq_event_sleep_secs }}
+OPEN_RETRY={{ mq_event_open_retry_secs }}    # seconds of fast-failing before giving up; 0 = forever
+HEALTHY_RUN=60                               # an amqsevt run >= this long counts as "worked" (resets the burst)
+ERRLOG="/tmp/mq-event-monitor.${QM}.stderr"  # last run's amqsevt stderr (mqm-writable), overwritten each loop
+
+say() { logger -t "$TAG" "run.sh[$$]: $*"; }  # wrapper lifecycle -> journald via its own logger
+
+say "starting event collector for ${QM} (pgid $(ps -o pgid= -p $$ | tr -d ' '))"
+fail_deadline=0
+while true; do
+  start=$(date +%s)
+  stdbuf -oL {{ mq_event_amqsevt_bin }} -m "${QM}" -o json_compact \
+    2>"${ERRLOG}" > >(exec logger --size {{ mq_event_logger_max_size }} -t "${TAG}")
+  rc=$?
+  ran=$(( $(date +%s) - start ))
+  # first 'reason code' line = the ROOT cause (e.g. MQOPEN ... 2042), before MOD_EXIT's MQCLOSE noise
+  reason=$(grep -iE 'reason code|MQRC_' "${ERRLOG}" 2>/dev/null | head -1 | tr -s ' ')
+
+  if [ "${ran}" -ge "${HEALTHY_RUN}" ]; then
+    # Ran and consumed for a while, then exited -> a genuine crash; start a fresh burst.
+    fail_deadline=0
+    say "amqsevt exited rc=${rc} after ${ran}s${reason:+ [${reason}]}; restarting in ${SLEEP}s"
+  else
+    # Fast exit -> crash-loop or a 2042 open that has not reaped yet; count toward the bound.
+    [ "${fail_deadline}" -eq 0 ] && fail_deadline=$(( $(date +%s) + OPEN_RETRY ))
+    if [ "${OPEN_RETRY}" -ne 0 ] && [ "$(date +%s)" -ge "${fail_deadline}" ]; then
+      say "amqsevt kept failing fast (rc=${rc})${reason:+ [${reason}]} for >${OPEN_RETRY}s — giving up; SERVICE goes DOWN (loud)"
+      exit "${rc}"
+    fi
+    say "amqsevt exited rc=${rc} after ${ran}s (fast)${reason:+ [${reason}]}; restarting in ${SLEEP}s"
+  fi
+  sleep "${SLEEP}"
+done

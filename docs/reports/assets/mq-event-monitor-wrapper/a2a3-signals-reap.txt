@@ -1,0 +1,32 @@
+# A2/A3 — amqsevt signal/handle behaviour + QM stale-handle reap timing
+# NHAUAPP on nha-ubuntu-a3, 2026-07-21T20:39:43Z
+nha-ubuntu-a3 | CHANGED => {
+    "changed": true,
+    "rc": 0,
+    "stderr": "Shared connection to 10.50.0.13 closed.\n",
+    "stderr_lines": [
+        "Shared connection to 10.50.0.13 closed."
+    ],
+    "stdout": "=== baseline ===\namqsevt pid(s): 5562   handles=1\n\nTRIAL 1 (SIGKILL): amqsevt pid=5562  handles_before=1\n  t=1s  handles=1   -> handle LEFT OPEN (stale)\n  REAPED after 28s\n  collector restarted\n\nTRIAL 2 (SIGKILL): amqsevt pid=16518  handles_before=1\n  t=1s  handles=1   -> handle LEFT OPEN (stale)\n  REAPED after 29s\n  collector restarted\n\nTRIAL 3 (SIGTERM): amqsevt pid=16937  handles_before=1\n  t=1s  handles=1   -> handle LEFT OPEN (stale)\n  REAPED after 29s\n  collector restarted\n\n=== final state: amqsevt pid(s): 17360   handles=1 ===\n",
+    "stdout_lines": [
+        "=== baseline ===",
+        "amqsevt pid(s): 5562   handles=1",
+        "",
+        "TRIAL 1 (SIGKILL): amqsevt pid=5562  handles_before=1",
+        "  t=1s  handles=1   -> handle LEFT OPEN (stale)",
+        "  REAPED after 28s",
+        "  collector restarted",
+        "",
+        "TRIAL 2 (SIGKILL): amqsevt pid=16518  handles_before=1",
+        "  t=1s  handles=1   -> handle LEFT OPEN (stale)",
+        "  REAPED after 29s",
+        "  collector restarted",
+        "",
+        "TRIAL 3 (SIGTERM): amqsevt pid=16937  handles_before=1",
+        "  t=1s  handles=1   -> handle LEFT OPEN (stale)",
+        "  REAPED after 29s",
+        "  collector restarted",
+        "",
+        "=== final state: amqsevt pid(s): 17360   handles=1 ==="
+    ]
+}

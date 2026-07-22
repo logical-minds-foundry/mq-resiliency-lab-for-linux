@@ -39,3 +39,12 @@
     dest: "{{ mq_event_run_dir }}/run.sh"
     mode: "0755"
   become: true
+
+# The SERVICE STOPCMD helper: negates MQ_SERVER_PID to SIGTERM the wrapper's whole process group
+# (MQ won't substitute a dash-prefixed token, and procps-ng /bin/kill needs `--`; see stop.sh.j2).
+- name: install the collector stop helper
+  ansible.builtin.template:
+    src: stop.sh.j2
+    dest: "{{ mq_event_run_dir }}/stop.sh"
+    mode: "0755"
+  become: true
