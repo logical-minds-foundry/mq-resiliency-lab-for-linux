@@ -1,7 +1,7 @@
 [project]
 name = "mqlab"
 version = "1.0.0"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6", "typer>=0.12", "rich>=13", "cryptography>=42"]
