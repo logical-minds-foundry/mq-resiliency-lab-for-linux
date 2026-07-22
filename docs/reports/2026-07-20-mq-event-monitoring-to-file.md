@@ -6,6 +6,14 @@ service, for a file-monitoring agent to pick up. **The Quick start is the setup;
 Follow-on requirements after it are mandatory before production; the rest is
 reference.**
 
+> **How the lab wires this in production.** This how-to targets a **file** sink.
+> The lab's own rollout ships events to **journald** instead: the shared
+> `mq-event-monitor` role runs the same `amqsevt -o json_compact` collector but
+> pipes it through `logger --size 32768` (tag `mq-events`), from where
+> Alloy → Loki → Grafana carry it — configured identically on **every** queue
+> manager across every stack, not just one. Treat this file-sink recipe as the
+> minimal, dependency-free standalone variant.
+
 ## Changelog — corrections to the version dated 2026-07-17
 
 This version corrects three defects in the 2026-07-17 document, changes the output

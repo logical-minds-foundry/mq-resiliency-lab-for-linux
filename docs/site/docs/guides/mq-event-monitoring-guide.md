@@ -1,14 +1,18 @@
 # IBM MQ instrumentation event monitoring — events as JSON via `amqsevt`
 
 - **MQ version:** 9.4 (`amqsevt` with JSON output on MQ for Multiplatforms)
-- **Status:** Draft
+- **Status:** Adopted — the shared `mq-event-monitor` role configures this on
+  **every** queue manager across every stack (a de-facto standard, not a
+  single-QM proof of concept)
 - **Last validated in lab:** 2026-07-20 — the enable command (11 classes) and the
   `amqsevt -o json_compact` collector mechanics were exercised on IBM MQ 9.4.5
   (RHEL 9.6). See the companion reports in the repo:
   `docs/reports/2026-07-20-mq-event-monitoring-to-file.md` and
   `docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md` (the
-  `STDOUT`-append proof). (Full cold-rebuild verification across all arms is
-  tracked under the event-monitoring rollout epic.)
+  `STDOUT`-append proof). (The role is now deployed fleet-wide and the event
+  mechanics were verified per arm during the rollout; a full clean cold-rebuild of
+  some arms remains gated by separate lab-reliability issues, not by event
+  monitoring itself.)
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md) — the
   complementary *log* stream (why something happened) to this *event* stream
   (what the queue manager did)
@@ -176,8 +180,10 @@ and are why the launcher exists rather than putting the command inline:
   for the event source so bursts are not silently dropped.
 
 !!! note "How this lab implements it"
-    This lab wires the feed end to end: an Ansible role deploys the `SERVICE`
-    (its launcher forwards `amqsevt` JSON to **journald**), Grafana **Alloy**
+    This lab wires the feed end to end: the shared `mq-event-monitor` role deploys
+    the `SERVICE` on **every queue manager across all stacks** — all four HA/DR
+    arms plus the shared `SVCQM` counterparty — (its launcher forwards `amqsevt`
+    JSON to **journald**), Grafana **Alloy**
     ships the journal to **Loki** under a distinct `unit="mq-events"` label
     (separate from the diagnostic-log stream), and the Grafana boards carry a
     per-object events panel — the queue-manager board shows every event for the
