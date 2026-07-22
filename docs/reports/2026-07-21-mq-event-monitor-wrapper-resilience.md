@@ -27,7 +27,7 @@ The evidence files referenced below live in
 Process table of the running `#114` collector on the active node
 (`assets/…/a0-topology.txt`):
 
-```
+```text
   PID  PPID  PGID   SID  USER  ARGS
  5455  5441  5455  5455  mqm   /opt/mqm/bin/amqzmgr0 -m NHAUAPP
  5513  5455  5455  5455  mqm   /opt/mqm/bin/amqpcsea NHAUAPP
@@ -166,5 +166,32 @@ timing, bounded around a ~30 s sweep on this build.
 
 ## Validation matrix (B1–B3)
 
-Populated by T3 (harness + scaffold) and T5 (live run). Placeholder — see
-`.github` `epics/122-event-monitor-wrapper/plan.md` Tasks 3 and 5.
+The B-matrix is mechanised by `tools/validate-event-monitor-wrapper.sh` and
+documented in `docs/reference/event-monitor-wrapper-validation.md`. It is run on
+the active node of the target QM and captures the evidence referenced below. The
+harness itself was self-tested green during T2/T3 on nativeha-ubuntu (NHAUAPP);
+the authoritative evidence here is filled by the T5 live run on a cold-rebuilt
+stack (`#764`).
+
+### B1 — normal start + checkpoint
+
+Wrapper (`run.sh` under `setsid`) and `amqsevt` both up; the SERVICE `PID` equals
+the wrapper's PID equals its PGID (its own process group); JSON events reach
+journald. Evidence: *T5 — `assets/mq-event-monitor-wrapper/`.*
+
+### B2 — clean stop (no orphan)
+
+`STOP SERVICE` reaps **both** the wrapper and `amqsevt`; no orphan; service gone.
+The regression the old `exec` model guaranteed and the new design preserves —
+note (per A2) that "clean" here means *no orphan*, not a graceful `MQCLOSE`
+(`amqsevt` has no signal handler, so the QM reaps its connection). Evidence:
+*T5 — `assets/mq-event-monitor-wrapper/`.*
+
+### B3 — crash recovery through the 2042 window
+
+`kill -9 amqsevt` → the wrapper logs the exit, sleeps ~10 s, and restarts it,
+retrying through the ~29 s exclusive-handle reap window (each retry logs
+`MQRC_OBJECT_IN_USE [2042]`, per A1's exclusive-open finding) until it succeeds —
+the deliberate fail-retry-succeed heartbeat. Early evidence captured during the
+T2 smoke is in `assets/mq-event-monitor-wrapper/b2b3-smoke.txt`; the T5 run
+supersedes it on a cold-rebuilt stack.
