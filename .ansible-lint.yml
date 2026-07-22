@@ -18,5 +18,6 @@ skip_list:
 
 exclude_paths:
   - lab/        # mqlab app config (lab/topology.yaml), not Ansible content
-  - build/      # gitignored working tree — downloaded collections (community.crypto),
-                # lab state, generated renders; never our authored Ansible source (#414)
+  # build/: gitignored working tree — downloaded collections (community.crypto),
+  # lab state, generated renders; never our authored Ansible source (#414).
+  - build/
