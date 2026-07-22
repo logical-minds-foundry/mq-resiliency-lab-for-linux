@@ -16,6 +16,9 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import box, cli
+from mqlab.box import (  # captured before conftest's _neutralize_box_gc autouse stub
+    gc_orphaned_images_best_effort as _real_gc_best_effort,
+)
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.orchestrator import StepFailedError
 from mqlab.render import Renderer
@@ -595,3 +598,253 @@ def test_box_clean_single_named_box_no_flag(monkeypatch):
     assert result.exit_code == 0
     assert seen["names"] == ["mq-rdqm-rhel9"]
     assert "removed: /x/mq-rdqm-rhel9.box" in result.stdout
+
+
+# --------------------------------------------------------------------------- #
+# Box base-image GC (#759)                                                     #
+# --------------------------------------------------------------------------- #
+def _vol_xml(name, alloc_bytes, backing=None):
+    """A libvirt volume XML fragment: name + exact byte allocation + optional
+    <backingStore> (present only on overlays, pointing at their base image)."""
+    backing_xml = (
+        f"<backingStore><path>/var/lib/libvirt/images/{backing}</path></backingStore>"
+        if backing
+        else ""
+    )
+    return (
+        f"<volume><name>{name}</name>"
+        f"<allocation unit='bytes'>{alloc_bytes}</allocation>"
+        f"<target><path>/var/lib/libvirt/images/{name}</path></target>"
+        f"{backing_xml}</volume>"
+    )
+
+
+class _FakeVirsh:
+    """Route virsh subcommands by argv: vol-list -> the name table, vol-dumpxml ->
+    that volume's XML, vol-delete -> record + scripted rc. Unexpected argv raises."""
+
+    def __init__(self, names, xml_by_name, *, delete_rc=0, delete_out=""):
+        self.names = names
+        self.xml_by_name = xml_by_name
+        self.deleted: list[str] = []
+        self.delete_rc = delete_rc
+        self.delete_out = delete_out
+
+    def run(self, command, on_line):
+        argv = command.argv
+        if "vol-list" in argv:
+            on_line(" Name        Path")
+            on_line("-------------------")
+            for n in self.names:
+                on_line(f" {n}   /var/lib/libvirt/images/{n}")
+            return 0
+        if "vol-dumpxml" in argv:
+            on_line(self.xml_by_name[argv[argv.index("vol-dumpxml") + 1]])
+            return 0
+        if "vol-delete" in argv:
+            self.deleted.append(argv[argv.index("vol-delete") + 1])
+            if self.delete_out:
+                on_line(self.delete_out)
+            return self.delete_rc
+        raise AssertionError(f"unexpected virsh argv: {argv}")
+
+
+def _install_virsh(monkeypatch, fake):
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: fake)
+
+
+def test_gc_keeps_newest_and_deletes_older(monkeypatch):
+    stem = "mq-rdqm-rhel9"
+    old = f"{stem}_vagrant_box_image_0_100_box.img"
+    mid = f"{stem}_vagrant_box_image_0_200_box.img"
+    new = f"{stem}_vagrant_box_image_0_300_box.img"
+    fake = _FakeVirsh(
+        [old, mid, new],
+        {
+            old: _vol_xml(old, 3_000_000_000),
+            mid: _vol_xml(mid, 3_500_000_000),
+            new: _vol_xml(new, 4_000_000_000),
+        },
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert set(result.deleted) == {old, mid}
+    assert result.kept_newest == [new]  # highest timestamp survives
+    assert result.freed_bytes == 6_500_000_000
+    assert set(fake.deleted) == {old, mid}
+    assert result.skipped_in_use == []
+
+
+def test_gc_skips_base_image_backing_a_live_overlay(monkeypatch):
+    stem = "obs-ubuntu2404"
+    old = f"{stem}_vagrant_box_image_0_100_box.img"
+    new = f"{stem}_vagrant_box_image_0_200_box.img"
+    overlay = "lab_obs.img"  # a live VM disk still backed by the OLD base image
+    fake = _FakeVirsh(
+        [old, new, overlay],
+        {
+            old: _vol_xml(old, 3_000_000_000),
+            new: _vol_xml(new, 3_000_000_000),
+            overlay: _vol_xml(overlay, 500_000_000, backing=old),
+        },
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.deleted == []  # old is protected — deleting it would corrupt the overlay
+    assert result.skipped_in_use == [old]
+    assert result.kept_newest == [new]
+    assert fake.deleted == []
+
+
+def test_gc_dry_run_deletes_nothing(monkeypatch):
+    stem = "mq-ubuntu2404"
+    old = f"{stem}_vagrant_box_image_0_1_box.img"
+    new = f"{stem}_vagrant_box_image_0_2_box.img"
+    fake = _FakeVirsh([old, new], {old: _vol_xml(old, 1000), new: _vol_xml(new, 2000)})
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images(dry_run=True)
+    assert result.deleted == [old]  # reported as would-delete
+    assert result.dry_run is True
+    assert fake.deleted == []  # but nothing actually removed
+
+
+def test_gc_no_box_images_is_noop(monkeypatch):
+    # A versioned cloud image (no `_0_<ts>_` segment) + a plain disk: neither matches.
+    cloud = "cloud-image-x_vagrant_box_image_20260705.0.0_box.img"
+    fake = _FakeVirsh(
+        [cloud, "some-disk.qcow2"],
+        {cloud: _vol_xml(cloud, 100), "some-disk.qcow2": _vol_xml("some-disk.qcow2", 200)},
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.deleted == []
+    assert result.kept_newest == []
+    assert result.skipped_in_use == []
+
+
+def test_pool_volume_names_parses_table(monkeypatch):
+    _install_virsh(monkeypatch, _FakeVirsh(["a.img", "b.img"], {}))
+    assert box._pool_volume_names() == ["a.img", "b.img"]
+
+
+def test_vol_detail_reads_allocation_and_backing(monkeypatch):
+    name = "ov.img"
+    _install_virsh(
+        monkeypatch, _FakeVirsh([name], {name: _vol_xml(name, 12345, backing="base_box.img")})
+    )
+    assert box._vol_detail(name) == (12345, "base_box.img")
+
+
+def test_vol_detail_missing_allocation_defaults_zero(monkeypatch):
+    name = "x.img"
+    _install_virsh(monkeypatch, _FakeVirsh([name], {name: "<volume><name>x.img</name></volume>"}))
+    assert box._vol_detail(name) == (0, None)
+
+
+def test_virsh_out_fails_loud_on_nonzero(monkeypatch):
+    class _Boom:
+        def run(self, command, on_line):
+            on_line("error: failed to connect to the hypervisor")
+            return 1
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _Boom())
+    with pytest.raises(RuntimeError, match="failed"):
+        box._virsh_out(["vol-list", "--pool", "default"])
+
+
+def test_vol_delete_success(monkeypatch):
+    class _Ok:
+        def run(self, command, on_line):
+            return 0
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _Ok())
+    box._vol_delete("x.img")  # returns, no raise
+
+
+def test_vol_delete_absent_is_swallowed(monkeypatch):
+    class _Gone:
+        def run(self, command, on_line):
+            on_line("error: Storage volume not found: no storage vol with matching name")
+            return 1
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _Gone())
+    box._vol_delete("x.img")  # idempotent: already gone, no raise
+
+
+def test_vol_delete_other_error_fails_loud(monkeypatch):
+    class _Err:
+        def run(self, command, on_line):
+            on_line("error: some other libvirt failure")
+            return 5
+
+    monkeypatch.setattr(box, "SubprocessRunner", lambda: _Err())
+    with pytest.raises(RuntimeError, match="vol-delete"):
+        box._vol_delete("x.img")
+
+
+def test_gc_best_effort_returns_result_on_success(monkeypatch):
+    sentinel = box.GcResult(
+        deleted=[], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=False
+    )
+    monkeypatch.setattr(box, "gc_orphaned_images", lambda: sentinel)
+    assert _real_gc_best_effort() is sentinel
+
+
+def test_gc_best_effort_reports_and_returns_none_on_failure(monkeypatch, capsys):
+    def _boom():
+        raise RuntimeError("virsh exploded")
+
+    monkeypatch.setattr(box, "gc_orphaned_images", _boom)
+    assert _real_gc_best_effort() is None  # cleanup never fatal...
+    assert "box base-image GC failed" in capsys.readouterr().err  # ...but never silent
+
+
+def test_human_bytes_small_and_large():
+    assert box._human_bytes(0) == "0.0 B"
+    assert box._human_bytes(1536) == "1.5 KiB"
+    assert box._human_bytes(2 * 1024**4).endswith("TiB")
+
+
+def test_gc_summary_empty():
+    result = box.GcResult(
+        deleted=[], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=False
+    )
+    assert "nothing to reclaim" in box.gc_summary(result)
+
+
+def test_gc_summary_lists_deleted_and_skipped():
+    result = box.GcResult(
+        deleted=["a.img"],
+        freed_bytes=1024**3,
+        kept_newest=["n.img"],
+        skipped_in_use=["b.img"],
+        dry_run=False,
+    )
+    summary = box.gc_summary(result)
+    assert "deleted 1 orphaned" in summary
+    assert "- a.img" in summary
+    assert "~ b.img" in summary
+
+
+def test_gc_summary_dry_run_verb():
+    result = box.GcResult(
+        deleted=["a.img"], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=True
+    )
+    assert "would delete" in box.gc_summary(result)
+
+
+def test_build_boxes_gcs_orphaned_images_after_bake(monkeypatch, capsys):
+    captured: list = []
+    _stub_build_env(monkeypatch, captured)
+    gc = box.GcResult(
+        deleted=["old_box.img"],
+        freed_bytes=3_000_000_000,
+        kept_newest=["new_box.img"],
+        skipped_in_use=[],
+        dry_run=False,
+    )
+    monkeypatch.setattr(box, "gc_orphaned_images_best_effort", lambda: gc)
+    box.build_boxes(["mq-rdqm-rhel9"], force=False)
+    err = capsys.readouterr().err
+    assert "box gc: deleted 1 orphaned" in err
+    assert "old_box.img" in err

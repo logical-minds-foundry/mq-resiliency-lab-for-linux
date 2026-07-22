@@ -443,6 +443,11 @@ def build_boxes(names: list[str], *, force: bool) -> None:
         raise typer.Exit(code=exc.exit_code) from exc
     finally:
         deps.transcript.close()
+    # A successful bake just imported (or re-imported) box base images; reclaim any
+    # now-orphaned older ones so re-bakes don't accumulate on the root disk (#759).
+    result = gc_orphaned_images_best_effort()
+    if result and result.deleted:
+        typer.echo(gc_summary(result), err=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -495,3 +500,163 @@ def clean_boxes(names: list[str]) -> list[str]:
         _vagrant_box_remove(name)
         removed.append(f"vagrant box '{name}'")
     return removed
+
+
+# --------------------------------------------------------------------------- #
+# Box base-image GC — reclaim orphaned libvirt base images (#759)             #
+# --------------------------------------------------------------------------- #
+# Every `vagrant box add --force` re-bake makes libvirt import a fresh base image
+# `<stem>_vagrant_box_image_0_<import-ts>_box.img` into the default pool and
+# orphans the previous one (~3-4 GiB each). Nothing GCs them, so they accumulate
+# until the (ephemeral) root disk fills and libvirt pauses VMs with I/O errors.
+# This GC keeps the NEWEST base image per box stem (the current template — the
+# next `vagrant up` reuses it) and deletes the older ones, with one hard safety
+# gate: an image still referenced as a <backingStore> by a live overlay volume is
+# never deleted (removing the file would corrupt that VM's disk).
+_VIRSH = ["virsh", "-c", "qemu:///system"]
+_DEFAULT_POOL = "default"
+# A vagrant-libvirt box base image: "<stem>_vagrant_box_image_0_<import-ts>_box.img".
+# The `_0_<digits>_` segment is what distinguishes a re-bakeable fat/base box (whose
+# import timestamp changes every bake) from a versioned cloud image, which is left alone.
+_BOX_IMAGE_RE = re.compile(r"^(?P<stem>.+)_vagrant_box_image_0_(?P<ts>\d+)_box\.img$")
+
+
+@dataclass(frozen=True)
+class GcResult:
+    """What a box-image GC pass did (or, under dry_run, would do)."""
+
+    deleted: list[str]  # base-image volume names removed
+    freed_bytes: int  # sum of their libvirt allocations
+    kept_newest: list[str]  # the newest image per stem, always kept
+    skipped_in_use: list[str]  # older images protected — a live overlay backs onto them
+    dry_run: bool
+
+
+def _virsh_out(args: list[str]) -> str:
+    """Run a read-only virsh command and return its output, FAIL-LOUD on non-zero.
+
+    Unlike `_capture`, this never masks a virsh failure as an empty result — a
+    broken `vol-list` must raise, not silently make GC a no-op (#759)."""
+    lines: list[str] = []
+    code = SubprocessRunner().run(Command([*_VIRSH, *args]), lines.append)
+    out = "\n".join(lines)
+    if code != 0:
+        raise RuntimeError(f"virsh {' '.join(args)} failed (rc={code}): {out}")
+    return out
+
+
+def _pool_volume_names(pool: str = _DEFAULT_POOL) -> list[str]:
+    """Volume names in the pool, from `virsh vol-list --pool <pool>` (Name/Path table)."""
+    names: list[str] = []
+    for raw in _virsh_out(["vol-list", "--pool", pool]).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("Name") or set(line) <= {"-"}:
+            continue
+        names.append(line.split()[0])
+    return names
+
+
+def _vol_detail(name: str, pool: str = _DEFAULT_POOL) -> tuple[int, str | None]:
+    """(allocation-bytes, backing-image-basename-or-None) from the volume XML.
+
+    Reads the exact `<allocation unit='bytes'>` and any `<backingStore><path>` —
+    the backing path is what marks a base image as in-use by an overlay."""
+    xml = _virsh_out(["vol-dumpxml", name, "--pool", pool])
+    alloc_match = re.search(r"<allocation unit='bytes'>(\d+)</allocation>", xml)
+    alloc = int(alloc_match.group(1)) if alloc_match else 0
+    backing_match = re.search(r"<backingStore>.*?<path>([^<]+)</path>", xml, re.DOTALL)
+    backing = Path(backing_match.group(1).strip()).name if backing_match else None
+    return alloc, backing
+
+
+def _vol_delete(name: str, pool: str = _DEFAULT_POOL) -> None:
+    """Delete a pool volume: idempotent on already-absent, FAIL-LOUD otherwise."""
+    lines: list[str] = []
+    code = SubprocessRunner().run(
+        Command([*_VIRSH, "vol-delete", name, "--pool", pool]), lines.append
+    )
+    if code == 0:
+        return
+    out = "\n".join(lines)
+    if "not found" in out.lower() or "no storage vol" in out.lower():
+        return  # already gone — idempotent
+    raise RuntimeError(f"virsh vol-delete {name} failed (rc={code}): {out}")
+
+
+def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> GcResult:
+    """Reclaim orphaned vagrant box base images from the libvirt pool (#759).
+
+    Keeps the newest base image per box stem and deletes the older ones, EXCEPT
+    any still referenced as a backing store by a live overlay volume. Idempotent
+    and safe to run repeatedly; `dry_run` reports without deleting."""
+    names = _pool_volume_names(pool)
+    alloc: dict[str, int] = {}
+    in_use: set[str] = set()
+    for name in names:
+        alloc[name], backing = _vol_detail(name, pool)
+        if backing:
+            in_use.add(backing)
+
+    by_stem: dict[str, list[tuple[int, str]]] = {}
+    for name in names:
+        match = _BOX_IMAGE_RE.match(name)
+        if match:
+            by_stem.setdefault(match["stem"], []).append((int(match["ts"]), name))
+
+    deleted: list[str] = []
+    kept: list[str] = []
+    skipped: list[str] = []
+    freed = 0
+    for _stem, images in sorted(by_stem.items()):
+        images.sort()  # ascending by import timestamp
+        kept.append(images[-1][1])  # newest is the current template — always keep
+        for _ts, name in images[:-1]:
+            if name in in_use:
+                skipped.append(name)
+                continue
+            if not dry_run:
+                _vol_delete(name, pool)
+            deleted.append(name)
+            freed += alloc.get(name, 0)
+    return GcResult(
+        deleted=deleted,
+        freed_bytes=freed,
+        kept_newest=kept,
+        skipped_in_use=skipped,
+        dry_run=dry_run,
+    )
+
+
+def gc_orphaned_images_best_effort() -> GcResult | None:
+    """GC for the automatic hooks (after a bake, after a teardown): cleanup must
+    never break the primary operation, but a failure is REPORTED to stderr — never
+    silently swallowed (#759). Returns the result, or None if GC failed."""
+    try:
+        return gc_orphaned_images()
+    except Exception as exc:  # cleanup must not fail the primary op — surfaced, not hidden
+        typer.echo(f"NOTICE: box base-image GC failed (non-fatal): {exc}", err=True)
+        return None
+
+
+def _human_bytes(num: int) -> str:
+    """Human-readable size, e.g. 3345661952 -> '3.1 GiB'."""
+    size = float(num)
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if size < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TiB"
+
+
+def gc_summary(result: GcResult) -> str:
+    """Render a box-image GC result for the CLI."""
+    if not result.deleted and not result.skipped_in_use:
+        return "box gc: no orphaned box base images — nothing to reclaim"
+    verb = "would delete" if result.dry_run else "deleted"
+    lines = [
+        f"box gc: {verb} {len(result.deleted)} orphaned box base image(s), "
+        f"{_human_bytes(result.freed_bytes)} reclaimed"
+    ]
+    lines += [f"  - {name}" for name in result.deleted]
+    lines += [f"  ~ {name} (kept — backing a live VM disk)" for name in result.skipped_in_use]
+    return "\n".join(lines)
