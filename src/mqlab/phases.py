@@ -299,14 +299,17 @@ def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa:
 def _host_mqlab() -> str:
     """Absolute path to a host-runnable mqlab console script for the host services.
 
-    The host-net-state systemd service runs as root with a minimal PATH, so it
-    must call mqlab by absolute path. It must NOT be the repo's `.venv/bin/mqlab`:
-    on the cloud host that venv is built inside the vrg container, so its
-    console-script shebang is `/workspace/.venv/bin/python` — a path that exists
-    only in the container, not on the host, and the service dies (status=127),
-    leaving `lab_network_state` unemitted (#398). The mqlab driving this bootstrap
-    is by definition host-runnable, so use the console script beside the running
-    interpreter — the same install that renders the dashboards above.
+    The host-net-state systemd service runs as root with a minimal PATH (no `uv`,
+    no mqlab on PATH), so it must call mqlab by absolute path. Use the console
+    script beside the interpreter driving THIS bootstrap — host-runnable by
+    definition, and the same venv `uv sync` keeps current at bootstrap (#776).
+
+    (History: this originally dodged a corrupted `.venv/bin/mqlab` whose shebang
+    was rewritten to the container path `/workspace/.venv/bin/python`, so the
+    service died status=127 (#398). That corruption is fixed at the source —
+    vergil-project/vergil-tooling#2473/#2495 give the container its own isolated
+    venv so it never rewrites the host `.venv` — so the interpreter-sibling mqlab
+    is now simply the correct host venv's console script, not a workaround.)
     """
     return str(Path(sys.executable).resolve().parent / "mqlab")
 
