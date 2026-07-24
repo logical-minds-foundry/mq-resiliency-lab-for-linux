@@ -39,3 +39,13 @@
     dest: "{{ mq_event_run_dir }}/run.sh"
     mode: "0755"
   become: true
+
+# The stop is now the inline `-TERM -- -+MQ_SERVER_PID+` group-kill in the SERVICE
+# definition (service.yml); the old stop.sh helper is gone (#786). A node provisioned
+# before that still carries the dead script, so remove it — nothing references it, and
+# leaving it invites an operator to think it is live.
+- name: remove the obsolete stop helper (superseded by the inline group-kill, #786)
+  ansible.builtin.file:
+    path: "{{ mq_event_run_dir }}/stop.sh"
+    state: absent
+  become: true
