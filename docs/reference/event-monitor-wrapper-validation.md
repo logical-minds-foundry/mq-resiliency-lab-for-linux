@@ -24,10 +24,12 @@ restart instead — still a pass.
 
 ## Prerequisites
 
-- The resilient wrapper is **deployed** on the target queue manager (`run.sh` +
-  `stop.sh` in `/opt/mq-event-monitor/`, and the SERVICE defined with the `setsid`
-  STARTCMD and the `stop.sh` STOPCMD). A cold rebuild (`#763`) is the authoritative
-  way to get there; `dspmqver`-style drift is not enough.
+- The resilient wrapper is **deployed** on the target queue manager (`run.sh` in
+  `/opt/mq-event-monitor/`, and the SERVICE defined with the `setsid` STARTCMD and the
+  inline group-kill STOPCMD — `STOPCMD('/bin/kill')` /
+  `STOPARG('-TERM -- -+MQ_SERVER_PID+')`; there is no separate `stop.sh` since `#786`).
+  A cold rebuild (`#763`) is the authoritative way to get there; `dspmqver`-style drift
+  is not enough.
 - The lab is up and the target QM is running. The harness **disrupts** the
   collector (it `STOP`/`START`s the service and `kill -9`s `amqsevt`), then leaves
   it running healthy — safe on a lab QM, not something to run against a QM you
