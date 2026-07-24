@@ -1243,6 +1243,11 @@
   mechanics were verified per arm during the rollout; a full clean cold-rebuild of
   some arms remains gated by separate lab-reliability issues, not by event
   monitoring itself.)</li>
+<li><strong>Resilience validated:</strong> 2026-07-24 — the crash-restart collector (a supervising
+  wrapper in its own process group via <code>setsid</code>; a negative-PID group stop; <code>amqsevt</code>
+  restarted through the <code>MQRC_OBJECT_IN_USE</code> 2042 exclusive-handle reap window) passed
+  its full B-matrix on nativeha-ubuntu (<code>NHAUAPP</code>). See the engineering report:
+  <code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code>.</li>
 <li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the
   complementary <em>log</em> stream (why something happened) to this <em>event</em> stream
   (what the queue manager did)</li>
@@ -1328,26 +1333,37 @@ that runs <code>amqsevt -o json_compact</code> against this queue manager. With 
 manager; <strong><code>-o json_compact</code> emits one JSON object per line</strong>. Use <code>json_compact</code>,
 not the pretty <code>-o json</code>: line-oriented pipelines (<code>logger</code>/journald, syslog, a
 file tailer) treat every line as a separate record, so a multi-line pretty event is
-split into fragments; one-object-per-line keeps each event a single record. Point
-<code>STARTCMD</code> at a small launcher that runs <code>amqsevt</code> and forwards its standard output
-to your log pipeline, and make <code>STOPCMD</code> stop the process the queue manager started:</p>
+split into fragments; one-object-per-line keeps each event a single record. Run the
+collector under a small <strong>supervising wrapper</strong>, started via <code>setsid</code> so the wrapper
+leads its own process group, and stop that whole group with a negative-PID <code>kill</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  CONTROL(QMGR) SERVTYPE(SERVER) +
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/path/to/your/launcher&#39;) STARTARG(&#39;+QMNAME+&#39;) +
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;+MQ_SERVER_PID+&#39;) +
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/usr/bin/setsid&#39;) STARTARG(&#39;-w -- /path/to/your/wrapper +QMNAME+&#39;) +
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;-TERM -- -+MQ_SERVER_PID+&#39;) +
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR(&#39;Drain SYSTEM.ADMIN.*.EVENT to JSON&#39;)
 </code></pre></div>
 <p>The <code>+QMNAME+</code> / <code>+MQ_SERVER_PID+</code> replaceable inserts <strong>require the <code>+</code>
 delimiters</strong> — without them MQ passes the literal token, not the value, and
-<code>STOPCMD</code> cannot reach the collector.</p>
-<p>The launcher itself is environment-specific and lives outside this guide (it is a
-few lines: run <code>amqsevt -m "$1" -o json_compact</code> and send its output to wherever
-your host collects logs — journald, syslog, a file tailer). Two properties matter,
-and are why the launcher exists rather than putting the command inline:</p>
+<code>STOPCMD</code> cannot reach the collector. MQ substitutes <code>+MQ_SERVER_PID+</code> <strong>even when
+embedded</strong> in a larger argument, so <code>-TERM -- -+MQ_SERVER_PID+</code> expands to
+<code>kill -TERM -- -&lt;pid&gt;</code>: because <code>setsid</code> made the wrapper the group leader, its PID
+<em>is</em> the process-group ID, and the <strong>negative</strong> PID signals the whole group — the
+wrapper and its <code>amqsevt</code> child together. The <code>--</code> is for procps-ng <code>/bin/kill</code>, so
+<code>-&lt;pid&gt;</code> is read as a process group, not an option.</p>
+<p>The wrapper itself is environment-specific and lives outside this guide, but three
+properties are why it exists rather than putting <code>amqsevt</code> inline:</p>
 <ul>
-<li><strong><code>exec</code> the collector</strong> so the process the queue manager tracks
-  (<code>MQ_SERVER_PID</code>) <em>is</em> <code>amqsevt</code>. Then <code>STOPCMD</code> stops the collector cleanly on
-  queue-manager shutdown, instead of leaving it orphaned.</li>
+<li><strong>Own process group</strong> (<code>setsid</code>) so a single negative-PID <code>STOPCMD</code> reaps the
+  wrapper <em>and</em> <code>amqsevt</code> together — a clean stop with no orphan. (<code>-w</code> keeps the
+  QM-tracked process alive if MQ ever spawns <code>STARTCMD</code> as a group leader, which would
+  force <code>setsid</code> to fork rather than exec in place.)</li>
+<li><strong>Supervise, don't just <code>exec</code></strong> — loop and <strong>restart <code>amqsevt</code> if it exits</strong>, so a
+  crashed collector self-heals instead of staying dead until the queue manager next
+  restarts. A restart that races the previous run's not-yet-released handle hits
+  <code>MQRC_OBJECT_IN_USE</code> (2042) — the event queues are opened for <em>exclusive</em> input — so
+  the wrapper <strong>retries on a short delay</strong> until the queue manager reaps the stale
+  handle (about a ~30 s housekeeping sweep on current builds). This crash-restart is
+  the whole reason to run under a wrapper rather than a bare <code>exec</code>.</li>
 <li><strong>Line-delimited output</strong> (<code>-o json_compact</code>) so each event is one line — one
   record to journald/syslog/a file reader — and <code>stdbuf -oL</code> keeps it flushed
   promptly rather than sitting in a block buffer.</li>
@@ -1370,6 +1386,11 @@ and are why the launcher exists rather than putting the command inline:</p>
   collector is running again on the newly active node. Behaviour varies by HA
   mechanism — a Native HA takeover is not a <code>strmqm</code>, so start/stop events may
   differ from a cold start; observe your own mechanism rather than assuming.</li>
+<li><strong>It self-heals.</strong> Kill the running <code>amqsevt</code> directly (not via MQ) and confirm the
+  wrapper restarts it within a few retries — the JSON feed resumes without a
+  queue-manager bounce. Expect a burst of <code>MQRC_OBJECT_IN_USE</code> (2042) log lines while
+  the queue manager reaps the old exclusive handle; that fail-retry-succeed sequence is
+  the wrapper working, not an error.</li>
 </ul>
 <h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1392,8 +1413,10 @@ and are why the launcher exists rather than putting the command inline:</p>
 <p class="admonition-title">How this lab implements it</p>
 <p>This lab wires the feed end to end: the shared <code>mq-event-monitor</code> role deploys
 the <code>SERVICE</code> on <strong>every queue manager across all stacks</strong> — all four HA/DR
-arms plus the shared <code>SVCQM</code> counterparty — (its launcher forwards <code>amqsevt</code>
-JSON to <strong>journald</strong>), Grafana <strong>Alloy</strong>
+arms plus the shared <code>SVCQM</code> counterparty — (its supervising wrapper restarts
+<code>amqsevt</code> on crash and forwards its JSON to <strong>journald</strong>; the proven mechanism and
+its live B-matrix are in
+<code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code>), Grafana <strong>Alloy</strong>
 ships the journal to <strong>Loki</strong> under a distinct <code>unit="mq-events"</code> label
 (separate from the diagnostic-log stream), and the Grafana boards carry a
 per-object events panel — the queue-manager board shows every event for the
@@ -1559,14 +1582,19 @@ IBM MQ 9.4 <em>ALTER QMGR</em> reference; the platform column reflects its footn
 <td>use <code>-o json_compact</code> — one JSON object per line, one record per event</td>
 </tr>
 <tr>
-<td>Collector keeps running after the queue manager stops</td>
-<td><code>STOPCMD</code> cannot reach the real process</td>
-<td><code>exec</code> the collector in the launcher so <code>MQ_SERVER_PID</code> is <code>amqsevt</code></td>
+<td>Collector (or a stray <code>amqsevt</code>) left running after the queue manager stops</td>
+<td><code>STOPCMD</code> doesn't reach the whole process group</td>
+<td>start the wrapper under <code>setsid</code> and stop with <code>kill -TERM -- -+MQ_SERVER_PID+</code> — the negative PID signals the whole group</td>
+</tr>
+<tr>
+<td><code>amqsevt</code> dies but the queue manager stays up, and the event feed just stops</td>
+<td>the collector isn't supervised (a bare <code>exec</code>)</td>
+<td>run <code>amqsevt</code> under a wrapper that restarts it on exit, retrying through the <code>MQRC_OBJECT_IN_USE</code> (2042) exclusive-handle reap window</td>
 </tr>
 <tr>
 <td>Events lag, then arrive in bursts</td>
 <td>the collector's output is block-buffered</td>
-<td>line-buffer the collector's standard output in the launcher</td>
+<td>line-buffer the collector's standard output in the wrapper</td>
 </tr>
 <tr>
 <td>Bursts of events missing under load</td>
