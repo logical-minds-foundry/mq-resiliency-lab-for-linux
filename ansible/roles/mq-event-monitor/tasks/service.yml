@@ -47,11 +47,13 @@
 
 # Define the service and start it now. CONTROL(QMGR) auto-starts it on future QM starts.
 # STARTCMD launches run.sh under `setsid -w --` so the wrapper leads its own process group (its pid
-# == its pgid; #760/A0). STOPCMD is the run-dir `stop.sh` helper, which SIGTERMs the NEGATIVE pgid to
-# reap BOTH the wrapper and its amqsevt child on QM/service stop (the resilient wrapper, .github#122).
-# STOPARG is the QM NAME (a literal), NOT MQ_SERVER_PID: the #761 smoke proved MQ does not substitute
-# MQ_SERVER_PID on this build (it arrives literal), so stop.sh instead DISCOVERS the live wrapper for
-# the QM via pgrep and kills its group (see stop.sh.j2; it also handles the procps-ng `--` quirk).
+# == its pgid; #760/A0) — that dedicated group is the point: it lets STOPCMD reap the wrapper AND its
+# amqsevt child in one signal (the resilient wrapper, .github#122). STOPCMD is `/bin/kill`, STOPARG is
+# `-TERM -- -+MQ_SERVER_PID+`: MQ substitutes the `+MQ_SERVER_PID+` insert (the group-leader pid, since
+# setsid makes run.sh the leader) even when embedded, so this expands to `kill -TERM -- -<pid>` and the
+# NEGATIVE pid signals the whole process group. `--` is for procps-ng /bin/kill (treat `-<pgid>` as a
+# group, not an option). (An earlier design used a stop.sh + pgrep because a T2 diagnostic that OMITTED
+# the `+` delimiters wrongly concluded MQ does not substitute MQ_SERVER_PID; #784 corrected that.)
 # `-w` keeps the QM-tracked process alive should MQ ever spawn the STARTCMD as a group leader (forcing
 # setsid to fork); A0 shows it does not here, so setsid execs in place. DEFINE ... REPLACE always
 # emits AMQ8625I; a START on an already-active service reports the AMQ8737W warning (rc 10) — a
@@ -61,8 +63,8 @@
 - name: define + start the MQ event-monitor service
   ansible.builtin.shell: |
     set -o pipefail
-    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('/usr/bin/setsid') STARTARG('-w -- %s/run.sh %s') STOPCMD('%s/stop.sh') STOPARG('%s') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
-      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
+    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('/usr/bin/setsid') STARTARG('-w -- %s/run.sh %s') STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
+      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
   args:
     executable: /bin/bash
