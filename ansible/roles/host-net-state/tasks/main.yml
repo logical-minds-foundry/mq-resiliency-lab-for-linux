@@ -6,9 +6,9 @@
       - mqlab_bin | length > 0
     fail_msg: >-
       mqlab_bin is unset. Run host-obs.yml with `-e mqlab_bin=<abs path to a
-      host-runnable mqlab>` — NOT the repo .venv, whose interpreter may be
-      container-built on the cloud host (#398). The observe phase passes it
-      automatically (phases._host_mqlab).
+      host-runnable mqlab>` (the systemd service runs with a minimal PATH, so it
+      needs an absolute path). The observe phase passes it automatically
+      (phases._host_mqlab — the host venv's mqlab, kept current by #776's uv sync).
 
 - name: textfile dir for the host collector
   ansible.builtin.file:
