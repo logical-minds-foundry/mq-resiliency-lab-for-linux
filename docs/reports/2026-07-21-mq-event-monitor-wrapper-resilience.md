@@ -3,9 +3,12 @@
 - **Epic:** `logical-minds-foundry/.github#122`
 - **Research task:** `logical-minds-foundry/mq-resiliency-lab-for-linux#760` (T1, A0–A3)
 - **Design:** `.github` `epics/122-event-monitor-wrapper/{spec,plan}.md`
-- **Lab arm used:** nativeha-ubuntu, QM `NHAUAPP`, active instance `nha-ubuntu-a3`
-- **Date:** 2026-07-21
-- **Status:** research findings (A0–A3); validation sections (B1–B3) added by T3/T5.
+- **Lab arm used:** nativeha-ubuntu, QM `NHAUAPP` (active instance varies per run —
+  A0–A3 on `nha-ubuntu-a3`, B1–B3 on `nha-ubuntu-a2`)
+- **Date:** 2026-07-21 (research); B-matrix re-validated 2026-07-24
+- **Status:** complete — research findings (A0–A3, T1) proven, and the B-matrix (B1–B3)
+  validated live against the **simplified** wrapper (no `stop.sh`; inline group-kill) by
+  T7 (`#785`). Evidence: `assets/mq-event-monitor-wrapper/b1b3-t7-nativeha-ubuntu.txt`.
 
 ## Purpose
 
@@ -147,8 +150,16 @@ timing, bounded around a ~30 s sweep on this build.
 
 ## Implications for the wrapper design (T2)
 
-1. **Mechanism confirmed.** `setsid -w -- run.sh` + `STOPARG('-TERM -MQ_SERVER_PID')`
-   is sound on this platform (A0); build it as the primary, not the fallback.
+1. **Mechanism confirmed.** `setsid -w -- run.sh` + a negative-PID group stop is sound on
+   this platform (A0); build it as the primary, not the fallback. The proven form is
+   `STOPCMD('/bin/kill')` + `STOPARG('-TERM -- -+MQ_SERVER_PID+')`: MQ substitutes the
+   `+MQ_SERVER_PID+` insert (the group-leader pid, since `setsid` makes `run.sh` the leader)
+   **even when embedded** in a larger argument, so it expands to `kill -TERM -- -<pid>` and the
+   *negative* pid signals the whole group; `--` is for procps-ng `/bin/kill` (so `-<pgid>` reads
+   as a group, not an option). (A T2 diagnostic that dropped the `+` delimiters wrongly concluded
+   MQ does not substitute the insert, and briefly led to an over-built `stop.sh`+`pgrep` helper;
+   that was corrected and the helper deleted — see T6/`#786`. The inline group-kill does the whole
+   job.)
 2. **2042 is real, not hypothetical.** Exclusive open (A1) + a ~29 s reap (A3)
    means a restart-after-crash **will** hit 2042 until the QM reaps — the retry is
    load-bearing, exactly as the spec argues.
@@ -168,30 +179,56 @@ timing, bounded around a ~30 s sweep on this build.
 
 The B-matrix is mechanised by `tools/validate-event-monitor-wrapper.sh` and
 documented in `docs/reference/event-monitor-wrapper-validation.md`. It is run on
-the active node of the target QM and captures the evidence referenced below. The
-harness itself was self-tested green during T2/T3 on nativeha-ubuntu (NHAUAPP);
-the authoritative evidence here is filled by the T5 live run on a cold-rebuilt
-stack (`#764`).
+the active node of the target QM and captures the evidence below. The authoritative
+run is **T7 (`#785`)**: the B-matrix re-run against the *simplified* wrapper — after
+T6/`#786` deleted `stop.sh` and moved the stop inline — on the stable nativeha-ubuntu
+stack (NHAUAPP, active `nha-ubuntu-a2`, 2026-07-24). All three scenarios PASS; the full
+capture is `assets/mq-event-monitor-wrapper/b1b3-t7-nativeha-ubuntu.txt`.
 
 ### B1 — normal start + checkpoint
 
-Wrapper (`run.sh` under `setsid`) and `amqsevt` both up; the SERVICE `PID` equals
-the wrapper's PID equals its PGID (its own process group); JSON events reach
-journald. Evidence: *T5 — `assets/mq-event-monitor-wrapper/`.*
+**PASS.** Wrapper (`run.sh` under `setsid`) and `amqsevt` both up; the SERVICE `PID`
+equals the wrapper's PID equals its PGID — one process group led by `run.sh`:
+
+```text
+  PID   PPID  PGID  ARGS
+39872   5957 39872  /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+39942  39872 39872  /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+service_PID=39872  wrapper_PID=39872  wrapper_PGID=39872  amqsevt=39942
+```
+
+`amqsevt` (39942) is a child inside the wrapper's group (PGID 39872), and 20 JSON
+events were already in journald. **Active-only:** a clean `ps` across the raft trio
+shows the wrapper + `amqsevt` **only** on the active instance (`nha-ubuntu-a2`);
+replicas `a1`/`a3` carry neither — the SERVICE (`CONTROL(QMGR)`) starts on the active
+QM instance alone, as Native HA requires. (A bare `pgrep -f 'run.sh NHAUAPP'` *appears*
+to match on the replicas, but that is the shell probe self-matching its own argv; the
+clean `ps` that excludes the `sh -c` wrapper is authoritative.)
 
 ### B2 — clean stop (no orphan)
 
-`STOP SERVICE` reaps **both** the wrapper and `amqsevt`; no orphan; service gone.
-The regression the old `exec` model guaranteed and the new design preserves —
-note (per A2) that "clean" here means *no orphan*, not a graceful `MQCLOSE`
-(`amqsevt` has no signal handler, so the QM reaps its connection). Evidence:
-*T5 — `assets/mq-event-monitor-wrapper/`.*
+**PASS.** `STOP SERVICE` (`AMQ8732I`) reaped **both** the wrapper and `amqsevt` — no
+orphan, service gone — via the inline `STOPARG('-TERM -- -+MQ_SERVER_PID+')` group-kill
+alone (no `stop.sh`). This is the same no-orphan guarantee the old `exec` model gave,
+now preserved by the group stop. Note (per A2) that "clean" here means *no orphan*, not
+a graceful `MQCLOSE` (`amqsevt` has no signal handler, so the QM reaps its connection);
+a brief stale handle after the stop is normal and self-heals.
 
 ### B3 — crash recovery through the 2042 window
 
-`kill -9 amqsevt` → the wrapper logs the exit, sleeps ~10 s, and restarts it,
-retrying through the ~29 s exclusive-handle reap window (each retry logs
-`MQRC_OBJECT_IN_USE [2042]`, per A1's exclusive-open finding) until it succeeds —
-the deliberate fail-retry-succeed heartbeat. Early evidence captured during the
-T2 smoke is in `assets/mq-event-monitor-wrapper/b2b3-smoke.txt`; the T5 run
-supersedes it on a cold-rebuilt stack.
+**PASS.** `kill -9` on `amqsevt` (66238) → the wrapper logged the exit, slept ~10 s, and
+relaunched it (→ 66473), retrying through the exclusive-handle reap window — each racing
+restart logging `MQRC_OBJECT_IN_USE [2042]` (per A1's exclusive-open finding) until the
+handle cleared and the collector stuck. The journald trail is the deliberate
+fail-retry-succeed heartbeat:
+
+```text
+run.sh[66167]: amqsevt exited rc=0 after 0s [... MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[66167]: amqsevt exited rc=137 after 3s (fast); restarting in 10s
+run.sh[66167]: amqsevt exited rc=0 after 0s [... MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+```
+
+The lab was left healthy: service running only on the active node, raft
+`INSYNC`/`QUORUM(3/3)`. Full capture (with the active-only `ps` and final state):
+`assets/mq-event-monitor-wrapper/b1b3-t7-nativeha-ubuntu.txt`. The earlier T2 smoke
+(`assets/mq-event-monitor-wrapper/b2b3-smoke.txt`) is superseded by this T7 run.

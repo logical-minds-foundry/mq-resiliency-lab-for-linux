@@ -1,0 +1,52 @@
+# T7 (#785) — live B-matrix of the SIMPLIFIED wrapper (no stop.sh; inline group-kill).
+# Stack nativeha-ubuntu, QM NHAUAPP. Raft trio nha-ubuntu-a1/a2/a3; QM active on a2, QUORUM(3/3), all INSYNC.
+# Deployed SERVICE (proven simplified form):
+#   STARTCMD(/usr/bin/setsid) STARTARG(-w -- /opt/mq-event-monitor/run.sh NHAUAPP)
+#   STOPCMD(/bin/kill)        STOPARG(-TERM -- -+MQ_SERVER_PID+)
+# Harness: tools/validate-event-monitor-wrapper.sh, run on the active node via `ansible -m script`.
+
+== B1 (active-only) :: the SERVICE runs on the ACTIVE instance only ==
+# clean `ps` (comm+args, excluding the ansible `sh -c` wrapper) across the raft trio:
+nha-ubuntu-a1: (no amqsevt / no run.sh)
+nha-ubuntu-a2: 39872  5957 39872 run.sh   /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+               39942 39872 39872 amqsevt  /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+nha-ubuntu-a3: (no amqsevt / no run.sh)
+# NB: a bare `pgrep -f 'run.sh NHAUAPP'` self-matches the ansible `sh -c` wrapper's own argv on the
+# replicas — a false positive. The clean `ps` that excludes the shell wrapper (above) is authoritative:
+# the wrapper + amqsevt exist only on the active instance.
+
+== full harness run on the active node (a2) ==
+== event-monitor wrapper validation :: QM=NHAUAPP SERVICE=MQ.EVENT.MONITOR :: 2026-07-24T20:12:46Z ==
+
+-- B1: wrapper + amqsevt up; service PID == wrapper PGID; events flowing --
+  39872    5957   39872 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  39942   39872   39872 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+wrapper_pid=39872  service_PID=39872  amqsevt=39942  wrapper_PGID=39872
+PASS  B1 up + checkpoint (service PID == wrapper PID == PGID = 39872)
+PASS  B1 events flowing (20 JSON events in journald)
+
+-- B2: STOP SERVICE reaps BOTH wrapper + amqsevt (no orphan) --
+AMQ8732I: Request to stop Service accepted.
+PASS  B2 clean stop — wrapper + amqsevt both reaped, no orphan
+
+-- B3: kill -9 amqsevt; wrapper restarts it (retrying through the ~29s 2042 window) --
+AMQ8733I: Request to start Service accepted.
+amqsevt before crash: 66238
+PASS  B3 crash recovery (wrapper restarted amqsevt: 66238 -> 66473)
+run.sh lifecycle in journald (fail-retry-succeed, incl. MQRC_OBJECT_IN_USE 2042):
+run.sh[39789]: starting event collector for NHAUAPP (pgid 39789)
+run.sh[39872]: starting event collector for NHAUAPP (pgid 39872)
+run.sh[39872]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[66167]: starting event collector for NHAUAPP (pgid 66167)
+run.sh[66167]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[66167]: amqsevt exited rc=137 after 3s (fast); restarting in 10s
+run.sh[66167]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[66167]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+
+== summary: ALL SCENARIOS PASS ==
+  66167    5957   66167 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  66473   66167   66167 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+
+== final state (lab left healthy) ==
+NHAUAPP ROLE(Active) INSTANCE(nha-ubuntu-a2) INSYNC(yes) QUORUM(3/3) GRPROLE(Live)
+service running only on active a2: run.sh 66167 + amqsevt in pgid 66167; replicas a1/a3 clean.
