@@ -436,7 +436,8 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     host_argv = next(a for a in playbooks if a[1] == "host-obs.yml")
     assert host_argv[2:6] == ["-c", "local", "-i", "localhost,"]
     # host-obs.yml is passed the host-runnable mqlab the net-state service calls
-    # by absolute path — beside the running interpreter, never the repo .venv (#398).
+    # by absolute path (the service runs with a minimal PATH): the console script
+    # beside the interpreter driving this bootstrap — the host venv's own mqlab.
     mqlab_bin = next(a for a in host_argv if a.startswith("mqlab_bin="))
     assert host_argv[host_argv.index(mqlab_bin) - 1] == "-e"
     assert mqlab_bin == f"mqlab_bin={Path(sys.executable).resolve().parent / 'mqlab'}"

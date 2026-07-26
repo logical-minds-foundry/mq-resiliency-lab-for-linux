@@ -40,11 +40,12 @@
     mode: "0755"
   become: true
 
-# The SERVICE STOPCMD helper: negates MQ_SERVER_PID to SIGTERM the wrapper's whole process group
-# (MQ won't substitute a dash-prefixed token, and procps-ng /bin/kill needs `--`; see stop.sh.j2).
-- name: install the collector stop helper
-  ansible.builtin.template:
-    src: stop.sh.j2
-    dest: "{{ mq_event_run_dir }}/stop.sh"
-    mode: "0755"
+# The stop is now the inline `-TERM -- -+MQ_SERVER_PID+` group-kill in the SERVICE
+# definition (service.yml); the old stop.sh helper is gone (#786). A node provisioned
+# before that still carries the dead script, so remove it — nothing references it, and
+# leaving it invites an operator to think it is live.
+- name: remove the obsolete stop helper (superseded by the inline group-kill, #786)
+  ansible.builtin.file:
+    path: "{{ mq_event_run_dir }}/stop.sh"
+    state: absent
   become: true

@@ -8,12 +8,12 @@
 # (see tasks/service.yml). MQ spawns the STARTCMD process as a child of amqzmgr0, NOT as a group
 # leader (proven in #760/A0), so `setsid` calls setsid(2) in place and execs THIS script, which
 # becomes its own session/process-group leader with PGID == its PID. amqsevt then
-# runs as our child in that group. The SERVICE STOPCMD is the run-dir `stop.sh` helper, which
-# SIGTERMs the NEGATIVE pgid — so a QM/service stop reaps BOTH this wrapper and amqsevt in one shot.
-# (The helper exists because MQ won't substitute MQ_SERVER_PID at all on this build, so stop.sh
-# discovers this wrapper by QM name via pgrep; procps-ng /bin/kill also needs `--`. See stop.sh.j2.)
-# (Positive `kill MQ_SERVER_PID`, as the old exec-model used, could only ever kill one process; and
-# a negative kill without setsid would have hit amqzmgr0's group — which is why setsid is load-bearing.)
+# runs as our child in that group. The SERVICE STOPCMD is `/bin/kill` with STOPARG
+# `-TERM -- -+MQ_SERVER_PID+`: MQ substitutes the `+MQ_SERVER_PID+` insert (this wrapper's pid, the
+# group leader) even when embedded, so it expands to `kill -TERM -- -<pid>` — a NEGATIVE pid that
+# SIGTERMs the WHOLE process group, reaping this wrapper AND amqsevt in one shot (`--` is for
+# procps-ng /bin/kill). Positive `kill <pid>` could only ever kill one process; a negative kill
+# without setsid would have hit amqzmgr0's group — which is why the setsid group leader is load-bearing.
 #
 # WHY A WRAPPER: amqsevt is a non-transactional PCF-parsing sample with NO signal handlers
 # (#760/A1) and NO restart of its own — an MQ SERVICE is start-once, unlike systemd. A corrupt
