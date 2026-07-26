@@ -1,0 +1,33 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.COMMAND.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Command Event",
+    "value": 99
+  },
+  "eventReason": {
+    "name": "Command MQSC",
+    "value": 2412
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:18Z",
+    "epoch": 1785064698
+  },
+  "correlationID": "414D51204E48415241505020202020202CEA656A05F40040",
+  "eventData": {
+    "commandContext": {
+      "eventUserId": "mqm",
+      "eventOrigin": "Console",
+      "eventQueueMgr": "NHARAPP",
+      "command": "Change Queue"
+    },
+    "commandData": {
+      "queueName": "APP.REPLY",
+      "queueType": "Local",
+      "inhibitPut": "Put Inhibited"
+    }
+  }
+}

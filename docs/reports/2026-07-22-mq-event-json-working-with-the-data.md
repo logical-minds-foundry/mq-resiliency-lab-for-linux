@@ -164,6 +164,29 @@ are human-readable but the numeric `value` is the stable key.
 > not find them. They work; they are simply undocumented. Do not rely on IBM docs
 > to describe them.
 
+## 8. Syslog fidelity — do events fit, and is the journald copy faithful?
+
+A fair worry about the journald/`logger` path: does anything get **truncated**
+between the event queue and Loki? Measured live (2026-07-26, `NHARAPP`) by reading
+each event two ways — the authoritative `amqsevt -m NHARAPP -b -o json_compact`
+browse vs. the journald copy the collector shipped through `logger --size 32768`:
+
+- The **largest** event observed was **2,424 bytes** (a `Config Change` full
+  attribute dump) — about **13× under** the 32,768-byte `logger --size` cap.
+- **11 of 12** reason types were **byte-identical** between the authoritative read
+  and the journald copy; the single difference was a different command *instance*,
+  not truncation.
+
+**Finding: MQ instrumentation events fit comfortably in the journald/syslog path,
+and the shipped copy is byte-faithful — no truncation.** The `logger --size 32768`
+setting is headroom for pathological config objects, not a limit that normal
+events approach. Full per-reason table and the real captured fixtures (one JSON
+per reason code) are under
+[`assets/110-mq-event-captures/`](assets/110-mq-event-captures/README.md)
+([syslog-fidelity.md](assets/110-mq-event-captures/syslog-fidelity.md)). To force
+each event class yourself, see the companion
+[event-generation reference](2026-07-26-mq-event-generation-lab-reference.md).
+
 ---
 
 ## Appendix A — Captured events, annotated

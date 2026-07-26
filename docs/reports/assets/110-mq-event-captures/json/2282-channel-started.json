@@ -1,0 +1,23 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.CHANNEL.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Channel Event",
+    "value": 46
+  },
+  "eventReason": {
+    "name": "Channel Started",
+    "value": 2282
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:23Z",
+    "epoch": 1785064703
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "channelName": "NHARAPP.SVCQM"
+  }
+}

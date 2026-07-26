@@ -1,0 +1,26 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.QMGR.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Queue Mgr Event",
+    "value": 44
+  },
+  "eventReason": {
+    "name": "Unknown Xmit Queue",
+    "value": 2196
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:18Z",
+    "epoch": 1785064698
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "queueName": "EVT.RMT",
+    "xmitQueueName": "NO.XMIT",
+    "applType": "Unix",
+    "applName": "amqsput"
+  }
+}

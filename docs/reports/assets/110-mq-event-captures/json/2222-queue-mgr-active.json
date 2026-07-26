@@ -1,0 +1,24 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.QMGR.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Queue Mgr Event",
+    "value": 44
+  },
+  "eventReason": {
+    "name": "Queue Mgr Active",
+    "value": 2222
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:02:46Z",
+    "epoch": 1785063766
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "hostName": "nha-rhel-a1",
+    "reasonQualifier": "Replica Activated"
+  }
+}
