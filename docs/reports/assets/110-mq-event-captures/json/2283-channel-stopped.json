@@ -1,0 +1,32 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.CHANNEL.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Channel Event",
+    "value": 46
+  },
+  "eventReason": {
+    "name": "Channel Stopped",
+    "value": 2283
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:19Z",
+    "epoch": 1785064699
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "channelName": "NHARAPP.SVCQM",
+    "xmitQueueName": "SVCQM",
+    "connectionName": "10.60.0.50(1414)",
+    "reasonQualifier": "Channel Stopped Disabled",
+    "errorId": "0x10009528",
+    "auxErrorDataInt1": 0,
+    "auxErrorDataInt2": 0,
+    "auxErrorDataStr1": "NHARAPP.SVCQM",
+    "auxErrorDataStr2": "svc-sim-ext (10.60.0.50)(1414)",
+    "auxErrorDataStr3": ""
+  }
+}

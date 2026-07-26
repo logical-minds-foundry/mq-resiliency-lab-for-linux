@@ -1,0 +1,46 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.CONFIG.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Config Event",
+    "value": 43
+  },
+  "eventReason": {
+    "name": "Config Create Object",
+    "value": 2367
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:18Z",
+    "epoch": 1785064698
+  },
+  "correlationID": "414D51204E48415241505020202020202CEA656A15F40040",
+  "eventData": {
+    "eventUserId": "mqm",
+    "eventOrigin": "Console",
+    "eventQueueMgr": "NHARAPP",
+    "objectType": "Queue",
+    "queueName": "EVT.RMT",
+    "queueDesc": "",
+    "remoteQueueName": "X",
+    "remoteQueueMgrName": "Y",
+    "xmitQueueName": "NO.XMIT",
+    "custom": "",
+    "clusterName": "",
+    "clusterNamelist": "",
+    "alterationDate": "",
+    "alterationTime": "",
+    "inhibitPut": "Put Allowed",
+    "defPriority": 0,
+    "defPersistence": "Not Persistent",
+    "scope": "Queue Mgr",
+    "defBind": "Bind On Open",
+    "clwlQueueRank": 0,
+    "clwlQueuePriority": 0,
+    "capExpiry": -1,
+    "defPutResponseType": "Sync Response",
+    "queueType": "Remote"
+  }
+}

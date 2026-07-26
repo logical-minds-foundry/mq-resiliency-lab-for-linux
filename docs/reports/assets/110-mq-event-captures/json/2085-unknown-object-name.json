@@ -1,0 +1,25 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.QMGR.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Queue Mgr Event",
+    "value": 44
+  },
+  "eventReason": {
+    "name": "Unknown Object Name",
+    "value": 2085
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:18Z",
+    "epoch": 1785064698
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "applType": "Unix",
+    "applName": "amqsput",
+    "queueName": "A.MISSING.QUEUE"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.PERFM.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Perfm Event",
+    "value": 45
+  },
+  "eventReason": {
+    "name": "Queue Full",
+    "value": 2053
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:19Z",
+    "epoch": 1785064699
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "baseObjectName": "EVT.HI",
+    "timeSinceReset": 0,
+    "highQueueDepth": 5,
+    "msgEnqCount": 1,
+    "msgDeqCount": 0
+  }
+}

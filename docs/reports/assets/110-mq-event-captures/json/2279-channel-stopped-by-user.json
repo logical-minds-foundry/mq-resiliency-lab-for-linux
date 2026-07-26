@@ -1,0 +1,24 @@
+{
+  "eventSource": {
+    "objectName": "SYSTEM.ADMIN.CHANNEL.EVENT",
+    "objectType": "Queue",
+    "queueMgr": "NHARAPP"
+  },
+  "eventType": {
+    "name": "Channel Event",
+    "value": 46
+  },
+  "eventReason": {
+    "name": "Channel Stopped By User",
+    "value": 2279
+  },
+  "eventCreation": {
+    "timeStamp": "2026-07-26T11:18:19Z",
+    "epoch": 1785064699
+  },
+  "eventData": {
+    "queueMgrName": "NHARAPP",
+    "channelName": "NHARAPP.SVCQM",
+    "reasonQualifier": "Channel Stopped Disabled"
+  }
+}

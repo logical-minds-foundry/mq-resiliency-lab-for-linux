@@ -18,6 +18,15 @@
   restarted through the `MQRC_OBJECT_IN_USE` 2042 exclusive-handle reap window) passed
   its full B-matrix on nativeha-ubuntu (`NHAUAPP`). See the engineering report:
   `docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md`.
+- **Working with the data:** this guide covers *producing* the feed; two companion
+  repo reports cover *consuming* and *generating* it — the schema/consume reference
+  `docs/reports/2026-07-22-mq-event-json-working-with-the-data.md` (envelope, the
+  PCF→JSON key rule, the unordered/conditional-keys caveat, the syslog-fidelity
+  finding, and an annotated appendix of real captured events) and the deterministic
+  event-generation reference
+  `docs/reports/2026-07-26-mq-event-generation-lab-reference.md` (how to force one
+  event of each class). Real captured fixtures live under
+  `docs/reports/assets/110-mq-event-captures/`.
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md) — the
   complementary *log* stream (why something happened) to this *event* stream
   (what the queue manager did)
