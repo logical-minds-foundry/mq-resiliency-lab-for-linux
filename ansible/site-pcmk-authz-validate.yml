@@ -24,7 +24,8 @@
 #       provisioning. So the N1 probe as written (hosts: app) will not find this
 #       keystore until the live arm either (a) stages an OU=ops keystore on the app
 #       host readable by the probe user, or (b) re-homes the N1 probe to mon-probe.
-#       RESOLVE ON #618 -- do not assume the file is present on the app host.
+#       RESOLVED (#792): the first play fetches it from mon-probe and stages it on
+#       the app host (option a). Verified live on the running pcmk-ubuntu arm.
 #
 #   (2) The positive flow uses `app_requester.py --count 1` (a bounded one-shot).
 #       app_requester.py has NO `--once` flag (the plan's placeholder); --count 1
@@ -36,6 +37,23 @@
 #       roles/app-requester), NOT a /opt/mqlab checkout. The stage-probe task below
 #       mirrors roles/app-requester's copy idiom. Confirm the venv+path on #618.
 # ============================================================================
+
+# (#792) Stage the OU=ops (mq_prometheus) keystore from mon-probe onto the app host.
+# The mqmon identity's only keystore is placed by roles/mq-exporter on mon-probe
+# (mqm-owned), but N1 runs on the app host (pymqi + app keystore live there). MQ
+# authorizes by cert DN (SSLPEERMAP -> mqmon), NOT source host, so the denial
+# reproduces identically from the app host. Fetch to the controller, then copy over.
+- name: stage the OU=ops keystore from mon-probe (fetch to controller)
+  hosts: mon-probe
+  become: true
+  gather_facts: false
+  tasks:
+    - name: fetch the mq_prometheus keystore from mon-probe
+      ansible.builtin.fetch:
+        src: "/var/mqm/ssl/mq_prometheus/{{ item }}"
+        dest: /tmp/authz-mqmon-ks/
+        flat: true
+      loop: [key.p12, key.sth]
 
 - name: Stage 2 authorization -- negative (N1 + N3) + positive
   hosts: app
@@ -53,11 +71,27 @@
     # owner vagrant -- placed on the app host by roles/mq-client (#250). Grounded.
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
-    # mq_prometheus keystore (OU=ops): see KNOWN-UNKNOWN (1) above -- placed on
-    # mon-probe by roles/mq-exporter, NOT the app host. Verify/stage on #618.
-    mon_keyrepo: /var/mqm/ssl/mq_prometheus/key
+    # mq_prometheus keystore (OU=ops): staged from mon-probe by the play above (#792).
+    mon_keyrepo: /home/vagrant/ssl/mqmon/key
     mon_certlabel: mq_prometheus
   tasks:
+    - name: create the staged mqmon keystore dir on the app host (#792)
+      ansible.builtin.file:
+        path: /home/vagrant/ssl/mqmon
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0700"
+
+    - name: stage the mqmon (mq_prometheus) keystore on the app host (#792)
+      ansible.builtin.copy:
+        src: "/tmp/authz-mqmon-ks/{{ item }}"
+        dest: "/home/vagrant/ssl/mqmon/{{ item }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0600"
+      loop: [key.p12, key.sth]
+
     - name: stage the authz probe on the app host (alongside app_requester.py)
       ansible.builtin.copy:
         src: "{{ probe_src }}"
@@ -177,7 +211,7 @@
     app_requester: /home/vagrant/app_requester.py
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
-    mon_keyrepo: /var/mqm/ssl/mq_prometheus/key # see KNOWN-UNKNOWN (1)
+    mon_keyrepo: /home/vagrant/ssl/mqmon/key # staged on the app host by the first play (#792)
     mon_certlabel: mq_prometheus
   tasks:
     - name: N1 (post-failover) -- mqmon still denied an MQPUT (2035)
