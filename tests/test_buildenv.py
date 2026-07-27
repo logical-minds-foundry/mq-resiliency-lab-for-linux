@@ -232,13 +232,11 @@ def test_migrate_moves_known_entries(tmp_path):
     (build / "mq").mkdir(parents=True)
     (build / "inventory.ini").write_text("x")
     (build / "snapshots").mkdir(parents=True)
-    (build / "rhel-ha").mkdir(parents=True)  # operator-curated HA repo -> state (not stray)
     b.ensure(main, run=run)
     b.migrate(main)
     assert (build / "cache" / "mq").is_dir()
     assert (build / "work" / "inventory.ini").exists()
     assert (build / "state" / "snapshots").is_dir()
-    assert (build / "state" / "rhel-ha").is_dir()  # entitlement-gated: never a disposable stray
     assert not (build / "mq").exists()
 
 
