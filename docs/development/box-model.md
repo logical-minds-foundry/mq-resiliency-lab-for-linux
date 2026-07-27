@@ -61,10 +61,10 @@ answer to a kernel-pin problem:
   the base MQ product on the stock `rhel/9.6` base (no RDQM/Pacemaker stack, no
   `extra_disk`). The two fat RHEL boxes are distinct not by kernel flavor but
   because native HA omits the entire RDQM/DRBD stack.
-- **`rhel96-x86_64`** — the *bare* RHEL 9.6 base box, still booted un-baked by the
-  RHEL arms that are **not yet** baked (`pcmk-rhel-*`, `san-a-rhel`). These still
-  pay the full per-run install; baking the Pacemaker RHEL arm is deferred to a
-  follow-on epic. (The Native-HA RHEL arm was baked in `logical-minds-foundry/.github#88`.)
+- **`rhel96-x86_64`** — the *bare* RHEL 9.6 base box. No RHEL arm boots it un-baked
+  any more; its sole role now is to be the base image the two fat RHEL boxes are
+  baked **from** (§3). (The Native-HA RHEL arm was baked in
+  `logical-minds-foundry/.github#88`; the RDQM box bakes from this same base, above.)
 
 Both attach the RHEL install DVD as a cdrom — it doubles as a complete offline
 BaseOS+AppStream dnf repo for the unregistered guests.
