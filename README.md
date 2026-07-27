@@ -31,7 +31,7 @@ Almost everything is fetched automatically — IBM **MQ Advanced for Developers*
 - **A virtualization-capable Linux/macOS host with root/sudo** — the lab creates
   nested libvirt/QEMU/Vagrant guests and wants a beefy box (~12 vCPU / 64 GiB,
   nested virtualization). `mqlab doctor` reports anything missing.
-- **A RHEL box/subscription** — only for the RHEL-based arms (pcmk-rhel, RDQM,
+- **A RHEL box/subscription** — only for the RHEL-based arms (RDQM,
   native-HA-RHEL). Ubuntu arms need nothing extra.
 
 ### (Optional) Verify the download

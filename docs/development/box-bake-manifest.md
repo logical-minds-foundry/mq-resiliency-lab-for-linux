@@ -215,13 +215,10 @@ Verified by reading each role's `tasks/main.yml`:
 1. **`mq-install` is NOT in `bake-mq-rdqm`.** It is Ubuntu-only (copies the
    UbuntuLinux deb tar, `apt-get install`). The RHEL rdqm box installs MQ via
    `rdqm-install` (LinuxX64 rpm tar). Listing both would break on RHEL.
-2. **`rhel-ha-repo` is NOT in `bake-mq-rdqm`.** It serves the HighAvailability repo
-   for the **pcmk-rhel** arm only (`site-pcmk-rhel.yml`, `pcmk-cluster`). RDQM gets
-   Pacemaker/DRBD from the MQ Advanced tar's PreReqs, so the rdqm box never uses it.
-3. **`mq-exporter` build is in `bake-obs`, not `bake-mq-rdqm`.** It is Ubuntu-only
+2. **`mq-exporter` build is in `bake-obs`, not `bake-mq-rdqm`.** It is Ubuntu-only
    (includes the Ubuntu-deb `mq-install`, apt `golang-go`) and the exporter runs on
    the obs/probe box.
-4. **`node-exporter` and `loki` are baked as full roles** (not split): their config
+3. **`node-exporter` and `loki` are baked as full roles** (not split): their config
    is static, so the whole role is effectively install.
 
 ## Naming note: `rdqm-install` = "MQ product **+** RDQM stack"
