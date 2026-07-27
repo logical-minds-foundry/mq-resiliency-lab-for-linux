@@ -190,6 +190,35 @@ def lab_stacks() -> dict[str, Stack]:
     return result
 
 
+# Topology group-name prefix marking a SAN target group (san_a, san_b). The SAN
+# targets are the only stack members that stay on the host-resolved base box and run
+# the drbd-san / iscsi-target install-half, so their debs are pre-cached (#796).
+_SAN_GROUP_PREFIX = "san_"
+
+
+def stack_san_targets(name: str) -> list[str]:
+    """SAN target hosts of a stack — members of its `san_*` groups (san-a/san-b).
+
+    Returns [] for a stack with no SAN targets (rdqm / native-ha) or an unknown
+    stack name. Gates the SAN-deb pre-cache: only a stack that actually has SAN
+    targets needs the install-half debs staged (#796). Reads topology directly, the
+    same pure-membership way `stack_members` does.
+    """
+    data = _topology()
+    stacks = data.get("stacks") or {}
+    all_groups: dict[str, list[str]] = {
+        g: list(hosts) for g, hosts in (data.get("groups") or {}).items()
+    }
+    targets: list[str] = []
+    for g in (stacks.get(name) or {}).get("groups", []):
+        if not g.startswith(_SAN_GROUP_PREFIX):
+            continue
+        for host in all_groups.get(g, []):
+            if host not in targets:
+                targets.append(host)
+    return targets
+
+
 def stack_members(name: str) -> list[str] | None:
     """Hosts belonging to a stack's groups (flattened in declared order, de-duped).
 

@@ -85,6 +85,16 @@ def mq_cache_dir() -> Path:
     return cache("mq")
 
 
+def san_deb_cache_dir() -> Path:
+    """SAN install-half .deb cache — shared cache/ (re-fetchable downloads, #796).
+
+    Holds the pre-fetched SAN target packages (drbd-utils, targetcli-fb, the
+    kernel-keyed linux-modules-extra) so a cold rebuild installs them from a local
+    copy instead of a ~100 MB internet pull. Re-fetchable, so it lives beside the MQ
+    tarballs in the nuke-safe cache/ bucket."""
+    return cache("san-debs")
+
+
 def lab_script(name: str) -> Path:
     """Absolute path to a script under lab/scripts/."""
     return repo_root() / "lab" / "scripts" / name

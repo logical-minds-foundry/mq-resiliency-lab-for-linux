@@ -1,5 +1,40 @@
-- name: install targetcli (apt)
-  ansible.builtin.apt:
-    name: targetcli-fb
-    update_cache: true
+# targetcli-fb (the LIO admin tool), installed OFFLINE from the pre-cached SAN debs
+# (#796). The mqlab bootstrap pre-fetches it into san_media_dir on the controller so
+# a cold rebuild copies + dpkgs it instead of pulling from the archive. If it is
+# absent from the cache it falls back to a normal network `apt install`, so the path
+# self-heals. (targetcli-fb's own python deps are small; only the named deb is
+# cached, so those resolve from the network on a from-scratch box — see
+# docs/development/san-deb-cache.md.)
+- name: locate cached targetcli-fb deb on the controller
+  ansible.builtin.find:
+    paths: "{{ san_media_dir }}"
+    patterns: "targetcli-fb_*.deb"
+  delegate_to: localhost
+  become: false
+  register: iscsi_target_cache
+
+- name: stage cached targetcli-fb deb on the target
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/cache/san-debs/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ iscsi_target_cache.files | map(attribute='path') | list }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  become: true
+
+- name: install targetcli (cached deb offline, network fallback)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    deb=$(ls -1 /var/cache/san-debs/targetcli-fb_*.deb 2>/dev/null | sort -V | tail -n1 || true)
+    if [ -n "$deb" ]; then
+      DEBIAN_FRONTEND=noninteractive apt-get install -y "$deb"
+    else
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y targetcli-fb
+    fi
+  args:
+    executable: /bin/bash
+  register: iscsi_target_install
+  changed_when: "'Setting up' in iscsi_target_install.stdout"
   become: true
