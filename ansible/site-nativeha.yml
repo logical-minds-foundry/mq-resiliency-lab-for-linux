@@ -110,7 +110,7 @@
   vars:
     our_qm: "{{ qm_app }}"
     # This arm's own site-A net-ext IPs (the active instance answers on whichever
-    # of the three holds the QM) — NOT another arm's range (.7x is pcmk-rhel).
+    # of the three holds the QM) — NOT another arm's range.
     our_conn: "nha-rhel-a1-ext.client.com(1414),nha-rhel-a2-ext.client.com(1414),nha-rhel-a3-ext.client.com(1414)"
     # The app host reaches the app QM on the data plane; Native HA has no VIP, so it
     # lists the site-A instances. APP.SVRCONN is mutual-TLS here (matches pcmk), so

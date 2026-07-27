@@ -22,9 +22,8 @@
     mq_exporter_tls: false
   tasks:
     # `acl` for unprivileged become — the _rdqm-cluster-ha.yml prerequisite, hoisted
-    # to bake (coupling-free, dnf on RHEL). NOTE: RDQM does NOT use rhel-ha-repo —
-    # its Pacemaker/DRBD stack comes from the MQ Advanced tar's PreReqs (rdqm-install),
-    # not the HighAvailability repo (that repo is the pcmk-rhel arm's, verified #602).
+    # to bake (coupling-free, dnf on RHEL). NOTE: RDQM's Pacemaker/DRBD stack comes
+    # from the MQ Advanced tar's PreReqs (rdqm-install), not a HighAvailability repo.
     - name: acl package (unprivileged become prereq)
       ansible.builtin.dnf:
         name: acl
