@@ -20,7 +20,7 @@
 - name: unzip (needed to unpack the alloy release archive)
   # ansible.builtin.package (not apt) so this works on both Debian/Ubuntu (apt) and RHEL
   # (dnf) arms — the alloy release ships as a .zip on every arch. apt-only here silently
-  # broke logs on every RHEL arm (nativeha-rhel / rdqm-rhel / pcmk-rhel) (#279).
+  # broke logs on every RHEL arm (nativeha-rhel / rdqm-rhel) (#279).
   ansible.builtin.package:
     name: unzip
     state: present

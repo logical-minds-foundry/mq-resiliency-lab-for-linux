@@ -252,34 +252,11 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
-  # --- pcmk-rhel arm: OSS Pacemaker/SAN substrate on RHEL 9.6 (issue #238/#244).
-  # Same SAN/hb/data shape as the Ubuntu Phase-D arm, on RHEL x86_64/TCG to match
-  # the RDQM platform. New net-san-rhel-a (10.40.3.0/24) plane; .7x host octets. ---
-  san-a-rhel:
-    platform: rhel96-x86_64
-    extra_disk: 8
-    nics: { net-mgmt: 10.50.0.70, net-san-rhel-a: 10.40.3.5, net-wan: 10.99.0.70 }
-  pcmk-rhel-a1:
-    platform: rhel96-x86_64
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.71, net-data-a: 10.10.1.71, net-hb-a: 172.16.1.71, net-san-rhel-a: 10.40.3.71, net-wan: 10.99.0.71, net-ext: 10.60.0.71 }
-  pcmk-rhel-a2:
-    platform: rhel96-x86_64
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.72, net-data-a: 10.10.1.72, net-hb-a: 172.16.1.72, net-san-rhel-a: 10.40.3.72, net-wan: 10.99.0.72, net-ext: 10.60.0.72 }
-  pcmk-rhel-a3:
-    platform: rhel96-x86_64
-    cpus: 2
-    memory: 2048
-    nics: { net-mgmt: 10.50.0.73, net-data-a: 10.10.1.73, net-hb-a: 172.16.1.73, net-san-rhel-a: 10.40.3.73, net-wan: 10.99.0.73, net-ext: 10.60.0.73 }
-
   # --- Native HA arm (#246, #267): six RHEL x86_64 TCG nodes, shared-nothing
   # (raft log replication — NO extra_disk). Site A = nha_rhel_a (HA, Phase 1);
   # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); the Ubuntu
   # peer arm (nha-ubuntu-*, #417) is below. HA replication on net-hb-a; CRR over net-wan.
-  # Host octets .9x — kept clear of the pcmk-rhel arm's .7x block (both RHEL/TCG).
+  # Host octets .9x — clear of every other arm's block (both RHEL/TCG).
   nha-rhel-a1:
     platform: mq-nativeha-rhel9
     cpus: 2
@@ -315,7 +292,7 @@ nodes:
   # of the RHEL arm above. Same shared-nothing raft shape (NO extra_disk), same
   # net plan — HA replication on net-hb, CRR over net-wan. Site A = nha_ubuntu_a
   # (HA), site B = nha_ubuntu_b (CRR/DR). Host octets .1x — clear of every other
-  # arm (rdqm .3x/.4x, pcmk .5x/.6x, pcmk-rhel .7x, nha-rhel .9x) so this arm can
+  # arm (rdqm .3x/.4x, pcmk .5x/.6x, nha-rhel .9x) so this arm can
   # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
   #
   # They boot the baked mq-nativeha-ubuntu fat box (#103 T6) so a bootstrap skips the MQ
@@ -364,8 +341,6 @@ groups:
   san_b:  [san-b]
   pcmk_a: [pcmk-a1, pcmk-a2, pcmk-a3]
   pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
-  san_a_rhel:  [san-a-rhel]
-  pcmk_rhel_a: [pcmk-rhel-a1, pcmk-rhel-a2, pcmk-rhel-a3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
   nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]

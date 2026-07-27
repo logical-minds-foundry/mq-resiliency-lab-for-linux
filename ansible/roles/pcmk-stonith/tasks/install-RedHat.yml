@@ -1,8 +1,0 @@
-# EL9 ships fence_virsh in fence-agents-virsh (HighAvailability). Installed
-# explicitly here so the role is self-sufficient even though pcmk-cluster's
-# fence-agents-all already pulls it in.
-- name: fence agent package (dnf)
-  ansible.builtin.dnf:
-    name: fence-agents-virsh
-    state: present
-  become: true
