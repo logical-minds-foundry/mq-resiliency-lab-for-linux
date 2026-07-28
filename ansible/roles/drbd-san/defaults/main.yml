@@ -1,0 +1,7 @@
+---
+# SAN install-half .deb cache on the Ansible controller (#796). Defaults to the
+# per-run shared cache bucket (build/cache/san-debs), which the mqlab bootstrap
+# pre-populates before the pcmk provision runs; a custom run can override with
+# `-e san_media_dir=<abs-path>`. Mirrors mq-install's `mq_media_dir`. Debs absent
+# from this dir install from the network instead (self-healing fallback).
+san_media_dir: "{{ playbook_dir }}/../build/cache/san-debs"

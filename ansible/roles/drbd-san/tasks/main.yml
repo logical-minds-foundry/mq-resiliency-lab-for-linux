@@ -4,14 +4,47 @@
 # cross-site - the hand-built equivalent of RDQM's built-in DR replication.
 # Runs on san-a (primary) and san-b (secondary). Vars per host:
 #   drbd_self_ip, drbd_peer_ip, drbd_role (primary|secondary)
-- name: install drbd userland + the in-tree kernel module
-  ansible.builtin.apt:
-    # Ubuntu ships the DRBD module in linux-modules-extra for the running
-    # kernel (no DKMS build needed); drbd-utils is the userland.
-    name:
-      - drbd-utils
-      - "linux-modules-extra-{{ ansible_kernel }}"
-    update_cache: true
+# DRBD userland + in-tree kernel module, installed OFFLINE from the pre-cached SAN
+# debs (#796). Ubuntu ships the DRBD module in linux-modules-extra for the running
+# kernel (no DKMS build needed); drbd-utils is the userland. The mqlab bootstrap
+# pre-fetches both into san_media_dir on the controller so a cold rebuild copies +
+# dpkgs them (disk-speed) instead of a ~100 MB internet pull. Anything absent from
+# the cache — e.g. the base box's kernel moved past the cached linux-modules-extra —
+# falls back to a normal network `apt install`, so the path self-heals.
+- name: locate cached SAN debs for drbd on the controller
+  ansible.builtin.find:
+    paths: "{{ san_media_dir }}"
+    patterns:
+      - "drbd-utils_*.deb"
+      - "linux-modules-extra-{{ ansible_kernel }}_*.deb"
+  delegate_to: localhost
+  become: false
+  register: drbd_san_cache
+
+- name: stage cached SAN debs on the target
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/var/cache/san-debs/{{ item | basename }}"
+    mode: "0644"
+  loop: "{{ drbd_san_cache.files | map(attribute='path') | list }}"
+  loop_control:
+    label: "{{ item | basename }}"
+  become: true
+
+- name: install drbd userland + kernel module (cached debs offline, network fallback)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    args=(); need_net=0
+    for pkg in drbd-utils "linux-modules-extra-{{ ansible_kernel }}"; do
+      deb=$(ls -1 /var/cache/san-debs/"${pkg}"_*.deb 2>/dev/null | sort -V | tail -n1 || true)
+      if [ -n "$deb" ]; then args+=("$deb"); else args+=("$pkg"); need_net=1; fi
+    done
+    if [ "$need_net" = 1 ]; then apt-get update; fi
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${args[@]}"
+  args:
+    executable: /bin/bash
+  register: drbd_san_install
+  changed_when: "'Setting up' in drbd_san_install.stdout"
   become: true
 
 - name: load drbd module (builtin-only; no external collection)

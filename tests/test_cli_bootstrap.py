@@ -280,6 +280,83 @@ def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# SAN install-half deb pre-cache (#796): the provision phase pre-fetches the SAN
+# debs, but only for a stack that actually has SAN targets.
+# --------------------------------------------------------------------------- #
+def test_ensure_san_debs_noop_without_san_targets(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "stack_san_targets", lambda name: [])
+    called: list[object] = []
+    monkeypatch.setattr(cli, "ensure_san_debs", lambda *a, **k: called.append(a))
+    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
+    assert called == []  # no SAN targets -> nothing pre-fetched
+
+
+def test_ensure_san_debs_populates_and_reports_fallback(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "stack_san_targets", lambda name: ["san-a", "san-b"])
+    monkeypatch.setattr(cli.platform, "uname", lambda: SimpleNamespace(release="6.8.0-106-generic"))
+    seen: dict[str, object] = {}
+
+    def fake_ensure(cache_dir, kernel):
+        seen["cache_dir"] = cache_dir
+        seen["kernel"] = kernel
+        return {
+            "drbd-utils": "cached",
+            "targetcli-fb": "downloaded",
+            "linux-modules-extra-6.8.0-106-generic": "unavailable",
+        }
+
+    monkeypatch.setattr(cli, "ensure_san_debs", fake_ensure)
+    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
+    assert seen["kernel"] == "6.8.0-106-generic"  # keyed by the pre-cache host's kernel
+    out = capsys.readouterr().out
+    assert "drbd-utils" in out and "targetcli-fb" in out  # both staged
+    assert "network fallback at install for: linux-modules-extra-6.8.0-106-generic" in out
+
+
+def test_ensure_san_debs_all_staged_omits_fallback_line(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "stack_san_targets", lambda name: ["san-a"])
+    monkeypatch.setattr(cli.platform, "uname", lambda: SimpleNamespace(release="k1"))
+    monkeypatch.setattr(cli, "ensure_san_debs", lambda c, k: {"drbd-utils": "cached"})
+    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
+    out = capsys.readouterr().out
+    assert "staged for kernel k1" in out
+    assert "network fallback" not in out  # nothing unavailable -> no fallback line
+
+
+def test_provision_dispatch_runs_san_after_mq(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
+    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: "galaxy-step")
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: "pki-step")
+    monkeypatch.setattr(cli, "_execute", lambda *a, **k: calls.append("execute"))
+    monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify-galaxy"))
+    provision = next(p for p in PHASES if p.name == "provision")
+    cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], provision, step=False)
+    assert "san" in calls  # provision declares the "san" prereq kind
+    assert calls.index("san") > calls.index("mq")  # dispatched after mq
+
+
+def test_observe_dispatch_does_not_run_san(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: "pki-step")
+    monkeypatch.setattr(cli, "_execute", lambda *a, **k: None)
+    observe = next(p for p in PHASES if p.name == "observe")
+    cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], observe, step=False)
+    assert "san" not in calls  # observe does not declare "san"
+
+
+# --------------------------------------------------------------------------- #
 # provision secret injection (#373: the #350 cutover dropped it -> hacluster
 # password came up empty and chpasswd failed on the cluster nodes)
 #

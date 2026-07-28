@@ -61,7 +61,7 @@ class Phase:
                  first incomplete phase).
     ensure:      data-only tuple naming the fresh-volume prerequisites this phase
                  needs before its steps can run (#350 Task 5) — e.g. ("boxes",
-                 "mq") for vms, ("galaxy", "mq", "pki") for provision. This
+                 "mq") for vms, ("galaxy", "mq", "pki", "san") for provision. This
                  module stays PURE: the names are plain strings; the sequencer in
                  cli.py owns the real I/O (tarball fetch, galaxy/PKI plays) and
                  dispatches on these names. Keeping the declaration here means
@@ -419,7 +419,7 @@ PHASES: list[Phase] = [
         "provision",
         _provision_build_steps,
         _provision_satisfied,
-        ensure=("galaxy", "mq", "pki"),
+        ensure=("galaxy", "mq", "pki", "san"),
     ),
     Phase("observe", _observe_build_steps, _observe_satisfied, ensure=("pki",)),
 ]

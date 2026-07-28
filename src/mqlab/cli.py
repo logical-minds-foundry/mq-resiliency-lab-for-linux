@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -35,6 +36,7 @@ from mqlab.paths import (
     mq_cache_dir,
     repo_root,
     resolved_topology_path,
+    san_deb_cache_dir,
     state,
     work,
 )
@@ -59,7 +61,8 @@ from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
-from mqlab.stacks import lab_stacks, stack_members
+from mqlab.sandeb import ensure_san_debs
+from mqlab.stacks import lab_stacks, stack_members, stack_san_targets
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
@@ -244,6 +247,28 @@ def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
     )
 
 
+def _ensure_san_debs_for_stack(stack: Stack) -> None:
+    """Pre-cache the SAN install-half debs for a stack that has SAN targets (#796).
+
+    A no-op for a stack without SAN targets (rdqm / native-ha): like the MQ ensure,
+    this fires for every stack's provision phase but resolves to real work only where
+    it applies (the pacemaker-san stack). The kernel keyed for the one kernel-coupled
+    package (linux-modules-extra) is the pre-cache host's own running kernel; if the
+    SAN base box has since moved to a newer kernel the cache misses on that one deb and
+    the drbd-san role network-installs it (self-healing — a later re-run re-caches the
+    new kernel's deb under its own name). Pre-caching is best-effort: an unreachable
+    package is reported, not fatal, because the roles carry a network fallback."""
+    if not stack_san_targets(stack.name):
+        return
+    kernel = platform.uname().release
+    results = ensure_san_debs(san_deb_cache_dir(), kernel)
+    staged = sorted(pkg for pkg, status in results.items() if status != "unavailable")
+    fallback = sorted(pkg for pkg, status in results.items() if status == "unavailable")
+    typer.echo(f"SAN install-half debs staged for kernel {kernel}: {', '.join(staged) or 'none'}")
+    if fallback:
+        typer.echo(f"  network fallback at install for: {', '.join(fallback)}")
+
+
 def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None:
     """Ensure the fresh-volume prerequisites a phase declares (phases.Phase.ensure),
     for a stack, before that phase's steps run (#350 Task 5).
@@ -251,6 +276,7 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
     Dispatches each declared prereq kind in dependency order:
       boxes  -> build/register the local boxes for the stack's VMs (vms phase)
       mq     -> the MQ-for-Developers tarball(s) for the stack's platforms
+      san    -> the SAN install-half debs (only a stack with SAN targets; #796)
       galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
       pki    -> the PKI CA + entity keystores (the exporters consume these too)
     The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
@@ -261,6 +287,8 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
         _ensure_local_boxes(all_vms(stack))
     if "mq" in kinds:
         _ensure_mq_artifacts_for_stack(stack)
+    if "san" in kinds:
+        _ensure_san_debs_for_stack(stack)
     steps: list[CommandStep] = []
     if "galaxy" in kinds:
         steps.append(_galaxy_install_step())
