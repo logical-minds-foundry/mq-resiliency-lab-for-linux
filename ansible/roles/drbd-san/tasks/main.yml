@@ -21,6 +21,13 @@
   become: false
   register: drbd_san_cache
 
+- name: ensure the SAN deb-cache dir exists on the target
+  ansible.builtin.file:
+    path: /var/cache/san-debs
+    state: directory
+    mode: "0755"
+  become: true
+
 - name: stage cached SAN debs on the target
   ansible.builtin.copy:
     src: "{{ item }}"

@@ -13,6 +13,13 @@
   become: false
   register: iscsi_target_cache
 
+- name: ensure the SAN deb-cache dir exists on the target
+  ansible.builtin.file:
+    path: /var/cache/san-debs
+    state: directory
+    mode: "0755"
+  become: true
+
 - name: stage cached targetcli-fb deb on the target
   ansible.builtin.copy:
     src: "{{ item }}"
