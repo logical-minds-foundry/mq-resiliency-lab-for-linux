@@ -7,7 +7,7 @@
 - **Last validated in lab:** 2026-07-20 — the enable command (11 classes) and the
   `amqsevt -o json_compact` collector mechanics were exercised on IBM MQ 9.4.5
   (RHEL 9.6). See the companion reports in the repo:
-  `docs/reports/2026-07-20-mq-event-monitoring-to-file.md` and
+  `docs/reports/2026-07-28-mq-event-monitoring-to-file.md` and
   `docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md` (the
   `STDOUT`-append proof). (The role is now deployed fleet-wide and the event
   mechanics were verified per arm during the rollout; a full clean cold-rebuild of
@@ -17,7 +17,9 @@
   wrapper in its own process group via `setsid`; a negative-PID group stop; `amqsevt`
   restarted through the `MQRC_OBJECT_IN_USE` 2042 exclusive-handle reap window) passed
   its full B-matrix on nativeha-ubuntu (`NHAUAPP`). See the engineering report:
-  `docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md`.
+  `docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md` (the *why*), and
+  the vendor-neutral install how-to
+  `docs/reports/2026-07-28-mq-event-monitor-resilient-service.md` (the *how*).
 - **Working with the data:** this guide covers *producing* the feed; two companion
   repo reports cover *consuming* and *generating* it — the schema/consume reference
   `docs/reports/2026-07-22-mq-event-json-working-with-the-data.md` (envelope, the

@@ -2,7 +2,7 @@
 
 IBM MQ 9.4 for Multiplatforms (Linux / RHEL). This is the **consume-side**
 companion to the produce-side how-to
-([`2026-07-20-mq-event-monitoring-to-file.md`](2026-07-20-mq-event-monitoring-to-file.md))
+([`2026-07-28-mq-event-monitoring-to-file.md`](2026-07-28-mq-event-monitoring-to-file.md))
 and the site guide
 ([`mq-event-monitoring-guide.md`](../site/docs/guides/mq-event-monitoring-guide.md)):
 those cover **getting** the `amqsevt` JSON event feed flowing; this covers
@@ -195,7 +195,7 @@ Real events captured on IBM MQ 9.4.5 (RHEL 9.6, QM `EVTCAP`), one per reason we
 can force in the lab, pretty-printed (`-o json`). Each is followed by an
 annotation of its **`eventData`** keys (the envelope is per §2). The raw
 capture set also lives in
-[the produce-side report's Appendix&nbsp;D](2026-07-20-mq-event-monitoring-to-file.md#appendix-d--captured-event-examples-the-de-facto-schema);
+[the produce-side report's Appendix&nbsp;D](2026-07-28-mq-event-monitoring-to-file.md#appendix-d--captured-event-examples-the-de-facto-schema);
 here each is annotated for consumers.
 
 ### A.1 Not Authorized — Queue Mgr Event (44), reason 2035 — `AUTHOREV`
