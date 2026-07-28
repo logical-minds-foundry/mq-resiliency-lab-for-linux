@@ -1237,7 +1237,7 @@
 <li><strong>Last validated in lab:</strong> 2026-07-20 — the enable command (11 classes) and the
   <code>amqsevt -o json_compact</code> collector mechanics were exercised on IBM MQ 9.4.5
   (RHEL 9.6). See the companion reports in the repo:
-  <code>docs/reports/2026-07-20-mq-event-monitoring-to-file.md</code> and
+  <code>docs/reports/2026-07-28-mq-event-monitoring-to-file.md</code> and
   <code>docs/reports/2026-07-20-mq-service-stdout-open-mode-evidence.md</code> (the
   <code>STDOUT</code>-append proof). (The role is now deployed fleet-wide and the event
   mechanics were verified per arm during the rollout; a full clean cold-rebuild of
@@ -1247,7 +1247,9 @@
   wrapper in its own process group via <code>setsid</code>; a negative-PID group stop; <code>amqsevt</code>
   restarted through the <code>MQRC_OBJECT_IN_USE</code> 2042 exclusive-handle reap window) passed
   its full B-matrix on nativeha-ubuntu (<code>NHAUAPP</code>). See the engineering report:
-  <code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code>.</li>
+  <code>docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md</code> (the <em>why</em>), and
+  the vendor-neutral install how-to
+  <code>docs/reports/2026-07-28-mq-event-monitor-resilient-service.md</code> (the <em>how</em>).</li>
 <li><strong>Working with the data:</strong> this guide covers <em>producing</em> the feed; two companion
   repo reports cover <em>consuming</em> and <em>generating</em> it — the schema/consume reference
   <code>docs/reports/2026-07-22-mq-event-json-working-with-the-data.md</code> (envelope, the
