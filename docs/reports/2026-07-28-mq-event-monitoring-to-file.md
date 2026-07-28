@@ -6,13 +6,34 @@ service, for a file-monitoring agent to pick up. **The Quick start is the setup;
 Follow-on requirements after it are mandatory before production; the rest is
 reference.**
 
-> **How the lab wires this in production.** This how-to targets a **file** sink.
-> The lab's own rollout ships events to **journald** instead: the shared
-> `mq-event-monitor` role runs the same `amqsevt -o json_compact` collector but
-> pipes it through `logger --size 32768` (tag `mq-events`), from where
-> Alloy → Loki → Grafana carry it — configured identically on **every** queue
-> manager across every stack, not just one. Treat this file-sink recipe as the
-> minimal, dependency-free standalone variant.
+> **File sink vs. syslog sink.** This how-to targets a **file** sink — the
+> minimal, dependency-free variant: no syslog daemon, no log pipeline, just a
+> queue-manager service appending JSON to a path your agent watches. A **syslog**
+> sink (pipe `amqsevt` through `logger` instead) is often simpler in practice,
+> because it inherits the platform's existing forwarding and rotation and removes
+> two of the follow-on requirements below. If you also want the collector to
+> **restart itself when it dies** and survive failover as a managed service, see
+> the companion how-to
+> [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md).
+
+## Changelog — version dated 2026-07-28
+
+This version supersedes the 2026-07-20 document. The mechanism is unchanged; the
+edits make it a **generic, environment-neutral** recipe and connect it to the new
+resilient-service how-to:
+
+1. **Removed environment-specific production detail.** The previous version
+   described one particular rollout (a shared config-management role shipping to
+   `journald`, then on through a specific metrics pipeline). That is replaced with a
+   neutral file-sink-vs-syslog-sink note, so the recipe reads for any queue manager,
+   provisioned by any tool (or none).
+2. **Narrowed follow-on requirement 3 (restart-on-death).** The self-healing
+   collector is now written up separately; this document points at it rather than
+   leaving "restart it if it dies" as an open problem. See
+   [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md).
+
+The captured-event reference (Appendix D), the event-class reference, and the
+file-sink recipe carry forward unchanged.
 
 ## Changelog — corrections to the version dated 2026-07-17
 
@@ -25,7 +46,7 @@ verbatim on a circular-logging queue manager, configured **nothing**.
    valid only on a **linear-logging** queue manager; on a circular-logging queue
    manager MQ rejects it with `AMQ8518E` and — because `ALTER QMGR` is atomic —
    **rejects the entire statement**, so none of the other event classes are
-   enabled either. The lab uses circular logging, so the previous command silently
+   enabled either. On a circular-logging queue manager the previous command silently
    enabled no events. The corrected command (11 classes) is below.
 2. **Removed the launcher script; the service now runs `amqsevt` directly.** The
    2026-07-17 version introduced a wrapper script that redirected `amqsevt` output
@@ -47,7 +68,7 @@ verbatim on a circular-logging queue manager, configured **nothing**.
    a raw file does not, so the format has to do it.) Verified: `-o json_compact`
    emits exactly one JSON object per line.
 5. **Added Appendix D — captured event examples.** Real JSON for each event class
-   that can be forced in the lab, pretty-printed as reference material. IBM
+   that can be forced on a test queue manager, pretty-printed as reference material. IBM
    publishes no formal JSON schema for `amqsevt` output, so these captured examples
    are the de-facto reference for the field shapes you will actually receive.
 
@@ -175,10 +196,16 @@ optional.
    has **no restart logic of its own.** `CONTROL(QMGR)` starts it when the queue
    manager starts, but if the collector process crashes — for example `amqsevt`
    meets an event it cannot parse and dies — **nothing restarts it; the feed stops
-   silently.** The service is a moving part that must be health-monitored, alerted
-   on, and restarted on failure: **a running queue manager does not imply its
-   services are running.** The status of its important services is part of its
-   health, and this collector is now one of them.
+   silently.** The **restart** half of this is solved by running the collector under
+   a self-healing wrapper instead of invoking `amqsevt` directly — see the companion
+   how-to
+   [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md),
+   which also survives failover as a managed service. The wrapper does **not**
+   remove the **monitoring** half: the service is still a moving part that must be
+   health-monitored and alerted on — **a running queue manager does not imply its
+   services are running** — and a wrapper that has given up and exited loudly still
+   needs someone watching for the resulting `DOWN` service. Whether or not you adopt
+   the wrapper, the status of this collector is part of the queue manager's health.
 4. **Enable the events and thresholds on every queue that matters — and keep
    doing it.** The queue-manager `ALTER` in step 2 turns the event *classes* on,
    but performance events (queue full, depth high/low) fire only where a queue
@@ -353,7 +380,7 @@ priority signal: log-space pressure precedes a hard stop.)*
 This design was shaped and corrected by live testing on IBM MQ **9.4.5** (RHEL
 9.6). What follows is the record of what was verified.
 
-### Verified in the lab (observed behaviour)
+### Verified by live testing (observed behaviour)
 
 - The 11-class enable (no `LOGGEREV`) applies cleanly on a circular-logging queue
   manager; the verbatim 12-class command with `LOGGEREV(ENABLED)` is rejected
@@ -387,8 +414,8 @@ IBM publishes **no formal JSON schema** for `amqsevt` output. The envelope is a
 convention of the sample, and the `eventData` keys vary by event (they are the
 PCF/MQI parameter names, camelCased; keys are **unordered** and **conditionally
 present**). The examples below are **real events captured on IBM MQ 9.4.5** (RHEL
-9.6, circular logging) on 2026-07-20, one representative per event class we can
-force in the lab, pretty-printed (`-o json`). They are the practical reference for
+9.6, circular logging) on 2026-07-20, one representative per event class that can be
+forced on a test queue manager, pretty-printed (`-o json`). They are the practical reference for
 what you will actually receive. **Not captured:** `CHADEV` (channel auto-definition
 — not used here, so it should not occur) and `SSLEV` (needs a staged TLS fault);
 `LOGGEREV` does not apply (circular logging).
