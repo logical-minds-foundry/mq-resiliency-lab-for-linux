@@ -1,0 +1,82 @@
+#!/bin/bash
+# shellcheck disable=SC1083  # Jinja double-brace substitutions are rendered by Ansible before this runs
+# MQ event collector launcher — self-healing wrapper (.github#122, epic .github#31). Started by
+# the queue manager as an MQ SERVICE object (CONTROL(QMGR)), so it travels with the QM across
+# every failover.
+#
+# LAUNCHED UNDER setsid: the SERVICE STARTCMD is `setsid -w -- /opt/mq-event-monitor/run.sh <QM>`
+# (see tasks/service.yml). MQ spawns the STARTCMD process as a child of amqzmgr0, NOT as a group
+# leader (proven in #760/A0), so `setsid` calls setsid(2) in place and execs THIS script, which
+# becomes its own session/process-group leader with PGID == its PID. amqsevt then
+# runs as our child in that group. The SERVICE STOPCMD is `/bin/kill` with STOPARG
+# `-TERM -- -+MQ_SERVER_PID+`: MQ substitutes the `+MQ_SERVER_PID+` insert (this wrapper's pid, the
+# group leader) even when embedded, so it expands to `kill -TERM -- -<pid>` — a NEGATIVE pid that
+# SIGTERMs the WHOLE process group, reaping this wrapper AND amqsevt in one shot (`--` is for
+# procps-ng /bin/kill). Positive `kill <pid>` could only ever kill one process; a negative kill
+# without setsid would have hit amqzmgr0's group — which is why the setsid group leader is load-bearing.
+#
+# WHY A WRAPPER: amqsevt is a non-transactional PCF-parsing sample with NO signal handlers
+# (#760/A1) and NO restart of its own — an MQ SERVICE is start-once, unlike systemd. A corrupt
+# event message can crash it, silently ending event monitoring until the next QM start. This loop
+# restores it: on any amqsevt exit the wrapper (still alive) logs, sleeps, and re-runs it.
+#
+# CLEAN STOP vs CRASH — falls out of the mechanism, with NO in-script signal trap:
+#   * STOPCMD -> the group SIGTERM hits the wrapper AND amqsevt; the wrapper terminates on the
+#               DEFAULT SIGTERM disposition and never reaches the loop again. No orphan.
+#   * crash   -> amqsevt exits on its own; the wrapper is still alive -> log, sleep, restart.
+#
+# 2042 ON RESTART (deliberately visible): amqsevt opens the event queue for EXCLUSIVE input
+# (SYSTEM.ADMIN.QMGR.EVENT is DEFSOPT(EXCL); #760/A1) and the QM takes a consistent ~29s to reap a
+# dead handle (#760/A3). A fast restart re-opens before the reap and amqsevt exits with 2042; with
+# SLEEP (~10s) < reap the loop retries ~3x, hitting 2042 twice, then succeeds once the QM reaps.
+# That fail-twice-then-succeed pattern is a DELIBERATE, no-cost operational tell that the retry path
+# is alive (#122 review) — recovery lands at ~30s either way, gated by the reap. A restart that
+# keeps failing FAST past OPEN_RETRY (a queue genuinely held by a live owner) makes the wrapper exit
+# non-zero so the SERVICE goes DOWN visibly (fail loud) rather than looping forever.
+#
+# Output: amqsevt stdout is pure single-line JSON (`-o json_compact`) -> APPENDED to the .json data
+# file (DATA_FILE), one JSON object per line (JSONL) for a downstream file-monitoring agent.
+# amqsevt diagnostics go to STDERR (statusStream=stderr in json mode; #760/A1) -> captured so the
+# wrapper can surface the MQ reason (e.g. "...2042") on a failed run without polluting the JSON, then
+# flushed to the .error file (the SERVICE STDOUT/STDERR redirect), where the wrapper's own lifecycle
+# lines (`say` -> stderr) land too.
+#
+# $1 is the queue-manager name (the SERVICE STARTARG).
+set -u
+QM="$1"
+DATA_FILE="/var/mqm/event-monitor/NHAUAPP.events.json"         # JSONL event stream — THIS is the sink (append)
+ERROR_FILE="/var/mqm/event-monitor/NHAUAPP.error"       # wrapper lifecycle + amqsevt diagnostics (SERVICE STDOUT/STDERR)
+SLEEP=10
+OPEN_RETRY=1800    # seconds of fast-failing before giving up; 0 = forever
+HEALTHY_RUN=60                               # an amqsevt run >= this long counts as "worked" (resets the burst)
+ERRLOG="/tmp/mq-event-monitor.${QM}.stderr"  # last run's amqsevt stderr (mqm-writable), overwritten each loop
+
+say() { echo "run.sh[$$]: $*" >&2; }          # wrapper lifecycle -> stderr -> SERVICE STDERR (.error)
+
+say "starting event collector for ${QM} (pgid $(ps -o pgid= -p $$ | tr -d ' '))"
+fail_deadline=0
+while true; do
+  start=$(date +%s)
+  stdbuf -oL /opt/mqm/samp/bin/amqsevt -m "${QM}" -o json_compact \
+    2>"${ERRLOG}" >> "${DATA_FILE}"
+  rc=$?
+  ran=$(( $(date +%s) - start ))
+  # first 'reason code' line = the ROOT cause (e.g. MQOPEN ... 2042), before MOD_EXIT's MQCLOSE noise
+  reason=$(grep -iE 'reason code|MQRC_' "${ERRLOG}" 2>/dev/null | head -1 | tr -s ' ')
+  cat "${ERRLOG}" >&2   # flush this run's raw amqsevt diagnostics into .error (SERVICE STDERR redirect)
+
+  if [ "${ran}" -ge "${HEALTHY_RUN}" ]; then
+    # Ran and consumed for a while, then exited -> a genuine crash; start a fresh burst.
+    fail_deadline=0
+    say "amqsevt exited rc=${rc} after ${ran}s${reason:+ [${reason}]}; restarting in ${SLEEP}s"
+  else
+    # Fast exit -> crash-loop or a 2042 open that has not reaped yet; count toward the bound.
+    [ "${fail_deadline}" -eq 0 ] && fail_deadline=$(( $(date +%s) + OPEN_RETRY ))
+    if [ "${OPEN_RETRY}" -ne 0 ] && [ "$(date +%s)" -ge "${fail_deadline}" ]; then
+      say "amqsevt kept failing fast (rc=${rc})${reason:+ [${reason}]} for >${OPEN_RETRY}s — giving up; SERVICE goes DOWN (loud)"
+      exit "${rc}"
+    fi
+    say "amqsevt exited rc=${rc} after ${ran}s (fast)${reason:+ [${reason}]}; restarting in ${SLEEP}s"
+  fi
+  sleep "${SLEEP}"
+done
