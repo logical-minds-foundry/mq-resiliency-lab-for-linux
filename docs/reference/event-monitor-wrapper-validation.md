@@ -66,6 +66,33 @@ The harness prints one `PASS`/`FAIL` line per check, the `run.sh` journald
 lifecycle lines (the fail-retry-succeed evidence), a final `== summary: ALL
 SCENARIOS PASS ==`, and exits non-zero if any scenario failed.
 
+### File sink (`SINK=file`) — `.github#152`
+
+The syslog invocation above is unchanged (the default sink reads journald). For a
+queue manager provisioned with `mq_event_sink: file`, run the harness in **file**
+mode so it reads the `.json` / `.error` files instead of journald — pass the sink
+plus the two file paths (from `mq_event_data_file` / `mq_event_error_file`,
+defaulting to `/var/mqm/event-monitor/<QM>.events.json` and `…/<QM>.error`):
+
+```bash
+cd ansible
+uv run --project .. ansible <active-node> -b -m script \
+  -a "../tools/validate-event-monitor-wrapper.sh <QM> MQ.EVENT.MONITOR file \
+      /var/mqm/event-monitor/<QM>.events.json /var/mqm/event-monitor/<QM>.error"
+```
+
+The file-sink **SUCCESS bar** adds two asserts to the B-matrix (all must pass):
+
+| # | Assert | Expected |
+|---|---|---|
+| **A1** | JSONL well-formed | the last 20 lines of `<QM>.events.json` each parse as standalone JSON |
+| **A2** | Destructive drain | a self-contained `DEFINE`/`DELETE QLOCAL(EVT.DRAIN.PROBE)` grows `.json` **and** `SYSTEM.ADMIN.QMGR.EVENT` sits at `CURDEPTH(0)` (consumed, not browsed) |
+| **B2** | Clean stop | no orphaned `run.sh`/`amqsevt` after `STOP SERVICE` (sink-independent) |
+| **B3** | 2042 recovery | `kill -9 amqsevt` recovers through the ~29 s reap; the root-cause `MQRC_OBJECT_IN_USE [2042]` is visible in `<QM>.error` |
+
+Capture file-sink evidence (full stdout + a 20-line `.json` sample + the `.error`
+tail) under `docs/reports/assets/mq-event-monitor-file-sink/`.
+
 ## Step 3 — interpret and capture
 
 - **All three scenarios must `PASS`** and the summary must read `ALL SCENARIOS
