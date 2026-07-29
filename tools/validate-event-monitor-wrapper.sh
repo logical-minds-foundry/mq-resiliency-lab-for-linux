@@ -17,9 +17,15 @@
 # Usage: validate-event-monitor-wrapper.sh <QM> [SERVICE_NAME]
 set -u
 
-QM="${1:?usage: validate-event-monitor-wrapper.sh <QM> [SERVICE_NAME]}"
+QM="${1:?usage: validate-event-monitor-wrapper.sh <QM> [SERVICE] [SINK] [DATA_FILE] [ERROR_FILE]}"
 SVC="${2:-MQ.EVENT.MONITOR}"
+SINK="${3:-syslog}"          # syslog (default, reads journald) | file (reads .json / .error)
+DATA_FILE="${4:-}"           # file sink: the JSONL data file (<QM>.events.json)
+ERROR_FILE="${5:-}"          # file sink: the diagnostics file (<QM>.error)
 fails=0
+if [ "${SINK}" = "file" ] && { [ -z "${DATA_FILE}" ] || [ -z "${ERROR_FILE}" ]; }; then
+  printf 'usage (file sink): %s <QM> <SERVICE> file <DATA_FILE> <ERROR_FILE>\n' "$0" >&2; exit 2
+fi
 
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; fails=$((fails + 1)); }
@@ -32,6 +38,16 @@ service_pid() { printf 'DISPLAY SVSTATUS(%s)\n' "${SVC}" | mqsc | grep -oE 'PID\
 # shellcheck disable=SC2009  # want the formatted ps line (pid/ppid/pgid/args) for evidence, not just pids
 procs()       { ps -eo pid,ppid,pgid,args | grep -E 'run\.sh|amqsevt' | grep -v grep; }
 running()     { pgrep -f "run.sh ${QM}" >/dev/null 2>&1 || pgrep -x amqsevt >/dev/null 2>&1; }
+
+# Sink-aware readers: file sink reads the .json / .error files; syslog reads the mq-events journald tag.
+events_count() {
+  if [ "${SINK}" = "file" ]; then grep -c '"eventSource"' "${DATA_FILE}" 2>/dev/null || echo 0
+  else journalctl -t mq-events --no-pager -o cat 2>/dev/null | grep -c '"eventSource"'; fi
+}
+lifecycle() {
+  if [ "${SINK}" = "file" ]; then grep 'run.sh\[' "${ERROR_FILE}" 2>/dev/null | tail -8
+  else journalctl -t mq-events --no-pager -o cat 2>/dev/null | grep 'run.sh\[' | tail -8; fi
+}
 
 # Echo an amqsevt pid that is stable across 3s (past any startup 2042-retry dance), else nothing.
 wait_stable_sevt() {
@@ -65,8 +81,32 @@ if [ -n "${wpid}" ] && [ -n "${sevt}" ] && [ "${wpid}" = "${wpgid}" ] && [ "${sp
 else
   fail "B1 start/checkpoint (wrapper=${wpid} pgid=${wpgid} servicePID=${spid} amqsevt=${sevt})"
 fi
-events=$(journalctl -t mq-events --no-pager -o cat 2>/dev/null | grep -c '"eventSource"')
-if [ "${events:-0}" -gt 0 ]; then pass "B1 events flowing (${events} JSON events in journald)"; else fail "B1 no events in journald"; fi
+events=$(events_count)
+if [ "${events:-0}" -gt 0 ]; then pass "B1 events flowing (${events} JSON events in ${SINK})"; else fail "B1 no events in ${SINK}"; fi
+
+# ---- A1/A2: file-sink output asserts (JSONL well-formed + destructive drain) ----
+if [ "${SINK}" = "file" ]; then
+  printf '\n-- A1: .json is well-formed JSONL; A2: forced events drain destructively --\n'
+  # A1: the last 20 lines of the data file each parse as standalone JSON
+  if tail -n 20 "${DATA_FILE}" 2>/dev/null | python3 -c 'import json,sys; [json.loads(l) for l in sys.stdin if l.strip()]' 2>/dev/null; then
+    pass "A1 .json is well-formed JSONL (last 20 lines parse)"
+  else
+    fail "A1 .json not valid JSONL"
+  fi
+  # A2: force events with a self-contained define-then-delete of a throwaway queue (config +
+  # command events; mutates nothing persistent), then confirm .json grew AND the event queue
+  # sits drained (CURDEPTH 0) — destructive consume, not browse.
+  before=$(events_count)
+  printf 'DEFINE QLOCAL(EVT.DRAIN.PROBE) REPLACE\nDELETE QLOCAL(EVT.DRAIN.PROBE)\n' | mqsc >/dev/null 2>&1
+  sleep 4
+  after=$(events_count)
+  depth=$(printf 'DISPLAY QLOCAL(SYSTEM.ADMIN.QMGR.EVENT) CURDEPTH\n' | mqsc | grep -oE 'CURDEPTH\([0-9]+\)' | grep -oE '[0-9]+' | head -1)
+  if [ "${after:-0}" -gt "${before:-0}" ] && [ "${depth:-1}" -eq 0 ]; then
+    pass "A2 destructive drain (events ${before}->${after} in .json; SYSTEM.ADMIN.QMGR.EVENT CURDEPTH=0)"
+  else
+    fail "A2 drain (before=${before} after=${after} depth=${depth})"
+  fi
+fi
 
 # ---- B2: clean stop reaps both ----
 printf '\n-- B2: STOP SERVICE reaps BOTH wrapper + amqsevt (no orphan) --\n'
@@ -102,8 +142,11 @@ else
     fail "B3 amqsevt did not come back"
   fi
 fi
-printf 'run.sh lifecycle in journald (fail-retry-succeed, incl. MQRC_OBJECT_IN_USE 2042):\n'
-journalctl -t mq-events --no-pager -o cat 2>/dev/null | grep 'run.sh\[' | tail -8
+printf 'run.sh lifecycle (fail-retry-succeed, incl. MQRC_OBJECT_IN_USE 2042):\n'
+lifecycle
+if [ "${SINK}" = "file" ]; then
+  printf 'root-cause 2042 in .error:\n'; grep -iE 'MQRC_OBJECT_IN_USE|2042' "${ERROR_FILE}" 2>/dev/null | tail -3
+fi
 
 printf '\n== summary: '
 if [ "${fails}" -eq 0 ]; then printf 'ALL SCENARIOS PASS ==\n'; else printf '%s SCENARIO(S) FAILED ==\n' "${fails}"; fi
