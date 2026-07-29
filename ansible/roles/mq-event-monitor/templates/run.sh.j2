@@ -34,33 +34,59 @@
 # keeps failing FAST past OPEN_RETRY (a queue genuinely held by a live owner) makes the wrapper exit
 # non-zero so the SERVICE goes DOWN visibly (fail loud) rather than looping forever.
 #
+{% if mq_event_sink == 'file' %}
+# Output: amqsevt stdout is pure single-line JSON (`-o json_compact`) -> APPENDED to the .json data
+# file (DATA_FILE), one JSON object per line (JSONL) for a downstream file-monitoring agent.
+# amqsevt diagnostics go to STDERR (statusStream=stderr in json mode; #760/A1) -> captured so the
+# wrapper can surface the MQ reason (e.g. "...2042") on a failed run without polluting the JSON, then
+# flushed to the .error file (the SERVICE STDOUT/STDERR redirect), where the wrapper's own lifecycle
+# lines (`say` -> stderr) land too.
+{% else %}
 # Output: amqsevt stdout is pure single-line JSON (`-o json_compact`) -> its own `logger` so each
 # event is exactly one journald entry (`--size` holds the largest event whole; see defaults).
 # amqsevt diagnostics go to STDERR (statusStream=stderr in json mode; #760/A1) -> captured so the
 # wrapper can surface the MQ reason (e.g. "...2042") on a failed run without polluting the JSON.
 # The wrapper's own lifecycle lines use a direct `logger`, not the amqsevt pipe (dead on exit).
+{% endif %}
 #
 # $1 is the queue-manager name (the SERVICE STARTARG).
 set -u
 QM="$1"
+{% if mq_event_sink == 'file' %}
+DATA_FILE="{{ mq_event_data_file }}"         # JSONL event stream — THIS is the sink (append)
+ERROR_FILE="{{ mq_event_error_file }}"       # wrapper lifecycle + amqsevt diagnostics (SERVICE STDOUT/STDERR)
+{% else %}
 TAG="{{ mq_event_syslog_tag }}"
+{% endif %}
 SLEEP={{ mq_event_sleep_secs }}
 OPEN_RETRY={{ mq_event_open_retry_secs }}    # seconds of fast-failing before giving up; 0 = forever
 HEALTHY_RUN=60                               # an amqsevt run >= this long counts as "worked" (resets the burst)
 ERRLOG="/tmp/mq-event-monitor.${QM}.stderr"  # last run's amqsevt stderr (mqm-writable), overwritten each loop
 
+{% if mq_event_sink == 'file' %}
+say() { echo "run.sh[$$]: $*" >&2; }          # wrapper lifecycle -> stderr -> SERVICE STDERR (.error)
+{% else %}
 say() { logger -t "$TAG" "run.sh[$$]: $*"; }  # wrapper lifecycle -> journald via its own logger
+{% endif %}
 
 say "starting event collector for ${QM} (pgid $(ps -o pgid= -p $$ | tr -d ' '))"
 fail_deadline=0
 while true; do
   start=$(date +%s)
+{% if mq_event_sink == 'file' %}
+  stdbuf -oL {{ mq_event_amqsevt_bin }} -m "${QM}" -o json_compact \
+    2>"${ERRLOG}" >> "${DATA_FILE}"
+{% else %}
   stdbuf -oL {{ mq_event_amqsevt_bin }} -m "${QM}" -o json_compact \
     2>"${ERRLOG}" > >(exec logger --size {{ mq_event_logger_max_size }} -t "${TAG}")
+{% endif %}
   rc=$?
   ran=$(( $(date +%s) - start ))
   # first 'reason code' line = the ROOT cause (e.g. MQOPEN ... 2042), before MOD_EXIT's MQCLOSE noise
   reason=$(grep -iE 'reason code|MQRC_' "${ERRLOG}" 2>/dev/null | head -1 | tr -s ' ')
+{% if mq_event_sink == 'file' %}
+  cat "${ERRLOG}" >&2   # flush this run's raw amqsevt diagnostics into .error (SERVICE STDERR redirect)
+{% endif %}
 
   if [ "${ran}" -ge "${HEALTHY_RUN}" ]; then
     # Ran and consumed for a while, then exited -> a genuine crash; start a fresh burst.

@@ -32,3 +32,16 @@ mq_event_open_retry_secs: 1800
 # thresholds only make sense on real app queues, so each arm sets its own list at the
 # include call site (e.g. ["PCMK.SVC.REQUEST"]). Empty = safe no-op.
 mq_event_perf_queues: []
+
+# Sink selector (.github#152). The choice lives HERE, in the management layer, and is resolved at
+# TEMPLATE-RENDER time — so the delivered run.sh is single-purpose (no runtime sink branch, and no
+# `logger` at all in the file variant). 'syslog' stays the lab default: it feeds journald -> Alloy
+# and inherits the platform's forwarding/rotation. 'file' appends JSONL to a host-local data file
+# for a downstream file-monitoring agent.
+mq_event_sink: syslog
+# File-sink outputs (only meaningful when mq_event_sink == 'file'). Host-local, mqm-owned, per-QM
+# (so a failover node can host its own). .json = the JSONL event stream (THE sink); .error = the
+# wrapper's lifecycle + amqsevt's diagnostics (the SERVICE STDOUT/STDERR redirect).
+mq_event_file_dir: /var/mqm/event-monitor
+mq_event_data_file: "{{ mq_event_file_dir }}/{{ qmgr_name }}.events.json"
+mq_event_error_file: "{{ mq_event_file_dir }}/{{ qmgr_name }}.error"
