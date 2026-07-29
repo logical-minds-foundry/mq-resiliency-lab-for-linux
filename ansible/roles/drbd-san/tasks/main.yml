@@ -11,6 +11,15 @@
 # dpkgs them (disk-speed) instead of a ~100 MB internet pull. Anything absent from
 # the cache — e.g. the base box's kernel moved past the cached linux-modules-extra —
 # falls back to a normal network `apt install`, so the path self-heals.
+- name: record this SAN target's kernel on the controller (self-heals the pre-cache next rebuild, #816)
+  ansible.builtin.copy:
+    content: "{{ ansible_kernel }}\n"
+    dest: "{{ san_media_dir }}/.target-kernel"
+    mode: "0644"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
 - name: locate cached SAN debs for drbd on the controller
   ansible.builtin.find:
     paths: "{{ san_media_dir }}"

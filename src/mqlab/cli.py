@@ -61,7 +61,7 @@ from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
-from mqlab.sandeb import ensure_san_debs
+from mqlab.sandeb import ensure_san_debs, observed_target_kernel
 from mqlab.stacks import lab_stacks, stack_members, stack_san_targets
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
@@ -253,14 +253,16 @@ def _ensure_san_debs_for_stack(stack: Stack) -> None:
     A no-op for a stack without SAN targets (rdqm / native-ha): like the MQ ensure,
     this fires for every stack's provision phase but resolves to real work only where
     it applies (the pacemaker-san stack). The kernel keyed for the one kernel-coupled
-    package (linux-modules-extra) is the pre-cache host's own running kernel; if the
-    SAN base box has since moved to a newer kernel the cache misses on that one deb and
-    the drbd-san role network-installs it (self-healing — a later re-run re-caches the
-    new kernel's deb under its own name). Pre-caching is best-effort: an unreachable
-    package is reported, not fatal, because the roles carry a network fallback."""
+    package (linux-modules-extra) is the SAN base box's *observed* kernel — recorded by
+    the drbd-san role on a prior rebuild — falling back to the controller's own kernel
+    only on the very first rebuild, before the box has ever booted (#816). This makes
+    the offline fast-path fire on every rebuild after the first, instead of missing
+    forever because the controller's kernel drifts from the cloud image's. Pre-caching
+    is best-effort: an unreachable package is reported, not fatal, because the roles
+    carry a network fallback."""
     if not stack_san_targets(stack.name):
         return
-    kernel = platform.uname().release
+    kernel = observed_target_kernel(san_deb_cache_dir()) or platform.uname().release
     results = ensure_san_debs(san_deb_cache_dir(), kernel)
     staged = sorted(pkg for pkg, status in results.items() if status != "unavailable")
     fallback = sorted(pkg for pkg, status in results.items() if status == "unavailable")
