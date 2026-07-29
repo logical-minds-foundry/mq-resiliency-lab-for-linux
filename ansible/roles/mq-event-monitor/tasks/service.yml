@@ -61,10 +61,17 @@
 # is actually RUNNING in the next task; we do NOT fall back to a blanket rc tolerance that would
 # re-hide a genuine define/start failure.
 - name: define + start the MQ event-monitor service
+  # Sink-aware (.github#152): for the file sink the SERVICE redirects the wrapper's STDOUT/STDERR to
+  # the .error file (so wrapper lifecycle + amqsevt diagnostics land there while events go to the
+  # .json data file via the in-script redirect); for syslog the STDIO clause is empty and the DESCR
+  # is the original, so the produced MQSC is byte-for-byte the pre-#152 statement.
+  vars:
+    _svc_stdio: "{{ \"STDOUT('\" + mq_event_error_file + \"') STDERR('\" + mq_event_error_file + \"') \" if mq_event_sink == 'file' else '' }}"
+    _svc_descr: "{{ 'Drain SYSTEM.ADMIN.*.EVENT as JSONL to ' + mq_event_data_file + ' (.error = diagnostics)' if mq_event_sink == 'file' else 'Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)' }}"
   ansible.builtin.shell: |
     set -o pipefail
-    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('/usr/bin/setsid') STARTARG('-w -- %s/run.sh %s') STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)')\nSTART SERVICE(%s)\n" \
-      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ mq_event_service_name }}" \
+    printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('/usr/bin/setsid') STARTARG('-w -- %s/run.sh %s') {{ _svc_stdio }}STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') DESCR('%s')\nSTART SERVICE(%s)\n" \
+      "{{ mq_event_service_name }}" "{{ mq_event_run_dir }}" "{{ qmgr_name }}" "{{ _svc_descr }}" "{{ mq_event_service_name }}" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
   args:
     executable: /bin/bash
