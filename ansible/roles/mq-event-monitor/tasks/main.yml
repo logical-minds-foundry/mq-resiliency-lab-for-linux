@@ -24,7 +24,9 @@
     msg: >-
       /etc/systemd/journald.conf.d/10-mq.conf is absent — mq-diag-logging must run before
       mq-event-monitor, else 'everything on' event bursts are silently rate-dropped by journald.
-  when: not rl_dropin.stat.exists
+  # Only the syslog sink is exposed to journald rate-limiting; the file sink writes to a
+  # host-local file and never touches journald, so the drop-in is irrelevant there (#152).
+  when: mq_event_sink == 'syslog' and not rl_dropin.stat.exists
 
 - name: run dir for the collector wrapper
   ansible.builtin.file:
@@ -32,6 +34,19 @@
     state: directory
     mode: "0755"
   become: true
+
+# File sink only: the collector (running as mqm) appends events to <QM>.events.json and its
+# diagnostics to <QM>.error under this dir. Created on EVERY failover-capable node so the QM can
+# host it wherever it activates. mqm-owned (writable by the collector, readable by a file agent). (#152)
+- name: file-sink output directory (mqm-owned) — only when the file sink is selected
+  ansible.builtin.file:
+    path: "{{ mq_event_file_dir }}"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0750"
+  become: true
+  when: mq_event_sink == 'file'
 
 - name: install the collector wrapper script
   ansible.builtin.template:
