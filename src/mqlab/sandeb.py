@@ -54,6 +54,29 @@ def san_deb_packages(kernel: str) -> list[str]:
     return [*SAN_KERNEL_INDEPENDENT_PKGS, kernel_modules_pkg(kernel)]
 
 
+# The drbd-san role records the SAN base box's actual kernel here (delegate_to
+# localhost, after a boot) so a later pre-cache keys linux-modules-extra to the
+# kernel that really boots — the controller's own kernel drifts from the cloud
+# image's and is only the first-rebuild seed (#816).
+_TARGET_KERNEL_FILE = ".target-kernel"
+
+
+def observed_target_kernel(cache_dir: Path) -> str | None:
+    """The SAN base box's kernel as observed on a prior rebuild, or None if never seen.
+
+    First rebuild: the base box has not booted, so this is None and the caller seeds
+    the pre-cache with the controller's own kernel (a miss → network fallback). Every
+    rebuild after: the drbd-san role has recorded the target's `ansible_kernel`, so the
+    pre-cache fetches linux-modules-extra for the kernel that actually boots — an
+    offline hit, no ~100 MB pull. This is the real self-healing (#816).
+    """
+    path = cache_dir / _TARGET_KERNEL_FILE
+    if not path.is_file():
+        return None
+    kernel = path.read_text().strip()
+    return kernel or None
+
+
 def cached_deb(cache_dir: Path, pkg: str) -> Path | None:
     """The cached `.deb` for a package name, or None if absent.
 

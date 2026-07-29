@@ -36,6 +36,22 @@ def test_san_deb_packages_includes_the_three_named_packages():
     assert sandeb.san_deb_packages(_KERNEL) == ["drbd-utils", "targetcli-fb", _MODULES]
 
 
+def test_observed_target_kernel_absent_is_none(sandir):
+    # First rebuild: the base box has never booted, so no observed kernel yet (#816).
+    assert sandeb.observed_target_kernel(sandir) is None
+
+
+def test_observed_target_kernel_reads_persisted(sandir):
+    # A later rebuild: the drbd-san role recorded the base box's actual kernel.
+    (sandir / ".target-kernel").write_text("6.8.0-117-generic\n")
+    assert sandeb.observed_target_kernel(sandir) == "6.8.0-117-generic"
+
+
+def test_observed_target_kernel_blank_is_none(sandir):
+    (sandir / ".target-kernel").write_text("  \n")
+    assert sandeb.observed_target_kernel(sandir) is None
+
+
 def test_cached_deb_hit_and_miss(sandir):
     assert sandeb.cached_deb(sandir, "drbd-utils") is None
     deb = _touch_deb(sandir, "drbd-utils", "9.28.0-1")
