@@ -33,24 +33,36 @@ authz_grants:
   - { group: mqmon, object_type: queue, object: "APP.REPLY",        authorities: "+dsp +inq" }
   - { group: mqmon, object_type: queue, object: "SVC.REQUEST",      authorities: "+dsp +inq" }
   # service app (counterparty receiver MCA): put reply, put DLQ; nothing else.
-  # +setall (on the qmgr object AND APP.REPLY) is REQUIRED (#613): a non-privileged
-  # receiving MCA opens the destination queue with MQOO_SET_ALL_CONTEXT to reinstate
-  # message context under PUTAUT(DEF) too (not just CTX) — without +setall the inbound
-  # RCVR MQPUT fails 2035 and replies divert to the DLQ, breaking the trade flow. This
-  # is a corroborated doc-deduction (two primary 9.4 pages + APAR IT21537); N4 (#618)
-  # confirms it empirically. +setall is scoped to APP.REPLY + the qmgr object — still
-  # far short of mqm.
+  # +setall (on the qmgr object AND every destination the MCA opens) is REQUIRED
+  # (#613): a non-privileged receiving MCA opens the destination queue with
+  # MQOO_SET_ALL_CONTEXT to reinstate message context under PUTAUT(DEF) too (not just
+  # CTX) — without +setall the inbound RCVR MQPUT fails 2035. This holds for BOTH
+  # destinations the MCA opens: APP.REPLY AND the dead-letter queue (see the DLQ note
+  # below — #617 proved the DLQ needs +setall too). +setall is scoped to APP.REPLY +
+  # the DLQ + the qmgr object — still far short of mqm.
   - { group: mqsvc, object_type: qmgr,  object: "",                authorities: "+connect +setall" }
   - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put +setall" }
-  - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put" }
+  - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put +setall" }
 
 # DLQ the receiver MCA falls back to. FINAL/minimal (#614): a per-channel /
 # per-remote-QM DLQ is NOT an MQ 9.4 feature — DEADQ is a queue-manager-level
 # attribute (one per QM) and USEDLQ is only a boolean toggle over that single DLQ.
-# So +put on the QM-wide DLQ (set as DEADQ in authz.mqsc.j2) is the architecturally
-# required grant for a receiver MCA to dead-letter at all under USEDLQ(YES) — not a
-# stand-in for a future dedicated queue. It is already minimal (+put on exactly one
-# queue) and cannot be scoped narrower because no per-channel DLQ exists.
+# So the QM-wide DLQ (set as DEADQ in authz.mqsc.j2) is the architecturally required
+# dead-letter destination under USEDLQ(YES) — not a stand-in for a future dedicated
+# queue. It cannot be scoped narrower because no per-channel DLQ exists.
+#
+# +setall on the DLQ (#617): the receiver MCA (PUTAUT(DEF)) writes the dead-letter
+# message as [MQDLH + original message] preserving the original context, so it opens
+# the DLQ with MQOO_SET_ALL_CONTEXT — exactly as it opens APP.REPLY. That open is
+# authority-checked against the MCA user, so the DLQ needs +put AND +setall, not +put
+# alone. The interim "+put is enough" (an untested #614 assumption) was INCOMPLETE:
+# with +put only, an induced undeliverable reply produced AMQ9599E / MQRC 2035 on the
+# DLQ open and the receiver channel wedged in STATUS(PAUSED) SUBSTATE(MQPUT) — the
+# message could neither be delivered NOR dead-lettered. Grounded in the #613
+# set-all-context mechanic + IBM 9.4 docs (attributes-channel-mqsc-keywords-n-r;
+# authority-authorizations-context) and confirmed empirically on the live arm (#617).
+# The qmgr-object +setall mqsvc already holds satisfies the qmgr half of the
+# "queue AND qmgr" context-authority rule; only the DLQ-queue +setall was missing.
 # Per-counterparty segregation, if ever wanted, is a downstream runmqdlq handler
 # concern, not a grant change.
 mqsvc_dlq: "SYSTEM.DEAD.LETTER.QUEUE"

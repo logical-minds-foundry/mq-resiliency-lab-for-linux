@@ -203,12 +203,14 @@ documented behavior.)
 dedicated per-channel DLQ — it does not exist as an MQ feature.**
 
 - The `mqsvc` receiver MCA's dead-letter target is **dictated by `QMSVC`'s
-  `DEADQ`**; it cannot be pointed at a private queue. The `+put` on
+  `DEADQ`**; it cannot be pointed at a private queue. The grant on
   `SYSTEM.DEAD.LETTER.QUEUE` is therefore **not a temporary stand-in for a future
   dedicated DLQ** — it is the architecturally required grant for a receiver MCA
   to dead-letter at all under `USEDLQ(YES)`. The "interim" **is** the
   destination. **This confirms rather than replaces the Stage 2 grant** (spec
   §7.1); the grant should be reclassified from "interim" to "final, minimal."
+  **Correction (#617):** the required grant is **`+put +setall`**, not `+put`
+  alone — see §7.2. This report originally under-specified it as `+put`.
 - The grant is already minimal: `+put` on exactly **one** queue. It cannot be
   scoped narrower via a per-channel DLQ, because no such queue exists. Renaming
   the QM's single `DEADQ` to a per-counterparty name (e.g. on the dedicated
@@ -244,6 +246,45 @@ loss-quantification framing already established in the lab:
 
 **[judgment]** N5 should **not** attempt to assert per-channel DLQ isolation —
 this report establishes there is nothing to assert there.
+
+### 7.2 N5 empirical result — the DLQ grant needed `+setall` too (#617)
+
+**[data — live, `pcmk-ubuntu` arm, 2026-07-29]** Running the induced N5 check
+surfaced a real gap this report's §7 recommendation had missed. With `mqsvc`
+granted **`+put` only** on `SYSTEM.DEAD.LETTER.QUEUE` (plus `+setall` on the qmgr
+object and on `APP.REPLY`, per #613), an induced undeliverable reply was **not**
+dead-lettered: the receiver channel wedged in `STATUS(PAUSED) SUBSTATE(MQPUT)` and
+the QM error log showed `AMQ9599E` (*"Program could not open a queue manager
+object … by user 'mqsvc' failed with reason code 2035"*) followed by `AMQ9511E`
+(*"Messages cannot be put to a queue"*). The message could neither be delivered
+**nor** dead-lettered, so the shared receiver channel stalled — the exact outage
+this grant is meant to prevent.
+
+**[judgment]** Root cause, grounded in #613 + IBM 9.4 docs
+(`attributes-channel-mqsc-keywords-n-r`, `authority-authorizations-context`): the
+DLQ is **not special** in the authority model. Under `PUTAUT(DEF)` the receiver MCA
+opens **every** destination it writes — including the DLQ — with
+`MQOO_SET_ALL_CONTEXT` (it lays down the `MQDLH` + the original message preserving
+the original context). That open is authority-checked against the MCA user, so the
+DLQ needs **`+put` AND `+setall`**, exactly as `APP.REPLY` does. `+put` alone fails
+`2035` at the set-all-context open. The qmgr-object `+setall` `mqsvc` already holds
+satisfies the "queue **and** qmgr object" half of the context-authority rule; only
+the **DLQ-queue** `+setall` was missing. It is specifically `+setall`
+(`MQOO_SET_ALL_CONTEXT`), not `+passall`.
+
+**[judgment] Corrected recommendation:** grant the receiver MCAUSER
+`+put +setall` on the DLQ (fixed in `ansible/group_vars/all/authz.yml`,
+`mqsvc_dlq` grant). `+setall` stays scoped to `APP.REPLY` + the DLQ + the qmgr
+object — still far short of `mqm`.
+
+**[judgment] N5 harness note:** inducing a genuinely undeliverable message on the
+**shared, live** inter-QM receiver channel is unsafe — it blocks the live reply
+stream during the channel's message-retry (`MRRTY`×`MRTMR`) and wedges the channel
+if the receiver cannot dead-letter. The default N5 check
+(`site-pcmk-authz-validate.yml`, `--tags n2,n4,n5`) therefore asserts the *config*
+(the receiver holds `+put +setall` on the DLQ, i.e. it **can** dead-letter); the
+full induced dead-letter→DLQ demonstration is an opt-in play (`--tags n5-induce`)
+for an **isolated / cold-rebuild** arm only.
 
 ## 8. Sources
 
