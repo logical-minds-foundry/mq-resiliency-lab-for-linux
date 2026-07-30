@@ -12,6 +12,18 @@
 # CONNAME list are lab constants here.
 - import_playbook: _nativeha-ubuntu-cluster-ha.yml
 
+# Stage 2 authorization (#74/#619): the OAM service principals (mqapp/mqmon/mqsvc)
+# must exist on EVERY nativeha-ubuntu node BEFORE any setmqaut grant, and on both the
+# HA site (nha_ubuntu_a) AND the DR site (nha_ubuntu_b) so authorization survives an
+# instance failover AND a CRR/GroupRole cutover — the substrate-consistency invariant
+# (spec §6). Arm-agnostic: same accounts role + authz.yml as the pcmk arm; only the
+# node lists change. Native HA replicates the QM's authority records via raft, but the
+# OS principals the records resolve against are node-local, so every node needs them.
+- name: authz service accounts on every nativeha-ubuntu node (HA + DR)
+  hosts: nha_ubuntu_a:nha_ubuntu_b
+  become: true
+  roles: [mq-authz-accounts]
+
 # Folded qm-create: our-side inter-QM + app MQSC on the ACTIVE Native HA instance.
 # runmqsc must run on the active instance; Native HA replicates the objects to all
 # instances via raft. Body identical to the RHEL arm — only the active-instance
@@ -81,6 +93,64 @@
       until: mqsc.rc in [0, 10]
       retries: 30
       delay: 5
+
+    # Stage 2 authorization (#74/#619): applied AFTER the base + inter-QM MQSC above so
+    # the deny-all back-stop + SSLPEERMAP maps reference channels that already exist.
+    # Reuses the ARM-AGNOSTIC authz.mqsc.j2 (CHLAUTH ENABLE + deny-all + SSLPEERMAP) and
+    # group_vars/all/authz.yml (accounts/maps/grants) verbatim from the pcmk arm — only
+    # chl_to_app (=SVCQM.NHAUAPP, this arm's inter-QM RCVR, the qm_svc.qm_app channel of
+    # the base MQSC) and the node lists differ. Runs ONCE on the active instance; Native
+    # HA raft-replicates the QM object catalog — CHLAUTH rules AND the OAM authority
+    # records — to every instance, so the posture follows an HA failover. CONNAUTH stays
+    # disabled (the cert is the credential); the base MQSC's transient CHLAUTH(DISABLED)
+    # is flipped to ENABLED here, atomically, before any real client connects.
+    - name: render the authorization MQSC (CHLAUTH + maps) on the active instance
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2"
+        dest: /var/mqm/authz.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      run_once: true
+      delegate_to: "{{ active_host }}"
+
+    - name: apply the authorization MQSC (flip CHLAUTH ENABLED + back-stop + SSLPEERMAP)
+      ansible.builtin.shell: |
+        su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/authz.mqsc"
+      args:
+        executable: /bin/bash
+      register: authz_mqsc
+      changed_when: true
+      failed_when: authz_mqsc.rc not in [0, 10]
+      run_once: true
+      delegate_to: "{{ active_host }}"
+
+    # setmqaut grants (#74): the minimal least-privilege authority surface, one
+    # invocation per grant, on the running active instance (raft-replicated). -t qmgr
+    # grants omit -n. Mirrors the pcmk role's grant loop, driven by the same authz_grants.
+    - name: apply setmqaut grants (least-privilege OAM) on the active instance
+      ansible.builtin.command:
+        cmd: >
+          su - mqm -c "/opt/mqm/bin/setmqaut -m {{ qm_name }}
+          {% if item.object_type != 'qmgr' %}-n {{ item.object }} {% endif %}-t {{ item.object_type }}
+          -g {{ item.group }} {{ item.authorities }}"
+      loop: "{{ authz_grants }}"
+      loop_control: { label: "{{ item.group }} -> {{ item.object_type }} {{ item.object }}" }
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: setmqaut_res
+      changed_when: true
+      failed_when: setmqaut_res.rc != 0
+
+    - name: refresh the authorization service on the active instance
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf 'REFRESH SECURITY TYPE(AUTHSERV)\n' | su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}"
+      args:
+        executable: /bin/bash
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      changed_when: true
 
     # Enable classes + define/start the collector on the ACTIVE instance; Native HA
     # replicates the SERVICE/QMGR objects to all instances via raft. runmqsc only works

@@ -1,0 +1,343 @@
+---
+# Stage 2 authorization validation for the nativeha-ubuntu arm (#74 / #619). The
+# Native HA peer of site-pcmk-authz-validate.yml: induced-denial + positive +
+# post-failover, run against the live, authorized nativeha-ubuntu arm. Harness CODE
+# that IS the live-run evidence source for #619 (this repo has no behavioural lint —
+# the running, authorized arm + a one-pass bring-up is the epic gate).
+#
+# Adapted from the pcmk harness to the Native HA substrate:
+#   * NO VIP -> app_conn is the instance CONNAME reconnect list (site A + site B), so
+#     one connect reaches the live QM whichever instance/site currently holds it.
+#   * the active instance is discovered with `dspmq -m <qm> -o nativeha -x` (not pcs).
+#   * failover is NOT pcs -> post-failover uses the CRR GroupRole SWITCHOVER, driven by
+#     the existing nativeha mechanism site-nativeha-ubuntu-switchover.yml (run between
+#     the `--tags core` and `--tags postfail` passes — see the RUN block at the bottom).
+#
+# Induced checks (mirror pcmk N1/N3 + positive + post-failover):
+#   N1  mqmon (OU=ops via MON.SVRCONN) MQPUT APP.REPLY   -> DENIED 2035 (monitoring is
+#       read-only: dsp/inq/sub, no put/get).
+#   N3  mqapp (OU=apps via APP.SVRCONN) MQGET SVC.REQUEST -> DENIED 2035 (least privilege
+#       inside the app's own queues: mqapp may PUT requests, not GET them).
+#   POS the app trade-flow round-trip succeeds end-to-end (site A, where the SVC
+#       counterparty is reachable).
+#   post-failover (site B is live after the GroupRole switch): N1 STILL denied 2035 +
+#       mqapp is STILL authorized to PUT SVC.REQUEST (reason 0) on the new site-B active
+#       node -> authorization survived the cutover.
+#
+# WHY the post-failover positive is the authz-PUT, not the full business round-trip:
+# the SVC counterparty QM's sender channel CONNAME is the site-A `-ext` list, and the
+# site-B nodes carry NO net-ext NIC (lab/topology.yaml) — so the inter-business round-
+# trip is site-A-scoped by TOPOLOGY WIRING, not by authorization. Asserting the full
+# round-trip against a site-B-live QM would fail for a reason unrelated to #619. The
+# authz-PUT (mqapp -> SVC.REQUEST, reason 0) instead proves the SSLPEERMAP identity map
+# + the OAM grants resolve on the new site-B active node — the substrate-consistency
+# claim #619 is actually making (accounts provisioned on nha_ubuntu_b; CRR-replicated
+# authority records). The FULL round-trip is re-asserted after failback to site A
+# (`--tags positive` in the RUN block).
+#
+# Variable-driven: qm_app (=NHAUAPP, from the topology/phases like site-nativeha-ubuntu.yml),
+# tls_cipher (group_vars/all/tls.yml), app_conn. Override any with `-e` to pin a node/keystore.
+#
+# ============================================================================
+# KNOWN-UNKNOWNS -- grounded in the current roles, confirmed on the live arm (#619):
+#   (1) mon_keyrepo -- the OU=ops identity (mqmon) needs an OU=ops client keystore. The
+#       only one in the lab is `mq_prometheus`, placed by roles/mq-exporter on mon-probe
+#       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT on the app host. The first play
+#       fetches it from mon-probe and stages it on the app host (as the pcmk harness #792).
+#   (2) The positive uses `app_requester.py --count 1` (bounded one-shot: exit 0 on a
+#       reply, non-zero on failure). Its TLS args are the app-requester role defaults.
+#   (3) Client sync path: scripts copied per-file to /home/vagrant/ and run via the pymqi
+#       venv /home/vagrant/mqvenv/bin/python (roles/mq-client + roles/app-requester).
+#       app-client is shared across arms; the keystore stem/label are arm-independent
+#       (/home/vagrant/ssl/key, label app-client). Only qm_app + app_conn are arm-specific.
+# ============================================================================
+
+# (#619) Stage the OU=ops (mq_prometheus) keystore from mon-probe onto the app host.
+# MQ authorizes by cert DN (SSLPEERMAP -> mqmon), NOT source host, so the mqmon denial
+# reproduces identically from the app host. Fetch to the controller, then copy over.
+- name: stage the OU=ops keystore from mon-probe (fetch to controller)
+  hosts: probe
+  become: true
+  gather_facts: false
+  tags: [stage, induced, postfail]
+  tasks:
+    - name: fetch the mq_prometheus keystore from mon-probe
+      ansible.builtin.fetch:
+        src: "/var/mqm/ssl/mq_prometheus/{{ item }}"
+        dest: /tmp/authz-nhau-mqmon-ks/
+        flat: true
+      loop: [key.p12, key.sth]
+
+- name: Stage 2 authorization -- negative (N1 + N3) + positive + authz-positive
+  hosts: app
+  become: false # run as the connecting user (vagrant), who owns the venv + app keystore
+  gather_facts: false
+  vars:
+    app_qm: "{{ qm_app | default('NHAUAPP') }}" # supplied by the topology/phases
+    # Data-plane CONNAME reconnect list: BOTH sites' instance names, so one connect
+    # reaches the live QM whether site A (a1..a3 on net-data-a) or site B (b1..b3 on
+    # net-data-b) currently holds it. Native HA has no VIP (site-nativeha-ubuntu.yml).
+    app_conn: >-
+      nha-ubuntu-a1-data-a.client.com(1414),nha-ubuntu-a2-data-a.client.com(1414),nha-ubuntu-a3-data-a.client.com(1414),nha-ubuntu-b1-data-b.client.com(1414),nha-ubuntu-b2-data-b.client.com(1414),nha-ubuntu-b3-data-b.client.com(1414)
+    venv_python: /home/vagrant/mqvenv/bin/python
+    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
+    probe_dest: /home/vagrant/authz_probe.py
+    app_requester: /home/vagrant/app_requester.py # placed by roles/app-requester
+    # app-client keystore (OU=apps): stem /home/vagrant/ssl/key, label app-client, owner
+    # vagrant -- placed on the app host by roles/mq-client (shared across arms).
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    # mq_prometheus keystore (OU=ops): staged from mon-probe by the play above (#619).
+    mon_keyrepo: /home/vagrant/ssl/mqmon/key
+    mon_certlabel: mq_prometheus
+  tasks:
+    - name: create the staged mqmon keystore dir on the app host
+      ansible.builtin.file:
+        path: /home/vagrant/ssl/mqmon
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0700"
+      tags: [stage, induced, postfail]
+
+    - name: stage the mqmon (mq_prometheus) keystore on the app host
+      ansible.builtin.copy:
+        src: "/tmp/authz-nhau-mqmon-ks/{{ item }}"
+        dest: "/home/vagrant/ssl/mqmon/{{ item }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0600"
+      loop: [key.p12, key.sth]
+      tags: [stage, induced, postfail]
+
+    - name: stage the authz probe on the app host (alongside app_requester.py)
+      ansible.builtin.copy:
+        src: "{{ probe_src }}"
+        dest: "{{ probe_dest }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+      tags: [stage, induced, positive, authzpos, postfail]
+
+    # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to APP.REPLY --
+    # monitoring is read-only (dsp/inq/sub, no put/get). Expect 2035.
+    - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - MON.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ mon_keyrepo }}"
+          - --certlabel
+          - "{{ mon_certlabel }}"
+          - --queue
+          - APP.REPLY
+          - --op
+          - put
+          - --expect
+          - "2035"
+      changed_when: false
+      tags: [induced, postfail]
+
+    # NEGATIVE N3: mqapp (OU=apps via APP.SVRCONN) may PUT SVC.REQUEST but is DENIED an
+    # MQGET from it -- least privilege within the app's own queues. Expect 2035.
+    - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - APP.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+          - --queue
+          - SVC.REQUEST
+          - --op
+          - get
+          - --expect
+          - "2035"
+      changed_when: false
+      tags: [induced, postfail]
+
+    # POSITIVE (full round-trip): the app trade flow still completes end-to-end (one
+    # round-trip). --count 1 is the one-shot; exit 0 == a reply returned. Site A only
+    # (the SVC counterparty is reachable from site A's -ext plane).
+    - name: POSITIVE -- app trade flow round-trip (app_requester --count 1)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ app_requester }}"
+          - --count
+          - "1"
+          - --qm
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+      changed_when: false
+      register: tradeflow
+      failed_when: tradeflow.rc != 0
+      tags: [positive]
+
+    # AUTHZ-POSITIVE (substrate-portable): mqapp IS authorized to PUT SVC.REQUEST
+    # (reason 0). Deterministic and site-independent (a QREMOTE PUT enqueues to the local
+    # xmitq and is authority-checked against mqapp's +put, regardless of SVC reachability),
+    # so it proves the app identity is mapped + granted on whichever node/site is live --
+    # used as the post-failover positive on site B.
+    - name: AUTHZ-POSITIVE -- mqapp authorized to PUT SVC.REQUEST (reason 0)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - APP.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+          - --queue
+          - SVC.REQUEST
+          - --op
+          - put
+          - --expect
+          - "0"
+      changed_when: false
+      tags: [authzpos, postfail]
+
+# Read-only authorization EVIDENCE captured on the active Native HA instance: the CHLAUTH
+# listing (deny-all back-stop + SSLPEERMAP maps), the mqsvc DLQ +put +setall grant (the
+# #844/N5 fix), and dspmq -o nativeha -x. Non-disruptive; runs runmqsc/dmpmqaut/dspmqaut
+# as mqm on whichever site-A instance is Active.
+- name: authorization evidence (read-only) on the active instance
+  hosts: nha_ubuntu_a
+  become: true
+  gather_facts: false
+  tags: [evidence]
+  vars:
+    qm: "{{ qm_app | default('NHAUAPP') }}"
+    dlq: "SYSTEM.DEAD.LETTER.QUEUE"
+  tasks:
+    - name: find the active Native HA instance
+      ansible.builtin.shell: |
+        set -o pipefail
+        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm }} -o nativeha -x" \
+          | grep -oE 'INSTANCE\(nha-ubuntu-a[0-9]\) ROLE\(Active\)' \
+          | grep -oE 'nha-ubuntu-a[0-9]' | head -1 || true
+      args:
+        executable: /bin/bash
+      register: act
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['nha_ubuntu_a'][0] }}"
+      until: act.stdout | trim | length > 0
+      retries: 12
+      delay: 5
+
+    - name: record the active host
+      ansible.builtin.set_fact:
+        active_host: "{{ act.stdout | trim }}"
+      run_once: true
+
+    - name: evidence -- dspmq -o nativeha -x (which instance is Active)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmq -m {{ qm }} -o nativeha -x\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_dspmq
+
+    - name: evidence -- CHLAUTH rules (deny-all back-stop + SSLPEERMAP maps)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"echo 'DIS CHLAUTH(*) TYPE(ALL)' | /opt/mqm/bin/runmqsc {{ qm }}\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_chlauth
+
+    - name: evidence -- QMGR CHLAUTH + CONNAUTH posture
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"echo 'DIS QMGR CHLAUTH CONNAUTH DEADQ' | /opt/mqm/bin/runmqsc {{ qm }}\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_qmgr
+
+    - name: evidence -- mqsvc holds +put +setall on the DLQ (the #844/N5 fix)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t queue -n {{ dlq }} -p mqsvc\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_dlq
+
+    - name: evidence -- mqmon authority on APP.REPLY (dsp/inq only; NO put)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t queue -n APP.REPLY -p mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon
+
+    - name: report the captured authorization evidence
+      ansible.builtin.debug:
+        msg:
+          - "active     : {{ active_host }}"
+          - "dspmq -x   : {{ ev_dspmq.stdout | default('') }}"
+          - "CHLAUTH    : {{ ev_chlauth.stdout | default('') }}"
+          - "QMGR       : {{ ev_qmgr.stdout | default('') }}"
+          - "DLQ mqsvc  : {{ ev_dlq.stdout | default('') }}"
+          - "APP.REPLY mqmon : {{ ev_mon.stdout | default('') }}"
+      run_once: true
+
+    - name: assert the CHLAUTH posture + the #844/N5 DLQ grant
+      ansible.builtin.assert:
+        that:
+          - "'CHLAUTH(ENABLED)' in (ev_qmgr.stdout | default(''))"
+          - "'NOACCESS' in (ev_chlauth.stdout | default(''))"
+          - "'SSLPEERMAP' in (ev_chlauth.stdout | default(''))"
+          - "'put' in (ev_dlq.stdout | default(''))"
+          - "'setall' in (ev_dlq.stdout | default(''))"
+        fail_msg: "authorization evidence FAILED -- see the report task above."
+        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5)."
+      run_once: true
+
+# ============================================================================
+# RUN (live, from a worktree; inventory = build/work/inventory.ini):
+#
+#   INV=../build/work/inventory.ini
+#   # Pre-failover (site A live): full induced + round-trip positive + evidence.
+#   ansible-playbook -i $INV site-nativeha-ubuntu-authz-validate.yml \
+#       --tags induced,positive,authzpos,evidence -e qm_app=NHAUAPP
+#   # Post-failover: cut the live role over to site B via the nativeha GroupRole
+#   # switchover (NOT pcs), then re-run one negative + the authz-positive on site B.
+#   ansible-playbook -i $INV site-nativeha-ubuntu-switchover.yml -e target_live=b -e qm_app=NHAUAPP
+#   ansible-playbook -i $INV site-nativeha-ubuntu-authz-validate.yml --tags postfail -e qm_app=NHAUAPP
+#   # Fail back to site A and re-assert the full business round-trip (leave arm healthy).
+#   ansible-playbook -i $INV site-nativeha-ubuntu-switchover.yml -e target_live=a -e qm_app=NHAUAPP
+#   ansible-playbook -i $INV site-nativeha-ubuntu-authz-validate.yml --tags positive -e qm_app=NHAUAPP
+# ============================================================================
