@@ -257,3 +257,512 @@
       changed_when: false
       register: tradeflow_postfailover
       failed_when: tradeflow_postfailover.rc != 0
+
+# ============================================================================
+# PART B (#617) -- the three deferred negatives, each coupled to its research:
+#   N2  unmapped cert -> deny-all back-stop (AMQ9777)         [identity brief #347]
+#   N4  assert-ownership / message-context authority           [+setall report #613]
+#   N5  undeliverable -> QM DLQ, receiver channel unstalled    [DLQ report   #614]
+#
+# Tagged so the DEFAULT `--tags n2,n4,n5` run is SAFE and non-disruptive on the
+# shared, healthy live arm (it never touches the live APP.REPLY / mq-app-requester
+# stream, never revokes a production grant, and skips the Pacemaker-failover play
+# above -- that play is untagged):
+#   * N2  -- a throwaway rogue cert connects and is refused; read-only otherwise.
+#   * N4a -- a client set-identity-context put is refused (no live state changed).
+#   * N4c/N5 -- read-only dspmqaut/runmqsc config assertions.
+#
+# WHY N5 IS A CONFIG ASSERTION HERE, NOT A LIVE INDUCTION: inducing a genuinely
+# undeliverable message on the SHARED inter-QM RECEIVER channel is unsafe -- the
+# message blocks the live reply stream during the channel's message-retry
+# (MRRTY x MRTMR) and, if the receiver cannot dead-letter, wedges the channel in
+# STATUS(PAUSED) SUBSTATE(MQPUT). #617 established EMPIRICALLY (see the #617 issue
+# comment) that with the pre-fix grant (mqsvc +put ONLY on the DLQ) the receiver
+# could NOT dead-letter -- AMQ9599E / MQRC 2035 on the set-all-context DLQ open --
+# and the channel wedged. The fix (mqsvc +put +setall on the DLQ, authz.yml) is
+# grounded in #613 + IBM 9.4 docs. The default N5 here asserts that fix is in place
+# (the receiver CAN dead-letter). The full induced dead-letter->DLQ demonstration
+# lives in the OPT-IN `n5-induce` play at the bottom, for an ISOLATED / cold-rebuild
+# arm only -- never `--tags n5-induce` against the shared arm.
+#
+# Run (safe, against the live arm from a worktree):
+#   ansible-playbook -i <inv> site-pcmk-authz-validate.yml --tags n2,n4,n5 \
+#     -e qm_app=PCMKAPP -e authz_pki_ca_dir=<repo>/build/state/secrets/pki/ca/app-org
+# authz_pki_ca_dir defaults to the in-repo PKI CA dir (cold-rebuild-safe); override
+# it when running from a git worktree whose build/ lives elsewhere.
+# ============================================================================
+
+- name: PART B setup -- locate the active PCMKAPP Pacemaker node
+  hosts: pcmk_a
+  become: true
+  gather_facts: false
+  tags: [n2, n4, n5, n5-induce]
+  tasks:
+    - name: probe which node currently runs the QM
+      ansible.builtin.command: "dspmq -m {{ qm_app }} -o status"
+      register: dspmq_probe
+      changed_when: false
+      failed_when: false
+
+    - name: decide whether the QM is Running on this node
+      ansible.builtin.set_fact:
+        qm_active_here: "{{ '(Running)' in dspmq_probe.stdout and 'not available' not in dspmq_probe.stdout }}"
+
+    # group_by evaluates its key per host (unlike add_host, which bypasses the host
+    # loop and runs once) -- so exactly the node whose QM is Running joins authz_active.
+    - name: group nodes by QM-active status (authz_active = the node running the QM)
+      ansible.builtin.group_by:
+        key: "authz_{{ 'active' if (qm_active_here | bool) else 'inactive' }}"
+      changed_when: false
+
+- name: N2 setup -- mint an unmapped (rogue) client cert signed by the lab app-org CA
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [n2]
+  vars:
+    # In-repo default (cold-rebuild-safe: playbook_dir is <repo>/ansible). Override
+    # with -e authz_pki_ca_dir=... when running from a worktree.
+    authz_pki_ca_dir: "{{ playbook_dir }}/../build/state/secrets/pki/ca/app-org"
+    rogue_dir: /tmp/authz-n2-rogue
+    rogue_pw: "n2-rogue-pw"
+  tasks:
+    # Minted with openssl (command module) -- self-contained, no ansible-collection
+    # dependency. Legacy 3DES-PBE + SHA1-MAC yields a PKCS#12 GSKit reads. DN is
+    # O=app-org (passes the channel's org-only SSLPEER) + OU=rogue (matches NO
+    # SSLPEERMAP rule) -> the connection lands on the deny-all back-stop, not a TLS
+    # reject. Signed by the app-org CA the QM already trusts. The N2 probe MUST pass
+    # --certlabel rogue-unmapped (MQ needs the label to select the personal cert).
+    - name: create the controller-side mint dir
+      ansible.builtin.file:
+        path: "{{ rogue_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: generate the rogue private key (RSA-4096, matches lab pki_key_size)
+      ansible.builtin.command: "openssl genrsa -out {{ rogue_dir }}/rogue.key 4096"
+      args:
+        creates: "{{ rogue_dir }}/rogue.key"
+      changed_when: true
+
+    - name: build the rogue CSR (O=app-org, OU=rogue, CN=rogue-unmapped)
+      ansible.builtin.command: >-
+        openssl req -new -key {{ rogue_dir }}/rogue.key -out {{ rogue_dir }}/rogue.csr
+        -subj "/O=app-org/OU=rogue/CN=rogue-unmapped"
+      args:
+        creates: "{{ rogue_dir }}/rogue.csr"
+      changed_when: true
+
+    - name: sign the rogue cert with the app-org CA (the CA the QM trusts)
+      ansible.builtin.command: >-
+        openssl x509 -req -in {{ rogue_dir }}/rogue.csr
+        -CA {{ authz_pki_ca_dir }}/ca.crt -CAkey {{ authz_pki_ca_dir }}/ca.key
+        -CAcreateserial -out {{ rogue_dir }}/rogue.crt -days 3 -sha256
+      args:
+        creates: "{{ rogue_dir }}/rogue.crt"
+      changed_when: true
+
+    - name: export the rogue PKCS#12 (GSKit-readable legacy PBE; personal cert + app-org CA)
+      ansible.builtin.command: >-
+        openssl pkcs12 -export -inkey {{ rogue_dir }}/rogue.key -in {{ rogue_dir }}/rogue.crt
+        -certfile {{ authz_pki_ca_dir }}/ca.crt -name rogue-unmapped
+        -out {{ rogue_dir }}/rogue.p12 -passout pass:{{ rogue_pw }}
+        -legacy -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1
+      args:
+        creates: "{{ rogue_dir }}/rogue.p12"
+      changed_when: true
+
+- name: PART B -- N2 + N4 + N5 (safe, non-disruptive) induced checks
+  hosts: authz_active
+  become: true
+  gather_facts: false
+  tags: [n2, n4, n5]
+  vars:
+    qm: "{{ qm_app }}"
+    app_host: app-client
+    app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
+    venv_python: /home/vagrant/mqvenv/bin/python
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    probe_dest: /home/vagrant/authz_probe.py
+    dlq_dest: /home/vagrant/dlq_probe.py
+    rogue_ctrl_p12: /tmp/authz-n2-rogue/rogue.p12
+    rogue_pw: "n2-rogue-pw"
+    rogue_repo: /home/vagrant/ssl/rogue/key
+    rogue_dir: /home/vagrant/ssl/rogue
+    errlog: "/mqshared/qmgrs/{{ qm_app }}/errors/AMQERR01.LOG"
+    recv_chl: "SVCQM.PCMKAPP"
+    dlq: "SYSTEM.DEAD.LETTER.QUEUE"
+  tasks:
+    - name: PART B safe induced checks
+      block:
+        - name: stage authz_probe + dlq_probe on the app host
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../clients/{{ item.s }}"
+            dest: "{{ item.d }}"
+            owner: vagrant
+            group: vagrant
+            mode: "0644"
+          loop:
+            - s: authz_probe.py
+              d: "{{ probe_dest }}"
+            - s: dlq_probe.py
+              d: "{{ dlq_dest }}"
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        # ================= N2 -- unmapped cert -> deny-all back-stop =================
+        - name: N2 -- create the rogue keystore dir on the app host
+          ansible.builtin.file:
+            path: "{{ rogue_dir }}"
+            state: directory
+            owner: vagrant
+            group: vagrant
+            mode: "0700"
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        - name: N2 -- stage the rogue PKCS#12 on the app host
+          ansible.builtin.copy:
+            src: "{{ rogue_ctrl_p12 }}"
+            dest: "{{ rogue_repo }}.p12"
+            owner: vagrant
+            group: vagrant
+            mode: "0600"
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        - name: N2 -- stash the rogue keystore password (.sth) for the MQI client
+          ansible.builtin.command: >-
+            /opt/mqm/bin/runmqakm -keydb -stashpw -type pkcs12 -db {{ rogue_repo }}.p12 -pw {{ rogue_pw }}
+          args:
+            creates: "{{ rogue_repo }}.sth"
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        - name: "N2 -- rogue (unmapped) cert on APP.SVRCONN must be refused 2035 (back-stop)"
+          ansible.builtin.command:
+            argv:
+              - "{{ venv_python }}"
+              - "{{ probe_dest }}"
+              - --qmgr
+              - "{{ qm }}"
+              - --conn
+              - "{{ app_conn }}"
+              - --channel
+              - APP.SVRCONN
+              - --cipher
+              - "{{ tls_cipher }}"
+              - --keyrepo
+              - "{{ rogue_repo }}"
+              - --certlabel
+              - rogue-unmapped
+              - --queue
+              - SVC.REQUEST
+              - --op
+              - put
+              - --expect
+              - "2035"
+          delegate_to: "{{ app_host }}"
+          become: false
+          changed_when: false
+          failed_when: false
+          register: n2_probe
+
+        - name: "N2 -- assert the CHLAUTH back-stop block is recorded in the QM error log (AMQ9777)"
+          ansible.builtin.shell: "set -o pipefail; grep -aE 'AMQ9777' {{ errlog }} | tail -n 3"
+          args:
+            executable: /bin/bash
+          changed_when: false
+          failed_when: false
+          register: n2_log
+
+        # ================= N4a -- client cannot spoof identity context =================
+        - name: "N4a -- mqapp SET_IDENTITY_CONTEXT put (spoof MQMD.UserIdentifier) is denied 2035"
+          ansible.builtin.command:
+            argv:
+              - "{{ venv_python }}"
+              - "{{ probe_dest }}"
+              - --qmgr
+              - "{{ qm }}"
+              - --conn
+              - "{{ app_conn }}"
+              - --channel
+              - APP.SVRCONN
+              - --cipher
+              - "{{ tls_cipher }}"
+              - --keyrepo
+              - "{{ app_keyrepo }}"
+              - --certlabel
+              - "{{ app_certlabel }}"
+              - --queue
+              - SVC.REQUEST
+              - --op
+              - put
+              - --set-context
+              - identity
+              - --as-user
+              - mqm
+              - --expect
+              - "2035"
+          delegate_to: "{{ app_host }}"
+          become: false
+          changed_when: false
+          failed_when: false
+          register: n4a_probe
+
+        # ====== N4c + N5 -- receiver design matches #613/#614 (read-only config) ======
+        - name: "N4c -- mqsvc holds +setall on the qmgr object"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"dspmqaut -m {{ qm }} -t qmgr -p mqsvc\""
+          changed_when: false
+          failed_when: false
+          register: n4c_qmgr
+
+        - name: "N4c -- mqsvc holds +put +setall on APP.REPLY"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"dspmqaut -m {{ qm }} -t queue -n APP.REPLY -p mqsvc\""
+          changed_when: false
+          failed_when: false
+          register: n4c_reply
+
+        - name: "N5 -- mqsvc holds +put +setall on the DLQ (receiver CAN dead-letter; #617 fix)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"dspmqaut -m {{ qm }} -t queue -n {{ dlq }} -p mqsvc\""
+          changed_when: false
+          failed_when: false
+          register: n5_dlq_auth
+
+        - name: "N4c -- the receiver channel runs PUTAUT(DEF)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"echo 'DIS CHANNEL({{ recv_chl }}) PUTAUT' | runmqsc {{ qm }}\""
+          changed_when: false
+          failed_when: false
+          register: n4c_putaut
+
+        - name: "N4c -- mqsvc's +setall is scoped (NOT granted on SVC.REQUEST)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"dspmqaut -m {{ qm }} -t queue -n SVC.REQUEST -p mqsvc 2>&1 || true\""
+          changed_when: false
+          failed_when: false
+          register: n4c_scope
+
+      always:
+        - name: "teardown -- remove the rogue keystore from the app host"
+          ansible.builtin.file:
+            path: "{{ rogue_dir }}"
+            state: absent
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        - name: "teardown -- remove the controller-side rogue mint dir"
+          ansible.builtin.file:
+            path: /tmp/authz-n2-rogue
+            state: absent
+          delegate_to: localhost
+          become: false
+
+    - name: "PART B -- report observed evidence"
+      ansible.builtin.debug:
+        msg:
+          - "N2  probe : {{ n2_probe.stdout | default('') }}"
+          - "N2  log   : {{ n2_log.stdout | default('(no AMQ9777 line found)') }}"
+          - "N4a probe : {{ n4a_probe.stdout | default('') }}"
+          - "N4c qmgr  : {{ n4c_qmgr.stdout | default('') }}"
+          - "N4c reply : {{ n4c_reply.stdout | default('') }}"
+          - "N5  dlq   : {{ n5_dlq_auth.stdout | default('') }}"
+          - "N4c putaut: {{ n4c_putaut.stdout | default('') }}"
+          - "N4c scope : {{ n4c_scope.stdout | default('') }}"
+
+    - name: "PART B -- assert all safe induced checks passed"
+      ansible.builtin.assert:
+        that:
+          - n2_probe.rc == 0
+          - "'AMQ9777' in (n2_log.stdout | default(''))"
+          - n4a_probe.rc == 0
+          - "'setall' in (n4c_qmgr.stdout | default(''))"
+          - "'setall' in (n4c_reply.stdout | default(''))"
+          - "'put' in (n5_dlq_auth.stdout | default(''))"
+          - "'setall' in (n5_dlq_auth.stdout | default(''))"
+          - "'PUTAUT(DEF)' in (n4c_putaut.stdout | default(''))"
+          - "'setall' not in (n4c_scope.stdout | default(''))"
+        fail_msg: "PART B safe induced checks FAILED -- see the report task above for observed evidence."
+        success_msg: "PART B (#617): N2 + N4 + N5 (config) all passed."
+
+# ============================================================================
+# OPT-IN (`--tags n5-induce`) -- the FULL induced undeliverable -> DLQ demo.
+#
+# DANGER on a SHARED arm: this routes a genuinely undeliverable reply over the LIVE
+# inter-QM receiver channel, which blocks the live reply stream during the channel's
+# message-retry (MRRTY x MRTMR ~= 10s) and, if the receiver cannot dead-letter (i.e.
+# the #617 DLQ +setall fix is NOT applied), wedges the channel PAUSED(MQPUT). RUN
+# ONLY ON AN ISOLATED / COLD-REBUILD ARM. The `always:` block re-enables the queue to
+# unwedge and cleans up, but a wedged channel still degrades live traffic while paused.
+# Requires the authz.yml DLQ +setall fix to be applied (else it will wedge, not pass).
+# ============================================================================
+- name: "PART B (opt-in) -- N5 induced undeliverable -> DLQ demonstration"
+  hosts: authz_active
+  become: true
+  gather_facts: false
+  tags: [n5-induce]
+  vars:
+    qm: "{{ qm_app }}"
+    app_host: app-client
+    app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
+    venv_python: /home/vagrant/mqvenv/bin/python
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    app_requester: /home/vagrant/app_requester.py
+    dlq_dest: /home/vagrant/dlq_probe.py
+    dlq: "SYSTEM.DEAD.LETTER.QUEUE"
+    recv_chl: "SVCQM.PCMKAPP"
+    testq: "N5.INDUCE.REPLY"
+  tasks:
+    - name: N5 induced demonstration
+      block:
+        - name: "N5i -- stage dlq_probe on the app host"
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../clients/dlq_probe.py"
+            dest: "{{ dlq_dest }}"
+            owner: vagrant
+            group: vagrant
+            mode: "0644"
+          delegate_to: "{{ app_host }}"
+          become: false
+
+        - name: "N5i -- create a throwaway reply queue, put-inhibited, + grants"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"{{ item }}\""
+          loop:
+            - "echo 'DEFINE QLOCAL({{ testq }}) PUT(DISABLED) GET(ENABLED) MAXDEPTH(50) REPLACE' | runmqsc {{ qm }}"
+            - "setmqaut -m {{ qm }} -t queue -n {{ testq }} -g mqsvc +put +setall"
+            - "setmqaut -m {{ qm }} -t queue -n {{ testq }} -g mqapp +put +get +inq +browse"
+            - "setmqaut -m {{ qm }} -t queue -n {{ dlq }} -g mqapp +get +inq +browse"
+          changed_when: true
+
+        - name: "N5i -- drive a round-trip whose reply routes to the put-inhibited queue"
+          ansible.builtin.command:
+            argv:
+              - "{{ venv_python }}"
+              - "{{ app_requester }}"
+              - --count
+              - "1"
+              - --qm
+              - "{{ qm }}"
+              - --conn
+              - "{{ app_conn }}"
+              - --request-queue
+              - SVC.REQUEST
+              - --reply-queue
+              - "{{ testq }}"
+              - --keyrepo
+              - "{{ app_keyrepo }}"
+              - --certlabel
+              - "{{ app_certlabel }}"
+          delegate_to: "{{ app_host }}"
+          become: false
+          changed_when: false
+          failed_when: false
+
+        - name: "N5i -- wait past the receiver message-retry window (MRRTY x MRTMR)"
+          ansible.builtin.pause:
+            seconds: 20
+
+        - name: "N5i -- assert the reply dead-lettered to the DLQ with Reason 2051 (PUT_INHIBITED)"
+          ansible.builtin.command:
+            argv:
+              - "{{ venv_python }}"
+              - "{{ dlq_dest }}"
+              - --qmgr
+              - "{{ qm }}"
+              - --conn
+              - "{{ app_conn }}"
+              - --channel
+              - APP.SVRCONN
+              - --cipher
+              - "{{ tls_cipher }}"
+              - --keyrepo
+              - "{{ app_keyrepo }}"
+              - --certlabel
+              - "{{ app_certlabel }}"
+              - --queue
+              - "{{ dlq }}"
+              - --expect-reason
+              - "2051"
+              - --expect-destq
+              - "{{ testq }}"
+          delegate_to: "{{ app_host }}"
+          become: false
+          changed_when: false
+          failed_when: false
+          register: n5i_dlq
+
+        - name: "N5i -- assert the inter-QM receiver channel did NOT stall (still RUNNING)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"echo 'DIS CHSTATUS({{ recv_chl }}) STATUS' | runmqsc {{ qm }}\""
+          changed_when: false
+          failed_when: false
+          register: n5i_chstatus
+
+      always:
+        - name: "teardown -- re-enable PUT on the throwaway queue (unwedge the channel)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"echo 'ALTER QLOCAL({{ testq }}) PUT(ENABLED)' | runmqsc {{ qm }}\""
+          changed_when: true
+          failed_when: false
+
+        - name: "teardown -- let any retrying/undelivered reply drain, then drain the DLQ"
+          ansible.builtin.pause:
+            seconds: 8
+
+        - name: "teardown -- drain any leftover dead-letters + the throwaway queue"
+          ansible.builtin.command:
+            argv:
+              - "{{ venv_python }}"
+              - "{{ dlq_dest }}"
+              - --qmgr
+              - "{{ qm }}"
+              - --conn
+              - "{{ app_conn }}"
+              - --channel
+              - APP.SVRCONN
+              - --cipher
+              - "{{ tls_cipher }}"
+              - --keyrepo
+              - "{{ app_keyrepo }}"
+              - --certlabel
+              - "{{ app_certlabel }}"
+              - --queue
+              - "{{ item }}"
+              - --expect-reason
+              - "0"
+              - --expect-destq
+              - "__drain__"
+          delegate_to: "{{ app_host }}"
+          become: false
+          changed_when: false
+          failed_when: false
+          loop: ["{{ dlq }}", "{{ testq }}", "{{ testq }}"]
+
+        - name: "teardown -- delete the throwaway queue + revoke temp grants (best-effort)"
+          ansible.builtin.command:
+            cmd: "su - mqm -c \"{{ item }}\""
+          loop:
+            - "echo 'DELETE QLOCAL({{ testq }}) PURGE' | runmqsc {{ qm }}"
+            - "setmqaut -m {{ qm }} -t queue -n {{ dlq }} -g mqapp -get -inq -browse"
+          changed_when: true
+          failed_when: false
+
+    - name: "N5i -- report + assert the induced dead-letter"
+      ansible.builtin.debug:
+        msg:
+          - "N5i DLQ  : {{ n5i_dlq.stdout | default('') }}"
+          - "N5i chan : {{ n5i_chstatus.stdout | default('') }}"
+
+    - name: "N5i -- assert dead-letter reason + channel RUNNING"
+      ansible.builtin.assert:
+        that:
+          - n5i_dlq.rc == 0
+          - "'RUNNING' in (n5i_chstatus.stdout | default(''))"
+        fail_msg: "N5 induced check FAILED -- reply did not dead-letter to the DLQ, or the channel stalled."
+        success_msg: "N5 induced (#617): undeliverable reply dead-lettered to the DLQ; receiver channel stayed RUNNING."
