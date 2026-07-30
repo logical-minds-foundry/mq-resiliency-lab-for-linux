@@ -117,3 +117,11 @@ manager — all four HA/DR arms (RDQM, Pacemaker/SAN, and both Native HA arms) p
 the shared `SVCQM` counterparty. Like mqweb, the collector is **data-plane
 infrastructure co-located with the queue manager it instruments** — but its
 output is what the observability plane consumes.
+
+The collector's **sink is selectable** (`mq_event_sink`), resolved at
+provisioning time so the delivered wrapper is single-purpose: **syslog** →
+journald (the lab default, feeding Alloy → Loki as above), or a **file** (`.json`
+event stream + `.error` diagnostics) for a site whose forwarding agent watches
+files. Both are independently tested; the file variant carries a host-local
+HA-failover stranding window the syslog sink does not, which is why syslog is the
+lab default. See `docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md`.
