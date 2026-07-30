@@ -16,10 +16,16 @@
 - **Resilience validated:** 2026-07-24 — the crash-restart collector (a supervising
   wrapper in its own process group via `setsid`; a negative-PID group stop; `amqsevt`
   restarted through the `MQRC_OBJECT_IN_USE` 2042 exclusive-handle reap window) passed
-  its full B-matrix on nativeha-ubuntu (`NHAUAPP`). See the engineering report:
-  `docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md` (the *why*), and
-  the vendor-neutral install how-to
-  `docs/reports/2026-07-28-mq-event-monitor-resilient-service.md` (the *how*).
+  its full B-matrix on nativeha-ubuntu (`NHAUAPP`). The collector's **sink is
+  selectable** — **syslog** (journald; the lab default) or a **file** (`.json` data +
+  `.error` diagnostics) — resolved at provisioning time (`mq_event_sink`) so the
+  delivered script is **single-purpose**, and **both variants are independently
+  tested**. See the engineering report
+  `docs/reports/2026-07-21-mq-event-monitor-wrapper-resilience.md` (the *why*), and the
+  vendor-neutral, install-as-written how-tos:
+  `docs/reports/2026-07-28-mq-event-monitor-resilient-service.md` (syslog) and
+  `docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md` (file — clean stop,
+  2042 recovery, JSONL, and destructive drain all validated on `NHAUAPP`, 2026-07-29).
 - **Working with the data:** this guide covers *producing* the feed; two companion
   repo reports cover *consuming* and *generating* it — the schema/consume reference
   `docs/reports/2026-07-22-mq-event-json-working-with-the-data.md` (envelope, the

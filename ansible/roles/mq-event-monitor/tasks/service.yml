@@ -60,14 +60,26 @@
 # legitimate re-provision no-op. We assert the DEFINE landed (AMQ8625I) here and prove the collector
 # is actually RUNNING in the next task; we do NOT fall back to a blanket rc tolerance that would
 # re-hide a genuine define/start failure.
-- name: define + start the MQ event-monitor service
-  # Sink-aware (.github#152): for the file sink the SERVICE redirects the wrapper's STDOUT/STDERR to
-  # the .error file (so wrapper lifecycle + amqsevt diagnostics land there while events go to the
-  # .json data file via the in-script redirect); for syslog the STDIO clause is empty and the DESCR
-  # is the original, so the produced MQSC is byte-for-byte the pre-#152 statement.
-  vars:
+# Sink-aware SERVICE clauses (.github#152): for the file sink the SERVICE redirects the wrapper's
+# STDOUT/STDERR to the .error file (so wrapper lifecycle + amqsevt diagnostics land there while events
+# go to the .json data file via the in-script redirect); for syslog the STDIO clause is empty and the
+# DESCR is the original, so the produced MQSC is byte-for-byte the pre-#152 statement.
+- name: compute the sink-aware SERVICE clauses
+  ansible.builtin.set_fact:
     _svc_stdio: "{{ \"STDOUT('\" + mq_event_error_file + \"') STDERR('\" + mq_event_error_file + \"') \" if mq_event_sink == 'file' else '' }}"
-    _svc_descr: "{{ 'Drain SYSTEM.ADMIN.*.EVENT as JSONL to ' + mq_event_data_file + ' (.error = diagnostics)' if mq_event_sink == 'file' else 'Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)' }}"
+    # DESCR is path-free and fixed-length (embedding mq_event_data_file blew past MQ's limit on a real QM).
+    _svc_descr: "{{ 'Drain SYSTEM.ADMIN.*.EVENT as JSONL to a file (.error=diag)' if mq_event_sink == 'file' else 'Drain SYSTEM.ADMIN.*.EVENT to JSON on journald (mq-events)' }}"
+
+# Fail loud BEFORE runmqsc: MQ's SERVICE DESCR maxes at 64 chars, and an over-length one is rejected
+# at runtime with AMQ8413E (String Length Error) that aborts the whole DEFINE — vrg-validate cannot
+# see a live MQSC field limit, so guard it here (#841).
+- name: assert the SERVICE DESCR fits MQ's 64-char limit (AMQ8413E guard, #841)
+  ansible.builtin.assert:
+    that: _svc_descr | length <= 64
+    fail_msg: "event-monitor SERVICE DESCR is {{ _svc_descr | length }} chars (> MQ's 64-char limit): {{ _svc_descr }}"
+    quiet: true
+
+- name: define + start the MQ event-monitor service
   ansible.builtin.shell: |
     set -o pipefail
     printf "DEFINE SERVICE(%s) REPLACE CONTROL(QMGR) SERVTYPE(SERVER) STARTCMD('/usr/bin/setsid') STARTARG('-w -- %s/run.sh %s') {{ _svc_stdio }}STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') DESCR('%s')\nSTART SERVICE(%s)\n" \

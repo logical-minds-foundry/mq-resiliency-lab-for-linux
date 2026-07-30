@@ -12,9 +12,12 @@ reference.**
 > sink (pipe `amqsevt` through `logger` instead) is often simpler in practice,
 > because it inherits the platform's existing forwarding and rotation and removes
 > two of the follow-on requirements below. If you also want the collector to
-> **restart itself when it dies** and survive failover as a managed service, see
-> the companion how-to
-> [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md).
+> **restart itself when it dies** and survive failover as a managed service, use
+> the **tested resilient file-sink variant** — this how-to's file sink run under the
+> self-healing wrapper, documented and validated end-to-end in
+> [`2026-07-29-mq-event-monitor-file-sink-resilient.md`](2026-07-29-mq-event-monitor-file-sink-resilient.md)
+> (the syslog equivalent is
+> [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md)).
 
 ## Changelog — version dated 2026-07-28
 
@@ -197,9 +200,11 @@ optional.
    manager starts, but if the collector process crashes — for example `amqsevt`
    meets an event it cannot parse and dies — **nothing restarts it; the feed stops
    silently.** The **restart** half of this is solved by running the collector under
-   a self-healing wrapper instead of invoking `amqsevt` directly — see the companion
-   how-to
-   [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md),
+   a self-healing wrapper instead of invoking `amqsevt` directly — see the tested
+   resilient file-sink variant
+   [`2026-07-29-mq-event-monitor-file-sink-resilient.md`](2026-07-29-mq-event-monitor-file-sink-resilient.md)
+   (or the syslog equivalent
+   [`2026-07-28-mq-event-monitor-resilient-service.md`](2026-07-28-mq-event-monitor-resilient-service.md)),
    which also survives failover as a managed service. The wrapper does **not**
    remove the **monitoring** half: the service is still a moving part that must be
    health-monitored and alerted on — **a running queue manager does not imply its
