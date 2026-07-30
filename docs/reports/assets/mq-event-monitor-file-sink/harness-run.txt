@@ -1,0 +1,35 @@
+== event-monitor wrapper validation :: QM=NHAUAPP SERVICE=MQ.EVENT.MONITOR :: 2026-07-29T23:19:06Z ==
+(file sink; validate-event-monitor-wrapper.sh NHAUAPP MQ.EVENT.MONITOR file \
+   /var/mqm/event-monitor/NHAUAPP.events.json /var/mqm/event-monitor/NHAUAPP.error)
+(nativeha-ubuntu arm — same Native HA mechanism as RHEL; RHEL arm not buildable on the aarch64 host, #103 D11)
+
+-- B1: wrapper + amqsevt up; service PID == wrapper PGID; events flowing --
+  10562    7309   10562 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  10582   10562   10562 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact
+wrapper_pid=10562  service_PID=10562  amqsevt=10582  wrapper_PGID=10562
+PASS  B1 up + checkpoint (service PID == wrapper PID == PGID = 10562)
+PASS  B1 events flowing (1 JSON events in file)
+
+-- A1: .json is well-formed JSONL; A2: forced events drain destructively --
+PASS  A1 .json is well-formed JSONL (last 20 lines parse)
+PASS  A2 destructive drain (events 1->5 in .json; SYSTEM.ADMIN.QMGR.EVENT CURDEPTH=0)
+
+-- B2: STOP SERVICE reaps BOTH wrapper + amqsevt (no orphan) --
+AMQ8732I: Request to stop Service accepted.
+PASS  B2 clean stop — wrapper + amqsevt both reaped, no orphan
+
+-- B3: kill -9 amqsevt; wrapper restarts it (retrying through the ~29s 2042 window) --
+AMQ8733I: Request to start Service accepted.
+amqsevt before crash: 10857
+PASS  B3 crash recovery (wrapper restarted amqsevt: 10857 -> 10920)
+run.sh lifecycle (fail-retry-succeed, incl. MQRC_OBJECT_IN_USE 2042):
+run.sh[10562]: starting event collector for NHAUAPP (pgid 10562)
+run.sh[10815]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+run.sh[10815]: amqsevt exited rc=137 after 5s (fast); restarting in 10s
+run.sh[10815]: amqsevt exited rc=0 after 0s (fast) [MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]]; restarting in 10s
+root-cause 2042 in .error:
+MQOPEN of 'SYSTEM.ADMIN.COMMAND.EVENT' ended with reason code MQRC_OBJECT_IN_USE [2042]
+
+== summary: ALL SCENARIOS PASS ==
+  10815    7309   10815 /bin/bash /opt/mq-event-monitor/run.sh NHAUAPP
+  10920   10815   10815 /opt/mqm/samp/bin/amqsevt -m NHAUAPP -o json_compact

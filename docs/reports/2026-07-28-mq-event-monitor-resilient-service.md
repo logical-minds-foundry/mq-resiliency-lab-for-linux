@@ -348,18 +348,19 @@ inherits the platform's existing forwarding and rotation — you do not have to 
 a file tailer or a rotation policy. Point your log pipeline at the `mq-events` tag
 and you are done.
 
-If you need a **file** instead, `run.sh` is a one-line change — redirect `amqsevt`'s
-stdout to a file rather than piping it through `logger`:
-
-```bash
-stdbuf -oL "${AMQSEVT}" -m "${QM}" -o json_compact 2>"${ERRLOG}" >> "${DATA_FILE}"
-```
-
-A file sink then adds two responsibilities the syslog path gave you for free —
-**forwarding with a checkpointed read offset** and **copy-truncate rotation** (never
-rename-and-recreate; the collector holds the file open and does not reopen on a
-signal). Those, plus the general best-effort-not-exactly-once caveat, are covered in
-the [events-to-JSON file-sink how-to](2026-07-28-mq-event-monitoring-to-file.md).
+If you need a **file** instead, use the **tested file-sink variant** — a
+single-purpose script you install as written, *not* this syslog script hand-edited.
+It is documented, with its own end-to-end test evidence (clean stop, 2042 crash
+recovery, JSONL output, destructive drain), in
+[`2026-07-29-mq-event-monitor-file-sink-resilient.md`](2026-07-29-mq-event-monitor-file-sink-resilient.md):
+`amqsevt` stdout appends to a `.json` data file, and the wrapper's lifecycle plus
+`amqsevt`'s diagnostics go to a companion `.error` file via the `SERVICE`'s
+`STDOUT`/`STDERR`. A file sink adds two responsibilities the syslog path gave you
+for free — **forwarding with a checkpointed read offset** and **copy-truncate
+rotation** (never rename-and-recreate; the collector holds the file open and does
+not reopen on a signal) — plus a host-local **HA-failover stranding window**. Those,
+with the general best-effort-not-exactly-once caveat, are covered in that report and
+in the [events-to-JSON file-sink how-to](2026-07-28-mq-event-monitoring-to-file.md).
 
 Either way, remember the collector is **destructive and non-transactional**: it
 removes each event from MQ as it reads it, so a crash *between* the get and the write
