@@ -33,12 +33,16 @@
 - name: install targetcli (cached deb offline, network fallback)
   ansible.builtin.shell: |
     set -euo pipefail
+    # DPkg::Lock::Timeout waits out a fresh-boot unattended-upgrades holding the
+    # dpkg frontend lock instead of failing the cold rebuild (#820, epic .github#104).
+    # A local-deb install still takes the frontend lock, so the offline path races too.
+    lock="-o DPkg::Lock::Timeout={{ apt_lock_timeout }}"
     deb=$(ls -1 /var/cache/san-debs/targetcli-fb_*.deb 2>/dev/null | sort -V | tail -n1 || true)
     if [ -n "$deb" ]; then
-      DEBIAN_FRONTEND=noninteractive apt-get install -y "$deb"
+      DEBIAN_FRONTEND=noninteractive apt-get $lock install -y "$deb"
     else
-      apt-get update
-      DEBIAN_FRONTEND=noninteractive apt-get install -y targetcli-fb
+      apt-get $lock update
+      DEBIAN_FRONTEND=noninteractive apt-get $lock install -y targetcli-fb
     fi
   args:
     executable: /bin/bash
