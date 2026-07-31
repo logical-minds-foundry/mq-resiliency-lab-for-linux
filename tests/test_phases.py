@@ -16,9 +16,12 @@ import pytest
 from mqlab.orchestrator import CommandStep
 from mqlab.phases import (
     _DEFAULT_BOOT_BATCH,
+    _HOST_RESOLVED_BASE_BOX,
     PHASES,
     _batch_guests,
+    _batch_shares_box,
     _boot_batch,
+    _guest_box,
     build_states,
     first_unsatisfied,
 )
@@ -227,15 +230,30 @@ def _seed_boot_batch(tmp_path, value) -> None:
     (tmp_path / "lab" / "topology.yaml").write_text(f"{TOPO}boot_batch: {value}\n")
 
 
+def _batch_payload(step) -> list[str]:
+    """The guest names of one `vagrant up [--no-parallel] <batch>` step, with the
+    optional #859 serialization flag stripped — so the ordering/chunking assertions
+    stay independent of whether that batch shares a box."""
+    argv = step.command.argv
+    assert argv[0] == "vagrant"
+    assert argv[1] == "up"
+    rest = argv[2:]
+    if rest and rest[0] == "--no-parallel":
+        rest = rest[1:]
+    return rest
+
+
+def _is_serial(step) -> bool:
+    """True iff this batch step carries the #859 --no-parallel serialization flag."""
+    return "--no-parallel" in step.command.argv
+
+
 def _batched_targets(steps) -> list[str]:
     """Flatten the per-batch `vagrant up <batch>` steps back into one ordered list,
-    asserting each step is a well-formed vagrant-up call."""
+    asserting each step is a well-formed vagrant-up call (flag stripped)."""
     flat: list[str] = []
     for step in steps:
-        argv = step.command.argv
-        assert argv[0] == "vagrant"
-        assert argv[1] == "up"
-        flat.extend(argv[2:])
+        flat.extend(_batch_payload(step))
     return flat
 
 
@@ -263,13 +281,17 @@ def test_vms_build_steps_batches_default_n_preserving_order(monkeypatch, tmp_pat
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     # 9 VMs, N=4 → ceil(9/4) = 3 batches, contiguous chunks in order.
-    assert [s.command.argv[2:] for s in steps] == [
+    assert [_batch_payload(s) for s in steps] == [
         _EXPECTED_VMS[0:4],
         _EXPECTED_VMS[4:8],
         _EXPECTED_VMS[8:9],
     ]
     # Concatenation preserves the authoritative HADR order exactly.
     assert _batched_targets(steps) == _EXPECTED_VMS
+    # These fixture nodes declare no platform, so they all boot the one host-resolved
+    # base box: the two multi-guest batches share a box and serialize (#859); the lone
+    # trailing guest has no in-batch contention, so it keeps the parallel default.
+    assert [_is_serial(s) for s in steps] == [True, True, False]
     # Multi-batch runs carry a [i/n] progress label for a readable transcript.
     assert [s.label for s in steps] == [
         "pcmk-ubuntu vms up [1/3]",
@@ -285,7 +307,7 @@ def test_vms_build_steps_custom_boot_batch(monkeypatch, tmp_path):
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == 5
-    assert [s.command.argv[2:] for s in steps] == [
+    assert [_batch_payload(s) for s in steps] == [
         _EXPECTED_VMS[0:2],
         _EXPECTED_VMS[2:4],
         _EXPECTED_VMS[4:6],
@@ -302,7 +324,9 @@ def test_vms_build_steps_serial_when_batch_one(monkeypatch, tmp_path):
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == len(_EXPECTED_VMS)
-    assert all(len(s.command.argv[2:]) == 1 for s in steps)
+    # One guest per batch → no in-batch contention → no serialization flag (#859).
+    assert all(_batch_payload(s) == [g] for s, g in zip(steps, _EXPECTED_VMS, strict=True))
+    assert not any(_is_serial(s) for s in steps)
     assert _batched_targets(steps) == _EXPECTED_VMS
 
 
@@ -315,7 +339,7 @@ def test_vms_build_steps_single_batch_when_n_ge_len(monkeypatch, tmp_path):
     steps = PHASES[1].build_steps(stack, None)
     assert len(steps) == 1
     assert steps[0].label == "pcmk-ubuntu vms up"
-    assert steps[0].command.argv[2:] == _EXPECTED_VMS
+    assert _batch_payload(steps[0]) == _EXPECTED_VMS
 
 
 @pytest.mark.parametrize("bad", [0, -3, "four", 2.5, True])
@@ -348,6 +372,66 @@ def test_boot_batch_defaults_when_unset(monkeypatch, tmp_path):
 def test_batch_guests_contiguous_chunks(items, size, expected):
     """_batch_guests emits ceil(L/N) contiguous, in-order chunks for every edge case."""
     assert _batch_guests(items, size) == expected
+
+
+# --- #859: same-box boot serialization ------------------------------------- #
+
+# A topology slice exercising the box-contention key: two fat-box platforms mapping
+# to distinct boxes, a shared platform (two guests, one box), and platform-less guests
+# (the host-resolved base box). No file I/O — the helpers take a topo dict directly.
+_BOX_TOPO = {
+    "boxes": {
+        "fat-rhel": {"box": "mq-nativeha-rhel9"},
+        "fat-ubuntu": {"box": "mq-ubuntu2404"},
+    },
+    "nodes": {
+        "nha-rhel-a1": {"platform": "fat-rhel"},
+        "nha-rhel-a2": {"platform": "fat-rhel"},
+        "svc-sim": {"platform": "fat-ubuntu"},
+        "san-a": {},  # no platform → host-resolved base box
+        "san-b": {},  # no platform → host-resolved base box
+    },
+}
+
+
+def test_guest_box_resolves_platform_to_box():
+    """A guest's contention key is the box its platform clones (via the registry)."""
+    assert _guest_box("nha-rhel-a1", _BOX_TOPO) == "mq-nativeha-rhel9"
+    assert _guest_box("svc-sim", _BOX_TOPO) == "mq-ubuntu2404"
+
+
+def test_guest_box_platformless_folds_to_host_resolved_base():
+    """Guests with no platform (and group hosts absent from nodes:) all clone the one
+    host-resolved base box, so they share the sentinel key."""
+    assert _guest_box("san-a", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
+    assert _guest_box("san-b", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
+    # A group host not present in nodes: is treated as platform-less, not an error.
+    assert _guest_box("not-a-node", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
+
+
+def test_guest_box_unknown_platform_fails_loud():
+    """A platform absent from the boxes: registry is a garbled dial — fail loud rather
+    than silently mis-group the boot."""
+    topo = {"boxes": {}, "nodes": {"x": {"platform": "ghost"}}}
+    with pytest.raises(ValueError, match="unknown platform 'ghost'"):
+        _guest_box("x", topo)
+
+
+@pytest.mark.parametrize(
+    ("batch", "expected"),
+    [
+        (["nha-rhel-a1", "nha-rhel-a2"], True),  # same fat box → contends
+        (["nha-rhel-a1", "svc-sim"], False),  # distinct boxes → no contention
+        (["san-a", "san-b"], True),  # both host-resolved base box → contends
+        (["nha-rhel-a1", "svc-sim", "san-a"], False),  # all distinct
+        (["nha-rhel-a1", "svc-sim", "nha-rhel-a2"], True),  # one repeat is enough
+        (["nha-rhel-a1"], False),  # a lone guest never contends with itself
+        ([], False),  # empty batch → nothing to serialize
+    ],
+)
+def test_batch_shares_box(batch, expected):
+    """A batch needs --no-parallel iff two+ of its guests clone the same box (#859)."""
+    assert _batch_shares_box(batch, _BOX_TOPO) is expected
 
 
 def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
@@ -508,7 +592,7 @@ def test_all_vms_dedupes_overlap(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     stack = lab_stacks()["my-stack"]
     steps = PHASES[1].build_steps(stack, None)
-    targets = steps[0].command.argv[2:]
+    targets = _batch_payload(steps[0])
     assert targets.count("obs") == 1  # listed once despite three appearances
     assert targets == ["h1", "obs"]
 

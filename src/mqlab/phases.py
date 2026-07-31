@@ -226,19 +226,75 @@ def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
     return [guests[i : i + size] for i in range(0, len(guests), size)]
 
 
+# The boot-lock contention key for a guest that declares no platform: it boots the
+# one host-resolved base OS box (default_platform), so every platform-less guest
+# (e.g. the SAN targets) shares this single base volume. A stable sentinel — never a
+# real box name — folds them into one contention group (#859).
+_HOST_RESOLVED_BASE_BOX = "\0host-resolved-base"
+
+
+def _guest_box(guest: str, topo: dict[str, Any]) -> str:
+    """The libvirt base volume this guest's `vagrant up` clones — the thing same-box
+    boots contend on (#859).
+
+    Two guests share this key iff they clone the SAME baked box volume, which is
+    exactly the concurrency that trips vagrant-libvirt's per-machine lock when a batch
+    boots them in parallel before that box's volume is staged. Resolved node ->
+    `platform` -> `boxes[platform].box`; a guest with no platform boots the one
+    host-resolved base box and folds to `_HOST_RESOLVED_BASE_BOX`. Fails loud on a
+    platform absent from the `boxes:` registry — a garbled platform would otherwise
+    silently mis-group the boot (the same fail-loud stance as `resolve()`).
+    """
+    spec = (topo.get("nodes") or {}).get(guest) or {}
+    platform = spec.get("platform")
+    if platform is None:
+        return _HOST_RESOLVED_BASE_BOX
+    boxes = topo.get("boxes") or {}
+    entry = boxes.get(platform)
+    if entry is None:
+        msg = f"guest {guest!r}: unknown platform {platform!r} (not in boxes: registry)"
+        raise ValueError(msg)
+    return str(entry.get("box", platform))
+
+
+def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
+    """True iff two+ guests in this batch clone the same box volume (#859).
+
+    A parallel `vagrant up` of same-box guests races on staging that box's base volume
+    and trips Vagrant's per-machine lock ('another Vagrant process is currently reading
+    or modifying the machine'); such a batch must boot serially (--no-parallel). A batch
+    whose guests all clone distinct boxes has no such contention, so it keeps the
+    bounded parallelism the `boot_batch` dial buys (#638).
+    """
+    boxes = [_guest_box(g, topo) for g in batch]
+    return len(set(boxes)) != len(boxes)
+
+
 def _vms_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
     """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs, in
-    contiguous batches of at most `boot_batch` (#638).
+    contiguous batches of at most `boot_batch` (#638), serializing a batch whose guests
+    share a box (#859).
 
     One `vagrant up <batch>` per group of <= N, over the topology's ordered VM list, so
     the fat boxes don't all copy their multi-GB images at once. See `_boot_batch` for
     the speed<->reliability tradeoff and `_batch_guests` for the ordering guarantee.
+
+    When a batch contains two+ guests that clone the SAME box (e.g. the six nha-rhel-*
+    on mq-nativeha-rhel9, or the three mq-ubuntu2404 commons), the parallel default
+    races on staging that box's base volume and trips vagrant-libvirt's per-machine
+    lock, so that batch is issued `--no-parallel` (serial within the batch — each boot
+    stages the shared volume before the next clones it). A batch whose guests all clone
+    distinct boxes keeps the parallel default: distinct volumes don't contend, and the
+    disk-I/O ceiling is already bounded by the batch size. `--no-parallel` preserves the
+    listed order, so the HADR bring-up order still holds either way (#859).
     """
+    topo = _topology()
     vms = _all_vms(stack)
     batches = _batch_guests(vms, _boot_batch())
     steps: list[CommandStep] = []
     for index, batch in enumerate(batches, start=1):
-        cmd = Command(["vagrant", "up", *batch], cwd=repo_root() / "lab")
+        serial = ["--no-parallel"] if _batch_shares_box(batch, topo) else []
+        cmd = Command(["vagrant", "up", *serial, *batch], cwd=repo_root() / "lab")
         label = (
             f"{stack.name} vms up"
             if len(batches) == 1
