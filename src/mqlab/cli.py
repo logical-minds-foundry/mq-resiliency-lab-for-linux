@@ -291,6 +291,12 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
     `--only observe` ensures only the exporter PKI."""
     kinds = phase.ensure
     if "boxes" in kinds:
+        # #858: BEFORE building/registering boxes and running `vagrant up`, forget any
+        # guest whose cached box_meta names a box the topology has since repointed away
+        # from — otherwise the stale box_meta wins over the Vagrantfile's node.vm.box and
+        # `vagrant up` boots the OLD box. #636 handles this on teardown; this handles the
+        # repoint-then-bootstrap-without-teardown path.
+        _reconcile_box_meta(all_vms(stack), step=step)
         _ensure_local_boxes(all_vms(stack))
     if "mq" in kinds:
         _ensure_mq_artifacts_for_stack(stack)
@@ -1196,6 +1202,69 @@ def _forget_machine_step(g: str) -> CommandStep:
     # from the Vagrantfile (#636, epic .github#70).
     cmd = Command(["rm", "-rf", str(_vagrant_machine_dir(g))])  # noqa: S607
     return CommandStep(f"{g} forget vagrant machine", cmd)
+
+
+def _cached_box_name(g: str) -> str | None:
+    """The box name Vagrant cached in guest `g`'s per-machine box_meta, or None.
+
+    The first time Vagrant stands a guest up it writes box_meta (JSON) under the
+    provider subdir, naming the box it was created from — and honors that cached
+    name OVER the Vagrantfile's node.vm.box on every later `vagrant up`. Returns
+    the cached "name", or None when Vagrant has never created the guest (no
+    box_meta yet — nothing to reconcile). A present box_meta is JSON Vagrant
+    itself wrote; a malformed one is a genuine anomaly and surfaces (json.loads
+    raises) rather than being swallowed into silently booting an unknown box.
+    """
+    meta = _vagrant_machine_dir(g) / "libvirt" / "box_meta"
+    if not meta.exists():
+        return None
+    name = json.loads(meta.read_text()).get("name")
+    return name if isinstance(name, str) else None
+
+
+def _plan_reconcile_box_meta(guests: list[str]) -> tuple[list[CommandStep], list[str]]:
+    """Forget the per-machine metadata of any guest whose cached box_meta names a
+    DIFFERENT box than the resolved topology now assigns (#858, the #636 class).
+
+    #636 clears box_meta on TEARDOWN, but a box REPOINT (a node's box changing in
+    the topology) followed by a bootstrap WITHOUT a teardown of that stack leaves
+    the stale box_meta in place — and Vagrant honors box_meta over the
+    Vagrantfile's node.vm.box, so `vagrant up` boots the OLD box (often the bare
+    base box) and the repoint silently does nothing (MQ gets re-installed instead
+    of skipped, defeating the bake). This closes the gap on the bring-up side:
+    before `vagrant up`, compare each guest's cached box to its resolved box and
+    forget the machine dir on a mismatch, making the guest brand-new so Vagrant
+    reads the repointed box from the Vagrantfile. A guest with no cached metadata
+    (never created) or whose cache already matches is left untouched — this acts
+    only on a positively-confirmed repoint.
+    """
+    nodes = _resolved_nodes()
+    steps: list[CommandStep] = []
+    notes: list[str] = []
+    for g in guests:
+        cached = _cached_box_name(g)
+        resolved = (nodes.get(g) or {}).get("box")
+        if cached is not None and resolved is not None and cached != resolved:
+            notes.append(
+                f"{g}: box repointed {cached} -> {resolved}; "
+                "forgetting stale vagrant metadata (#858)"
+            )
+            steps.append(_forget_machine_step(g))
+    return steps, notes
+
+
+def _reconcile_box_meta(guests: list[str], *, step: bool) -> None:
+    """Run the #858 box_meta reconciliation before the vms phase's `vagrant up`.
+
+    Emits an operator-visible note per repointed guest and forgets its stale
+    per-machine metadata (see _plan_reconcile_box_meta). A no-op when nothing was
+    repointed — the common case — so a steady-state bootstrap stays quiet.
+    """
+    steps, notes = _plan_reconcile_box_meta(guests)
+    for note in notes:
+        typer.echo(note)
+    if steps:
+        _execute("reconcile box", steps, step_mode=step)
 
 
 # State-aware destroy planner (#99): given the live state, act only where needed and

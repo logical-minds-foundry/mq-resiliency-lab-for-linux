@@ -226,19 +226,75 @@ def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
     return [guests[i : i + size] for i in range(0, len(guests), size)]
 
 
+# The boot-lock contention key for a guest that declares no platform: it boots the
+# one host-resolved base OS box (default_platform), so every platform-less guest
+# (e.g. the SAN targets) shares this single base volume. A stable sentinel — never a
+# real box name — folds them into one contention group (#859).
+_HOST_RESOLVED_BASE_BOX = "\0host-resolved-base"
+
+
+def _guest_box(guest: str, topo: dict[str, Any]) -> str:
+    """The libvirt base volume this guest's `vagrant up` clones — the thing same-box
+    boots contend on (#859).
+
+    Two guests share this key iff they clone the SAME baked box volume, which is
+    exactly the concurrency that trips vagrant-libvirt's per-machine lock when a batch
+    boots them in parallel before that box's volume is staged. Resolved node ->
+    `platform` -> `boxes[platform].box`; a guest with no platform boots the one
+    host-resolved base box and folds to `_HOST_RESOLVED_BASE_BOX`. Fails loud on a
+    platform absent from the `boxes:` registry — a garbled platform would otherwise
+    silently mis-group the boot (the same fail-loud stance as `resolve()`).
+    """
+    spec = (topo.get("nodes") or {}).get(guest) or {}
+    platform = spec.get("platform")
+    if platform is None:
+        return _HOST_RESOLVED_BASE_BOX
+    boxes = topo.get("boxes") or {}
+    entry = boxes.get(platform)
+    if entry is None:
+        msg = f"guest {guest!r}: unknown platform {platform!r} (not in boxes: registry)"
+        raise ValueError(msg)
+    return str(entry.get("box", platform))
+
+
+def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
+    """True iff two+ guests in this batch clone the same box volume (#859).
+
+    A parallel `vagrant up` of same-box guests races on staging that box's base volume
+    and trips Vagrant's per-machine lock ('another Vagrant process is currently reading
+    or modifying the machine'); such a batch must boot serially (--no-parallel). A batch
+    whose guests all clone distinct boxes has no such contention, so it keeps the
+    bounded parallelism the `boot_batch` dial buys (#638).
+    """
+    boxes = [_guest_box(g, topo) for g in batch]
+    return len(set(boxes)) != len(boxes)
+
+
 def _vms_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
     """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs, in
-    contiguous batches of at most `boot_batch` (#638).
+    contiguous batches of at most `boot_batch` (#638), serializing a batch whose guests
+    share a box (#859).
 
     One `vagrant up <batch>` per group of <= N, over the topology's ordered VM list, so
     the fat boxes don't all copy their multi-GB images at once. See `_boot_batch` for
     the speed<->reliability tradeoff and `_batch_guests` for the ordering guarantee.
+
+    When a batch contains two+ guests that clone the SAME box (e.g. the six nha-rhel-*
+    on mq-nativeha-rhel9, or the three mq-ubuntu2404 commons), the parallel default
+    races on staging that box's base volume and trips vagrant-libvirt's per-machine
+    lock, so that batch is issued `--no-parallel` (serial within the batch — each boot
+    stages the shared volume before the next clones it). A batch whose guests all clone
+    distinct boxes keeps the parallel default: distinct volumes don't contend, and the
+    disk-I/O ceiling is already bounded by the batch size. `--no-parallel` preserves the
+    listed order, so the HADR bring-up order still holds either way (#859).
     """
+    topo = _topology()
     vms = _all_vms(stack)
     batches = _batch_guests(vms, _boot_batch())
     steps: list[CommandStep] = []
     for index, batch in enumerate(batches, start=1):
-        cmd = Command(["vagrant", "up", *batch], cwd=repo_root() / "lab")
+        serial = ["--no-parallel"] if _batch_shares_box(batch, topo) else []
+        cmd = Command(["vagrant", "up", *serial, *batch], cwd=repo_root() / "lab")
         label = (
             f"{stack.name} vms up"
             if len(batches) == 1
@@ -257,17 +313,73 @@ def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
 # --------------------------------------------------------------------------- #
 # provision phase
 # --------------------------------------------------------------------------- #
-def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
-    """Bring up DNS, then run the stack's provision playbook with the #351 QM
-    extra-vars.
+def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
+    """Post-boot NIC-assurance guard for the RHEL9 nodes in this stack (#860).
 
-    DNS goes first (#478): render the zones from topology, serve them on the infra
-    nodes (bind-dns), and point every guest's resolver at them (host-resolver), so
-    the app-requester's runtime reverse lookups (#454) resolve from the outset
-    rather than paying the ~10s getnameinfo tax until observe. site-dns.yml is
-    limited to this stack's VM set (members + commons, which carries the infra
-    nodes). Fail loud (no silent skip) if the stack declares no provision
-    playbook — a reserved stack like nativeha-ubuntu cannot be bootstrapped.
+    vagrant-libvirt's RedHat configure_networks writes an ifcfg for every lab NIC,
+    but NetworkManager on RHEL9 non-deterministically leaves some of them unmanaged /
+    DOWN with no IP after boot (triage .github#102) — cascading into unreachable
+    nodes, "provision dns" exit 4, and Native HA no-quorum. #690 forces
+    NM_CONTROLLED=yes so the connection profile always EXISTS; this guard runs first,
+    before DNS and the stack playbook, and makes it ACTIVE: lab/scripts/nic-assure.sh
+    reloads NetworkManager, claims + connects every ethernet device, then asserts
+    every declared NIC IP is live (fail loud if not).
+
+    It runs over the Vagrant NAT channel (enp5s0, independent of every lab NIC), so
+    it can repair even a down net-mgmt NIC that the Ansible-over-net-mgmt provision
+    plays could never reach. Ubuntu (netplan) arms are not subject to the
+    ifup/ifdown race and are skipped. The script is uploaded per node (no synced
+    folder in this lab) and then invoked with sudo, passing that node's declared
+    topology NIC IPs as the expected set.
+    """
+    nodes = _topology().get("nodes") or {}
+    lab = repo_root() / "lab"
+    steps: list[CommandStep] = []
+    for name in all_vms(stack):
+        spec = nodes.get(name) or {}
+        if "rhel" not in str(spec.get("platform", "")).lower():
+            continue  # netplan (Ubuntu) arm — not subject to the ifup/ifdown race
+        ips = [str(ip) for ip in (spec.get("nics") or {}).values() if ip]
+        if not ips:
+            continue
+        # Upload to the ssh user's home (writable by the vagrant-upload transport,
+        # readable by the sudo run) rather than a world-writable /tmp.
+        dest = "/home/vagrant/nic-assure.sh"
+        steps.append(
+            CommandStep(
+                f"nic-assure upload {name}",
+                Command(
+                    ["vagrant", "upload", "scripts/nic-assure.sh", dest, name],
+                    cwd=lab,
+                ),
+            )
+        )
+        steps.append(
+            CommandStep(
+                f"nic-assure {name}",
+                Command(
+                    ["vagrant", "ssh", name, "-c", f"sudo bash {dest} " + " ".join(ips)],
+                    cwd=lab,
+                ),
+            )
+        )
+    return steps
+
+
+def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+    """Assure NICs, bring up DNS, then run the stack's provision playbook with the
+    #351 QM extra-vars.
+
+    The NIC-assurance guard goes first (#860): before any Ansible-over-net-mgmt play
+    runs, repair any RHEL9 NIC the vagrant-libvirt/NetworkManager boot race left DOWN
+    (see `_nic_assure_steps`) — otherwise a node whose net-mgmt NIC is down is
+    unreachable and "provision dns" exits 4. DNS goes next (#478): render the zones
+    from topology, serve them on the infra nodes (bind-dns), and point every guest's
+    resolver at them (host-resolver), so the app-requester's runtime reverse lookups
+    (#454) resolve from the outset rather than paying the ~10s getnameinfo tax until
+    observe. site-dns.yml is limited to this stack's VM set (members + commons, which
+    carries the infra nodes). Fail loud (no silent skip) if the stack declares no
+    provision playbook — a reserved stack like nativeha-ubuntu cannot be bootstrapped.
     """
     if stack.provision is None:
         msg = f"stack {stack.name!r} has no provision playbook — cannot bootstrap"
@@ -279,6 +391,7 @@ def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noq
         cwd=ansible,
     )
     return [
+        *_nic_assure_steps(stack),
         CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
         CommandStep(
             f"{stack.name} provision dns",
