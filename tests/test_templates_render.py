@@ -50,11 +50,16 @@ def _ansible_jinja_env() -> jinja2.Environment:
     keeps the parse faithful to what Ansible does at deploy time. `parse()` never
     resolves filters or variables, so no Ansible plugin registration is required.
     """
+    # autoescape is a RENDER-time setting; this env only ever calls `.parse()`
+    # (an AST build, driven purely by delimiters/whitespace), so autoescape has
+    # zero effect on the result. It is set True to satisfy security scanners
+    # (CodeQL py/jinja2/autoescape-false) without changing any parse behaviour —
+    # not because these config/shell/service templates emit HTML.
     return jinja2.Environment(
         trim_blocks=True,
         lstrip_blocks=False,
         keep_trailing_newline=True,
-        autoescape=False,  # noqa: S701 - config/shell/service templates, not HTML
+        autoescape=True,
     )
 
 
