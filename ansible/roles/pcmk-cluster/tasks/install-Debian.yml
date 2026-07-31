@@ -3,4 +3,7 @@
   ansible.builtin.apt:
     name: [pacemaker, corosync, pcs, resource-agents-base, resource-agents-extra]
     update_cache: true
+    # Wait out a fresh-boot unattended-upgrades holding the dpkg frontend lock
+    # instead of failing the cold rebuild (#820, epic .github#104).
+    lock_timeout: "{{ apt_lock_timeout }}"
   become: true

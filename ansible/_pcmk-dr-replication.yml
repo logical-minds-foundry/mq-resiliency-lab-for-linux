@@ -13,7 +13,12 @@
   become: true
   tasks:
     - name: LIO target package on the DR-peer SAN
-      ansible.builtin.apt: { name: targetcli-fb, update_cache: true }
+      # lock_timeout waits out a fresh-boot unattended-upgrades holding the dpkg
+      # frontend lock instead of failing the cold rebuild (#820, epic .github#104).
+      ansible.builtin.apt:
+        name: targetcli-fb
+        update_cache: true
+        lock_timeout: "{{ apt_lock_timeout }}"
 # pcmk-b* get their stable initiator IQNs now (the cutover ACLs match on them);
 # they log in to san-b's target only at cutover -> iscsi-initiator with no
 # san_portal_ip sets the IQN and skips the login.

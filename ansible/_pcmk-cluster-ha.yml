@@ -58,7 +58,12 @@
   become: true
   tasks:
     - name: acl package for unprivileged become
-      ansible.builtin.apt: { name: acl, update_cache: false }
+      # lock_timeout waits out a fresh-boot unattended-upgrades holding the dpkg
+      # frontend lock instead of failing the cold rebuild (#820, epic .github#104).
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+        lock_timeout: "{{ apt_lock_timeout }}"
 
 # --- DRBD between the two SAN VMs (san-a primary, san-b secondary) ---
 - hosts: san_a
