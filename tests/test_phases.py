@@ -22,6 +22,7 @@ from mqlab.phases import (
     _batch_shares_box,
     _boot_batch,
     _guest_box,
+    _nic_assure_steps,
     build_states,
     first_unsatisfied,
 )
@@ -482,6 +483,89 @@ def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
     stack = lab_stacks()["nativeha-ubuntu"]
     with pytest.raises(ValueError, match="provision"):
         PHASES[2].build_steps(stack, None)
+
+
+# A RHEL stack whose group mixes a RHEL node with NICs (guarded), a RHEL node with
+# no NICs (skipped), and an Ubuntu node (skipped) — exercises every branch of the
+# #860 NIC-assurance guard. Commons are Ubuntu and always skipped.
+RHEL_TOPO = (
+    "nodes:\n"
+    "  rdqm-a1: { platform: mq-rdqm-rhel9, nics: {net-mgmt: 10.50.0.31, net-hb-a: 172.16.1.31} }\n"
+    "  rdqm-a2: { platform: mq-rdqm-rhel9, nics: {} }\n"
+    "  ubu-1:   { platform: mq-ubuntu2404, nics: { net-mgmt: 10.50.0.99 } }\n"
+    "  obs: {}\n"
+    "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
+    "groups:\n"
+    "  rdqm_a:  [rdqm-a1, rdqm-a2, ubu-1]\n"
+    "  obs_box: [obs]\n"
+    "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
+    "stacks:\n"
+    "  rdqm-rhel:\n"
+    "    mechanism: rdqm\n"
+    "    os: rhel\n"
+    "    short: RDQM\n"
+    "    groups: [rdqm_a]\n"
+    "    provision: ansible/site-rdqm.yml\n"
+    "    secrets: [mqweb_admin_password]\n"
+    "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
+    "    alloc:\n"
+    "      exporter_app_port: 9157\n"
+    "      exporter_svc_port: 9158\n"
+    "      app_unit: app-rdqm\n"
+    "      svc_port: 1414\n"
+    "    verbs:\n"
+    "      qm-status: { rdqmstatus: '-m RDQM' }\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
+    "commons:\n"
+    "  groups: [obs_box, probe, svc, app]\n"
+    "  provision: ansible/site-obs.yml\n"
+)
+
+
+def _seed_rhel(tmp_path):
+    lab = tmp_path / "lab"
+    nets = lab / "networks"
+    nets.mkdir(parents=True)
+    (lab / "topology.yaml").write_text(RHEL_TOPO)
+    for n in ("net-mgmt", "net-data-a"):
+        (nets / f"{n}.xml").write_text(NET_XML.format(name=n))
+
+
+def test_nic_assure_steps_guards_rhel_nodes_only(monkeypatch, tmp_path):
+    """#860: the guard emits an upload + a sudo nic-assure.sh run for each RHEL node
+    that declares NICs, passing that node's topology IPs as the expected set — and
+    skips Ubuntu nodes (netplan, unaffected) and RHEL nodes with no NICs."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_rhel(tmp_path)
+    stack = lab_stacks()["rdqm-rhel"]
+    steps = _nic_assure_steps(stack)
+    # Only rdqm-a1 is guarded (rdqm-a2 has no NICs; ubu-1 is Ubuntu) → exactly 2 steps.
+    dest = "/home/vagrant/nic-assure.sh"
+    assert [s.command.argv for s in steps] == [
+        ["vagrant", "upload", "scripts/nic-assure.sh", dest, "rdqm-a1"],
+        ["vagrant", "ssh", "rdqm-a1", "-c", f"sudo bash {dest} 10.50.0.31 172.16.1.31"],
+    ]
+    # vagrant commands run from lab/ (the resolved-topology consumer dir).
+    assert all(s.command.cwd == tmp_path / "lab" for s in steps)
+
+
+def test_provision_prepends_nic_assure_before_dns(monkeypatch, tmp_path):
+    """#860: on a RHEL stack the NIC-assurance guard runs before DNS/provision, so a
+    node whose net-mgmt NIC is down is repaired before any Ansible-over-net-mgmt play."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_rhel(tmp_path)
+    stack = lab_stacks()["rdqm-rhel"]
+    steps = PHASES[2].build_steps(stack, None)
+    assert steps[0].command.argv[:2] == ["vagrant", "upload"]
+    assert steps[1].command.argv[:2] == ["vagrant", "ssh"]
+    # DNS + provision follow the guard.
+    assert steps[2].command.argv == ["mqlab", "dns", "render"]
+    assert "site-dns.yml" in steps[3].command.argv
+    assert "site-rdqm.yml" in steps[4].command.argv
 
 
 def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
