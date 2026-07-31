@@ -1,0 +1,22 @@
+---
+# Cold-rebuild apt-lock hardening (#820, reliability epic .github#104). On a fresh
+# boot the base cloud image's unattended-upgrades / apt-daily jobs hold the dpkg
+# frontend lock (/var/lib/dpkg/lock-frontend). A provisioning apt task that fires
+# inside that window fails fast — "Unable to acquire the dpkg frontend lock ... is
+# another process using it? (rc 100)" — which flakes a one-shot cold rebuild
+# (surfaced on pcmk-b1/b2 in the pcmk-cluster install). It is transient: a retry
+# clears once the background job finishes.
+#
+# The robust fix is to make every provisioning apt call WAIT for the lock instead
+# of failing immediately: apt honours DPkg::Lock::Timeout, blocking up to this many
+# seconds for the frontend lock to free — long enough to outlast a fresh-boot
+# unattended-upgrades run — before giving up. This waits the background job out
+# natively, with no need to stop/mask system units for the provision window.
+#
+# 300s (5 min) is a generous ceiling for the small package delta on a freshly-baked
+# lab image; the former inline 60s was too short. Consumers:
+#   - ansible.builtin.apt module tasks pass it as `lock_timeout: "{{ apt_lock_timeout }}"`
+#   - raw `apt-get` shell tasks pass it as `-o DPkg::Lock::Timeout={{ apt_lock_timeout }}`
+#     on both `apt-get update` and `apt-get install` (a local-deb install still takes
+#     the frontend lock, so the cached-offline path races too, not just the fallback).
+apt_lock_timeout: 300
