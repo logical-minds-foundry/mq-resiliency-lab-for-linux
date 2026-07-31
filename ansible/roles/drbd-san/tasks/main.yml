@@ -55,8 +55,12 @@
       deb=$(ls -1 /var/cache/san-debs/"${pkg}"_*.deb 2>/dev/null | sort -V | tail -n1 || true)
       if [ -n "$deb" ]; then args+=("$deb"); else args+=("$pkg"); need_net=1; fi
     done
-    if [ "$need_net" = 1 ]; then apt-get update; fi
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "${args[@]}"
+    # DPkg::Lock::Timeout waits out a fresh-boot unattended-upgrades holding the
+    # dpkg frontend lock instead of failing the cold rebuild (#820, epic .github#104).
+    # A local-deb install still takes the frontend lock, so the offline path races too.
+    lock="-o DPkg::Lock::Timeout={{ apt_lock_timeout }}"
+    if [ "$need_net" = 1 ]; then apt-get $lock update; fi
+    DEBIAN_FRONTEND=noninteractive apt-get $lock install -y "${args[@]}"
   args:
     executable: /bin/bash
   register: drbd_san_install
