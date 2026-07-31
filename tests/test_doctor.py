@@ -17,10 +17,35 @@ def _none_present(name: str) -> None:
 
 
 def test_vergil_short_circuits():
+    # The RHEL-stacks capability is a permanent host-arch fact reported on every
+    # host, so it precedes the vergil short-circuit; the rest of the checklist is
+    # still skipped inside Vergil (#847).
     checks = d.run_checks(VERGIL, which=_all_present)
-    assert [c.name for c in checks] == ["vergil"]
-    assert checks[0].ok
+    assert [c.name for c in checks] == ["rhel-stacks", "vergil"]
+    assert all(c.ok for c in checks)
     assert d.summarise(checks)[0] is True
+
+
+def test_rhel_stacks_capability_unsupported_on_aarch64():
+    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False)
+    checks = d.run_checks(arm, which=_all_present)
+    cap = next(c for c in checks if c.name == "rhel-stacks")
+    assert cap.ok is True  # informational — aarch64 is a fine host for the Ubuntu stack
+    assert "unsupported" in cap.detail and "aarch64" in cap.detail
+    assert d.summarise(checks)[0] is True  # never flips the host to a failure
+
+
+def test_rhel_stacks_capability_supported_on_x86():
+    cap = next(c for c in d.run_checks(X86, which=_all_present) if c.name == "rhel-stacks")
+    assert cap.ok is True
+    assert "supported" in cap.detail
+
+
+def test_rhel_stacks_capability_reported_inside_vergil():
+    # Discoverable even inside Vergil (where the checklist short-circuits), because
+    # the profile cannot change the host arch.
+    names = {c.name for c in d.run_checks(VERGIL, which=_all_present)}
+    assert "rhel-stacks" in names
 
 
 def test_x86_all_present_passes():

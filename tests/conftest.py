@@ -20,6 +20,15 @@ def prepare_lab_calls(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _neutralize_stack_host_arch_gate(monkeypatch):
+    """Neutralise cli._gate_stack_host_arch in every test — it calls probe() (real
+    host I/O) to abort a RHEL stack on aarch64 before any box bake (#847). Unit
+    tests must not read the live host; the gate is tested directly via the import
+    captured before this stub (mirrors the _prepare_lab pattern)."""
+    monkeypatch.setattr(cli, "_gate_stack_host_arch", lambda stack: None)
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_ensure_local_boxes(monkeypatch):
     """Neutralise cli._ensure_local_boxes in every test — it reads the rendered
     resolved topology and shells `vagrant box list` / build-box.sh, which must not

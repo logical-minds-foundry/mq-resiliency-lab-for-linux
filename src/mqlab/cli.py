@@ -62,7 +62,12 @@ from mqlab.render import Renderer
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.sandeb import ensure_san_debs, observed_target_kernel
-from mqlab.stacks import lab_stacks, stack_members, stack_san_targets
+from mqlab.stacks import (
+    lab_stacks,
+    rhel_stack_unsupported_reason,
+    stack_members,
+    stack_san_targets,
+)
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.vmstatus import vm_status_core
 
@@ -1606,6 +1611,19 @@ def _lookup_stack_or_exit(name: str) -> Stack:
     return stack
 
 
+def _gate_stack_host_arch(stack: Stack) -> None:
+    """Abort a RHEL-stack bring-up on a non-x86 host BEFORE any box bake or VM boot
+    (#847). The RHEL arms require an x86_64 host — RHEL is unavailable for Apple
+    Silicon and emulated cross-arch box builds are disabled (#103 D11) — so on an
+    aarch64 host only the Ubuntu stacks run. Formerly this surfaced only as a deep
+    box-bake failure partway through bootstrap; this fast preflight fails loud with
+    an actionable message instead. Exit 2 mirrors the other precondition gates."""
+    reason = rhel_stack_unsupported_reason(stack, probe())
+    if reason is not None:
+        typer.echo(reason, err=True)
+        raise typer.Exit(code=2)
+
+
 # Prometheus on the obs guest (net-mgmt IP : Prometheus port). The observe probe
 # queries its targets API to see whether this stack's exporters are registered.
 PROMETHEUS_URL = "http://10.50.0.2:9090"
@@ -1728,6 +1746,7 @@ def _bootstrap_run(
     and prints a resume hint naming the failing phase."""
     venvsync.ensure_venv_current()  # sync dev venv to uv.lock before subprocesses spawn (#776)
     stack = _lookup_stack_or_exit(stack_name)
+    _gate_stack_host_arch(stack)  # #847: abort a RHEL stack on aarch64 pre-bake
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
     deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
