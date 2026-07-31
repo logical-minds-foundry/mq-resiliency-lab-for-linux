@@ -5,23 +5,73 @@
 - name: install targetcli (OS-adapter)
   ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
-- name: configure target (idempotent via ls probe)
+# Idempotent per-object: probe each object (backstore / target / LUN / ACLs /
+# portal) and create-if-absent, so a re-provision over existing targetcli state
+# is a no-op instead of dying `Storage object block/mqlun exists` (#821). The
+# old single `targetcli ls /backstores/block | grep -q mqlun` gate was fragile:
+# under `pipefail`, targetcli returning non-zero on a transient prefs/save-config
+# warning (even with mqlun present) made the pipeline report "absent", so every
+# create ran and the LUN create failed. `has()` below neutralises targetcli's
+# own exit code (|| true) and greps the captured text only, so detection no
+# longer depends on targetcli's rc.
+- name: configure target (per-object idempotent probes)
   ansible.builtin.shell: |
-    set -e
-    set -o pipefail
-    if targetcli ls /backstores/block 2>/dev/null | grep -q mqlun; then
-      echo already-configured
-      exit 0
+    set -euo pipefail
+
+    iqn="{{ san_target_iqn }}"
+    changed=0
+
+    # has <parent-path> <fixed-substring>: true iff the listing of <parent-path>
+    # contains <fixed-substring>. Robust to the targetcli exit code (see note above).
+    has() {
+      local listing
+      listing=$(targetcli "$1" ls 2>/dev/null || true)
+      grep -qF -- "$2" <<<"$listing"
+    }
+
+    # 1. block backstore on the extra disk
+    if ! has /backstores/block mqlun; then
+      targetcli /backstores/block create name=mqlun dev={{ san_backing_dev }}
+      changed=1
     fi
-    targetcli /backstores/block create name=mqlun dev={{ san_backing_dev }}
-    targetcli /iscsi create {{ san_target_iqn }}
-    targetcli /iscsi/{{ san_target_iqn }}/tpg1/luns create /backstores/block/mqlun
-    {% for iqn in san_initiator_iqns %}
-    targetcli /iscsi/{{ san_target_iqn }}/tpg1/acls create {{ iqn }}
+
+    # 2. iSCSI target IQN (auto-creates tpg1 + a default 0.0.0.0:3260 portal)
+    if ! has /iscsi "$iqn"; then
+      targetcli /iscsi create "$iqn"
+      changed=1
+    fi
+
+    # 3. LUN mapping the backstore into tpg1
+    if ! has "/iscsi/$iqn/tpg1/luns" block/mqlun; then
+      targetcli "/iscsi/$iqn/tpg1/luns" create /backstores/block/mqlun
+      changed=1
+    fi
+
+    # 4. ACLs for the initiators at this site
+    {% for initiator in san_initiator_iqns %}
+    if ! has "/iscsi/$iqn/tpg1/acls" "{{ initiator }}"; then
+      targetcli "/iscsi/$iqn/tpg1/acls" create "{{ initiator }}"
+      changed=1
+    fi
     {% endfor %}
-    targetcli /iscsi/{{ san_target_iqn }}/tpg1/portals delete 0.0.0.0 3260 || true
-    targetcli /iscsi/{{ san_target_iqn }}/tpg1/portals create {{ san_portal_ip }} 3260
-    targetcli saveconfig
+
+    # 5. Portal: bind to the SAN net, dropping the auto-created 0.0.0.0 default.
+    portals=$(targetcli "/iscsi/$iqn/tpg1/portals" ls 2>/dev/null || true)
+    if grep -qF -- '0.0.0.0:3260' <<<"$portals"; then
+      targetcli "/iscsi/$iqn/tpg1/portals" delete 0.0.0.0 3260 || true
+      changed=1
+    fi
+    if ! grep -qF -- "{{ san_portal_ip }}:3260" <<<"$portals"; then
+      targetcli "/iscsi/$iqn/tpg1/portals" create {{ san_portal_ip }} 3260
+      changed=1
+    fi
+
+    # 6. Persist to /etc/rtslib-fb-target only when something actually changed
+    if [ "$changed" -eq 1 ]; then
+      targetcli saveconfig
+    else
+      echo already-configured
+    fi
   args:
     executable: /bin/bash
   register: tgt
