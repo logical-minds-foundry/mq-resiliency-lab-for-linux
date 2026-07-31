@@ -323,6 +323,86 @@
       # — a var defined in terms of itself is a recursive-template loop.)
       when: rdqm_is_active
 
+# Stage 2 authorization (#74/#620): the OAM service principals (mqapp/mqmon/mqsvc)
+# must exist on EVERY rdqm node BEFORE any setmqaut grant, and on both the HA site
+# (rdqm_a) AND the DR site (rdqm_b) so authorization survives an HA failover AND a DR
+# takeover — the substrate-consistency invariant (spec §6). Arm-agnostic: same accounts
+# role + authz.yml as the pcmk/nativeha arms; only the node lists change. RDQM replicates
+# the QM's authority records via DRBD (block-level, with the DataPath), but the OS
+# principals the records resolve against are node-local, so every node needs them.
+- name: authz service accounts on every rdqm node (HA + DR) (#74/#620)
+  hosts: rdqm_a:rdqm_b
+  become: true
+  roles: [mq-authz-accounts]
+
+# Stage 2 authorization (#74/#620): flip CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP
+# + setmqaut on the ACTIVE (DRBD-primary) node, AFTER the app-facing channels exist
+# (rdqm-app-tls above) so the maps reference real channels. Reuses the ARM-AGNOSTIC
+# authz.mqsc.j2 (CHLAUTH ENABLE + deny-all + SSLPEERMAP) and group_vars/all/authz.yml
+# (accounts/maps/grants incl. the #844/N5 mqsvc +put +setall DLQ grant) VERBATIM from the
+# pcmk/nativeha arms; only chl_to_app (this arm's inter-QM RCVR, the qm_svc.qm_app channel)
+# and the node lists differ. Runs on the one active node (rdqm_is_active); RDQM replicates
+# the QM object catalog — CHLAUTH rules AND the OAM authority records — to the DR peer via
+# DRBD, so the posture follows an HA/DR move. CONNAUTH stays disabled (the cert is the
+# credential); qm-create's transient CHLAUTH(DISABLED) is flipped to ENABLED here, before
+# the distributed SVC hookup and any real client connects.
+- name: Stage 2 internal authorization on the RDQM app QM (#74/#620)
+  hosts: rdqm_a
+  gather_facts: false
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+  tasks:
+    - name: resolve the active RDQM node
+      ansible.builtin.include_role:
+        name: rdqm-active-node
+      vars:
+        rdqm_qm: "{{ qm_app }}"
+
+    - name: render the authorization MQSC (CHLAUTH + maps) on the active node
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2"
+        dest: /var/mqm/authz.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      when: rdqm_is_active
+
+    - name: apply the authorization MQSC (flip CHLAUTH ENABLED + back-stop + SSLPEERMAP)
+      ansible.builtin.shell: |
+        su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/authz.mqsc"
+      args:
+        executable: /bin/bash
+      register: authz_mqsc
+      changed_when: true
+      failed_when: authz_mqsc.rc not in [0, 10]
+      when: rdqm_is_active
+
+    # setmqaut grants (#74): the minimal least-privilege authority surface, one invocation
+    # per grant, on the active node (DRBD-replicated). -t qmgr grants omit -n. Mirrors the
+    # pcmk/nativeha grant loop, driven by the same authz_grants.
+    - name: apply setmqaut grants (least-privilege OAM) on the active node
+      ansible.builtin.command:
+        cmd: >
+          su - mqm -c "/opt/mqm/bin/setmqaut -m {{ qm_name }}
+          {% if item.object_type != 'qmgr' %}-n {{ item.object }} {% endif %}-t {{ item.object_type }}
+          -g {{ item.group }} {{ item.authorities }}"
+      loop: "{{ authz_grants }}"
+      loop_control: { label: "{{ item.group }} -> {{ item.object_type }} {{ item.object }}" }
+      register: setmqaut_res
+      changed_when: true
+      failed_when: setmqaut_res.rc != 0
+      when: rdqm_is_active
+
+    - name: refresh the authorization service on the active node
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf 'REFRESH SECURITY TYPE(AUTHSERV)\n' | su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: rdqm_is_active
+
 - import_playbook: site-distributed-shared.yml
   vars:
     our_qm: "{{ qm_app }}"
