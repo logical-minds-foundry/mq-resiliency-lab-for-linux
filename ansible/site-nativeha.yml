@@ -18,6 +18,41 @@
 # floating VIP, so the SVC CONNAME and our-side CONNAME list are lab constants
 # supplied below — the phase stays pure and setup_dict (the #356 regression) is
 # never referenced.
+
+# Fast-fail reachability gate (#765). From a fully torn-down lab the generous
+# connect tolerance (ConnectTimeout=60 x ssh retries=3 ~= 180s, #590) is paid IN
+# FULL by every task that touches a host which was never provisioned — the
+# delegated "find the active Native HA instance" poll below burns minutes only to
+# conclude UNREACHABLE, and its until/retries leader-election wait (#421) never
+# even engages because the connection never succeeds. That tolerance is correct
+# for a LIVE-but-CPU/IO-starved node (slow SSH banner exchange) and the poll for
+# leader election; it is pure dead time on a cold start. A short-timeout TCP probe
+# of the active-instance host's port 22 cleanly separates the two cases: a
+# torn-down host fails the TCP connect in seconds, whereas a live-but-busy host has
+# sshd LISTENING (only the post-connect banner exchange is slow) and passes.
+# connection: local makes this a plain socket connect from the control node — NOT
+# an SSH connect subject to ConnectTimeout — and any_errors_fatal aborts the whole
+# provision up front instead of marching the cluster-ha import into the same
+# multi-minute hang. Scoped strictly to the initial "is anything up?" decision; the
+# 60s tolerance and the until poll are untouched for the live path.
+- name: preflight — fail fast if the nativeha-rhel stack is not up (#765)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: probe the active Native HA instance host on SSH (short timeout)
+      ansible.builtin.wait_for:
+        host: "{{ hostvars[groups['nha_rhel_a'][0]].ansible_host | default(groups['nha_rhel_a'][0]) }}"
+        port: "{{ hostvars[groups['nha_rhel_a'][0]].ansible_port | default(22) }}"
+        timeout: 5
+        msg: >-
+          nativeha-rhel is not up: the active-instance host
+          {{ groups['nha_rhel_a'][0] }} is unreachable on SSH within 5s. Bring the
+          lab up first (mqlab bootstrap nativeha-rhel) before provisioning — failing
+          fast instead of paying the full ~180s SSH connect-timeout budget on a
+          torn-down lab (#765).
+
 - import_playbook: _nativeha-cluster-ha.yml
 
 # Folded qm-create (#350 Task 2 step 2): our-side inter-QM + app MQSC on the ACTIVE
