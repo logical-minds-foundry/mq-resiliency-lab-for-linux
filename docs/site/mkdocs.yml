@@ -70,5 +70,6 @@ nav:
       - Instrumentation event monitoring: guides/mq-event-monitoring-guide.md
       - Metrics & monitoring configuration: guides/mq-metrics-config-guide.md
       - TCP configuration: guides/mq-tcp-config-guide.md
+      - Authorization & access control: guides/mq-authorization-guide.md
   - Architecture: architecture/index.md
   - Design & Specs: design-and-specs.md
