@@ -6,6 +6,7 @@
 ## Contents
 
 - [Vagrant leaves orphaned extra-disk volumes](#vagrant-leaves-orphaned-extra-disk-volumes)
+- [Concurrent same-box boot trips a Vagrant machine lock](#concurrent-same-box-boot-trips-a-vagrant-machine-lock)
 - [Can't live-attach a NIC ("No more available PCI slots")](#cant-live-attach-a-nic-no-more-available-pci-slots)
 - [Driving the lab from a worktree](#driving-the-lab-from-a-worktree)
 - [build/ artifacts missing in a worktree](#build-artifacts-missing-in-a-worktree)
@@ -32,6 +33,27 @@ done
 vagrant up san-a
 ```
 Generalize the `awk` filter to `lab_(san-|pcmk-|app-client)` for a full arm wipe.
+
+## Concurrent same-box boot trips a Vagrant machine lock
+
+**Symptom.** A `vagrant up` of several nodes at once fails on *one* of them (a
+different node each run) with: `Vagrant can't use the requested machine because
+it is locked! ... another Vagrant process is currently reading or modifying the
+machine`. The nodes themselves are fine — the *batch* fails, so a resume limps
+forward one batch at a time and never completes a cold rebuild in one pass.
+
+**Cause.** Nodes that boot from the **same** baked box (e.g. the six
+`nha-rhel-*` on `mq-nativeha-rhel9`, or the three `mq-ubuntu2404` commons) race
+on staging that box's base volume into the libvirt pool the first time it's
+used. The concurrent clones trip Vagrant's per-machine lock. Once the volume is
+staged, later clones from it are fine.
+
+**Fix (built in, #859).** The vms phase detects a batch whose guests share a box
+and issues that batch `vagrant up --no-parallel` — serial *within the batch*, so
+the first boot stages the shared volume before the next clones it. Batches whose
+guests all boot **distinct** boxes keep the parallel default (distinct volumes
+don't contend), preserving the `boot_batch` speed dial (#638). If you ever drive
+`vagrant up` by hand across same-box nodes, add `--no-parallel` yourself.
 
 ## Can't live-attach a NIC ("No more available PCI slots")
 

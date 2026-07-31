@@ -20,6 +20,7 @@ from typer.testing import CliRunner
 
 from mqlab import cli
 from mqlab.cli import _gate_stack_host_arch as _real_gate  # captured before the autouse stub
+from mqlab.cli import _reconcile_box_meta as _real_reconcile_box_meta  # captured before stub
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.phases import PHASES, build_states
 from mqlab.render import Renderer
@@ -532,6 +533,135 @@ def test_ensure_for_stack_net_pulls_nothing(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: pytest.fail("net runs no box ensure"))
     cli._ensure_prereqs_for_stack(stack, _phase("net"), step=False)  # no-op, no failures
+
+
+# --------------------------------------------------------------------------- #
+# #858: before the vms phase's `vagrant up`, forget any guest whose cached
+# box_meta names a box the topology has since REPOINTED away from — otherwise
+# the stale box_meta wins over the Vagrantfile and boots the OLD box. This is
+# the #636 class, but on the repoint-then-bootstrap-without-teardown path.
+# --------------------------------------------------------------------------- #
+def _make_box_meta(tmp_path, guest: str, box_name: str):
+    """Create a fake Vagrant per-machine box_meta naming `box_name` for `guest`."""
+    d = tmp_path / "build" / "state" / "vagrant" / "machines" / guest / "libvirt"
+    d.mkdir(parents=True)
+    (d / "box_meta").write_text(json.dumps({"name": box_name, "version": "0"}))
+    return d
+
+
+def test_cached_box_name_reads_the_box_meta_name(monkeypatch, tmp_path):
+    """_cached_box_name returns the `name` Vagrant cached in the guest's box_meta."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _make_box_meta(tmp_path, "nha-rhel-a1", "rhel/9.6-x86_64")
+    assert cli._cached_box_name("nha-rhel-a1") == "rhel/9.6-x86_64"
+
+
+def test_cached_box_name_none_when_never_created(monkeypatch, tmp_path):
+    """A guest Vagrant has never created has no box_meta -> None (nothing to reconcile)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    assert cli._cached_box_name("nha-rhel-a1") is None
+
+
+def test_cached_box_name_none_when_name_key_absent(monkeypatch, tmp_path):
+    """A box_meta object without a `name` yields None (treated as no usable cache)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    d = tmp_path / "build" / "state" / "vagrant" / "machines" / "nha-rhel-a1" / "libvirt"
+    d.mkdir(parents=True)
+    (d / "box_meta").write_text('{"version":"0"}')
+    assert cli._cached_box_name("nha-rhel-a1") is None
+
+
+def test_cached_box_name_raises_on_malformed_box_meta(monkeypatch, tmp_path):
+    """A present-but-corrupt box_meta is a real anomaly and surfaces (no silent swallow)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    d = tmp_path / "build" / "state" / "vagrant" / "machines" / "nha-rhel-a1" / "libvirt"
+    d.mkdir(parents=True)
+    (d / "box_meta").write_text("{ not json")
+    with pytest.raises(json.JSONDecodeError):
+        cli._cached_box_name("nha-rhel-a1")
+
+
+def test_plan_reconcile_forgets_repointed_guest(monkeypatch, tmp_path):
+    """The bug scenario: cached box_meta names the OLD box, topology now assigns a
+    new one -> forget the machine dir + emit a repoint note."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    _make_box_meta(tmp_path, "nha-rhel-a1", "rhel/9.6-x86_64")  # pre-repoint base box
+    steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-a1"])
+    assert [s.label for s in steps] == ["nha-rhel-a1 forget vagrant machine"]
+    assert notes == [
+        "nha-rhel-a1: box repointed rhel/9.6-x86_64 -> mq-nativeha-rhel9; "
+        "forgetting stale vagrant metadata (#858)"
+    ]
+
+
+def test_plan_reconcile_leaves_matching_guest_untouched(monkeypatch, tmp_path):
+    """Cached box already matches the resolved box -> no forget, no note (quiet path)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    _make_box_meta(tmp_path, "nha-rhel-a1", "mq-nativeha-rhel9")
+    steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-a1"])
+    assert steps == []
+    assert notes == []
+
+
+def test_plan_reconcile_leaves_never_created_guest_untouched(monkeypatch, tmp_path):
+    """A guest with no cached box_meta is brand-new to Vagrant -> nothing to forget."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-a1"])
+    assert steps == [] and notes == []
+
+
+def test_plan_reconcile_forgets_only_the_repointed_guests(monkeypatch, tmp_path):
+    """Across a stack's VMs, only the repointed guests are forgotten; matches + fresh
+    guests are left alone."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli,
+        "_resolved_nodes",
+        lambda: {
+            "nha-rhel-a1": {"box": "mq-nativeha-rhel9"},  # repointed
+            "nha-rhel-a2": {"box": "mq-nativeha-rhel9"},  # already matches
+            "obs": {"box": "obs-ubuntu2404"},  # never created
+        },
+    )
+    _make_box_meta(tmp_path, "nha-rhel-a1", "rhel/9.6-x86_64")  # stale
+    _make_box_meta(tmp_path, "nha-rhel-a2", "mq-nativeha-rhel9")  # current
+    steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-a1", "nha-rhel-a2", "obs"])
+    assert [s.label for s in steps] == ["nha-rhel-a1 forget vagrant machine"]
+    assert len(notes) == 1 and notes[0].startswith("nha-rhel-a1: box repointed")
+
+
+def test_reconcile_box_meta_runs_forget_and_notes(monkeypatch, tmp_path, capsys):
+    """The real _reconcile_box_meta echoes the repoint note and drives the forget step
+    through the _execute step-runner seam."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    _make_box_meta(tmp_path, "nha-rhel-a1", "rhel/9.6-x86_64")
+    labels = _capture_execute(monkeypatch)
+    _real_reconcile_box_meta(["nha-rhel-a1"], step=False)
+    assert labels == ["nha-rhel-a1 forget vagrant machine"]
+    assert "box repointed rhel/9.6-x86_64 -> mq-nativeha-rhel9" in capsys.readouterr().out
+
+
+def test_reconcile_box_meta_noop_when_nothing_repointed(monkeypatch, tmp_path):
+    """No repoint -> _reconcile_box_meta never touches the _execute step-runner seam."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+    )
+    _make_box_meta(tmp_path, "nha-rhel-a1", "mq-nativeha-rhel9")  # already current
+    monkeypatch.setattr(cli, "_execute", lambda *a, **k: pytest.fail("no forget on a match"))
+    _real_reconcile_box_meta(["nha-rhel-a1"], step=False)  # no-op, no failure
 
 
 def test_stack_mq_platforms_resolves_cluster_node_platforms(monkeypatch, tmp_path):
