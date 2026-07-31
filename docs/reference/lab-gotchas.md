@@ -11,6 +11,7 @@
 - [build/ artifacts missing in a worktree](#build-artifacts-missing-in-a-worktree)
 - [Ansible silently does nothing (empty inventory)](#ansible-silently-does-nothing-empty-inventory)
 - [Pacemaker operational settings that matter](#pacemaker-operational-settings-that-matter)
+- [RDQM DR cold-create: crtmqm mkfs I/O error on the DR device](#rdqm-dr-cold-create-crtmqm-mkfs-io-error-on-the-dr-device)
 
 ## Vagrant leaves orphaned extra-disk volumes
 
@@ -136,3 +137,41 @@ work immediately. It's in the DVD BaseOS repo (offline). The Native HA TLS role
 `CipherSpec`/`CertificateLabel`/`KeyRepository`. **Verified (#246 Phase 3):** the
 site-A Native HA group re-formed `QUORUM(3/3) INSYNC` with replication negotiating
 `ECDHE_RSA_AES_256_GCM_SHA384` — TLS replication via a CA-signed lab-pki cert.
+
+## RDQM DR cold-create: crtmqm mkfs I/O error on the DR device
+
+**Symptom.** A cold `crtmqm` of the DR/HA queue manager aborts while formatting the
+DR device — `mkfs.ext4` on `/dev/drbd/by-res/<qm>.dr/0` fails with I/O errors, and
+crtmqm rolls its own create back:
+```
+AMQ3817E: Replicated data subsystem call '/sbin/mkfs.ext4 /dev/drbd/by-res/rdqmapp.dr/0' failed with return code '1'.
+Warning: could not read block 0: Input/output error
+mkfs.ext4: Input/output error while writing out and closing file system
+AMQ3812E: Failed to create replicated data queue manager
+Secondary queue manager deleted on 'rdqm-a3'.   ← crtmqm rolls the create back
+```
+`crtmqm` exits `rc=71`; the provision fails at `site-rdqm.yml` → "create the RDQM
+queue manager". Non-deterministic / load-sensitive.
+
+**Cause.** The coordinated create formats the DR DRBD device before the DR
+replication link (site-A ↔ site-B) is *stably* Connected/UpToDate. Under this
+stack's resource envelope (the rdqm arm's own ~20 vCPU footprint on an 8-core
+host), DRBD heartbeats time out in the format window: `dmesg` shows
+`rdqmapp.dr ... conn( Disconnecting → StandAlone )` and the resource losing quorum.
+`mkfs` "could not read block 0: Input/output error" is DRBD **fencing I/O because
+the DR device lost quorum**, not a bad block. It is transient: a manual
+`bootstrap --from provision` resume moments later succeeds because the link has
+settled by then.
+
+**Fix.** A bounded in-line retry around the DR `crtmqm` create, not a DRBD-config
+rewrite. `run_crtmqm_retry` in `lab/scripts/rdqm-qm-create.sh` wraps **both** DR
+site creates (the `-rr p` primary on rdqm-a1 and the `-rr s` secondary on rdqm-b1):
+it retries **only** the transient DR-device signature (`Input/output error`, the
+AMQ3817E mkfs subsystem-call failure, or AMQ3812E alongside a StandAlone/
+Disconnecting DR-link drop) with a 20s backoff to let the link settle, up to 3
+attempts, and **fails loud** on any other error or after exhaustion — a genuine
+crtmqm fault must never be swallowed (#583). crtmqm self-rolls-back the failed
+attempt, so each retry starts clean; no manual pre-clean is needed. The HA-only
+create is not wrapped — with no DR link (`-reh`, no `.dr` device) it cannot hit
+this class. Mirrors the `run_mqsc_retry` idiom (#657) in the same script. See #768;
+amplified by host pressure (#120).

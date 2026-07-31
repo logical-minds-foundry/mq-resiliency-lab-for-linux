@@ -121,6 +121,59 @@ run_mqsc_retry() {  # $1=label  $2=MQSC command (run on the current active site-
   return 1
 }
 
+# Classify a failed DR crtmqm as the retryable DR-device format flake (#768).
+# The coordinated create formats the DR DRBD device (mkfs.ext4 on
+# /dev/drbd/by-res/<qm>.dr/0) as part of crtmqm. Under this stack's resource
+# envelope the DR replication link to the peer site can still be settling at that
+# instant — dmesg shows rdqmapp.dr going conn(Disconnecting -> StandAlone) and the
+# resource losing quorum — so mkfs writes are fenced with I/O errors. Any of these
+# co-signatures is that flake (and ONLY that flake — a genuine crtmqm fault must
+# still fail loud, #583):
+#   * the raw "Input/output error" mkfs emits when the DR device is fenced, or
+#   * AMQ3817E naming the failed mkfs replicated-data-subsystem call, or
+#   * AMQ3812E (create failed) alongside a DR link drop to StandAlone/Disconnecting.
+# Matched in-shell (no `| grep -q`: under pipefail that SIGPIPEs the producer and
+# trips the pipeline — same trap active_a_node documents).
+is_transient_dr_io() {  # $1=captured crtmqm output; returns 0 iff the retryable flake
+  local out="$1"
+  [[ $out == *"Input/output error"* ]] && return 0
+  [[ $out == *AMQ3817E* && $out == *mkfs* ]] && return 0
+  [[ $out == *AMQ3812E* && ( $out == *StandAlone* || $out == *Disconnecting* ) ]] && return 0
+  return 1
+}
+
+# Run the coordinated DR `crtmqm -sx` create, retrying ONLY the transient DR-device
+# format flake (#768), mirroring run_mqsc_retry (#657): bounded attempts, a backoff
+# to let the DR link settle, re-print the crtmqm transcript, and fail loud on
+# anything else or after exhaustion. crtmqm cleanly rolls its own create back on the
+# failed attempt ("Secondary queue manager deleted on ..."), so each retry starts
+# from a clean slate — no manual pre-clean needed. A manual `bootstrap --from
+# provision` resume moments later already succeeds because the link has settled by
+# then, which is exactly what a short in-line retry automates. The HA-only create
+# (below) is NOT wrapped: with no DR link (`-reh`, no `.dr` device) it cannot hit
+# this class. Output is captured (2>&1) to classify the failure, then re-emitted so
+# the provision log still carries the full crtmqm transcript.
+run_crtmqm_retry() {  # $1=label  $2=node  $3=crtmqm command line (run as mqm)
+  local label="$1" node="$2" cmd="$3" out rc i
+  local attempts=3 delay=20
+  for (( i=1; i<=attempts; i++ )); do
+    if out=$(run_mqm "$node" "$cmd" 2>&1); then
+      printf '%s\n' "$out"
+      [ "$i" -gt 1 ] && echo "=== $label: crtmqm succeeded on attempt $i/$attempts ($node) ==="
+      return 0
+    fi
+    rc=$?
+    printf '%s\n' "$out"  # preserve the crtmqm transcript in the provision log
+    if [ "$i" -lt "$attempts" ] && is_transient_dr_io "$out"; then
+      echo "=== $label: crtmqm attempt $i/$attempts on $node hit the transient DR-device format flake (mkfs I/O error; DR link settling, AMQ3817E/AMQ3812E) — crtmqm has rolled the create back; waiting ${delay}s for the DR link to stabilize, then retrying ===" >&2
+      sleep "$delay"
+      continue
+    fi
+    echo "ERROR: $label: crtmqm failed on $node (rc=$rc) — not the retryable DR-device I/O flake, or retries exhausted after $attempts attempts. Surfacing the failure (crtmqm output above)." >&2
+    return "$rc"
+  done
+}
+
 # Lab MQSC posture (listener + app channel + a persistent test queue). On HA/DR these
 # objects replicate to site B with the QM, so they are defined once on the site-A primary.
 # Each runmqsc block is wrapped in run_mqsc_retry (#657) — it re-resolves and targets the
@@ -156,9 +209,14 @@ if [ "$DR" = 1 ]; then
   else
     # IBM's documented DR/HA create: ONE `crtmqm -sx` per site, run as mqm. crtmqm SSHes
     # to that site's peers (over 172.16.x) as mqm and auto-creates the secondaries
-    # ("Secondary queue manager created on ..."). No manual -sxs.
-    run_mqm rdqm-a1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM"  # site A = DR primary, auto-creates a2/a3
-    run_mqm rdqm-b1 "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM"  # site B = DR secondary, auto-creates b2/b3
+    # ("Secondary queue manager created on ..."). No manual -sxs. Both site creates
+    # format a DR DRBD device (rdqmapp.dr) while the a1<->b1 DR link is still settling,
+    # so both go through run_crtmqm_retry, which retries ONLY the transient DR-device
+    # mkfs I/O flake and fails loud on anything else (#768).
+    run_crtmqm_retry "site-A DR-primary create (rdqm-a1, auto-creates a2/a3)" rdqm-a1 \
+      "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr p -rl $A_WAN -ri $B_WAN -rp $DR_PORT $REPL_TLS $QM"
+    run_crtmqm_retry "site-B DR-secondary create (rdqm-b1, auto-creates b2/b3)" rdqm-b1 \
+      "/opt/mqm/bin/crtmqm -fs 3072M -sx -rr s -rl $B_WAN -ri $A_WAN -rp $DR_PORT $REPL_TLS $QM"
   fi
   A_PRIMARY=$(active_a_node)  # the site-A node running the QM (not necessarily a1 on a resume)
   add_vip "$A_PRIMARY" "$VIP"
