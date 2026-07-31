@@ -61,8 +61,8 @@
   changed_when: "'MQWB' not in (setmqweb.stderr | default(''))"
   failed_when: false
 
-# Start non-blocking: Liberty is slow to come up (minutes under x86 TCG, and on a
-# fresh arm64 node), and a blocking `state: started` makes provision wait on — and
+# Start non-blocking: Liberty can be slow to come up (minutes under macOS-era x86 TCG
+# emulation, and on a fresh arm64 node), and a blocking `state: started` makes provision wait on — and
 # time out with — the systemd job. --no-block returns immediately; REST becomes ready
 # asynchronously (the message path does not depend on it). Idempotent: starting an
 # already-active unit is a no-op.

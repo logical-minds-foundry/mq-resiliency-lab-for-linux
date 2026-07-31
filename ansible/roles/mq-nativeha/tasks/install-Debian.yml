@@ -3,7 +3,8 @@
 # mq-nativeha role (#417, Phase 2 of #246) — the peer of install-RedHat.yml. The
 # formation logic (main.yml) is shared verbatim; only this install differs.
 #
-# Unlike the RHEL box (offline, DVD-repo'd, x86/TCG), the Ubuntu guests have apt
+# Unlike the RHEL box (offline, DVD-repo'd, x86_64 — native KVM on an x86 host, TCG
+# only on an arm64/macOS host), the Ubuntu guests have apt
 # network access, so there is no offline-repo dance — apt resolves the debs' OS
 # deps directly. The tar arch suffix tracks the guest arch (host-resolved, #276):
 # ARM64 on the Apple-Silicon dev host, X64 on an x86 host — mirroring mq-install.
