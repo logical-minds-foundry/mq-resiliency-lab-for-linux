@@ -26,8 +26,15 @@ alternatives are ranked. Start a new guide by copying
 - **[TCP configuration](mq-tcp-config-guide.md)** — tune the `TCP` stanza and the
   OS keepalive timers for fast dead-peer detection (HA failover), plus listener
   backlog, connect timeout, and buffers.
+- **[Authorization & access control](mq-authorization-guide.md)** — map an
+  authenticated TLS client's certificate DN to a non-privileged service identity
+  with CHLAUTH `SSLPEERMAP`, back it with a deny-all rule, and grant
+  least-privilege `setmqaut` authorities per role — including the message-context
+  (`+setall`) authority a receiver MCA needs on every destination, the
+  dead-letter queue included.
 
 ## Planned
 
-Further guides tracked under the epic: security (TLS with channel and connection
-authentication and object authorizations), among others.
+Further guides tracked under the epic: TLS transport security (ciphers,
+certificates, and channel/connection authentication — the authentication layer
+beneath the [authorization guide](mq-authorization-guide.md)), among others.
