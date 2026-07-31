@@ -632,6 +632,8 @@
       
         
       
+        
+      
     
     
     
@@ -857,6 +859,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1008,10 +1038,17 @@ alternatives are ranked. Start a new guide by copying
 <li><strong><a href="mq-tcp-config-guide/">TCP configuration</a></strong> — tune the <code>TCP</code> stanza and the
   OS keepalive timers for fast dead-peer detection (HA failover), plus listener
   backlog, connect timeout, and buffers.</li>
+<li><strong><a href="mq-authorization-guide/">Authorization &amp; access control</a></strong> — map an
+  authenticated TLS client's certificate DN to a non-privileged service identity
+  with CHLAUTH <code>SSLPEERMAP</code>, back it with a deny-all rule, and grant
+  least-privilege <code>setmqaut</code> authorities per role — including the message-context
+  (<code>+setall</code>) authority a receiver MCA needs on every destination, the
+  dead-letter queue included.</li>
 </ul>
 <h2 id="planned">Planned<a class="headerlink" href="#planned" title="Permanent link">&para;</a></h2>
-<p>Further guides tracked under the epic: security (TLS with channel and connection
-authentication and object authorizations), among others.</p>
+<p>Further guides tracked under the epic: TLS transport security (ciphers,
+certificates, and channel/connection authentication — the authentication layer
+beneath the <a href="mq-authorization-guide/">authorization guide</a>), among others.</p>
 
 
 

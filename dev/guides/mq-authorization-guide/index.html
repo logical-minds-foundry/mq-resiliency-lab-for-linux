@@ -1,0 +1,2017 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../mq-tcp-config-guide/">
+      
+      
+        <link rel="next" href="../../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Authorization & access control - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ibm-mq-authorization-map-an-authenticated-tls-client-to-a-least-privilege-identity" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Authorization & access control
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-event-monitoring-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-metrics-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-tcp-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-authority-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Authority reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Authority reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-least-privilege-grants-per-role" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 Least-privilege grants per role
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-chlauth-usersrc-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 CHLAUTH USERSRC values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-putaut-and-message-context-authority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.3 PUTAUT and message-context authority
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix B: Alternatives and tradeoffs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#b1-identity-mapping-evidence-for-the-section-3-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.1 Identity mapping — evidence for the section 3 ranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.2 Dead-letter queue scope — QM-wide vs per-counterparty
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b3-connauth-posture-when-the-certificate-is-the-credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.3 CONNAUTH posture when the certificate is the credential
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b4-os-based-oam-vs-external-authorization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.4 OS-based OAM vs external authorization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-how-to-configure-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. How to configure it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify-it-worked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify it worked
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-what-stays-caveats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. What stays / caveats
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-authority-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Authority reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix A: Authority reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a1-least-privilege-grants-per-role" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.1 Least-privilege grants per role
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a2-chlauth-usersrc-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.2 CHLAUTH USERSRC values
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a3-putaut-and-message-context-authority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A.3 PUTAUT and message-context authority
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: Alternatives and tradeoffs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix B: Alternatives and tradeoffs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#b1-identity-mapping-evidence-for-the-section-3-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.1 Identity mapping — evidence for the section 3 ranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.2 Dead-letter queue scope — QM-wide vs per-counterparty
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b3-connauth-posture-when-the-certificate-is-the-credential" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.3 CONNAUTH posture when the certificate is the credential
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b4-os-based-oam-vs-external-authorization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B.4 OS-based OAM vs external authorization
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-c-complete-configuration-examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix C: Complete configuration examples
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="ibm-mq-authorization-map-an-authenticated-tls-client-to-a-least-privilege-identity">IBM MQ authorization — map an authenticated TLS client to a least-privilege identity<a class="headerlink" href="#ibm-mq-authorization-map-an-authenticated-tls-client-to-a-least-privilege-identity" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 9.4 (Multiplatforms, OS-based OAM authorization)</li>
+<li><strong>Status:</strong> Draft — pending review</li>
+<li><strong>Last validated in lab:</strong> 2026-07-31</li>
+<li><strong>Related guides:</strong> <a href="../mq-event-monitoring-guide/">Instrumentation event monitoring</a>
+  — the authority-event class surfaces the <code>MQRC 2035</code> failures this guide's
+  grants prevent; <a href="../mq-tcp-config-guide/">TCP configuration</a> — the transport
+  this sits above. TLS cipher and certificate setup (the <em>authentication</em> layer
+  this guide's <em>authorization</em> builds on) is a sibling concern, covered
+  separately.</li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>This guide hardens <strong>channel authorization</strong>: once a client or a partner queue
+manager has authenticated over mutual TLS, <em>what identity does it run as, and
+what is that identity allowed to do?</em> The strong pattern is to derive a
+<strong>non-privileged service identity from the authenticated certificate DN</strong> with a
+CHLAUTH <code>SSLPEERMAP</code> rule, put a <strong>deny-all back-stop</strong> behind it so nothing
+unmapped gets in, and grant each identity <strong>only the <code>setmqaut</code> authorities its
+role needs</strong> — retiring the historical <code>MCAUSER('mqm')</code> / <code>CHLAUTH(DISABLED)</code>
+posture where every channel runs privileged.</p>
+<p>It is for anyone moving IBM MQ off blanket-privileged channels onto
+least-privilege, certificate-mapped identities — especially in an HA/DR estate,
+where the OS accounts behind those identities must be consistent across every
+node a queue manager can run on.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope, pinned to <strong>MQ 9.4 Multiplatforms</strong> with the default OS-based Object
+Authority Manager (OAM):</p>
+<ul>
+<li>CHLAUTH <code>SSLPEERMAP</code> identity mapping (<code>USERSRC(MAP)</code> + <code>MCAUSER</code>) and the
+  deny-all <code>ADDRESSMAP</code> back-stop, with rule ordering.</li>
+<li>Least-privilege <code>setmqaut</code> grants, scoped per role and attached to <strong>groups</strong>.</li>
+<li><strong>Message-context authority</strong> for a receiving message channel agent (MCA):
+  <code>PUTAUT(DEF)</code> and the <code>+setall</code> requirement on <strong>every</strong> destination the MCA
+  opens — including the dead-letter queue.</li>
+<li>The <code>CONNAUTH</code> posture when the certificate is the credential.</li>
+</ul>
+<p>Out of scope: TLS ciphers and certificate provisioning (the authentication layer
+beneath this); LDAP or <code>UserExternal</code> authorization models (summarized as an
+alternative in Appendix B); z/OS RACF specifics (noted only where they differ);
+lab-specific values.</p>
+<h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
+<p><strong>Headline — key the identity off the authenticated certificate, never off a
+string the client asserts, and never off a blanket privileged account.</strong> CHLAUTH
+itself authenticates nothing; it is firewall-style mapping over an identity that
+TLS has already proven. So the ranking below is about <em>which</em> proven identity a
+channel runs as.</p>
+<p>Ranked strongest → weakest:</p>
+<ol>
+<li><strong><code>SSLPEERMAP</code> → a fixed, non-privileged <code>MCAUSER</code> (recommended).</strong>
+   <code>SET CHLAUTH(&lt;channel&gt;) TYPE(SSLPEERMAP) SSLPEER('&lt;partner DN&gt;') USERSRC(MAP)
+   MCAUSER('&lt;svc-acct&gt;')</code>. The identity is keyed off the certificate's
+   authenticated Distinguished Name; the client's self-asserted OS username never
+   enters the authorization decision. <em>Compromise:</em> you must provision and
+   maintain one low-privilege service account (and its group) per partner role.
+   This cost is the point — it is what makes each identity independently
+   grantable.</li>
+<li><strong>A fixed channel-definition <code>MCAUSER</code>.</strong> Overrides the asserted ID, but it is
+   per-<em>channel</em>, not per-<em>partner</em>, and it is not tied to the authenticated DN —
+   any client that reaches the channel runs as it. <em>Compromise:</em> coarser
+   granularity and no cryptographic binding between identity and certificate.</li>
+<li><strong>Blank <code>MCAUSER</code> / the asserted client ID (the dangerous default).</strong> The
+   channel runs as whatever username the client flows — trivially spoofable.
+   <em>Compromise:</em> no real access control at all.</li>
+<li><strong><code>MCAUSER('mqm')</code> or <code>CHLAUTH(DISABLED)</code> (retire).</strong> Every channel runs
+   fully privileged and unauthenticated. This is the posture this guide exists to
+   replace.</li>
+</ol>
+<p>Behind whichever mapping you choose, add the <strong>deny-all back-stop first</strong> so that
+any identity not matched by a map is refused (section 4, step 2). Two further
+decisions — the dead-letter-queue grant scope, and whether to keep <code>CONNAUTH</code> —
+are ranked with their evidence in <a href="#appendix-b-alternatives-and-tradeoffs">Appendix B</a>.</p>
+<h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
+<p>The order matters: the deny-all back-stop is laid <strong>before</strong> the maps, so there
+is never a window in which an unmapped identity is admitted, and so
+"more-specific rule wins" leaves the maps as the only way in.</p>
+<ol>
+<li><strong>Enable CHLAUTH and name the queue manager's dead-letter queue.</strong> CHLAUTH
+   must be on for any rule to take effect; the DLQ is a queue-manager attribute
+   (there is exactly one per queue manager — see Appendix B).</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR CHLAUTH(ENABLED)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>ALTER QMGR DEADQ(&#39;SYSTEM.DEAD.LETTER.QUEUE&#39;)
+</code></pre></div>
+<ol>
+<li><strong>Lay the deny-all back-stop first.</strong> A wildcard <code>ADDRESSMAP</code> with
+   <code>USERSRC(NOACCESS)</code> refuses every connection that no more-specific rule
+   matches. <code>ACTION(REPLACE)</code> keeps the statement idempotent.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>SET CHLAUTH(&#39;*&#39;) TYPE(ADDRESSMAP) ADDRESS(&#39;*&#39;) USERSRC(NOACCESS) ACTION(REPLACE)
+</code></pre></div>
+<ol>
+<li><strong>Map each partner's certificate DN to its service identity.</strong> One
+   <code>SSLPEERMAP</code> per role. <code>USERSRC(MAP)</code> makes <code>MCAUSER</code> the authoritative
+   identity; the asserted username is discarded. Being more specific than the
+   back-stop, these are the only admitted paths.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a># Application clients (request/reply over a server-connection channel)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>SET CHLAUTH(&#39;APP.SVRCONN&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=apps&#39;) USERSRC(MAP) MCAUSER(&#39;appsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a># Monitoring clients (read-only)
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>SET CHLAUTH(&#39;MON.SVRCONN&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=ops&#39;) USERSRC(MAP) MCAUSER(&#39;monsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a># A partner queue manager&#39;s receiver channel
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>SET CHLAUTH(&#39;PARTNER.TO.ME&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=gateway&#39;) USERSRC(MAP) MCAUSER(&#39;mcasvc&#39;) ACTION(REPLACE)
+</code></pre></div>
+<p>Where subject DNs are not unique across partners, pin the issuer as well with
+   <code>SSLCERTI('&lt;issuer DN&gt;')</code>.</p>
+<ol>
+<li>
+<p><strong>Provision the OS service accounts on every node the queue manager can run
+   on.</strong> Under OS-based OAM each <code>MCAUSER</code> must be a real, resolvable OS principal
+   with a primary group, or <code>setmqaut</code> rejects it (<code>AMQ7026E</code>). Grants attach to
+   the group. Because CHLAUTH rules and <code>setmqaut</code> authorities are
+   queue-manager objects — replicated across an RDQM or Native HA group like any
+   other configuration — but <code>/etc/passwd</code> is <strong>not</strong> replicated, the accounts
+   and their groups must exist <strong>identically on every node</strong> a queue manager can
+   fail over to. A missing account on a standby node means authorization silently
+   breaks after failover. Keep each service-account name <strong>≤ 12 characters</strong> (an
+   adopted authorization identity is truncated at 12).</p>
+</li>
+<li>
+<p><strong>Grant least privilege per role, to the group.</strong> Each identity gets only the
+   authorities its role needs, on only the objects it touches. Grant to the group
+   (<code>-g</code>), never the principal.</p>
+</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a># Application identity: connect + inquire; put to its request queue; get its replies
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                        -g appsvc +connect +inq
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REQUEST        -g appsvc +put
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY          -g appsvc +get +inq +browse
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a># Monitoring identity: read-only — no put, no get
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                        -g monsvc +connect +inq
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REQUEST        -g monsvc +dsp +inq
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY          -g monsvc +dsp +inq
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>setmqaut -m &lt;QMGR&gt; -t topic -n &lt;RESOURCE.TOPIC&gt;   -g monsvc +sub
+</code></pre></div>
+<p>For the monitoring subscription, scope the topic object to the exact
+   resource-monitoring point the collector needs (for example a <code>$SYS/MQ</code>
+   subtree). Do <strong>not</strong> grant <code>+sub</code> on <code>SYSTEM.BASE.TOPIC</code>: that is the root of
+   the topic tree and subscribes to everything — an over-grant against
+   least-privilege.</p>
+<ol>
+<li><strong>Give a receiving MCA its message-context authority — including on the
+   DLQ.</strong> This is the load-bearing subtlety. A receiver channel with
+   <code>PUTAUT(DEF)</code> opens <strong>every</strong> destination it writes with
+   <code>MQOO_SET_ALL_CONTEXT</code>, to reinstate the original message context. That open is
+   authority-checked against the MCA's identity, so the identity needs <code>+setall</code>
+   on the queue manager object <strong>and</strong> on each destination it opens — the reply
+   queue <strong>and the dead-letter queue</strong>. Miss the DLQ and an undeliverable message
+   can be neither delivered nor dead-lettered, and the channel stalls (see
+   Appendix D).</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a># Receiver MCA identity: context authority on QM + every destination it opens
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                             -g mcasvc +connect +setall
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY               -g mcasvc +put +setall
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>setmqaut -m &lt;QMGR&gt; -t queue -n SYSTEM.DEAD.LETTER.QUEUE -g mcasvc +put +setall
+</code></pre></div>
+<p>Set <code>PUTAUT(DEF)</code> and <code>USEDLQ(YES)</code> on the receiver channel definition so
+   undeliverable messages route to that DLQ.</p>
+<ol>
+<li><strong>Refresh security</strong> so the connection-authority and mapping changes take
+   effect without a queue-manager restart.</li>
+</ol>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>REFRESH SECURITY TYPE(CONNAUTH)
+</code></pre></div>
+<h2 id="5-verify-it-worked">5. Verify it worked<a class="headerlink" href="#5-verify-it-worked" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Unmapped identities are refused.</strong> A connection whose certificate DN matches
+  no <code>SSLPEERMAP</code> should be rejected by the back-stop — the channel ends and an
+  authority event / error-log entry records the refusal. Confirm a known-good
+  partner still connects and runs as the mapped <code>MCAUSER</code>, not as <code>mqm</code> or the
+  asserted username.</li>
+<li><strong>Each identity holds exactly its grants.</strong> Inspect the authority records for
+  each service account's group and confirm they match the role table
+  (<a href="#a1-least-privilege-grants-per-role">Appendix A</a>) — no extra <code>+put</code>/<code>+get</code> on
+  the monitoring identity, no privileged authorities anywhere.</li>
+<li><strong>The receiver can dead-letter.</strong> Confirm the receiver identity holds <code>+put</code>
+  <strong>and</strong> <code>+setall</code> on both the reply queue and the DLQ. The real test is
+  behavioural: an induced undeliverable reply should land in the DLQ (wrapped in
+  an <code>MQDLH</code>) and the channel should keep running — not stall in
+  <code>STATUS(PAUSED) SUBSTATE(MQPUT)</code>.</li>
+<li><strong>No spurious authorization failures.</strong> Watch the authority-event stream (see
+  the event-monitoring guide): legitimate flows should produce <strong>no</strong> <code>MQRC 2035</code>
+  events. A 2035 at a set-all-context open is the signature of a missing
+  <code>+setall</code> (Appendix D).</li>
+</ul>
+<h2 id="6-what-stays-caveats">6. What stays / caveats<a class="headerlink" href="#6-what-stays-caveats" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>CHLAUTH authenticates nothing.</strong> It maps and filters an identity that TLS has
+  already proven. Certificate mapping is only as strong as the TLS mutual
+  authentication beneath it (<code>SSLCAUTH(ENABLED)</code> + <code>SSLPEER</code>).</li>
+<li><strong>Only a receiver MCA needs <code>+setall</code>.</strong> Context security is <strong>not supported on
+  server-connection channels</strong>, so the application and monitoring identities
+  (which arrive over SVRCONN) never take a <code>+setall</code> grant — only the QM-to-QM
+  receiver MCA does. Granting <code>+setall</code> to a SVRCONN identity is both useless and
+  an over-grant.</li>
+<li><strong>The DLQ is not special in the authority model.</strong> It is checked exactly like
+  any other destination the MCA opens with set-all context. The <code>+setall</code>-on-DLQ
+  requirement is invisible until an undeliverable message actually needs
+  dead-lettering — the classic trap.</li>
+<li><strong>OS accounts do not replicate; MQ objects do.</strong> The mapped service accounts
+  and their groups must be present on every failover node. This is substrate
+  consistency the queue manager cannot enforce for you.</li>
+<li><strong>12-character identities.</strong> An identity adopted for authorization is truncated
+  to 12 characters. Keep <code>MCAUSER</code> service-account names within that.</li>
+<li><strong><code>MCAUSER('mqm')</code> and <code>CHLAUTH(DISABLED)</code> are retired,</strong> not merely
+  discouraged. Any channel left on either undoes the whole model.</li>
+</ul>
+<hr />
+<h2 id="appendix-a-authority-reference">Appendix A: Authority reference<a class="headerlink" href="#appendix-a-authority-reference" title="Permanent link">&para;</a></h2>
+<h3 id="a1-least-privilege-grants-per-role">A.1 Least-privilege grants per role<a class="headerlink" href="#a1-least-privilege-grants-per-role" title="Permanent link">&para;</a></h3>
+<p>Illustrative grants for three common roles. All grants attach to the identity's
+<strong>group</strong>; the OS principal is a member of it.</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Object</th>
+<th>Authorities</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Application (<code>appsvc</code>)</td>
+<td>qmgr</td>
+<td><code>+connect +inq</code></td>
+<td>connect and inquire only</td>
+</tr>
+<tr>
+<td></td>
+<td>queue <code>APP.REQUEST</code></td>
+<td><code>+put</code></td>
+<td>submit requests</td>
+</tr>
+<tr>
+<td></td>
+<td>queue <code>APP.REPLY</code></td>
+<td><code>+get +inq +browse</code></td>
+<td>collect its replies</td>
+</tr>
+<tr>
+<td>Monitoring (<code>monsvc</code>)</td>
+<td>qmgr</td>
+<td><code>+connect +inq</code></td>
+<td>connect and inquire only</td>
+</tr>
+<tr>
+<td></td>
+<td>queue <code>APP.REQUEST</code> / <code>APP.REPLY</code></td>
+<td><code>+dsp +inq</code></td>
+<td>read metadata (depth, attributes) — no message access</td>
+</tr>
+<tr>
+<td></td>
+<td>topic <code>&lt;RESOURCE.TOPIC&gt;</code></td>
+<td><code>+sub</code></td>
+<td>subscribe to the scoped resource-monitoring topic</td>
+</tr>
+<tr>
+<td>Receiver MCA (<code>mcasvc</code>)</td>
+<td>qmgr</td>
+<td><code>+connect +setall</code></td>
+<td>connect + context authority (QM half)</td>
+</tr>
+<tr>
+<td></td>
+<td>queue <code>APP.REPLY</code></td>
+<td><code>+put +setall</code></td>
+<td>deliver replies preserving context</td>
+</tr>
+<tr>
+<td></td>
+<td>queue <code>SYSTEM.DEAD.LETTER.QUEUE</code></td>
+<td><code>+put +setall</code></td>
+<td>dead-letter the undeliverable, preserving context</td>
+</tr>
+</tbody>
+</table>
+<h3 id="a2-chlauth-usersrc-values">A.2 CHLAUTH <code>USERSRC</code> values<a class="headerlink" href="#a2-chlauth-usersrc-values" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th><code>USERSRC</code></th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAP</code> (default)</td>
+<td>Run as the rule's <code>MCAUSER</code> (mandatory with <code>MAP</code>). The identity is asserted by the rule, not the client.</td>
+</tr>
+<tr>
+<td><code>CHANNEL</code></td>
+<td>Run as the channel-defined / flowed ID. Weak — no mapping.</td>
+</tr>
+<tr>
+<td><code>NOACCESS</code></td>
+<td>Block. The channel ends immediately. Used for the back-stop.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="a3-putaut-and-message-context-authority">A.3 <code>PUTAUT</code> and message-context authority<a class="headerlink" href="#a3-putaut-and-message-context-authority" title="Permanent link">&para;</a></h3>
+<p><code>PUTAUT</code> is valid on <code>RCVR</code>, <code>RQSTR</code>, and <code>CLUSRCVR</code> channels (Multiplatforms).
+Both settings open the destination with <code>MQOO_SET_ALL_CONTEXT</code>, so both require
+<code>+setall</code>; they differ only in the alternate-user machinery and in which identity
+the <em>put</em> is checked against.</p>
+<table>
+<thead>
+<tr>
+<th>Check at inbound <code>MQPUT</code></th>
+<th><code>PUTAUT(DEF)</code></th>
+<th><code>PUTAUT(CTX)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>set-all-context open → <code>+setall</code> on queue</td>
+<td>MCA identity</td>
+<td>MCA identity</td>
+</tr>
+<tr>
+<td><code>+setall</code> also on <strong>qmgr object</strong></td>
+<td>MCA identity</td>
+<td>MCA identity</td>
+</tr>
+<tr>
+<td>alternate-user open → <code>+altusr</code></td>
+<td>not opened</td>
+<td>MCA identity</td>
+</tr>
+<tr>
+<td>the put itself → <code>+put</code></td>
+<td>MCA identity</td>
+<td>the stamped <code>MQMD.UserIdentifier</code></td>
+</tr>
+</tbody>
+</table>
+<p>The rule to remember: <strong>set-all/set-id authority must be granted on both the
+queue object and the queue-manager object.</strong> <code>PUTAUT(DEF)</code> does <em>not</em> avoid
+<code>+setall</code> — it only avoids the alternate-user check. The requirement is invisible
+under a privileged blank <code>MCAUSER</code> (the <code>mqm</code>-owned listener already holds
+<code>+setall</code>), which is exactly why hardening to a low-privilege <code>MCAUSER</code> surfaces
+it.</p>
+<h2 id="appendix-b-alternatives-and-tradeoffs">Appendix B: Alternatives and tradeoffs<a class="headerlink" href="#appendix-b-alternatives-and-tradeoffs" title="Permanent link">&para;</a></h2>
+<h3 id="b1-identity-mapping-evidence-for-the-section-3-ranking">B.1 Identity mapping — evidence for the section 3 ranking<a class="headerlink" href="#b1-identity-mapping-evidence-for-the-section-3-ranking" title="Permanent link">&para;</a></h3>
+<p><code>SSLPEERMAP</code> → fixed <code>MCAUSER</code> is the top recommendation because identity is keyed
+off the <strong>authenticated</strong> certificate DN, not a spoofable asserted string. In the
+community "strength of factor" view, CHLAUTH, a channel <code>MCAUSER</code>, and an asserted
+client ID are all rated <em>weak — no authentication</em>; only TLS mutual auth
+(possession of the certificate and its secret) is <em>strong</em>. Mapping lets the
+strong factor (the cert) select the identity, and <code>USERSRC(NOACCESS)</code> — not a
+"junk" <code>MCAUSER</code> — is the correct default-deny primitive.</p>
+<h3 id="b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty">B.2 Dead-letter queue scope — QM-wide vs per-counterparty<a class="headerlink" href="#b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty" title="Permanent link">&para;</a></h3>
+<p>There is <strong>no per-channel or per-remote-queue-manager DLQ in MQ 9.4.</strong> <code>DEADQ</code> is
+a queue-manager attribute (one DLQ per queue manager); <code>USEDLQ(YES|NO)</code> is only a
+per-channel boolean over that single queue — it controls <em>whether</em> a channel
+dead-letters, never <em>which</em> queue.</p>
+<ul>
+<li><strong>QM-wide DLQ (recommended, and in fact the only native option).</strong> One DLQ, one
+  <code>+put +setall</code> grant on it. <em>Compromise:</em> the grant's blast radius is a queue
+  every channel can touch — it cannot be scoped narrower because no per-channel
+  DLQ exists. This is not an interim shortcut; it is the architecturally required
+  destination under <code>USEDLQ(YES)</code>.</li>
+<li><strong>Per-counterparty routing.</strong> Achievable only <strong>downstream</strong> of the DLQ, with a
+  <code>runmqdlq</code> rules table forwarding by <code>DESTQ</code> / <code>DESTQM</code> / <code>REASON</code>.
+  <em>Compromise:</em> a continuously-run batch utility, a maintained rules table,
+  re-put/forward semantics with delivery-ordering effects — and the MCA still
+  needs <code>+put +setall</code> on the QM DLQ regardless. There is no reliable
+  "source channel" key to route on (<code>MQDLH.PutApplName</code> carries the queue-manager
+  name, not the channel), so per-channel segregation is not dependable anyway.</li>
+</ul>
+<h3 id="b3-connauth-posture-when-the-certificate-is-the-credential">B.3 <code>CONNAUTH</code> posture when the certificate is the credential<a class="headerlink" href="#b3-connauth-posture-when-the-certificate-is-the-credential" title="Permanent link">&para;</a></h3>
+<p>Once mutual TLS proves the client and <code>SSLPEERMAP</code> selects the identity, the
+certificate <em>is</em> the credential — so <code>CONNAUTH</code> (connection-level user/password)
+becomes a <strong>second, independent factor</strong> rather than the primary one.</p>
+<ul>
+<li><strong>Keep <code>CONNAUTH</code> (recommended default).</strong> Retaining a user/password check
+  (<code>CHCKCLNT(REQDADM)</code> at minimum) is defense-in-depth: an authenticated secret in
+  addition to the certificate, and the check that stops a privileged ID
+  connecting without a password. <em>Compromise:</em> a credential store to operate and
+  rotate.</li>
+<li><strong>Disable <code>CONNAUTH</code> (<code>CONNAUTH(' ')</code>).</strong> Defensible when the mutually
+  authenticated certificate is genuinely the single source of identity truth: it
+  removes a password store and simplifies operation. <em>Compromise:</em> you give up the
+  second factor and the privileged-ID password gate entirely — acceptable only if
+  certificate issuance and the deny-all back-stop are truly trusted to carry the
+  whole authentication burden. Prefer keeping <code>CONNAUTH</code> unless that condition
+  clearly holds.</li>
+</ul>
+<h3 id="b4-os-based-oam-vs-external-authorization">B.4 OS-based OAM vs external authorization<a class="headerlink" href="#b4-os-based-oam-vs-external-authorization" title="Permanent link">&para;</a></h3>
+<p>The default OAM authorizes by <strong>OS group</strong>, which is why every <code>MCAUSER</code> must be a
+real OS principal on every node. Two escape hatches exist if maintaining OS
+accounts across a fleet is undesirable: <strong>LDAP authorization</strong> (<code>idpwldap</code> with
+LDAP performing authorization, not just authentication — the resolved short name
+need not be an OS user but must be unique) and <strong><code>SecurityPolicy=UserExternal</code></strong>
+(MQ 9.2.1+). Both trade the "accounts on every node" burden for an external
+directory dependency. LDAP used for <em>authentication only</em>, with OAM still doing
+authorization, does <strong>not</strong> relax the OS-account requirement.</p>
+<h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
+<p><strong>CHLAUTH — back-stop first, then the maps (idempotent):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ALTER QMGR CHLAUTH(ENABLED)
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>ALTER QMGR DEADQ(&#39;SYSTEM.DEAD.LETTER.QUEUE&#39;)
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a># Deny-all back-stop — laid before any map
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>SET CHLAUTH(&#39;*&#39;) TYPE(ADDRESSMAP) ADDRESS(&#39;*&#39;) USERSRC(NOACCESS) ACTION(REPLACE)
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a># Per-role SSLPEERMAP identity maps (more specific than the back-stop)
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>SET CHLAUTH(&#39;APP.SVRCONN&#39;)   TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=apps&#39;)    USERSRC(MAP) MCAUSER(&#39;appsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>SET CHLAUTH(&#39;MON.SVRCONN&#39;)   TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=ops&#39;)     USERSRC(MAP) MCAUSER(&#39;monsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>SET CHLAUTH(&#39;PARTNER.TO.ME&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=gateway&#39;) USERSRC(MAP) MCAUSER(&#39;mcasvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>REFRESH SECURITY TYPE(CONNAUTH)
+</code></pre></div>
+<p><strong><code>setmqaut</code> — least privilege per role (grants to groups):</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a># Application identity
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                              -g appsvc +connect +inq
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REQUEST              -g appsvc +put
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY                -g appsvc +get +inq +browse
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a># Monitoring identity (read-only)
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                              -g monsvc +connect +inq
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REQUEST              -g monsvc +dsp +inq
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY                -g monsvc +dsp +inq
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>setmqaut -m &lt;QMGR&gt; -t topic -n &lt;RESOURCE.TOPIC&gt;         -g monsvc +sub
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a># Receiver MCA identity (context authority on QM + every destination)
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>setmqaut -m &lt;QMGR&gt; -t qmgr                              -g mcasvc +connect +setall
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>setmqaut -m &lt;QMGR&gt; -t queue -n APP.REPLY                -g mcasvc +put +setall
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>setmqaut -m &lt;QMGR&gt; -t queue -n SYSTEM.DEAD.LETTER.QUEUE -g mcasvc +put +setall
+</code></pre></div>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Receiver channel wedged in <code>STATUS(PAUSED) SUBSTATE(MQPUT)</code>; log shows <code>AMQ9599E … reason code 2035</code> then <code>AMQ9511E</code> on the DLQ open</td>
+<td>MCA identity has <code>+put</code> but <strong>not</strong> <code>+setall</code> on the dead-letter queue — the set-all-context open is refused, so the message can be neither delivered nor dead-lettered</td>
+<td>grant <code>+setall</code> on the DLQ (and confirm <code>+setall</code> on the qmgr object and the reply queue)</td>
+</tr>
+<tr>
+<td>Legitimate replies never reach the reply queue; <code>MQRC 2035</code> at inbound put</td>
+<td>missing <code>+setall</code> on the reply queue or the qmgr object under <code>PUTAUT(DEF)</code></td>
+<td>grant <code>+put +setall</code> on the queue and <code>+setall</code> on the qmgr object</td>
+</tr>
+<tr>
+<td>A known-good partner is refused / channel ends immediately</td>
+<td>its certificate DN matches no <code>SSLPEERMAP</code>, so the deny-all back-stop catches it</td>
+<td>add or correct the <code>SSLPEERMAP</code> (check the exact DN order and <code>SSLCERTI</code> if subjects collide)</td>
+</tr>
+<tr>
+<td><code>setmqaut</code> returns <code>AMQ7026E</code> (principal or group unknown)</td>
+<td>the <code>MCAUSER</code> is not a real OS principal with a primary group on this node</td>
+<td>create the account and group on <strong>every</strong> node the queue manager can run on</td>
+</tr>
+<tr>
+<td>Authorization works on the active node but breaks after failover</td>
+<td>the service account/group is missing on the standby node (MQ objects replicate, OS accounts do not)</td>
+<td>provision the accounts identically across the whole HA/DR group</td>
+</tr>
+<tr>
+<td>Monitoring identity can read message payloads it should not</td>
+<td><code>+get</code>/<code>+browse</code> or <code>+sub</code> on <code>SYSTEM.BASE.TOPIC</code> over-granted</td>
+<td>reduce to <code>+dsp +inq</code>; scope the topic subscription to the specific resource-monitoring point</td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<p>IBM MQ 9.4 documentation:</p>
+<ul>
+<li><em>SET CHLAUTH</em> and <em>Channel authentication records</em> — the <code>SSLPEERMAP</code> /
+  <code>ADDRESSMAP</code> rule types, <code>USERSRC</code>, and rule precedence.
+  <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=commands-set-chlauth">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=commands-set-chlauth</a></li>
+<li><em>setmqaut (grant or revoke authority)</em> — authority keywords and the <code>-g</code> group
+  form. <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-setmqaut-grant-revoke-authority">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-setmqaut-grant-revoke-authority</a></li>
+<li><em>PUTAUT (channel attribute)</em> and <em>Context authority</em> — the <code>DEF</code>/<code>CTX</code> open
+  behaviour and the "queue <strong>and</strong> queue-manager object" set-all-context rule.
+  Search these topic titles at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>.</li>
+<li><em>Using a dead-letter queue</em> — <code>DEADQ</code> (queue-manager) vs <code>USEDLQ</code> (per-channel
+  boolean), and <code>runmqdlq</code> rules-table handling.</li>
+<li><em>Connection authentication (CONNAUTH)</em> — <code>CHCKCLNT</code>, <code>ADOPTCTX</code>, and disabling
+  the check. Search at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>
