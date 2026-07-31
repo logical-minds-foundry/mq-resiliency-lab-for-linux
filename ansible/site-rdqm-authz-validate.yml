@@ -1,0 +1,288 @@
+---
+# Stage 2 authorization validation for the rdqm arm (#74 / #620). The RDQM (RHEL,
+# DRBD + Pacemaker) peer of site-pcmk-authz-validate.yml / site-nativeha-ubuntu-authz-
+# validate.yml: induced-denial + positive + post-failover, run against the live,
+# authorized rdqm-rhel arm. Harness CODE that IS the live-run evidence source for #620
+# (this repo has no behavioural lint — the running, authorized arm + a one-pass bring-up
+# is the epic gate).
+#
+# RDQM substrate specifics (vs the other arms):
+#   * ONE floating data VIP per QM (rdqm-vip-a) that Pacemaker moves with the DRBD
+#     primary, so app_conn is CONSTANT pre- and post-failover (unlike nativeha's
+#     instance-CONNAME list). The app reaches the live primary at that VIP always.
+#   * the active node is discovered by `dspmq -o status` STATUS(Running) via the
+#     rdqm-active-node role (rdqm_is_active), NOT pcs/dspmq -o nativeha.
+#   * failover is induced the NATIVE way (rdqmadm/pcs) between the --tags core and
+#     --tags postfail passes — the mqlab failover verb is NOT_YET; see the RUN block.
+#
+# Induced checks (mirror pcmk/nativeha N1/N3 + positive + post-failover):
+#   N1  mqmon (OU=ops via MON.SVRCONN) MQPUT APP.REPLY   -> DENIED 2035 (monitoring is
+#       read-only: dsp/inq/sub, no put/get).
+#   N3  mqapp (OU=apps via APP.SVRCONN) MQGET SVC.REQUEST -> DENIED 2035 (least privilege).
+#   POS the app trade-flow round-trip succeeds end-to-end.
+#   AUTHZ-POS mqapp IS authorized to PUT SVC.REQUEST (reason 0) — deterministic, site-
+#       independent (QREMOTE PUT enqueues to the local xmitq, authority-checked against
+#       mqapp's +put), used as the post-failover positive on the new primary.
+#   post-failover: N1 STILL denied 2035 + AUTHZ-POS still 0 on the new primary node ->
+#       authorization survived the HA failover (DRBD-replicated authority records).
+#
+# ============================================================================
+# KNOWN-UNKNOWNS -- grounded in the current roles:
+#   (1) mon_keyrepo -- the OU=ops (mqmon) keystore mq_prometheus is on mon-probe
+#       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT the app host. The first play
+#       fetches it from mon-probe and stages it on the app host (as pcmk #792 / nativeha).
+#   (2) positive uses app_requester.py --count 1 (exit 0 on a reply). app-client keystore
+#       (/home/vagrant/ssl/key, label app-client) is placed by roles/mq-client (shared).
+#   (3) app_conn is the single data VIP rdqm-vip-a.client.com(1414) (site-rdqm.yml).
+# ============================================================================
+
+# (#620) Stage the OU=ops (mq_prometheus) keystore from mon-probe onto the app host.
+# MQ authorizes by cert DN (SSLPEERMAP -> mqmon), NOT source host, so the mqmon denial
+# reproduces identically from the app host. Fetch to the controller, then copy over.
+- name: stage the OU=ops keystore from mon-probe (fetch to controller)
+  hosts: probe
+  become: true
+  gather_facts: false
+  tags: [stage, induced, postfail]
+  tasks:
+    - name: fetch the mq_prometheus keystore from mon-probe
+      ansible.builtin.fetch:
+        src: "/var/mqm/ssl/mq_prometheus/{{ item }}"
+        dest: /tmp/authz-rdqm-mqmon-ks/
+        flat: true
+      loop: [key.p12, key.sth]
+
+- name: Stage 2 authorization -- negative (N1 + N3) + positive + authz-positive
+  hosts: app
+  become: false # run as the connecting user (vagrant), who owns the venv + app keystore
+  gather_facts: false
+  vars:
+    app_qm: "{{ qm_app | default('RDQMAPP') }}"
+    # Single floating data VIP: Pacemaker moves it with the DRBD primary, so one CONNAME
+    # reaches the live primary whether before or after an HA failover (site-rdqm.yml).
+    app_conn: "rdqm-vip-a.client.com(1414)"
+    venv_python: /home/vagrant/mqvenv/bin/python
+    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
+    probe_dest: /home/vagrant/authz_probe.py
+    app_requester: /home/vagrant/app_requester.py
+    app_keyrepo: /home/vagrant/ssl/key
+    app_certlabel: app-client
+    mon_keyrepo: /home/vagrant/ssl/mqmon/key
+    mon_certlabel: mq_prometheus
+  tasks:
+    - name: create the staged mqmon keystore dir on the app host
+      ansible.builtin.file:
+        path: /home/vagrant/ssl/mqmon
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: "0700"
+      tags: [stage, induced, postfail]
+
+    - name: stage the mqmon (mq_prometheus) keystore on the app host
+      ansible.builtin.copy:
+        src: "/tmp/authz-rdqm-mqmon-ks/{{ item }}"
+        dest: "/home/vagrant/ssl/mqmon/{{ item }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0600"
+      loop: [key.p12, key.sth]
+      tags: [stage, induced, postfail]
+
+    - name: stage the authz probe on the app host (alongside app_requester.py)
+      ansible.builtin.copy:
+        src: "{{ probe_src }}"
+        dest: "{{ probe_dest }}"
+        owner: vagrant
+        group: vagrant
+        mode: "0644"
+      tags: [stage, induced, positive, authzpos, postfail]
+
+    # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to APP.REPLY.
+    - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - MON.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ mon_keyrepo }}"
+          - --certlabel
+          - "{{ mon_certlabel }}"
+          - --queue
+          - APP.REPLY
+          - --op
+          - put
+          - --expect
+          - "2035"
+      changed_when: false
+      tags: [induced, postfail]
+
+    # NEGATIVE N3: mqapp (OU=apps via APP.SVRCONN) is DENIED an MQGET from SVC.REQUEST.
+    - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - APP.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+          - --queue
+          - SVC.REQUEST
+          - --op
+          - get
+          - --expect
+          - "2035"
+      changed_when: false
+      tags: [induced, postfail]
+
+    # POSITIVE (full round-trip): the app trade flow still completes end-to-end.
+    - name: POSITIVE -- app trade flow round-trip (app_requester --count 1)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ app_requester }}"
+          - --count
+          - "1"
+          - --qm
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+      changed_when: false
+      register: tradeflow
+      failed_when: tradeflow.rc != 0
+      tags: [positive]
+
+    # AUTHZ-POSITIVE: mqapp IS authorized to PUT SVC.REQUEST (reason 0). Deterministic +
+    # site-independent — used as the post-failover positive on the new primary.
+    - name: AUTHZ-POSITIVE -- mqapp authorized to PUT SVC.REQUEST (reason 0)
+      ansible.builtin.command:
+        argv:
+          - "{{ venv_python }}"
+          - "{{ probe_dest }}"
+          - --qmgr
+          - "{{ app_qm }}"
+          - --conn
+          - "{{ app_conn }}"
+          - --channel
+          - APP.SVRCONN
+          - --cipher
+          - "{{ tls_cipher }}"
+          - --keyrepo
+          - "{{ app_keyrepo }}"
+          - --certlabel
+          - "{{ app_certlabel }}"
+          - --queue
+          - SVC.REQUEST
+          - --op
+          - put
+          - --expect
+          - "0"
+      changed_when: false
+      tags: [authzpos, postfail]
+
+# Read-only authorization EVIDENCE on the active (DRBD-primary) RDQM node: the CHLAUTH
+# listing (deny-all back-stop + SSLPEERMAP maps), the mqsvc DLQ +put +setall grant (the
+# #844/N5 fix), and the QMGR CHLAUTH/CONNAUTH posture. Non-disruptive; runs on the one
+# node where rdqm_is_active.
+- name: authorization evidence (read-only) on the active RDQM node
+  hosts: rdqm_a
+  become: true
+  gather_facts: false
+  tags: [evidence]
+  vars:
+    qm: "{{ qm_app | default('RDQMAPP') }}"
+    dlq: "SYSTEM.DEAD.LETTER.QUEUE"
+  tasks:
+    - name: resolve the active RDQM node
+      ansible.builtin.include_role:
+        name: rdqm-active-node
+      vars:
+        rdqm_qm: "{{ qm }}"
+
+    - name: evidence -- CHLAUTH rules (deny-all back-stop + SSLPEERMAP maps)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"echo 'DIS CHLAUTH(*) TYPE(ALL)' | /opt/mqm/bin/runmqsc {{ qm }}\""
+      changed_when: false
+      register: ev_chlauth
+      when: rdqm_is_active
+
+    - name: evidence -- QMGR CHLAUTH + CONNAUTH + DEADQ posture
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"echo 'DIS QMGR CHLAUTH CONNAUTH DEADQ' | /opt/mqm/bin/runmqsc {{ qm }}\""
+      changed_when: false
+      register: ev_qmgr
+      when: rdqm_is_active
+
+    - name: evidence -- mqsvc holds +put +setall on the DLQ (the #844/N5 fix)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t queue -n {{ dlq }} -p mqsvc\""
+      changed_when: false
+      register: ev_dlq
+      when: rdqm_is_active
+
+    - name: evidence -- mqmon authority on APP.REPLY (dsp/inq only; NO put)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t queue -n APP.REPLY -p mqmon\""
+      changed_when: false
+      register: ev_mon
+      when: rdqm_is_active
+
+    - name: report the captured authorization evidence
+      ansible.builtin.debug:
+        msg:
+          - "active    : {{ inventory_hostname }}"
+          - "CHLAUTH   : {{ ev_chlauth.stdout | default('') }}"
+          - "QMGR      : {{ ev_qmgr.stdout | default('') }}"
+          - "DLQ mqsvc : {{ ev_dlq.stdout | default('') }}"
+          - "APP.REPLY mqmon : {{ ev_mon.stdout | default('') }}"
+      when: rdqm_is_active
+
+    - name: assert the CHLAUTH posture + the #844/N5 DLQ grant
+      ansible.builtin.assert:
+        that:
+          - "'CHLAUTH(ENABLED)' in (ev_qmgr.stdout | default(''))"
+          - "'NOACCESS' in (ev_chlauth.stdout | default(''))"
+          - "'SSLPEERMAP' in (ev_chlauth.stdout | default(''))"
+          - "'put' in (ev_dlq.stdout | default(''))"
+          - "'setall' in (ev_dlq.stdout | default(''))"
+        fail_msg: "authorization evidence FAILED -- see the report task above."
+        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5)."
+      when: rdqm_is_active
+
+# ============================================================================
+# RUN (live, from a worktree; inventory = build/work/inventory.ini):
+#
+#   INV=../build/work/inventory.ini
+#   # Pre-failover: full induced + round-trip positive + authz-positive + evidence.
+#   ansible-playbook -i $INV site-rdqm-authz-validate.yml \
+#       --tags induced,positive,authzpos,evidence -e qm_app=RDQMAPP
+#   # Induce an HA failover the NATIVE way (mqlab failover verb is NOT_YET). Suspend the
+#   # current primary node so Pacemaker restarts RDQMAPP + moves the VIP to another
+#   # rdqm_a node, then resume it:
+#   #   rdqmadm -s -n <current-primary>   # suspend -> QM + VIP relocate
+#   #   (wait for STATUS(Running) on a new node)
+#   #   rdqmadm -r -n <suspended-node>    # resume (restore the node to the HA group)
+#   # Then re-run one negative + the authz-positive on the new primary (same VIP):
+#   ansible-playbook -i $INV site-rdqm-authz-validate.yml --tags postfail -e qm_app=RDQMAPP
+# ============================================================================
