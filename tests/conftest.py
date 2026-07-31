@@ -38,6 +38,16 @@ def _neutralize_ensure_local_boxes(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _neutralize_reconcile_box_meta(monkeypatch):
+    """Neutralise cli._reconcile_box_meta in every test — it reads the rendered
+    resolved topology (via _resolved_nodes) to detect a box repoint before the vms
+    phase's `vagrant up` (#858), which unit tests do not render. The real function
+    and its pure planner are tested directly via the import captured before this
+    stub (mirrors the _neutralize_ensure_local_boxes pattern)."""
+    monkeypatch.setattr(cli, "_reconcile_box_meta", lambda guests, *, step: None)
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_build_ensure(monkeypatch):
     """Neutralise cli._build_ensure in every test — it shells git + makes symlinks
     (#286), which must not run in unit tests. The build commands test it via their own
