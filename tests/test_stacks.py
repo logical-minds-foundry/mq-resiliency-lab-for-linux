@@ -8,14 +8,21 @@ from __future__ import annotations
 
 import pytest
 
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.stacks import (
     QmConfig,
     _svc_identity,
     dashboard_folder_for,
     lab_stacks,
+    rhel_stack_unsupported_reason,
     stack_members,
     stack_san_targets,
 )
+
+# Host-facts fixtures for the arch-capability predicate (#847). Only `arch` is
+# load-bearing here; kvm/distro/vergil are irrelevant to the RHEL-on-aarch64 rule.
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
 
 
 def test_qmconfig_derives_app_svc_and_channel_pair() -> None:
@@ -359,3 +366,36 @@ def test_dashboard_folder_for_fails_loud_on_unlabelled_mechanism_or_os():
         dashboard_folder_for("no-such-mechanism", "ubuntu")
     with pytest.raises(ValueError, match="os"):
         dashboard_folder_for("native-ha", "no-such-os")
+
+
+# --------------------------------------------------------------------------- #
+# RHEL-stack host-arch capability (#847): the RHEL arms require an x86_64 host;
+# on aarch64 only the Ubuntu stacks run (no cross-arch emulation — #103 D11).
+# --------------------------------------------------------------------------- #
+def test_rhel_stack_on_aarch64_is_unsupported(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stacks = lab_stacks()
+    for name in ("rdqm-rhel", "nativeha-rhel"):
+        reason = rhel_stack_unsupported_reason(stacks[name], ARM)
+        assert reason is not None
+        assert name in reason  # names the offending stack
+        # actionable: names the arch required and the arch present
+        assert "x86_64" in reason and "aarch64" in reason
+
+
+def test_rhel_stack_on_x86_is_supported(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stacks = lab_stacks()
+    assert rhel_stack_unsupported_reason(stacks["rdqm-rhel"], X86) is None
+    assert rhel_stack_unsupported_reason(stacks["nativeha-rhel"], X86) is None
+
+
+def test_ubuntu_stack_is_supported_on_either_arch(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stacks = lab_stacks()
+    for name in ("pcmk-ubuntu", "nativeha-ubuntu"):
+        assert rhel_stack_unsupported_reason(stacks[name], ARM) is None
+        assert rhel_stack_unsupported_reason(stacks[name], X86) is None

@@ -36,6 +36,23 @@ class Check:
     fix: str | None = None
 
 
+def _rhel_capability(facts: HostFacts) -> Check:
+    """Host-arch capability line for the RHEL stacks (#847), so the constraint is
+    discoverable before a bring-up is attempted (the bring-up gate lives in the
+    stack sequencer). The RHEL arms require an x86_64 host; on aarch64 only the
+    Ubuntu stacks run (Ubuntu-for-ARM + emulated MQ). Informational — an aarch64
+    host is fully supported for the Ubuntu stack, so this line never fails the host.
+    """
+    if facts.arch == AARCH64:
+        return Check(
+            "rhel-stacks",
+            True,
+            "unsupported on this aarch64 host — only the Ubuntu stacks run here "
+            "(the RHEL arms require an x86_64 host; #847)",
+        )
+    return Check("rhel-stacks", True, "supported on this x86_64 host")
+
+
 def _required_tools(facts: HostFacts) -> list[str]:
     tools = ["qemu-system-x86_64", "virsh", "vagrant", "ansible", "genisoimage"]
     if facts.arch == AARCH64:
@@ -52,9 +69,16 @@ def _install_hint(tool: str, family: str) -> str | None:
 
 
 def run_checks(facts: HostFacts, *, which: Callable[[str], str | None]) -> list[Check]:
+    # The RHEL-stacks capability is a permanent host-arch fact the Vergil profile
+    # cannot change, so it is reported on every host — including inside Vergil,
+    # where the rest of the checklist short-circuits (#847).
+    checks: list[Check] = [_rhel_capability(facts)]
     if facts.in_vergil:
-        return [Check("vergil", True, "Vergil-managed; prerequisites guaranteed by the profile")]
-    checks = [
+        checks.append(
+            Check("vergil", True, "Vergil-managed; prerequisites guaranteed by the profile")
+        )
+        return checks
+    checks += [
         Check(
             "kvm",
             facts.kvm,

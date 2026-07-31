@@ -15,11 +15,15 @@ the cutover (migrate callers, retire the old blocks).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from mqlab.hostfacts import AARCH64
 from mqlab.paths import repo_root
+
+if TYPE_CHECKING:
+    from mqlab.hostfacts import HostFacts
 
 # Display labels for a stack's Grafana dashboard folder (#59). Derived from
 # mechanism+os so a new stack needs no separate folder literal — the folder title
@@ -128,6 +132,31 @@ class Stack:
         """The Grafana folder this stack's dashboards live under (#59), e.g.
         "Native HA (RHEL)" — derived from mechanism+os (see dashboard_folder_for)."""
         return dashboard_folder_for(self.mechanism, self.os)
+
+
+def rhel_stack_unsupported_reason(stack: Stack, facts: HostFacts) -> str | None:
+    """Why this stack cannot run on this host, or None when it can (#847).
+
+    The RHEL stacks (``os == "rhel"``: rdqm-rhel, nativeha-rhel) require an
+    x86_64 host. RHEL is not — and is not expected to become — available for
+    Apple Silicon, and emulated cross-arch box builds are disabled by design
+    (#103 D11), so on an aarch64 host only the Ubuntu stacks are supported
+    (Ubuntu-for-ARM + emulated MQ). Every other combination is supported.
+
+    Pure and display-safe — never raises, reads only the stack's declared OS and
+    the host arch — so both the bring-up preflight gate and `mqlab doctor` can
+    consult it. Follows the #350 stack registry's ``os`` field as the authority on
+    which stacks are RHEL-based, rather than re-deriving arch from the box layer.
+    """
+    if stack.os == "rhel" and facts.arch == AARCH64:
+        return (
+            f"the {stack.name!r} stack requires an x86_64 host: the RHEL arms are "
+            f"unsupported on aarch64 (this host). RHEL is not available for Apple "
+            f"Silicon and emulated cross-arch box builds are disabled (#103 D11). "
+            f"On aarch64 only the Ubuntu stacks are supported (Ubuntu-for-ARM + "
+            f"emulated MQ)."
+        )
+    return None
 
 
 def _topology() -> dict[str, Any]:

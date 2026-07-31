@@ -19,10 +19,16 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
+from mqlab.cli import _gate_stack_host_arch as _real_gate  # captured before the autouse stub
+from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.phases import PHASES, build_states
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
+
+# Host-facts fixtures for the #847 RHEL-on-aarch64 preflight gate.
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
 
 # A seeded topology mirroring tests/test_phases.py: nodes + groups + a stacks:
 # block + commons + two lab networks (for the net phase to enumerate).
@@ -706,6 +712,36 @@ def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
 # --------------------------------------------------------------------------- #
 # validation
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# #847: RHEL-stack bring-up on an aarch64 host aborts at a fast preflight, before
+# any box bake or VM boot (no cross-arch emulation — #103 D11). The autouse
+# conftest stub neutralises the gate for every other test; these re-enable the
+# real gate (captured at import) to prove it fires.
+# --------------------------------------------------------------------------- #
+def test_bootstrap_aborts_rhel_stack_on_aarch64(monkeypatch, tmp_path):
+    _seed_infra(monkeypatch, tmp_path)  # INFRA_TOPO carries an rdqm-rhel (os: rhel) stack
+    monkeypatch.setattr(cli, "_gate_stack_host_arch", _real_gate)  # un-neutralise the real gate
+    monkeypatch.setattr(cli, "probe", lambda: ARM)
+    # Must abort before any phase runs: build_deps/_probe_all would blow up if reached.
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: pytest.fail("must abort before phases"))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "rdqm-rhel"])
+    assert result.exit_code == 2
+    assert "rdqm-rhel" in result.output
+    assert "x86_64" in result.output  # actionable: the arch the RHEL arms require
+
+
+def test_gate_allows_rhel_stack_on_x86(monkeypatch, tmp_path):
+    _seed_infra(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "probe", lambda: X86)
+    _real_gate(cli._lookup_stack_or_exit("rdqm-rhel"))  # no raise on a native x86 host
+
+
+def test_gate_allows_ubuntu_stack_on_aarch64(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)  # this seed's stack is pcmk-ubuntu (os: ubuntu)
+    monkeypatch.setattr(cli, "probe", lambda: ARM)
+    _real_gate(cli._lookup_stack_or_exit("pcmk-ubuntu"))  # Ubuntu runs on aarch64 — no raise
+
+
 def test_bootstrap_unknown_stack_exits_2(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     result = CliRunner().invoke(cli.app, ["bootstrap", "nope"])
