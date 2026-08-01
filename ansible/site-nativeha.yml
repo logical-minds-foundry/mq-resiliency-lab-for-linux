@@ -120,8 +120,10 @@
       delegate_to: "{{ active_host }}"
       # The raft layer assigns ROLE(Active) a beat before the QM's admin interface
       # is up (STATUS reaches Running slightly later); runmqsc in that window fails
-      # AMQ8146E (rc 20). TCG's slowness masks it here, but the same race exists —
-      # retry until the active QM accepts the MQSC, mirroring #421's wait. (#435)
+      # AMQ8146E (rc 20). Slow-host timing (macOS-era TCG) can mask it, but the race
+      # exists regardless — on an x86 host this RHEL arm runs native KVM (per
+      # platforms.py) and may expose it — so retry until the active QM accepts the
+      # MQSC, mirroring #421's wait. (#435)
       until: mqsc.rc in [0, 10]
       retries: 30
       delay: 5

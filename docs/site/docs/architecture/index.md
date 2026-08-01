@@ -35,9 +35,12 @@ it disposable and reproducible.
 
 ## Layer 2 — Inside the lab VM
 
-Inside the lab VM the lab is itself virtualized — nested virtualization
-(Apple silicon → macOS Virtualization → Lima → KVM/TCG) runs the guest
-fleet. Those guests sit on a fabric of isolated libvirt networks: per-site
+Inside the lab VM the lab is itself virtualized — nested virtualization runs
+the guest fleet under native KVM wherever the guest arch matches the host: on
+the x86 Linux host every guest (including the x86_64 RHEL arms) is native KVM,
+and on an Apple-silicon Mac (Apple silicon → macOS Virtualization → Lima) the
+arm64 guests are native while only a foreign-arch guest — the x86_64 RHEL arms —
+is TCG-emulated. Those guests sit on a fabric of isolated libvirt networks: per-site
 data and heartbeat networks, a WAN that links the two sites, the inter-business
 network to the counterparty (`net-ext`), the SAN networks, and a dedicated
 management plane. The networks are designed to be **severable** so failures can

@@ -18,18 +18,21 @@
 #      the QM wherever HA placed it (the old single-shot node-1 poll missed a QM on a2/a3).
 #   2. Pre-cut DR-in-sync gate. We refuse to promote until the live site reports DR status
 #      Normal (bounded by DR_SYNC_TIMEOUT), so an incomplete recovery copy is never activated.
-#   3. Post-promote HA-settle wait. After rdqmdr -p the QM HA-bounces under Pacemaker; on the
-#      TCG emulation this can trip RDQM's (non-tunable) start/monitor timing and set
+#   3. Post-promote HA-settle wait. After rdqmdr -p the QM HA-bounces under Pacemaker; on a
+#      slow host this can trip RDQM's (non-tunable) start/monitor timing and set
 #      "HA blocked location: All nodes" — a timing artifact, not a data fault. We wait
 #      (bounded by HA_SETTLE_TIMEOUT) and surface it loudly with the proven recovery, rather
-#      than emit a confusing mid-bounce status. See finding 3 in the report for why this is a
-#      TCG-only flake (the cutover capability itself is proven at ~69 s on real timing).
+#      than emit a confusing mid-bounce status. #294 finding 3 first saw this under macOS-era
+#      TCG emulation, but on an x86 host these RHEL arms run native KVM/host-passthrough (per
+#      src/mqlab/platforms.py _provider), so it is a slow-host timing flake (emulation-or-not),
+#      not an emulation-specific one — and may be a macOS-arm64-era artifact to re-verify under
+#      cloud KVM (#870). The cutover capability itself is proven at ~69 s on real timing.
 #
 # Run via `uv run` / the mqlab venv (needs ansible on PATH).
 set -euo pipefail
 DIR="${1:-a2b}"
 QM="${2:-RDQMAPP}"
-# Bounded gates (seconds), overridable for a slower/faster emulation host.
+# Bounded gates (seconds), overridable for a slower/faster host (emulated or native KVM).
 DR_SYNC_TIMEOUT="${DR_SYNC_TIMEOUT:-300}"   # max wait for pre-cut DR status Normal
 HA_SETTLE_TIMEOUT="${HA_SETTLE_TIMEOUT:-180}"  # max wait for the post-promote HA bounce
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -109,8 +112,9 @@ confirm_dr_in_sync() {  # $1 = live-site HA primary node
 }
 
 # Finding 3 — post-promote HA-settle wait. After rdqmdr -p the QM HA-bounces under Pacemaker.
-# Poll the new primary until the QM is Running with no blocked HA location. Under TCG emulation
-# slowness the bounce can trip RDQM's start/monitor timing and set "HA blocked location: All
+# Poll the new primary until the QM is Running with no blocked HA location. Under slow-host
+# timing (macOS-era TCG emulation, or any slow host — on x86 these arms run native KVM) the
+# bounce can trip RDQM's start/monitor timing and set "HA blocked location: All
 # nodes" (a timing artifact — the QM logs only warnings + a controlled end, no data fault). We
 # do NOT auto-remediate with an unproven command: the proven recovery (see the #288 report) is
 # a rdqmdr re-flip on the CORRECT HA primary, which the finding-1 discovery above now makes
@@ -131,7 +135,7 @@ wait_ha_settle() {  # $1 = new (TO-site) HA primary node
       echo "WARNING: $QM did not reach a clean HA-settled state on $node after ${HA_SETTLE_TIMEOUT}s" >&2
       echo "WARNING:   (Queue manager status: ${qmstat:-unknown}, HA blocked location: ${blocked:-unknown})." >&2
       if [ "$blocked" = "All nodes" ]; then
-        echo "WARNING: this is the known TCG-only start/monitor timing flake (#294 finding 3): the cutover" >&2
+        echo "WARNING: this is the known slow-host start/monitor timing flake (#294 finding 3): the cutover" >&2
         echo "WARNING:   capability is proven (~69 s in the Phase-C drill), the QM logs only warnings + a" >&2
         echo "WARNING:   controlled end, and the node has free RAM. Recover with a rdqmdr re-flip on the" >&2
         echo "WARNING:   CURRENT HA primary of each site (rdqmstatus 'HA current location'), per the #288 report." >&2

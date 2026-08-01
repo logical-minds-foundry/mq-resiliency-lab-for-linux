@@ -123,8 +123,10 @@
       delegate_to: "{{ active_host }}"
       # The raft layer assigns ROLE(Active) a beat before the QM's admin interface
       # is up (STATUS reaches Running slightly later); runmqsc in that window fails
-      # AMQ8146E (rc 20). The fast native-arm64 arm exposes it where slow TCG masks
-      # it — retry until the active QM accepts the MQSC, mirroring #421's wait. (#435)
+      # AMQ8146E (rc 20). A fast node exposes the race where a slow host masks it: the
+      # native-arm64 Ubuntu arm hit it while the macOS-era TCG-emulated RHEL peer did
+      # not — but on an x86 host both arms run native KVM and can expose it — retry
+      # until the active QM accepts the MQSC, mirroring #421's wait. (#435)
       until: mqsc.rc in [0, 10]
       retries: 30
       delay: 5

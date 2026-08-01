@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # lab/scripts/lab-snapshot.sh - capture the BUILT + PROVISIONED state of running lab
 # domains as host-durable, standalone qcow2 goldens, so the lab can be restored
-# without re-running the ~2h RHEL-TCG build + provision (#218).
+# without re-running the lengthy RHEL build + provision (#218). (The ~2h figure was the
+# macOS-era TCG-emulated build; on an x86 host these RHEL arms build under native KVM and
+# are faster — the build cost is host-dependent, not fixed at TCG timings.)
 #
 # Goldens are written under the MAIN worktree's host-mounted build/state/snapshots/ (durable
 # across an ephemeral Vergil-VM rebuild, unlike /var/lib/libvirt/images). The domains
