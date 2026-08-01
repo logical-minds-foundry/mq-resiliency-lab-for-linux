@@ -166,7 +166,9 @@ nodes:
     org: service  # the mock service.com nameserver
     nics: { net-mgmt: 10.50.0.9, net-ext: 10.60.0.9 }
 
-  # --- Phase C: RDQM arm, six RHEL x86_64 TCG nodes (spec 10-C) ---
+  # --- Phase C: RDQM arm, six RHEL x86_64 nodes (spec 10-C) — native KVM/host-passthrough
+  # on an x86 host; TCG (emulated) only when the host is arm64/macOS (resolved per host by
+  # src/mqlab/platforms.py _provider). ---
   rdqm-a1:
     platform: mq-rdqm-rhel9
     cpus: 2
@@ -252,11 +254,12 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
-  # --- Native HA arm (#246, #267): six RHEL x86_64 TCG nodes, shared-nothing
+  # --- Native HA arm (#246, #267): six RHEL x86_64 nodes, shared-nothing
   # (raft log replication — NO extra_disk). Site A = nha_rhel_a (HA, Phase 1);
   # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); the Ubuntu
   # peer arm (nha-ubuntu-*, #417) is below. HA replication on net-hb-a; CRR over net-wan.
-  # Host octets .9x — clear of every other arm's block (both RHEL/TCG).
+  # These arms run native KVM/host-passthrough on an x86 host (TCG only on arm64/macOS).
+  # Host octets .9x — clear of every other arm's block (both RHEL arms).
   nha-rhel-a1:
     platform: mq-nativeha-rhel9
     cpus: 2
