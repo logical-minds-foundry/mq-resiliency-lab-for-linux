@@ -1664,6 +1664,82 @@ def pki_list() -> None:
         typer.echo(f"{e['cn']:<14} org={e['org']:<11} ou={e.get('ou', '-'):<16} {e['kind']}")
 
 
+# --- dr: cross-site DR cutover / failback (the DR *operation*, #867) --------------
+# This is the operator verb that DRIVES a cross-site cutover, distinct from the
+# mqlab.dr package (the DR *measurement* framework: ledger/classifier/report). It
+# wraps lab/scripts/rdqm-dr-cutover.sh — which needs `ansible` on PATH — by shelling
+# it from inside the mqlab venv (SubprocessRunner inherits this process's env, so the
+# venv PATH carries ansible), removing the manual `uv run` the bare script required
+# (#294's deferred item). cutover = a2b (site A -> B); failback = b2a (B -> A).
+dr_app = typer.Typer(
+    help="disaster-recovery operation: cross-site cutover / failback (#867)",
+    no_args_is_help=True,
+)
+app.add_typer(dr_app, name="dr")
+
+_RDQM_DR_CUTOVER_SCRIPT = "rdqm-dr-cutover.sh"
+_Rpo0DrillOpt = Annotated[
+    bool,
+    typer.Option(
+        "--rpo0-drill",
+        help=(
+            "seed a persistent message before the cut and assert it survives at the peer "
+            "(RPO-0, no message loss); exercises only against a live rdqm DR arm"
+        ),
+    ),
+]
+
+
+def _dr_run(stack_name: str, direction: str, verb: str, *, rpo0_drill: bool) -> None:
+    # Resolve + gate the stack, render the inventory the script's ansible calls read, then
+    # shell rdqm-dr-cutover.sh with the direction + the stack's app QM. Only the rdqm
+    # mechanism has this script (the pacemaker arm's cutover is a different flow); refuse
+    # anything else with a clean exit-2 message rather than run the wrong script.
+    stack = _stack_qm_or_exit(stack_name)
+    if stack.mechanism != "rdqm":
+        typer.echo(
+            f"dr {verb}: only the rdqm mechanism has an rdqm-dr-cutover flow "
+            f"(stack {stack_name!r} is {stack.mechanism!r})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    argv = ["bash", str(lab_script(_RDQM_DR_CUTOVER_SCRIPT)), direction, stack.qm.qm_app]
+    env = {"RPO0_DRILL": "1"} if rpo0_drill else None
+    deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        # The script drives ansible against build/work/inventory.ini (via ansible.cfg) —
+        # render it fresh so the site nodes resolve, mirroring the qm/bootstrap paths.
+        _render_inventory(deps)
+        step = CommandStep(
+            f"{stack.name} dr {verb}",
+            Command(argv, cwd=repo_root() / "ansible", env=env),  # noqa: S607
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@dr_app.command("cutover")
+def dr_cutover(stack: str, rpo0_drill: _Rpo0DrillOpt = False) -> None:
+    """Cut a stack's live QM over to its DR peer site (a2b: site A -> B)."""
+    _dr_run(stack, "a2b", "cutover", rpo0_drill=rpo0_drill)
+
+
+@dr_app.command("failback")
+def dr_failback(stack: str, rpo0_drill: _Rpo0DrillOpt = False) -> None:
+    """Fail a stack's QM back to its original site (b2a: site B -> A)."""
+    _dr_run(stack, "b2a", "failback", rpo0_drill=rpo0_drill)
+
+
 @app.command("parity")
 def parity_matrix() -> None:
     """Print the cross-arm capability matrix (which verbs each arm supports)."""
