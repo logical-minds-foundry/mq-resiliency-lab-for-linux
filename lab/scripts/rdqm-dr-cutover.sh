@@ -28,13 +28,24 @@
 #      not an emulation-specific one — and may be a macOS-arm64-era artifact to re-verify under
 #      cloud KVM (#870). The cutover capability itself is proven at ~69 s on real timing.
 #
-# Run via `uv run` / the mqlab venv (needs ansible on PATH).
+# Run via `uv run` / the mqlab venv (needs ansible on PATH) — or, preferred, via
+# `mqlab dr cutover|failback <stack>` (#867), which shells this script from inside that
+# venv so ansible is on PATH without a manual `uv run`.
 set -euo pipefail
 DIR="${1:-a2b}"
 QM="${2:-RDQMAPP}"
 # Bounded gates (seconds), overridable for a slower/faster host (emulated or native KVM).
 DR_SYNC_TIMEOUT="${DR_SYNC_TIMEOUT:-300}"   # max wait for pre-cut DR status Normal
 HA_SETTLE_TIMEOUT="${HA_SETTLE_TIMEOUT:-180}"  # max wait for the post-promote HA bounce
+# RPO-0 message-survival drill (#867, from #294's deferred item). Opt-in via RPO0_DRILL=1
+# (the `mqlab dr … --rpo0-drill` flag sets it). Seed a uniquely-tagged PERSISTENT message on
+# the live site BEFORE the cut; the pre-cut DR-in-sync gate (finding 2) then guarantees it is
+# replicated to the recovery site; after the cut, retrieve it at the new live site and assert
+# the tag survived — RPO 0 (no message loss). The message rides RDQM DR block replication like
+# the QM's own data, so no re-apply is needed; a miss fails the run loud under `set -e`.
+RPO0_DRILL="${RPO0_DRILL:-0}"
+RPO0_DRILL_QUEUE="${RPO0_DRILL_QUEUE:-DR.RPO0.DRILL}"
+RPO0_TOKEN=""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$(dirname "$0")/../../ansible"
 run() { ansible "$1" -b -m shell -a "$2"; }
@@ -148,6 +159,41 @@ wait_ha_settle() {  # $1 = new (TO-site) HA primary node
   done
 }
 
+# --- RPO-0 message-survival drill (#867) -----------------------------------------------------
+# Run a shell command AS THE mqm user on a node — MQ control commands (runmqsc) and the shipped
+# samples (amqsput/amqsget) need MQ authority. --become-user layers onto the site run()'s -b.
+mqm_run() {  # $1=node ; $2=shell command
+  ansible "$1" -b --become-user mqm -m shell -a "$2"
+}
+
+# Seed one uniquely-tagged PERSISTENT message on the live site's HA primary, BEFORE the cut.
+# Defines the drill queue idempotently with DEFPSIST(YES) so amqsput's message is persistent
+# (survives the QM restart the cut entails), then puts the token. The subsequent DR-in-sync
+# gate (finding 2) waits for "DR status: Normal", which guarantees this message reached the
+# recovery copy before we promote it.
+rpo0_seed() {  # $1 = live (FROM) HA primary node ; sets RPO0_TOKEN
+  RPO0_TOKEN="RPO0-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM"
+  echo "=== RPO-0 drill: seeding persistent message '$RPO0_TOKEN' into $RPO0_DRILL_QUEUE on $1 ==="
+  mqm_run "$1" "echo 'DEFINE QLOCAL($RPO0_DRILL_QUEUE) DEFPSIST(YES) REPLACE' | /opt/mqm/bin/runmqsc $QM"
+  mqm_run "$1" "printf '%s\n' '$RPO0_TOKEN' | /opt/mqm/samp/bin/amqsput $RPO0_DRILL_QUEUE $QM"
+}
+
+# After the cut, retrieve from the drill queue at the NEW live site and assert the seeded token
+# survived — RPO 0. amqsget destructively drains the queue and prints each message body; a hit
+# proves no loss, a miss fails loud (RPO-0 violated) and — under set -e — aborts the run.
+rpo0_verify() {  # $1 = new (TO) HA primary node
+  local out
+  echo "=== RPO-0 drill: retrieving from $RPO0_DRILL_QUEUE on $1 (expect '$RPO0_TOKEN') ==="
+  out="$(mqm_run "$1" "/opt/mqm/samp/bin/amqsget $RPO0_DRILL_QUEUE $QM")"
+  echo "$out"
+  if grep -qF "$RPO0_TOKEN" <<<"$out"; then
+    echo "=== RPO-0 VERIFIED: the seeded message survived the $DIR cutover — no message loss ==="
+  else
+    echo "ERROR: RPO-0 VIOLATED — seeded message '$RPO0_TOKEN' was not retrievable at $1 after the cut." >&2
+    return 1
+  fi
+}
+
 if [ "$DIR" = a2b ]; then
   FROM_NODES=(rdqm-a1 rdqm-a2 rdqm-a3); TO_NODES=(rdqm-b1 rdqm-b2 rdqm-b3); TO_VIP="$(rdqm_vip vip_b)"
 elif [ "$DIR" = b2a ]; then
@@ -162,6 +208,11 @@ echo "=== 0. Discover the current HA primary at each site (finding 1) ==="
 FROM_PRIMARY="$(ha_primary "${FROM_NODES[@]}")"
 TO_PRIMARY="$(ha_primary "${TO_NODES[@]}")"
 echo "    live (FROM) HA primary: $FROM_PRIMARY ; recovery (TO) HA primary: $TO_PRIMARY"
+
+if [ "$RPO0_DRILL" = 1 ]; then
+  echo "=== RPO-0 drill enabled (#867): seed a persistent message now, assert its survival after the cut ==="
+  rpo0_seed "$FROM_PRIMARY"
+fi
 
 echo "=== 1. Confirm DR is in-sync before cutting (finding 2) ==="
 confirm_dr_in_sync "$FROM_PRIMARY"
@@ -184,4 +235,9 @@ run "$TO_PRIMARY" "/opt/mqm/bin/rdqmint -m $QM -a -f $TO_VIP -l $IFACE || true"
 
 echo "=== 6. Verify ==="
 run "$TO_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM"
+
+if [ "$RPO0_DRILL" = 1 ]; then
+  echo "=== 7. RPO-0 assertion: retrieve the seeded message at the new live site (finding: #294 drill) ==="
+  rpo0_verify "$TO_PRIMARY"
+fi
 echo "=== cutover $DIR complete: $QM now live at $TO_PRIMARY via $TO_VIP ==="

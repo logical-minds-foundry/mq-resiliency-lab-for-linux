@@ -159,3 +159,37 @@ def test_rdqm_field_reads_dr_status() -> None:
 def test_rdqm_field_reads_blocked_location_and_qm_status() -> None:
     assert _run_field("HA blocked location", SAMPLE_PRIMARY) == "None"
     assert _run_field("Queue manager status", SAMPLE_PRIMARY) == "Running"
+
+
+# --- #867: RPO-0 message-survival drill (opt-in, seeds before the cut, asserts after) --------
+
+
+def test_rpo0_drill_is_opt_in() -> None:
+    text = SCRIPT.read_text()
+    # The drill is gated on RPO0_DRILL (default 0) so a plain cutover never touches app data.
+    assert 'RPO0_DRILL="${RPO0_DRILL:-0}"' in text, "RPO-0 drill must default off"
+    assert 'if [ "$RPO0_DRILL" = 1 ]; then' in text, "drill steps must be guarded"
+
+
+def test_rpo0_seeds_persistent_message_before_the_cut() -> None:
+    text = SCRIPT.read_text()
+    assert "rpo0_seed" in text, "must define an RPO-0 seed step"
+    # The seeded message must be PERSISTENT so it survives the QM restart the cut entails.
+    assert "DEFPSIST(YES)" in text, "the drill queue must be persistent"
+    assert "amqsput" in text, "must put the seed message with the MQ sample"
+    # Seed must run BEFORE the demote so the pre-cut DR-in-sync gate replicates it.
+    seed = text.index('rpo0_seed "$FROM_PRIMARY"')
+    demote = text.index('run "$FROM_PRIMARY" "/opt/mqm/bin/rdqmdr -m $QM -s"')
+    assert seed < demote, "the seed must precede the cut"
+
+
+def test_rpo0_verifies_survival_after_the_cut_and_fails_loud() -> None:
+    text = SCRIPT.read_text()
+    assert "rpo0_verify" in text, "must define an RPO-0 verify step"
+    assert "amqsget" in text, "must retrieve the seed message at the peer"
+    # A miss must fail loud (return 1 under set -e), never a silent pass.
+    assert "RPO-0 VIOLATED" in text and "return 1" in text
+    # Verify must run AFTER the promote (retrieve at the NEW live site).
+    verify = text.index('rpo0_verify "$TO_PRIMARY"')
+    promote = text.index('run "$TO_PRIMARY" "/opt/mqm/bin/rdqmdr -m $QM -p"')
+    assert promote < verify, "the survival assertion must follow the cut"
