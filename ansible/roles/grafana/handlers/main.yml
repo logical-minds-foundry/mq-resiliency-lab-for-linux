@@ -1,6 +1,20 @@
 ---
+# Bounded retry on the transient D-Bus reset seen when a unit is restarted on a
+# freshly-booted, still-settling observability host (#871): `systemctl restart`
+# intermittently loses its D-Bus channel ("D-Bus connection terminated /
+# Connection reset by peer"). Retry ONLY that transient signature; any other
+# failure (a genuine unit-start error) satisfies `until` on the first attempt and
+# fails loud with its real message. Mirrors the repo's register/until retry idiom
+# (#657/#768); the systemd module is kept (daemon_reload + idempotency intact).
 - name: restart grafana
   ansible.builtin.systemd:
     name: grafana-server
     state: restarted
     daemon_reload: true
+  register: grafana_restart
+  until: >-
+    grafana_restart is succeeded or
+    grafana_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated')
+  retries: 5
+  delay: 5

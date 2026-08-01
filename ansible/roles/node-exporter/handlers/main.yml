@@ -1,9 +1,23 @@
 ---
+# Bounded retry on the transient D-Bus reset seen when a unit is restarted on a
+# freshly-booted, still-settling observability host (#871): `systemctl restart`
+# intermittently loses its D-Bus channel ("D-Bus connection terminated /
+# Connection reset by peer"). Retry ONLY that transient signature; any other
+# failure (a genuine unit-start error) satisfies `until` on the first attempt and
+# fails loud with its real message. Mirrors the repo's register/until retry idiom
+# (#657/#768); the systemd module is kept (daemon_reload + idempotency intact).
 - name: restart node_exporter
   ansible.builtin.systemd:
     name: node_exporter
     state: restarted
     daemon_reload: true
+  register: node_exporter_restart
+  until: >-
+    node_exporter_restart is succeeded or
+    node_exporter_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated')
+  retries: 5
+  delay: 5
 
 # Apply the drop-zone tmpfiles rule immediately (not just on next boot) so the
 # 02775 mode takes effect this run (#458).

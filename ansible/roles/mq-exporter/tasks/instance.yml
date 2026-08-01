@@ -28,6 +28,12 @@
   become: true
   register: mq_exporter_unit
 
+# Bounded retry on the transient D-Bus reset seen when a unit is (re)started on a
+# freshly-booted, still-settling observability host (#871): the mq-metric-samples
+# exporter runs on mon-probe, the same host whose D-Bus channel intermittently
+# drops mid-restart ("D-Bus connection terminated / Connection reset by peer").
+# Retry ONLY that transient signature; any other failure satisfies `until` on the
+# first attempt and fails loud. Mirrors the repo's register/until idiom (#657/#768).
 - name: enable + (re)start the exporter
   ansible.builtin.systemd:
     name: "mq-exporter-{{ mq_exporter_instance }}"
@@ -35,3 +41,10 @@
     state: "{{ 'restarted' if mq_exporter_unit is changed else 'started' }}"
     daemon_reload: true
   become: true
+  register: mq_exporter_restart
+  until: >-
+    mq_exporter_restart is succeeded or
+    mq_exporter_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated')
+  retries: 5
+  delay: 5
