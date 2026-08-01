@@ -313,24 +313,19 @@ def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
 # --------------------------------------------------------------------------- #
 # provision phase
 # --------------------------------------------------------------------------- #
-def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
-    """Post-boot NIC-assurance guard for the RHEL9 nodes in this stack (#860).
+def _rhel_nat_nic_steps(stack: Stack, script: str, label: str) -> list[CommandStep]:
+    """Emit an (upload, sudo-run) CommandStep pair for lab/scripts/<script> per RHEL
+    node in this stack that declares NICs, run over the Vagrant NAT channel.
 
-    vagrant-libvirt's RedHat configure_networks writes an ifcfg for every lab NIC,
-    but NetworkManager on RHEL9 non-deterministically leaves some of them unmanaged /
-    DOWN with no IP after boot (triage .github#102) — cascading into unreachable
-    nodes, "provision dns" exit 4, and Native HA no-quorum. #690 forces
-    NM_CONTROLLED=yes so the connection profile always EXISTS; this guard runs first,
-    before DNS and the stack playbook, and makes it ACTIVE: lab/scripts/nic-assure.sh
-    reloads NetworkManager, claims + connects every ethernet device, then asserts
-    every declared NIC IP is live (fail loud if not).
-
-    It runs over the Vagrant NAT channel (enp5s0, independent of every lab NIC), so
-    it can repair even a down net-mgmt NIC that the Ansible-over-net-mgmt provision
-    plays could never reach. Ubuntu (netplan) arms are not subject to the
-    ifup/ifdown race and are skipped. The script is uploaded per node (no synced
-    folder in this lab) and then invoked with sudo, passing that node's declared
-    topology NIC IPs as the expected set.
+    Shared bring-up plumbing for the two RHEL9 NIC-race passes: the NM-native config
+    step (#866, nic-config.sh) and the assurance guard (#860, nic-assure.sh). Each is
+    uploaded per node (no synced folder in this lab) to the ssh user's home — writable
+    by the vagrant-upload transport, readable by the sudo run — and invoked with sudo,
+    passing that node's declared topology NIC IPs as arguments. Both run over the NAT
+    channel (independent of every lab NIC), so they can act on even a down net-mgmt NIC
+    the Ansible-over-net-mgmt provision plays could never reach. Ubuntu (netplan) arms
+    are not subject to the ifup/ifdown race and are skipped, as are RHEL nodes with no
+    declared NICs.
     """
     nodes = _topology().get("nodes") or {}
     lab = repo_root() / "lab"
@@ -342,21 +337,16 @@ def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
         ips = [str(ip) for ip in (spec.get("nics") or {}).values() if ip]
         if not ips:
             continue
-        # Upload to the ssh user's home (writable by the vagrant-upload transport,
-        # readable by the sudo run) rather than a world-writable /tmp.
-        dest = "/home/vagrant/nic-assure.sh"
+        dest = f"/home/vagrant/{script}"
         steps.append(
             CommandStep(
-                f"nic-assure upload {name}",
-                Command(
-                    ["vagrant", "upload", "scripts/nic-assure.sh", dest, name],
-                    cwd=lab,
-                ),
+                f"{label} upload {name}",
+                Command(["vagrant", "upload", f"scripts/{script}", dest, name], cwd=lab),
             )
         )
         steps.append(
             CommandStep(
-                f"nic-assure {name}",
+                f"{label} {name}",
                 Command(
                     ["vagrant", "ssh", name, "-c", f"sudo bash {dest} " + " ".join(ips)],
                     cwd=lab,
@@ -366,14 +356,66 @@ def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
     return steps
 
 
-def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
-    """Assure NICs, bring up DNS, then run the stack's provision playbook with the
-    #351 QM extra-vars.
+def _nic_config_steps(stack: Stack) -> list[CommandStep]:
+    """NM-native, authoritative lab-NIC configuration for the RHEL9 nodes (#866).
 
-    The NIC-assurance guard goes first (#860): before any Ansible-over-net-mgmt play
-    runs, repair any RHEL9 NIC the vagrant-libvirt/NetworkManager boot race left DOWN
-    (see `_nic_assure_steps`) — otherwise a node whose net-mgmt NIC is down is
-    unreachable and "provision dns" exits 4. DNS goes next (#478): render the zones
+    The root-cause companion to the #860 assurance guard. The RHEL9 race (triage
+    .github#102) is that vagrant-libvirt's RedHat configure_networks writes an ifcfg
+    per lab NIC but applies it with /sbin/ifup, which does not exist on NM-only RHEL9
+    — a silent no-op — so whether NetworkManager reads + auto-activates the profile at
+    boot is a load-sensitive race. #690 makes the profile always EXIST; this step,
+    running first in the provision phase, makes NetworkManager AUTHORITATIVELY OWN it:
+    lab/scripts/nic-config.sh reloads NM, then for each declared NIC hardens its
+    profile (autoconnect on, high priority, infinite retries, method manual), claims
+    the device managed, and brings it up — so NM itself keeps every NIC up, the first
+    time and self-healing across the long provision, rather than drifting DOWN until
+    the guard nudges it. It reuses the device→IP mapping Vagrant already got right
+    (matches each profile by its declared IP), so no enp7s0… mapping is invented here.
+
+    It does NOT assert liveness — that stays `_nic_assure_steps` (#860), which runs
+    immediately after as the fail-loud backstop and is intended to become a rare
+    no-op now that the config is deterministic at the source.
+    """
+    return _rhel_nat_nic_steps(stack, "nic-config.sh", "nic-config")
+
+
+def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
+    """Post-boot NIC-assurance guard for the RHEL9 nodes in this stack (#860).
+
+    vagrant-libvirt's RedHat configure_networks writes an ifcfg for every lab NIC,
+    but NetworkManager on RHEL9 non-deterministically leaves some of them unmanaged /
+    DOWN with no IP after boot (triage .github#102) — cascading into unreachable
+    nodes, "provision dns" exit 4, and Native HA no-quorum. #690 forces
+    NM_CONTROLLED=yes so the connection profile always EXISTS; #866's nic-config step
+    (run just before this one) makes NetworkManager authoritatively own + activate it.
+    This guard is the deterministic backstop that then ASSERTS every declared NIC IP
+    is live: lab/scripts/nic-assure.sh reloads NetworkManager, claims + connects every
+    ethernet device, then fails loud if any expected IP is still missing. It is
+    retained as defense-in-depth on this load-sensitive area even now that #866
+    root-causes the config — belt and suspenders — and should be a rare no-op.
+
+    It runs over the Vagrant NAT channel (enp5s0, independent of every lab NIC), so
+    it can repair even a down net-mgmt NIC that the Ansible-over-net-mgmt provision
+    plays could never reach. Ubuntu (netplan) arms are not subject to the
+    ifup/ifdown race and are skipped. The script is uploaded per node (no synced
+    folder in this lab) and then invoked with sudo, passing that node's declared
+    topology NIC IPs as the expected set.
+    """
+    return _rhel_nat_nic_steps(stack, "nic-assure.sh", "nic-assure")
+
+
+def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+    """Configure + assure NICs, bring up DNS, then run the stack's provision playbook
+    with the #351 QM extra-vars.
+
+    The RHEL9 NIC bring-up goes first, before any Ansible-over-net-mgmt play runs:
+    the NM-native config step (#866, `_nic_config_steps`) makes NetworkManager
+    authoritatively own + activate every declared lab NIC at the source, then the
+    assurance guard (#860, `_nic_assure_steps`) asserts each is live and fails loud
+    otherwise — otherwise a node whose net-mgmt NIC is down is unreachable and
+    "provision dns" exits 4. The guard stays as defense-in-depth on this load-
+    sensitive race even though #866 root-causes the config. DNS goes next (#478):
+    render the zones
     from topology, serve them on the infra nodes (bind-dns), and point every guest's
     resolver at them (host-resolver), so the app-requester's runtime reverse lookups
     (#454) resolve from the outset rather than paying the ~10s getnameinfo tax until
@@ -391,6 +433,7 @@ def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noq
         cwd=ansible,
     )
     return [
+        *_nic_config_steps(stack),
         *_nic_assure_steps(stack),
         CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
         CommandStep(
