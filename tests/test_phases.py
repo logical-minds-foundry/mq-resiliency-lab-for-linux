@@ -23,6 +23,7 @@ from mqlab.phases import (
     _boot_batch,
     _guest_box,
     _nic_assure_steps,
+    _nic_config_steps,
     build_states,
     first_unsatisfied,
 )
@@ -553,19 +554,56 @@ def test_nic_assure_steps_guards_rhel_nodes_only(monkeypatch, tmp_path):
     assert all(s.command.cwd == tmp_path / "lab" for s in steps)
 
 
-def test_provision_prepends_nic_assure_before_dns(monkeypatch, tmp_path):
-    """#860: on a RHEL stack the NIC-assurance guard runs before DNS/provision, so a
-    node whose net-mgmt NIC is down is repaired before any Ansible-over-net-mgmt play."""
+def test_nic_config_steps_configure_rhel_nodes_only(monkeypatch, tmp_path):
+    """#866: the NM-native config step emits an upload + a sudo nic-config.sh run for
+    each RHEL node that declares NICs, passing that node's topology IPs — and, like the
+    guard, skips Ubuntu nodes (netplan, unaffected) and RHEL nodes with no NICs."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_rhel(tmp_path)
+    stack = lab_stacks()["rdqm-rhel"]
+    steps = _nic_config_steps(stack)
+    # Only rdqm-a1 is configured (rdqm-a2 has no NICs; ubu-1 is Ubuntu) → exactly 2 steps.
+    dest = "/home/vagrant/nic-config.sh"
+    assert [s.command.argv for s in steps] == [
+        ["vagrant", "upload", "scripts/nic-config.sh", dest, "rdqm-a1"],
+        ["vagrant", "ssh", "rdqm-a1", "-c", f"sudo bash {dest} 10.50.0.31 172.16.1.31"],
+    ]
+    # vagrant commands run from lab/ (the resolved-topology consumer dir).
+    assert all(s.command.cwd == tmp_path / "lab" for s in steps)
+
+
+def test_provision_configures_then_assures_before_dns(monkeypatch, tmp_path):
+    """#866 + #860: on a RHEL stack the NM-native config step runs first, then the
+    assurance guard, then DNS/provision — so every NIC is authoritatively brought up
+    (and asserted) before any Ansible-over-net-mgmt play. The guard stays in place as
+    defense-in-depth after the root-cause config step."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_rhel(tmp_path)
     stack = lab_stacks()["rdqm-rhel"]
     steps = PHASES[2].build_steps(stack, None)
-    assert steps[0].command.argv[:2] == ["vagrant", "upload"]
+    # nic-config (root-cause) precedes nic-assure (backstop): both are (upload, ssh).
+    assert steps[0].command.argv == [
+        "vagrant",
+        "upload",
+        "scripts/nic-config.sh",
+        "/home/vagrant/nic-config.sh",
+        "rdqm-a1",
+    ]
     assert steps[1].command.argv[:2] == ["vagrant", "ssh"]
-    # DNS + provision follow the guard.
-    assert steps[2].command.argv == ["mqlab", "dns", "render"]
-    assert "site-dns.yml" in steps[3].command.argv
-    assert "site-rdqm.yml" in steps[4].command.argv
+    assert "nic-config.sh" in steps[1].command.argv[-1]
+    assert steps[2].command.argv == [
+        "vagrant",
+        "upload",
+        "scripts/nic-assure.sh",
+        "/home/vagrant/nic-assure.sh",
+        "rdqm-a1",
+    ]
+    assert steps[3].command.argv[:2] == ["vagrant", "ssh"]
+    assert "nic-assure.sh" in steps[3].command.argv[-1]
+    # DNS + provision follow the two NIC passes.
+    assert steps[4].command.argv == ["mqlab", "dns", "render"]
+    assert "site-dns.yml" in steps[5].command.argv
+    assert "site-rdqm.yml" in steps[6].command.argv
 
 
 def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
