@@ -10,7 +10,7 @@
 
   <div class="panel">
     <h3>① Nested-virtualization stack</h3>
-    <p class="sub">KVM acceleration on Apple silicon; TCG emulation for the x86_64 RHEL guests.</p>
+    <p class="sub">Native KVM wherever the guest arch matches the host; TCG emulates only a foreign-arch guest. On the x86_64 Linux (cloud) host every guest — including the x86_64 RHEL arms — runs native KVM. The flow below is the Apple-silicon path, where the x86_64 RHEL guests are the one TCG case.</p>
     <div class="flow">
       <div class="node">Apple silicon (M-series)</div>
       <span class="sep">→</span>
@@ -18,7 +18,7 @@
       <span class="sep">→</span>
       <div class="node">Lima</div>
       <span class="sep">→</span>
-      <div class="node">KVM (arm64) / TCG (x86_64)</div>
+      <div class="node">KVM (native-arch guest) / TCG (foreign-arch x86_64 guest)</div>
       <span class="sep">→</span>
       <div class="node">libvirt + Vagrant</div>
     </div>
