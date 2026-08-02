@@ -1,0 +1,34 @@
+---
+# grafana-image-renderer — server-side dashboard/panel PNG/PDF rendering (#877).
+#
+# Deployed as a standalone REMOTE rendering service under systemd, matching the lab's
+# dominant "download a release binary + systemd unit" idiom (loki/prometheus/logcli),
+# and pointed at by Grafana via GF_RENDERING_SERVER_URL (wired in the grafana role).
+#
+# Why the standalone service and NOT the Grafana plugin: the deprecated
+# grafana-image-renderer *plugin* ships an x86_64 build ONLY (no linux-arm64 build in
+# the Grafana plugin catalog), so it cannot serve this lab's DUAL-ARCH obs box, which
+# bakes natively as aarch64 on an Apple-silicon host and x86_64 on an x86 host
+# (docs/development/box-model.md). The standalone binary ships both linux-amd64 and
+# linux-arm64, and its default --browser.sandbox=false already launches the browser
+# with --no-sandbox (required under Ubuntu 24.04's restricted unprivileged userns).
+grafana_image_renderer_version: "5.10.3"
+grafana_image_renderer_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+grafana_image_renderer_pkg: "grafana-image-renderer-linux-{{ grafana_image_renderer_arch }}"
+grafana_image_renderer_base_url: "https://github.com/grafana/grafana-image-renderer/releases/download"
+grafana_image_renderer_url: "{{ grafana_image_renderer_base_url }}/v{{ grafana_image_renderer_version }}/{{ grafana_image_renderer_pkg }}"
+
+# The service listens here; Grafana's GF_RENDERING_SERVER_URL points at :8081/render.
+grafana_image_renderer_addr: ":8081"
+
+# A dedicated non-login service user; its home holds the browser's cache/profile.
+grafana_image_renderer_home: "/var/lib/grafana-renderer"
+
+# The renderer binary ships NO browser — a Chromium-based browser is installed
+# separately and pointed at via --browser.path. Host-resolved: Google Chrome on
+# x86_64 (a self-contained .deb that pulls its own Chromium runtime deps, and a
+# browser Grafana explicitly supports), the distro Chromium on aarch64 (no arm64
+# Chrome/Edge .deb exists).
+grafana_image_renderer_browser_x86: "/usr/bin/google-chrome-stable"
+grafana_image_renderer_browser_arm: "/usr/bin/chromium"
+grafana_image_renderer_browser_path: "{{ grafana_image_renderer_browser_arm if ansible_architecture == 'aarch64' else grafana_image_renderer_browser_x86 }}"

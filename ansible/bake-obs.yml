@@ -19,6 +19,9 @@
     # Skip the per-run TLS ops keystore (pki-distribute) inside the mq-exporter build;
     # the exporter binary + MQ SDK are baked, the keystore is dropped per-run.
     mq_exporter_tls: false
+    # Bake the grafana rendering env drop-in so the obs box can render dashboards to
+    # PNG/PDF server-side (#877); the grafana-image-renderer service is baked below.
+    grafana_rendering: true
   tasks:
     # Fleet agents' binaries (same as every box). node-exporter is all-install;
     # alloy is split → install half only.
@@ -50,6 +53,15 @@
     - name: grafana (install half — package + static datasource/provider + service)
       ansible.builtin.include_role:
         name: grafana
+        tasks_from: install
+
+    # Server-side dashboard rendering (#877): the standalone grafana-image-renderer
+    # service — browser + renderer binary + inert unit. Bakeable; enabled per-run in
+    # the observe phase (site-obs.yml). Grafana points at it via the rendering drop-in
+    # baked by the grafana install half above (grafana_rendering: true).
+    - name: grafana-image-renderer (install half — browser + binary + unit, no start)
+      ansible.builtin.include_role:
+        name: grafana-image-renderer
         tasks_from: install
 
     # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go

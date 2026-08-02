@@ -4,3 +4,12 @@ grafana_admin_password: "{{ lookup('ansible.builtin.env', 'GF_SECURITY_ADMIN_PAS
 # the lab opts in via group_vars/all. When true, Grafana grants anonymous Admin and
 # hides the login form — human convenience only. LAB ONLY.
 grafana_anonymous: false
+# Server-side rendering via grafana-image-renderer (#877). Default off; the obs
+# deployment opts in (bake-obs.yml) so the grafana install half bakes the rendering
+# env drop-in. When on, Grafana talks to the standalone renderer service (provisioned
+# by the grafana-image-renderer role) at grafana_rendering_server_url; the renderer's
+# headless browser loads dashboards back from grafana_rendering_callback_url. Both
+# default to localhost — renderer and Grafana are co-located on the obs box.
+grafana_rendering: false
+grafana_rendering_server_url: "http://localhost:8081/render"
+grafana_rendering_callback_url: "http://localhost:3000/"

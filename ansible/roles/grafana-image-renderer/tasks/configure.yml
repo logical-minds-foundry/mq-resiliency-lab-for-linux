@@ -1,0 +1,12 @@
+---
+# CONFIGURE (#877, #642): the per-run half — enable + start the renderer service.
+# Split out of the bakeable install half so the baked obs box stays inert (no
+# boot-time auto-start in a pre-config state); the observe phase (site-obs.yml)
+# brings it up. Grafana connects to it lazily on the first render request, so no
+# strict ordering against grafana-server is required.
+- name: enable + start grafana-image-renderer
+  ansible.builtin.systemd:
+    name: grafana-image-renderer
+    enabled: true
+    state: started
+    daemon_reload: true

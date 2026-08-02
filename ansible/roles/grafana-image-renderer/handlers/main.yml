@@ -1,0 +1,17 @@
+---
+# Mirror the grafana role's bounded transient-D-Bus-reset retry (#871/#657/#768): a
+# `systemctl restart` on a freshly-booted, still-settling obs host can intermittently
+# lose its D-Bus channel. Retry ONLY that transient signature; any other failure
+# satisfies `until` on the first attempt and fails loud with its real message.
+- name: restart grafana-image-renderer
+  ansible.builtin.systemd:
+    name: grafana-image-renderer
+    state: restarted
+    daemon_reload: true
+  register: gir_restart
+  until: >-
+    gir_restart is succeeded or
+    gir_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5

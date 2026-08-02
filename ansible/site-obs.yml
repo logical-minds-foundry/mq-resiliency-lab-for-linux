@@ -42,6 +42,13 @@
         name: prometheus
         tasks_from: configure
 
+    # Bring the renderer up before grafana (#877) so it is ready when the first render
+    # request arrives; the rendering env drop-in was baked by the grafana install half.
+    - name: grafana-image-renderer configure (per-run enable + start)
+      ansible.builtin.include_role:
+        name: grafana-image-renderer
+        tasks_from: configure
+
     - name: grafana configure (per-run dashboard tree + admin-password secret)
       ansible.builtin.include_role:
         name: grafana
