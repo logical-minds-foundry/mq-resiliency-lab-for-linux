@@ -76,6 +76,8 @@
 # Liberty reads its keyStore/ssl config at startup, so a cert/config change needs
 # a restart to take effect. --no-block keeps provision from waiting on the slow
 # come-up. Only when the rendered XML actually changed.
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882,
+# extending #881): a non-transient failure satisfies `until` on attempt 1 (fail-loud).
 - name: restart mqweb to pick up the TLS cert (non-blocking)
   ansible.builtin.systemd:
     name: mqweb.service
@@ -83,3 +85,10 @@
     no_block: true
   become: true
   when: mqweb_tls | bool and mqwebuser_xml is changed
+  register: mqweb_restart
+  until: >-
+    mqweb_restart is succeeded or
+    mqweb_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5

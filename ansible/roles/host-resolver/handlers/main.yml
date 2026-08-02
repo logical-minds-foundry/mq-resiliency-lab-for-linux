@@ -1,9 +1,18 @@
 ---
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882,
+# extending #881): a non-transient failure satisfies `until` on attempt 1 (fail-loud).
 - name: restart systemd-resolved
   ansible.builtin.systemd:
     name: systemd-resolved
     state: restarted
   become: true
+  register: resolved_restart
+  until: >-
+    resolved_restart is succeeded or
+    resolved_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5
 
 - name: reload networkmanager
   ansible.builtin.systemd:
