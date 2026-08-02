@@ -1,0 +1,11 @@
+---
+# Split along the bake/configure line (#602/#642): install.yml is the image-bakeable
+# half (browser + renderer binary + systemd unit, left inert); configure.yml is the
+# per-run enable+start. main.yml runs both in order so the normal full-role path
+# reaches the same end state; a single-host bake play consumes install.yml directly
+# via `tasks_from: install`.
+- name: install grafana-image-renderer (bakeable)
+  ansible.builtin.import_tasks: install.yml
+
+- name: configure grafana-image-renderer (per-run enable + start)
+  ansible.builtin.import_tasks: configure.yml
