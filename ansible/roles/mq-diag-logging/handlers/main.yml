@@ -1,6 +1,20 @@
 ---
+# Bounded retry on the transient systemd/D-Bus query race seen when a unit is
+# restarted on a freshly-booted, still-settling host during the concurrent
+# multi-node bootstrap (#879): the module samples the unit while systemd is
+# momentarily busy and reports "Service is in unknown state" (empty status).
+# Same transient class as #871's D-Bus reset. Retry ONLY those signatures; any
+# other failure (a genuine restart error) satisfies `until` on the first attempt
+# and fails loud with its real message.
 - name: restart journald
   ansible.builtin.systemd:
     name: systemd-journald
     state: restarted
   become: true
+  register: journald_restart
+  until: >-
+    journald_restart is succeeded or
+    journald_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5

@@ -15,6 +15,6 @@
   until: >-
     prometheus_restart is succeeded or
     prometheus_restart.msg | default('') is not
-    search('Connection reset by peer|D-Bus connection terminated')
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
   retries: 5
   delay: 5
