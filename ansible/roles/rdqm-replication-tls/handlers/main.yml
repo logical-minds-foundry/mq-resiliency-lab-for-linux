@@ -1,6 +1,15 @@
 ---
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882,
+# extending #881): a non-transient failure satisfies `until` on attempt 1 (fail-loud).
 - name: restart tlshd
   ansible.builtin.systemd:
     name: tlshd
     state: restarted
   become: true
+  register: rdqm_repl_tls_restart
+  until: >-
+    rdqm_repl_tls_restart is succeeded or
+    rdqm_repl_tls_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5

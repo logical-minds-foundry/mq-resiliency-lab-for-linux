@@ -1,6 +1,15 @@
 ---
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882,
+# extending #881): a non-transient failure satisfies `until` on attempt 1 (fail-loud).
 - name: restart loki
   ansible.builtin.systemd:
     name: loki
     state: restarted
     daemon_reload: true
+  register: loki_restart
+  until: >-
+    loki_restart is succeeded or
+    loki_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5
