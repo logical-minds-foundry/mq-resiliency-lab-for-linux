@@ -78,7 +78,20 @@
   become: true
   vars: { qm_name: "{{ qm_app }}" }
   tasks:
+    # Bounded retry on the transient systemd/D-Bus query race seen when a unit is
+    # restarted on a freshly-booted, still-settling host during the concurrent
+    # multi-node bootstrap (#879): the module samples the unit while systemd is
+    # momentarily busy and reports "Service is in unknown state" (empty status).
+    # Same transient class as #871's D-Bus reset. Retry ONLY those signatures; any
+    # other failure satisfies `until` on the first attempt and fails loud.
     - name: restart mqmonitor@
       ansible.builtin.systemd:
         name: "mqmonitor@{{ qm_name }}"
         state: restarted
+      register: mqmonitor_restart
+      until: >-
+        mqmonitor_restart is succeeded or
+        mqmonitor_restart.msg | default('') is not
+        search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+      retries: 5
+      delay: 5

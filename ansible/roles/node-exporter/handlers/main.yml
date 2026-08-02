@@ -15,7 +15,7 @@
   until: >-
     node_exporter_restart is succeeded or
     node_exporter_restart.msg | default('') is not
-    search('Connection reset by peer|D-Bus connection terminated')
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
   retries: 5
   delay: 5
 
