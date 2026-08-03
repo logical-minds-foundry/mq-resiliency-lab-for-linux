@@ -376,6 +376,13 @@
       register: authz_mqsc
       changed_when: true
       failed_when: authz_mqsc.rc not in [0, 10]
+      # Guard the same AMQ8146E "queue manager not available" (rc 20) startup window the
+      # our-side MQSC guards (#435): if the RDQM-managed QM's admin interface lags the apply,
+      # retry until it accepts rather than fail the flip. No-op when the QM is already ready;
+      # protective when it is not. Consistency with the nativeha-ubuntu authz apply. (#888)
+      until: authz_mqsc.rc in [0, 10]
+      retries: 30
+      delay: 5
       when: rdqm_is_active
 
     # setmqaut grants (#74): the minimal least-privilege authority surface, one invocation
