@@ -668,6 +668,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#one-command-brings-up-a-stack-mqlab-bootstrap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One command brings up a stack: mqlab bootstrap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-queue-manager-with-mqlab-qm" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1112,6 +1123,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#one-command-brings-up-a-stack-mqlab-bootstrap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One command brings up a stack: mqlab bootstrap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-queue-manager-with-mqlab-qm" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1204,154 +1226,146 @@ developer note.</p>
 <p>The lab is driven by <strong><code>mqlab</code></strong>, an operator orchestrator that does the
 opposite of most tooling: rather than hiding the mechanics, it <strong>shows</strong> them.
 Every command it runs — <code>virsh</code>, Ansible, <code>runmqsc</code> — is printed verbatim as it
-runs, streamed live, and teed to a transcript under <code>build/runs/</code>. You can watch
-a step, understand it, then reproduce it by hand. (Why expose rather than
+runs, streamed live, and teed to a transcript under <code>build/state/runs/</code>. You can
+watch a step, understand it, then reproduce it by hand. (Why expose rather than
 encapsulate? Because the deliverable is transparent evidence for the
 RDQM-vs-Ubuntu comparison — see <a href="../design-and-specs/">design &amp; specs</a>.)</p>
-<p>Bring up the libvirt network fabric and watch it happen:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mqlab<span class="w"> </span>net<span class="w"> </span>create<span class="w"> </span>all<span class="w">   </span><span class="c1"># define + autostart every lab network (virsh net-define)</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mqlab<span class="w"> </span>net<span class="w"> </span>up<span class="w"> </span>all<span class="w">       </span><span class="c1"># activate them (virsh net-start)</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>mqlab<span class="w"> </span>net<span class="w"> </span>status<span class="w">       </span><span class="c1"># which networks are defined / active / autostart</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>mqlab<span class="w"> </span>net<span class="w"> </span>show<span class="w"> </span>all<span class="w">     </span><span class="c1"># per-network config + who is attached (DHCP leases)</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>mqlab<span class="w"> </span>net<span class="w"> </span>down<span class="w"> </span>all<span class="w">     </span><span class="c1"># deactivate (virsh net-destroy)</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>mqlab<span class="w"> </span>net<span class="w"> </span>destroy<span class="w"> </span>all<span class="w">  </span><span class="c1"># remove the definitions (virsh net-undefine)</span>
-</code></pre></div>
-<p>Like <code>vm</code>, <code>net</code> is symmetric on two axes — <strong>create/destroy</strong> (existence) and
-<strong>up/down</strong> (active) — each mapped onto its virsh verb (note virsh confusingly
-names <em>deactivate</em> <code>net-destroy</code>):</p>
+<h3 id="one-command-brings-up-a-stack-mqlab-bootstrap">One command brings up a stack: <code>mqlab bootstrap</code><a class="headerlink" href="#one-command-brings-up-a-stack-mqlab-bootstrap" title="Permanent link">&para;</a></h3>
+<p>A <strong>stack</strong> is one HA/DR arm — a mechanism on an OS. <code>mqlab bootstrap &lt;stack&gt;</code>
+stands the whole thing up in one command, running four idempotent <strong>phases</strong> in
+order:</p>
 <table>
 <thead>
 <tr>
-<th>mqlab</th>
-<th>virsh</th>
-<th>axis</th>
+<th>phase</th>
+<th>what it does</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>net create</code></td>
-<td><code>net-define</code> (+ <code>net-autostart</code>)</td>
-<td>existence</td>
+<td><code>net</code></td>
+<td>define + autostart + start every lab libvirt network</td>
 </tr>
 <tr>
-<td><code>net up</code></td>
-<td><code>net-start</code></td>
-<td>active</td>
+<td><code>vms</code></td>
+<td><code>vagrant up</code> the stack's guests (plus the shared commons VMs)</td>
 </tr>
 <tr>
-<td><code>net down</code></td>
-<td><code>net-destroy</code></td>
-<td>active</td>
+<td><code>provision</code></td>
+<td>configure the cluster/storage and build the queue manager</td>
 </tr>
 <tr>
-<td><code>net destroy</code></td>
-<td><code>net-undefine</code></td>
-<td>existence</td>
+<td><code>observe</code></td>
+<td>render + provision Prometheus/Grafana targets for the stack</td>
 </tr>
 </tbody>
 </table>
-<p>Every verb takes a <strong>selector</strong> (a net name, a regex, or <code>all</code>) and is
-<strong>state-aware and idempotent</strong>: it first runs <code>virsh net-list --all</code>, then acts
-only where needed — <code>net create</code> skips already-defined nets, <code>net up</code> skips
-active ones, <code>net down</code> skips inactive ones, <code>net destroy</code> deactivates an active
-net before removing it. Skipped nets get a one-line advisory note. Re-running any
-verb is safe and converges.</p>
-<p>There is <strong>no bare default</strong>: <code>mqlab net down</code> with no selector is a usage
-error, so a fat-finger cannot wipe the whole fabric — you must say <code>all</code>. Add
-<code>--step</code> to pause after each step and go poke at the live system. (The groomed
-<code>lab/scripts/net-up.sh</code> / <code>net-down.sh</code> remain as a hand-run reference for the
-combined create+up / down+destroy in one shot.) Break something and
-<code>mqlab net destroy all &amp;&amp; mqlab net create all &amp;&amp; mqlab net up all</code> to rebuild,
-because the lab is a disposable, reproducible illusion.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mqlab<span class="w"> </span>doctor<span class="w">                 </span><span class="c1"># pre-flight the host (arch, KVM, required tools)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># net → vms → provision → observe, every step streamed</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>mqlab<span class="w"> </span>status<span class="w">                 </span><span class="c1"># phase completion (✓/✗) per stack</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>mqlab<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">     </span><span class="c1"># just this stack</span>
+</code></pre></div>
+<p>Each phase is gated by a live "satisfied?" probe, so bootstrap is <strong>state-aware
+and resumable</strong>: it starts from the first <em>unsatisfied</em> phase and a re-run picks
+up exactly where a previous one stopped — nothing already done is redone. If a
+step fails, bootstrap halts and prints the resume hint (<code>mqlab bootstrap &lt;stack&gt;
+--from &lt;phase&gt;</code>). Add <code>--step</code> to pause after each step and go poke at the live
+system; <code>--from &lt;phase&gt;</code> / <code>--only &lt;phase&gt;</code> force the phase selection by hand.</p>
 <p>The lab's shape is a single source of truth:
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>
-— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN) and every
-guest's NICs and platform. See the <a href="../architecture/">Architecture</a>
-walkthrough for what each network is for.</p>
-<p>Once the fabric is up, bring up the guest VMs with <strong><code>mqlab vm</code></strong> — the same
-selector paradigm, over <code>topology.yaml</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>status<span class="w">            </span><span class="c1"># ground-truth fleet (via virsh), joined with topology</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">         </span><span class="c1"># render build/inventory.ini from topology — the static map</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>rdqm<span class="w">       </span><span class="c1"># create + provision the RDQM guests — watch Ansible run</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>all<span class="w"> </span>--step<span class="w"> </span><span class="c1"># create every guest, pausing between each to poke around</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>up<span class="w"> </span>pcmk_san_ha<span class="w">    </span><span class="c1"># start an existing setup&#39;s guests (virsh start)</span>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>down<span class="w"> </span>all<span class="w">          </span><span class="c1"># shut them down  ( vm destroy all removes them + disks )</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>rdqm-a1<span class="w">       </span><span class="c1"># drop into a shell on one guest</span>
+— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
+NICs and platform, and the stack registry itself. See the
+<a href="../architecture/">Architecture</a> walkthrough for what each network is for.</p>
+<p>The four stacks bootstrap knows about:</p>
+<table>
+<thead>
+<tr>
+<th>stack</th>
+<th>mechanism</th>
+<th>OS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pcmk-ubuntu</code></td>
+<td>Pacemaker/SAN (shared-LUN HA + cross-site DR)</td>
+<td>Ubuntu</td>
+</tr>
+<tr>
+<td><code>rdqm-rhel</code></td>
+<td>RDQM (DRBD replicated HA/DR)</td>
+<td>RHEL</td>
+</tr>
+<tr>
+<td><code>nativeha-rhel</code></td>
+<td>Native HA (raft-log replication)</td>
+<td>RHEL</td>
+</tr>
+<tr>
+<td><code>nativeha-ubuntu</code></td>
+<td>Native HA (raft-log replication)</td>
+<td>Ubuntu</td>
+</tr>
+</tbody>
+</table>
+<p>Two <code>mqlab vm</code> utilities render or reach the guests directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">     </span><span class="c1"># render build/work/inventory.ini from topology — the static map</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
 </code></pre></div>
-<p>Setups are named with <strong>underscores</strong> (<code>pcmk_san_ha</code>, <code>rdqm_dr</code>, …) so the same
-token is the topology setup, the <code>mqlab</code> selector, <strong>and</strong> the Ansible inventory
-group. <code>mqlab vm inventory</code> renders that inventory — every host with its static
-management IP, the atomic role groups, and each setup as a group-of-groups —
-straight from <code>topology.yaml</code>, no live probing.</p>
-<p>The verbs mirror a domain's lifecycle on two axes — <strong>create/destroy</strong> (existence)
-and <strong>up/down</strong> (power):</p>
-<ul>
-<li><code>vm create</code> runs <code>vagrant up</code> per guest — the one verb that uses Vagrant, because
-  it both <strong>creates</strong> the VM and <strong>provisions</strong> it (this is where you watch Ansible
-  build each machine).</li>
-<li><code>vm up</code> / <code>vm down</code> / <code>vm destroy</code> drive <strong><code>virsh</code></strong> (<code>start</code> / <code>shutdown</code> /
-  <code>undefine</code>). <strong>libvirt is the ground truth for state; Vagrant is used only for
-  create</strong> — so these work regardless of Vagrant's metadata.</li>
-</ul>
-<p>Every verb is <strong>state-aware and idempotent</strong>: it first runs <code>virsh list --all</code>
-(streamed verbatim, like every other step) to see the live state, then acts only
-on the guests that need it. Re-running <code>vm create all</code> skips guests that already
-exist; <code>vm up</code> skips those already running; <code>vm down</code> skips those already off;
-<code>vm destroy</code> force-stops a running guest before removing it, and skips any that
-are already gone. Guests it leaves alone get a one-line advisory note (<code>·</code>)
-explaining why — so the output always traces the decision back to the probed
-state. Running a verb twice is safe and converges on the same result.</p>
-<p>Like <code>net</code>, the mutating verbs require a selector, so a bare <code>mqlab vm destroy</code>
-cannot wipe every guest.</p>
+<p>When you're done, tear a stack back down:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack&#39;s guests + overlay disks</span>
+</code></pre></div>
+<p><code>teardown</code> reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
+other stack is still up — pass <code>--commons</code> to force their removal, or leave them
+for the next stack. Like bootstrap, it names a stack, so a bare <code>mqlab teardown</code>
+cannot wipe everything by accident.</p>
 <h3 id="build-the-queue-manager-with-mqlab-qm">Build the queue manager with <code>mqlab qm</code><a class="headerlink" href="#build-the-queue-manager-with-mqlab-qm" title="Permanent link">&para;</a></h3>
-<p><code>vm create</code> provisions the cluster <strong>infrastructure</strong> — iSCSI/SAN, Corosync,
-Pacemaker, the MQ install — but stops short of the queue manager itself. <strong><code>mqlab
-qm</code></strong> is the next layer: it builds the IBM MQ queue manager on the shared LUN and
-hands it to Pacemaker as a highly-available resource group. Run it <em>after</em>
-<code>mqlab vm create &lt;setup&gt;</code> has stood the infrastructure up.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk_san_ha<span class="w">   </span><span class="c1"># build the QM on the LUN + the HA resource group</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk_san_ha<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">  </span>pcmk_san_ha<span class="w">    </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">    </span>pcmk_san_ha<span class="w">    </span><span class="c1"># start it again (pcs resource enable)</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk_san_ha<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
+<p>The <code>provision</code> phase already stands the queue manager up as part of bringing a
+stack live — bootstrap leaves you with a running QM. <strong><code>mqlab qm</code></strong> is the
+lifecycle layer <em>on top</em> of that: drive the QM without re-running a whole
+bootstrap. It dispatches per stack, so the same verbs cover every mechanism
+(Pacemaker <code>pcs</code>, RDQM, Native HA <code>systemctl</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># start it again (pcs resource enable)</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># (re)build the QM + its HA resource group</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
 </code></pre></div>
-<p>The same two axes as <code>net</code> and <code>vm</code> — <strong>create/destroy</strong> (the QM and its HA
-group exist or not) and <strong>up/down</strong> (the cluster runs it or not):</p>
-<ul>
-<li><code>qm create</code> runs the <strong><code>mq-pcmk-qmgr</code> Ansible role</strong>: the queue manager is
-  created on the shared LUN, taught to every node (<code>dspmqinf</code> → <code>addmqinf</code>),
-  wrapped in a <strong>disabled</strong> systemd unit, and handed to Pacemaker as the
-  <code>mq_fs</code> → <code>mq_vip</code> → <code>mq_qm</code> resource group. <code>qm destroy</code> removes it.</li>
-<li><code>qm up</code> / <code>qm down</code> go <strong>through Pacemaker</strong> — <code>pcs resource enable</code> /
-  <code>disable mq_group</code> on the cluster's first node. Because the systemd units are
-  disabled, the cluster is the <em>only</em> thing that starts the QM; you never
-  <code>strmqm</code> it by hand. <code>qm status</code> is <code>pcs status resources</code>.</li>
-</ul>
-<p><code>qm create</code> is <strong>idempotent</strong> — every step guards on existing state, so re-running
-it converges. And the role is the point: the streamed, verbatim task output <em>is</em>
-the reproducible, step-by-step HA procedure — the artifact a client re-implements
-under their own automation. Watching it run is how you come to understand exactly
-how MQ HA is built on Pacemaker/SAN.</p>
+<p>For the Pacemaker/SAN stack, <code>qm create</code> runs the <strong><code>mq-pcmk-qmgr</code> Ansible
+role</strong>: the queue manager is created on the shared LUN, taught to every node
+(<code>dspmqinf</code> → <code>addmqinf</code>), wrapped in a <strong>disabled</strong> systemd unit, and handed to
+Pacemaker as the <code>mq_fs</code> → <code>mq_vip</code> → <code>mq_qm</code> resource group. <code>qm up</code> / <code>qm down</code>
+go <strong>through Pacemaker</strong> — <code>pcs resource enable</code> / <code>disable mq_group</code> on the
+cluster's first node. Because the systemd units are disabled, the cluster is the
+<em>only</em> thing that starts the QM; you never <code>strmqm</code> it by hand.</p>
+<p>The role is the point: the streamed, verbatim task output <em>is</em> the reproducible,
+step-by-step HA procedure — the artifact a client re-implements under their own
+automation. Watching it run is how you come to understand exactly how MQ HA is
+built on Pacemaker/SAN.</p>
 <blockquote>
-<p><strong>More verbs land as the slices ship.</strong> <code>mqlab net</code>, <code>mqlab vm</code>, and <code>mqlab qm</code>
-(the Pacemaker/SAN arm) are live; the RDQM arm, the HA/DR experiment layer
-(failover, cross-site cutover, DR drills), and the <code>status</code> / <code>check</code> dashboard
-arrive in subsequent slices, each extending this walkthrough.</p>
+<p><strong>Which verbs each arm supports</strong> is a live matrix: <code>mqlab parity</code> prints it,
+and <code>mqlab --help</code> (or <code>mqlab &lt;group&gt; --help</code>) lists the full command surface —
+including cross-site DR (<code>mqlab dr cutover</code> / <code>failback</code>) and the shared
+observability stack (<code>mqlab commons</code>).</p>
 </blockquote>
 <h2 id="3-stand-up-one-stack-end-to-end">3. Stand up one stack end to end<a class="headerlink" href="#3-stand-up-one-stack-end-to-end" title="Permanent link">&para;</a></h2>
-<p>The <strong>standalone queue manager</strong> path (Phase B) is the simplest proof that
-the stack works: a single queue manager, a simulated upstream (<code>svc-sim</code>),
-and an application client exchanging messages over the client network. Bring
-it up, send a message, and confirm it survives a guest reboot.</p>
+<p>The quickest proof that the stack works is to bootstrap one arm and exercise it:
+a queue manager, a simulated upstream (<code>svc-sim</code>), and an application client
+exchanging messages over the client network. <strong>Native HA on Ubuntu</strong> is the
+lightest starting point (no SAN, and it boots native on the dev host):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># bring the whole arm up end to end</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w">  </span>nativeha-ubuntu<span class="w">  </span><span class="c1"># confirm the QM is up (dspmq -o nativeha)</span>
+</code></pre></div>
+<p>Send a message, then stop the active instance and watch the standby take over —
+the QM survives, because that is the whole point of the arm.</p>
 <p>From there, the <a href="../architecture/">Architecture</a> page walks the
-higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
-alternative.</p>
+higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.</p>
 <h2 id="4-watch-the-lab-live-observability">4. Watch the lab live (observability)<a class="headerlink" href="#4-watch-the-lab-live-observability" title="Permanent link">&para;</a></h2>
 <p>A dedicated <strong><code>obs</code></strong> VM runs <strong>Prometheus + Grafana</strong>, scraping <code>node_exporter</code>
 across the whole fleet over the host-only <strong><code>net-mgmt</code></strong> plane — the one network
 fault drills never sever, so the dashboard stays live exactly when something
 breaks. A second node, <strong><code>mon-probe</code></strong>, carries the data-net NICs for the MQ
-client exporters that land in a later slice.</p>
+client exporters.</p>
 <p>Metrics are only half the picture. Every queue manager also ships <strong>MQ
 instrumentation events</strong> — authority failures, channel start/stop, queue-depth
 alarms, and the rest — as <code>json_compact</code> JSONL to journald (tag <code>mq-events</code>) via
@@ -1359,20 +1373,23 @@ the shared <code>mq-event-monitor</code> role, standard on <strong>every</strong
 stream to <strong>Loki</strong>, and Grafana surfaces the events alongside the metrics, so the
 boards show both what the fleet is <em>doing</em> (metrics) and what MQ is <em>reporting</em>
 (events).</p>
-<p>Bring the pair up and provision it — one verb, provisioned as code:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>up<span class="w">        </span><span class="c1"># render scrape targets + inventory, create obs + mon-probe, provision</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>status<span class="w">    </span><span class="c1"># are the pair up? which targets are scraped, up/down?</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">   </span><span class="c1"># render build/prometheus/targets/node.json from topology + echo it</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">      </span><span class="c1"># print the Grafana URL + the workstation tunnel recipe</span>
+<p>The observability stack is stood up <strong>as part of <code>mqlab bootstrap</code></strong> — its
+<code>observe</code> phase renders the scrape targets and dashboards from topology and
+provisions the obs pair plus this stack's exporters. To bring the shared
+observability VMs up on their own (independently of any stack), use <code>mqlab
+commons up</code>. A few renders and the front door are exposed directly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">       </span><span class="c1"># print the Grafana URL + how to reach it from your workstation</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">    </span><span class="c1"># render the Prometheus file_sd targets from topology + echo them</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">  </span><span class="c1"># render the Grafana dashboards (Watcher + per-stack cockpits)</span>
 </code></pre></div>
-<p><code>obs</code> is a guest <strong>inside</strong> the Vergil VM, so opening Grafana from your
-workstation means forwarding a local port through the VM. <code>mqlab obs open</code>
-prints the exact recipe; in short:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># on your workstation (macOS):</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>limactl<span class="w"> </span>list<span class="w">                                                  </span><span class="c1"># find this repo&#39;s instance</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>ssh<span class="w"> </span>-F<span class="w"> </span>~/.lima/&lt;instance&gt;/ssh.config<span class="w"> </span>-L<span class="w"> </span><span class="m">3000</span>:10.50.0.2:3000<span class="w"> </span>&lt;host-alias&gt;
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># then browse:  http://localhost:3000/d/lab-watcher   (admin / admin)</span>
+<p><code>obs</code> is a guest <strong>inside</strong> the Vergil VM, but the forward is <strong>automatic</strong> — no
+manual tunnel. Lima forwards the base VM's port 3000 to your Mac's
+<code>localhost:3000</code>, and the <code>vergil-portforward</code> relay bridges that to the obs
+guest, so you just browse:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>http://localhost:3000/d/lab-watcher   (anonymous — no login)
 </code></pre></div>
+<p><code>mqlab obs open</code> prints the exact URLs (and re-heals the relay if a grafana
+restart wedged it).</p>
 <p><strong>The Watcher</strong> (<code>lab-watcher</code>, #488) is the lab-state front door: a support-layer
 instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
 drilling into its own cockpit board. Scrape targets are rendered from <strong>the full
@@ -1386,27 +1403,26 @@ Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per nod
 QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
 which has no VIP) — <strong>not</strong> on the management / Watcher plane. <code>mqlab rest render</code>
 prints each queue manager's canonical REST endpoint(s) for both sites.</p>
-<p><code>obs up</code> brings up only the observer pair; to put host metrics on a running arm,
-overlay the fleet role onto its group:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>create<span class="w"> </span>pcmk_a<span class="w">                                  </span><span class="c1"># boots the arm (arm64, KVM-fast)</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nb">cd</span><span class="w"> </span>ansible<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>ansible-playbook<span class="w"> </span>observability.yml<span class="w"> </span>--limit<span class="w"> </span>pcmk_a
+<p>Because <code>bootstrap</code> already made every node a scrape target, a fault is something
+you can <em>watch</em>. Kill a live cluster node the same way the lab exposes every
+other step — by hand, with <code>virsh</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_pcmk-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
 </code></pre></div>
-<p>Those tiles flip from red to green as <code>node_exporter</code> starts — no re-render or
-restart needed, because the nodes were already targets. Now watch a fault become
-visible: <code>mqlab vm down pcmk-a2</code> turns that tile red within a scrape interval,
-<code>mqlab vm up pcmk-a2</code> turns it green again. That live red↔green flip is the
+<p>That node's tile turns red within a scrape interval while Pacemaker refloats the
+QM elsewhere; bring it back (<code>mqlab bootstrap pcmk-ubuntu</code>, which resumes at the
+<code>vms</code> phase) and the tile turns green again. That live red↔green flip is the
 point — a fault you can <em>watch</em>.</p>
 <h2 id="building-these-docs-locally">Building these docs locally<a class="headerlink" href="#building-these-docs-locally" title="Permanent link">&para;</a></h2>
 <p>The site builds inside the project's docs container, the same way CI does:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>vrg-container-docs<span class="w"> </span>serve
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Stage the changelog + release-notes sources into the docs tree (once per</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># session, or after CHANGELOG.md / releases/ change).</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>vrg-container-run<span class="w"> </span>--<span class="w"> </span>vrg-docs-stage<span class="w"> </span>--docs-dir<span class="w"> </span>docs/site/docs
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="c1"># Strict build (fails on any broken link or orphan page):</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>vrg-container-docs<span class="w"> </span>build<span class="w"> </span>--strict
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="c1"># Or a live-reloading preview at http://localhost:8000 :</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>vrg-container-docs<span class="w"> </span>serve
 </code></pre></div>
 
 
