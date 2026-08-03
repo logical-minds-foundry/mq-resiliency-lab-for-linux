@@ -17,6 +17,37 @@
       ansible.builtin.wait_for_connection:
         timeout: 180
 
+# Root-cause gate for the "Service is in unknown state" systemd-module transient
+# (#890; earlier per-task guards #879/#881/#882/#435). A freshly-booted guest can still
+# be finishing systemd boot when provisioning's first systemd-module call fires, so
+# systemctl/D-Bus returns an indeterminate unit state and the call fails. This is the
+# earliest all-hosts touch (site-dns runs first in the provision phase), and it precedes
+# BOTH systemd-using plays below (bind-dns `state: started` on infra, host-resolver on
+# all). Wait until systemd finished booting once per host; every later systemd call in
+# the run then runs against a settled systemd. Boot-readiness only — an already-booted
+# host passes immediately (idempotent).
+- name: wait for systemd to finish booting before any systemd-module call (#890)
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: wait for connection (guests may be freshly booted)
+      ansible.builtin.wait_for_connection:
+        timeout: 180
+    - name: wait for systemd to reach a settled state
+      ansible.builtin.command: systemctl is-system-running
+      register: _systemd_state
+      # 'running' = fully booted; 'degraded' = booted but a unit failed (still queryable,
+      # so unit ops are safe). 'starting'/'initializing'/'maintenance' → keep waiting.
+      until: _systemd_state.stdout in ['running', 'degraded']
+      retries: 30
+      delay: 5
+      changed_when: false
+      # Best-effort gate: is-system-running exits non-zero on 'degraded', and we never want
+      # the readiness wait itself to hard-fail the run — a genuinely broken systemd surfaces
+      # loudly at the real systemd tasks that follow.
+      failed_when: false
+
 # The BIND9 install (package + /etc/bind/zones scaffolding) is BAKED into the
 # infra-ubuntu2404 box (ansible/bake-infra.yml), so per-run we run ONLY bind-dns's
 # configure half: the topology-rendered zone data and this node's
