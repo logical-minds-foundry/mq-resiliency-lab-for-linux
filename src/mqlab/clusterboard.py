@@ -761,19 +761,21 @@ def _nativeha_log_row(
     loki_uid: str, y: int, prefix: str = "nha-rhel", qm: str = "NHARAPP"
 ) -> dict[str, Any]:
     """Native HA logs: MQ-related journald units on the nha hosts, severity-filtered by
-    the shared $level toggle. Note: MQ's own error log (AMQERR*.LOG) is file-based, not
-    journald — so the QM's HA/CRR events only appear here once Alloy tails those files.
-    prefix/qm select the arm (RHEL by default)."""
-    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
-    # the mq-.* wildcard would otherwise sweep it in.
+    the shared $level toggle. Since #282 MQ's own diagnostic log (AMQERR JSON) is emitted
+    to journald and relabeled by Alloy to unit="ibm-mq" (#742/#744), so the QM's HA/CRR
+    error events render here alongside the cluster units. prefix/qm select the arm (RHEL
+    by default)."""
+    # ibm-mq is the MQ diagnostic (AMQERR JSON) stream (#282/#822); the other alternatives
+    # are the mqmonitor/collector units. unit!="mq-events" keeps the instrumentation-event
+    # stream (#517) off the log panel — the mq-.* wildcard would otherwise sweep it in.
     sel = (
-        f'{{host=~"{prefix}-.*", unit=~".*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*", '
+        f'{{host=~"{prefix}-.*", unit=~"ibm-mq|.*mqmonitor.*|.*amq.*|.*ibmmq.*|mq-.*", '
         'unit!="mq-events"} |~ `${level}`'
     )
     note = (
-        "Shows MQ-related journald units on the nha nodes. MQ's own error log "
-        f"(/var/mqm/qmgrs/{qm}/errors/AMQERR*.LOG) is file-based, not journald, so it is "
-        "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/CRR logs."
+        "Shows MQ-related journald units on the nha nodes, including MQ's own diagnostic "
+        f"error log: since #282 the AMQERR JSON for {qm} is emitted to journald and Alloy "
+        'relabels it to unit="ibm-mq", so the QM HA/CRR error events render here.'
     )
     return _logs_panel("▤ Native HA logs (severity: $level)", sel, loki_uid, y, description=note)
 
@@ -1291,18 +1293,20 @@ def _rdqm_timeline(ds_uid: str, y: int) -> dict[str, Any]:
 
 def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     """RDQM logs: the Pacemaker/DRBD/MQ journald units on the rdqm-* hosts, severity-filtered
-    by the shared $level toggle. Note: MQ's AMQERR error log is file-based, not journald, so
-    the QM's own HA/DR events only appear once Alloy tails those files (same as the other arms)."""
-    # unit!="mq-events" keeps the instrumentation-event stream (#517) off the log panel —
-    # the mq-.* wildcard would otherwise sweep it in.
+    by the shared $level toggle. Since #282 MQ's own diagnostic log (AMQERR JSON) is emitted
+    to journald and relabeled by Alloy to unit="ibm-mq" (#742/#744), so the QM's HA/DR error
+    events render here alongside the Pacemaker/DRBD units (same as the other arms)."""
+    # ibm-mq is the MQ diagnostic (AMQERR JSON) stream (#282/#822); the other alternatives
+    # are the cluster daemons + mqmonitor/collector units. unit!="mq-events" keeps the
+    # instrumentation-event stream (#517) off the log panel — mq-.* would otherwise sweep it in.
     sel = (
-        '{host=~"rdqm-.*", unit=~"pacemaker.*|corosync.*|drbd.*|.*mqmonitor.*|.*amq.*'
+        '{host=~"rdqm-.*", unit=~"ibm-mq|pacemaker.*|corosync.*|drbd.*|.*mqmonitor.*|.*amq.*'
         '|.*ibmmq.*|mq-.*", unit!="mq-events"} |~ `${level}`'
     )
     note = (
-        "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes. MQ's own error log "
-        "(/var/mqm/qmgrs/RDQMAPP/errors/AMQERR*.LOG) is file-based, not journald, so it is "
-        "not shipped to Loki yet — wire Alloy to tail those files for full QM HA/DR logs."
+        "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes, including MQ's own "
+        "diagnostic error log: since #282 the AMQERR JSON for RDQMAPP is emitted to journald "
+        'and Alloy relabels it to unit="ibm-mq", so the QM HA/DR error events render here.'
     )
     return _logs_panel("▤ RDQM logs (severity: $level)", sel, loki_uid, y, description=note)
 
