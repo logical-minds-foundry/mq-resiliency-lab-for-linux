@@ -64,6 +64,18 @@
         name: grafana-image-renderer
         tasks_from: install
 
+    # Reclaim the apt cache before the space-hungry cgo mq_prometheus build (#885). The
+    # install-half roles above leave their .debs in /var/cache/apt/archives; #884's Chrome
+    # (~0.5 GiB of package + cached .deb) tipped the size-constrained bake box over, so the
+    # next task's Go build ran /tmp out of space ("no space left on device") and failed the
+    # whole obs bake — blocking every arm, since all arms consume the baked obs box. Cleaning
+    # here frees every install-half .deb, restoring more headroom than the pre-#884 baseline
+    # that baked clean across 40 arm builds. Placed at bake scope (not in the renderer role)
+    # so it reclaims the other install halves' caches too, right before the build that needs it.
+    - name: reclaim the apt cache before the mq_prometheus build (#885)
+      ansible.builtin.apt:
+        clean: true
+
     # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
     # toolchain — exactly the work worth baking once. This is Ubuntu-only (it pulls
     # the full MQ via the Ubuntu-deb mq-install role and apt golang), so it lives on
