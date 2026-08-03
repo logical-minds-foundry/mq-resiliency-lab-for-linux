@@ -10,6 +10,44 @@
   become: true
   roles: [node-exporter, alloy]
 
+# MQ-service exporters on the probe: client-mode mq_prometheus, one app + one svc
+# instance PER STACK (#423), each on the stack's alloc port and scraped by Prometheus
+# on the mgmt plane (#172, #182). The per-stack list (`mq_exporters`) is rendered from
+# topology by mqlab (obs targets) and passed as an extra-var. Build the exporter binary
+# + shared ops keystore ONCE, then loop the per-instance unit. Metrics are qmgr-keyed
+# so a board follows failover; a stopped stack's exporters just report the QM down. Both
+# app + svc connect on the dedicated MON.SVRCONN (#250) — the exporter presents O=app-org,
+# which MON.SVRCONN pins on every QM. Objects are wildcarded in the role defaults.
+#
+# ORDER (#893, subset of #886): this play runs BEFORE the obs_box services play below. The
+# exporters are the load-bearing MQ metrics (Register C) and the scrape *targets* Prometheus
+# consumes — targets before the scraper. Keeping them ahead means a single obs_box service
+# failure (e.g. a stale box missing the grafana-image-renderer unit, #886/#877) can no longer
+# abort the whole playbook and take MQ metrics down with it. Dependency-safe: this play needs
+# only the baked probe box + the pre-rendered `mq_exporters` var, nothing the obs_box play makes.
+- hosts: probe
+  become: true
+  tasks:
+    - name: build mq_prometheus + place the shared ops keystore (once)
+      ansible.builtin.include_role:
+        name: mq-exporter
+        tasks_from: build
+
+    - name: per-stack mq_prometheus exporter instances (app + svc per stack)
+      ansible.builtin.include_role:
+        name: mq-exporter
+        tasks_from: instance
+      vars:
+        mq_exporter_qm: "{{ item.qm }}"
+        mq_exporter_instance: "{{ item.instance }}"
+        mq_exporter_conn: "{{ item.conn }}"
+        mq_exporter_channel: "{{ item.channel }}"
+        mq_exporter_port: "{{ item.port }}"
+        mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ item.instance }}.json"
+      loop: "{{ mq_exporters }}"
+      loop_control:
+        label: "{{ item.instance }} :{{ item.port }} -> {{ item.qm }}"
+
 # obs is baked (obs-ubuntu2404, #605): every service is baked INERT (install half only,
 # #642) — the binaries/package + static config are baked, but nothing auto-starts on
 # boot in a pre-config state. So per-run we run the configure halves that enable + start
@@ -53,34 +91,3 @@
       ansible.builtin.include_role:
         name: grafana
         tasks_from: configure
-
-# MQ-service exporters on the probe: client-mode mq_prometheus, one app + one svc
-# instance PER STACK (#423), each on the stack's alloc port and scraped by Prometheus
-# on the mgmt plane (#172, #182). The per-stack list (`mq_exporters`) is rendered from
-# topology by mqlab (obs targets) and passed as an extra-var. Build the exporter binary
-# + shared ops keystore ONCE, then loop the per-instance unit. Metrics are qmgr-keyed
-# so a board follows failover; a stopped stack's exporters just report the QM down. Both
-# app + svc connect on the dedicated MON.SVRCONN (#250) — the exporter presents O=app-org,
-# which MON.SVRCONN pins on every QM. Objects are wildcarded in the role defaults.
-- hosts: probe
-  become: true
-  tasks:
-    - name: build mq_prometheus + place the shared ops keystore (once)
-      ansible.builtin.include_role:
-        name: mq-exporter
-        tasks_from: build
-
-    - name: per-stack mq_prometheus exporter instances (app + svc per stack)
-      ansible.builtin.include_role:
-        name: mq-exporter
-        tasks_from: instance
-      vars:
-        mq_exporter_qm: "{{ item.qm }}"
-        mq_exporter_instance: "{{ item.instance }}"
-        mq_exporter_conn: "{{ item.conn }}"
-        mq_exporter_channel: "{{ item.channel }}"
-        mq_exporter_port: "{{ item.port }}"
-        mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ item.instance }}.json"
-      loop: "{{ mq_exporters }}"
-      loop_control:
-        label: "{{ item.instance }} :{{ item.port }} -> {{ item.qm }}"
