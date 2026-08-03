@@ -16,123 +16,136 @@ The VM is ephemeral. After a `vrg-vm rebuild`, the host-mounted repo and
 uv sync          # creates .venv and puts `mqlab` on PATH (so it's `mqlab …`, not `uv run mqlab …`)
 ```
 
-Install the lab's Ansible collection (the only one — `community.crypto`, for the
-PKI provider). Declarative + reproducible; reinstalls cleanly on a fresh VM:
-
-```bash
-ansible-galaxy collection install -r ansible/requirements.yml -p build/ansible_collections
-```
+Everything else a bring-up needs — the baked boxes, the arch-correct MQ tarball,
+the Ansible galaxy collections, and the PKI CA + keystores — is **ensured
+automatically** by `mqlab bootstrap` before the phase that needs it (and only for
+the phases actually selected). There is nothing else to install by hand.
 
 Run every `mqlab` command from the **repo root** (the main `develop` checkout).
 
 Secrets and the fence key are **auto-generated and persisted** under the
-gitignored `build/secrets/` and `build/fence_key` — they survive VM rebuilds and
-regenerate on a full `build/` wipe. There is no password to remember or export
+gitignored `build/state/secrets/` — they survive VM rebuilds and regenerate on a
+full `build/` wipe. There is no password to remember or export
 (`lab/scripts/lab-secret.sh`).
 
 ### Where state lives (and how to actually wipe it)
 
 Three independent layers — know which one you're touching:
 
-| Layer | Lives on | `rm lab/.vagrant`? | `vrg-vm rebuild`? | Wiped by |
+| Layer | Lives on | `rm build/state/vagrant`? | `vrg-vm rebuild`? | Wiped by |
 |---|---|---|---|---|
 | Repo + `build/` (secrets, fence key, rendered configs) | virtiofs mount from your Mac | survives | **survives** (host, not VM) | `rm -rf build/` |
-| Lab VM disks (`lab_*.img`, `lab_san-*-vdb.qcow2`, incl. the SAN `/dev/vdb` with DRBD md) | `/var/lib/libvirt/images` on the Vergil VM's root disk | **survives** | not reliably | **`mqlab vm destroy`** |
-| `lab/.vagrant/` | the repo | n/a | survives | `rm lab/.vagrant` |
+| Lab VM disks (`lab_*.img`, `lab_san-*-vdb.qcow2`, incl. the SAN `/dev/vdb` with DRBD md) | `/var/lib/libvirt/images` on the Vergil VM's root disk | **survives** | not reliably | **`mqlab teardown <stack>`** |
+| Vagrant bookkeeping (`build/state/vagrant/`) | shared `build/state` bucket | n/a | survives | that dir |
 
-**`rm lab/.vagrant` wipes nothing real.** It is only Vagrant's bookkeeping
-(per-machine `libvirt/id` = the domain UUID, box metadata, created-networks). It
-makes Vagrant *forget* which libvirt domains are "its" — the domains and disks
-stay, and the next `up` then collides with the orphans. It is **not** a reset.
+**Removing Vagrant's bookkeeping wipes nothing real.** It is only Vagrant's
+per-machine metadata (`libvirt/id` = the domain UUID, box metadata). It makes
+Vagrant *forget* which libvirt domains are "its" — the domains and disks stay,
+and the next bootstrap then collides with the orphans. It is **not** a reset.
 
-**The only true wipe is `mqlab vm destroy`** — `virsh undefine
+**The only true wipe is `mqlab teardown`** — `virsh undefine
 --remove-all-storage --nvram`, which deletes the domain, **both** disks (`vda`
 *and* the SAN `vdb` carrying stale DRBD metadata), and the UEFI nvram. Stale
 `/dev/vdb` md is what breaks a DR build (#158/#160), so a clean DR build **must**
-go through `vm destroy`, not `rm .vagrant`.
+go through `teardown`.
 
-**Cold-reset a setup (the real one):**
+**Cold-reset a stack (the real one):**
 
 ```bash
-mqlab vm destroy pcmk_san_dr      # destroys ALL members (8 VMs) + their disks — not just the SANs
+mqlab teardown pcmk-ubuntu        # destroys ALL member VMs + their disks (+ commons when last stack out)
 virsh -c qemu:///system vol-list --pool default | grep -E 'lab_(san|pcmk)' || echo clean
-mqlab vm create pcmk_san_dr
-mqlab vm provision pcmk_san_dr
+mqlab bootstrap pcmk-ubuntu       # net → vms → provision → observe, from scratch
 ```
 
-Recreating only *some* VMs (e.g. just the SANs) leaves the rest carrying stale
-state (e.g. a prior Pacemaker cluster config → `pcs cluster setup` fails). Wipe
-the whole setup. `build/` (secrets/keys) survives, so the rebuild stays
-reproducible; to reset those too, `rm -rf build/`.
+Recreating only *some* VMs leaves the rest carrying stale state (e.g. a prior
+Pacemaker cluster config → `pcs cluster setup` fails), so tear the whole stack
+down. `build/` (secrets/keys) survives, so the rebuild stays reproducible; to
+reset those too, `rm -rf build/`.
 
 ---
 
-## 1. Networks (always first)
+## The one command: `mqlab bootstrap <stack>`
+
+`bootstrap` stands a whole stack up by running four idempotent phases in order,
+each gated by a live "satisfied?" probe so a re-run **resumes from the first
+incomplete phase**:
+
+| phase | what it does |
+|-------|--------------|
+| `net` | define + autostart + start every lab libvirt network (guests attach to them) |
+| `vms` | `vagrant up` the stack members + the shared commons VMs (obs/probe/svc/app/infra) |
+| `provision` | NIC + DNS bring-up, the stack's `site-*.yml`, and the queue manager |
+| `observe` | render + provision Prometheus/Grafana targets and instrument the nodes |
 
 ```bash
-mqlab net create all      # define + autostart + start every libvirt network
-mqlab net status          # confirm: all the lab nets active
+mqlab doctor                 # pre-flight the host (arch, KVM, required tools)
+mqlab bootstrap pcmk-ubuntu  # the whole stack, every step streamed
+mqlab bootstrap pcmk-ubuntu --from provision   # force a starting phase
+mqlab bootstrap pcmk-ubuntu --only observe     # run a single phase
+mqlab bootstrap pcmk-ubuntu --step             # pause after each step
 ```
 
-Networks must exist before any guest boots (the guests attach to them).
+The QM comes up **inside the `provision` phase** — there is no separate
+"create the QM" bring-up step anymore. Use `mqlab qm` (below) to drive its
+lifecycle afterward.
 
 ---
 
-## 2. Observability (independent — any time after networks)
+## The four stacks
+
+`bootstrap` / `teardown` / `qm` / `status` all take a **stack** name. The
+canonical registry (`lab/topology.yaml → stacks:`):
+
+| stack | what it is | provision playbook | mechanism |
+|---|---|---|---|
+| `pcmk-ubuntu` | Pacemaker/SAN, full HA + cross-site DR (san-a/b + pcmk-a1..3 + pcmk-b1..3) | `site-pcmk.yml` | pacemaker-san |
+| `rdqm-rhel` | RDQM/RHEL HA + 3+3 DR (rdqm-a1..3 + rdqm-b1..3) | `site-rdqm.yml` | rdqm |
+| `nativeha-rhel` | Native HA (RHEL) — raft-log replication + 3+3 CRR | `site-nativeha.yml` | native-ha |
+| `nativeha-ubuntu` | Native HA (Ubuntu) — the OS-as-only-variable peer of `nativeha-rhel` | `site-nativeha-ubuntu.yml` | native-ha |
+
+`mqlab parity` prints the live cross-arm capability matrix (which verb each arm
+supports).
+
+---
+
+## Networks & observability
+
+Both were once separate bring-up steps; they are now **phases of `bootstrap`**:
+
+- The **`net` phase** brings the libvirt fabric up first (nothing to run by
+  hand). The groomed `lab/scripts/net-up.sh` / `net-down.sh` remain as a
+  hand-run reference for the whole fabric in one shot.
+- The **`observe` phase** renders the scrape targets/dashboards and provisions
+  the obs pair + this stack's exporters + node instrumentation.
+
+To stand the shared observability VMs up **independently of any stack**:
 
 ```bash
-mqlab obs up                       # boot obs + mon-probe, provision Prometheus + Grafana (+ Loki/Alloy once #143 lands)
-mqlab obs instrument <setup>       # install node_exporter (+ net-reach) on a running setup's guests
-mqlab obs open                     # print the Grafana URL + the SSH-tunnel one-liner
+mqlab commons up          # boot obs + probe + svc + app + infra, provision Prometheus/Grafana/Loki
+mqlab commons status      # commons health (topology × live virsh state)
+mqlab obs open            # print the Grafana URL + the (automatic) forward recipe
 ```
-
-`obs up` only stands up the monitoring pair. `obs instrument <setup>` is what
-makes a given arm (e.g. `pcmk_san_ha`) start reporting — run it **after** that
-setup's guests are up.
 
 ---
 
-## 3. PCMK single-site HA — site A (`pcmk_san_ha`)
+## Per-stack bring-up
 
-Three cluster nodes + one iSCSI SAN, one site. QMPCMK on the shared LUN as a
-Pacemaker resource group (`mq_fs → mq_vip → mq_vip_ext → mq_qm`).
-
-```bash
-mqlab net create all                 # (if not already done)
-mqlab vm create pcmk_san_ha          # boot san-a + pcmk-a1..3 (vagrant up — bare guests, no provisioning yet)
-mqlab vm provision pcmk_san_ha       # site-pcmk.yml: iSCSI target/initiators, LUN format, Corosync/Pacemaker, STONITH, mq-install
-mqlab qm create pcmk_san_ha          # create QMPCMK + its HA resource group (vip 10.10.1.200 / ext 10.60.0.10)
-mqlab qm status pcmk_san_ha          # pcs status of the mq resource group
-```
-
-- `vm provision` **auto-sources** the `hacluster` secret — no env var to set.
-- `vm create` then `vm provision` back-to-back is safe: the playbook waits for
-  every SAN-arm host to be SSH-ready before any storage work (cold-boot guard,
-  #151). If a node still drops, just re-run `vm provision` (idempotent).
-- The QM is a **separate step** (`qm create`) — the provision playbook builds the
-  cluster + storage but never the QM.
-
----
-
-## 4. PCMK cross-site DR — sites A + B (`pcmk_san_dr`)
+### Pacemaker/SAN — `pcmk-ubuntu`
 
 The full 8-node topology: san-a/b + pcmk-a1..3 + pcmk-b1..3, DRBD-async under the
 SAN, DR-ready from the start. Site A runs live; site B receives on cutover.
+QM `PCMKAPP` on the shared LUN as a Pacemaker resource group
+(`mq_fs → mq_vip → mq_vip_ext → mq_qm`).
 
 ```bash
-mqlab net create all
-mqlab vm create pcmk_san_dr          # boot all 8: san-a, san-b, pcmk-a1..3, pcmk-b1..3
-mqlab vm provision pcmk_san_dr       # site-pcmk-dr.yml: DRBD (a→b), iSCSI, BOTH clusters (mqpcmk-a / mqpcmk-b), STONITH, mq-install
-                                     #   equivalent wrapper: lab/scripts/dr-provision.sh
-mqlab qm create pcmk_san_ha          # create QMPCMK on the LIVE site (A). NOTE: the qm config lives on the
-                                     #   pcmk_san_ha setup; pcmk_san_dr carries no `qm:` field.
-lab/scripts/pcmk-dr-seed-peer.sh     # teach site B about the QM (addmqinf + disabled unit) so a cutover can start it;
-                                     #   QM DATA travels via DRBD, this seeds only the definition
+mqlab bootstrap pcmk-ubuntu          # net → vms → provision (iSCSI/DRBD, Corosync/Pacemaker, STONITH, QM) → observe
+mqlab qm status pcmk-ubuntu          # pcs status of the mq resource group
 ```
 
-DR exercises (after the above):
+DR exercises (after the stack is up):
 
 ```bash
+lab/scripts/pcmk-dr-seed-peer.sh     # teach site B about the QM (addmqinf + disabled unit) so a cutover can start it
 lab/scripts/pcmk-dr-cutover.sh a2b   # controlled cutover site A → B (quiesce → confirm replication → flip DRBD → bring B up)
 lab/scripts/pcmk-dr-cutover.sh b2a   # failback B → A (mirror)
 ```
@@ -141,40 +154,49 @@ Both partner VIPs (`mq_vip` + `mq_vip_ext`) float together on HA failover and
 move together on DR cutover. DRBD/cutover internals and recovery:
 `docs/reference/drbd-operations.md` and `docs/reference/lab-gotchas.md`.
 
+### RDQM — `rdqm-rhel`
+
+```bash
+mqlab bootstrap rdqm-rhel            # net → vms → provision (site-rdqm.yml, RDQM HA/DR) → observe
+mqlab qm status rdqm-rhel            # /opt/mqm/bin/rdqmstatus
+mqlab dr cutover  rdqm-rhel          # cross-site cutover A → B (a2b)
+mqlab dr failback rdqm-rhel          # failback B → A (b2a); add --rpo0-drill to assert no message loss
+```
+
+### Native HA — `nativeha-rhel` / `nativeha-ubuntu`
+
+Shared-nothing raft-log replication (no SAN, no extra disk). The two arms are
+OS-as-only-variable peers and can coexist on one host.
+
+```bash
+mqlab bootstrap nativeha-ubuntu      # net → vms → provision (site-nativeha-ubuntu.yml, raft HA + CRR) → observe
+mqlab qm status nativeha-ubuntu      # dspmq -o nativeha -x
+```
+
 ---
 
 ## Status & lifecycle
 
 ```bash
-mqlab vm status [<setup>|all]        # topology × live virsh state
-mqlab qm up      <setup>             # pcs resource enable  mq_group  (start the QM, HA intact)
-mqlab qm down    <setup>             # pcs resource disable mq_group  (stop cleanly, HA intact)
-mqlab qm status  <setup>             # pcs status resources
-mqlab vm down    <setup>             # graceful guest shutdown
-mqlab vm destroy <setup>             # remove guests + overlay disks (base box untouched)
+mqlab status [<stack>]               # phase completion (net/vms/provision/observe, ✓/✗) — one stack or all
+mqlab qm up      <stack>             # start the QM (pcs enable / strmqm / systemctl start, per mechanism)
+mqlab qm down    <stack>             # stop the QM cleanly (HA intact)
+mqlab qm status  <stack>             # the QM's HA resource / instance state
+mqlab teardown   <stack>             # remove the stack's guests + overlay disks (base box untouched)
+mqlab teardown   <stack> --commons   # …and also reclaim the shared commons VMs
 ```
-
-## Setups (selector for `vm`/`qm`/`obs instrument`)
-
-| setup | what it is | provision playbook | QM step |
-|---|---|---|---|
-| `pcmk_san_ha` | Pacemaker/SAN, site-A 3-node HA | `site-pcmk.yml` | `qm create pcmk_san_ha` |
-| `pcmk_san_dr` | Pacemaker/SAN 3+3 cross-site DR | `site-pcmk-dr.yml` | `qm create pcmk_san_ha` + `pcmk-dr-seed-peer.sh` |
-| `rdqm_ha` / `rdqm_dr` | RDQM/RHEL HA / 3+3 DR | `site-rdqm.yml` | `lab/scripts/rdqm-qm-create.sh` |
-| `nativeha-rhel` | Native HA (RHEL) — raft-log replication + 3+3 CRR; boots the baked `mq-nativeha-rhel9` box | `site-nativeha.yml` | `qm create nativeha-rhel` |
-| `standalone` | Phase-B single QM + SVC sim + client | `site.yml` | (QM comes up in provision) |
-| `distributed-pcmk-ubuntu` | QMPCMK ⇄ QMSVC over net-ext (epic #145) | `site-distributed.yml` | `qm create distributed-pcmk-ubuntu` |
-| `monitoring` | Prometheus/Grafana + MQ probe | `site-obs.yml` | n/a (use `mqlab obs up`) |
 
 ## Notes / gotchas
 
-- **One-pass cold rebuild is the acceptance gate.** `net → vm create → vm
-  provision → qm create` should succeed from a clean state in a single pass
-  (#151/#152). A second `vm provision` is always safe (idempotent).
-- **Selectors** accept a setup name (→ its members in bring-up order), `all`, or
-  a regex over guest names. Destructive verbs require an explicit selector — no
-  accidental "wipe everything."
-- **`vm create` is the only Vagrant verb;** everything else is virsh/Ansible. The
-  Vagrantfile does no provisioning (Ansible owns file transport).
-- **Don't drive the lab from a feature worktree** without the copied-`.vagrant` /
-  symlinked-`build/` dance — run bring-up from the main `develop` checkout.
+- **One-pass cold rebuild is the acceptance gate.** `mqlab bootstrap <stack>`
+  should succeed from a clean state in a single pass (#151/#152); if a phase
+  fails, re-running resumes from it (idempotent).
+- **`bootstrap` / `teardown` / `qm` require a stack name** — no accidental "wipe
+  everything." Bring-up order (SANs first, site-A before site-B) is fixed by the
+  stack's `groups:` in `topology.yaml`.
+- **Vagrant is used only to boot the guests** (the `vms` phase); everything else
+  is virsh/Ansible. The Vagrantfile does no provisioning (Ansible owns file
+  transport).
+- **Drive the lab from the main `develop` checkout**, not a feature worktree —
+  the shared `build/state` bucket carries the one canonical Vagrant/libvirt
+  state.

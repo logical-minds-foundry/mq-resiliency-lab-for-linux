@@ -34,144 +34,122 @@ developer note.
 The lab is driven by **`mqlab`**, an operator orchestrator that does the
 opposite of most tooling: rather than hiding the mechanics, it **shows** them.
 Every command it runs — `virsh`, Ansible, `runmqsc` — is printed verbatim as it
-runs, streamed live, and teed to a transcript under `build/runs/`. You can watch
-a step, understand it, then reproduce it by hand. (Why expose rather than
+runs, streamed live, and teed to a transcript under `build/state/runs/`. You can
+watch a step, understand it, then reproduce it by hand. (Why expose rather than
 encapsulate? Because the deliverable is transparent evidence for the
 RDQM-vs-Ubuntu comparison — see [design & specs](design-and-specs.md).)
 
-Bring up the libvirt network fabric and watch it happen:
+### One command brings up a stack: `mqlab bootstrap`
+
+A **stack** is one HA/DR arm — a mechanism on an OS. `mqlab bootstrap <stack>`
+stands the whole thing up in one command, running four idempotent **phases** in
+order:
+
+| phase | what it does |
+|-------|--------------|
+| `net` | define + autostart + start every lab libvirt network |
+| `vms` | `vagrant up` the stack's guests (plus the shared commons VMs) |
+| `provision` | configure the cluster/storage and build the queue manager |
+| `observe` | render + provision Prometheus/Grafana targets for the stack |
 
 ```bash
-mqlab net create all   # define + autostart every lab network (virsh net-define)
-mqlab net up all       # activate them (virsh net-start)
-mqlab net status       # which networks are defined / active / autostart
-mqlab net show all     # per-network config + who is attached (DHCP leases)
-mqlab net down all     # deactivate (virsh net-destroy)
-mqlab net destroy all  # remove the definitions (virsh net-undefine)
+mqlab doctor                 # pre-flight the host (arch, KVM, required tools)
+mqlab bootstrap pcmk-ubuntu  # net → vms → provision → observe, every step streamed
+mqlab status                 # phase completion (✓/✗) per stack
+mqlab status pcmk-ubuntu     # just this stack
 ```
 
-Like `vm`, `net` is symmetric on two axes — **create/destroy** (existence) and
-**up/down** (active) — each mapped onto its virsh verb (note virsh confusingly
-names *deactivate* `net-destroy`):
-
-| mqlab | virsh | axis |
-|-------|-------|------|
-| `net create` | `net-define` (+ `net-autostart`) | existence |
-| `net up` | `net-start` | active |
-| `net down` | `net-destroy` | active |
-| `net destroy` | `net-undefine` | existence |
-
-Every verb takes a **selector** (a net name, a regex, or `all`) and is
-**state-aware and idempotent**: it first runs `virsh net-list --all`, then acts
-only where needed — `net create` skips already-defined nets, `net up` skips
-active ones, `net down` skips inactive ones, `net destroy` deactivates an active
-net before removing it. Skipped nets get a one-line advisory note. Re-running any
-verb is safe and converges.
-
-There is **no bare default**: `mqlab net down` with no selector is a usage
-error, so a fat-finger cannot wipe the whole fabric — you must say `all`. Add
-`--step` to pause after each step and go poke at the live system. (The groomed
-`lab/scripts/net-up.sh` / `net-down.sh` remain as a hand-run reference for the
-combined create+up / down+destroy in one shot.) Break something and
-`mqlab net destroy all && mqlab net create all && mqlab net up all` to rebuild,
-because the lab is a disposable, reproducible illusion.
+Each phase is gated by a live "satisfied?" probe, so bootstrap is **state-aware
+and resumable**: it starts from the first *unsatisfied* phase and a re-run picks
+up exactly where a previous one stopped — nothing already done is redone. If a
+step fails, bootstrap halts and prints the resume hint (`mqlab bootstrap <stack>
+--from <phase>`). Add `--step` to pause after each step and go poke at the live
+system; `--from <phase>` / `--only <phase>` force the phase selection by hand.
 
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml)
-— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN) and every
-guest's NICs and platform. See the [Architecture](architecture/index.md)
-walkthrough for what each network is for.
+— the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
+NICs and platform, and the stack registry itself. See the
+[Architecture](architecture/index.md) walkthrough for what each network is for.
 
-Once the fabric is up, bring up the guest VMs with **`mqlab vm`** — the same
-selector paradigm, over `topology.yaml`:
+The four stacks bootstrap knows about:
+
+| stack | mechanism | OS |
+|-------|-----------|-----|
+| `pcmk-ubuntu` | Pacemaker/SAN (shared-LUN HA + cross-site DR) | Ubuntu |
+| `rdqm-rhel` | RDQM (DRBD replicated HA/DR) | RHEL |
+| `nativeha-rhel` | Native HA (raft-log replication) | RHEL |
+| `nativeha-ubuntu` | Native HA (raft-log replication) | Ubuntu |
+
+Two `mqlab vm` utilities render or reach the guests directly:
 
 ```bash
-mqlab vm status            # ground-truth fleet (via virsh), joined with topology
-mqlab vm inventory         # render build/inventory.ini from topology — the static map
-mqlab vm create rdqm       # create + provision the RDQM guests — watch Ansible run
-mqlab vm create all --step # create every guest, pausing between each to poke around
-mqlab vm up pcmk_san_ha    # start an existing setup's guests (virsh start)
-mqlab vm down all          # shut them down  ( vm destroy all removes them + disks )
-mqlab vm ssh rdqm-a1       # drop into a shell on one guest
+mqlab vm inventory     # render build/work/inventory.ini from topology — the static map
+mqlab vm ssh pcmk-a1   # drop into a shell on one guest
 ```
 
-Setups are named with **underscores** (`pcmk_san_ha`, `rdqm_dr`, …) so the same
-token is the topology setup, the `mqlab` selector, **and** the Ansible inventory
-group. `mqlab vm inventory` renders that inventory — every host with its static
-management IP, the atomic role groups, and each setup as a group-of-groups —
-straight from `topology.yaml`, no live probing.
+When you're done, tear a stack back down:
 
-The verbs mirror a domain's lifecycle on two axes — **create/destroy** (existence)
-and **up/down** (power):
+```bash
+mqlab teardown pcmk-ubuntu   # destroy the stack's guests + overlay disks
+```
 
-- `vm create` runs `vagrant up` per guest — the one verb that uses Vagrant, because
-  it both **creates** the VM and **provisions** it (this is where you watch Ansible
-  build each machine).
-- `vm up` / `vm down` / `vm destroy` drive **`virsh`** (`start` / `shutdown` /
-  `undefine`). **libvirt is the ground truth for state; Vagrant is used only for
-  create** — so these work regardless of Vagrant's metadata.
-
-Every verb is **state-aware and idempotent**: it first runs `virsh list --all`
-(streamed verbatim, like every other step) to see the live state, then acts only
-on the guests that need it. Re-running `vm create all` skips guests that already
-exist; `vm up` skips those already running; `vm down` skips those already off;
-`vm destroy` force-stops a running guest before removing it, and skips any that
-are already gone. Guests it leaves alone get a one-line advisory note (`·`)
-explaining why — so the output always traces the decision back to the probed
-state. Running a verb twice is safe and converges on the same result.
-
-Like `net`, the mutating verbs require a selector, so a bare `mqlab vm destroy`
-cannot wipe every guest.
+`teardown` reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
+other stack is still up — pass `--commons` to force their removal, or leave them
+for the next stack. Like bootstrap, it names a stack, so a bare `mqlab teardown`
+cannot wipe everything by accident.
 
 ### Build the queue manager with `mqlab qm`
 
-`vm create` provisions the cluster **infrastructure** — iSCSI/SAN, Corosync,
-Pacemaker, the MQ install — but stops short of the queue manager itself. **`mqlab
-qm`** is the next layer: it builds the IBM MQ queue manager on the shared LUN and
-hands it to Pacemaker as a highly-available resource group. Run it *after*
-`mqlab vm create <setup>` has stood the infrastructure up.
+The `provision` phase already stands the queue manager up as part of bringing a
+stack live — bootstrap leaves you with a running QM. **`mqlab qm`** is the
+lifecycle layer *on top* of that: drive the QM without re-running a whole
+bootstrap. It dispatches per stack, so the same verbs cover every mechanism
+(Pacemaker `pcs`, RDQM, Native HA `systemctl`).
 
 ```bash
-mqlab qm create pcmk_san_ha   # build the QM on the LUN + the HA resource group
-mqlab qm status pcmk_san_ha   # pcs status resources — where mq_group is Started
-mqlab qm down  pcmk_san_ha    # stop the QM cluster-side (pcs resource disable)
-mqlab qm up    pcmk_san_ha    # start it again (pcs resource enable)
-mqlab qm destroy pcmk_san_ha  # remove the QM + its HA resources
+mqlab qm status pcmk-ubuntu   # pcs status resources — where mq_group is Started
+mqlab qm down   pcmk-ubuntu   # stop the QM cluster-side (pcs resource disable)
+mqlab qm up     pcmk-ubuntu   # start it again (pcs resource enable)
+mqlab qm create pcmk-ubuntu   # (re)build the QM + its HA resource group
+mqlab qm destroy pcmk-ubuntu  # remove the QM + its HA resources
 ```
 
-The same two axes as `net` and `vm` — **create/destroy** (the QM and its HA
-group exist or not) and **up/down** (the cluster runs it or not):
+For the Pacemaker/SAN stack, `qm create` runs the **`mq-pcmk-qmgr` Ansible
+role**: the queue manager is created on the shared LUN, taught to every node
+(`dspmqinf` → `addmqinf`), wrapped in a **disabled** systemd unit, and handed to
+Pacemaker as the `mq_fs` → `mq_vip` → `mq_qm` resource group. `qm up` / `qm down`
+go **through Pacemaker** — `pcs resource enable` / `disable mq_group` on the
+cluster's first node. Because the systemd units are disabled, the cluster is the
+*only* thing that starts the QM; you never `strmqm` it by hand.
 
-- `qm create` runs the **`mq-pcmk-qmgr` Ansible role**: the queue manager is
-  created on the shared LUN, taught to every node (`dspmqinf` → `addmqinf`),
-  wrapped in a **disabled** systemd unit, and handed to Pacemaker as the
-  `mq_fs` → `mq_vip` → `mq_qm` resource group. `qm destroy` removes it.
-- `qm up` / `qm down` go **through Pacemaker** — `pcs resource enable` /
-  `disable mq_group` on the cluster's first node. Because the systemd units are
-  disabled, the cluster is the *only* thing that starts the QM; you never
-  `strmqm` it by hand. `qm status` is `pcs status resources`.
+The role is the point: the streamed, verbatim task output *is* the reproducible,
+step-by-step HA procedure — the artifact a client re-implements under their own
+automation. Watching it run is how you come to understand exactly how MQ HA is
+built on Pacemaker/SAN.
 
-`qm create` is **idempotent** — every step guards on existing state, so re-running
-it converges. And the role is the point: the streamed, verbatim task output *is*
-the reproducible, step-by-step HA procedure — the artifact a client re-implements
-under their own automation. Watching it run is how you come to understand exactly
-how MQ HA is built on Pacemaker/SAN.
-
-> **More verbs land as the slices ship.** `mqlab net`, `mqlab vm`, and `mqlab qm`
-> (the Pacemaker/SAN arm) are live; the RDQM arm, the HA/DR experiment layer
-> (failover, cross-site cutover, DR drills), and the `status` / `check` dashboard
-> arrive in subsequent slices, each extending this walkthrough.
+> **Which verbs each arm supports** is a live matrix: `mqlab parity` prints it,
+> and `mqlab --help` (or `mqlab <group> --help`) lists the full command surface —
+> including cross-site DR (`mqlab dr cutover` / `failback`) and the shared
+> observability stack (`mqlab commons`).
 
 ## 3. Stand up one stack end to end
 
-The **standalone queue manager** path (Phase B) is the simplest proof that
-the stack works: a single queue manager, a simulated upstream (`svc-sim`),
-and an application client exchanging messages over the client network. Bring
-it up, send a message, and confirm it survives a guest reboot.
+The quickest proof that the stack works is to bootstrap one arm and exercise it:
+a queue manager, a simulated upstream (`svc-sim`), and an application client
+exchanging messages over the client network. **Native HA on Ubuntu** is the
+lightest starting point (no SAN, and it boots native on the dev host):
+
+```bash
+mqlab bootstrap nativeha-ubuntu   # bring the whole arm up end to end
+mqlab qm status  nativeha-ubuntu  # confirm the QM is up (dspmq -o nativeha)
+```
+
+Send a message, then stop the active instance and watch the standby take over —
+the QM survives, because that is the whole point of the arm.
 
 From there, the [Architecture](architecture/index.md) page walks the
-higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN
-alternative.
+higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.
 
 ## 4. Watch the lab live (observability)
 
@@ -179,7 +157,7 @@ A dedicated **`obs`** VM runs **Prometheus + Grafana**, scraping `node_exporter`
 across the whole fleet over the host-only **`net-mgmt`** plane — the one network
 fault drills never sever, so the dashboard stays live exactly when something
 breaks. A second node, **`mon-probe`**, carries the data-net NICs for the MQ
-client exporters that land in a later slice.
+client exporters.
 
 Metrics are only half the picture. Every queue manager also ships **MQ
 instrumentation events** — authority failures, channel start/stop, queue-depth
@@ -189,25 +167,29 @@ stream to **Loki**, and Grafana surfaces the events alongside the metrics, so th
 boards show both what the fleet is *doing* (metrics) and what MQ is *reporting*
 (events).
 
-Bring the pair up and provision it — one verb, provisioned as code:
+The observability stack is stood up **as part of `mqlab bootstrap`** — its
+`observe` phase renders the scrape targets and dashboards from topology and
+provisions the obs pair plus this stack's exporters. To bring the shared
+observability VMs up on their own (independently of any stack), use `mqlab
+commons up`. A few renders and the front door are exposed directly:
 
 ```bash
-mqlab obs up        # render scrape targets + inventory, create obs + mon-probe, provision
-mqlab obs status    # are the pair up? which targets are scraped, up/down?
-mqlab obs targets   # render build/prometheus/targets/node.json from topology + echo it
-mqlab obs open      # print the Grafana URL + the workstation tunnel recipe
+mqlab obs open       # print the Grafana URL + how to reach it from your workstation
+mqlab obs targets    # render the Prometheus file_sd targets from topology + echo them
+mqlab obs dashboard  # render the Grafana dashboards (Watcher + per-stack cockpits)
 ```
 
-`obs` is a guest **inside** the Vergil VM, so opening Grafana from your
-workstation means forwarding a local port through the VM. `mqlab obs open`
-prints the exact recipe; in short:
+`obs` is a guest **inside** the Vergil VM, but the forward is **automatic** — no
+manual tunnel. Lima forwards the base VM's port 3000 to your Mac's
+`localhost:3000`, and the `vergil-portforward` relay bridges that to the obs
+guest, so you just browse:
 
-```bash
-# on your workstation (macOS):
-limactl list                                                  # find this repo's instance
-ssh -F ~/.lima/<instance>/ssh.config -L 3000:10.50.0.2:3000 <host-alias>
-# then browse:  http://localhost:3000/d/lab-watcher   (admin / admin)
+```text
+http://localhost:3000/d/lab-watcher   (anonymous — no login)
 ```
+
+`mqlab obs open` prints the exact URLs (and re-heals the relay if a grafana
+restart wedged it).
 
 **The Watcher** (`lab-watcher`, #488) is the lab-state front door: a support-layer
 instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
@@ -224,18 +206,17 @@ QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native 
 which has no VIP) — **not** on the management / Watcher plane. `mqlab rest render`
 prints each queue manager's canonical REST endpoint(s) for both sites.
 
-`obs up` brings up only the observer pair; to put host metrics on a running arm,
-overlay the fleet role onto its group:
+Because `bootstrap` already made every node a scrape target, a fault is something
+you can *watch*. Kill a live cluster node the same way the lab exposes every
+other step — by hand, with `virsh`:
 
 ```bash
-mqlab vm create pcmk_a                                  # boots the arm (arm64, KVM-fast)
-cd ansible && ansible-playbook observability.yml --limit pcmk_a
+virsh -c qemu:///system destroy lab_pcmk-a2   # yank a node out from under the cluster
 ```
 
-Those tiles flip from red to green as `node_exporter` starts — no re-render or
-restart needed, because the nodes were already targets. Now watch a fault become
-visible: `mqlab vm down pcmk-a2` turns that tile red within a scrape interval,
-`mqlab vm up pcmk-a2` turns it green again. That live red↔green flip is the
+That node's tile turns red within a scrape interval while Pacemaker refloats the
+QM elsewhere; bring it back (`mqlab bootstrap pcmk-ubuntu`, which resumes at the
+`vms` phase) and the tile turns green again. That live red↔green flip is the
 point — a fault you can *watch*.
 
 ## Building these docs locally
