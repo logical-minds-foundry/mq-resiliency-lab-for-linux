@@ -159,6 +159,13 @@
       register: authz_mqsc
       changed_when: true
       failed_when: authz_mqsc.rc not in [0, 10]
+      # Same AMQ8146E raft-readiness race the our-side MQSC above guards (#435): the raft
+      # layer assigns ROLE(Active) a beat before the QM admin interface reaches Running, so
+      # on a fast native-KVM x86 node the authz flip can hit "queue manager not available"
+      # (rc 20). Retry until the active QM accepts it, mirroring the our-side wait. (#888)
+      until: authz_mqsc.rc in [0, 10]
+      retries: 30
+      delay: 5
       run_once: true
       delegate_to: "{{ active_host }}"
 
