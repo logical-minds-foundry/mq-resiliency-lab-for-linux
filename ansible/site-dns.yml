@@ -34,7 +34,11 @@
     - name: wait for connection (guests may be freshly booted)
       ansible.builtin.wait_for_connection:
         timeout: 180
-    - name: wait for systemd to reach a settled state
+    # noqa command-instead-of-module: `systemctl is-system-running` is a system-state
+    # QUERY with no ansible.builtin.systemd equivalent (the module acts on units); and
+    # using the systemd module here would re-introduce the very D-Bus query this gate
+    # exists to avoid. A raw query is the correct tool.
+    - name: wait for systemd to reach a settled state  # noqa: command-instead-of-module
       ansible.builtin.command: systemctl is-system-running
       register: _systemd_state
       # 'running' = fully booted; 'degraded' = booted but a unit failed (still queryable,
