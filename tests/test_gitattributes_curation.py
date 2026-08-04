@@ -26,9 +26,13 @@ INCLUDED = [
     "ansible/",
     "lab/",
     "manifests/",
-    "pyproject.toml",
-    "VERSION",
+    "docs/",
+    "scripts/",
     "scripts/setup",
+    "pyproject.toml",
+    "uv.lock",
+    "README.md",
+    "VERSION",
     "RELEASE-KEY.asc",
 ]
 
