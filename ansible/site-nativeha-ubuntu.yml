@@ -57,6 +57,12 @@
 - name: authz service accounts on every nativeha-ubuntu node (HA + DR)
   hosts: nha_ubuntu_a:nha_ubuntu_b
   become: true
+  # `authz` tag (#235): lets the Stage-2 authorization be (re)applied on an
+  # already-provisioned arm via `--tags authz`, without a full arm re-provision.
+  # Tags are inert on a default (untagged) run, so this changes nothing for the
+  # normal provision path. The tagged set below is self-contained: accounts here,
+  # then active-instance discovery + the CHLAUTH/setmqaut tasks in the qm play.
+  tags: [authz]
   roles: [mq-authz-accounts]
 
 # Folded qm-create: our-side inter-QM + app MQSC on the ACTIVE Native HA instance.
@@ -77,6 +83,7 @@
     # active had drifted to a2/a3. The detail lines list every instance from any node, so
     # this resolves the active regardless of which instance answers (#722).
     - name: find the active Native HA instance
+      tags: [authz]
       ansible.builtin.shell: |
         set -o pipefail
         su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x" \
@@ -96,6 +103,7 @@
       delay: 5
 
     - name: record the active host
+      tags: [authz]
       ansible.builtin.set_fact:
         active_host: "{{ act.stdout | trim }}"
       run_once: true
@@ -142,6 +150,7 @@
     # disabled (the cert is the credential); the base MQSC's transient CHLAUTH(DISABLED)
     # is flipped to ENABLED here, atomically, before any real client connects.
     - name: render the authorization MQSC (CHLAUTH + maps) on the active instance
+      tags: [authz]
       ansible.builtin.template:
         src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2"
         dest: /var/mqm/authz.mqsc
@@ -152,6 +161,7 @@
       delegate_to: "{{ active_host }}"
 
     - name: apply the authorization MQSC (flip CHLAUTH ENABLED + back-stop + SSLPEERMAP)
+      tags: [authz]
       ansible.builtin.shell: |
         su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/authz.mqsc"
       args:
@@ -173,6 +183,7 @@
     # invocation per grant, on the running active instance (raft-replicated). -t qmgr
     # grants omit -n. Mirrors the pcmk role's grant loop, driven by the same authz_grants.
     - name: apply setmqaut grants (least-privilege OAM) on the active instance
+      tags: [authz]
       ansible.builtin.command:
         cmd: >
           su - mqm -c "/opt/mqm/bin/setmqaut -m {{ qm_name }}
@@ -187,6 +198,7 @@
       failed_when: setmqaut_res.rc != 0
 
     - name: refresh the authorization service on the active instance
+      tags: [authz]
       ansible.builtin.shell: |
         set -o pipefail
         printf 'REFRESH SECURITY TYPE(AUTHSERV)\n' | su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}"
