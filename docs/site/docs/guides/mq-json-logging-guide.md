@@ -105,7 +105,7 @@ manager or to retrofit one created before the template existed.**
    `Severities` you want. For the File style, set `Format = json`. Direct `.ini`
    editing is a supported IBM mechanism and takes effect on the next
    queue-manager restart; see the mechanism note in
-   [section 6](#6-what-stays-caveats). See
+   [section 6](#6-what-stays-and-caveats). See
    [Appendix C](#appendix-c-complete-configuration-examples) for both variants in
    full.
 3. **System / installation diagnostics (`mqs.ini`).** Add a
@@ -141,7 +141,7 @@ manager or to retrofit one created before the template existed.**
   (e.g. `AMQ9209E`), `loglevel`, and the expanded `message` text. If those are
   present and each line parses cleanly, the surface is configured correctly.
 
-## 6. What stays / caveats
+## 6. What stays and caveats
 
 - **The legacy text logs never go away.** The multi-line `AMQERRnn.LOG` files are
   always written and cannot be turned off. JSON is *additive* — it carries the
