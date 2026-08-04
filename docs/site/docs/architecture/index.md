@@ -71,7 +71,10 @@ The Pacemaker arm provides the same single-site HA goal as RDQM but with a
 different mechanism: shared SAN storage (`san-a`) fronted by a Pacemaker
 cluster (`pcmk-a1..3`) instead of block-level replication. Running both on
 the same fabric lets the lab compare replicated-storage HA against
-shared-storage HA directly.
+shared-storage HA directly. Like the other arms it is a full **3+3**: cross-site
+resilience is an asynchronous DR peer in Data Center B (`pcmk-b1..3` fronting
+`san-b`, whose LUN is DRBD-replicated from `san-a` over the WAN) that receives
+the queue manager on a manual cutover — never a WAN-stretched cluster.
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/05-pacemaker-san.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Pacemaker/SAN arm"></iframe>
@@ -129,3 +132,10 @@ event stream + `.error` diagnostics) for a site whose forwarding agent watches
 files. Both are independently tested; the file variant carries a host-local
 HA-failover stranding window the syslog sink does not, which is why syslog is the
 lab default. See `docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md`.
+
+## Where to next
+
+This page is the **why** — the shape of the lab and the reasoning behind each
+mechanism. For the **how** — running failover drills, cutting a stack over to its
+DR site, driving the end-to-end request/reply path, and watching it all live —
+see [Operate & Observe](../operate/index.md).
