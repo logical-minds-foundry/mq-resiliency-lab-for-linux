@@ -107,11 +107,13 @@ def test_archive_includes_product_paths() -> None:
 
 
 def test_archive_ships_only_the_product_docs_subtree() -> None:
-    """Fail-loud boundary: docs/site/ is the ONLY docs/ subtree that ships.
-    Any other docs/* directory leaking into the archive (a new engineering-record
-    tree added later without an export-ignore entry) trips this."""
+    """Fail-loud boundary: docs/site is the ONLY docs/ subtree that ships. Any
+    other docs/* path leaking into the archive (a new engineering-record tree
+    added later without an export-ignore entry) trips this."""
     names = _archive_or_skip()
     leaked = sorted(
-        n for n in names if n.startswith("docs/") and not n.startswith("docs/site/")
+        n
+        for n in names
+        if n.startswith("docs/") and n != "docs/site" and not n.startswith("docs/site/")
     )
     assert not leaked, f"non-product docs leaked into archive: {leaked}"
