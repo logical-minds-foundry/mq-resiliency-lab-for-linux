@@ -105,7 +105,7 @@ manager or to retrofit one created before the template existed.**
    `Severities` you want. For the File style, set `Format = json`. Direct `.ini`
    editing is a supported IBM mechanism and takes effect on the next
    queue-manager restart; see the mechanism note in
-   [section 6](#6-what-stays--caveats). See
+   [section 6](#6-what-stays-caveats). See
    [Appendix C](#appendix-c-complete-configuration-examples) for both variants in
    full.
 3. **System / installation diagnostics (`mqs.ini`).** Add a
