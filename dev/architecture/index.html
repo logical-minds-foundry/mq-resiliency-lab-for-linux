@@ -11,10 +11,10 @@
       
       
       
-        <link rel="prev" href="../guides/mq-authorization-guide/">
+        <link rel="prev" href="../getting-started/">
       
       
-        <link rel="next" href="../design-and-specs/">
+        <link rel="next" href="../operate/">
       
       
         
@@ -268,6 +268,25 @@
   
   
     <li class="md-tabs__item">
+      <a href="../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
       <a href="../getting-started/" class="md-tabs__link">
         
   
@@ -275,6 +294,46 @@
     
   
   Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../operate/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operate & Observe
 
       </a>
     </li>
@@ -307,17 +366,34 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../reference/" class="md-tabs__link">
         
   
   
     
   
-  Architecture
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
 
       </a>
     </li>
@@ -585,6 +661,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../getting-started/" class="md-nav__link">
         
   
@@ -593,6 +696,184 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layer-1-the-host-and-its-vms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer 1 — The host and its VMs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-2-inside-the-lab-vm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer 2 — Inside the lab VM
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-the-rdqm-arm-ha-dr-building-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer 3 — The RDQM arm (HA + DR building block)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-the-pacemakersan-arm-the-ha-contrast" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer 3 — The Pacemaker/SAN arm (the HA contrast)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-3-the-native-ha-arm-log-replicated-ha" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer 3 — The Native HA arm (log-replicated HA)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-admin-plane-mqweb-data-plane-infrastructure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The admin plane — mqweb (data-plane infrastructure)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-event-feed-mq-instrumentation-events-every-queue-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The event feed — MQ instrumentation events (every queue manager)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../operate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
   
 
     
@@ -645,7 +926,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -667,14 +948,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -893,44 +1174,17 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Architecture
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Architecture
+    Reference
   
 
     
@@ -939,103 +1193,33 @@
   
 
       </a>
-      
-        
+    </li>
+  
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+    
+      
+      
   
   
   
+  
+    <li class="md-nav__item">
+      <a href="../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
     
   
+    Develop the lab
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#layer-1-the-host-and-its-vms" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 1 — The host and its VMs
-      
-    </span>
-  </a>
+
+    
+  </span>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#layer-2-inside-the-lab-vm" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 2 — Inside the lab VM
-      
-    </span>
-  </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#layer-3-the-rdqm-arm-ha-dr-building-block" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 3 — The RDQM arm (HA + DR building block)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#layer-3-the-pacemakersan-arm-the-ha-contrast" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 3 — The Pacemaker/SAN arm (the HA contrast)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#layer-3-the-native-ha-arm-log-replicated-ha" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Layer 3 — The Native HA arm (log-replicated HA)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-admin-plane-mqweb-data-plane-infrastructure" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The admin plane — mqweb (data-plane infrastructure)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-event-feed-mq-instrumentation-events-every-queue-manager" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The event feed — MQ instrumentation events (every queue manager)
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
+
+      </a>
     </li>
   
 
@@ -1192,10 +1376,11 @@
 machines on it, the network fabric and node fleet inside the lab VM, and
 finally the MQ-service arms built on top. The lab runs <strong>three HA/DR
 mechanisms</strong> — RDQM (replicated-storage HA), Pacemaker/SAN (shared-storage HA),
-and Native HA (log-replicated HA) — each as a full <strong>3+3</strong> stack (a 3-node group
-in Data Center A with an asynchronous DR/CRR relationship to a matching 3-node
-group in Data Center B), all exchanging messages with a simulated cross-business
-counterparty (<code>svc-sim</code>) over distributed queuing. Everything shown here is
+and Native HA (log-replicated HA) — across <strong>four arms</strong> (Native HA runs on both
+Ubuntu and RHEL), each a full <strong>3+3</strong> stack (a 3-node group in Data Center A with
+an asynchronous DR/CRR relationship to a matching 3-node group in Data Center B),
+all exchanging messages with a simulated cross-business counterparty (<code>svc-sim</code>)
+over distributed queuing. Everything shown here is
 <strong>as-built</strong> and traces back to
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>.</p>
 <blockquote>
