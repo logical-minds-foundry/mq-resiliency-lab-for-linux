@@ -320,12 +320,13 @@ def test_nativeha_board_has_full_section_parity_minus_storage():
     assert len(row_titles) >= 6  # ① ② ③ + timeline + logs + perf + net
 
 
-def test_nativeha_log_panel_notes_amqerr_is_file_based():
-    # the logs panel carries a description so an empty panel doesn't read as broken (#279):
-    # MQ's AMQERR error log is file-based, not journald.
+def test_nativeha_log_panel_includes_ibm_mq_diagnostic_stream():
+    # the logs panel carries a description so an empty panel doesn't read as broken (#279),
+    # and since #282/#822 it targets the ibm-mq diagnostic (AMQERR JSON) stream.
     d = render_cluster_dashboard({}, arm="nativeha-rhel")
     logs = next(p for p in d["panels"] if p["type"] == "logs")
     assert "AMQERR" in logs["description"]
+    assert "ibm-mq" in logs["targets"][0]["expr"]
     assert 'host=~"nha-rhel-.*"' in logs["targets"][0]["expr"]
 
 
@@ -362,9 +363,10 @@ def test_nativeha_ubuntu_board_is_the_rhel_board_reparameterized():
     assert any("Cross-region replication (CRR)" in t for t in titles)
     assert any(t in ("Site A", "Site B") for t in titles)
     assert "③ Storage — DRBD / SAN" not in titles
-    # the AMQERR note points at the Ubuntu QM's error path
+    # the logs panel names the Ubuntu QM and targets the ibm-mq diagnostic stream (#822)
     logs = next(p for p in d["panels"] if p["type"] == "logs")
-    assert "/var/mqm/qmgrs/NHAUAPP/errors/" in logs["description"]
+    assert "NHAUAPP" in logs["description"]
+    assert "ibm-mq" in logs["targets"][0]["expr"]
 
 
 def test_nativeha_crr_card_is_replication_health_not_group_roles():
@@ -722,10 +724,11 @@ def test_rdqm_board_scopes_shared_metrics_to_rdqm_groups():
     assert "pcmk_a|pcmk_b" not in blob and "nha_rhel" not in blob  # no other arm's scope
 
 
-def test_rdqm_log_panel_notes_amqerr_is_file_based():
+def test_rdqm_log_panel_includes_ibm_mq_diagnostic_stream():
     d = render_cluster_dashboard({}, arm="rdqm-rhel")
     logs = next(p for p in d["panels"] if p["type"] == "logs")
     assert "AMQERR" in logs["description"]
+    assert "ibm-mq" in logs["targets"][0]["expr"]
     assert 'host=~"rdqm-.*"' in logs["targets"][0]["expr"]
 
 
