@@ -4,10 +4,11 @@ This page walks the lab from the outside in: the host machine, the virtual
 machines on it, the network fabric and node fleet inside the lab VM, and
 finally the MQ-service arms built on top. The lab runs **three HA/DR
 mechanisms** — RDQM (replicated-storage HA), Pacemaker/SAN (shared-storage HA),
-and Native HA (log-replicated HA) — each as a full **3+3** stack (a 3-node group
-in Data Center A with an asynchronous DR/CRR relationship to a matching 3-node
-group in Data Center B), all exchanging messages with a simulated cross-business
-counterparty (`svc-sim`) over distributed queuing. Everything shown here is
+and Native HA (log-replicated HA) — across **four arms** (Native HA runs on both
+Ubuntu and RHEL), each a full **3+3** stack (a 3-node group in Data Center A with
+an asynchronous DR/CRR relationship to a matching 3-node group in Data Center B),
+all exchanging messages with a simulated cross-business counterparty (`svc-sim`)
+over distributed queuing. Everything shown here is
 **as-built** and traces back to
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml).
 
