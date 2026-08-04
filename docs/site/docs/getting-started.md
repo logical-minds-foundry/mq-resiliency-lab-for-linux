@@ -1,35 +1,120 @@
 # Getting Started
 
-This page takes you from nothing to a running MQ stack. It stays at
-orientation altitude and points to the real commands; per-arm operational
-detail lives in the design spec and (later) the Operations section.
+This page takes you from nothing — a bare x86 Linux host — to a running MQ stack
+you can fail over. It stays at orientation altitude and points to the real
+commands; per-arm operational detail lives in the design spec and the
+[Operate & Observe](operate/index.md) section.
 
-## 1. Build and enter the lab VM
+!!! warning "Consumer path status"
+    The consumer path is documented; end-to-end validation on a clean x86 host
+    is tracked in
+    [#910](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/910).
 
-The lab runs inside an ephemeral Vergil VM declared by
-[`vergil.toml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/vergil.toml)
-(the `[vm.vergil-user]` profile). It is 100% reproducible — rebuild it
-freely.
+## 1. Prerequisites
+
+You bring a virtualization-capable host and a short list of tools; the lab
+brings everything else (IBM **MQ Advanced for Developers**, the no-charge
+edition, is fetched automatically by the tooling).
+
+- **An x86-64 Linux host with root/sudo** and nested virtualization — the lab
+  creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly
+  12 vCPU / 64 GiB). `mqlab doctor` reports anything missing.
+- **[uv](https://docs.astral.sh/uv/)** and **Python 3.12** — the orchestrator's
+  runtime.
+- **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
+- **gpg** — to verify the signed release below.
+- **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
+  RHEL). The canonical `pcmk-ubuntu` arm used throughout this page needs nothing
+  extra.
+
+## 2. Download and verify the release
+
+The lab ships as a **signed tarball** from the project's
+[Releases page](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases).
+Each release carries four assets: the tarball, its detached signature, a
+`SHA256SUMS`, and a signed `SHA256SUMS.asc`.
+
+Download the tarball and the two checksum files (substitute the version you're
+installing):
 
 ```bash
-vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
-vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
+VERSION=vX.Y.Z
+base=https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/releases/download/$VERSION
+curl -LO $base/mq-resiliency-lab-for-linux-$VERSION.tar.gz
+curl -LO $base/SHA256SUMS
+curl -LO $base/SHA256SUMS.asc
 ```
 
-All working state lives under the gitignored `build/` directory, mounted
-from the host. Nothing else in the VM is precious.
+Verify it **before** you unpack. The trust root is the **fingerprint below plus
+a key fetched out-of-band** — not any key bundled in the tarball:
 
-Guests boot **pre-baked, per-role box images** rather than installing everything
-on every bring-up: MQ, the RDQM/observability stacks, and the OSS agents are
-baked once into a golden box per role, so a bring-up only does the fast,
-instance-specific configuration. That is why the walkthrough below is minutes,
-not the better part of an hour. The baked boxes persist across a VM rebuild
-(they live on the persistent data disk), so "rebuild" comes in tiers of very
-different cost — see the
-[box model & rebuild tiers](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)
-developer note.
+```bash
+gpg --recv-keys 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54     # or import the key from the release page over HTTPS
+gpg --fingerprint 5BABD50A78EBF24D2410AE52ADF1A99B75D24E54   # cross-check it matches the README
+gpg --verify SHA256SUMS.asc SHA256SUMS                       # the checksums are signed by that key
+sha256sum -c SHA256SUMS                                      # the tarball matches the checksums
+```
 
-## 2. Drive the lab with `mqlab`
+Once both checks pass, unpack the tarball and enter the tree:
+
+```bash
+tar xzf mq-resiliency-lab-for-linux-$VERSION.tar.gz
+cd mq-resiliency-lab-for-linux-$VERSION
+```
+
+## 3. Set up and pre-flight the host
+
+From inside the extracted tree, build the Python environment and pre-flight the
+host:
+
+```bash
+./scripts/setup     # checks uv + Python 3.12, then runs `uv sync` to build the venv
+mqlab doctor        # pre-flight the host: arch, KVM, libvirt, and required tools
+```
+
+`./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
+Python 3.12 are present (failing loud if not), runs `uv sync` to materialize the
+virtual environment, and prints the next commands. `mqlab doctor` then confirms
+the host can actually run the guests before you commit to a bring-up.
+
+## 4. Bring up your first stack
+
+One command stands up a whole HA/DR stack. The canonical starting arm is
+**`pcmk-ubuntu`** — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:
+
+```bash
+mqlab bootstrap pcmk-ubuntu   # net → vms → provision → observe, every step streamed
+mqlab status pcmk-ubuntu      # phase completion (✓/✗) for this stack
+```
+
+`bootstrap` runs four idempotent phases in order — define the lab networks, boot
+the guest fleet, provision the cluster and queue manager, then wire up
+observability — and leaves you with a **running queue manager**. Guests boot
+pre-baked, per-role box images rather than installing MQ on every bring-up, which
+is why this takes minutes rather than the better part of an hour.
+
+### Your first message
+
+With the stack up, prove the whole point of the lab — that a live message path
+survives failover. Confirm the queue manager is up, then (via the
+[Operate & Observe](operate/index.md) walkthrough) put a message, fail the active
+node, and watch the queue manager refloat with the message intact:
+
+```bash
+mqlab qm status pcmk-ubuntu   # confirm the QM is Started
+```
+
+The deep dive below explains what each `mqlab` verb is doing under the hood.
+
+??? note "Developing with Vergil? (that's basically just the author)"
+    The lab is *developed* inside an ephemeral
+    [Vergil](https://github.com/vergil-project) VM — the author's personal
+    solo-practitioner dev tooling — rather than on the host directly. That is a
+    development convenience, **not** part of the consumer path: strip Vergil away
+    and what remains is exactly the tree you unpacked above. If you're a Vergil
+    user, [Develop the lab](develop.md) covers the `vrg-vm` workflow.
+
+## How `mqlab` drives the lab
 
 The lab is driven by **`mqlab`**, an operator orchestrator that does the
 opposite of most tooling: rather than hiding the mechanics, it **shows** them.
@@ -51,13 +136,6 @@ order:
 | `vms` | `vagrant up` the stack's guests (plus the shared commons VMs) |
 | `provision` | configure the cluster/storage and build the queue manager |
 | `observe` | render + provision Prometheus/Grafana targets for the stack |
-
-```bash
-mqlab doctor                 # pre-flight the host (arch, KVM, required tools)
-mqlab bootstrap pcmk-ubuntu  # net → vms → provision → observe, every step streamed
-mqlab status                 # phase completion (✓/✗) per stack
-mqlab status pcmk-ubuntu     # just this stack
-```
 
 Each phase is gated by a live "satisfied?" probe, so bootstrap is **state-aware
 and resumable**: it starts from the first *unsatisfied* phase and a re-run picks
@@ -133,12 +211,13 @@ built on Pacemaker/SAN.
 > including cross-site DR (`mqlab dr cutover` / `failback`) and the shared
 > observability stack (`mqlab commons`).
 
-## 3. Stand up one stack end to end
+## Exercise a stack end to end
 
-The quickest proof that the stack works is to bootstrap one arm and exercise it:
-a queue manager, a simulated upstream (`svc-sim`), and an application client
-exchanging messages over the client network. **Native HA on Ubuntu** is the
-lightest starting point (no SAN, and it boots native on the dev host):
+The quickest proof that a stack works is to bootstrap one arm and exercise it: a
+queue manager, a simulated upstream (`svc-sim`), and an application client
+exchanging messages over the client network. The canonical `pcmk-ubuntu` arm
+above does this; an even lighter arm to try is **Native HA on Ubuntu** (no SAN,
+and it boots native on an x86 dev host):
 
 ```bash
 mqlab bootstrap nativeha-ubuntu   # bring the whole arm up end to end
@@ -151,7 +230,7 @@ the QM survives, because that is the whole point of the arm.
 From there, the [Architecture](architecture/index.md) page walks the
 higher-order arms: the RDQM 3+3 HA/DR cluster and the Pacemaker/SAN alternative.
 
-## 4. Watch the lab live (observability)
+## Watch the lab live (observability)
 
 A dedicated **`obs`** VM runs **Prometheus + Grafana**, scraping `node_exporter`
 across the whole fleet over the host-only **`net-mgmt`** plane — the one network
@@ -179,16 +258,13 @@ mqlab obs targets    # render the Prometheus file_sd targets from topology + ech
 mqlab obs dashboard  # render the Grafana dashboards (Watcher + per-stack cockpits)
 ```
 
-`obs` is a guest **inside** the Vergil VM, but the forward is **automatic** — no
-manual tunnel. Lima forwards the base VM's port 3000 to your Mac's
-`localhost:3000`, and the `vergil-portforward` relay bridges that to the obs
-guest, so you just browse:
+`obs` is a guest inside the lab, reached on your host at `localhost:3000`:
 
 ```text
 http://localhost:3000/d/lab-watcher   (anonymous — no login)
 ```
 
-`mqlab obs open` prints the exact URLs (and re-heals the relay if a grafana
+`mqlab obs open` prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).
 
 **The Watcher** (`lab-watcher`, #488) is the lab-state front door: a support-layer
@@ -218,19 +294,3 @@ That node's tile turns red within a scrape interval while Pacemaker refloats the
 QM elsewhere; bring it back (`mqlab bootstrap pcmk-ubuntu`, which resumes at the
 `vms` phase) and the tile turns green again. That live red↔green flip is the
 point — a fault you can *watch*.
-
-## Building these docs locally
-
-The site builds inside the project's docs container, the same way CI does:
-
-```bash
-# Stage the changelog + release-notes sources into the docs tree (once per
-# session, or after CHANGELOG.md / releases/ change).
-vrg-container-run -- vrg-docs-stage --docs-dir docs/site/docs
-
-# Strict build (fails on any broken link or orphan page):
-vrg-container-docs build --strict
-
-# Or a live-reloading preview at http://localhost:8000 :
-vrg-container-docs serve
-```
