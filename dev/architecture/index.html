@@ -851,6 +851,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#where-to-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to next
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1354,6 +1365,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#where-to-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to next
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1436,7 +1458,10 @@ always a separate, asynchronous DR relationship with a manual cutover.</p>
 different mechanism: shared SAN storage (<code>san-a</code>) fronted by a Pacemaker
 cluster (<code>pcmk-a1..3</code>) instead of block-level replication. Running both on
 the same fabric lets the lab compare replicated-storage HA against
-shared-storage HA directly.</p>
+shared-storage HA directly. Like the other arms it is a full <strong>3+3</strong>: cross-site
+resilience is an asynchronous DR peer in Data Center B (<code>pcmk-b1..3</code> fronting
+<code>san-b</code>, whose LUN is DRBD-replicated from <code>san-a</code> over the WAN) that receives
+the queue manager on a manual cutover — never a WAN-stretched cluster.</p>
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/05-pacemaker-san.html" style="width:100%;height:360px;border:0;border-radius:8px;" title="Pacemaker/SAN arm"></iframe>
 
@@ -1486,6 +1511,11 @@ event stream + <code>.error</code> diagnostics) for a site whose forwarding agen
 files. Both are independently tested; the file variant carries a host-local
 HA-failover stranding window the syslog sink does not, which is why syslog is the
 lab default. See <code>docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md</code>.</p>
+<h2 id="where-to-next">Where to next<a class="headerlink" href="#where-to-next" title="Permanent link">&para;</a></h2>
+<p>This page is the <strong>why</strong> — the shape of the lab and the reasoning behind each
+mechanism. For the <strong>how</strong> — running failover drills, cutting a stack over to its
+DR site, driving the end-to-end request/reply path, and watching it all live —
+see <a href="../operate/">Operate &amp; Observe</a>.</p>
 
 
 

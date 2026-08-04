@@ -751,6 +751,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -767,6 +785,108 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bring-a-stack-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bring a stack up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-end-to-end-requestreply-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The end-to-end request/reply path
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failover-drills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Failover drills
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dr-cutover-and-failback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DR: cutover and failback
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-watcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Watcher
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Watcher">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mqlab-obs-verbs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mqlab obs verbs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-boards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The boards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1157,6 +1277,97 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#bring-a-stack-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bring a stack up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-end-to-end-requestreply-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The end-to-end request/reply path
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failover-drills" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Failover drills
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dr-cutover-and-failback" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DR: cutover and failback
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-watcher" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Watcher
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The Watcher">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#mqlab-obs-verbs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mqlab obs verbs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-boards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The boards
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1173,16 +1384,182 @@
 
 
 <h1 id="operate-observe">Operate &amp; Observe<a class="headerlink" href="#operate-observe" title="Permanent link">&para;</a></h1>
-<p>Operate and observe the running lab: driving failover drills, DR
-cutover/failback, the end-to-end request/reply message path, and watching it
-all live through the Watcher (Prometheus/Grafana + MQ events).</p>
+<p>This page is the <strong>how</strong> — how to <em>run</em> the lab and <em>watch</em> it. It sits at
+operational altitude: the commands you type against a live stack and the boards
+you watch them on. For the <strong>why</strong> — the shape of the lab, the four arms, and the
+reasoning behind each HA/DR mechanism — read <a href="../architecture/">Architecture</a>
+first; everything below assumes that mental model.</p>
+<p>Every verb here is stack-dispatched: you name a <strong>stack</strong> and <code>mqlab</code> resolves
+the right mechanism-specific action from
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>.
+The four stack names are:</p>
+<table>
+<thead>
+<tr>
+<th>Stack</th>
+<th>Mechanism</th>
+<th>OS</th>
+<th>App queue manager</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rdqm-rhel</code></td>
+<td>RDQM (replicated-storage HA)</td>
+<td>RHEL</td>
+<td><code>RDQMAPP</code></td>
+</tr>
+<tr>
+<td><code>pcmk-ubuntu</code></td>
+<td>Pacemaker/SAN (shared-storage HA)</td>
+<td>Ubuntu</td>
+<td><code>PCMKAPP</code></td>
+</tr>
+<tr>
+<td><code>nativeha-rhel</code></td>
+<td>Native HA (log-replicated HA)</td>
+<td>RHEL</td>
+<td><code>NHARAPP</code></td>
+</tr>
+<tr>
+<td><code>nativeha-ubuntu</code></td>
+<td>Native HA (log-replicated HA)</td>
+<td>Ubuntu</td>
+<td><code>NHAUAPP</code></td>
+</tr>
+</tbody>
+</table>
+<p>Queue-manager names are derived from each stack's short token — no literal is
+hardcoded (<code>{short}APP</code> / <code>{short}SVC</code>).</p>
+<h2 id="bring-a-stack-up">Bring a stack up<a class="headerlink" href="#bring-a-stack-up" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mqlab<span class="w"> </span>doctor<span class="w">                      </span><span class="c1"># host pre-flight (run first)</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>mqlab<span class="w"> </span>commons<span class="w"> </span>up<span class="w">                  </span><span class="c1"># shared infra + the Watcher (obs/probe/svc/app/dns)</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>&lt;stack&gt;<span class="w">           </span><span class="c1"># net → vms → provision → observe, resumable</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>mqlab<span class="w"> </span>status<span class="w">                      </span><span class="c1"># topology joined with live virsh state</span>
+</code></pre></div>
+<p><code>mqlab bootstrap</code> runs from the first unsatisfied phase, so a re-run resumes;
+<code>--from &lt;phase&gt;</code> / <code>--only &lt;phase&gt;</code> force or narrow it. Observability comes up
+with <code>mqlab commons up</code> (it provisions the <code>obs</code> guest), so the Watcher is
+already live before the first stack lands. Tear a stack down with
+<code>mqlab teardown &lt;stack&gt;</code> (shared commons are reclaimed when the last stack exits).</p>
+<h2 id="the-end-to-end-requestreply-path">The end-to-end request/reply path<a class="headerlink" href="#the-end-to-end-requestreply-path" title="Permanent link">&para;</a></h2>
+<p>The lab always has a live workload: a continuous request/reply stream between our
+HA queue manager and the simulated cross-business counterparty (<code>svc-sim</code>). This
+is the traffic a failover drill perturbs and the Watcher measures.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>app-client                     our HA queue manager            svc-sim
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>┌─────────────────┐  APP.SVRCONN  ┌──────────────┐  distributed  ┌──────────────────────┐
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│ mq-app-requester │ ────────────▶ │  app QM      │   queuing     │ SVCQM                │
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│                 │               │ (e.g. PCMKAPP)│ ────────────▶ │  &lt;SHORT&gt;.SVC.REQUEST │
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│                 │ ◀──────────── │              │  (net-ext)    │        │             │
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>└─────────────────┘   APP.REPLY   └──────────────┘               │        ▼             │
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>                                                                 │ mq-svc-responder@… │
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>                                                                 └──────────────────────┘
+</code></pre></div>
+<ul>
+<li><strong>Requester (Business A).</strong> The <code>mq-app-requester</code> systemd unit on <code>app-client</code>
+  drives an always-on request/reply stream (fixed-rate, <code>APP.SVRCONN</code>) at the app
+  queue manager's <strong>data-plane address</strong> — the floating VIP on the RDQM and
+  Pacemaker arms, or the active-instance CONNAME list on the Native HA arms (which
+  have no VIP). It publishes a node-exporter round-trip metric
+  (<code>app_roundtrip_total</code>, <code>app_roundtrip_failures_total</code>, <code>app_roundtrip_latency_ms</code>)
+  and logs each round trip to journald → Loki.</li>
+<li><strong>Responder (Business B / SVC).</strong> One shared <code>SVCQM</code> on <code>svc-sim</code> hosts each
+  stack's own <code>&lt;SHORT&gt;.SVC.REQUEST</code> queue, serviced by a per-stack
+  <code>mq-svc-responder@&lt;SHORT&gt;.SVC.REQUEST</code> instance (e.g.
+  <code>mq-svc-responder@PCMK.SVC.REQUEST</code>). Per-stack queues keep the always-on
+  streams independent — a stuck responder affects only its own stack.</li>
+</ul>
+<p>To fire a bounded burst by hand (each request must round-trip or the script exits
+non-zero):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># lab/scripts/e2e-test.sh [COUNT=5] [QM=PCMKAPP] [CONN=&lt;conname-list&gt;]</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>lab/scripts/e2e-test.sh<span class="w"> </span><span class="m">20</span><span class="w"> </span>PCMKAPP
+</code></pre></div>
+<h2 id="failover-drills">Failover drills<a class="headerlink" href="#failover-drills" title="Permanent link">&para;</a></h2>
+<p>The always-on requester is the probe: induce a failure on the active node and
+watch the stream dip and recover while the queue manager fails over. The
+controlled, stack-dispatched lever is <code>mqlab qm</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>&lt;stack&gt;<span class="w">    </span><span class="c1"># HA resource / instance state</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w"> </span>&lt;stack&gt;<span class="w">      </span><span class="c1"># stop the active QM, HA intact — the controlled-failover trigger</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w"> </span>&lt;stack&gt;<span class="w">        </span><span class="c1"># bring it back</span>
+</code></pre></div>
+<p>What each verb runs is per-mechanism (all from the stack's topology <code>verbs:</code>):
+Pacemaker disables/enables the <code>mq_group</code> resource (<code>pcs</code>), RDQM runs
+<code>endmqm -w</code> / <code>strmqm</code>, and Native HA stops/starts the <code>mqmonitor@</code> unit so the
+raft group elects a new leader.</p>
+<p>For harder, host-side drills that a clean <code>qm down</code> cannot express, the lab ships
+fault scripts (run on the host, not through <code>mqlab</code>):</p>
+<ul>
+<li><code>lab/scripts/nativeha-fault-suite.sh &lt;qm&gt;</code> — the Native HA fault suite
+  (hard <code>virsh destroy</code> of the active node, then assert the end state).</li>
+<li><code>lab/scripts/net-down.sh &lt;net…&gt;</code> / <code>lab/scripts/net-up.sh &lt;net…&gt;</code> — sever and
+  restore a lab network to inject a partition (the planes are designed severable).</li>
+<li><code>lab/scripts/drbd-degrade.sh</code> — degrade DRBD replication for a forced-DR drill.</li>
+</ul>
+<p>Watch any drill on the stack's <strong>cockpit</strong> board and the <strong>lab-watcher</strong> front
+door (see <a href="#the-watcher">The Watcher</a>).</p>
+<h2 id="dr-cutover-and-failback">DR: cutover and failback<a class="headerlink" href="#dr-cutover-and-failback" title="Permanent link">&para;</a></h2>
+<p>HA never stretches the WAN — cross-site resilience is always a <em>separate,
+asynchronous</em> DR relationship with a <strong>manual</strong> cutover. The unified operator
+verb is <code>mqlab dr</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>dr<span class="w"> </span>cutover<span class="w">  </span>&lt;stack&gt;<span class="w">   </span><span class="c1"># site A → B (a2b)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>dr<span class="w"> </span>failback<span class="w"> </span>&lt;stack&gt;<span class="w">   </span><span class="c1"># site B → A (b2a)</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>mqlab<span class="w"> </span>dr<span class="w"> </span>cutover<span class="w">  </span>&lt;stack&gt;<span class="w"> </span>--rpo0-drill<span class="w">   </span><span class="c1"># seed a persistent message, assert it survives the cut</span>
+</code></pre></div>
+<p><code>--rpo0-drill</code> proves <strong>RPO-0</strong> (no message loss): it seeds a persistent message
+before the cut and asserts it is present at the peer afterward — the survival
+assertion behind the DR framing.</p>
 <div class="admonition note">
-<p class="admonition-title">In progress</p>
-<p>This section is authored in
-<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/902">task #902</a>,
-under epic
-<a href="https://github.com/logical-minds-foundry/.github/issues/161">logical-minds-foundry/.github#161</a>.</p>
+<p class="admonition-title">Per-arm DR coverage as-built</p>
+<p><code>mqlab dr cutover|failback</code> currently drives the <strong>RDQM</strong> cross-site flow and
+refuses other mechanisms with a clean error. The other arms cut over through
+their own as-built flows: the <strong>Native HA</strong> arms run their switchover playbook
+(<code>ansible/site-nativeha-switchover.yml</code> / <code>…-ubuntu-switchover.yml</code>, the
+topology <code>dr-cutover</code> / <code>dr-failback</code> verbs), and the <strong>Pacemaker/SAN</strong> arm
+uses <code>lab/scripts/pcmk-dr-cutover.sh</code>. Run <code>mqlab parity</code> to print the
+cross-arm capability matrix.</p>
 </div>
+<h2 id="the-watcher">The Watcher<a class="headerlink" href="#the-watcher" title="Permanent link">&para;</a></h2>
+<p>The <strong>Watcher</strong> is the management/observability plane — the <code>net-mgmt</code> side of the
+lab that observes every node but never carries transit traffic. It runs on the
+<code>obs</code> guest and fuses two halves of the picture:</p>
+<ul>
+<li><strong>Metrics (Prometheus → Grafana).</strong> <code>node-exporter</code> on every node for host
+  health; a per-stack <code>mq_prometheus</code> exporter for MQ metrics. Scrape targets are
+  rendered from topology.</li>
+<li><strong>Events + logs (Alloy → Loki → Grafana).</strong> Every queue manager runs the
+  <code>mq-event-monitor</code> MQ SERVICE — an <code>amqsevt</code> collector that emits MQ
+  instrumentation events as JSONL to journald under the <code>mq-events</code> tag. <strong>Alloy</strong>
+  ships the journald stream (relabelled to <code>unit="mq-events"</code>, <code>unit="ibm-mq"</code>,
+  <code>unit="ibm-mqweb"</code>, plus the app round-trip stream) to <strong>Loki</strong>, and Grafana
+  surfaces it alongside the metrics.</li>
+</ul>
+<h3 id="mqlab-obs-verbs"><code>mqlab obs</code> verbs<a class="headerlink" href="#mqlab-obs-verbs" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># emit lab_network_state metrics from virsh (host-side)</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
+</code></pre></div>
+<p>The render verbs are pure topology→file projections; the observe phase of
+<code>mqlab commons up</code> runs them and hands the output to <code>site-obs.yml</code>, so a normal
+bring-up leaves the boards current without a manual render.</p>
+<h3 id="the-boards">The boards<a class="headerlink" href="#the-boards" title="Permanent link">&para;</a></h3>
+<p><code>mqlab obs open</code> prints the current URLs. Grafana is anonymous (no login):</p>
+<ul>
+<li><strong><code>lab-watcher</code></strong> — <em>the front door.</em> One instrument-strip row per commons
+  support host and one rollup row per stack (mechanism · Site A live · Site B DR ·
+  flow), each drilling into that stack's cockpit.</li>
+<li><strong>Per-stack cluster cockpit</strong> — the deep HA/DR view for one stack (QM owner,
+  per-node health, replication state).</li>
+<li><strong>Per-stack messaging board</strong> — the request/reply flow, driven by the
+  <code>mq-app-requester</code> round-trip metric.</li>
+<li><strong>Per-QM boards</strong> and the <strong><code>lab-fleet-node</code></strong> node-health board round out the
+  set.</li>
+</ul>
+<p>For a partition or failover drill, keep <code>lab-watcher</code> open for the whole-lab
+verdict and the stack cockpit open for the mechanism detail; use Grafana <strong>Explore</strong>
+against the Loki datasource (query printed by <code>mqlab obs open</code>) to live-tail the
+requester and event streams as the drill runs.</p>
 
 
 
