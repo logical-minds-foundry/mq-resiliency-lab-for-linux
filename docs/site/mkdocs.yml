@@ -61,7 +61,10 @@ nav:
       - Changelog: changelog.md
       - Release Notes:
           - releases/index.md
+  - Methodology: methodology.md
   - Getting Started: getting-started.md
+  - Architecture: architecture/index.md
+  - Operate & Observe: operate/index.md
   - Guides:
       - guides/index.md
       - Authoring standard: guides/guide-standard.md
@@ -71,5 +74,6 @@ nav:
       - Metrics & monitoring configuration: guides/mq-metrics-config-guide.md
       - TCP configuration: guides/mq-tcp-config-guide.md
       - Authorization & access control: guides/mq-authorization-guide.md
-  - Architecture: architecture/index.md
+  - Reference: reference/index.md
+  - Develop the lab: develop.md
   - Design & Specs: design-and-specs.md
