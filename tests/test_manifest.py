@@ -23,7 +23,8 @@ def manifests(tmp_path, monkeypatch):
         tmp_path,
         "manifests/_shared/observability.yaml",
         "prometheus: '2.53.2'\nnode_exporter: '1.8.2'\nloki: '3.1.0'\n"
-        "alloy: '1.3.0'\ngrafana: '11.1.0'\nmq_metric_samples_ref: 'v5.6.4'\n",
+        "alloy: '1.3.0'\ngrafana: '11.1.0'\nmq_metric_samples_ref: 'v5.6.4'\n"
+        "opensearch: '3.8.0'\nopensearch_dashboards: '3.8.0'\n",
     )
     return tmp_path
 
@@ -131,6 +132,16 @@ def test_committed_shared_obs_manifest_loads():
     ov = m.obs_overlay()
     assert ov["prometheus_version"]
     assert ov["mq_exporter_ref"]
+
+
+def test_committed_manifest_pins_opensearch():
+    # #829 (epic .github#149, logsearch tier): the shared obs manifest is the single
+    # source for the OpenSearch + Dashboards version pin, so a re-bake never changes the
+    # version under an existing snapshot. OpenSearch and its Dashboards share one upstream
+    # version number. Real committed manifest, not the fixture.
+    ov = m.obs_overlay()
+    assert ov["opensearch_version"]
+    assert ov["opensearch_dashboards_version"]
 
 
 def test_default_mq_version_is_set():

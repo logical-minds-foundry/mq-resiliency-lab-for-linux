@@ -110,6 +110,12 @@ _OBS_VAR_MAP = {
     "alloy_version": "alloy",
     "grafana_version": "grafana",
     "mq_exporter_ref": "mq_metric_samples_ref",
+    # logsearch tier (#829, epic .github#149): OpenSearch + Dashboards share one upstream
+    # version, pinned once in the shared manifest so a re-bake never changes the engine
+    # version under an existing snapshot. The opensearch/opensearch-dashboards roles that
+    # consume these are added in later #149 tasks.
+    "opensearch_version": "opensearch",
+    "opensearch_dashboards_version": "opensearch_dashboards",
 }
 
 
