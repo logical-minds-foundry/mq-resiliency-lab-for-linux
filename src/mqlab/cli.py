@@ -857,7 +857,7 @@ def obs_open() -> None:
         f"Fleet — Node Health (#488 predecessor): {WORKSTATION_GRAFANA_URL}/d/lab-fleet-node"
     )
     typer.echo(f"Live tail:   {WORKSTATION_GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
-    typer.echo('             query {unit="mqlab-requester"} and toggle Live)')
+    typer.echo('             query {unit="mq-app-requester"} and toggle Live)')
     typer.echo("")
     typer.echo("The forward is automatic — no manual tunnel. Lima forwards the VM's")
     typer.echo("port 3000 to your Mac's localhost:3000, and the vergil-portforward relay")

@@ -11,24 +11,46 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GITATTRIBUTES = REPO_ROOT / ".gitattributes"
 
+# Dev-only / engineering-record paths stripped from the release tarball (#918).
 EXCLUDED = [
     ".gitattributes",
+    ".gitignore",
     ".github/",
     ".claude/",
     ".vergil/",
     ".worktrees/",
     ".superpowers/",
+    ".ansible-lint.yml",
     "vergil.toml",
+    "CLAUDE.md",
     "tests/",
+    "tools/",
+    "build/.gitkeep",
+    "releases/.gitkeep",
+    "docs/plans/",
+    "docs/specs/",
+    "docs/reports/",
+    "docs/development/",
+    "docs/reference/",
+    "docs/shareable/",
 ]
+# Runtime + product-doc paths that must survive into the tarball (#918).
+# clients/ is runtime: the ansible roles load it as {{ playbook_dir }}/../clients/*.py.
 INCLUDED = [
     "src/mqlab/",
     "ansible/",
+    "clients/",
     "lab/",
     "manifests/",
-    "pyproject.toml",
-    "VERSION",
+    "scripts/",
     "scripts/setup",
+    "docs/site/",
+    "pyproject.toml",
+    "uv.lock",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "VERSION",
     "RELEASE-KEY.asc",
 ]
 
@@ -82,3 +104,16 @@ def test_archive_includes_product_paths() -> None:
     names = _archive_or_skip()
     for path in INCLUDED:
         assert any(n == path or n.startswith(path) for n in names), f"{path} missing from archive"
+
+
+def test_archive_ships_only_the_product_docs_subtree() -> None:
+    """Fail-loud boundary: docs/site is the ONLY docs/ subtree that ships. Any
+    other docs/* path leaking into the archive (a new engineering-record tree
+    added later without an export-ignore entry) trips this."""
+    names = _archive_or_skip()
+    leaked = sorted(
+        n
+        for n in names
+        if n.startswith("docs/") and n != "docs/site" and not n.startswith("docs/site/")
+    )
+    assert not leaked, f"non-product docs leaked into archive: {leaked}"
