@@ -2,11 +2,36 @@
 # `git archive` omits these paths so the published tree carries only the product,
 # not developer-only scaffolding. (.git and gitignored paths like build/ are
 # already excluded by git archive and need no entry here.)
+#
+# The published tarball ships runtime + product docs ONLY (issue #918):
+#   runtime = src/mqlab, ansible, clients, lab, manifests, scripts,
+#             pyproject.toml, uv.lock, VERSION, RELEASE-KEY.asc
+#   product = docs/site, README.md, LICENSE, CHANGELOG.md
+# Everything below is developer-only / engineering-record and is stripped.
+# clients/ is KEPT: the ansible roles load it at runtime as {{ playbook_dir }}/../clients/*.py.
+
+# --- Repo scaffolding & agent/dev tooling ---
 .gitattributes        export-ignore
+.gitignore            export-ignore
 .github/              export-ignore
 .claude/              export-ignore
 .vergil/              export-ignore
 .worktrees/           export-ignore
 .superpowers/         export-ignore
+.ansible-lint.yml     export-ignore
 vergil.toml           export-ignore
+CLAUDE.md             export-ignore
 tests/                export-ignore
+tools/                export-ignore
+
+# --- Empty-dir placeholders (no git in a tarball) ---
+build/.gitkeep        export-ignore
+releases/.gitkeep     export-ignore
+
+# --- Engineering-record docs (linked from docs/site via GitHub URLs, per #900) ---
+docs/plans/           export-ignore
+docs/specs/           export-ignore
+docs/reports/         export-ignore
+docs/development/     export-ignore
+docs/reference/       export-ignore
+docs/shareable/       export-ignore

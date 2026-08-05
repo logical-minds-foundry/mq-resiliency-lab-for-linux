@@ -2,7 +2,16 @@ name: Release
 
 on:
   push:
+    # "v*" matches both real tags (v1.0.0) and pre-release tags (v1.0.0-rc1).
+    # Pre-release tags are the safe iteration path: they exercise the whole
+    # pipeline and publish a *pre-release* Release without consuming the real
+    # version. See docs/development/release-runbook.md.
     tags: ["v*"]
+  # Manual re-trigger for a selected ref (pick a pushed tag in the "Run
+  # workflow" dropdown). Lets a maintainer converge a partially-failed run
+  # without re-pushing the tag; the version guard still fires, so dispatching
+  # against a non-version ref fails loud instead of publishing garbage.
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -22,6 +31,7 @@ jobs:
           python-version: "3.12"
 
       - name: Guard — tag matches pyproject.toml and VERSION
+        id: guard
         run: python tools/release_version_guard.py "${GITHUB_REF_NAME}"
 
       - name: Build curated tarball
@@ -52,13 +62,21 @@ jobs:
       - name: Publish GitHub Release (idempotent — §6 convergence)
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.guard.outputs.prerelease }}
         run: |
           set -euo pipefail
+          # A pre-release tag (v1.0.0-rc1) publishes as a *pre-release* Release
+          # and is never marked "Latest", so exercising the pipeline can never
+          # masquerade as — or be mistaken for — the real release.
+          CREATE_FLAGS=()
+          if [ "${PRERELEASE}" = "true" ]; then
+            CREATE_FLAGS+=(--prerelease --latest=false)
+          fi
           # Create the release only if absent, then upload with --clobber so a
           # re-run of the tag's workflow converges to the same four assets
           # instead of erroring on an already-existing release (design §6).
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
-            || gh release create "${GITHUB_REF_NAME}" \
+            || gh release create "${GITHUB_REF_NAME}" "${CREATE_FLAGS[@]}" \
                  --title "${GITHUB_REF_NAME}" \
                  --notes "Signed release ${GITHUB_REF_NAME}. Verify with RELEASE-KEY.asc (see README — fetch the key out-of-band)."
           gh release upload --clobber "${GITHUB_REF_NAME}" \

@@ -225,7 +225,7 @@ def test_obs_open_prints_workstation_url_and_automatic_forward():
     assert "http://10.50.0.2:3000/d/lab-watcher" in result.stdout
     assert "http://localhost:3000/d/lab-fleet-node" in result.stdout
     assert "/explore" in result.stdout
-    assert "mqlab-requester" in result.stdout
+    assert "mq-app-requester" in result.stdout
     # the forward is automatic and anonymous now — the stale manual-tunnel /
     # admin-login guidance must be gone (#264, #258)
     assert "automatic" in result.stdout

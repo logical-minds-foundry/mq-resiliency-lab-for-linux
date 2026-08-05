@@ -41,6 +41,25 @@
         mode: "0600"
         state: present
 
+    # SECOND fence prerequisite (#927): fence_virsh runs `virsh` over that ssh with
+    # NO explicit URI, so it uses the fence user's default — and with
+    # LIBVIRT_DEFAULT_URI unset that is qemu:///session (the EMPTY user session),
+    # not qemu:///system where the lab domains live. The agent then can't find any
+    # domain ("existing name/UUID"), every fence times out, STONITH never starts,
+    # and the cluster wedges (nodes `pending`, QM down). Masked on hosts where the
+    # URI was already set (e.g. the x86 cloud box); surfaces on a fresh dev host,
+    # notably local aarch64. pam_env applies /etc/environment to the fence user's
+    # (non-interactive) ssh sessions. (A scoped alternative is a forced-command
+    # wrapper on the authorized_keys line; /etc/environment is simpler on the
+    # single-purpose lab hypervisor.)
+    - name: pin the fence user's ssh sessions to the system libvirt (#927)
+      ansible.builtin.lineinfile:
+        path: /etc/environment
+        regexp: '^LIBVIRT_DEFAULT_URI='
+        line: "LIBVIRT_DEFAULT_URI=qemu:///system"
+        state: present
+      become: true
+
 # Cold-boot guard (#160; the DR twin of #151's site-pcmk guard): a clean
 # ground-up build runs `vm create` then `vm provision` back-to-back, and a guest
 # that is not yet SSH-ready when its play fires drops out as UNREACHABLE -- which
