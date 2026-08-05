@@ -416,7 +416,7 @@ def test_commons_up_threads_obs_manifest_overlay(monkeypatch, tmp_path):
     shared.parent.mkdir(parents=True)
     shared.write_text(
         "prometheus: p\nnode_exporter: ne\nloki: l\nalloy: a\ngrafana: g\n"
-        "mq_metric_samples_ref: r\n"
+        "mq_metric_samples_ref: r\nopensearch: os\nopensearch_dashboards: osd\n"
     )
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))

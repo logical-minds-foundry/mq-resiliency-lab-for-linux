@@ -7,3 +7,9 @@ loki: "3.1.1" # ansible/roles/loki/defaults
 alloy: "1.3.1" # ansible/roles/alloy/defaults
 grafana: "" # apt-float today; "" = let apt pick (pin later by step-function)
 mq_metric_samples_ref: "master" # float today; pin to a release tag to retire #172
+# logsearch tier (#829, epic .github#149). OpenSearch + Dashboards share one upstream
+# version; pin both here so a re-bake never changes the engine version under an existing
+# snapshot. 3.8.0 is the current stable GA (opensearch.org/downloads.html, released
+# 2026-08-04; confirmed at github.com/opensearch-project/OpenSearch/releases).
+opensearch: "3.8.0" # ansible/roles/opensearch/defaults (role added in a later #149 task)
+opensearch_dashboards: "3.8.0" # ansible/roles/opensearch-dashboards/defaults (later task)
