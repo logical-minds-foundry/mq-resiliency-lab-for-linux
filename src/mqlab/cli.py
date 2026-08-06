@@ -493,6 +493,13 @@ app.add_typer(vm_app, name="vm")
 obs_app = typer.Typer(help="observability renders (targets/dashboard) + open", no_args_is_help=True)
 app.add_typer(obs_app, name="obs")
 
+# logsearch tier CLI (OpenSearch + Dashboards): status/open/snapshot/restore. Its
+# own module owns the Typer group + pure helpers (epic .github#149, Task 11), mirroring
+# how the box sub-app lives in box.py; here we just mount it under `mqlab logsearch`.
+from mqlab import logsearch  # noqa: E402
+
+app.add_typer(logsearch.app, name="logsearch")
+
 
 @obs_app.command("targets")
 def obs_targets(
