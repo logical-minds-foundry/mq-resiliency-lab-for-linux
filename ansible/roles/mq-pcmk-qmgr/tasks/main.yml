@@ -86,7 +86,7 @@
         ALTER QMGR SSLKEYR('"'"'/mqshared/ssl/key'"'"') KEYRPWD('"'"'{{ pki_keyrpwd.stdout }}'"'"') CERTLABL('"'"'{{ qm_name }}'"'"')\n
         REFRESH SECURITY TYPE(SSL)\n
         DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE\n
-        ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
+        ALTER QMGR MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)\n' | su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }}'
         su mqm -c '/opt/mqm/bin/endmqm -w {{ qm_name }}'
       args:
         executable: /bin/bash

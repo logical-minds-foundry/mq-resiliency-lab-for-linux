@@ -10,7 +10,7 @@
 ALTER QMGR SSLKEYR('{{ rdqm_datapath }}/ssl/key') KEYRPWD('{{ pki_keyrpwd.stdout }}') CERTLABL('{{ qm_name }}')
 * Real-time monitoring on, so the per-stack mq_prometheus exporter (#423) reports
 * channel and queue status -- matching the pcmk/nativeha QMGR posture.
-ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)
+ALTER QMGR MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)
 * App client -> app QM: mutual TLS, pin the app-org client cert (O=app-org).
 ALTER CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}')
 * Ops exporter -> app QM: the dedicated O=app-org monitoring SVRCONN (#250), new on
