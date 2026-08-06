@@ -303,6 +303,23 @@
       delegate_to: "{{ active_host }}"
       register: ev_mon
 
+    # #936: the mq_prometheus exporter (mqmon) needs command-queue + $SYS-topic authority.
+    - name: evidence -- mqmon +put on SYSTEM.ADMIN.COMMAND.QUEUE (PCF discovery)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t queue -n SYSTEM.ADMIN.COMMAND.QUEUE -p mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_cmdq
+
+    - name: evidence -- mqmon +sub on SYSTEM.ADMIN.TOPIC ($SYS/MQ resource monitoring)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dspmqaut -m {{ qm }} -t topic -n SYSTEM.ADMIN.TOPIC -p mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_topic
+
     - name: report the captured authorization evidence
       ansible.builtin.debug:
         msg:
@@ -312,9 +329,11 @@
           - "QMGR       : {{ ev_qmgr.stdout | default('') }}"
           - "DLQ mqsvc  : {{ ev_dlq.stdout | default('') }}"
           - "APP.REPLY mqmon : {{ ev_mon.stdout | default('') }}"
+          - "CMDQ mqmon : {{ ev_mon_cmdq.stdout | default('') }}"
+          - "ADMIN.TOPIC mqmon : {{ ev_mon_topic.stdout | default('') }}"
       run_once: true
 
-    - name: assert the CHLAUTH posture + the #844/N5 DLQ grant
+    - name: assert the CHLAUTH posture + the #844/N5 DLQ grant + the #936 mqmon exporter grants
       ansible.builtin.assert:
         that:
           - "'CHLAUTH(ENABLED)' in (ev_qmgr.stdout | default(''))"
@@ -322,8 +341,12 @@
           - "'SSLPEERMAP' in (ev_chlauth.stdout | default(''))"
           - "'put' in (ev_dlq.stdout | default(''))"
           - "'setall' in (ev_dlq.stdout | default(''))"
+          # #936: exporter must be able to run PCF discovery (+put on the command queue)
+          # and subscribe to the $SYS/MQ resource-monitoring tree (+sub on SYSTEM.ADMIN.TOPIC).
+          - "'put' in (ev_mon_cmdq.stdout | default(''))"
+          - "'sub' in (ev_mon_topic.stdout | default(''))"
         fail_msg: "authorization evidence FAILED -- see the report task above."
-        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5)."
+        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936)."
       run_once: true
 
 # ============================================================================
