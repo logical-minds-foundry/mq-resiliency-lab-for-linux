@@ -49,7 +49,10 @@ loki.relabel "journal" {
 }
 
 loki.source.journal "system" {
-  forward_to    = [loki.write.obs.receiver]
+  // #831: when the OpenSearch fan-out gate is on, this source keeps forwarding to
+  // Loki AND gains a second target — the loki->OTLP bridge below. The Loki path is
+  // untouched (transport is a swappable boundary; json-logging principle).
+  forward_to    = [loki.write.obs.receiver{% if alloy_fanout_opensearch | default(false) | bool %}, otelcol.receiver.loki.opensearch_bridge.receiver{% endif %}]
   relabel_rules = loki.relabel.journal.rules
   labels        = {
     host = "{{ inventory_hostname }}",
@@ -74,6 +77,31 @@ local.file_match "mqweb" {
 
 loki.source.file "mqweb" {
   targets    = local.file_match.mqweb.targets
-  forward_to = [loki.write.obs.receiver]
+  // #831: same fan-out as the journal source — Loki stays, OpenSearch is additive.
+  forward_to = [loki.write.obs.receiver{% if alloy_fanout_opensearch | default(false) | bool %}, otelcol.receiver.loki.opensearch_bridge.receiver{% endif %}]
+}
+{% endif %}
+
+{% if alloy_fanout_opensearch | default(false) | bool %}
+// #831 logsearch fan-out (gating spike #826, docs/reports/2026-07-29-alloy-opensearch-connector-spike.md).
+// Alloy has NO native Elasticsearch/OpenSearch exporter, so the "fan-out sink to
+// OpenSearch" is an OTLP/gRPC exporter aimed at a Data Prepper otel_logs_source;
+// Data Prepper (a separate component on the logsearch node, #830/#832) is what
+// writes to OpenSearch. This block ONLY adds a receive/export path — the existing
+// loki.source.* blocks above forward here as a second target and the loki.write
+// "obs" path is left entirely alone (transport is a swappable boundary).
+otelcol.receiver.loki "opensearch_bridge" {   // Loki log entries -> OTLP logs (Alloy-native bridge)
+  output {
+    logs = [otelcol.exporter.otlp.dataprepper.input]
+  }
+}
+
+otelcol.exporter.otlp "dataprepper" {          // OTLP/gRPC -> Data Prepper otel_logs_source (logs port 21892)
+  client {
+    endpoint = "{{ opensearch_dataprepper_endpoint }}"
+    tls {
+      insecure = true                          // mgmt-plane-only, no TLS in v1 (spec §10)
+    }
+  }
 }
 {% endif %}
