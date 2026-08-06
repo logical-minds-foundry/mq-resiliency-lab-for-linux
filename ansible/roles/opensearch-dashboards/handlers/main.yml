@@ -1,0 +1,16 @@
+---
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882/#881/#871):
+# a non-transient failure satisfies `until` on attempt 1 (fail-loud). Mirrors the opensearch
+# and grafana handlers.
+- name: restart opensearch-dashboards
+  ansible.builtin.systemd:
+    name: opensearch-dashboards
+    state: restarted
+    daemon_reload: true
+  register: opensearch_dashboards_restart
+  until: >-
+    opensearch_dashboards_restart is succeeded or
+    opensearch_dashboards_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5

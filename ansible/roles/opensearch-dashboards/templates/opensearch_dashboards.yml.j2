@@ -1,0 +1,19 @@
+# Managed by ansible/roles/opensearch-dashboards (logsearch tier, epic .github#149). Static
+# config, baked into the box; the service enable+start lives in the configure half.
+server.host: "{{ opensearch_dashboards_server_host }}"
+server.port: {{ opensearch_dashboards_server_port }}
+opensearch.hosts: {{ opensearch_dashboards_opensearch_hosts }}
+
+{% if opensearch_dashboards_security_enabled | bool %}
+# security-on posture (follow-on #819): authenticate to OpenSearch with the admin seam.
+# NOTE: enabling this baked path with a real credential requires moving the secret to a
+# per-run drop-in (never bake a secret) — see the configure half. Off in v1.
+opensearch.username: "{{ opensearch_dashboards_opensearch_username | default('') }}"
+opensearch.password: "{{ opensearch_dashboards_opensearch_password | default('') }}"
+opensearch.ssl.verificationMode: none
+{% else %}
+# v1 telemetry-plane posture (spec §10, #827): OpenSearch runs `plugins.security.disabled`,
+# so Dashboards connects over plain http with NO auth and its bundled security plugin removed
+# (install half). Deliberately no opensearch_security.* / opensearch.username lines — writing
+# auth/TLS the OpenSearch side is not running makes Dashboards fail to start.
+{% endif %}
