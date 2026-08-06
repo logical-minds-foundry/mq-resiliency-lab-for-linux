@@ -6,3 +6,14 @@ alloy_url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version
 loki_push_url: "http://10.50.0.2:3100/loki/api/v1/push"   # obs net-mgmt IP : Loki
 # Tail the mqweb (Liberty) JSON messages.log on queue-manager nodes (#282).
 alloy_tail_mqweb: false
+
+# #831 (epic #149, logsearch tier): fan the journald/mqweb corpus OUT to OpenSearch,
+# in ADDITION to the untouched Loki path. Per the gating connector spike (#826,
+# docs/reports/2026-07-29-alloy-opensearch-connector-spike.md) Alloy has NO native
+# Elasticsearch/OpenSearch exporter, so the "sink" is an OTLP/gRPC exporter aimed at
+# a Data Prepper otel_logs_source (Data Prepper is what writes to OpenSearch).
+# Default OFF. #832 (site-logsearch.yml) flips this gate on and sets the endpoint to
+# the logsearch node's Data Prepper logs port. (The plan calls the var generically
+# opensearch_endpoint; named for the real hop it targets — Data Prepper, not :9200.)
+alloy_fanout_opensearch: false
+opensearch_dataprepper_endpoint: ""   # e.g. "10.50.0.X:21892" (OTLP/gRPC logs source) — set by #832
