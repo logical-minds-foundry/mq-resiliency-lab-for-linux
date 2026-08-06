@@ -1,0 +1,22 @@
+# Managed by ansible/roles/opensearch (logsearch tier, epic .github#149). Static config,
+# baked into the box; per-run secrets + service start live in the configure half.
+cluster.name: {{ opensearch_cluster_name }}
+node.name: {{ opensearch_node_name }}
+network.host: {{ opensearch_network_host }}
+http.port: {{ opensearch_http_port }}
+discovery.type: single-node
+path.data: {{ opensearch_data_dir }}
+# path.repo — the native _snapshot filesystem repository (snapshot spike decision); the
+# configure half registers `{{ opensearch_snapshot_repo }}` against this location.
+path.repo: ["{{ opensearch_repo_dir }}"]
+
+# v1 telemetry-plane posture (spec §10 tenet + follow-on #819). The logsearch tier lives on
+# the lab's DELIBERATELY-UNHARDENED telemetry plane and is exposed only on the node's
+# mgmt-only NIC. The security plugin is disabled for v1: this matches the connector +
+# snapshot spikes' proven end-to-end config (the Data Prepper http sink and `mqlab logsearch`
+# health path both target plain http://:9200), and OpenSearch's admin-password bootstrap is
+# incompatible with both the inert-bake split and the existing hex lab-secret (which fails
+# OpenSearch's password-complexity validator). Whether to add a security demonstration is the
+# named follow-on #819; the admin credential SEAM is still materialized + injected by the
+# configure half, so flipping this to `false` later is a one-line change.
+plugins.security.disabled: true

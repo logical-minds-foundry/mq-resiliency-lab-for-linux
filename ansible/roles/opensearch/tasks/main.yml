@@ -1,0 +1,11 @@
+---
+# opensearch role, split along the bake/configure line (mirrors loki, epic .github#70).
+# The install half (sysctl + user + binary + data/repo dirs + static opensearch.yml +
+# inert systemd unit) is image-bakeable; the configure half (credential seam + service
+# enable+start + index template + snapshot repo + restore-on-bring-up) is held out of the
+# bake so no baked service auto-starts in a pre-config state. main.yml runs both in order
+# so any caller of the whole role reaches the same end state. The bake playbook
+# (bake-logsearch.yml, later #149 task) invokes ONLY `tasks_from: install`; the per-run
+# bring-up (site-logsearch.yml, later #149 task) invokes `tasks_from: configure`.
+- ansible.builtin.import_tasks: install.yml
+- ansible.builtin.import_tasks: configure.yml

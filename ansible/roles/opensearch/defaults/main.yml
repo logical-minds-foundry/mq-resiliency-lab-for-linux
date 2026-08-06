@@ -1,0 +1,44 @@
+---
+# opensearch role defaults (logsearch tier, epic .github#149; issue #827).
+#
+# Version pin: mirrors how loki_version is threaded — this literal is the standalone
+# fallback, but the AUTHORITATIVE pin is the shared observability manifest
+# (manifests/_shared/observability.yaml -> `opensearch`), surfaced by
+# mqlab.manifest.obs_overlay() as the `opensearch_version` extra-var and passed to the
+# play via `-e @_obs.overlay.json` (mqlab.cli._obs_manifest_args). Keep this literal in
+# sync with that manifest entry, exactly as loki_version tracks the `loki` manifest key.
+opensearch_version: "3.8.0"
+# OpenSearch tarball arch tokens are x64 / arm64 (NOT amd64), unlike loki/alloy.
+opensearch_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+opensearch_pkg: "opensearch-{{ opensearch_version }}-linux-{{ opensearch_arch }}"
+opensearch_url: "https://artifacts.opensearch.org/releases/bundle/opensearch/{{ opensearch_version }}/{{ opensearch_pkg }}.tar.gz"
+
+# Install layout. The tarball is self-contained (bundles its own JDK), mirroring the
+# loki/alloy/prometheus binary-tarball roles (the deb is rejected: its postinstall
+# consumes OPENSEARCH_INITIAL_ADMIN_PASSWORD at INSTALL time and the cluster refuses to
+# start without it, which is incompatible with the inert-bake / password-in-configure
+# split this role's install/configure halves require).
+opensearch_home: /usr/share/opensearch
+opensearch_data_dir: /var/lib/opensearch
+# path.repo — the native _snapshot filesystem repository dir (snapshot spike decision).
+opensearch_repo_dir: /var/lib/opensearch/snapshots
+opensearch_user: opensearch
+opensearch_heap: "2g"                 # JVM heap (tunable; node is sized ~6-8 GB, spec §5)
+opensearch_http_port: 9200
+# The logsearch node carries a mgmt-only NIC (topology, later #149 task), so binding all
+# interfaces is effectively mgmt-plane-only exposure (spec §10) — no baked-in IP literal.
+opensearch_network_host: "0.0.0.0"
+opensearch_cluster_name: logsearch
+opensearch_node_name: logsearch
+
+# --- configure-half knobs ---
+opensearch_snapshot_repo: logsearch-fs
+opensearch_index_template_name: logs
+opensearch_index_pattern: "logs-*"
+# number_of_replicas:0 is load-bearing on a single node (connector spike, spec §6): the
+# default replicas:1 reads yellow forever. The template must exist BEFORE any sink writes.
+opensearch_number_of_replicas: 0
+# Host-side snapshot store. The CALLER (site-logsearch.yml, later #149 task) resolves
+# build/state/logsearch/ via `mqlab build path state` and passes it here — the role never
+# hardcodes a build/<X> path. Empty => restore-on-bring-up is a clean, LOGGED no-op.
+opensearch_snapshot_state_dir: ""

@@ -1,0 +1,161 @@
+---
+# CONFIGURE (epic .github#70): the per-run half of opensearch — the admin credential seam,
+# the service enable+start, the logs-* index template, the native _snapshot fs repo, and
+# restore-on-bring-up. Split out of the bakeable install half so the baked box stays inert
+# (no boot-time auto-start in a pre-config state). site-logsearch.yml (later #149 task)
+# invokes this via `tasks_from: configure`; the un-baked full-role path runs it as the
+# second half of main.yml.
+
+# --- credential seam (spec §10, plan Task 4 Step 1) ------------------------------------
+# lab-secret.sh auto-generates + persists the value under build/state/secrets/ (gitignored,
+# host-durable) — the SAME seam grafana's admin password uses. Runs on the control host;
+# fail loud if it cannot be materialized, NEVER a default password.
+- name: materialize the OpenSearch admin credential from the lab secret seam
+  ansible.builtin.command:
+    cmd: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh opensearch_admin_password"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+  register: opensearch_admin_secret
+
+- name: assert the admin credential was materialized (no silent default)
+  ansible.builtin.assert:
+    that:
+      - opensearch_admin_secret.stdout | trim | length > 0
+    fail_msg: >-
+      opensearch: the admin credential could not be materialized from the lab secret seam
+      (lab/scripts/lab-secret.sh opensearch_admin_password) — refusing to bring the tier up
+      with a default password.
+
+# Injected as a per-run SECRET drop-in (mirrors grafana's admin.conf), mode 0600, never
+# baked. v1 runs the security plugin disabled (opensearch.yml), so the engine does not
+# currently consume this — but wiring the seam now keeps the credential path real and makes
+# a future security-on flip (follow-on #819) a one-line opensearch.yml change.
+- name: opensearch admin-password env drop-in (per-run secret)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/opensearch.service.d/admin.conf
+    mode: "0600"
+    content: |
+      [Service]
+      Environment=OPENSEARCH_INITIAL_ADMIN_PASSWORD={{ opensearch_admin_secret.stdout | trim }}
+  notify: restart opensearch
+
+# --- service enable + start -----------------------------------------------------------
+- name: enable + start opensearch
+  ansible.builtin.systemd:
+    name: opensearch
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: wait for the OpenSearch cluster to accept requests
+  # green or yellow are BOTH healthy here; only red / unreachable is a failure. On a
+  # single node with the replicas:0 template below, health should read green.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ opensearch_http_port }}/_cluster/health"
+    method: GET
+    status_code: 200
+  register: opensearch_health
+  until: opensearch_health.status == 200 and opensearch_health.json.status in ['green', 'yellow']
+  retries: 60
+  delay: 5
+
+# --- logs-* index template BEFORE any sink writes (connector spike gating finding) -----
+- name: PUT the logs-* index template (number_of_replicas:0, envelope mappings)
+  # MUST exist before the Data Prepper sink first writes logs-* (connector spike): the sink
+  # otherwise creates logs-* with the default replicas:1, which reads yellow forever on a
+  # single node. Idempotent PUT.
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ opensearch_http_port }}/_index_template/{{ opensearch_index_template_name }}"
+    method: PUT
+    body_format: json
+    body: "{{ lookup('ansible.builtin.template', 'index-template.json.j2') | from_json }}"
+    status_code: [200, 201]
+
+# --- restore-on-bring-up (snapshot spike; guarded, LOGGED no-op when no snapshot) ------
+- name: look for the latest host-side snapshot artifact (control host)
+  # The host snapshot store is build/state/logsearch/, resolved via `mqlab build path state`
+  # by the CALLER (site-logsearch.yml passes opensearch_snapshot_state_dir) — the role never
+  # hardcodes a build/<X> path. Empty/absent => a fresh build with no snapshot => a clean,
+  # LOGGED no-op (spec §7 accepted tradeoff), never a silent skip.
+  ansible.builtin.find:
+    paths: "{{ opensearch_snapshot_state_dir }}"
+    patterns: "*.tar.gz"
+  delegate_to: localhost
+  become: false
+  register: opensearch_host_snapshots
+  when: opensearch_snapshot_state_dir | length > 0
+
+- name: stage the latest host snapshot into path.repo
+  when:
+    - opensearch_snapshot_state_dir | length > 0
+    - opensearch_host_snapshots.files | default([]) | length > 0
+  block:
+    - name: pick the latest snapshot tarball (names sort by UTC timestamp)
+      ansible.builtin.set_fact:
+        opensearch_latest_snapshot: "{{ opensearch_host_snapshots.files | map(attribute='path') | sort | last }}"
+
+    - name: copy the snapshot tarball to the guest
+      ansible.builtin.copy:
+        src: "{{ opensearch_latest_snapshot }}"
+        dest: "/tmp/{{ opensearch_latest_snapshot | basename }}"
+        owner: "{{ opensearch_user }}"
+        group: "{{ opensearch_user }}"
+        mode: "0640"
+
+    - name: unpack the snapshot repo contents into path.repo
+      ansible.builtin.unarchive:
+        src: "/tmp/{{ opensearch_latest_snapshot | basename }}"
+        dest: "{{ opensearch_repo_dir }}"
+        remote_src: true
+        owner: "{{ opensearch_user }}"
+        group: "{{ opensearch_user }}"
+
+# Register the fs repo AFTER any restored files are in place so OpenSearch scans them.
+# Runs on every bring-up (a fresh build registers an empty repo so future snapshots work).
+- name: register the native filesystem snapshot repository
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ opensearch_http_port }}/_snapshot/{{ opensearch_snapshot_repo }}"
+    method: PUT
+    body_format: json
+    body:
+      type: fs
+      settings:
+        location: "{{ opensearch_repo_dir }}"
+        compress: true
+    status_code: [200, 201]
+
+- name: restore the latest snapshot from the staged repo
+  when:
+    - opensearch_snapshot_state_dir | length > 0
+    - opensearch_host_snapshots.files | default([]) | length > 0
+  block:
+    - name: list the snapshots the staged repo carries
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ opensearch_http_port }}/_snapshot/{{ opensearch_snapshot_repo }}/_all"
+        method: GET
+        status_code: 200
+      register: opensearch_repo_snapshots
+
+    - name: pick the latest snapshot id (names sort by UTC timestamp)
+      ansible.builtin.set_fact:
+        opensearch_restore_id: "{{ opensearch_repo_snapshots.json.snapshots | map(attribute='snapshot') | sort | last }}"
+      when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+
+    - name: restore the latest repo snapshot
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ opensearch_http_port }}/_snapshot/{{ opensearch_snapshot_repo }}/{{ opensearch_restore_id }}/_restore?wait_for_completion=true"
+        method: POST
+        status_code: 200
+      when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+
+- name: report when there is no snapshot to restore (fresh build starts empty)
+  ansible.builtin.debug:
+    msg: >-
+      opensearch: no host-side snapshot under
+      '{{ opensearch_snapshot_state_dir | default('(unset)', true) }}' — starting with an
+      empty corpus (accepted tradeoff, spec §7). Capture one with `mqlab logsearch snapshot`.
+  when: >-
+    opensearch_snapshot_state_dir | length == 0
+    or (opensearch_host_snapshots.files | default([]) | length == 0)

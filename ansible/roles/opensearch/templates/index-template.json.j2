@@ -1,0 +1,23 @@
+{
+  "index_patterns": ["{{ opensearch_index_pattern }}"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": {{ opensearch_number_of_replicas }}
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp":    { "type": "date" },
+        "time":          { "type": "date" },
+        "ibm_datetime":  { "type": "date" },
+        "severity":      { "type": "keyword" },
+        "severityText":  { "type": "keyword" },
+        "level":         { "type": "keyword" },
+        "host":          { "type": "keyword" },
+        "unit":          { "type": "keyword" },
+        "message":       { "type": "text" },
+        "body":          { "type": "text" }
+      }
+    }
+  }
+}
