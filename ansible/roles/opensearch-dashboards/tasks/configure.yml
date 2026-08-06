@@ -1,0 +1,88 @@
+---
+# CONFIGURE (epic .github#70): the per-run half of opensearch-dashboards — the admin
+# credential seam, the service enable+start, the /api/status wait, and the default logs-*
+# index pattern. Split out of the bakeable install half so the baked box stays inert (no
+# boot-time auto-start in a pre-config state). site-logsearch.yml (later #149 task) invokes
+# this via `tasks_from: configure`; the un-baked full-role path runs it as the second half of
+# main.yml.
+
+# --- credential seam (spec §10, plan Task 5 Step 2, reuses the Task 4 seam) -------------
+# Materialize the SAME OpenSearch admin credential the opensearch role (#827) uses, from the
+# shared lab secret seam under build/state/secrets/ (gitignored, host-durable). v1 runs
+# OpenSearch security disabled, so Dashboards does NOT consume this — it connects
+# unauthenticated (see opensearch_dashboards.yml + the removed security plugin). Wiring the
+# seam now keeps the credential path real and makes the security-on flip (#819) a localized
+# change. Runs on the control host; fail loud if it cannot be materialized, never a default.
+- name: materialize the OpenSearch admin credential from the lab secret seam
+  ansible.builtin.command:
+    cmd: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh opensearch_admin_password"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+  register: opensearch_dashboards_admin_secret
+
+- name: assert the admin credential was materialized (no silent default)
+  ansible.builtin.assert:
+    that:
+      - opensearch_dashboards_admin_secret.stdout | trim | length > 0
+    fail_msg: >-
+      opensearch-dashboards: the admin credential could not be materialized from the lab
+      secret seam (lab/scripts/lab-secret.sh opensearch_admin_password) — refusing to bring
+      the tier up with a default password.
+
+# --- service enable + start ------------------------------------------------------------
+- name: enable + start opensearch-dashboards
+  ansible.builtin.systemd:
+    name: opensearch-dashboards
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# --- wait for Dashboards to come up (plan Task 5 Step 2) --------------------------------
+- name: wait for OpenSearch Dashboards /api/status to report green
+  # Dashboards reports red/yellow while it boots + connects to OpenSearch, green once ready.
+  # green or yellow are BOTH "server up + serving the saved-objects API" here; only red /
+  # unreachable is a failure (mirrors the opensearch role's green|yellow health tolerance).
+  ansible.builtin.uri:
+    url: "http://localhost:{{ opensearch_dashboards_server_port }}/api/status"
+    method: GET
+    status_code: 200
+  register: opensearch_dashboards_status
+  until: >-
+    opensearch_dashboards_status.status == 200
+    and opensearch_dashboards_status.json.status.overall.state in ['green', 'yellow']
+  retries: 60
+  delay: 5
+
+# --- default logs-* index pattern (plan Task 5 Step 3) ---------------------------------
+# PLUMBING so Discover shows the corpus out of the box (criterion #3), NOT seeded content
+# (spec §2 non-goal). Idempotent create against the Dashboards saved-objects API with a
+# deterministic id: 200 on first create, 409 when it already exists. `osd-xsrf` is the
+# required CSRF header for state-changing Dashboards API calls.
+- name: create the default logs-* index pattern (idempotent)
+  ansible.builtin.uri:
+    url: >-
+      http://localhost:{{ opensearch_dashboards_server_port }}/api/saved_objects/index-pattern/{{ opensearch_dashboards_index_pattern_id }}
+    method: POST
+    headers:
+      osd-xsrf: "true"
+    body_format: json
+    body:
+      attributes:
+        title: "{{ opensearch_dashboards_index_pattern }}"
+        timeFieldName: "{{ opensearch_dashboards_time_field }}"
+    status_code: [200, 409]
+
+# Make it the default so Discover opens straight onto the corpus (also idempotent).
+- name: set logs-* as the default index pattern (idempotent)
+  ansible.builtin.uri:
+    url: >-
+      http://localhost:{{ opensearch_dashboards_server_port }}/api/opensearch-dashboards/settings/defaultIndex
+    method: POST
+    headers:
+      osd-xsrf: "true"
+    body_format: json
+    body:
+      value: "{{ opensearch_dashboards_index_pattern_id }}"
+    status_code: 200

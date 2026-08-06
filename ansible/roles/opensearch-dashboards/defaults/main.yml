@@ -1,0 +1,56 @@
+---
+# opensearch-dashboards role defaults (logsearch tier, epic .github#149; issue #828).
+#
+# Version pin: mirrors how opensearch_version / loki_version are threaded — this literal is
+# the standalone fallback, but the AUTHORITATIVE pin is the shared observability manifest
+# (manifests/_shared/observability.yaml -> `opensearch_dashboards`, #829), surfaced by
+# mqlab.manifest.obs_overlay() as the `opensearch_dashboards_version` extra-var and passed
+# to the play via `-e @_obs.overlay.json` (mqlab.cli._obs_manifest_args). Keep this literal
+# in sync with that manifest entry, exactly as opensearch_version tracks its manifest key.
+opensearch_dashboards_version: "3.8.0"
+# Dashboards tarball arch tokens are x64 / arm64 (match the opensearch role, NOT amd64).
+opensearch_dashboards_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+opensearch_dashboards_pkg: "opensearch-dashboards-{{ opensearch_dashboards_version }}-linux-{{ opensearch_dashboards_arch }}"
+opensearch_dashboards_url: "https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/{{ opensearch_dashboards_version }}/{{ opensearch_dashboards_pkg }}.tar.gz"
+
+# Install layout. The tarball is self-contained (bundles its own Node.js runtime), mirroring
+# the opensearch role's binary-tarball layout.
+opensearch_dashboards_home: /usr/share/opensearch-dashboards
+opensearch_dashboards_user: opensearch-dashboards
+
+# --- server binding (spec §10: mgmt-plane-only) ---------------------------------------
+# server.host binds the Dashboards HTTP listener. The logsearch node carries a mgmt-only
+# NIC (topology, later #149 task), so binding all interfaces is effectively mgmt-plane-only
+# exposure — no baked-in IP literal, mirroring the opensearch role's network.host default.
+opensearch_dashboards_server_host: "0.0.0.0"
+opensearch_dashboards_server_port: 5601
+
+# --- OpenSearch backend ---------------------------------------------------------------
+# Dashboards and OpenSearch are co-located on the logsearch node; connect over loopback.
+# #827 runs OpenSearch with plugins.security.disabled + plain http on 9200, so this is a
+# plain-http, UNAUTHENTICATED endpoint (no TLS, no auth) in v1 — see the security note below.
+opensearch_dashboards_opensearch_port: 9200
+opensearch_dashboards_opensearch_hosts: '["http://localhost:{{ opensearch_dashboards_opensearch_port }}"]'
+
+# --- security posture (MUST track the opensearch role) --------------------------------
+# v1 telemetry-plane posture (spec §10, follow-on #819): #827's opensearch.yml sets
+# `plugins.security.disabled: true`, so the bundled Dashboards security plugin is REMOVED at
+# install and NO opensearch_security.* / opensearch.username lines are written — Dashboards
+# connects over plain http with no auth. Writing auth/TLS the OpenSearch side is not running
+# makes Dashboards fail to start. The admin credential SEAM is still materialized by the
+# configure half (parallel to #827) so the credential path stays real and a future
+# security-on flip (#819) is a localized change. Keep this false while #827 runs security
+# disabled; flipping both roles' flags together is the #819 follow-on.
+opensearch_dashboards_security_enabled: false
+
+# --- default logs-* index pattern (plan Task 5 Step 3) --------------------------------
+# PLUMBING so Discover shows the corpus out of the box (success criterion #3), NOT seeded
+# content (spec §2 non-goal covers seeded queries/saved-searches/dashboards, not the pattern
+# that makes Discover display the corpus at all). Created idempotently via the saved-objects
+# API in the configure half. The time field is the event timestamp the Data Prepper
+# opensearch sink writes (connector spike: stored docs carry `time`); the opensearch role's
+# index template maps both `time` and `@timestamp` as date.
+opensearch_dashboards_index_pattern: "logs-*"
+# Deterministic saved-object id makes the create idempotent (re-create returns 409 = present).
+opensearch_dashboards_index_pattern_id: "logs-star"
+opensearch_dashboards_time_field: "time"
