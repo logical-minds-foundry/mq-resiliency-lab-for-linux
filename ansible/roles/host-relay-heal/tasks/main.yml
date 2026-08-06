@@ -1,0 +1,33 @@
+---
+# Host-side self-heal for the Grafana port-forward relay (#946). The
+# vergil-portforward relay leaks connections on abrupt client disconnect and wedges
+# into accept-then-reset after sustained use; the durable fix is upstream
+# (vergil-tooling#2603). Until it lands, a timer runs `mqlab obs relay-heal` on a
+# cadence to recover the wedge automatically. Mirrors the host-net-state role (the
+# mqlab-by-absolute-path timer idiom, #398).
+- name: require a host-runnable mqlab path
+  ansible.builtin.assert:
+    that:
+      - mqlab_bin is defined
+      - mqlab_bin | length > 0
+    fail_msg: >-
+      mqlab_bin is unset. Run host-obs.yml with `-e mqlab_bin=<abs path to a
+      host-runnable mqlab>` (the systemd service runs with a minimal PATH, so it
+      needs an absolute path). The observe phase passes it automatically
+      (phases._host_mqlab).
+
+- name: install the relay-heal service + timer
+  ansible.builtin.template:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    mode: "0644"
+  loop:
+    - lab-relay-heal.service.j2
+    - lab-relay-heal.timer.j2
+
+- name: enable + start the relay-heal timer
+  ansible.builtin.systemd:
+    name: lab-relay-heal.timer
+    enabled: true
+    state: started
+    daemon_reload: true

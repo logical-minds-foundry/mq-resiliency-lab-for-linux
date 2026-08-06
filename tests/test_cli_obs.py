@@ -278,3 +278,78 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
     assert result.exit_code == 0
     data = json.loads((tmp_path / "build" / "work" / "obs" / "reach-peers.json").read_text())
     assert data["pcmk-a1"]["net-hb-a"][0]["peer"] == "pcmk-a2"
+
+
+# --- relay-heal: probe the workstation forward, restart the relay only if wedged (#946) ---
+
+
+def test_obs_relay_heal_healthy_leaves_relay_untouched(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # probe succeeds -> the relay is serving; it must NOT be restarted (a bounce
+    # would drop live Grafana sessions).
+    runner = RecordingRunner(results=[ScriptedResult(["ok"], exit_code=0)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 0
+    assert len(runner.recorded) == 1
+    assert "curl" in runner.recorded[0].display()
+    assert not any("systemctl" in c.display() for c in runner.recorded)
+
+
+def test_obs_relay_heal_wedged_restarts_then_heals(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # probe fails (curl -f on the accept-then-reset) -> restart -> re-probe ok.
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult([], exit_code=7),
+            ScriptedResult([], exit_code=0),
+            ScriptedResult(["ok"], exit_code=0),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 0
+    assert len(runner.recorded) == 3
+    restart = runner.recorded[1].display()
+    assert "systemctl" in restart and "restart" in restart
+    for unit in cli.RELAY_UNITS:
+        assert unit in restart
+
+
+def test_obs_relay_heal_restart_failure_surfaces_exit_code(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # restart itself fails -> surface its exit code, no re-probe.
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult([], exit_code=7),
+            ScriptedResult([], exit_code=5),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 5
+    assert len(runner.recorded) == 2
+
+
+def test_obs_relay_heal_still_wedged_after_restart_fails_loud(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # restart succeeds but the relay is still not serving -> fail loud (exit 1).
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult([], exit_code=7),
+            ScriptedResult([], exit_code=0),
+            ScriptedResult([], exit_code=7),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 1
+    assert len(runner.recorded) == 3
