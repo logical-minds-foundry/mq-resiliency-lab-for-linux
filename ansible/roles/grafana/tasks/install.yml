@@ -70,6 +70,7 @@
       [Service]
       Environment=GF_RENDERING_SERVER_URL={{ grafana_rendering_server_url }}
       Environment=GF_RENDERING_CALLBACK_URL={{ grafana_rendering_callback_url }}
+      Environment=GF_RENDERING_RENDERER_TOKEN={{ grafana_rendering_token }}
   when: grafana_rendering | bool
   notify: restart grafana
 

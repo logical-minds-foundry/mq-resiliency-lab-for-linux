@@ -8,3 +8,12 @@
 # these to a real deployment.
 mqweb_console_anonymous: true   # MQ Console (browser) loads with no login; REST unchanged
 grafana_anonymous: true         # Grafana grants anonymous Admin + hides the login form
+
+# Shared auth token between Grafana and its co-located grafana-image-renderer (#935).
+# Grafana >= (this lab's pin) REFUSES to start in production with the default renderer
+# token ("Using the default [rendering]renderer_token is not allowed"), so a non-default
+# value is REQUIRED whenever grafana_rendering is on. Wired into Grafana's
+# GF_RENDERING_RENDERER_TOKEN and the renderer's AUTH_TOKEN — the two MUST match. This is
+# STATIC config, not a secret: the renderer binds localhost only (both services on the obs
+# box), so the token authenticates a loopback call and protects nothing externally. LAB ONLY.
+grafana_rendering_token: "lab-obs-renderer-loopback-token"
