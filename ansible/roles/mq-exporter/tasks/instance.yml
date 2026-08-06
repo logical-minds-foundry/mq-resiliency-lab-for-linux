@@ -17,6 +17,20 @@
   become: true
   when: mq_exporter_tls | bool
 
+# Per-QM YAML config (#944): the unit runs `mq_prometheus -f <this>`, so the
+# connection/object/filter/fire-hose settings all live here (EXTENDED etc. have no
+# CLI flag). No credentials are rendered — those stay runtime-injected. Register it
+# so a config change (not just a unit change) restarts the exporter below.
+- name: render the exporter YAML config
+  ansible.builtin.template:
+    src: mq-exporter.yaml.j2
+    dest: "{{ mq_exporter_config }}"
+    owner: mqm
+    group: mqm
+    mode: "0644"
+  become: true
+  register: mq_exporter_config_render
+
 # Per-QM unit name so the probe runs one exporter per QM (per-stack alloc ports,
 # #423). A static notify-handler can't target a per-instance unit, so restart
 # inline when the unit changes.
@@ -38,7 +52,7 @@
   ansible.builtin.systemd:
     name: "mq-exporter-{{ mq_exporter_instance }}"
     enabled: true
-    state: "{{ 'restarted' if mq_exporter_unit is changed else 'started' }}"
+    state: "{{ 'restarted' if (mq_exporter_unit is changed or mq_exporter_config_render is changed) else 'started' }}"
     daemon_reload: true
   become: true
   register: mq_exporter_restart

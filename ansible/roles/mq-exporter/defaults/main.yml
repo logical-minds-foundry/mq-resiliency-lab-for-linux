@@ -19,6 +19,22 @@ mq_exporter_tls: true
 mq_exporter_certlabel: mq_prometheus
 mq_exporter_keyrepo: /var/mqm/ssl/mq_prometheus/key   # keystore stem; file is key.{p12,sth} (#409)
 mq_exporter_ccdt: "/var/mqm/ssl/exporter-ccdt-{{ mq_exporter_instance }}.json"
+# YAML config file (#944): the exporter now runs `mq_prometheus -f <yaml>` instead
+# of a stack of ExecStart CLI flags. The migration exists because the fire-hose
+# knobs below (notably the EXTENDED queue class) have NO CLI flag — YAML is the only
+# way to reach them (Phase-0 doc §7, DECIDED 2026-08-06). One rendered file per QM.
+mq_exporter_confdir: /var/mqm/exporter
+mq_exporter_config: "{{ mq_exporter_confdir }}/mq-exporter-{{ mq_exporter_instance }}.yaml"
+# Fire-hose knobs (#944), Phase-0 doc §3/§7 — open everything, prune later:
+#   * EXTENDED queue class: 9.4.2+ L2/L3 queue diagnostics, excluded by default and
+#     unreachable via CLI. Listing the full class set = maximal queue coverage.
+#   * showInactiveChannels: surface defined-but-inactive / stopped channels (a
+#     dashboard-critical signal), off by default.
+#   * rediscoverInterval: drop the 1h default so newly-created queues are picked up
+#     promptly by the next wildcard rediscovery pass.
+mq_exporter_queue_selector: [PUT, GET, GENERAL, OPENCLOSE, INQSET, EXTENDED]
+mq_exporter_show_inactive_channels: true
+mq_exporter_rediscover_interval: 1m
 # Wildcard ALL objects, including SYSTEM.* (#423): filtering is a display concern,
 # not a scrape concern, and the system series (e.g. SYSTEM.CLUSTER.* churn) is a
 # proven leading indicator we want for free — a production deployment would filter,
