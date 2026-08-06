@@ -1,0 +1,5 @@
+# Managed by ansible/roles/data-prepper (logsearch tier, epic .github#149, issue #939).
+# Data Prepper core-server config (the internal API / metrics endpoint on :4900). TLS
+# off: the logsearch node lives on the lab's mgmt-only telemetry plane with no TLS in
+# v1 (spec §10), consistent with the OpenSearch tier's security-disabled posture (#827).
+ssl: false

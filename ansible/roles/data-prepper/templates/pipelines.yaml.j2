@@ -1,0 +1,27 @@
+# Managed by ansible/roles/data-prepper (logsearch tier, epic .github#149, issue #939).
+# The end-to-end pipeline the connector spike (#826) proved:
+#   Alloy --(OTLP/gRPC)--> otel_logs_source --> parse_json --> opensearch sink
+#
+# Data Prepper reads every *.yaml in its pipelines/ dir; this is the only one.
+logs-pipeline:
+  source:
+    # OTLP logs over gRPC. ssl:false = plaintext, matching Alloy's `tls { insecure = true }`
+    # exporter on the lab's mgmt-only telemetry plane (no TLS in v1, spec §10). This is the
+    # port #831's Alloy fan-out targets via `opensearch_dataprepper_endpoint`.
+    otel_logs_source:
+      ssl: false
+      port: {{ data_prepper_otel_logs_port }}
+  processor:
+    # The MQ JSON arrives as a STRING in the OTLP `body` (spike downstream note #2). Parse
+    # it and promote its keys (severity, ibm_datetime, host, unit, message, …) to the event
+    # root so they land as structured, queryable fields instead of a text blob.
+    - parse_json:
+        source: "{{ data_prepper_parse_json_source }}"
+  sink:
+    # v1 OpenSearch runs security DISABLED (#827) — plain http on :9200, no auth. Writes the
+    # daily logs-YYYY.MM.DD indices governed by the #827 index template (number_of_replicas:0),
+    # which the site play (#832) ensures exists before this sink first writes.
+    - opensearch:
+        hosts: {{ data_prepper_opensearch_hosts | to_json }}
+        insecure: true
+        index: "{{ data_prepper_index }}"

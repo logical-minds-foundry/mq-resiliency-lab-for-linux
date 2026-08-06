@@ -24,7 +24,7 @@ def manifests(tmp_path, monkeypatch):
         "manifests/_shared/observability.yaml",
         "prometheus: '2.53.2'\nnode_exporter: '1.8.2'\nloki: '3.1.0'\n"
         "alloy: '1.3.0'\ngrafana: '11.1.0'\nmq_metric_samples_ref: 'v5.6.4'\n"
-        "opensearch: '3.8.0'\nopensearch_dashboards: '3.8.0'\n",
+        "opensearch: '3.8.0'\nopensearch_dashboards: '3.8.0'\ndata_prepper: '2.16.0'\n",
     )
     return tmp_path
 
@@ -111,6 +111,7 @@ def test_obs_overlay_reads_shared_manifest(manifests):
     assert ov["prometheus_version"] == "2.53.2"
     assert ov["grafana_version"] == "11.1.0"
     assert ov["mq_exporter_ref"] == "v5.6.4"
+    assert ov["data_prepper_version"] == "2.16.0"
     assert "mq_version" not in ov  # obs-only
 
 
@@ -142,6 +143,15 @@ def test_committed_manifest_pins_opensearch():
     ov = m.obs_overlay()
     assert ov["opensearch_version"]
     assert ov["opensearch_dashboards_version"]
+
+
+def test_committed_manifest_pins_data_prepper():
+    # #939 (epic .github#149, logsearch tier): the shared obs manifest is the single
+    # source for the Data Prepper connector version pin (the #826 spike proved 2.16.0),
+    # so a re-bake never changes the shipper version. Real committed manifest, not the
+    # fixture.
+    ov = m.obs_overlay()
+    assert ov["data_prepper_version"]
 
 
 def test_default_mq_version_is_set():

@@ -1,0 +1,59 @@
+---
+# data-prepper role defaults (logsearch tier, epic .github#149; issue #939).
+#
+# Data Prepper is the connector the gating connector spike (#826,
+# docs/reports/2026-07-29-alloy-opensearch-connector-spike.md) proved is required:
+# Alloy has NO native OpenSearch exporter, so ingestion runs
+# Alloy --(OTLP/gRPC)--> Data Prepper --> OpenSearch. Data Prepper lands on the
+# logsearch node beside OpenSearch + Dashboards.
+#
+# Version pin: mirrors how opensearch_version / loki_version are threaded — this
+# literal is the standalone fallback, but the AUTHORITATIVE pin is the shared
+# observability manifest (manifests/_shared/observability.yaml -> `data_prepper`),
+# surfaced by mqlab.manifest.obs_overlay() as the `data_prepper_version` extra-var.
+# Keep this literal in sync with that manifest entry. The spike proved 2.16.0.
+data_prepper_version: "2.16.0"
+
+# We ship the JDK-BUNDLED distribution (`…-jdk-…`), NOT the plain tarball. This is
+# the deliberate answer to the spike's Java notes (operational notes + downstream
+# note #3): the plain `-linux-x64` tarball bundles no JDK, and Data Prepper's
+# launcher `exec`s a bare `java` that must be on PATH. The `-jdk` distribution
+# co-bundles an OpenJDK 17 under `openjdk/` AND its `bin/data-prepper` launcher
+# auto-discovers it (globs `openjdk/*`, exports JAVA_HOME + prepends its bin to
+# PATH before `exec java`). So the role stays fully self-contained — no apt JDK, no
+# JAVA_HOME guesswork in the unit — and satisfies the "Java 11+, java on PATH"
+# requirement by construction.
+# Data Prepper arch tokens are x64 / arm64 (like opensearch, NOT amd64).
+data_prepper_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+data_prepper_pkg: "opensearch-data-prepper-jdk-{{ data_prepper_version }}-linux-{{ data_prepper_arch }}"
+data_prepper_url: "https://artifacts.opensearch.org/data-prepper/{{ data_prepper_version }}/{{ data_prepper_pkg }}.tar.gz"
+
+# Install layout. Unpacks under /usr/share; data_prepper_home symlinks the versioned
+# dir (mirrors the opensearch role). The launcher resolves home via `readlink -f`, so
+# it follows the symlink to the real install dir and finds its co-bundled openjdk.
+data_prepper_home: /usr/share/data-prepper
+# Working/state dir. Data Prepper's default log4j config writes to a RELATIVE
+# `log/data-prepper/…` path, so the systemd unit sets WorkingDirectory here and the
+# dir must be writable by the service user (else logging would fail silently).
+data_prepper_data_dir: /var/lib/data-prepper
+data_prepper_user: data-prepper
+data_prepper_heap: "1g"                 # JVM heap, passed via JAVA_OPTS (node sized ~6-8 GB)
+
+# --- pipeline knobs (proven end-to-end by the connector spike) ---
+# otel_logs_source gRPC port. Default DP logs port; the value #831's Alloy fan-out
+# targets via `opensearch_dataprepper_endpoint` (roles/alloy/defaults). Plaintext
+# (ssl:false) — the lab's mgmt-only telemetry plane runs no TLS in v1 (spec §10),
+# matching Alloy's `tls { insecure = true }` exporter.
+data_prepper_otel_logs_port: 21892
+# opensearch sink target. v1 runs OpenSearch security DISABLED (#827), so this is
+# plain http on :9200 with no auth — exactly the spike's proven config.
+data_prepper_opensearch_hosts: ["http://localhost:9200"]
+# Daily indices (spec §6). The #827 index template (number_of_replicas:0) governs
+# `logs-*` and MUST already exist before this sink first writes — the site play
+# (#832) orders OpenSearch's configure half (which PUTs the template) ahead of this
+# role, so the template is in place by the time the sink starts.
+data_prepper_index: "logs-%{yyyy.MM.dd}"
+# parse_json promotes the MQ JSON that arrives as a STRING in the OTLP `body`
+# (spike downstream note #2) into top-level structured fields, so severity /
+# ibm_datetime become queryable instead of buried in a text blob.
+data_prepper_parse_json_source: "body"
