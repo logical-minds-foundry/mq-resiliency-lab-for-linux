@@ -73,6 +73,9 @@
       User=grafana-renderer
       Group=grafana-renderer
       Environment=HOME={{ grafana_image_renderer_home }}
+      # Must match Grafana's GF_RENDERING_RENDERER_TOKEN (#935): Grafana sends this as the
+      # X-Auth-Token header on every render call; the renderer rejects mismatches.
+      Environment=AUTH_TOKEN={{ grafana_rendering_token }}
       ExecStart=/usr/local/bin/grafana-image-renderer server \
         --server.addr={{ grafana_image_renderer_addr }} \
         --browser.path={{ grafana_image_renderer_browser_path }}
