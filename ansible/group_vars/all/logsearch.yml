@@ -1,0 +1,27 @@
+# Fleet-wide log-search fan-out gate (#832, epic .github#149). group_vars/all is
+# inherited by EVERY host in EVERY play, which is exactly the point: it turns #831's
+# Alloy->OpenSearch fan-out ON across the whole fleet (spec §6/§13, "the same source
+# set Loki receives, for parity") without editing site-obs.yml or observability.yml —
+# both their alloy invocations pick these two vars up automatically. #831's fan-out
+# block in roles/alloy/templates/config.alloy.j2 keys off exactly these two names, so
+# wiring them here is sufficient.
+#
+# The switch is a RENDERED gate file (build/work/logsearch/fanout.json), written by
+# `mqlab commons up` when the logsearch node is brought up and removed by
+# `mqlab commons down`. Reading it here (rather than baking a static bool) means:
+#   * it survives per-stack observability.yml re-applies (non-clobbering);
+#   * standalone `ansible-playbook` runs pick it up too;
+#   * fan-out is cleanly INERT when the file is absent (logsearch not brought up) —
+#     the lookup tolerates a missing file and defaults to OFF.
+#
+# The gate file shape: {"enabled": true, "endpoint": "<logsearch-mgmt-ip>:21892"}.
+# The endpoint is the logsearch node's mgmt IP + Data Prepper's OTLP/gRPC logs port,
+# derived from topology by mqlab (never hardcoded here).
+#
+# `errors='ignore'` returns '' for a missing file (a LEGITIMATE state — logsearch not
+# deployed — not a hidden error), so we guard with a length check before from_json.
+_logsearch_fanout_json: "{{ lookup('file', playbook_dir ~ '/../build/work/logsearch/fanout.json', errors='ignore') }}"
+_logsearch_fanout: "{{ (_logsearch_fanout_json | from_json) if (_logsearch_fanout_json | length > 0) else {} }}"
+
+alloy_fanout_opensearch: "{{ _logsearch_fanout.enabled | default(false) | bool }}"
+opensearch_dataprepper_endpoint: "{{ _logsearch_fanout.endpoint | default('') }}"
