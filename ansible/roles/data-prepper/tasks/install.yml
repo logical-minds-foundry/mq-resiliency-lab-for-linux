@@ -1,0 +1,103 @@
+---
+# BAKE (epic .github#149, issue #939): the install-time half of data-prepper — the
+# data-prepper system user, the JDK-bundled Data Prepper tarball, the data/working
+# dir, the pipelines.yaml + data-prepper-config.yaml, and the systemd unit. All
+# image-bakeable. Deliberately EXCLUDES the service enable+start (the configure half):
+# a baked service must NOT auto-start on boot in a pre-config state. The box bake
+# (#830) consumes this via `tasks_from: install`; the per-run path runs it as the
+# first half of main.yml.
+
+- name: data-prepper system user
+  ansible.builtin.user:
+    name: "{{ data_prepper_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+# Skip-if-baked (mirrors the opensearch/alloy roles): the fat box bakes this install
+# half, so the binary is already present. Stat the installed launcher and gate the
+# large fetch (~700 MB, the JDK-bundled distribution) on it, so a baked box re-applying
+# the role never re-downloads Data Prepper.
+- name: check for an already-installed data-prepper binary (skip the baked download)
+  ansible.builtin.stat:
+    path: "/usr/share/{{ data_prepper_pkg }}/bin/data-prepper"
+  register: data_prepper_installed
+
+- name: download + unpack the JDK-bundled data-prepper distribution
+  ansible.builtin.unarchive:
+    src: "{{ data_prepper_url }}"
+    dest: /usr/share
+    remote_src: true
+    owner: "{{ data_prepper_user }}"
+    group: "{{ data_prepper_user }}"
+    creates: "/usr/share/{{ data_prepper_pkg }}/bin/data-prepper"
+  when: not data_prepper_installed.stat.exists
+
+- name: symlink {{ data_prepper_home }} -> the versioned install dir
+  ansible.builtin.file:
+    src: "/usr/share/{{ data_prepper_pkg }}"
+    dest: "{{ data_prepper_home }}"
+    state: link
+    force: true
+
+# Working/state dir. WorkingDirectory for the unit; Data Prepper's default log4j
+# config writes a RELATIVE `log/data-prepper/…` path, so this dir must be writable by
+# the service user or logging fails.
+- name: data-prepper data/working dir
+  ansible.builtin.file:
+    path: "{{ data_prepper_data_dir }}"
+    state: directory
+    owner: "{{ data_prepper_user }}"
+    group: "{{ data_prepper_user }}"
+    mode: "0750"
+
+# Data Prepper (with `-Ddata-prepper.dir=$HOME`, set by its launcher) auto-reads
+# pipelines from $HOME/pipelines/*.yaml and its server config from
+# $HOME/config/data-prepper-config.yaml. Template both there (through the symlink).
+- name: deploy the pipelines.yaml (otel_logs_source -> parse_json -> opensearch sink)
+  ansible.builtin.template:
+    src: pipelines.yaml.j2
+    dest: "{{ data_prepper_home }}/pipelines/pipelines.yaml"
+    owner: "{{ data_prepper_user }}"
+    group: "{{ data_prepper_user }}"
+    mode: "0640"
+  notify: restart data-prepper
+
+- name: deploy the data-prepper-config.yaml (core server, TLS off on the mgmt plane)
+  ansible.builtin.template:
+    src: data-prepper-config.yaml.j2
+    dest: "{{ data_prepper_home }}/config/data-prepper-config.yaml"
+    owner: "{{ data_prepper_user }}"
+    group: "{{ data_prepper_user }}"
+    mode: "0640"
+  notify: restart data-prepper
+
+- name: install the systemd unit (INERT — not enabled/started here; configure half owns that)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/data-prepper.service
+    mode: "0644"
+    # NOTE: JAVA_HOME/PATH are NOT set here on purpose. The JDK-bundled distribution's
+    # `bin/data-prepper` launcher discovers its co-bundled OpenJDK (globs openjdk/*),
+    # exports JAVA_HOME and prepends its bin to PATH, then `exec java`s — so a bare
+    # `java` resolves correctly without the unit hardcoding a version-specific JDK path.
+    # WorkingDirectory anchors the launcher's relative `log/data-prepper/…` output.
+    content: |
+      [Unit]
+      Description=OpenSearch Data Prepper (Alloy -> OTLP -> OpenSearch connector)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User={{ data_prepper_user }}
+      Group={{ data_prepper_user }}
+      WorkingDirectory={{ data_prepper_data_dir }}
+      Environment=JAVA_OPTS=-Xms{{ data_prepper_heap }} -Xmx{{ data_prepper_heap }}
+      ExecStart={{ data_prepper_home }}/bin/data-prepper
+      LimitNOFILE=65536
+      TimeoutStartSec=180
+      Restart=on-failure
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: restart data-prepper
