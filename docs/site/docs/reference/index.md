@@ -59,8 +59,11 @@ planes are attached per role. The management plane is deliberately non-transit
 
 The guest fleet is the four 3+3 stacks (24 nodes), two SAN targets (`san-a`,
 `san-b`), and six shared commons (`obs`, `mon-probe`, `svc-sim`, `app-client`,
-`infra-client`, `infra-svc`). See `lab/topology.yaml` for the authoritative
-per-node NIC and resource allocation.
+`infra-client`, `infra-svc`). An **optional** seventh mgmt-plane node — `logsearch`
+(`net-mgmt` `10.50.0.4`), the single-node OpenSearch log-search tier (see
+[Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch))
+— joins the fleet when the topology carries it. See `lab/topology.yaml` for the
+authoritative per-node NIC and resource allocation.
 
 ## REST endpoints
 
@@ -118,7 +121,8 @@ Command groups:
 | `mqlab rest` | `render` | Render the published mqweb REST endpoints (both sites) |
 | `mqlab dns` | `render` | Render BIND zone files + `named.conf` + host resolver facts |
 | `mqlab pki` | `ensure` · `issue` · `list` | Lab PKI / TLS certificate provider (org CAs, entity certs, keystores) |
-| `mqlab commons` | `up` · `status` · `down` | Shared commons VMs (obs + probe + svc + app) independently of any stack |
+| `mqlab commons` | `up` · `status` · `down` | Shared commons VMs (obs + probe + svc + app) — and, when present, the `logsearch` tier — independently of any stack |
+| `mqlab logsearch` | `status` · `open` · `snapshot` · `restore` | Operate the optional log-search tier (single-node OpenSearch + Dashboards): cluster health, Dashboards URL, host-durable snapshot/restore |
 | `mqlab box` | `status` · `build` · `rebuild` · `clean` · `gc` | Baked-box fleet lifecycle |
 | `mqlab build` | `path` · `ensure` · `clean` · `status` · `migrate` | `build/` bucket lifecycle (cache/state/work/temp) |
 
