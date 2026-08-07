@@ -1,0 +1,29 @@
+---
+# CONFIGURE (epic .github#149, issue #939): the per-run half of data-prepper — the
+# service enable+start and the readiness wait. Split out of the bakeable install half
+# so the baked box stays inert (no boot-time auto-start in a pre-config state).
+# site-logsearch.yml (#832) invokes this via `tasks_from: configure`; the un-baked
+# full-role path runs it as the second half of main.yml.
+#
+# Dependency ordering (owned by the #832 site play, not this role): the opensearch
+# role's configure half runs FIRST, bringing OpenSearch up on :9200 and PUTting the
+# logs-* index template (number_of_replicas:0) BEFORE this sink writes — the load-
+# bearing ordering the connector spike proved (a sink-created index defaults to
+# replicas:1 and reads yellow forever on a single node).
+
+- name: enable + start data-prepper
+  ansible.builtin.systemd:
+    name: data-prepper
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Readiness = the otel_logs_source gRPC port is accepting connections. That is the
+# endpoint #831's Alloy fan-out dials, so a listening :21892 is the meaningful "ready
+# to ingest" signal (Data Prepper binds the pipeline source once the pipeline is up).
+- name: wait for the Data Prepper otel_logs_source to accept connections
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ data_prepper_otel_logs_port }}"
+    state: started
+    timeout: 180

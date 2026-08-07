@@ -13,3 +13,7 @@ mq_metric_samples_ref: "master" # float today; pin to a release tag to retire #1
 # 2026-08-04; confirmed at github.com/opensearch-project/OpenSearch/releases).
 opensearch: "3.8.0" # ansible/roles/opensearch/defaults (role added in a later #149 task)
 opensearch_dashboards: "3.8.0" # ansible/roles/opensearch-dashboards/defaults (later task)
+# Data Prepper — the Alloy -> OTLP -> OpenSearch connector (#939, epic .github#149). The
+# gating connector spike (#826) proved 2.16.0 end-to-end; pin it here so a re-bake never
+# changes the shipper version. The data-prepper role (#939) consumes this pin.
+data_prepper: "2.16.0" # ansible/roles/data-prepper/defaults

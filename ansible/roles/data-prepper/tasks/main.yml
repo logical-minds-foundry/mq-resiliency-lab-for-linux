@@ -1,0 +1,11 @@
+---
+# data-prepper role, split along the bake/configure line (mirrors opensearch, epic
+# .github#149). The install half (user + JDK-bundled binary + data dir + config +
+# pipeline templates + inert systemd unit) is image-bakeable; the configure half
+# (service enable+start + readiness wait) is held out of the bake so no baked service
+# auto-starts in a pre-config state. main.yml runs both in order so any caller of the
+# whole role reaches the same end state. The box bake (#830) invokes ONLY
+# `tasks_from: install`; the per-run bring-up (site-logsearch.yml, #832) invokes
+# `tasks_from: configure`.
+- ansible.builtin.import_tasks: install.yml
+- ansible.builtin.import_tasks: configure.yml

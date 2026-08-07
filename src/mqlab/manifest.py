@@ -116,6 +116,10 @@ _OBS_VAR_MAP = {
     # consume these are added in later #149 tasks.
     "opensearch_version": "opensearch",
     "opensearch_dashboards_version": "opensearch_dashboards",
+    # Data Prepper — the Alloy -> OTLP -> OpenSearch connector (#939). Pinned in the same
+    # shared manifest so a re-bake never changes the shipper version; the data-prepper role
+    # draws its version from here rather than hardcoding.
+    "data_prepper_version": "data_prepper",
 }
 
 
