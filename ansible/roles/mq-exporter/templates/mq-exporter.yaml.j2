@@ -1,0 +1,87 @@
+# mq_prometheus exporter config — {{ mq_exporter_qm }} (client-mode, #172/#944).
+# Rendered per-QM by the mq-exporter role; the systemd unit invokes
+#   mq_prometheus -f {{ mq_exporter_config }}
+#
+# Migrated from ExecStart CLI flags to a YAML config (#944) because the fire-hose
+# knobs below — notably the EXTENDED queue class — have NO CLI flag (Phase-0 doc §7,
+# DECIDED 2026-08-06). Section/field names verified against mq-metric-samples
+# `config.common.yaml`, `pkg/config/config.go`, and `cmd/mq_prometheus/config.go`.
+#
+# Deliberately NOT in this file: the MQ user/password. Credentials stay
+# runtime-injected, never rendered to disk (repo secrets policy). Every field with
+# a non-empty / non-false upstream default is stated explicitly so the flags->YAML
+# migration cannot silently change behaviour.
+global:
+    # useObjectStatus is deprecated and force-enabled by the exporter (VerifyConfig
+    # hard-sets it); stated to match the upstream sample. usePublications MUST stay
+    # true — it is the resource-publication fire hose (default true).
+    useObjectStatus: true
+    usePublications: true
+    useResetQStats: false
+    # Statistics *messages* overlap the publications the exporter already gets and
+    # force monitoredQueues=* — left off (Phase-0 doc §3, "likely prune").
+    useStatistics: false
+    logLevel: error
+    pollInterval: 0s
+    tzOffset: 0h
+    # Fire-hose knob (#944): drop the 1h default so newly-created queues become
+    # visible promptly at the next wildcard rediscovery pass (Phase-0 doc §3 caveat).
+    rediscoverInterval: "{{ mq_exporter_rediscover_interval }}"
+
+connection:
+    queueManager: {{ mq_exporter_qm }}
+    # Off-cluster client-mode exporter (never bindings) — the whole role premise.
+    clientConnection: true
+{% if mq_exporter_tls | bool %}
+    # TLS (#250): SSLCIPH + cert label live in the CCDT (no MQ-TLS CLI/YAML flag
+    # exists); MQSSLKEYR is set in the unit. connName/channel come from the CCDT.
+    ccdtUrl: "file://{{ mq_exporter_ccdt }}"
+{% else %}
+    connName: "{{ mq_exporter_conn }}"
+    channel: {{ mq_exporter_channel }}
+{% endif %}
+    # PCF reply model queue (exporter default; explicit so a round-trip can't blank it).
+    replyQueue: SYSTEM.DEFAULT.MODEL.QUEUE
+    waitInterval: 3
+
+# Wildcard ALL objects incl. SYSTEM.* (#423): filtering is a display concern, not a
+# scrape concern. YAML lists are joined to the exporter's internal comma-string form.
+objects:
+    queues:
+{% for q in mq_exporter_monitored_queues.split(',') %}
+        - "{{ q }}"
+{% endfor %}
+    channels:
+{% for c in mq_exporter_monitored_channels.split(',') %}
+        - "{{ c }}"
+{% endfor %}
+    # Topics/subscriptions kept at the exporter's own defaults (# / *), stated
+    # explicitly to preserve them across the flags->YAML migration.
+    topics:
+        - "#"
+    subscriptions:
+        - "*"
+
+filters:
+    # Fire-hose knob (#944): show defined-but-inactive / stopped channels — a
+    # dashboard-critical signal, off by default (Phase-0 doc §3).
+    showInactiveChannels: {{ (mq_exporter_show_inactive_channels | bool) | ternary('true', 'false') }}
+    hideSvrConnJobname: false
+    showCustomAttribute: false
+    # Fire-hose knob (#944): queue resource classes to subscribe to. EXTENDED
+    # (9.4.2+ L2/L3 diagnostics) is excluded unless explicitly named here — the very
+    # reason a CLI-flag config cannot express this and the migration exists. Listing
+    # the full class set = maximal queue coverage (Phase-0 doc §7).
+    queueSubscriptionSelector:
+{% for sel in mq_exporter_queue_selector %}
+        - {{ sel }}
+{% endfor %}
+
+# mq_prometheus collector-specific section.
+prometheus:
+    port: "{{ mq_exporter_port }}"
+    # Keep running across QM disconnects so the exporter follows failover and reports
+    # the QM down rather than exiting (default true; explicit so a round-trip can't
+    # flip it to false and crash-loop under systemd Restart=always).
+    keepRunning: true
+    reconnectInterval: 5s
