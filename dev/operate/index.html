@@ -869,6 +869,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mqlab-logsearch-verbs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mqlab logsearch verbs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-boards" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1351,6 +1362,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#mqlab-logsearch-verbs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mqlab logsearch verbs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-boards" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1543,6 +1565,34 @@ lab that observes every node but never carries transit traffic. It runs on the
 <p>The render verbs are pure topology→file projections; the observe phase of
 <code>mqlab commons up</code> runs them and hands the output to <code>site-obs.yml</code>, so a normal
 bring-up leaves the boards current without a manual render.</p>
+<h3 id="mqlab-logsearch-verbs"><code>mqlab logsearch</code> verbs<a class="headerlink" href="#mqlab-logsearch-verbs" title="Permanent link">&para;</a></h3>
+<p>The optional <strong><code>logsearch</code></strong> tier (single-node OpenSearch + Dashboards + Data
+Prepper — see <a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>)
+is a sibling of <code>obs</code>: it comes up with <code>mqlab commons up</code> (after <code>obs</code>) and is
+reclaimed by <code>mqlab commons down</code>, so there is no separate bring-up verb. Once it is
+up, <code>mqlab logsearch</code> is the operator surface over it:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>status<span class="w">            </span><span class="c1"># cluster health + disk-used + read-only/full check</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>open<span class="w">              </span><span class="c1"># print the OpenSearch Dashboards URL</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>snapshot<span class="w">          </span><span class="c1"># take a snapshot -&gt; host-durable build/state/logsearch/</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>restore<span class="w"> </span><span class="o">[</span>--snapshot<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># restore latest (or a named) host snapshot</span>
+</code></pre></div>
+<ul>
+<li><strong><code>status</code></strong> reports <code>_cluster/health</code>, per-node disk-used, and any read-only /
+  flood-stage-full state. On this single-node, <code>replicas: 0</code> tier <strong>both green and
+  yellow are healthy</strong> — only <em>red</em> or an unreachable node fails. A read-only / full
+  store is surfaced <strong>loudly</strong> and fails the command (never a silent skip).</li>
+<li><strong><code>open</code></strong> prints the Dashboards URL and its Discover deep-link — the mgmt-plane
+  full-text investigation surface (v1: plain http, no auth).</li>
+<li><strong><code>snapshot</code></strong> takes a native OpenSearch <code>_snapshot</code> (point-in-time consistent)
+  and fetches it to the host-durable <code>build/state/logsearch/</code> bucket — the only
+  durability the ephemeral-disk node has.</li>
+<li><strong><code>restore</code></strong> stages a host snapshot artifact back to the guest and restores it;
+  with no <code>--snapshot</code> it restores the latest. Bring-up auto-restores the latest;
+  an explicit <code>restore</code> with nothing to restore is a loud error, not a no-op.</li>
+</ul>
+<p>Because logsearch fans out the <em>same</em> corpus Loki receives, the search tier and the
+Grafana/Loki live-tail are two views of one log stream — use Dashboards for
+full-text and aggregation, Grafana Explore for live-tailing a drill.</p>
 <h3 id="the-boards">The boards<a class="headerlink" href="#the-boards" title="Permanent link">&para;</a></h3>
 <p><code>mqlab obs open</code> prints the current URLs. Grafana is anonymous (no login):</p>
 <ul>

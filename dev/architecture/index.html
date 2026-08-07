@@ -852,6 +852,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-log-search-tier-full-text-over-the-log-corpus-logsearch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The log-search tier — full-text over the log corpus (logsearch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-to-next" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1366,6 +1377,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-log-search-tier-full-text-over-the-log-corpus-logsearch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The log-search tier — full-text over the log corpus (logsearch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-to-next" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1511,6 +1533,39 @@ event stream + <code>.error</code> diagnostics) for a site whose forwarding agen
 files. Both are independently tested; the file variant carries a host-local
 HA-failover stranding window the syslog sink does not, which is why syslog is the
 lab default. See <code>docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md</code>.</p>
+<h2 id="the-log-search-tier-full-text-over-the-log-corpus-logsearch">The log-search tier — full-text over the log corpus (<code>logsearch</code>)<a class="headerlink" href="#the-log-search-tier-full-text-over-the-log-corpus-logsearch" title="Permanent link">&para;</a></h2>
+<p>Alongside the Watcher's metrics + Loki logs sits a second, <strong>optional</strong> telemetry
+tier: <strong><code>logsearch</code></strong>, a single-node <strong>OpenSearch + OpenSearch Dashboards + Data
+Prepper</strong> stack that gives the same log corpus a full-text, aggregation-capable
+search surface. It is a <strong>stack-agnostic sibling of <code>obs</code></strong> — another management-plane
+service that observes the fleet without carrying transit traffic — running on its
+own dedicated mgmt-plane node (<code>logsearch</code>, <code>net-mgmt</code> <code>10.50.0.4</code>).</p>
+<p><strong>Ingest path.</strong> The tier does not add a second collector: <strong>Alloy fans out the
+<em>same</em> corpus Loki already receives.</strong> Alloy has no native OpenSearch exporter (the
+connector spike proved this), so the fan-out runs Alloy → <strong>OTLP/gRPC</strong> → <strong>Data
+Prepper</strong> (on the logsearch node, port <strong><code>21892</code></strong>) → <strong>OpenSearch</strong>. The existing
+<strong>Loki path is untouched</strong> — the fan-out is a <em>second</em> forward target, added for
+parity so the search tier sees exactly the source set Loki does. The fleet-wide
+fan-out is gated: <code>mqlab commons up</code> renders a gate file
+(<code>build/work/logsearch/fanout.json</code>) that <code>group_vars/all/logsearch.yml</code> reads to
+flip <code>alloy_fanout_opensearch</code> on across every host; when logsearch is not brought
+up the gate file is absent and the fan-out is cleanly <strong>inert</strong>.</p>
+<p><strong>Indices.</strong> Logs land in daily <strong><code>logs-YYYY.MM.DD</code></strong> indices under an index
+template with <strong><code>number_of_replicas: 0</code></strong> — load-bearing on a single node, which can
+never place a replica shard (the default <code>replicas: 1</code> would read <em>yellow</em> forever).</p>
+<p><strong>Security (v1).</strong> The OpenSearch security plugin is <strong>disabled</strong> — plain http on
+<code>:9200</code> (OpenSearch) / <code>:5601</code> (Dashboards), no auth. This is a deliberate v1 posture
+for a <strong>management-plane-only</strong> service (spec §10); authentication is a follow-on.</p>
+<p><strong>Persistence.</strong> The logsearch node's guest disk is <strong>ephemeral</strong> (like every lab
+guest), so durability is <strong>host-side snapshot/restore only</strong>: <code>mqlab logsearch
+snapshot</code> takes a native OpenSearch <code>_snapshot</code> and fetches it to the host-durable
+<code>build/state/logsearch/</code> bucket, and bring-up <strong>auto-restores</strong> the latest snapshot
+(a fresh build with no snapshot is a logged no-op). There is no in-guest durable
+store to protect.</p>
+<p><strong>Lifecycle.</strong> logsearch is brought up as a sibling of <code>obs</code> by <code>mqlab commons up</code>
+(after <code>obs</code>, so the obs box and per-stack observe renders land first) and reclaimed
+with the shared tier by <code>mqlab commons down</code>. Because the tier is optional, a topology
+with no <code>logsearch</code> node skips it entirely.</p>
 <h2 id="where-to-next">Where to next<a class="headerlink" href="#where-to-next" title="Permanent link">&para;</a></h2>
 <p>This page is the <strong>why</strong> — the shape of the lab and the reasoning behind each
 mechanism. For the <strong>how</strong> — running failover drills, cutting a stack over to its

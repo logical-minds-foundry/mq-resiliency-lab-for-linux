@@ -1500,8 +1500,11 @@ planes are attached per role. The management plane is deliberately non-transit
 </table>
 <p>The guest fleet is the four 3+3 stacks (24 nodes), two SAN targets (<code>san-a</code>,
 <code>san-b</code>), and six shared commons (<code>obs</code>, <code>mon-probe</code>, <code>svc-sim</code>, <code>app-client</code>,
-<code>infra-client</code>, <code>infra-svc</code>). See <code>lab/topology.yaml</code> for the authoritative
-per-node NIC and resource allocation.</p>
+<code>infra-client</code>, <code>infra-svc</code>). An <strong>optional</strong> seventh mgmt-plane node — <code>logsearch</code>
+(<code>net-mgmt</code> <code>10.50.0.4</code>), the single-node OpenSearch log-search tier (see
+<a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>)
+— joins the fleet when the topology carries it. See <code>lab/topology.yaml</code> for the
+authoritative per-node NIC and resource allocation.</p>
 <h2 id="rest-endpoints">REST endpoints<a class="headerlink" href="#rest-endpoints" title="Permanent link">&para;</a></h2>
 <p>Each queue manager's admin REST API / Console (Liberty <code>mqweb</code>, HTTPS on
 <strong><code>9443</code></strong>) is a published endpoint derived from the topology. Render the
@@ -1644,7 +1647,12 @@ commands:</p>
 <tr>
 <td><code>mqlab commons</code></td>
 <td><code>up</code> · <code>status</code> · <code>down</code></td>
-<td>Shared commons VMs (obs + probe + svc + app) independently of any stack</td>
+<td>Shared commons VMs (obs + probe + svc + app) — and, when present, the <code>logsearch</code> tier — independently of any stack</td>
+</tr>
+<tr>
+<td><code>mqlab logsearch</code></td>
+<td><code>status</code> · <code>open</code> · <code>snapshot</code> · <code>restore</code></td>
+<td>Operate the optional log-search tier (single-node OpenSearch + Dashboards): cluster health, Dashboards URL, host-durable snapshot/restore</td>
 </tr>
 <tr>
 <td><code>mqlab box</code></td>
