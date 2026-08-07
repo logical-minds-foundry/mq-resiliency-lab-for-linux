@@ -128,6 +128,22 @@ def test_rdqm_stack_composed():
     assert "mqweb_admin_password" in s.secrets
 
 
+def test_logsearch_node_present_and_mgmt_only():
+    """The logsearch node (#830, epic .github#149): boots the baked
+    logsearch-ubuntu2404 box, sized for the OpenSearch/Data Prepper stack, and
+    lives on the management plane ONLY (one net-mgmt NIC — it ingests logs from
+    Alloy over mgmt, no data/hb/san/ext exposure)."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    node = topo["nodes"]["logsearch"]
+    assert node["platform"] == "logsearch-ubuntu2404"
+    assert node["memory"] >= 6144
+    assert set(node["nics"]) == {"net-mgmt"}
+
+
 def test_dns_infra_nodes_present_and_attached():
     """The DNS infra nodes (#474): infra-client is authoritative-to-be for
     client.com and reaches our guests on the mgmt + both data planes; infra-svc
