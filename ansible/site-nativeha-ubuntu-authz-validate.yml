@@ -320,6 +320,19 @@
       delegate_to: "{{ active_host }}"
       register: ev_mon_topic
 
+    # #943: the mqmon queue-namespace grant — PROFILE('**') OBJTYPE(QUEUE) +dsp +inq (SET
+    # AUTHREC) — is the coverage gate (§3). dmpmqaut dumps the generic-profile authority
+    # record directly, so we assert the record itself (not the effective authority on one
+    # queue, which cannot distinguish a specific grant from the namespace one). '**' is
+    # single-quoted so the mqm login shell does not glob it.
+    - name: evidence -- mqmon +dsp +inq on the queue namespace (** generic profile)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dmpmqaut -m {{ qm }} -t queue -n '**' -g mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_ns
+
     - name: report the captured authorization evidence
       ansible.builtin.debug:
         msg:
@@ -331,6 +344,7 @@
           - "APP.REPLY mqmon : {{ ev_mon.stdout | default('') }}"
           - "CMDQ mqmon : {{ ev_mon_cmdq.stdout | default('') }}"
           - "ADMIN.TOPIC mqmon : {{ ev_mon_topic.stdout | default('') }}"
+          - "QUEUE ** mqmon : {{ ev_mon_ns.stdout | default('') }}"
       run_once: true
 
     - name: assert the CHLAUTH posture + the #844/N5 DLQ grant + the #936 mqmon exporter grants
@@ -345,17 +359,76 @@
           # and subscribe to the $SYS/MQ resource-monitoring tree (+sub on SYSTEM.ADMIN.TOPIC).
           - "'put' in (ev_mon_cmdq.stdout | default(''))"
           - "'sub' in (ev_mon_topic.stdout | default(''))"
+          # #943: the queue-namespace grant (PROFILE('**') OBJTYPE(QUEUE) +dsp +inq) — the
+          # coverage gate proven live (§3). Read-only: dsp+inq, no put/get in the record.
+          - "'**' in (ev_mon_ns.stdout | default(''))"
+          - "'dsp' in (ev_mon_ns.stdout | default(''))"
+          - "'inq' in (ev_mon_ns.stdout | default(''))"
         fail_msg: "authorization evidence FAILED -- see the report task above."
-        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936)."
+        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936) + dsp/inq on the queue namespace PROFILE('**') (#943)."
       run_once: true
+
+# #943 (Part D) -- exporter coverage: prove the mqmon namespace grant translates into
+# ACTUAL scrape coverage, i.e. that monitored queues appear in the live mq_prometheus
+# exporter. Runs on the probe (mon-probe), where the client-mode exporter for NHAUAPP
+# runs. Read-only: discovers the exporter's HTTP port from its systemd unit, scrapes
+# /metrics, and asserts ibmmq_queue_* series (incl. APP.REPLY) are present -- the
+# observable proof of the §3 coverage fix (authority, not activity).
+- name: exporter coverage (read-only) on the probe
+  hosts: probe
+  become: true
+  gather_facts: false
+  tags: [exporter]
+  vars:
+    qm: "{{ qm_app | default('NHAUAPP') }}"
+  tasks:
+    # The probe runs one exporter unit per QM (mq-exporter-<instance>.service); the
+    # instance suffix is topology-derived, so we locate the unit by the QM its ExecStart
+    # targets rather than assuming the suffix, then read its -ibmmq.httpListenPort.
+    - name: locate the exporter unit for this QM + its HTTP listen port
+      ansible.builtin.shell: |
+        set -o pipefail
+        unit=$(grep -lE 'ibmmq.queueManager {{ qm }}( |$)' \
+          /etc/systemd/system/mq-exporter-*.service | head -1)
+        grep -oE 'httpListenPort [0-9]+' "$unit" | grep -oE '[0-9]+' | head -1
+      args:
+        executable: /bin/bash
+      register: exporter_port
+      changed_when: false
+
+    - name: scrape the exporter /metrics endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:{{ exporter_port.stdout | trim }}/metrics"
+        return_content: true
+      register: exporter_metrics
+
+    - name: report a sample of the exporter's queue coverage
+      ansible.builtin.debug:
+        msg: >-
+          port={{ exporter_port.stdout | trim }}
+          ibmmq_queue_series={{ exporter_metrics.content | default('') | regex_findall('ibmmq_queue_[a-z_]+') | unique | length }}
+          APP.REPLY_seen={{ 'APP.REPLY' in (exporter_metrics.content | default('')) }}
+
+    - name: assert monitored queues actually appear in the exporter (the §3 coverage fix)
+      ansible.builtin.assert:
+        that:
+          - "exporter_port.stdout | trim | length > 0"
+          - "'ibmmq_queue' in (exporter_metrics.content | default(''))"
+          - "'APP.REPLY' in (exporter_metrics.content | default(''))"
+        fail_msg: >-
+          exporter coverage FAILED at :{{ exporter_port.stdout | default('?') | trim }} --
+          no ibmmq_queue_* series (or APP.REPLY missing). The mqmon namespace grant may
+          not have taken effect, or the exporter/QM is down.
+        success_msg: "exporter coverage confirmed: ibmmq_queue_* series present, APP.REPLY visible in the live scrape."
 
 # ============================================================================
 # RUN (live, from a worktree; inventory = build/work/inventory.ini):
 #
 #   INV=../build/work/inventory.ini
-#   # Pre-failover (site A live): full induced + round-trip positive + evidence.
+#   # Pre-failover (site A live): full induced + round-trip positive + evidence +
+#   # exporter coverage (the #943 mqmon namespace grant -> live scrape).
 #   ansible-playbook -i $INV site-nativeha-ubuntu-authz-validate.yml \
-#       --tags induced,positive,authzpos,evidence -e qm_app=NHAUAPP
+#       --tags induced,positive,authzpos,evidence,exporter -e qm_app=NHAUAPP
 #   # Post-failover: cut the live role over to site B via the nativeha GroupRole
 #   # switchover (NOT pcs), then re-run one negative + the authz-positive on site B.
 #   ansible-playbook -i $INV site-nativeha-ubuntu-switchover.yml -e target_live=b -e qm_app=NHAUAPP

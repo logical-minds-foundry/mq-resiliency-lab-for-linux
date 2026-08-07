@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the Grafana port-forward relay every 60s and heal if wedged (#946)
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=60
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

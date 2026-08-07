@@ -7,6 +7,15 @@
   ansible.builtin.include_role:
     name: mq-install
 
+- name: ensure the exporter config directory (#944)
+  ansible.builtin.file:
+    path: "{{ mq_exporter_confdir }}"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0755"
+  become: true
+
 - name: build toolchain (Go + git)
   ansible.builtin.apt:
     name:

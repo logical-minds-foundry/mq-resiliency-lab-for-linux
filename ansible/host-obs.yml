@@ -10,3 +10,4 @@
   roles:
     - node-exporter
     - host-net-state
+    - host-relay-heal

@@ -10,13 +10,15 @@ Group=mqm
 Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
 {% if mq_exporter_tls | bool %}
 # TLS (#250): MQSSLKEYR points at the keystore stem (sibling .sth supplies the
-# password); the CCDT carries the channel/conn + SSLCIPH + cert label, so connName
-# and channel are not passed as flags here.
+# password). SSLCIPH/cert-label/connName/channel travel in the CCDT the config
+# references — no MQ-TLS CLI or YAML flag exists.
 Environment=MQSSLKEYR={{ mq_exporter_keyrepo }}
-ExecStart=/usr/local/bin/mq_prometheus -ibmmq.client -ibmmq.queueManager {{ mq_exporter_qm }} -ibmmq.ccdtUrl "file://{{ mq_exporter_ccdt }}" -ibmmq.monitoredQueues {{ mq_exporter_monitored_queues }} -ibmmq.monitoredChannels {{ mq_exporter_monitored_channels }} -ibmmq.httpListenPort {{ mq_exporter_port }}
-{% else %}
-ExecStart=/usr/local/bin/mq_prometheus -ibmmq.queueManager {{ mq_exporter_qm }} -ibmmq.connName "{{ mq_exporter_conn }}" -ibmmq.channel {{ mq_exporter_channel }} -ibmmq.monitoredQueues {{ mq_exporter_monitored_queues }} -ibmmq.monitoredChannels {{ mq_exporter_monitored_channels }} -ibmmq.httpListenPort {{ mq_exporter_port }}
 {% endif %}
+# Config-file launcher (#944): all connection/object/filter/fire-hose settings live
+# in the rendered per-QM YAML — the only clean way to reach EXTENDED and the per-class
+# filters (no CLI flag). See mq-exporter.yaml.j2. Launcher stays systemd (off-cluster
+# client-mode exporter); the YAML is the portable deliverable.
+ExecStart=/usr/local/bin/mq_prometheus -f {{ mq_exporter_config }}
 Restart=always
 RestartSec=5
 

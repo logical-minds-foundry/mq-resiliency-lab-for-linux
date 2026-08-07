@@ -23,26 +23,12 @@ authz_grants:
   - { group: mqapp, object_type: qmgr,  object: "",            authorities: "+connect +inq" }
   - { group: mqapp, object_type: queue, object: "SVC.REQUEST", authorities: "+put" }
   - { group: mqapp, object_type: queue, object: "APP.REPLY",   authorities: "+get +inq +browse" }
-  # monitoring (mq_prometheus exporter, MON.SVRCONN -> SSLPEERMAP -> mqmon). The exporter
-  # is NOT pure pub/sub: at startup it opens SYSTEM.ADMIN.COMMAND.QUEUE and issues PCF
-  # DISPLAY to expand its monitoredQueues/Channels patterns, replying on a temporary
-  # dynamic queue created from SYSTEM.DEFAULT.MODEL.QUEUE; only then does it subscribe to
-  # the $SYS/MQ resource-monitoring topics. The $SYS tree is administered by
-  # SYSTEM.ADMIN.TOPIC — NOT SYSTEM.BASE.TOPIC. The earlier SYSTEM.BASE.TOPIC grant was a
-  # placeholder that BOTH over-granted (whole tree root) AND failed to authorize $SYS/MQ,
-  # so the exporter crash-looped on MQRC 2035 (first opening the command queue, then
-  # subscribing to $SYS/MQ/INFO/QMGR/<qm>/Monitor/METADATA/CLASSES). This minimal set was
-  # pinned empirically against the LIVE NHAUAPP exporter (#936) — the error progression
-  # (command-queue -> reply queue -> $SYS subscribe -> clean) proves each grant necessary.
-  # SVCQM never hit this: it is instrumentation, not hardened (no mqmon group there).
-  # Grounded in IBM MQ 9.4 command-server/PCF authorization docs; a full coverage +
-  # permission review is the follow-on epic.
-  - { group: mqmon, object_type: qmgr,  object: "",                          authorities: "+connect +inq +dsp" }
-  - { group: mqmon, object_type: topic, object: "SYSTEM.ADMIN.TOPIC",        authorities: "+sub" }
-  - { group: mqmon, object_type: queue, object: "SYSTEM.ADMIN.COMMAND.QUEUE", authorities: "+put" }
-  - { group: mqmon, object_type: queue, object: "SYSTEM.DEFAULT.MODEL.QUEUE", authorities: "+dsp +inq +get" }
-  - { group: mqmon, object_type: queue, object: "APP.REPLY",                 authorities: "+dsp +inq" }
-  - { group: mqmon, object_type: queue, object: "SVC.REQUEST",               authorities: "+dsp +inq" }
+  # monitoring (mq_prometheus exporter, MON.SVRCONN -> SSLPEERMAP -> mqmon): the mqmon
+  # grants are NOT driven from here anymore. They moved to MQSC SET AUTHREC
+  # (authz_mqmon_grants below, rendered into authz.mqsc.j2) so the exporter's
+  # least-privilege security profile travels co-located with the object definitions
+  # (repo rule, 2026-08-06) — the §5 profile of the Phase-0 observability doc (#943 /
+  # .github#173). setmqaut here still drives only the mqapp/mqsvc grants.
   # service app (counterparty receiver MCA): put reply, put DLQ; nothing else.
   # +setall (on the qmgr object AND every destination the MCA opens) is REQUIRED
   # (#613): a non-privileged receiving MCA opens the destination queue with
@@ -54,6 +40,33 @@ authz_grants:
   - { group: mqsvc, object_type: qmgr,  object: "",                authorities: "+connect +setall" }
   - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put +setall" }
   - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put +setall" }
+
+# mqmon (mq_prometheus exporter) least-privilege security profile — the §5 grant table
+# of the Phase-0 observability doc (#943 / .github#173), expressed as MQSC SET AUTHREC
+# (NOT setmqaut) and rendered into authz.mqsc.j2 so the authority travels co-located with
+# the object definitions (repo rule, 2026-08-06). Arm-agnostic: every arm that renders
+# authz.mqsc.j2 (nativeha-ubuntu, pcmk, rdqm) gets the identical profile.
+#
+# The exporter is NOT pure pub/sub: at startup it opens SYSTEM.ADMIN.COMMAND.QUEUE (+put)
+# and issues PCF DISPLAY to expand its monitoredQueues/Channels patterns, replying on a
+# dynamic queue from SYSTEM.DEFAULT.MODEL.QUEUE (+dsp +inq +get); only then does it
+# subscribe to the $SYS/MQ resource-monitoring topics, administered by SYSTEM.ADMIN.TOPIC
+# (+sub) — NOT SYSTEM.BASE.TOPIC. Those three were pinned empirically against the LIVE
+# NHAUAPP exporter (#936 — the MQRC 2035 error progression command-queue -> reply queue
+# -> $SYS subscribe -> clean proves each necessary).
+#
+# PROFILE('**') OBJTYPE(QUEUE) +dsp +inq is the COVERAGE GATE proven live (#943 §3):
+# without it the exporter cannot inquire a queue it has no authority on, so backed-up
+# idle queues stay invisible — it was authority, not publication activity. It subsumes
+# the old per-queue mqmon grants (APP.REPLY, SVC.REQUEST). +dsp +inq only — read-only, no
+# put/get, so the N1 denial (mqmon MQPUT APP.REPLY -> 2035) still holds. This is the
+# least-privilege profile, not the industry "run the monitor as mqm" cop-out.
+authz_mqmon_grants:
+  - { objtype: QMGR,  authadd: "CONNECT, INQ, DSP" }
+  - { objtype: TOPIC, profile: "SYSTEM.ADMIN.TOPIC",         authadd: "SUB" }
+  - { objtype: QUEUE, profile: "SYSTEM.ADMIN.COMMAND.QUEUE", authadd: "PUT" }
+  - { objtype: QUEUE, profile: "SYSTEM.DEFAULT.MODEL.QUEUE", authadd: "DSP, INQ, GET" }
+  - { objtype: QUEUE, profile: "**",                         authadd: "DSP, INQ" }
 
 # DLQ the receiver MCA falls back to. FINAL/minimal (#614): a per-channel /
 # per-remote-QM DLQ is NOT an MQ 9.4 feature — DEADQ is a queue-manager-level
