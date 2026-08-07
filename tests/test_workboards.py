@@ -10,6 +10,7 @@ stay lab-object-driven; this module layers portability on top of their primitive
 from __future__ import annotations
 
 import json
+import re
 
 from mqlab.workboards import (
     WORK_BOARD_BUILDERS,
@@ -20,6 +21,7 @@ from mqlab.workboards import (
     work_dashboard_paths_and_texts,
     write_work_dashboards,
 )
+from mqlab.workqmboard import FLOW_BOARD_UID, QM_BOARD_UID, work_qm_dashboard
 
 # Lab-specific names that must NEVER leak into a portable board (the anti-contract).
 _LAB_NAMES = ("NHAUAPP", "NHARCAPP", "SVCQM", "RDQMAPP", "APP.REPLY", "APP.SVRCONN", "PCMKAPP")
@@ -224,3 +226,80 @@ def test_write_work_dashboards_writes_files_under_out_dir(tmp_path):
         assert path.exists()
         board = json.loads(path.read_text())
         assert board["uid"]
+
+
+# ── the QM-view board (#964, Wave 1a) ───────────────────────────────────────────
+#
+# The FIRST work-edition board; these tests pin the conventions #965/#967 follow. Every
+# PromQL must map to the Prometheus schema-note contract (Task 1); the board is QM-scoped
+# (no per-queue/per-channel series — that is the Flow board, #965); the trend band uses
+# rate() on counters; and a data link drills to the Flow board carrying $qmgr.
+
+# Every ibmmq_* series the QM board is allowed to bind — the schema-note contract subset it
+# uses (all qmgr-class; §3.1 object-status + §4.1 publication-driven). Binding anything else
+# is a contract violation the board must never commit.
+_QM_CONTRACT_METRICS = {
+    "ibmmq_qmgr_status",
+    "ibmmq_qmgr_uptime",
+    "ibmmq_qmgr_connection_count",
+    "ibmmq_qmgr_channel_initiator_status",
+    "ibmmq_qmgr_command_server_status",
+    "ibmmq_qmgr_active_listeners",
+    "ibmmq_qmgr_interval_mqput_mqput1_total_count",
+    "ibmmq_qmgr_interval_destructive_get_total_count",
+    "ibmmq_qmgr_log_current_primary_space_in_use_percentage",
+}
+
+
+def test_work_qm_board_binds_only_verified_metrics_and_is_qm_scoped():
+    dash = work_qm_dashboard()
+    blob = json.dumps(dash)
+    assert "ibmmq_qmgr_status" in blob and "$qmgr" in blob
+    assert "ibmmq_queue_" not in blob  # per-queue detail belongs on the flow board (#965)
+    assert "ibmmq_channel_" not in blob  # per-channel detail is the flow board's too
+    for name in _LAB_NAMES:
+        assert name not in blob, name
+
+
+def test_work_qm_board_binds_only_schema_note_metrics():
+    used = set(re.findall(r"ibmmq_[a-z0-9_]+", json.dumps(work_qm_dashboard())))
+    assert used, "expected ibmmq_* bindings"
+    assert used <= _QM_CONTRACT_METRICS, used - _QM_CONTRACT_METRICS
+
+
+def test_work_qm_board_is_registered_and_uses_the_pinned_uid():
+    assert work_qm_dashboard in WORK_BOARD_BUILDERS
+    assert work_qm_dashboard()["uid"] == QM_BOARD_UID
+
+
+def test_work_qm_trend_panels_are_timeseries_and_use_rate_for_counters():
+    dash = work_qm_dashboard()
+    ts_blobs = [json.dumps(p) for p in dash["panels"] if p.get("type") == "timeseries"]
+    assert ts_blobs, "expected trend-band timeseries panels"
+    # counters (the interval MQI totals) are only ever plotted as a rate(), never raw
+    for counter in (
+        "ibmmq_qmgr_interval_mqput_mqput1_total_count",
+        "ibmmq_qmgr_interval_destructive_get_total_count",
+    ):
+        hits = [b for b in ts_blobs if counter in b]
+        assert hits, f"{counter} not on a trend panel"
+        for b in hits:
+            assert f"rate({counter}" in b.replace(" ", ""), counter
+
+
+def test_work_qm_board_has_flow_drilldown_carrying_qmgr():
+    blob = json.dumps(work_qm_dashboard())
+    assert f"/d/{FLOW_BOARD_UID}" in blob  # drill to the Queue/channel board (#965)
+    assert "var-qmgr=$qmgr" in blob  # carrying the selected QM through
+
+
+def test_work_qm_board_es_feed_is_a_seam_not_a_wired_panel():
+    dash = work_qm_dashboard()
+    # ④ is a clearly-marked placeholder for Wave 1b / #966 (blocked on LogSearch)
+    seams = [p for p in dash["panels"] if p.get("type") == "text" and "#966" in json.dumps(p)]
+    assert seams, "expected an ES event/error-feed seam panel"
+    # no Loki datasource is wired (work has no Loki; the feed is ES-only, built once in 1b)
+    for ds in _all_datasources(dash):
+        assert ds.get("type") != "loki", ds
+    # and no ${loki} datasource variable is even declared (Wave 1a is metrics-only)
+    assert "loki" not in {v["name"] for v in dash["templating"]["list"]}

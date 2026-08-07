@@ -197,8 +197,17 @@ def _overview_board() -> dict[str, Any]:
     )
 
 
-# The registry of work-edition board builders. Wave 1b/1c (#964/#965/#967) append here.
+# The registry of work-edition board builders. Wave 1a/1b (#964/#965/#967) append here.
 WORK_BOARD_BUILDERS: list[Callable[[], dict[str, Any]]] = [_overview_board]
+
+
+def _register_work_boards() -> None:
+    """Append the rich work-edition boards to the registry. Imported lazily at module load
+    (see the bottom-of-module call) so the board generators can ``from mqlab.workboards
+    import ...`` the foundation above without a circular import at definition time."""
+    from mqlab.workqmboard import work_qm_dashboard  # noqa: PLC0415
+
+    WORK_BOARD_BUILDERS.append(work_qm_dashboard)
 
 
 def work_dashboard_paths_and_texts(out_dir: Path) -> list[tuple[Path, str]]:
@@ -221,3 +230,8 @@ def write_work_dashboards(out_dir: Path) -> list[Path]:
         path.write_text(text)
         paths.append(path)
     return paths
+
+
+# Register the rich work-edition boards once the foundation above is fully defined, so their
+# generators can import it without a circular dependency (#964 QM board; #965/#967 to follow).
+_register_work_boards()
