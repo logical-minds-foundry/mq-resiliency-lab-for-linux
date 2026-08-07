@@ -100,6 +100,50 @@ def dashboards_url(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
+# --- fleet-wide fan-out gate (#832) ---------------------------------------------
+# #831 added an Alloy fan-out block to config.alloy.j2 gated on `alloy_fanout_opensearch`
+# + `opensearch_dataprepper_endpoint`. This tier turns that gate ON fleet-wide (spec
+# §6/§13, "the same source set Loki receives, for parity") by rendering a gate file
+# (build/work/logsearch/fanout.json) that group_vars/all/logsearch.yml reads. The fan-out
+# endpoint is the logsearch node's mgmt IP + Data Prepper's OTLP/gRPC logs port. The IP is
+# DERIVED from topology (never hardcoded — a topology change flows straight through); the
+# port mirrors the data-prepper role default `data_prepper_otel_logs_port`.
+DATA_PREPPER_OTLP_LOGS_PORT = 21892
+
+
+def logsearch_mgmt_ip(topo: dict[str, Any]) -> str:
+    """The logsearch node's net-mgmt IP, resolved from topology.
+
+    Raises LogsearchError — loudly, never a bogus/empty endpoint — when the node or
+    its mgmt NIC is absent, so a fan-out is never pointed at an unresolved endpoint.
+    """
+    node = (topo.get("nodes") or {}).get("logsearch")
+    if node is None:
+        raise LogsearchError(
+            "mqlab logsearch: topology has no 'logsearch' node — cannot derive the "
+            "Alloy fan-out endpoint. Was lab/topology.yaml edited (#830)?"
+        )
+    ip = (node.get("nics") or {}).get("net-mgmt")
+    if not ip:
+        raise LogsearchError(
+            "mqlab logsearch: the logsearch node has no net-mgmt NIC in topology — "
+            "cannot derive the Alloy fan-out endpoint."
+        )
+    return str(ip)
+
+
+def fanout_endpoint(topo: dict[str, Any]) -> str:
+    """The Alloy fan-out target — ``<logsearch-mgmt-ip>:<otlp-logs-port>``."""
+    return f"{logsearch_mgmt_ip(topo)}:{DATA_PREPPER_OTLP_LOGS_PORT}"
+
+
+def fanout_gate(topo: dict[str, Any]) -> dict[str, Any]:
+    """The rendered gate-file body group_vars/all/logsearch.yml consumes: fleet-wide
+    fan-out ENABLED, pointed at the topology-derived Data Prepper endpoint. Its absence
+    (no gate file) is what makes fan-out cleanly inert when logsearch is not brought up."""
+    return {"enabled": True, "endpoint": fanout_endpoint(topo)}
+
+
 def _read_only_flag(entry: dict[str, Any]) -> bool:
     """True when an index's settings carry ``read_only_allow_delete: true`` in
     either the flat (``index.blocks.read_only_allow_delete``) or nested

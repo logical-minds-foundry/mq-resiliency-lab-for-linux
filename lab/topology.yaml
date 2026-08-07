@@ -379,6 +379,15 @@ groups:
   obs_box: [obs]
   probe:   [mon-probe]
   infra:   [infra-client, infra-svc]
+  # logsearch_box (not "logsearch") so the group name never collides with the host
+  # named logsearch — same convention as obs_box. This group is what makes the
+  # inventory render the logsearch host so site-logsearch.yml (hosts: logsearch) and
+  # the `mqlab logsearch` ad-hoc calls resolve it (#832). It is deliberately NOT a
+  # commons group: logsearch is wired into `mqlab commons up/status/down` explicitly
+  # but kept out of the per-stack all_vms set, so a stack bootstrap never force-boots
+  # the heavy (6 GB) logsearch node — the tier is opt-in and its fan-out inert until
+  # brought up.
+  logsearch_box: [logsearch]
 
 # stacks: — canonical 4-stack registry (#350). Each stack is the authoritative
 # union of its old arm (mechanism/verbs/short) and its full-HADR distributed setup

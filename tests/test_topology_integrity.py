@@ -144,6 +144,24 @@ def test_logsearch_node_present_and_mgmt_only():
     assert set(node["nics"]) == {"net-mgmt"}
 
 
+def test_logsearch_box_group_renders_but_is_not_a_commons_group():
+    """The logsearch node lives in the `logsearch_box` group (#832) so the inventory
+    renders it (site-logsearch.yml `hosts: logsearch` + the `mqlab logsearch` ad-hoc
+    calls resolve it). It is NOT a commons group: logsearch is wired into commons
+    up/status/down explicitly, but kept out of the per-stack all_vms boot set."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    assert topo["groups"]["logsearch_box"] == ["logsearch"]
+    assert "logsearch_box" not in topo["commons"]["groups"]
+    # the inventory (a pure function of topology) renders the host under the group
+    inv = lab_inventory()
+    assert "[logsearch_box]" in inv
+    assert "logsearch ansible_host=10.50.0.4" in inv
+
+
 def test_dns_infra_nodes_present_and_attached():
     """The DNS infra nodes (#474): infra-client is authoritative-to-be for
     client.com and reaches our guests on the mgmt + both data planes; infra-svc
