@@ -133,6 +133,46 @@ files. Both are independently tested; the file variant carries a host-local
 HA-failover stranding window the syslog sink does not, which is why syslog is the
 lab default. See `docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.md`.
 
+## The log-search tier — full-text over the log corpus (`logsearch`)
+
+Alongside the Watcher's metrics + Loki logs sits a second, **optional** telemetry
+tier: **`logsearch`**, a single-node **OpenSearch + OpenSearch Dashboards + Data
+Prepper** stack that gives the same log corpus a full-text, aggregation-capable
+search surface. It is a **stack-agnostic sibling of `obs`** — another management-plane
+service that observes the fleet without carrying transit traffic — running on its
+own dedicated mgmt-plane node (`logsearch`, `net-mgmt` `10.50.0.4`).
+
+**Ingest path.** The tier does not add a second collector: **Alloy fans out the
+*same* corpus Loki already receives.** Alloy has no native OpenSearch exporter (the
+connector spike proved this), so the fan-out runs Alloy → **OTLP/gRPC** → **Data
+Prepper** (on the logsearch node, port **`21892`**) → **OpenSearch**. The existing
+**Loki path is untouched** — the fan-out is a *second* forward target, added for
+parity so the search tier sees exactly the source set Loki does. The fleet-wide
+fan-out is gated: `mqlab commons up` renders a gate file
+(`build/work/logsearch/fanout.json`) that `group_vars/all/logsearch.yml` reads to
+flip `alloy_fanout_opensearch` on across every host; when logsearch is not brought
+up the gate file is absent and the fan-out is cleanly **inert**.
+
+**Indices.** Logs land in daily **`logs-YYYY.MM.DD`** indices under an index
+template with **`number_of_replicas: 0`** — load-bearing on a single node, which can
+never place a replica shard (the default `replicas: 1` would read *yellow* forever).
+
+**Security (v1).** The OpenSearch security plugin is **disabled** — plain http on
+`:9200` (OpenSearch) / `:5601` (Dashboards), no auth. This is a deliberate v1 posture
+for a **management-plane-only** service (spec §10); authentication is a follow-on.
+
+**Persistence.** The logsearch node's guest disk is **ephemeral** (like every lab
+guest), so durability is **host-side snapshot/restore only**: `mqlab logsearch
+snapshot` takes a native OpenSearch `_snapshot` and fetches it to the host-durable
+`build/state/logsearch/` bucket, and bring-up **auto-restores** the latest snapshot
+(a fresh build with no snapshot is a logged no-op). There is no in-guest durable
+store to protect.
+
+**Lifecycle.** logsearch is brought up as a sibling of `obs` by `mqlab commons up`
+(after `obs`, so the obs box and per-stack observe renders land first) and reclaimed
+with the shared tier by `mqlab commons down`. Because the tier is optional, a topology
+with no `logsearch` node skips it entirely.
+
 ## Where to next
 
 This page is the **why** — the shape of the lab and the reasoning behind each

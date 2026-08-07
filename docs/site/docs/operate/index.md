@@ -158,6 +158,38 @@ The render verbs are pure topology→file projections; the observe phase of
 `mqlab commons up` runs them and hands the output to `site-obs.yml`, so a normal
 bring-up leaves the boards current without a manual render.
 
+### `mqlab logsearch` verbs
+
+The optional **`logsearch`** tier (single-node OpenSearch + Dashboards + Data
+Prepper — see [Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch))
+is a sibling of `obs`: it comes up with `mqlab commons up` (after `obs`) and is
+reclaimed by `mqlab commons down`, so there is no separate bring-up verb. Once it is
+up, `mqlab logsearch` is the operator surface over it:
+
+```bash
+mqlab logsearch status            # cluster health + disk-used + read-only/full check
+mqlab logsearch open              # print the OpenSearch Dashboards URL
+mqlab logsearch snapshot          # take a snapshot -> host-durable build/state/logsearch/
+mqlab logsearch restore [--snapshot <name>]   # restore latest (or a named) host snapshot
+```
+
+- **`status`** reports `_cluster/health`, per-node disk-used, and any read-only /
+  flood-stage-full state. On this single-node, `replicas: 0` tier **both green and
+  yellow are healthy** — only *red* or an unreachable node fails. A read-only / full
+  store is surfaced **loudly** and fails the command (never a silent skip).
+- **`open`** prints the Dashboards URL and its Discover deep-link — the mgmt-plane
+  full-text investigation surface (v1: plain http, no auth).
+- **`snapshot`** takes a native OpenSearch `_snapshot` (point-in-time consistent)
+  and fetches it to the host-durable `build/state/logsearch/` bucket — the only
+  durability the ephemeral-disk node has.
+- **`restore`** stages a host snapshot artifact back to the guest and restores it;
+  with no `--snapshot` it restores the latest. Bring-up auto-restores the latest;
+  an explicit `restore` with nothing to restore is a loud error, not a no-op.
+
+Because logsearch fans out the *same* corpus Loki receives, the search tier and the
+Grafana/Loki live-tail are two views of one log stream — use Dashboards for
+full-text and aggregation, Grafana Explore for live-tailing a drill.
+
 ### The boards
 
 `mqlab obs open` prints the current URLs. Grafana is anonymous (no login):

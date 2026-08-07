@@ -15,7 +15,7 @@ path <bucket>` is the same authority for shell and other non-Python consumers.
 | Bucket   | Scope  | Lifecycle (when `clean` removes it)        | Holds |
 |----------|--------|---------------------------------------------|-------|
 | `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), the SAN install-half debs (`san-debs/`, [`san-deb-cache.md`](san-deb-cache.md)), doc refs (`refs/`), `ansible_collections/` |
-| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/` (arch-suffixed `<box>-<arch>.box` + `<box>-<arch>.manifest-hash` pairs), `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, the `vagrant/` dotfile (domain↔vagrant mapping + keys), manifest selection pins |
+| `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/` (arch-suffixed `<box>-<arch>.box` + `<box>-<arch>.manifest-hash` pairs), `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, `logsearch/` (the host-durable OpenSearch snapshot store, written by `mqlab logsearch snapshot` and read by restore-on-bring-up), the `vagrant/` dotfile (domain↔vagrant mapping + keys), manifest selection pins |
 | `work/`  | local  | **every** `mqlab build clean`               | deterministic renders — `inventory.ini`, `lab/topology.resolved.yaml`, `box-versions.json`, `versions.json`, `grafana/`, `prometheus/`, `obs/`, `salt/`, manifest overlays |
 | `temp/`  | local  | **every** `mqlab build clean`               | scratch, junk, and the screenshot handoff dir |
 
