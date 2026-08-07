@@ -18,9 +18,11 @@
 # The endpoint is the logsearch node's mgmt IP + Data Prepper's OTLP/gRPC logs port,
 # derived from topology by mqlab (never hardcoded here).
 #
-# `errors='ignore'` returns '' for a missing file (a LEGITIMATE state — logsearch not
-# deployed — not a hidden error), so we guard with a length check before from_json.
-_logsearch_fanout_json: "{{ lookup('file', playbook_dir ~ '/../build/work/logsearch/fanout.json', errors='ignore') }}"
+# A missing file is a LEGITIMATE state (logsearch not deployed — not a hidden error).
+# `errors='ignore'` returns None (NOT '') for a missing file, and `None | length`
+# raises "NoneType has no len()", so coerce to '' with `default('', true)` before the
+# length guard — that keeps the guard behaving as intended: empty -> fan-out OFF (#953).
+_logsearch_fanout_json: "{{ lookup('file', playbook_dir ~ '/../build/work/logsearch/fanout.json', errors='ignore') | default('', true) }}"
 _logsearch_fanout: "{{ (_logsearch_fanout_json | from_json) if (_logsearch_fanout_json | length > 0) else {} }}"
 
 alloy_fanout_opensearch: "{{ _logsearch_fanout.enabled | default(false) | bool }}"
