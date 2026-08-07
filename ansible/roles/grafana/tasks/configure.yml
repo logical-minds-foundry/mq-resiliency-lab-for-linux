@@ -1,13 +1,42 @@
 ---
 # CONFIGURE (#602): the per-run half of the grafana role — the topology-rendered
-# dashboard tree (build/work/grafana/dashboards/, rendered per lab by mqlab) and the
-# admin-password env drop-in (a per-run SECRET, injected from the lab secret, never
-# baked). Both notify `restart grafana` so a per-run apply picks them up.
+# dashboard tree (build/work/grafana/dashboards/, rendered per lab by mqlab), the
+# server-side rendering env drop-in (#954), and the admin-password env drop-in (a
+# per-run SECRET, injected from the lab secret, never baked). All notify
+# `restart grafana` so a per-run apply picks them up.
 #
 # The service enable+start also lives here (#642): moved out of the bakeable install
 # half so the baked obs box stays inert (no boot-time auto-start in a pre-config
 # state). Enable first; the dashboards + admin-password drop-in then restart the
 # running service to pick them up.
+
+# Server-side rendering env drop-in (#877), rendered PER-RUN (#954) — NOT baked. It
+# carries GF_RENDERING_RENDERER_TOKEN, and Grafana >= 13 refuses to start on the
+# default token; baking it left boxes baked before the token landed (#935) with a
+# stale drop-in that observe never refreshed, so grafana-server died on every cold
+# rebuild (#886 baked-staleness). Rendering it here — BEFORE the enable+start below,
+# so grafana comes up with a valid token on the first pass — keeps it current on any
+# box, exactly like the admin-password drop-in. The removal task keeps re-provisioning
+# idempotent when rendering is disabled.
+- name: grafana env drop-in — server-side rendering (grafana-image-renderer)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/grafana-server.service.d/rendering.conf
+    mode: "0644"
+    content: |
+      [Service]
+      Environment=GF_RENDERING_SERVER_URL={{ grafana_rendering_server_url }}
+      Environment=GF_RENDERING_CALLBACK_URL={{ grafana_rendering_callback_url }}
+      Environment=GF_RENDERING_RENDERER_TOKEN={{ grafana_rendering_token }}
+  when: grafana_rendering | bool
+  notify: restart grafana
+
+- name: remove the rendering drop-in when rendering is disabled
+  ansible.builtin.file:
+    path: /etc/systemd/system/grafana-server.service.d/rendering.conf
+    state: absent
+  when: not (grafana_rendering | bool)
+  notify: restart grafana
+
 - name: enable + start grafana
   ansible.builtin.systemd:
     name: grafana-server

@@ -57,29 +57,13 @@
     state: directory
     mode: "0755"
 
-# Server-side rendering env (#877). STATIC config (not a secret) → baked here in the
-# install half, unlike the per-run admin-password drop-in. Points Grafana at the
-# standalone grafana-image-renderer service so the render API, alert images, and
-# scheduled reports produce PNG/PDF. Gated on grafana_rendering (default off); the obs
-# deployment turns it on. The removal task keeps re-provisioning idempotent both ways.
-- name: grafana env drop-in — server-side rendering (grafana-image-renderer)
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/grafana-server.service.d/rendering.conf
-    mode: "0644"
-    content: |
-      [Service]
-      Environment=GF_RENDERING_SERVER_URL={{ grafana_rendering_server_url }}
-      Environment=GF_RENDERING_CALLBACK_URL={{ grafana_rendering_callback_url }}
-      Environment=GF_RENDERING_RENDERER_TOKEN={{ grafana_rendering_token }}
-  when: grafana_rendering | bool
-  notify: restart grafana
-
-- name: remove the rendering drop-in when rendering is disabled
-  ansible.builtin.file:
-    path: /etc/systemd/system/grafana-server.service.d/rendering.conf
-    state: absent
-  when: not (grafana_rendering | bool)
-  notify: restart grafana
+# Server-side rendering env drop-in (#877) is written by the PER-RUN configure half,
+# NOT baked here (#954). It carries GF_RENDERING_RENDERER_TOKEN, and Grafana >= 13
+# refuses to start on the default token; baking it meant a box baked before that token
+# landed (#935) kept a stale drop-in that observe never refreshed, so grafana-server
+# died on every cold rebuild (a #886 baked-staleness instance). Rendering it per-run —
+# like the admin-password drop-in — keeps the token current on any box. See
+# configure.yml.
 
 # The service enable+start moved to configure.yml (#642): a baked service must NOT
 # auto-start on boot in a pre-config state. The grafana deb also auto-enables
