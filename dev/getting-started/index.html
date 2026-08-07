@@ -1711,6 +1711,12 @@ commons up</code>. A few renders and the front door are exposed directly:</p>
 </code></pre></div>
 <p><code>mqlab obs open</code> prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).</p>
+<p>An <strong>optional</strong> second telemetry tier — <strong><code>logsearch</code></strong> (single-node OpenSearch +
+Dashboards) — gives the same log corpus a full-text, aggregation search surface
+alongside Grafana/Loki. It is a sibling of <code>obs</code> (comes up with <code>mqlab commons up</code>),
+operated with <code>mqlab logsearch</code> (<code>status</code>/<code>open</code>/<code>snapshot</code>/<code>restore</code>); see
+<a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>
+for the tier and <a href="../operate/#mqlab-logsearch-verbs">Operate &amp; Observe</a> for the verbs.</p>
 <p><strong>The Watcher</strong> (<code>lab-watcher</code>, #488) is the lab-state front door: a support-layer
 instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
 drilling into its own cockpit board. Scrape targets are rendered from <strong>the full
