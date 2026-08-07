@@ -550,7 +550,14 @@ def obs_targets(
 
 
 @obs_app.command("dashboard")
-def obs_dashboard() -> None:
+def obs_dashboard(
+    portable: bool = typer.Option(
+        False,
+        "--portable",
+        help="also render the datasource-portable work-edition boards to "
+        "build/work/grafana/work-edition/ (#963)",
+    ),
+) -> None:
     """Render build/work/grafana/dashboards/lab-status.json from topology and echo it."""
     from mqlab.dashboard import dashboard_path, lab_dashboard
 
@@ -588,6 +595,14 @@ def obs_dashboard() -> None:
         watcher.write_text(lab_watcher_dashboard())
         deps.renderer.command(f"render -> {watcher}")
         deps.transcript.write(f"render -> {watcher}")
+        # the datasource-portable work-edition boards (#963) — rendered only on
+        # request, into their own build/work/grafana/work-edition/ tree
+        if portable:
+            from mqlab.workboards import write_work_dashboards
+
+            for board in write_work_dashboards(work("grafana", "work-edition")):
+                deps.renderer.command(f"render -> {board}")
+                deps.transcript.write(f"render -> {board}")
     finally:
         deps.transcript.close()
 
