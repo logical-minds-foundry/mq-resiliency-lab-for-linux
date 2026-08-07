@@ -109,8 +109,11 @@ def _example_panels():
             "datasource": {"type": "prometheus", "uid": "prometheus"},
             "gridPos": {"h": 4, "w": 8, "x": 0, "y": 2},
             "targets": [
-                {"refId": "A", "expr": 'ibmmq_qmgr_status{qmgr="NHAUAPP"}',
-                 "datasource": {"type": "prometheus", "uid": "prometheus"}},
+                {
+                    "refId": "A",
+                    "expr": 'ibmmq_qmgr_status{qmgr="NHAUAPP"}',
+                    "datasource": {"type": "prometheus", "uid": "prometheus"},
+                },
                 {"refId": "B", "expr": "up"},  # a target with NO datasource
             ],
         },
@@ -124,8 +127,13 @@ def _example_panels():
                     "title": "child",
                     "datasource": {"type": "loki", "uid": "loki"},
                     "gridPos": {"h": 8, "w": 24, "x": 0, "y": 7},
-                    "targets": [{"refId": "A", "expr": '{host="x"}',
-                                 "datasource": {"type": "loki", "uid": "loki"}}],
+                    "targets": [
+                        {
+                            "refId": "A",
+                            "expr": '{host="x"}',
+                            "datasource": {"type": "loki", "uid": "loki"},
+                        }
+                    ],
                 }
             ],
         },

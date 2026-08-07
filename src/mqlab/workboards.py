@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from mqlab.clusterboard import _STALE_MAP, _STATUS_MAP, _ds, _stat, _t, _timeseries
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 # The template-variable names + their ${...} reference forms. A portable board wires every
