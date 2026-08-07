@@ -198,6 +198,40 @@ def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
     assert json.loads(board.read_text())["uid"] == "lab-qm-pcmk"
 
 
+def test_obs_dashboard_portable_renders_work_edition_boards(monkeypatch, tmp_path):
+    # #963: `obs dashboard --portable` also renders the datasource-portable work-edition
+    # boards under build/work/grafana/work-edition/. The rendered JSON must carry no
+    # hardcoded datasource uid and no lab QM/queue/channel name (the portability contract).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "dashboard", "--portable"])
+
+    assert result.exit_code == 0
+    work_edition = tmp_path / "build" / "work" / "grafana" / "work-edition"
+    boards = list(work_edition.glob("*.json"))
+    assert boards, "expected at least one portable work-edition board"
+    for board_path in boards:
+        board = json.loads(board_path.read_text())
+        blob = json.dumps(board)
+        assert "${datasource}" in blob  # datasource is a template variable
+        for leaked in ("NHAUAPP", "SVCQM", "APP.REPLY", "APP.SVRCONN"):
+            assert leaked not in blob
+
+
+def test_obs_dashboard_without_portable_skips_work_edition(monkeypatch, tmp_path):
+    # the default render leaves the work-edition tree untouched (portable is opt-in).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_monitoring(tmp_path)
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
+
+    result = CliRunner().invoke(cli.app, ["obs", "dashboard"])
+
+    assert result.exit_code == 0
+    assert not (tmp_path / "build" / "work" / "grafana" / "work-edition").exists()
+
+
 def test_obs_dashboard_also_renders_the_watcher_board(monkeypatch, tmp_path):
     # The Watcher (#488) — the lab-state front-door board — renders alongside the
     # other cockpits when `obs dashboard` runs.
