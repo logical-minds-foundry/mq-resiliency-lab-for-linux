@@ -50,8 +50,12 @@
   register: opensearch_dashboards_security_plugin
 
 - name: remove the security-dashboards plugin (v1 runs OpenSearch security disabled, #827)
+  # --allow-root: the bake play runs as root and the plugin CLI refuses root without it
+  # ("OpenSearch Dashboards should not be run as root. Use --allow-root to continue."). This
+  # is a local file op (removing the plugin dir) with no Dashboards service running, so root
+  # is fine here (#960).
   ansible.builtin.command:
-    cmd: "{{ opensearch_dashboards_home }}/bin/opensearch-dashboards-plugin remove securityDashboards"
+    cmd: "{{ opensearch_dashboards_home }}/bin/opensearch-dashboards-plugin remove securityDashboards --allow-root"
   when:
     - not (opensearch_dashboards_security_enabled | bool)
     - opensearch_dashboards_security_plugin.stat.exists
