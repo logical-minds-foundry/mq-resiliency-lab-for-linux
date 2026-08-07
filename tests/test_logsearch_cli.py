@@ -118,8 +118,15 @@ def test_disk_summary_empty_allocation() -> None:
 
 def test_snapshot_name_sorts_as_latest() -> None:
     name = logsearch.snapshot_name(datetime(2026, 8, 6, 12, 0, 0, tzinfo=UTC))
-    assert name == "snap-20260806T120000Z"
-    assert logsearch.latest_snapshot([name, "snap-20260101T000000Z"]) == name
+    assert name == "snap-20260806t120000z"
+    assert logsearch.latest_snapshot([name, "snap-20260101t000000z"]) == name
+
+
+def test_snapshot_name_is_lowercase() -> None:
+    # OpenSearch rejects snapshot names with uppercase (invalid_snapshot_name_exception);
+    # the ISO stamp's T/Z must be lowercased or every snapshot 400s (#962).
+    name = logsearch.snapshot_name(datetime(2026, 12, 31, 23, 59, 59, tzinfo=UTC))
+    assert name == name.lower()
 
 
 # --- Ansible transport argv builders (native _snapshot fs repo; spike Task 2) ---
@@ -132,6 +139,9 @@ _TAR = "/staging/x.tar.gz"  # arbitrary; the argv builders don't care about the 
 def test_archive_argv_tars_repo_dir() -> None:
     argv = logsearch.archive_argv("logsearch", _REPO, _TAR)
     assert argv[:2] == ["ansible", "logsearch"]
+    # --become: the fs repo is opensearch:opensearch 0750; the default vagrant user
+    # cannot read it to tar (#962).
+    assert "--become" in argv
     joined = " ".join(argv)
     assert _REPO in joined
     assert _TAR in joined
@@ -140,6 +150,7 @@ def test_archive_argv_tars_repo_dir() -> None:
 def test_fetch_argv_pulls_to_host_flat() -> None:
     argv = logsearch.fetch_argv("logsearch", _TAR, "/dest")
     assert argv[:2] == ["ansible", "logsearch"]
+    assert "--become" in argv
     assert "ansible.builtin.fetch" in argv
     joined = " ".join(argv)
     assert f"src={_TAR}" in joined
@@ -148,6 +159,7 @@ def test_fetch_argv_pulls_to_host_flat() -> None:
 
 def test_copy_argv_stages_host_tar_to_guest() -> None:
     argv = logsearch.copy_argv("logsearch", "/dest/x.tar.gz", _TAR)
+    assert "--become" in argv
     assert "ansible.builtin.copy" in argv
     joined = " ".join(argv)
     assert "src=/dest/x.tar.gz" in joined
@@ -156,6 +168,7 @@ def test_copy_argv_stages_host_tar_to_guest() -> None:
 
 def test_untar_argv_expands_into_repo_dir() -> None:
     argv = logsearch.untar_argv("logsearch", _REPO, _TAR)
+    assert "--become" in argv
     joined = " ".join(argv)
     assert _REPO in joined
     assert _TAR in joined

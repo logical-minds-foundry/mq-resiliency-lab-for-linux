@@ -191,14 +191,25 @@ def disk_full(allocation: list[dict[str, Any]], threshold: int = DISK_FULL_PERCE
 
 def snapshot_name(now: datetime) -> str:
     """A sortable snapshot name — ``snap-<UTC-timestamp>`` — so ``latest_snapshot``
-    picks the most recent by plain lexical max (snapshot spike, Task 2 note)."""
-    return "snap-" + now.strftime("%Y%m%dT%H%M%SZ")
+    picks the most recent by plain lexical max (snapshot spike, Task 2 note).
+
+    Lowercased because OpenSearch rejects snapshot names containing uppercase with
+    ``invalid_snapshot_name_exception`` (same rule as index names) — the ``T``/``Z``
+    of the ISO-8601 stamp would otherwise 400 every snapshot (#962). The stamp is
+    zero-padded fixed-width, so lowercasing keeps the lexical-max ordering."""
+    return "snap-" + now.strftime("%Y%m%dT%H%M%SZ").lower()
 
 
 # --- Ansible transport argv (native _snapshot fs repo; snapshot spike Task 2) ----
 # `fetch` is single-file, so the guest tars the repo dir first, then `fetch`
 # transports the tarball to the host state bucket. Restore reverses it: `copy` the
 # host tarball to the guest, untar into the repo dir, then POST _restore.
+#
+# All four run with `--become` (#962): the fs snapshot repo (path.repo,
+# /var/lib/opensearch/snapshots) is owned opensearch:opensearch mode 0750, so the
+# default ad-hoc user (vagrant) cannot read it to tar/fetch, nor write it to
+# copy/untar. Running as root also makes `tar` restore the archived opensearch
+# ownership on untar (root can chown), so OpenSearch can read the restored repo.
 
 
 def archive_argv(host: str, repo_dir: str, remote_tar: str) -> list[str]:
@@ -206,6 +217,7 @@ def archive_argv(host: str, repo_dir: str, remote_tar: str) -> list[str]:
     return [
         "ansible",
         host,
+        "--become",
         "-m",
         "ansible.builtin.shell",
         "-a",
@@ -219,6 +231,7 @@ def fetch_argv(host: str, remote_tar: str, dest_dir: str) -> list[str]:
     return [
         "ansible",
         host,
+        "--become",
         "-m",
         "ansible.builtin.fetch",
         "-a",
@@ -231,6 +244,7 @@ def copy_argv(host: str, local_tar: str, remote_tar: str) -> list[str]:
     return [
         "ansible",
         host,
+        "--become",
         "-m",
         "ansible.builtin.copy",
         "-a",
@@ -243,6 +257,7 @@ def untar_argv(host: str, repo_dir: str, remote_tar: str) -> list[str]:
     return [
         "ansible",
         host,
+        "--become",
         "-m",
         "ansible.builtin.shell",
         "-a",
