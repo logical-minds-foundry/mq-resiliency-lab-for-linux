@@ -267,6 +267,13 @@ http://localhost:3000/d/lab-watcher   (anonymous — no login)
 `mqlab obs open` prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).
 
+An **optional** second telemetry tier — **`logsearch`** (single-node OpenSearch +
+Dashboards) — gives the same log corpus a full-text, aggregation search surface
+alongside Grafana/Loki. It is a sibling of `obs` (comes up with `mqlab commons up`),
+operated with `mqlab logsearch` (`status`/`open`/`snapshot`/`restore`); see
+[Architecture](architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch)
+for the tier and [Operate &amp; Observe](operate/index.md#mqlab-logsearch-verbs) for the verbs.
+
 **The Watcher** (`lab-watcher`, #488) is the lab-state front door: a support-layer
 instrument strip (DNS/obs/probe/svc/app) plus a live/DR rollup row per stack, each
 drilling into its own cockpit board. Scrape targets are rendered from **the full

@@ -55,7 +55,7 @@
 
   <div class="panel">
     <h3>③ Node fleet — guests grouped by stack (3+3 per stack)</h3>
-    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs. Four registered HA/DR stacks, plus the counterparty, the app client, and the observability plane.</p>
+    <p class="sub">One <code>topology.yaml</code> defines every guest, its platform, and its NICs. Four registered HA/DR stacks, plus the counterparty, the app client, and the observability plane (the Watcher and the optional log-search tier).</p>
     <div class="group">
       <div class="glabel">Pacemaker / SAN arm (Ubuntu) — shared-storage HA</div>
       <div class="nodes"><div class="node">san-a</div><div class="node">pcmk-a1</div><div class="node">pcmk-a2</div><div class="node">pcmk-a3</div><span class="tag bsep">·B·</span><div class="node">san-b</div><div class="node">pcmk-b1</div><div class="node">pcmk-b2</div><div class="node">pcmk-b3</div></div>
@@ -74,7 +74,9 @@
     </div>
     <div class="group dr">
       <div class="glabel">Counterparty, app &amp; observability</div>
-      <div class="nodes"><div class="node">svc-sim <span class="tag">SVC · net-ext</span></div><div class="node">app-client</div><div class="node">obs <span class="tag">Watcher</span></div><div class="node">mon-probe</div></div>
+      <!-- logsearch: the mgmt-plane log-search tier node (obs sibling). The Alloy->Data Prepper->OpenSearch
+           fan-out flow is intentionally NOT drawn here — that telemetry-flow-layer redesign is deferred to #971. -->
+      <div class="nodes"><div class="node">svc-sim <span class="tag">SVC · net-ext</span></div><div class="node">app-client</div><div class="node">obs <span class="tag">Watcher</span></div><div class="node">mon-probe</div><div class="node">logsearch <span class="tag">log-search · 10.50.0.4</span></div></div>
     </div>
   </div>
 

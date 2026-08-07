@@ -10,14 +10,15 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The lab bakes **seven fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
+The lab bakes **eight fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
 `infra-ubuntu2404`, and `mq-ubuntu2404` (#659) from the bootstrap-performance
 epic; `mq-nativeha-rhel9` (#667) from the follow-on native-HA-RHEL baking epic
-(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu` (#103 T6) and
+(`logical-minds-foundry/.github#88`); `mq-nativeha-ubuntu` (#103 T6) and
 `pcmk-ubuntu` (#103 T7) from the arch-native box-building epic
-(`logical-minds-foundry/.github#103`). Each carries, as a **baked golden image**,
-the slow install work that never varies per run, so a per-run bootstrap can skip
-it.
+(`logical-minds-foundry/.github#103`); and `logsearch-ubuntu2404` (#830) from the
+log-search epic (`logical-minds-foundry/.github#149`). Each carries, as a **baked
+golden image**, the slow install work that never varies per run, so a per-run
+bootstrap can skip it.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -30,8 +31,9 @@ it.
 This document is the classification. The **bake playbooks**
 (`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
 `ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`,
-`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`) and the
-single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
+`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`,
+`ansible/bake-logsearch.yml`) and the single-host inventory
+(`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
@@ -67,7 +69,9 @@ in scope for both paths (a separate `-install` role would have to duplicate or
 re-home them). This satisfies the task's "extract `bind-dns-install`" intent while
 staying DRY and behavior-preserving.
 
-Roles split this way: **`prometheus`, `grafana`, `alloy`, `bind-dns`**.
+Roles split this way: **`prometheus`, `grafana`, `alloy`, `bind-dns`**, plus the
+three log-search-tier roles the log-search epic added the same way —
+**`opensearch`, `opensearch-dashboards`, `data-prepper`** (`logical-minds-foundry/.github#149`).
 
 ## Phased startup — baked inert, started per-run
 
@@ -77,7 +81,10 @@ the configure step, so the rule is: **bake the install half, leave the service
 inert** (unit present, not started), and let the per-run configure half drop the
 instance config and start it. This is why the split roles above bake only their
 install halves (e.g. `alloy` needs a per-run `config.alloy`; on the obs box
-`loki`/`prometheus`/`grafana` are started by `site-obs.yml`).
+`loki`/`prometheus`/`grafana` are started by `site-obs.yml`; and on the logsearch
+box `opensearch`/`opensearch-dashboards`/`data-prepper` are started — after their
+per-run renders (index template, snapshot repo, pipelines) — by
+`site-logsearch.yml`).
 
 Two services are the deliberate **benign exceptions**, left *enabled* at bake
 (#642) because they have no per-run config dependency and cannot boot in a broken
@@ -187,6 +194,25 @@ stay host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path (server + client + SDK + samples; unpack debs, licence, `setmqinst`, ulimits) — the way the Pacemaker cluster nodes install MQ in `_pcmk-cluster-ha.yml` (`roles: [mq-install]`). **No** RDQM/DRBD, **no** QM created; `crtmqm` / resource-group / cluster formation stay per-run (`mq-pcmk-qmgr`). Already carries the stat-of-`cmqc.h` skip-if-baked guard (#648/#659) and the arch-derived tarball, so the ~700 MB tar copy/unpack + install runs once — here. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a Pacemaker box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+
+### `logsearch-ubuntu2404` → `ansible/bake-logsearch.yml` (#830, epic .github#149)
+
+The log-search-tier box, for the single `logsearch` node (mgmt-plane only,
+`net-mgmt 10.50.0.4`) repointed to this box so a bootstrap skips the ~heavy
+OpenSearch/Dashboards/Data-Prepper install. Host-resolved: baked natively per host
+(arm64 or x86), guest arch not pinned. Every stack piece is baked **inert** — the
+binaries/packages + static config + inert systemd units are baked, but no service
+is enabled or started and no per-run render (index template, snapshot repo,
+live-endpoint pipelines) or credential seam is laid down; those all stay in the
+per-run configure path (`site-logsearch.yml`, #832).
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
+| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. On the logsearch node alloy also carries the fleet-wide OpenSearch fan-out, gated per-run by `group_vars/all/logsearch.yml`. |
+| `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; the credential seam + service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
+| `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
+| `data-prepper` | ✅ install half | JDK-bundled binary + data dir + static config + pipeline templates + inert unit baked; the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait stay per-run (#939). |
 
 ## Stays configure (per-run) — never baked
 
