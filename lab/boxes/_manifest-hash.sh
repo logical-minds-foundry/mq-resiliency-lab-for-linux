@@ -51,6 +51,7 @@ cd "$(dirname "$0")"
 case "$BOX" in
   mq-rdqm-rhel9)    BAKE_STEM=mq-rdqm ;;
   obs-ubuntu2404)   BAKE_STEM=obs ;;
+  logsearch-ubuntu2404) BAKE_STEM=logsearch ;;
   infra-ubuntu2404) BAKE_STEM=infra ;;
   mq-ubuntu2404)    BAKE_STEM=mq-ubuntu ;;
   mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel ;;

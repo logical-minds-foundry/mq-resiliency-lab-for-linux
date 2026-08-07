@@ -68,6 +68,7 @@ def test_local_box_builders_registry_covers_base_and_fat_boxes():
     for fat in (
         "mq-rdqm-rhel9",
         "obs-ubuntu2404",
+        "logsearch-ubuntu2404",
         "infra-ubuntu2404",
         "mq-ubuntu2404",
         "mq-nativeha-rhel9",
@@ -132,6 +133,28 @@ def test_unknown_box_dies():
     result = _run("--box", "no-such-box", "--domain-type", "kvm", "--cpu-mode", "host-passthrough")
     assert result.returncode != 0
     assert "no-such-box" in (result.stderr + result.stdout)
+
+
+def test_logsearch_box_accepted_by_builder(tmp_path):
+    # #952: the logsearch-ubuntu2404 box is registered in the Python FLEET (#830) but
+    # build-fatbox.sh carries its OWN --box allowlist that had drifted — the box was
+    # rejected with "unknown --box", so the tier could not be baked at all. A clean-cache
+    # --dry-run must now be ACCEPTED (decision BUILD), proving the case arm exists.
+    result = _run(
+        "--box",
+        "logsearch-ubuntu2404",
+        "--arch",
+        "x86_64",
+        "--domain-type",
+        "kvm",
+        "--cpu-mode",
+        "host-passthrough",
+        "--dry-run",
+        cache_dir=tmp_path / "boxes",
+    )
+    assert result.returncode == 0, result.stderr
+    assert "unknown --box" not in (result.stderr + result.stdout)
+    assert "BUILD" in result.stdout
 
 
 def test_missing_domain_type_dies():
@@ -288,6 +311,16 @@ def test_manifest_hash_covers_ubuntu_ha_boxes():
         assert len(h) == 64
         assert h == _manifest_hash(box)  # deterministic
     assert _manifest_hash("mq-nativeha-ubuntu") != _manifest_hash("pcmk-ubuntu")
+
+
+def test_manifest_hash_covers_logsearch_box():
+    # #952 (same #649-class guard): the logsearch-ubuntu2404 -> logsearch stem map must
+    # fire (not an unknown-box error, not a silent empty digest), digesting its own
+    # bake-logsearch.yml + role closure — a deterministic 64-char, box-specific hash.
+    h = _manifest_hash("logsearch-ubuntu2404")
+    assert len(h) == 64
+    assert h == _manifest_hash("logsearch-ubuntu2404")  # deterministic
+    assert h != _manifest_hash("obs-ubuntu2404")  # its own bake playbook enters the hash
 
 
 def test_manifest_hash_requires_a_box():
