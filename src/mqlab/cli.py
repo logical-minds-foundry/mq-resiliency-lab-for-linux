@@ -871,6 +871,74 @@ def obs_open() -> None:
     typer.echo("bridges that to the obs guest. Just browse localhost:3000 (anonymous —")
     typer.echo("no login, #258). If it drops after an 'obs up', the relay was wedged by a")
     typer.echo("grafana restart; 'mqlab obs up' now re-heals it as its last step (#264).")
+    typer.echo("A host-side timer also runs 'mqlab obs relay-heal' to recover the sustained-")
+    typer.echo("use fd-leak wedge on its own (#946; upstream fix vergil-tooling#2603).")
+
+
+# The functional health probe + the relay bounce used by `obs relay-heal` and its
+# host-side self-heal timer (#946). The probe mirrors the `obs up` "verify grafana
+# reachable" step: it exercises the *workstation-facing* forward, so it fails
+# exactly when the browser path is dead. The restart is the same bounce `obs up`
+# uses at provision time (#264) — the only recovery for the wedge.
+_RELAY_HEALTH_PROBE = Command(
+    ["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]  # noqa: S607
+)
+_RELAY_RESTART = Command(["sudo", "systemctl", "restart", *RELAY_UNITS])  # noqa: S607
+
+
+def _run_streamed(deps: Deps, cmd: Command) -> int:
+    """Show a command, stream its output to the renderer + transcript, return its code."""
+    deps.renderer.command(cmd.display())
+    deps.transcript.write(f"$ {cmd.display()}")
+
+    def sink(line: str) -> None:
+        deps.renderer.output(line)
+        deps.transcript.write(line)
+
+    return deps.runner.run(cmd, sink)
+
+
+def _relay_heal(deps: Deps) -> int:
+    """Probe the workstation Grafana forward; restart the relay ONLY if it is wedged.
+
+    The vergil-portforward relay leaks connections on abrupt client disconnect and,
+    after sustained use, wedges into accept-then-reset (upstream vergil-tooling#2603).
+    A restart drops any live Grafana sessions, so a healthy relay is left untouched —
+    heal only when the functional probe fails. Returns the shell exit code.
+    """
+    if _run_streamed(deps, _RELAY_HEALTH_PROBE) == 0:
+        deps.renderer.note("grafana port-forward relay healthy — no action")
+        return 0
+    deps.renderer.note("grafana port-forward relay wedged — restarting (vergil-tooling#2603)")
+    restart_code = _run_streamed(deps, _RELAY_RESTART)
+    if restart_code != 0:
+        deps.renderer.error(f"mqlab obs relay-heal: relay restart failed (exit {restart_code})")
+        return restart_code
+    if _run_streamed(deps, _RELAY_HEALTH_PROBE) == 0:
+        deps.renderer.note("grafana port-forward relay healed")
+        return 0
+    deps.renderer.error(
+        "mqlab obs relay-heal: relay still wedged after restart — see vergil-tooling#2603"
+    )
+    return 1
+
+
+@obs_app.command("relay-heal")
+def obs_relay_heal() -> None:
+    """Heal the Grafana port-forward relay if it has wedged (fd-leak; #946).
+
+    Probes the workstation forward and restarts the relay only when it is not
+    serving — a healthy relay is never bounced (a restart drops live sessions). Run
+    on a cadence by the host-side self-heal timer; also safe to run by hand.
+    """
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("obs-relay-heal", timestamp)
+    try:
+        code = _relay_heal(deps)
+    finally:
+        deps.transcript.close()
+    if code != 0:
+        raise typer.Exit(code=code)
 
 
 # ---------------------------------------------------------------------------
