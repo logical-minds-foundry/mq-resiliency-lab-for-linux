@@ -44,6 +44,7 @@ from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.phases import (
     PHASES,
     _commons_members,
+    _host_mqlab,
     _logsearch_members,
     _non_mq_commons_hosts,
     all_vms,
@@ -851,7 +852,11 @@ def _obs_up_steps() -> list[CommandStep]:
         CommandStep(
             "provision host collector",
             # the Vergil VM (libvirt host) — node_exporter + the lab_network_state
-            # timer — via a connection=local play.
+            # timer + the relay-heal timer (#946) — via a connection=local play.
+            # host-obs.yml's roles call mqlab by absolute path under a minimal root
+            # PATH, so mqlab_bin is REQUIRED — pass it exactly as the stack observe
+            # path does (phases.py "instrument host"); omitting it fails the
+            # host-net-state/host-relay-heal assert (#398/#946/#950).
             Command(
                 [
                     "ansible-playbook",
@@ -860,6 +865,8 @@ def _obs_up_steps() -> list[CommandStep]:
                     "local",
                     "-i",
                     "localhost,",
+                    "-e",
+                    f"mqlab_bin={_host_mqlab()}",
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
