@@ -1,0 +1,56 @@
+---
+# Bake the logsearch-ubuntu2404 box image (#830, epic .github#149 Task 7).
+#
+# ADDITIVE FOUNDATION: installs only the image-bakeable software for the log-search
+# box — the fleet agents' binaries plus the Alloy->OTLP->Data Prepper->OpenSearch
+# log-search stack (OpenSearch, OpenSearch Dashboards, Data Prepper). It bakes the
+# INSTALL halves ONLY, so the box boots INERT (#642): binaries/packages + STATIC
+# config are baked, but NO service is enabled or started, NO admin/credential secret
+# is dropped, and NO per-run render (index templates, snapshot repo, pipelines wired
+# to live endpoints) is laid down. Those all stay in the per-run (configure) path
+# (site-logsearch.yml, #832), which this playbook does not touch. Run against a
+# single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-logsearch.yml
+#
+# See docs/development/box-bake-manifest.md for the authoritative classification.
+- name: Bake logsearch-ubuntu2404 (install-only; no enable/start, no secrets, no renders)
+  hosts: bake
+  become: true
+  tasks:
+    # Fleet agents' binaries (same as every box). node-exporter is all-install;
+    # alloy is split -> install half only.
+    - name: node metrics agent (node-exporter, full role -- static config)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install
+
+    # The log-search stack -- bake only the INSTALL halves so the box boots INERT
+    # (#642): the binaries/package + STATIC config + inert systemd units are baked,
+    # but the services are NOT enabled or started (no boot-time auto-start in a
+    # pre-config state). opensearch, opensearch-dashboards, and data-prepper are all
+    # enabled + started per-run in the logsearch phase (site-logsearch.yml, #832). The
+    # bake never lays down the per-run renders (index templates, snapshot repo,
+    # live-endpoint pipelines) nor the opensearch admin credential seam.
+    - name: opensearch (install half -- binary + static opensearch.yml + unit, no start)
+      ansible.builtin.include_role:
+        name: opensearch
+        tasks_from: install
+
+    - name: opensearch-dashboards (install half -- package + static config + unit, no start)
+      ansible.builtin.include_role:
+        name: opensearch-dashboards
+        tasks_from: install
+
+    # Data Prepper (added per #939): it runs on the logsearch node as the
+    # Alloy->OTLP->Data Prepper->OpenSearch connector, so its install half (JDK-bundled
+    # binary + static config + pipeline templates + inert unit) MUST be baked here. The
+    # per-run bring-up (service enable+start + readiness wait) stays in the configure
+    # half (site-logsearch.yml, #832).
+    - name: data-prepper (install half -- binary + static config + pipelines + unit, no start)
+      ansible.builtin.include_role:
+        name: data-prepper
+        tasks_from: install

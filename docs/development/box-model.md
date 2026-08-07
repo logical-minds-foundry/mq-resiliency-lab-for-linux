@@ -14,10 +14,10 @@ For the exhaustive per-role bake-vs-configure classification, see
 [`box-bake-manifest.md`](box-bake-manifest.md); for where the baked artifacts
 live on disk, see [`build-layout.md`](build-layout.md).
 
-## 1. The eight local-built boxes
+## 1. The nine local-built boxes
 
-The lab builds **eight boxes locally**: the bare `rhel/9.6-x86_64` base box plus
-**seven per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
+The lab builds **nine boxes locally**: the bare `rhel/9.6-x86_64` base box plus
+**eight per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
 carries only the install surface that role needs, nothing more. The taxonomy is
 **role × platform × host-arch**:
 
@@ -26,12 +26,13 @@ carries only the install surface that role needs, nothing more. The taxonomy is
 | `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
 | `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the slow cgo `mq_prometheus` build + MQ SDK |
+| `logsearch-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `logsearch` | OpenSearch + OpenSearch Dashboards + Data Prepper + node-exporter + alloy |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the cgo `mq_prometheus` build + `acl` |
 | `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
 
-**Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
+**Host-resolved vs. arch-pinned.** The six Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
 Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
 The two RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`) are **`x86_64`-only**;
@@ -163,7 +164,7 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all seven fat boxes (plus the base box, and
+  the BUILD path and re-bakes all eight fat boxes (plus the base box, and
   re-acquires the entitlement-gated state media). This is the only tier that pays
   the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;

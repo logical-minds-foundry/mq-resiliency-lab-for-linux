@@ -50,7 +50,7 @@ def _fake_deps() -> cli.Deps:
 # --------------------------------------------------------------------------- #
 # Fleet definition                                                            #
 # --------------------------------------------------------------------------- #
-def test_fleet_has_eight_local_boxes():
+def test_fleet_has_nine_local_boxes():
     assert set(box.FLEET) == {
         "rhel/9.6-x86_64",
         "mq-rdqm-rhel9",
@@ -60,7 +60,15 @@ def test_fleet_has_eight_local_boxes():
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu",
         "pcmk-ubuntu",
+        "logsearch-ubuntu2404",
     }
+
+
+def test_logsearch_box_registered_as_fatbox():
+    # The logsearch-ubuntu2404 fat box (epic .github#149, Task 7): a provision-then-
+    # snapshot bake (build-fatbox.sh), like every other fat box.
+    assert "logsearch-ubuntu2404" in box.FLEET
+    assert box.FLEET["logsearch-ubuntu2404"].builder.endswith("build-fatbox.sh")
 
 
 def test_base_box_has_no_manifest_hash():

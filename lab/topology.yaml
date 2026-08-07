@@ -105,6 +105,17 @@ boxes:
   # stay host-resolved on the base box (design D8, deferred to the SAN-hosts epic #108).
   pcmk-ubuntu:
     box: pcmk-ubuntu
+  # The fat logsearch box (#830, epic .github#149): the cloud-image/ubuntu-24.04 base
+  # with the log-search stack (OpenSearch + OpenSearch Dashboards + Data Prepper) plus
+  # node-exporter + alloy BAKED IN (lab/boxes/build-fatbox.sh --box logsearch-ubuntu2404).
+  # The logsearch node boots this instead of the host-resolved Ubuntu platform so a
+  # bootstrap skips the stack install; the per-run configure half (service enable+start,
+  # credential seam, index templates, snapshot repo, live-endpoint pipelines) still runs
+  # (site-logsearch.yml, #832). host-resolved (#103) — arch tracks the host: the box is
+  # baked natively per host (arm64 on Apple Silicon, x86_64 on the cloud), so the guest
+  # arch is not pinned. No DVD (Ubuntu registers online).
+  logsearch-ubuntu2404:
+    box: logsearch-ubuntu2404
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -152,6 +163,17 @@ nodes:
     cpus: 1
     memory: 1024
     nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }
+
+  # --- Log search (#830, epic .github#149): logsearch runs the OpenSearch +
+  # OpenSearch Dashboards + Data Prepper log-search stack. It ingests logs from Alloy
+  # over the management plane, so it carries a net-mgmt NIC ONLY — no data/hb/san/ext
+  # exposure. Sized for the JVM stack (OpenSearch + Dashboards + Data Prepper). Its
+  # per-run bring-up is site-logsearch.yml (#832). ---
+  logsearch:
+    platform: logsearch-ubuntu2404  # boot the baked log-search stack (#830); mgmt-plane only
+    cpus: 2
+    memory: 6144
+    nics: { net-mgmt: 10.50.0.4 }
 
   # --- DNS infrastructure (#474, epic .github#21): per-side authoritative
   # nameservers, their own failure domain so DNS can be broken and measured
