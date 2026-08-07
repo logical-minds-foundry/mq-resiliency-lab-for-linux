@@ -65,7 +65,7 @@
 - name: enable QM monitoring for the prometheus exporter
   ansible.builtin.shell: |
     set -o pipefail
-    printf "ALTER QMGR MONQ(MEDIUM) MONCHL(MEDIUM) STATMQI(ON) STATQ(ON) STATCHL(MEDIUM) MAXHANDS(512)\n" \
+    printf "ALTER QMGR MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)\n" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
   args:
     executable: /bin/bash

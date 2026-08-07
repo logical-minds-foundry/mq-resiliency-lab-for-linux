@@ -8,4 +8,15 @@ SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) ACTION(REPLACE)
 {% for m in authz_chlauth_maps %}
 SET CHLAUTH('{{ m.channel }}') TYPE(SSLPEERMAP) SSLPEER('{{ m.sslpeer }}') USERSRC(MAP) MCAUSER('{{ m.mcauser }}') ACTION(REPLACE)
 {% endfor %}
+* mqmon (mq_prometheus exporter) least-privilege security profile (#943 / .github#173 §5)
+* — SET AUTHREC co-located with the object MQSC (repo rule). PROFILE('**') OBJTYPE(QUEUE)
+* +dsp +inq is the coverage gate proven live (#943 §3): read-only, so monitoring sees
+* every queue (incl. backed-up idle ones) but can neither put nor get.
+{% for g in authz_mqmon_grants %}
+{% if g.objtype == 'QMGR' %}
+SET AUTHREC OBJTYPE(QMGR) GROUP('mqmon') AUTHADD({{ g.authadd }})
+{% else %}
+SET AUTHREC PROFILE('{{ g.profile }}') OBJTYPE({{ g.objtype }}) GROUP('mqmon') AUTHADD({{ g.authadd }})
+{% endif %}
+{% endfor %}
 REFRESH SECURITY TYPE(CONNAUTH)
