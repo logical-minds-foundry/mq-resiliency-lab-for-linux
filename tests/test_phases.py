@@ -154,6 +154,47 @@ def test_first_unsatisfied_observe_gap(monkeypatch, tmp_path):
     assert first_unsatisfied(stack, states) == 3
 
 
+# --- logsearch membership (#832): a separate member set, NOT a commons group ---
+# logsearch is wired into commons up/status/down explicitly, but is deliberately kept
+# OUT of the commons group set so it is not force-booted by every per-stack bootstrap
+# (all_vms) — the 6 GB logsearch node stays opt-in (fan-out inert when it is absent).
+
+_LOGSEARCH_TOPO = TOPO.replace(
+    "  app-client: {}\n",
+    "  app-client: {}\n  logsearch: {nics: {net-mgmt: 10.50.0.4}}\n",
+).replace(
+    "  app:     [app-client]\n",
+    "  app:     [app-client]\n  logsearch_box: [logsearch]\n",
+)
+
+
+def test_logsearch_members_reads_logsearch_box_group(monkeypatch, tmp_path):
+    from mqlab.phases import _logsearch_members
+
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_LOGSEARCH_TOPO)
+    assert _logsearch_members() == ["logsearch"]
+
+
+def test_logsearch_members_empty_when_group_absent(monkeypatch, tmp_path):
+    from mqlab.phases import _logsearch_members
+
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)  # base TOPO has no logsearch_box group
+    assert _logsearch_members() == []
+
+
+def test_logsearch_not_in_commons_members_or_all_vms(monkeypatch, tmp_path):
+    from mqlab.phases import _commons_members, all_vms
+
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(_LOGSEARCH_TOPO)
+    assert "logsearch" not in _commons_members()
+    assert "logsearch" not in all_vms(lab_stacks()["pcmk-ubuntu"])
+
+
 # --- satisfied predicate edge branches ---
 
 

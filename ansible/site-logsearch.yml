@@ -1,0 +1,54 @@
+# Log-search tier per-run configure play (#832, epic .github#149). Run via
+# `mqlab commons up` (logsearch is brought up AFTER obs), or directly:
+#   ansible-playbook site-logsearch.yml -e opensearch_snapshot_state_dir=<host state dir>
+#
+# The logsearch node boots the baked logsearch-ubuntu2404 box (#830): every service is
+# baked INERT (install half only, #642) — the OpenSearch + OpenSearch Dashboards + Data
+# Prepper binaries/packages + static config + inert systemd units are baked, but nothing
+# auto-starts on boot in a pre-config state, and no per-run render (index templates,
+# snapshot repo, restore, live-endpoint pipelines) or credential seam is laid down. So
+# per-run this play runs the CONFIGURE halves that enable + start them and lay down the
+# per-run state. node_exporter is the one benign exception — baked enabled (static host
+# metrics, no per-run config) and re-applied here, exactly as site-obs.yml does for obs.
+#
+# The Alloy->OpenSearch fan-out itself is NOT wired here: it is a FLEET-WIDE property
+# (spec §6/§13, "the same source set Loki receives, for parity"), turned on for every
+# node by group_vars/all/logsearch.yml reading the rendered fan-out gate file — so both
+# site-obs.yml's alloy (obs/probe) and observability.yml's alloy (stack nodes) pick it
+# up automatically. This play only stands up the logsearch node's engine + connector.
+- hosts: logsearch
+  become: true
+  tasks:
+    # ORDER is load-bearing. OpenSearch first: it is the store the other two depend on.
+    # Its configure half enables + starts OpenSearch, PUTs the `logs` index template
+    # (number_of_replicas:0 — load-bearing on a single node), creates the `logsearch-fs`
+    # snapshot repo, and restores the last snapshot on bring-up. The caller passes
+    # `opensearch_snapshot_state_dir` (= $(mqlab build path state)/logsearch) as an
+    # extra-var; empty (the role default) makes restore-on-bring-up a clean, LOGGED no-op.
+    - name: opensearch configure (per-run enable + start, index template, snapshot repo, restore)
+      ansible.builtin.include_role:
+        name: opensearch
+        tasks_from: configure
+
+    # Data Prepper is the connector (#939): Alloy has no native OpenSearch exporter, so
+    # ingestion runs Alloy --(OTLP/gRPC)--> Data Prepper --> OpenSearch. It sinks to
+    # localhost:9200, so it MUST come up AFTER OpenSearch — and after the index template
+    # exists (above), which governs the `logs-*` daily indices its sink writes.
+    - name: data-prepper configure (per-run enable + start; sinks to localhost:9200)
+      ansible.builtin.include_role:
+        name: data-prepper
+        tasks_from: configure
+
+    # Dashboards is the investigation surface; it queries OpenSearch, so it comes up
+    # after the store. Its configure half enables + starts the service, waits on
+    # /api/status, and creates the default logs-* index pattern.
+    - name: opensearch-dashboards configure (per-run enable + start; after opensearch)
+      ansible.builtin.include_role:
+        name: opensearch-dashboards
+        tasks_from: configure
+
+    # Re-apply node-exporter (full role — static host metrics), exactly as site-obs.yml
+    # does for the obs box: baked enabled, idempotently re-asserted per run.
+    - name: node-exporter (full role — static host metrics, re-applied per run)
+      ansible.builtin.include_role:
+        name: node-exporter

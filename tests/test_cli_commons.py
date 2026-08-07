@@ -59,10 +59,28 @@ TOPO = (
 )
 
 
+# A commons topology that ALSO carries the logsearch tier (#832): the logsearch node
+# + its `logsearch_box` group. logsearch is NOT added to commons.groups — it is wired
+# into commons up/status/down explicitly, but kept out of the per-stack all_vms set.
+LOGSEARCH_TOPO = TOPO.replace(
+    "  app-client: {nics: {net-mgmt: 10.50.0.60}}\n",
+    "  app-client: {nics: {net-mgmt: 10.50.0.60}}\n  logsearch:  {nics: {net-mgmt: 10.50.0.4}}\n",
+).replace(
+    "  app:     [app-client]\n",
+    "  app:     [app-client]\n  logsearch_box: [logsearch]\n",
+)
+
+
 def _seed(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(TOPO)
+
+
+def _seed_logsearch(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(LOGSEARCH_TOPO)
 
 
 class _NoPause:
@@ -218,6 +236,78 @@ def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# commons up — logsearch tier (#832): brought up AFTER obs, fan-out gate rendered
+# ---------------------------------------------------------------------------
+
+
+def test_commons_up_brings_up_logsearch_after_obs(monkeypatch, tmp_path):
+    """commons up must vagrant-up the logsearch node and run site-logsearch.yml,
+    ORDERED AFTER the obs bring-up (site-obs.yml)."""
+    _seed_logsearch(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(14)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    all_argv = [" ".join(s.argv) for s in _recorded_steps(runner)]
+    ls_playbook_idx = next(i for i, a in enumerate(all_argv) if "site-logsearch.yml" in a)
+    obs_playbook_idx = next(i for i, a in enumerate(all_argv) if "site-obs.yml" in a)
+    ls_vagrant = [a for a in all_argv if "vagrant" in a and "logsearch" in a]
+    assert ls_vagrant, f"no vagrant up for logsearch; recorded: {all_argv}"
+    assert ls_playbook_idx > obs_playbook_idx, "site-logsearch.yml must run AFTER site-obs.yml"
+
+
+def test_commons_up_renders_fanout_gate(monkeypatch, tmp_path):
+    """commons up renders build/work/logsearch/fanout.json enabling fleet-wide fan-out
+    at the topology-derived Data Prepper endpoint (logsearch mgmt IP : 21892)."""
+    import json
+
+    _seed_logsearch(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(14)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    gate = tmp_path / "build" / "work" / "logsearch" / "fanout.json"
+    assert gate.exists(), "fan-out gate file was not rendered"
+    body = json.loads(gate.read_text())
+    assert body == {"enabled": True, "endpoint": "10.50.0.4:21892"}
+
+
+def test_commons_up_site_logsearch_passes_snapshot_state_dir(monkeypatch, tmp_path):
+    """site-logsearch.yml must receive opensearch_snapshot_state_dir resolved to the
+    host-durable state bucket (build/state/logsearch), per the opensearch role seam."""
+    _seed_logsearch(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(14)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    ls_step = next(s for s in runner.recorded if "site-logsearch.yml" in s.argv)
+    joined = " ".join(ls_step.argv)
+    expected = str(tmp_path / "build" / "state" / "logsearch")
+    assert f"opensearch_snapshot_state_dir={expected}" in joined, joined
+
+
+def test_commons_up_no_logsearch_steps_when_tier_absent(monkeypatch, tmp_path):
+    """With no logsearch tier in topology, commons up emits no logsearch steps and
+    renders no fan-out gate — the tier is cleanly optional."""
+    _seed(monkeypatch, tmp_path)  # base TOPO: no logsearch node/group
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(14)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    all_argv = [" ".join(s.argv) for s in _recorded_steps(runner)]
+    assert not any("site-logsearch.yml" in a for a in all_argv)
+    assert not (tmp_path / "build" / "work" / "logsearch" / "fanout.json").exists()
+
+
+# ---------------------------------------------------------------------------
 # commons status
 # ---------------------------------------------------------------------------
 
@@ -232,6 +322,25 @@ def test_commons_status_runs_virsh_for_commons_hosts(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "list", "--all"]
+
+
+def test_commons_status_includes_logsearch(monkeypatch, tmp_path):
+    """commons status must surface the logsearch node (visible in the shared tier)."""
+    _seed_logsearch(monkeypatch, tmp_path)
+    captured: dict[str, list[str]] = {}
+
+    def _fake_status(runner, renderer, transcript, *, guests):  # noqa: ANN001, ARG001
+        captured["guests"] = guests
+        return 0
+
+    monkeypatch.setattr(cli, "vm_status_core", _fake_status)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "status"])
+
+    assert result.exit_code == 0
+    assert "logsearch" in captured["guests"]
 
 
 def test_commons_status_nonzero_exit_propagates(monkeypatch, tmp_path):
@@ -281,6 +390,45 @@ def test_commons_down_destroys_commons_vms(monkeypatch, tmp_path):
         assert any(host in lbl for lbl in labels), (
             f"{host!r} not found in any step label; labels={labels}"
         )
+
+
+def test_commons_down_destroys_logsearch(monkeypatch, tmp_path):
+    """commons down must reclaim the logsearch node too (torn down with the tier)."""
+    _seed_logsearch(monkeypatch, tmp_path)
+    hosts = ["obs", "mon-probe", "svc-sim", "app-client", "logsearch"]
+    virsh_result = _dom_listing(dict.fromkeys(hosts, "running"))
+
+    captured: list = []
+    monkeypatch.setattr(cli, "run_steps", lambda steps, **kw: captured.extend(steps))
+    monkeypatch.setattr(
+        cli, "build_deps", lambda v, t: _deps(RecordingRunner(results=[virsh_result]))
+    )
+
+    result = CliRunner().invoke(cli.app, ["commons", "down"])
+
+    assert result.exit_code == 0
+    labels = [s.label for s in captured]
+    assert any("logsearch" in lbl for lbl in labels), f"logsearch not torn down; labels={labels}"
+
+
+def test_commons_down_removes_fanout_gate(monkeypatch, tmp_path):
+    """commons down removes the fan-out gate file so fleet-wide fan-out reverts to
+    inert (no fan-out pointed at a torn-down endpoint on the next observe run)."""
+    _seed_logsearch(monkeypatch, tmp_path)
+    gate = tmp_path / "build" / "work" / "logsearch" / "fanout.json"
+    gate.parent.mkdir(parents=True, exist_ok=True)
+    gate.write_text('{"enabled": true, "endpoint": "10.50.0.4:21892"}\n')
+    virsh_result = _dom_listing({})
+
+    monkeypatch.setattr(cli, "run_steps", lambda steps, **kw: None)
+    monkeypatch.setattr(
+        cli, "build_deps", lambda v, t: _deps(RecordingRunner(results=[virsh_result]))
+    )
+
+    result = CliRunner().invoke(cli.app, ["commons", "down"])
+
+    assert result.exit_code == 0
+    assert not gate.exists(), "fan-out gate file must be removed on commons down"
 
 
 def test_commons_down_absent_vms_emit_no_steps(monkeypatch, tmp_path):

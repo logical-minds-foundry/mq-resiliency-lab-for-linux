@@ -103,6 +103,27 @@ def _commons_members() -> list[str]:
     return members
 
 
+# The Ansible group the logsearch node lives in (topology #830/#832). Named `_box`
+# (not `logsearch`) so the group name never collides with the host named `logsearch`
+# — the same convention as obs_box vs the obs host (Ansible warns on group==host).
+_LOGSEARCH_GROUP = "logsearch_box"
+
+
+def _logsearch_members() -> list[str]:
+    """Hosts of the logsearch tier (topology group `logsearch_box`), or [] when the
+    group is absent (a lab whose topology carries no logsearch node).
+
+    Deliberately SEPARATE from _commons_members: logsearch is wired into commons
+    up/status/down explicitly (#832), but kept OUT of the commons group set so
+    all_vms does NOT force-boot the heavy (6 GB) logsearch node on every per-stack
+    bootstrap — the tier stays opt-in, and its Alloy fan-out is inert until it is
+    brought up (the gate file is absent). Read from topology the same way
+    _commons_members reads a group's hosts, so there is one source of truth.
+    """
+    all_groups: dict[str, list[str]] = _topology().get("groups") or {}
+    return list(all_groups.get(_LOGSEARCH_GROUP) or [])
+
+
 # Commons groups that run no MQ — infrastructure-only nodes (DNS + core services,
 # #606). They still boot in the vms phase (via _commons_members / all_vms) but carry
 # no MQ SDK, so the MQ-media (tarball) enumeration in cli must exclude their hosts:
