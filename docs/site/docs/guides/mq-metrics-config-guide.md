@@ -3,7 +3,10 @@
 - **MQ version:** 9.4 (Multiplatforms)
 - **Status:** Active
 - **Last validated in lab:** 2026-07-02
-- **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md)
+- **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md);
+  [Native HA log lifecycle (runbook)](nativeha-log-lifecycle-guide.md) — the
+  log-health band that reads this lab's out-of-band `mqlab_log_*` collector metrics
+  alongside the exporter's queue-manager metrics
 
 ---
 
@@ -113,6 +116,22 @@ for per-application data and is **not** required for the exporter path; see
   coherent.
 - **z/OS differs.** On z/OS, statistics granularity is ignored and class switches
   apply; this guide covers Multiplatforms.
+
+!!! note "How this lab implements it"
+    The exporter path above (the IBM MQ Prometheus exporter reading the monitoring
+    and statistics publications this guide enables) is only one of the metric
+    sources on the boards. For the **Native HA** arms the lab also runs a
+    stdlib-only, **out-of-band** collector — `src/mqlab/loglifecycle.py`, deployed
+    as `lab-loglifecycle-state` — that polls each instance's log filesystem (no
+    MQI, so it is independent of MQ monitoring) and emits
+    `mqlab_log_disk_used_bytes`, `mqlab_log_disk_total_bytes`,
+    `mqlab_log_extents_active`, `mqlab_log_extents_inactive`, and
+    `mqlab_log_sample_stale`, each labelled `{qm,instance,role}`. Prometheus scrapes
+    these alongside the exporter metrics, and `src/mqlab/qmboard.py`
+    (`_log_health_band`) assembles them into the per-queue-manager **log-health
+    band**. How to read that band is the
+    [Native HA log-lifecycle runbook](nativeha-log-lifecycle-guide.md)
+    (`logical-minds-foundry/.github#145`).
 
 ---
 
