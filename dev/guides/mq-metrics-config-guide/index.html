@@ -1499,7 +1499,10 @@
 <li><strong>MQ version:</strong> 9.4 (Multiplatforms)</li>
 <li><strong>Status:</strong> Active</li>
 <li><strong>Last validated in lab:</strong> 2026-07-02</li>
-<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a></li>
+<li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>;
+  <a href="../nativeha-log-lifecycle-guide/">Native HA log lifecycle (runbook)</a> — the
+  log-health band that reads this lab's out-of-band <code>mqlab_log_*</code> collector metrics
+  alongside the exporter's queue-manager metrics</li>
 </ul>
 <hr />
 <h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
@@ -1599,6 +1602,23 @@ for per-application data and is <strong>not</strong> required for the exporter p
 <li><strong>z/OS differs.</strong> On z/OS, statistics granularity is ignored and class switches
   apply; this guide covers Multiplatforms.</li>
 </ul>
+<div class="admonition note">
+<p class="admonition-title">How this lab implements it</p>
+<p>The exporter path above (the IBM MQ Prometheus exporter reading the monitoring
+and statistics publications this guide enables) is only one of the metric
+sources on the boards. For the <strong>Native HA</strong> arms the lab also runs a
+stdlib-only, <strong>out-of-band</strong> collector — <code>src/mqlab/loglifecycle.py</code>, deployed
+as <code>lab-loglifecycle-state</code> — that polls each instance's log filesystem (no
+MQI, so it is independent of MQ monitoring) and emits
+<code>mqlab_log_disk_used_bytes</code>, <code>mqlab_log_disk_total_bytes</code>,
+<code>mqlab_log_extents_active</code>, <code>mqlab_log_extents_inactive</code>, and
+<code>mqlab_log_sample_stale</code>, each labelled <code>{qm,instance,role}</code>. Prometheus scrapes
+these alongside the exporter metrics, and <code>src/mqlab/qmboard.py</code>
+(<code>_log_health_band</code>) assembles them into the per-queue-manager <strong>log-health
+band</strong>. How to read that band is the
+<a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>
+(<code>logical-minds-foundry/.github#145</code>).</p>
+</div>
 <hr />
 <h2 id="appendix-a-full-parameter-reference">Appendix A: Full parameter reference<a class="headerlink" href="#appendix-a-full-parameter-reference" title="Permanent link">&para;</a></h2>
 <p>Queue-manager attributes (set with <code>ALTER QMGR</code>). Objects (<code>ALTER QLOCAL</code>,

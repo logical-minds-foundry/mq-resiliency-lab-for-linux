@@ -1634,7 +1634,11 @@ full-text and aggregation, Grafana Explore for live-tailing a drill.</p>
 <li><strong>Per-stack messaging board</strong> — the request/reply flow, driven by the
   <code>mq-app-requester</code> round-trip metric.</li>
 <li><strong>Per-QM boards</strong> and the <strong><code>lab-fleet-node</code></strong> node-health board round out the
-  set.</li>
+  set. On the <strong>Native HA</strong> arms the per-QM board carries a <strong>log-health band</strong>
+  (extent reclaim, log-disk fill, media-image recency, collector freshness, and the
+  recovery-log logger-event feed); reading it — including why the active instance
+  and its replicas legitimately diverge — is the
+  <a href="../guides/nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>.</li>
 </ul>
 <p>For a partition or failover drill, keep <code>lab-watcher</code> open for the whole-lab
 verdict and the stack cockpit open for the mechanism detail; use Grafana <strong>Explore</strong>

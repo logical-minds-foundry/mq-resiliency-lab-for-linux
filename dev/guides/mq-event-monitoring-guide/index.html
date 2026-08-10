@@ -1066,50 +1066,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#appendix-a-event-class-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix A: Event-class reference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix B: Alternatives and tradeoffs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-d-troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix D: Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-e-references" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix E: References
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1411,50 +1367,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#appendix-a-event-class-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix A: Event-class reference
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-b-alternatives-and-tradeoffs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix B: Alternatives and tradeoffs
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-d-troubleshooting" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix D: Troubleshooting
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#appendix-e-references" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Appendix E: References
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1511,7 +1423,10 @@
   <code>docs/reports/assets/110-mq-event-captures/</code>.</li>
 <li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the
   complementary <em>log</em> stream (why something happened) to this <em>event</em> stream
-  (what the queue manager did)</li>
+  (what the queue manager did);
+  <a href="../nativeha-log-lifecycle-guide/">Native HA log lifecycle (runbook)</a> — reads the
+  recovery-log <strong><code>LOGGEREV</code></strong> events this guide enables, and is where the
+  linear/replicated-only constraint below is worked through in operational depth</li>
 </ul>
 <hr />
 <h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
@@ -1582,7 +1497,10 @@ volume, enable the full Multiplatforms set (Appendix A lists every class):</p>
 <strong>linear-logging</strong> queue manager; on a circular-logging one MQ raises <code>AMQ8518E</code>
 and — because <code>ALTER QMGR</code> is atomic — <strong>rejects the whole statement</strong>, leaving no
 classes enabled. Add <code>LOGGEREV(ENABLED)</code> only where the queue manager uses linear
-logging.</p>
+logging (a Native HA queue manager's <strong>replicated</strong> log is linear-family and
+accepts it — see the
+<a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>, which reads
+the resulting logger-event feed).</p>
 <p><strong>Step 2 — set the per-queue thresholds performance events need.</strong> <code>PERFMEV</code> at
 the queue-manager level emits nothing on its own; queue-depth events fire only
 where a queue carries thresholds. Set them on the application queues that matter:</p>
@@ -1682,9 +1600,17 @@ ships the journal to <strong>Loki</strong> under a distinct <code>unit="mq-event
 (separate from the diagnostic-log stream), and the Grafana boards carry a
 per-object events panel — the queue-manager board shows every event for the
 queue manager, and each queue and channel shows the events for that specific
-object, filtered on <code>eventSource.objectName</code>. The end-to-end design and the
-lab-specific wiring are recorded in the event-monitoring epic spec
-(<code>logical-minds-foundry/.github</code>, <code>epics/31-event-monitoring/spec.md</code>).</p>
+object, filtered on <code>eventSource.objectName</code>. The <code>LOGGEREV</code> class is applied
+<strong>log-type-aware</strong> across the fleet: each arm declares its log type, the role
+verifies that declaration against the live <code>qm.ini</code> <code>LogType</code> (failing loud on
+drift), then emits <code>LOGGEREV(ENABLED)</code> on the Native HA (replicated) arms and an
+explicit, accepted <code>LOGGEREV(DISABLED)</code> on the circular arms — a verified
+negative, not an untested omission (<code>logical-minds-foundry/.github#145</code>, task</p>
+<h1 id="809-the-resulting-logger-event-feed-is-read-in-the">809; the resulting logger-event feed is read in the<a class="headerlink" href="#809-the-resulting-logger-event-feed-is-read-in-the" title="Permanent link">&para;</a></h1>
+<p><a href="../nativeha-log-lifecycle-guide/">Native HA log-lifecycle runbook</a>). The
+end-to-end design and the lab-specific wiring are recorded in the
+event-monitoring epic spec (<code>logical-minds-foundry/.github</code>,
+<code>epics/31-event-monitoring/spec.md</code>).</p>
 </div>
 <h2 id="appendix-a-event-class-reference">Appendix A: Event-class reference<a class="headerlink" href="#appendix-a-event-class-reference" title="Permanent link">&para;</a></h2>
 <p>Every queue-manager event-control attribute. All are <code>ENABLED</code>/<code>DISABLED</code> except
