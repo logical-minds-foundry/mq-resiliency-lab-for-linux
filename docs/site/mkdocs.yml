@@ -74,6 +74,7 @@ nav:
       - Metrics & monitoring configuration: guides/mq-metrics-config-guide.md
       - TCP configuration: guides/mq-tcp-config-guide.md
       - Authorization & access control: guides/mq-authorization-guide.md
+      - Native HA log lifecycle (runbook): guides/nativeha-log-lifecycle-guide.md
   - Reference: reference/index.md
   - Develop the lab: develop.md
   - Design & Specs: design-and-specs.md

@@ -32,6 +32,12 @@ alternatives are ranked. Start a new guide by copying
   least-privilege `setmqaut` authorities per role — including the message-context
   (`+setall`) authority a receiver MCA needs on every destination, the
   dead-letter queue included.
+- **[Native HA log lifecycle (runbook)](nativeha-log-lifecycle-guide.md)** — read
+  a Native HA queue manager's recovery log as a living system: why it uses
+  replicated logging, what automatic log management and automatic media images do
+  to log extents, and how to read the log-health band (extent reclaim, disk fill,
+  media-image recency, logger events) — including why the active and its replicas
+  legitimately diverge. A reading runbook, not a config guide.
 
 ## Planned
 
