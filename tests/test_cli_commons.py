@@ -128,9 +128,10 @@ def test_commons_up_provisions_shared_host(monkeypatch, tmp_path):
 def test_commons_up_host_collector_passes_mqlab_bin(monkeypatch, tmp_path):
     """commons up must pass mqlab_bin to host-obs.yml (#950).
 
-    host-obs.yml's host-net-state / host-relay-heal roles call mqlab by absolute
-    path under a minimal root PATH and assert mqlab_bin is defined; the commons
-    path used to omit it, failing 'provision host collector' loud.
+    host-obs.yml's host-net-state role calls mqlab by absolute path under a minimal
+    root PATH and asserts mqlab_bin is defined; the commons path used to omit it,
+    failing 'provision host collector' loud. (relay-heal is mqlab-free since #984,
+    but net-state still needs mqlab_bin.)
     """
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])

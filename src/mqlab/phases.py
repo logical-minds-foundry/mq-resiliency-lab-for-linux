@@ -491,8 +491,14 @@ def _host_mqlab() -> str:
     vergil-project/vergil-tooling#2473/#2495 give the container its own isolated
     venv so it never rewrites the host `.venv` — so the interpreter-sibling mqlab
     is now simply the correct host venv's console script, not a workaround.)
+
+    Do NOT `.resolve()` `sys.executable`: `.venv/bin/python3` is a symlink to the
+    base interpreter, so resolving it follows the link back to `/usr/bin/python3`
+    and the sibling computes to a nonexistent `/usr/bin/mqlab` — the units then die
+    status=203/EXEC (#984). The unresolved parent is the venv's own `bin/`, where
+    the console script actually lives.
     """
-    return str(Path(sys.executable).resolve().parent / "mqlab")
+    return str(Path(sys.executable).parent / "mqlab")
 
 
 def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
