@@ -1,0 +1,2145 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reproducible nested-virtualization lab for IBM MQ HA and DR resiliency on Linux">
+      
+      
+      
+      
+        <link rel="prev" href="../mq-authorization-guide/">
+      
+      
+        <link rel="next" href="../../reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Native HA log lifecycle (runbook) - MQ Resiliency Lab for Linux</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#native-ha-log-lifecycle-the-operators-runbook" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-header__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            MQ Resiliency Lab for Linux
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Native HA log lifecycle (runbook)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../changelog/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Releases
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../methodology/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Methodology
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../operate/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Operate & Observe
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Reference
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../develop/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Develop the lab
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../design-and-specs/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Design & Specs
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="MQ Resiliency Lab for Linux" class="md-nav__button md-logo" aria-label="MQ Resiliency Lab for Linux" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    MQ Resiliency Lab for Linux
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    logical-minds-foundry/mq-resiliency-lab-for-linux
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Releases
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Releases
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../releases/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Release Notes
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../operate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & Observe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide-standard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authoring standard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../_template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-json-logging-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON diagnostic logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-event-monitoring-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instrumentation event monitoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-metrics-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metrics & monitoring configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-tcp-config-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TCP configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mq-authorization-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authorization & access control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Native HA log lifecycle (runbook)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-three-log-types-and-why-native-ha-uses-replicated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The three log types — and why Native HA uses replicated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-what-the-automation-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. What the automation does
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. What the automation does">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#4a-extent-lifecycle-create-reuse-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4a. Extent lifecycle — create, reuse, delete
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4b-media-images-what-lets-extents-be-released" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4b. Media images — what lets extents be released
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-reading-the-log-health-band" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Reading the log-health band
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Reading the log-health band">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#5a-the-reclaim-health-trend-lead-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5a. The reclaim-health trend (lead panel)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5b-log-disk-fill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5b. Log disk fill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5c-media-image-recency-slow-gauge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5c. Media-image recency (slow gauge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5d-collector-sample-freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5d. Collector sample freshness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5e-the-logger-event-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5e. The logger-event log
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5f-healthy-vs-per-instance-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5f. Healthy vs. per-instance divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-the-one-constraint-and-why-native-ha-makes-it-moot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. The one constraint, and why Native HA makes it moot
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-extent-naming-watermarks-and-signals-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Extent naming, watermarks, and signals reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../develop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Develop the lab
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../design-and-specs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design & Specs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-purpose-audience" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Purpose &amp; audience
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-scope-version-floor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Scope &amp; version floor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-three-log-types-and-why-native-ha-uses-replicated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The three log types — and why Native HA uses replicated
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-what-the-automation-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. What the automation does
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. What the automation does">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#4a-extent-lifecycle-create-reuse-delete" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4a. Extent lifecycle — create, reuse, delete
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4b-media-images-what-lets-extents-be-released" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4b. Media images — what lets extents be released
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-reading-the-log-health-band" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Reading the log-health band
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5. Reading the log-health band">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#5a-the-reclaim-health-trend-lead-panel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5a. The reclaim-health trend (lead panel)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5b-log-disk-fill" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5b. Log disk fill
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5c-media-image-recency-slow-gauge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5c. Media-image recency (slow gauge)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5d-collector-sample-freshness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5d. Collector sample freshness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5e-the-logger-event-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5e. The logger-event log
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5f-healthy-vs-per-instance-divergence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5f. Healthy vs. per-instance divergence
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-the-one-constraint-and-why-native-ha-makes-it-moot" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. The one constraint, and why Native HA makes it moot
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-extent-naming-watermarks-and-signals-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Extent naming, watermarks, and signals reference
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-d-troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix D: Troubleshooting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-e-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix E: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="native-ha-log-lifecycle-the-operators-runbook">Native HA log lifecycle — the operator's runbook<a class="headerlink" href="#native-ha-log-lifecycle-the-operators-runbook" title="Permanent link">&para;</a></h1>
+<ul>
+<li><strong>MQ version:</strong> 9.4</li>
+<li><strong>Status:</strong> Active</li>
+<li><strong>Last validated in lab:</strong> 2026-08-10 — verified against a live <code>native-ha</code>
+  arm (queue manager <code>NHARAPP</code>, MQ 9.4.5, RHEL 9.6) during the log-lifecycle
+  spike (#808). The verified specifics — log type, extent naming, watermarks,
+  logger-event fields, and the reclaim-health behaviour — are recorded in
+  <code>docs/reports/2026-08-10-nativeha-log-lifecycle-spike.md</code>.</li>
+<li><strong>Related guides:</strong>
+  <a href="../mq-event-monitoring-guide/">Instrumentation event monitoring</a> — the
+  <code>amqsevt</code> → JSON pipeline the logger-event feed rides on;
+  <a href="../mq-json-logging-guide/">JSON diagnostic logging</a> — the <code>AMQ7467I</code> /
+  <code>AMQ7468I</code> / <code>AMQ7490I</code> error-log lines this runbook reads;
+  <a href="../mq-metrics-config-guide/">Metrics &amp; monitoring configuration</a> — the
+  monitoring pipeline the log-health metrics feed into.</li>
+</ul>
+<hr />
+<h2 id="1-purpose-audience">1. Purpose &amp; audience<a class="headerlink" href="#1-purpose-audience" title="Permanent link">&para;</a></h2>
+<p>This runbook teaches an operator to read a <strong>Native HA queue manager's recovery
+log as a living system</strong>: what the queue manager is doing to its log extents on
+its own, which signals report that the automation is healthy, and — the part
+that trips people up — why the <strong>active instance and its replicas legitimately
+show different numbers</strong>. It is for whoever watches a Native HA queue manager in
+production and needs to tell "the automation is working" apart from "the log is
+about to fill".</p>
+<p>It is a <em>reading</em> guide, not a <em>configuration</em> guide: a Native HA queue manager
+arrives with all of this switched on and correct. The job is to interpret it, not
+to turn it on.</p>
+<h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
+<p>In scope: recovery-log logging types; why Native HA mandates <strong>replicated</strong>
+logging; what <strong>automatic log management</strong> and <strong>automatic media images</strong> do to
+log extents; how to read the log-health signals (extent counts, disk fill,
+recovery watermarks, media-image recency, the logger-event feed); and the one
+real constraint that automatic log management imposes.</p>
+<p>Out of scope: enabling the logger-event feed itself (that is the
+<a href="../mq-event-monitoring-guide/">event-monitoring guide</a>); the metrics-collector
+and dashboard mechanics (the lab wiring is noted where relevant but is not the
+subject); and disaster-recovery topology beyond the single Native HA group.</p>
+<p>Version floor: replicated logging and Native HA are MQ <strong>9.4</strong> on MQ for
+Multiplatforms. Automatic log management and automatic media images predate 9.4
+but are what a Native HA queue manager uses by default.</p>
+<h2 id="3-the-three-log-types-and-why-native-ha-uses-replicated">3. The three log types — and why Native HA uses replicated<a class="headerlink" href="#3-the-three-log-types-and-why-native-ha-uses-replicated" title="Permanent link">&para;</a></h2>
+<p>IBM MQ writes a <strong>recovery log</strong> so it can rebuild persistent state after a
+failure. There are three logging types, and the choice is made once, at queue-manager
+creation:</p>
+<table>
+<thead>
+<tr>
+<th>Log type</th>
+<th>What it does</th>
+<th>Recovery reach</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Circular</strong></td>
+<td>A fixed ring of extents, overwritten in place</td>
+<td>Restart recovery only — no media recovery, no replication</td>
+</tr>
+<tr>
+<td><strong>Linear</strong></td>
+<td>An ever-advancing sequence of extents; old extents are retained until no longer needed</td>
+<td>Restart <strong>and</strong> media recovery; supports archiving and backup queue managers</td>
+</tr>
+<tr>
+<td><strong>Replicated</strong></td>
+<td>Linear logging whose extents are <strong>synchronously replicated</strong> to the other instances in the Native HA group</td>
+<td>Restart and media recovery, made redundant across the group</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Native HA is replicated logging, and replicated logging is linear logging with
+two defaults turned on.</strong> A Native HA group keeps three instances of one queue
+manager in lock-step by replicating the recovery log itself: every log write on
+the active instance is streamed to the replicas before it is acknowledged. That
+only works on a linear-family log (circular's in-place overwrite cannot be
+replayed on a replica), so a Native HA queue manager is created with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">Log</span><span class="o">:</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">   </span><span class="na">LogType</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s">REPLICATED</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">   </span><span class="na">LogManagement</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="s">Automatic</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">   </span><span class="na">LogPath</span><span class="w">          </span><span class="o">=</span><span class="w"> </span><span class="s">/var/mqm/log/&lt;QM&gt;/</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">   </span><span class="na">LogFilePages</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="s">8192</span><span class="w">          </span><span class="c1"># 32 MB per extent (8192 × 4 KB pages)</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">   </span><span class="na">LogPrimaryFiles</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">10</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">   </span><span class="na">LogSecondaryFiles</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">10</span>
+</code></pre></div>
+<ul>
+<li><strong><code>LogType=REPLICATED</code></strong> — the log is linear <em>and</em> replicated across the group.</li>
+<li><strong><code>LogManagement=Automatic</code></strong> — MQ owns the extent lifecycle (section 4): it
+  creates, reuses, and deletes extents itself, with no archiving step and no
+  operator action.</li>
+<li><strong>Automatic media images on by default</strong> — <code>IMGSCHED(AUTO)</code> schedules media
+  images so old extents can be released (section 4).</li>
+</ul>
+<p>You can confirm the type: <code>LogType</code> and <code>LogManagement</code> are authoritative in
+<strong><code>qm.ini</code></strong> (the <code>Log:</code> stanza). Note that <code>DISPLAY QMGR LOGTYPE</code> does <strong>not</strong>
+exist — asking for it is a syntax error (<code>AMQ8405I</code>); read <code>qm.ini</code> instead.</p>
+<p>Because replicated logging is linear-family, the recovery-log <strong>logger events</strong>
+(<code>LOGGEREV</code>) that this runbook reads are valid and accepted on a Native HA queue
+manager — on a circular queue manager the same <code>ALTER QMGR LOGGEREV(ENABLED)</code> is
+rejected with <code>AMQ8518E</code>. See the <a href="../mq-event-monitoring-guide/">event-monitoring guide</a>.</p>
+<h2 id="4-what-the-automation-does">4. What the automation does<a class="headerlink" href="#4-what-the-automation-does" title="Permanent link">&para;</a></h2>
+<p>With <code>LogManagement=Automatic</code>, the queue manager runs two independent
+housekeeping loops. Reading the log health is really reading the interplay
+between them.</p>
+<h3 id="4a-extent-lifecycle-create-reuse-delete">4a. Extent lifecycle — create, reuse, delete<a class="headerlink" href="#4a-extent-lifecycle-create-reuse-delete" title="Permanent link">&para;</a></h3>
+<p>Log extents are fixed-size files under <code>LogPath/&lt;QM&gt;/active/</code>, named
+<code>S&lt;nnnnnnn&gt;.LOG</code> (standard, in use) and <code>R&lt;nnnnnnn&gt;.LOG</code> (reserved/recycled).
+As the queue manager writes, it rolls forward into a new extent; each roll is one
+step of <code>S0000001 → S0000002 → …</code>. When an extent is <strong>no longer needed for any
+kind of recovery</strong>, automatic log management either <strong>reuses</strong> it (renames it into
+the reserved pool for a future write) or <strong>deletes</strong> it. The queue manager reports
+each housekeeping pass in its error log:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>AMQ7490I: Log extent statistics: 1 created. 8 reused. 0 deleted.
+</code></pre></div>
+<p>Those three counters — <strong>created / reused / deleted</strong> — are the pulse of the
+extent lifecycle. A healthy queue manager under steady load shows extents being
+<strong>reused or deleted</strong> at roughly the rate they are created, so the active extent
+count holds a band rather than climbing forever.</p>
+<h3 id="4b-media-images-what-lets-extents-be-released">4b. Media images — what lets extents be released<a class="headerlink" href="#4b-media-images-what-lets-extents-be-released" title="Permanent link">&para;</a></h3>
+<p>An extent cannot be reused or deleted while it is still needed to <strong>media-recover</strong>
+an object. Automatic media images are what move that boundary forward: MQ
+periodically records a media image of recoverable objects, and once an image
+exists past a given extent, the extents before it are releasable. On a Native HA
+queue manager these are scheduled automatically:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ALTER QMGR IMGSCHED(AUTO) IMGINTVL(60) IMGLOGLN(3271) IMGRCOVO(YES) IMGRCOVQ(YES)
+</code></pre></div>
+<ul>
+<li><strong><code>IMGSCHED(AUTO)</code></strong> — MQ schedules media images itself; no <code>rcdmqimg</code> cron.</li>
+<li><strong><code>IMGINTVL(60)</code></strong> — target interval, in minutes, between automatic images.</li>
+<li><strong><code>IMGLOGLN(3271)</code></strong> — also trigger an image after this many MB of log written,
+  whichever comes first.</li>
+</ul>
+<p>The key operational consequence: <strong>media-image recency is a slow gauge.</strong> The
+media-recovery boundary only advances when an automatic image fires, so on a
+<strong>young</strong> queue manager — before the first <code>IMGINTVL</code> has elapsed — no image has
+been taken yet, the media boundary is still pinned at the first extent, and no
+extent can be released. That is expected early-life behaviour, not a fault (see
+section 5).</p>
+<h2 id="5-reading-the-log-health-band">5. Reading the log-health band<a class="headerlink" href="#5-reading-the-log-health-band" title="Permanent link">&para;</a></h2>
+<p>The lab surfaces all of this as a <strong>log-health band</strong> on the per-queue-manager
+Grafana board, present only on the Native HA arms. It is built to be read
+<strong>top to bottom as a story</strong>, and to be read <strong>per instance</strong> — the active and its
+replicas are drawn as separate lines because they genuinely diverge.</p>
+<div class="admonition note">
+<p class="admonition-title">How this lab implements it</p>
+<p>A stdlib-only collector (<code>src/mqlab/loglifecycle.py</code>, deployed as
+<code>lab-loglifecycle-state</code>) polls each instance's filesystem — no MQI — for
+disk usage and the <code>active/</code> extent split, and tags every sample by
+<code>instance</code> and <code>role</code> (<code>dspmq -m &lt;QM&gt; -o nativeha -x</code>). It emits
+<code>mqlab_log_disk_used_bytes</code>, <code>mqlab_log_disk_total_bytes</code>,
+<code>mqlab_log_extents_active</code> (the <code>S…</code> count), <code>mqlab_log_extents_inactive</code>
+(the <code>R…</code> count), and <code>mqlab_log_sample_stale</code>. The band is assembled in
+<code>src/mqlab/qmboard.py</code> (<code>_log_health_band</code>). The logger-event feed rides the
+shared <code>amqsevt</code> → journald → Loki pipeline (epic
+<code>logical-minds-foundry/.github#145</code>).</p>
+</div>
+<h3 id="5a-the-reclaim-health-trend-lead-panel">5a. The reclaim-health trend (lead panel)<a class="headerlink" href="#5a-the-reclaim-health-trend-lead-panel" title="Permanent link">&para;</a></h3>
+<p>The lead panel plots the <strong>standard (<code>S</code>, in-use)</strong> and <strong>reserved (<code>R</code>,
+recycled)</strong> extent counts over time, per instance. This is the headline signal.</p>
+<ul>
+<li><strong>Healthy:</strong> the <code>S</code> count holds a band — it rises as extents are created, then
+  levels or falls as reuse/delete keeps pace (cross-check the <code>AMQ7490I</code>
+  created/reused/deleted counters, section 4a). <code>R</code> reflects the recycled pool.</li>
+<li><strong>Watch the automation:</strong> the <code>S</code> count climbs <strong>monotonically</strong> with
+  <code>reused=0</code> / <code>deleted=0</code> in <code>AMQ7490I</code> and the media boundary pinned (section
+  5c). On a young queue manager this is the <strong>expected pre-first-media-image</strong>
+  pattern — the log grows because nothing has been released yet; it should
+  stabilise once the first automatic image fires. If it <em>keeps</em> climbing well
+  past <code>IMGINTVL</code> with the media boundary still pinned, that is the "automation is
+  not reclaiming" pattern worth investigating.</li>
+</ul>
+<h3 id="5b-log-disk-fill">5b. Log disk fill<a class="headerlink" href="#5b-log-disk-fill" title="Permanent link">&para;</a></h3>
+<p>Two panels — <strong>log disk %</strong> (the <code>LogPath</code> filesystem, per instance+role) and the
+raw <strong>bytes-used</strong> trend. Read these as the safety net under the extent trend: a
+reclaim stall shows up here as a steady climb toward full. Disk % is the number
+to alert on; the bytes trend shows the slope.</p>
+<h3 id="5c-media-image-recency-slow-gauge">5c. Media-image recency (slow gauge)<a class="headerlink" href="#5c-media-image-recency-slow-gauge" title="Permanent link">&para;</a></h3>
+<p>A single stat for the age of the most recent media image. Treat it as a <strong>coarse,
+slow gauge</strong>: it only moves on the automatic-image schedule (≥ <code>IMGINTVL</code>), so
+expect a <strong>long initial "No image / no data"</strong> on a young queue manager, and
+expect it to update in steps, not continuously. It is the forward-looking
+companion to the reclaim trend — when it advances, extents become releasable.</p>
+<p>The live media watermark is also visible in the logger-event feed
+(<code>mediaLogExtentName</code>, section 5e) and, offline, via <code>DISPLAY QMSTATUS MEDIALOG</code>.</p>
+<h3 id="5d-collector-sample-freshness">5d. Collector sample freshness<a class="headerlink" href="#5d-collector-sample-freshness" title="Permanent link">&para;</a></h3>
+<p>A stat that reads <strong>✓ fresh</strong>, <strong>⚠ STALE</strong>, or <strong>No data</strong>. This is the honesty
+check on the band itself: STALE means a filesystem sample timed out (the extent
+and disk numbers may be stale), and No data means the collector is not reporting
+at all. Trust the other panels only while this reads fresh.</p>
+<h3 id="5e-the-logger-event-log">5e. The logger-event log<a class="headerlink" href="#5e-the-logger-event-log" title="Permanent link">&para;</a></h3>
+<p>The bottom panel is the recovery-log <strong>logger events</strong> themselves — one per extent
+roll — scoped to <code>SYSTEM.ADMIN.LOGGER.EVENT</code>. Each event carries
+<code>currentLogExtentName</code>, <code>restartLogExtentName</code>, <code>mediaLogExtentName</code>, and
+<code>logPath</code>. There is <strong>no</strong> <code>archiveLogExtentName</code> — automatic log management has
+no archive workflow, so that field simply does not exist here. This panel is the
+per-event ground truth behind the trends above: the extent watermarks stepping
+forward, and the media watermark (not) advancing.</p>
+<h3 id="5f-healthy-vs-per-instance-divergence">5f. Healthy vs. per-instance divergence<a class="headerlink" href="#5f-healthy-vs-per-instance-divergence" title="Permanent link">&para;</a></h3>
+<p>The single most important reading skill: <strong>the active instance and its replicas
+do not match, and that is normal.</strong> In the spike, at the same moment, the three
+instances of one queue manager showed different <code>S</code>/<code>R</code> mixes and different extent
+counts (e.g. 10 vs 11 extents, with different <code>S</code>/<code>R</code> splits) and different disk
+totals. Each line is tagged by <code>instance</code> and <code>role</code>, so the active leads and each
+replica's divergence is visible as its own line.</p>
+<ul>
+<li><strong>Healthy divergence:</strong> the lines differ in count and <code>S</code>/<code>R</code> mix but all trend
+  together — each holds its band, each releases extents, each stays well under
+  disk. Divergence in <em>level</em> is expected; divergence in <em>behaviour</em> is the tell.</li>
+<li><strong>Real trouble:</strong> one instance's <code>S</code> count climbs while the others hold; or one
+  instance's disk % pulls away toward full; or an instance drops to role
+  <code>unknown</code> or its sample goes STALE. That is a single-instance problem, not the
+  group-wide reclaim story of section 5a.</li>
+</ul>
+<h2 id="6-the-one-constraint-and-why-native-ha-makes-it-moot">6. The one constraint, and why Native HA makes it moot<a class="headerlink" href="#6-the-one-constraint-and-why-native-ha-makes-it-moot" title="Permanent link">&para;</a></h2>
+<p>Automatic log management buys the hands-off extent lifecycle above, and it has
+exactly <strong>one</strong> real cost worth internalising:</p>
+<blockquote>
+<p><strong>Automatic log management does not archive log extents, so a queue manager
+using it cannot have a backup queue manager.</strong></p>
+</blockquote>
+<p>A backup queue manager (<code>strmqm -r</code>) is kept current by <strong>replaying archived log
+extents</strong> into a standby copy — which requires <strong>manual</strong> log management with an
+archiving step to hand those extents over. Automatic log management deliberately
+has no archive workflow (confirmed by the absence of any <code>archiveLogExtentName</code> in
+the logger events, section 5e), so the backup-queue-manager technique is simply
+not available on a Native HA queue manager.</p>
+<p><strong>Native HA makes that a non-loss, not a compromise.</strong> The backup queue manager
+exists to give you a second, log-shipped copy to recover onto. Native HA already
+provides that — and provides it <em>better</em> — through <strong>synchronous log replication</strong>
+to the replica instances: the redundant copies are live, in quorum, and promote
+automatically on failover, rather than a lagging copy you replay by hand. You give
+up a technique whose entire purpose Native HA fulfils more strongly. The one thing
+to remember is the negative: <strong>do not plan around a backup queue manager for a
+Native HA arm</strong> — the replicas are the redundancy.</p>
+<p>Other caveats to keep in mind:</p>
+<ul>
+<li><strong>Media recency is coarse by design</strong> (section 5c) — a long initial pin and
+  step-wise updates are the automation working, not a stall.</li>
+<li><strong>Per-instance numbers differ by design</strong> (section 5f) — never alert on the
+  active and a replica being unequal; alert on a single instance <em>diverging in
+  behaviour</em>.</li>
+<li><strong>The band is only as fresh as the collector</strong> (section 5d) — a STALE or
+  No-data sample invalidates the extent/disk numbers above it until it recovers.</li>
+</ul>
+<hr />
+<h2 id="appendix-a-extent-naming-watermarks-and-signals-reference">Appendix A: Extent naming, watermarks, and signals reference<a class="headerlink" href="#appendix-a-extent-naming-watermarks-and-signals-reference" title="Permanent link">&para;</a></h2>
+<p><strong>Extent files</strong> (under <code>LogPath/&lt;QM&gt;/active/</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>S&lt;nnnnnnn&gt;.LOG</code></td>
+<td>Standard extent, in use — the primary reclaim-health count</td>
+</tr>
+<tr>
+<td><code>R&lt;nnnnnnn&gt;.LOG</code></td>
+<td>Reserved / recycled extent, available for a future write</td>
+</tr>
+<tr>
+<td><code>amqhlctl.lfh</code></td>
+<td>Log control file (not an extent)</td>
+</tr>
+<tr>
+<td><code>nativeha.ini</code></td>
+<td>Native HA config (not an extent)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Recovery watermarks</strong> (<code>DISPLAY QMSTATUS</code>, and the logger-event fields):</p>
+<table>
+<thead>
+<tr>
+<th><code>QMSTATUS</code></th>
+<th>Logger-event field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CURRLOG</code></td>
+<td><code>currentLogExtentName</code></td>
+<td>The extent currently being written</td>
+</tr>
+<tr>
+<td><code>RECLOG</code></td>
+<td><code>restartLogExtentName</code></td>
+<td>Oldest extent needed for <strong>restart</strong> recovery</td>
+</tr>
+<tr>
+<td><code>MEDIALOG</code></td>
+<td><code>mediaLogExtentName</code></td>
+<td>Oldest extent needed for <strong>media</strong> recovery</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>logPath</code></td>
+<td>The active log directory</td>
+</tr>
+<tr>
+<td>—</td>
+<td><em>(no <code>archiveLogExtentName</code>)</em></td>
+<td>Automatic log management has no archive step</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Error-log signals</strong> (also visible via <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Message</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AMQ7467I</code></td>
+<td>Oldest log extent required to <strong>start</strong> the queue manager (= <code>RECLOG</code>)</td>
+</tr>
+<tr>
+<td><code>AMQ7468I</code></td>
+<td>Oldest log extent required for <strong>media recovery</strong> (= <code>MEDIALOG</code>)</td>
+</tr>
+<tr>
+<td><code>AMQ7490I</code></td>
+<td>Log extent statistics — <strong>N created. N reused. N deleted.</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Band metrics</strong> (emitted by the lab collector, all labelled <code>{qm,instance,role}</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mqlab_log_extents_active</code></td>
+<td>Count of <code>S…</code> extents (in use)</td>
+</tr>
+<tr>
+<td><code>mqlab_log_extents_inactive</code></td>
+<td>Count of <code>R…</code> extents (reserved/recycled)</td>
+</tr>
+<tr>
+<td><code>mqlab_log_disk_used_bytes</code> / <code>mqlab_log_disk_total_bytes</code></td>
+<td><code>LogPath</code> filesystem fill</td>
+</tr>
+<tr>
+<td><code>mqlab_log_sample_stale</code></td>
+<td><code>1</code> when a filesystem sample timed out</td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-d-troubleshooting">Appendix D: Troubleshooting<a class="headerlink" href="#appendix-d-troubleshooting" title="Permanent link">&para;</a></h2>
+<p>Read the band top to bottom; the first row that is wrong is your fault domain.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Reading</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>S</code> extent count rises, <code>reused=0</code>/<code>deleted=0</code>, <code>MEDIALOG</code> pinned, queue manager young</td>
+<td>No automatic media image has fired yet (<code>IMGINTVL</code> not reached)</td>
+<td>Expected pre-first-image behaviour — watch for it to stabilise after the first image</td>
+</tr>
+<tr>
+<td><code>S</code> count keeps climbing long past <code>IMGINTVL</code>, media boundary still pinned</td>
+<td>Reclaim genuinely stalled (media images not advancing the boundary)</td>
+<td>The "automation not reclaiming" pattern — investigate media imaging and disk headroom</td>
+</tr>
+<tr>
+<td>Log disk % climbing toward full</td>
+<td>Downstream of a reclaim stall, or genuine write volume</td>
+<td>Cross-check the extent trend (5a) and media recency (5c)</td>
+</tr>
+<tr>
+<td>Media-image recency shows "No image / no data" for a long time</td>
+<td>Young queue manager, or the recency series is not being fed</td>
+<td>Coarse gauge — corroborate with <code>mediaLogExtentName</code> in the logger-event log</td>
+</tr>
+<tr>
+<td>One instance diverges in <em>behaviour</em> (its <code>S</code> climbs while others hold)</td>
+<td>A single-instance problem, not the group reclaim story</td>
+<td>Scope to that instance+role; check its disk and role</td>
+</tr>
+<tr>
+<td>A line reads role <code>unknown</code>, or the sample stat is <code>⚠ STALE</code> / <code>No data</code></td>
+<td>Role probe or filesystem sample timed out; collector down</td>
+<td>Distrust that instance's numbers until fresh; check <code>lab-loglifecycle-state</code></td>
+</tr>
+<tr>
+<td><code>ALTER QMGR LOGGEREV(ENABLED)</code> rejected with <code>AMQ8518E</code></td>
+<td>Queue manager is circular, not linear/replicated</td>
+<td>Expected — <code>LOGGEREV</code> is linear-family only; a Native HA arm accepts it</td>
+</tr>
+<tr>
+<td><code>DISPLAY QMGR LOGTYPE</code> returns <code>AMQ8405I</code></td>
+<td>That attribute does not exist</td>
+<td>Read <code>LogType</code> from <code>qm.ini</code>, not <code>DISPLAY QMGR</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Lab spike (verified specifics):</strong>
+  <code>docs/reports/2026-08-10-nativeha-log-lifecycle-spike.md</code> (#808) — the live-arm
+  evidence for every claim here: log type, extent naming, watermarks, logger-event
+  fields, and the reclaim-health behaviour.</li>
+<li><strong>Epic:</strong> <code>logical-minds-foundry/.github#145</code> — Native HA log-lifecycle
+  observability (the collector, the cockpit band, and this runbook).</li>
+<li><strong>IBM MQ 9.4 documentation</strong> — search these topic titles at
+  <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>: <em>Types of logging</em>, <em>Managing logs</em>,
+  <em>Automatic media images</em>, <em>Recording media images</em>, <em>Logger event generation</em>,
+  <em>Backing up and restoring IBM MQ queue manager data</em> (backup queue managers),
+  and <em>Native HA</em>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "content.code.copy", "search.highlight", "search.suggest"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../js/resize-iframes.js"></script>
+      
+    
+  </body>
+</html>
