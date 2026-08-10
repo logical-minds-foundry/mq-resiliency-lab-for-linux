@@ -112,21 +112,29 @@
       when: inventory_hostname == active_host
 
     # ---------------------------------------------------------------- INDUCE: roll a 32 MB extent
-    # Persistent-message churn on the active instance (spike #808): a throwaway DEFPSIST(YES) queue,
-    # 32 MB of persistent PUTs per iteration (fed to amqsput as ~4 KB lines from base64 /dev/urandom),
-    # CLEAR-ed each pass so depth never caps — the PUT log records already forced the extent writes.
-    # Loop until DISPLAY QMSTATUS CURRLOG advances past the baseline (proves >= one new-extent write,
-    # i.e. >= one logger event), bounded so a genuinely wedged log fails loud instead of looping.
+    # Persistent-message churn on the active instance (spike #808): a throwaway DEFPSIST(YES) queue
+    # into which we ACCUMULATE persistent messages (~60 KB each) across iterations WITHOUT clearing.
+    # Every persistent PUT writes recovery-log records; once ~32 MB has accumulated the log forces a
+    # NEW extent and DISPLAY QMSTATUS CURRLOG steps (one logger event per new-extent write). The #985
+    # bug was a per-iteration CLEAR: on a replicated LogManagement=Automatic log it released the log
+    # records before they could accumulate, so MQ reclaimed the space and CURRLOG never advanced.
+    # Retaining the messages is the spike-proven behaviour (retained churn advanced CURRLOG(S2)->(S6),
+    # ~120 MB, #808). Larger messages (60 KB) reach a 32 MB extent in a couple of passes with far
+    # fewer PUTs than 8192 x 4 KB. Loop until CURRLOG advances past the baseline, bounded so a
+    # genuinely wedged log fails loud instead of looping; the queue is torn down ONCE (the end-of-play
+    # cleanup task below / a re-run's REPLACE), never per iteration — MAXDEPTH(999999999) tolerates it.
     - name: induce — churn persistent messages until an extent rolls (active instance)
       ansible.builtin.shell: |
         set -o pipefail
         base='{{ baseline_currlog.stdout | trim }}'
         printf 'DEFINE QLOCAL(%s) DEFPSIST(YES) MAXDEPTH(999999999) MAXMSGL(4194304) REPLACE\n' \
           '{{ churn_q }}' | {{ runmqsc_bin }} {{ qm }} >/dev/null
+        # ~16 MB of persistent messages per pass as 60 KB lines (base64 -w0 emits no wrapping
+        # newlines, so fold -w 61440 yields genuine 60 KB messages, not tiny base64-wrapped ones).
+        # Messages ACCUMULATE across passes — no CLEAR — so the recovery log grows until it rolls.
         for i in $(seq 1 30); do
-          base64 /dev/urandom | head -c 33554432 | fold -w 4096 \
+          base64 -w 0 /dev/urandom | head -c 16777216 | fold -w 61440 \
             | {{ amqsput_bin }} {{ churn_q }} {{ qm }} >/dev/null
-          printf 'CLEAR QLOCAL(%s)\n' '{{ churn_q }}' | {{ runmqsc_bin }} {{ qm }} >/dev/null
           cur=$(printf 'DISPLAY QMSTATUS CURRLOG\n' | {{ runmqsc_bin }} {{ qm }} \
             | grep -oE 'CURRLOG\([^)]*\)' | grep -oE 'S[0-9]+\.LOG' | head -1)
           if [ "$cur" != "$base" ]; then
