@@ -290,3 +290,116 @@ def test_event_panels_bind_the_loki_datasource():
     board = render_qm_board(FIXTURE, "nha-x", {"short": "NHAX"}, loki_uid="loki-x")
     logs = _logs_panels(board)
     assert logs and all(p["datasource"] == {"type": "loki", "uid": "loki-x"} for p in logs)
+
+
+# ── ④ log-health band (Native HA) — #811 ──────────────────────────────────────
+
+
+def _nha_board(short="NHAX"):
+    """A board for a native-ha arm (the band gates on mechanism == native-ha)."""
+    return render_qm_board(FIXTURE, "nha-x", {"short": short, "mechanism": "native-ha"})
+
+
+def test_log_health_band_uses_instance_series():
+    from mqlab.qmboard import _log_health_band
+
+    panels = _log_health_band("ds", "QM1", y=800)
+    joined = str(panels)
+    assert "mqlab_log_disk_used_bytes" in joined
+    assert "mqlab_log_extents_active" in joined
+    assert "by (instance" in joined  # instance-aware series (per-replica divergence)
+    assert panels[0]["type"] == "timeseries"  # time-series-led, not a stat tile
+
+
+def test_log_health_band_leads_with_the_reclaim_health_story():
+    # the spike headline: a monotonic extent rise with 0 reuse. The band leads with the
+    # standard (S, in-use) vs reserved (R, recycled) extent trend, both on the lead panel.
+    from mqlab.qmboard import _log_health_band
+
+    lead = _log_health_band("ds", "QM1", y=0)[0]
+    blob = " ".join(t["expr"] for t in lead["targets"])
+    assert "mqlab_log_extents_active" in blob
+    assert "mqlab_log_extents_inactive" in blob
+
+
+def test_log_health_band_binds_every_collector_metric_raw_not_rated():
+    from mqlab.qmboard import _log_health_band
+
+    blob = str(_log_health_band("ds", "QM1", y=0))
+    for metric in (
+        "mqlab_log_disk_used_bytes",
+        "mqlab_log_disk_total_bytes",
+        "mqlab_log_extents_active",
+        "mqlab_log_extents_inactive",
+        "mqlab_log_sample_stale",
+    ):
+        assert metric in blob
+    # every mqlab_log_* series is a gauge (a point-in-time df/ls reading — loglifecycle.py
+    # emits no counters), so it is plotted raw; rate() would be meaningless.
+    assert "rate(mqlab_log_" not in blob
+
+
+def test_log_health_band_qm_is_a_variable_not_a_literal():
+    from mqlab.qmboard import _log_health_band
+
+    blob = str(_log_health_band("ds", "ZZZAPP", y=0))
+    assert 'qm="ZZZAPP"' in blob
+    assert "QM1" not in blob
+
+
+def test_log_health_gauges_degrade_gracefully_with_the_sentinel():
+    # the two slow gauges (media-image recency + collector sample) are stat tiles that read
+    # no-data — never a false value — when their series is absent: every expr ends with the
+    # object-driven sentinel.
+    from mqlab.qmboard import _log_health_band
+
+    stats = [p for p in _log_health_band("ds", "QM1", y=0) if p["type"] == "stat"]
+    assert stats
+    for panel in stats:
+        assert panel["targets"][0]["expr"].endswith("or vector(-1)")
+
+
+def test_log_health_media_recency_is_a_slow_gauge_not_a_trend():
+    # spike-gated: media recency is coarse-grained (moves only on the automatic-image
+    # schedule, pinned on a young QM), so it ships as a single-value slow gauge that degrades
+    # gracefully — not a reactive/second-scale trend panel.
+    from mqlab.qmboard import _log_health_band
+
+    media = [
+        p
+        for p in _log_health_band("ds", "QM1", y=0)
+        if p["type"] == "stat" and "Media" in p["title"]
+    ]
+    assert len(media) == 1
+    assert "mqlab_log_media" in media[0]["targets"][0]["expr"]
+
+
+def test_log_health_band_has_a_logger_event_log():
+    from mqlab.qmboard import _log_health_band
+
+    logs = [p for p in _log_health_band("ds", "QM1", y=0, loki_uid="loki-z") if p["type"] == "logs"]
+    assert len(logs) == 1
+    expr = logs[0]["targets"][0]["expr"]
+    assert 'unit="mq-events"' in expr and "| json" in expr
+    assert "SYSTEM.ADMIN.LOGGER.EVENT" in expr  # the logger-event source (spike S2)
+    assert logs[0]["datasource"] == {"type": "loki", "uid": "loki-z"}
+
+
+def test_log_health_band_wired_only_for_native_ha_arms():
+    # the band renders on a native-ha board (its collector is deployed only on the nha arms)
+    # and is absent otherwise.
+    nha = _nha_board()
+    assert any("④ Log health" in t for t in _row_titles(nha))
+    assert "mqlab_log_extents_active" in " ".join(_all_exprs(nha))
+    # the default fixture cfg carries no mechanism → not native-ha → no band at all.
+    plain = _board()
+    assert not any("④ Log health" in t for t in _row_titles(plain))
+    assert "mqlab_log_" not in json.dumps(plain)
+
+
+def test_log_health_band_keeps_graph_panels_timeseries_only():
+    board = _nha_board()
+    graph_types = {
+        p["type"] for p in board["panels"] if p["type"] not in {"stat", "row", "text", "logs"}
+    }
+    assert graph_types == {"timeseries"}

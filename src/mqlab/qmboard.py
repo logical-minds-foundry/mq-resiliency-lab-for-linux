@@ -70,6 +70,38 @@ _SERVICES_MAP: list[dict[str, Any]] = [
     _STALE_MAP,
 ]
 
+# ④ Log-health slow gauges (#811). Both read the object-driven sentinel so an absent series
+# renders no-data, never a false value.
+#
+# Media-image recency is spike-gated (spike #808, S2/S3): the source
+# (`mediaLogExtentName` / `MEDIALOG` / `AMQ7468I`) exists but is coarse — it only advances on
+# the automatic-image schedule (≥ IMGINTVL) and stays pinned at the first extent on a young
+# QM — and it is NOT part of the non-MQI collector's metric contract (loglifecycle.py emits
+# disk + extent counts + stale only). So this ships as a *slow gauge on a forward-looking
+# series* that degrades gracefully to "No image / no data" until a collector exposes it; the
+# live media watermark is meanwhile visible in the logger-event log below (`mediaLogExtentName`).
+_MEDIA_RECENCY_MAP: list[dict[str, Any]] = [
+    {
+        "type": "value",
+        "options": {"-1": {"text": "No image / no data", "color": "grey", "index": 0}},
+    },
+    _STALE_MAP,
+]
+
+# Collector freshness: mqlab_log_sample_stale is 0 (fresh) / 1 (a timed-out filesystem sample);
+# the max across instances surfaces the worst case. -1 (sentinel) reads no-data (collector down).
+_SAMPLE_FRESHNESS_MAP: list[dict[str, Any]] = [
+    {
+        "type": "value",
+        "options": {
+            "-1": {"text": "No data", "color": "grey", "index": 0},
+            "0": {"text": "✓ fresh", "color": "green", "index": 1},
+            "1": {"text": "⚠ STALE", "color": "red", "index": 2},
+        },
+    },
+    _STALE_MAP,
+]
+
 
 def qm_board_uid(short: str) -> str:
     """The pinned per-QM board uid: `lab-qm-<short>` (lowercased)."""
@@ -316,6 +348,122 @@ def _channel_block(ds_uid: str, qm: str, channel: str, role: str, y: int) -> lis
     return [header, *panels]
 
 
+# ── ④ Native-HA log-health band (#811) ────────────────────────────────────────
+
+
+def _log_extents_expr(metric: str, qm: str) -> str:
+    """A per-instance extent-count series. All mqlab_log_* metrics are gauges (point-in-time
+    df/ls readings — loglifecycle.py emits no counters), so they are plotted raw; `by
+    (instance, role)` keeps the active and each replica as distinct lines (the spike showed
+    they genuinely diverge)."""
+    return f'max by (instance, role)(mqlab_log_{metric}{{qm="{qm}"}})'
+
+
+def _log_disk_pct_expr(qm: str) -> str:
+    """LogPath filesystem fill %, per instance+role. used/total share an identical label set,
+    so grouping both `by (instance, role)` matches them 1:1."""
+    used = f'max by (instance, role)(mqlab_log_disk_used_bytes{{qm="{qm}"}})'
+    total = f'max by (instance, role)(mqlab_log_disk_total_bytes{{qm="{qm}"}})'
+    return f"100 * {used} / {total}"
+
+
+def _log_health_band(ds_uid: str, qm: str, y: int, loki_uid: str = "loki") -> list[dict[str, Any]]:
+    """④ Native-HA log-health band — time-series-led and instance-aware (#811, spike #808).
+
+    Leads with the **reclaim-health story** (the spike headline: a monotonic extent rise with
+    0 reuse and a pinned MEDIALOG is the 'automation not reclaiming' pattern operators must
+    see): standard (S, in-use) vs reserved (R, recycled) extent counts over time, per instance.
+    Then LogPath disk % and the raw fill trend, all `by (instance, role)` so the active leads
+    but each replica's divergence is visible. Two slow gauges follow — media-image recency
+    (spike-gated: a coarse, forward-looking series that degrades to no-data) and collector
+    sample freshness — and finally the logger-event log (Channel A: amqsevt → journald →
+    Loki), scoped to the logger-event source. `qm` is a variable — no literal QM name."""
+    y2 = y + 7  # row B under the two lead trend panels (h=7)
+    y3 = y + 14  # the logger-event log row
+    return [
+        # Lead: the reclaim-health trend — S (standard/in-use) climbing with R (reserved)
+        # flat and no reuse is the automation-not-reclaiming signal (spike S2).
+        _timeseries(
+            "Log extents — reclaim health (S in-use · R reserved)",
+            [
+                _t(
+                    "A",
+                    _log_extents_expr("extents_active", qm),
+                    "{{instance}} · {{role}} · S in-use",
+                ),
+                _t(
+                    "B",
+                    _log_extents_expr("extents_inactive", qm),
+                    "{{instance}} · {{role}} · R reserved",
+                ),
+            ],
+            ds_uid,
+            0,
+            y,
+            w=12,
+            unit="short",
+        ),
+        _timeseries(
+            "Log disk % — LogPath filesystem",
+            [_t("A", _log_disk_pct_expr(qm), "{{instance}} · {{role}}")],
+            ds_uid,
+            12,
+            y,
+            w=12,
+            unit="percent",
+        ),
+        _timeseries(
+            "Log disk fill — bytes used",
+            [
+                _t(
+                    "A",
+                    f'max by (instance, role)(mqlab_log_disk_used_bytes{{qm="{qm}"}})',
+                    "{{instance}} · {{role}}",
+                )
+            ],
+            ds_uid,
+            0,
+            y2,
+            w=8,
+            unit="bytes",
+        ),
+        # Slow gauge (spike-gated): media-image recency degrades gracefully to no-data.
+        _stat(
+            "Media-image recency (slow)",
+            f'max(mqlab_log_media_image_age_seconds{{qm="{qm}"}}) or vector(-1)',
+            ds_uid,
+            8,
+            y2,
+            mappings=_MEDIA_RECENCY_MAP,
+            unit="dtdurations",
+            w=8,
+            h=7,
+            value_size=22,
+        ),
+        # Slow gauge: is any instance's filesystem sample stale (collector health)?
+        _stat(
+            "Collector sample",
+            f'max(mqlab_log_sample_stale{{qm="{qm}"}}) or vector(-1)',
+            ds_uid,
+            16,
+            y2,
+            mappings=_SAMPLE_FRESHNESS_MAP,
+            w=8,
+            h=7,
+            value_size=22,
+        ),
+        # Channel A: the logger events themselves (one per extent roll) — extent watermarks,
+        # media-log extent, logPath. Scoped to the logger-event source (exact, no queueMgrName
+        # padding gotcha — spike S2).
+        _events_panel(
+            loki_uid,
+            f"▤ {qm} — logger events (extent lifecycle)",
+            'eventSource_objectName="SYSTEM.ADMIN.LOGGER.EVENT"',
+            y3,
+        ),
+    ]
+
+
 def _title_banner(name: str, app_qm: str, y: int) -> dict[str, Any]:
     content = f"## Queue Manager · {name} · {app_qm} — health · critical queues · channels (trends)"
     return {
@@ -408,6 +556,19 @@ def render_qm_board(
             )
         )
         y += 8
+
+    # ④ Native-HA log-health band (#811): only the Native HA arms run the loglifecycle
+    # collector, so the band is gated on mechanism — a pcmk/rdqm/single board must not show
+    # empty mqlab_log_* panels for a collector that isn't deployed there.
+    if cfg.get("mechanism") == "native-ha":
+        panels.append(
+            _row_header(
+                "④ Log health (Native HA) — reclaim · disk · extents · media · logger events", y
+            )
+        )
+        y += 1
+        panels.extend(_log_health_band(ds_uid, app_qm, y, loki_uid=loki_uid))
+        y += 22  # two trend rows (7+7) + logger-event log (8)
 
     return {
         "uid": qm_board_uid(short),
