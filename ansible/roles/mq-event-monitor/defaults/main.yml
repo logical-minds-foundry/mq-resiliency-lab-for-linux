@@ -27,6 +27,13 @@ mq_event_sleep_secs: 10
 # forever. Order ~30min; comfortably clears the ~29s reap while still surfacing a real wedge.
 mq_event_open_retry_secs: 1800
 
+# Log type this arm's QM runs. Native HA arms override to 'replicated' (a linear-
+# equivalent log, per IBM — automatic log management on a replicated log); everything
+# else is circular. Drives LOGGEREV, which is only valid on a linear/replicated QM
+# (#721 / #145 / #809). The declared value is checked against the live QM's actual
+# LogType (read from qm.ini) before any ALTER, and drift fails loud.
+mq_log_type: circular
+
 # Application queues that should emit performance events (queue depth high / full).
 # Empty by default: PERFMEV is enabled at the QMGR, but per-queue QDPMAXEV/QDPHIEV
 # thresholds only make sense on real app queues, so each arm sets its own list at the
