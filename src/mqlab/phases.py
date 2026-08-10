@@ -37,7 +37,7 @@ import yaml
 from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
 from mqlab.orchestrator import CommandStep
-from mqlab.paths import repo_root
+from mqlab.paths import lab_script, repo_root
 from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
@@ -45,9 +45,6 @@ from mqlab.stacks import Stack, stack_members
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-# virsh, run as the lab host operator (mirrors cli.py's _VIRSH).
-_VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
 @dataclass(frozen=True)
@@ -182,19 +179,26 @@ def _qm_extra_vars(stack: Stack) -> list[str]:
 # net phase
 # --------------------------------------------------------------------------- #
 def _net_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
-    """Define, autostart, and start every lab network the stack needs.
+    """Define, autostart, and start every lab network the stack needs — idempotently.
 
     The lab's networks are global (lab/networks/net-*.xml), shared across stacks;
-    a stack needs them all up. Each gets the same define/autostart/start triple
-    the old `net create` path used, built from virsh primitives.
+    a stack needs them all up. This delegates to the already-idempotent
+    `lab/scripts/net-up.sh`, which defines a network only if it is absent and starts
+    it only if it is not already active (net-autostart is idempotent). Single-sourcing
+    the bring-up here fixes #974: a bare per-net `virsh net-define`/`net-start` triple
+    FAILS on an already-existing / already-active network, so after a base-VM reboot
+    (the lab networks persist, active) `bootstrap <stack>` would wedge at the net
+    phase. net-up.sh takes the net names as args and tolerates shared / pre-existing
+    networks (e.g. net-mgmt held up by a running commons) rather than tearing them
+    down. Emitted as a single step so build_steps stays pure — the idempotent probing
+    happens when the runner executes the script.
     """
-    steps: list[CommandStep] = []
-    for net in lab_net_names():
-        xml = repo_root() / "lab" / "networks" / f"{net}.xml"
-        steps.append(CommandStep(f"{net} define", Command([*_VIRSH, "net-define", str(xml)])))
-        steps.append(CommandStep(f"{net} autostart", Command([*_VIRSH, "net-autostart", net])))
-        steps.append(CommandStep(f"{net} start", Command([*_VIRSH, "net-start", net])))
-    return steps
+    return [
+        CommandStep(
+            "networks up",
+            Command(["bash", str(lab_script("net-up.sh")), *lab_net_names()]),  # noqa: S607
+        )
+    ]
 
 
 def _net_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG001
