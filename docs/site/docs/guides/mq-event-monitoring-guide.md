@@ -37,7 +37,10 @@
   `docs/reports/assets/110-mq-event-captures/`.
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md) — the
   complementary *log* stream (why something happened) to this *event* stream
-  (what the queue manager did)
+  (what the queue manager did);
+  [Native HA log lifecycle (runbook)](nativeha-log-lifecycle-guide.md) — reads the
+  recovery-log **`LOGGEREV`** events this guide enables, and is where the
+  linear/replicated-only constraint below is worked through in operational depth
 
 ---
 
@@ -121,7 +124,10 @@ ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) +
 **linear-logging** queue manager; on a circular-logging one MQ raises `AMQ8518E`
 and — because `ALTER QMGR` is atomic — **rejects the whole statement**, leaving no
 classes enabled. Add `LOGGEREV(ENABLED)` only where the queue manager uses linear
-logging.
+logging (a Native HA queue manager's **replicated** log is linear-family and
+accepts it — see the
+[Native HA log-lifecycle runbook](nativeha-log-lifecycle-guide.md), which reads
+the resulting logger-event feed).
 
 **Step 2 — set the per-queue thresholds performance events need.** `PERFMEV` at
 the queue-manager level emits nothing on its own; queue-depth events fire only
@@ -228,9 +234,17 @@ properties are why it exists rather than putting `amqsevt` inline:
     (separate from the diagnostic-log stream), and the Grafana boards carry a
     per-object events panel — the queue-manager board shows every event for the
     queue manager, and each queue and channel shows the events for that specific
-    object, filtered on `eventSource.objectName`. The end-to-end design and the
-    lab-specific wiring are recorded in the event-monitoring epic spec
-    (`logical-minds-foundry/.github`, `epics/31-event-monitoring/spec.md`).
+    object, filtered on `eventSource.objectName`. The `LOGGEREV` class is applied
+    **log-type-aware** across the fleet: each arm declares its log type, the role
+    verifies that declaration against the live `qm.ini` `LogType` (failing loud on
+    drift), then emits `LOGGEREV(ENABLED)` on the Native HA (replicated) arms and an
+    explicit, accepted `LOGGEREV(DISABLED)` on the circular arms — a verified
+    negative, not an untested omission (`logical-minds-foundry/.github#145`, task
+    #809; the resulting logger-event feed is read in the
+    [Native HA log-lifecycle runbook](nativeha-log-lifecycle-guide.md)). The
+    end-to-end design and the lab-specific wiring are recorded in the
+    event-monitoring epic spec (`logical-minds-foundry/.github`,
+    `epics/31-event-monitoring/spec.md`).
 
 ## Appendix A: Event-class reference
 
