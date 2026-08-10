@@ -25,14 +25,19 @@ HYPERVISOR_MGMT_IP = "10.50.0.1"  # the Vergil VM (libvirt host) on net-mgmt
 # --- MQ exporter (#423) -------------------------------------------------------
 # The mq_prometheus exporters run on mon-probe, client-mode, one app + one svc
 # instance per stack on the stack's alloc ports. The exporter reaches each app QM
-# the SAME way the app does: the arm's data-plane VIP where it has one, else the
-# Native HA site-A instances' data-plane addresses as a CONNAME list (no VIP).
+# over the management plane: the arm's data-plane VIP where it has one, else the
+# Native HA site-A instances' MGMT-plane addresses as a CONNAME list (no VIP).
 MQ_LISTENER_PORT = 1414
 MON_CHANNEL = "MON.SVRCONN"  # dedicated ops SVRCONN the exporter presents O=app-org on (#250)
 # The SVC counterparty is a single shared QM (SVCQM) on svc-sim; it is scraped once,
 # from the top-level `svc:` block — not one per stack (#446). See _svc_exporter_instance.
 PROBE_GROUP = "probe"
-EXPORTER_DATA_NET = "net-data-a"  # the plane mon-probe reaches site-A QMs on (VIPs live here)
+# Monitoring is MANAGEMENT traffic, so the no-VIP (Native HA) exporter conn rides the
+# net-mgmt plane — NOT the net-data-a *replication* plane, which is for Native HA raft
+# log traffic and is not a client path from mon-probe (#975). Every QM node and
+# mon-probe carries a net-mgmt nic, so this is always reachable. (VIP arms are
+# unaffected: they connect on cfg.qm.vip, set on the data plane, not via this net.)
+EXPORTER_CONN_NET = "net-mgmt"
 
 
 class ScrapeError(RuntimeError):
@@ -94,9 +99,10 @@ def _probe_mgmt_ip(topo: dict[str, Any]) -> str:
 
 
 def _app_qm_conn(topo: dict[str, Any], name: str, cfg: dict[str, Any]) -> str:
-    """The client CONNAME(s) the exporter uses to reach a stack's app QM — reached the
-    same way the app reaches it: the arm's VIP when it has one, else the Native HA
-    site-A instances' data-plane addresses as a CONNAME list (no VIP)."""
+    """The client CONNAME(s) the exporter uses to reach a stack's app QM: the arm's
+    VIP when it has one, else — for a no-VIP Native HA stack — the site-A instances'
+    MGMT-plane addresses as a CONNAME list. Monitoring is management traffic, so the
+    no-VIP path rides net-mgmt, never the net-data-a replication plane (#975)."""
     vip = (cfg.get("qm") or {}).get("vip")
     if vip:
         return f"{vip}({MQ_LISTENER_PORT})"
@@ -109,9 +115,9 @@ def _app_qm_conn(topo: dict[str, Any], name: str, cfg: dict[str, Any]) -> str:
     nodes = topo.get("nodes") or {}
     conns = []
     for h in hosts:
-        ip = ((nodes.get(h) or {}).get("nics") or {}).get(EXPORTER_DATA_NET)
+        ip = ((nodes.get(h) or {}).get("nics") or {}).get(EXPORTER_CONN_NET)
         if not ip:
-            raise ScrapeError(f"host {h} has no {EXPORTER_DATA_NET} IP for an exporter conn")
+            raise ScrapeError(f"host {h} has no {EXPORTER_CONN_NET} IP for an exporter conn")
         conns.append(f"{ip}({MQ_LISTENER_PORT})")
     return ",".join(conns)
 

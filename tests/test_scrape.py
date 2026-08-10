@@ -69,14 +69,16 @@ def test_missing_mgmt_ip_raises():
 # --- MQ exporter / ibmmq scrape (#423) ---------------------------------------
 
 # A minimal per-stack topology: a VIP arm (pcmk), a VIP-less Native HA arm (whose
-# app conn is its site-A instances' data-plane IPs), and a reserved stack with no
-# alloc ports (skipped).
+# app conn is its site-A instances' MGMT-plane IPs — monitoring is management
+# traffic, #975), and a reserved stack with no alloc ports (skipped). The Native
+# HA nodes carry BOTH a net-mgmt and a net-data-a nic so the tests can assert the
+# exporter conn rides mgmt and never the data-a replication plane.
 MQ_TOPO = {
     "nodes": {
         "mon-probe": {"nics": {"net-mgmt": "10.50.0.3"}},
-        "nha-x-a1": {"nics": {"net-data-a": "10.10.1.11"}},
-        "nha-x-a2": {"nics": {"net-data-a": "10.10.1.12"}},
-        "nha-x-a3": {"nics": {"net-data-a": "10.10.1.13"}},
+        "nha-x-a1": {"nics": {"net-mgmt": "10.50.0.11", "net-data-a": "10.10.1.11"}},
+        "nha-x-a2": {"nics": {"net-mgmt": "10.50.0.12", "net-data-a": "10.10.1.12"}},
+        "nha-x-a3": {"nics": {"net-mgmt": "10.50.0.13", "net-data-a": "10.10.1.13"}},
     },
     "groups": {"probe": ["mon-probe"], "nha_x_a": ["nha-x-a1", "nha-x-a2", "nha-x-a3"]},
     "svc": {"short": "SVC", "conn": "10.60.0.50", "exporter_port": 9158},
@@ -162,8 +164,11 @@ def test_mq_exporter_app_conn_is_vip_or_native_ha_instance_list():
     # VIP arm: the app conn is the VIP; the single shared svc conn is svc-sim's address
     assert by_qm["PCMKAPP"]["conn"] == "10.10.1.200(1414)"
     assert by_qm["SVCQM"]["conn"] == "10.60.0.50(1414)"
-    # VIP-less Native HA: the app conn lists every site-A instance (data plane)
-    assert by_qm["NHAXAPP"]["conn"] == "10.10.1.11(1414),10.10.1.12(1414),10.10.1.13(1414)"
+    # VIP-less Native HA: the app conn lists every site-A instance over the MGMT plane
+    # — monitoring is management traffic, never the data-a replication plane (#975).
+    assert by_qm["NHAXAPP"]["conn"] == "10.50.0.11(1414),10.50.0.12(1414),10.50.0.13(1414)"
+    # and it must NOT ride any data-a replication IP
+    assert "10.10.1." not in by_qm["NHAXAPP"]["conn"]
 
 
 def test_render_mq_scrape_targets_file_sd_on_the_probe():
@@ -203,7 +208,7 @@ def test_app_conn_without_vip_or_cluster_group_is_fail_loud():
         mq_exporter_instances(topo)
 
 
-def test_native_ha_conn_needs_data_plane_ips():
+def test_native_ha_conn_needs_mgmt_ips():
     from mqlab.scrape import mq_exporter_instances
 
     _ports = {"exporter_app_port": 1}
@@ -212,7 +217,7 @@ def test_native_ha_conn_needs_data_plane_ips():
         "groups": {"probe": ["mon-probe"], "g": ["n1"]},
         "stacks": {"s": {"short": "S", "cluster_group": "g", "qm": {}, "alloc": _ports}},
     }
-    with pytest.raises(ScrapeError, match="no net-data-a IP"):
+    with pytest.raises(ScrapeError, match="no net-mgmt IP"):
         mq_exporter_instances(topo)
 
 
