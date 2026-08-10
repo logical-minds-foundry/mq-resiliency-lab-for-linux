@@ -16,6 +16,22 @@
     dest: /usr/local/bin/lab-nativeha-state
     mode: "0755"
 
+# The log-health collector reuses nativehastate's dspmq role-detection, so drop
+# nativehastate.py alongside it as an importable module (the script above has no .py
+# extension and is not importable). Running lab-loglifecycle-state puts /usr/local/bin on
+# sys.path[0], so `import nativehastate` resolves to this file (#810).
+- name: deploy nativehastate as an importable sibling module (for loglifecycle)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/mqlab/nativehastate.py"
+    dest: /usr/local/bin/nativehastate.py
+    mode: "0644"
+
+- name: deploy the log-health collector (the tested mqlab module, verbatim)
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../src/mqlab/loglifecycle.py"
+    dest: /usr/local/bin/lab-loglifecycle-state
+    mode: "0755"
+
 - name: install service + timer
   ansible.builtin.template:
     src: "{{ item }}"
