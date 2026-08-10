@@ -16,6 +16,27 @@ def _git(mapping):
     return run
 
 
+def test_real_git_runs_relative_to_repo_root(monkeypatch):
+    # b._git must resolve git against repo_root(), NOT the process cwd — otherwise mqlab
+    # crashes as a root systemd service with cwd=/ ("not a git repository", #989).
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        captured["cwd"] = kwargs.get("cwd")
+
+        class _Result:
+            stdout = "  /repo/.git  \n"
+
+        return _Result()
+
+    monkeypatch.setattr(b, "repo_root", lambda: Path("/repo"))
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    assert b._git(["git", "rev-parse", "--git-dir"]) == "/repo/.git"
+    assert captured["cwd"] == Path("/repo")
+    assert captured["args"] == ["git", "rev-parse", "--git-dir"]
+
+
 def test_is_worktree_true_when_dirs_differ():
     run = _git(
         {
