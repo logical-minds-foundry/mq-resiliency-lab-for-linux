@@ -5,7 +5,10 @@
 - **Last validated in lab:** 2026-07-06
 - **Related guides:** [Instrumentation event monitoring](mq-event-monitoring-guide.md)
   — the complementary *event* stream (what the queue manager did) to this *log*
-  stream (why); a log-shipping pipeline guide is planned
+  stream (why);
+  [Native HA log lifecycle (runbook)](nativeha-log-lifecycle-guide.md) — reads the
+  recovery-log diagnostic lines (`AMQ7467I` / `AMQ7468I` / `AMQ7490I`) this JSON
+  feed carries; a log-shipping pipeline guide is planned
 
 ---
 
