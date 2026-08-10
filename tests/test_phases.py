@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from mqlab.orchestrator import CommandStep
+from mqlab.paths import lab_script
 from mqlab.phases import (
     _DEFAULT_BOOT_BATCH,
     _HOST_RESOLVED_BASE_BOX,
@@ -228,27 +229,27 @@ def test_vms_satisfied_when_all_running(monkeypatch, tmp_path):
 # --- build_steps: argv/label assertions for pcmk-ubuntu ---
 
 
-def test_net_build_steps_define_autostart_start(monkeypatch, tmp_path):
+def test_net_build_steps_delegates_to_idempotent_net_up(monkeypatch, tmp_path):
+    # The net phase must be idempotent: re-running it against already-existing /
+    # already-active networks (e.g. after a base-VM reboot) must NOT error (#974).
+    # Idempotency is single-sourced in lab/scripts/net-up.sh — which defines only if
+    # absent and starts only if not active — so the phase delegates to it rather than
+    # emitting a bare `virsh net-define`/`net-start` triple that fails on a
+    # pre-existing net. phases.py is pure, so we assert the delegation structurally.
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stack = lab_stacks()["pcmk-ubuntu"]
     steps = PHASES[0].build_steps(stack, None)
     assert all(isinstance(s, CommandStep) for s in steps)
-    by_label = {s.label: s for s in steps}
-    # each lab net gets define + autostart + start
-    assert "net-mgmt define" in by_label
-    assert "net-mgmt autostart" in by_label
-    assert "net-mgmt start" in by_label
-    assert "net-data-a define" in by_label
-    # the define step runs `virsh net-define <xml>`; autostart/start run net-autostart/net-start
-    assert by_label["net-mgmt define"].command.argv[:4] == [
-        "virsh",
-        "-c",
-        "qemu:///system",
-        "net-define",
-    ]
-    assert by_label["net-mgmt autostart"].command.argv[-2:] == ["net-autostart", "net-mgmt"]
-    assert by_label["net-mgmt start"].command.argv[-2:] == ["net-start", "net-mgmt"]
+    # one step that runs the idempotent script over every lab net (sorted names)
+    assert [s.label for s in steps] == ["networks up"]
+    argv = steps[0].command.argv
+    assert argv[0] == "bash"
+    assert argv[1] == str(lab_script("net-up.sh"))
+    # the lab nets are passed as args, so net-up.sh acts on exactly the required set
+    assert argv[2:] == ["net-data-a", "net-mgmt"]
+    # the bug being fixed: NO bare unguarded net-define is emitted by the phase itself
+    assert "net-define" not in argv
 
 
 # The seeded topology's ordered VM list for pcmk-ubuntu: stack members (groups
