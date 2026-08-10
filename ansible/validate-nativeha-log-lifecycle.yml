@@ -1,0 +1,310 @@
+---
+# Live-lab induce-and-assert validation for the Native HA log-lifecycle observability band
+# (#812, epic logical-minds-foundry/.github#145, live-lab validation framework .github#38).
+#
+# This proves the WHOLE Tasks-2/3/4 chain end-to-end on a running Native HA arm: an induced
+# extent roll fires a logger event (#809 LOGGEREV, drained to journald by mq-event-monitor),
+# the non-MQI collector (#810) reflects the roll in its filesystem metrics, and the #809
+# declare-and-verify drift guardrail aborts LOUDLY when fed a wrong log-type declaration. It
+# is the Task-5 induce-and-assert playbook; the four checks map 1:1 to the epic plan:
+#
+#   INDUCE   drive persistent-message churn on the ACTIVE instance until a 32 MB extent rolls
+#            (spike #808 technique — one logger event per new-extent write). QM name is
+#            variable-driven (qm_app, default NHARAPP), never hardcoded.
+#   ASSERT-1 within a bounded window a "Logger Event" appears in journald (SYSLOG_IDENTIFIER
+#            mq-events, where the mq-event-monitor SERVICE's `logger` lands events); absent -> fail.
+#   ASSERT-2 the nha exporter (node_exporter textfile :9100) shows the extent/disk series MOVED
+#            on the active instance, and ALL THREE site-A instances report a FRESH (non-STALE)
+#            sample (mqlab_log_sample_stale == 0); otherwise -> fail.
+#   NEGATIVE run the #809 mq-event-monitor verify against a deliberately WRONG mq_log_type
+#            (circular, on the replicated QM) inside a block/rescue and assert the play ABORTS
+#            with the #809 "log-type drift" message — an assertion that never fires is a dead
+#            guardrail. The correct (replicated) declaration is restored afterward.
+#
+# Substrate facts (spike #808, applied forward):
+#   * DISPLAY QMGR LOGTYPE does NOT exist — the log type is authoritative in qm.ini; the extent
+#     watermark is authoritative via DISPLAY QMSTATUS CURRLOG (S<n>.LOG), which steps on each roll.
+#   * runmqsc only works on the ACTIVE instance (a replica rejects it AMQ8478E), so every MQSC/
+#     churn/journald task runs on the instance dspmq reports ROLE(Active); the log + events + the
+#     collector's metrics then appear on all three via raft replication.
+#
+# Correct-by-construction from the merged deps + spike; NOT run against the live lab here (the
+# currently-running arm predates Tasks 2/3 — a cold-rebuilt arm + live run is the separate
+# validation task #815). See the RUN block at the bottom.
+
+- name: Native HA log-lifecycle — induce an extent roll and assert the whole observability chain
+  hosts: nha_rhel_a
+  become: true
+  gather_facts: false
+  vars:
+    qm: "{{ qm_app | default('NHARAPP') }}" # supplied by the topology/phases (site-nativeha.yml)
+    churn_q: LOG.LIFECYCLE.CHURN # a throwaway persistent queue we create + destroy for the roll
+    amqsput_bin: /opt/mqm/samp/bin/amqsput
+    runmqsc_bin: /opt/mqm/bin/runmqsc
+    # journald identifier the mq-event-monitor SERVICE tags events with (mq_event_syslog_tag,
+    # role default 'mq-events'); events reach journald via `logger -t mq-events` (run.sh.j2).
+    event_tag: mq-events
+    node_exporter_url: http://localhost:9100/metrics
+    # Regexes use [{] [}] and [0-9] (not \{ \} \d) so no backslash-escaping is needed in YAML.
+    # Each host's :9100 carries exactly ONE line per metric (its own instance), so matching by
+    # metric name alone is unambiguous and sidesteps any nodename-vs-inventory_hostname mismatch.
+    _re_extents: 'mqlab_log_extents_active[{][^}]*[}] ([0-9]+)'
+    _re_disk: 'mqlab_log_disk_used_bytes[{][^}]*[}] ([0-9]+)'
+    _re_stale: 'mqlab_log_sample_stale[{][^}]*[}] ([0-9]+)'
+
+  tasks:
+    # ---------------------------------------------------------------- discover the active instance
+    # Match the per-instance detail line 'INSTANCE(<node>) ROLE(Active)' (not the local summary
+    # line), delegated to a1 so it resolves the active regardless of which instance answers (#722).
+    - name: find the active Native HA instance
+      ansible.builtin.shell: |
+        set -o pipefail
+        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm }} -o nativeha -x" \
+          | grep -oE 'INSTANCE\(nha-rhel-a[0-9]\) ROLE\(Active\)' \
+          | grep -oE 'nha-rhel-a[0-9]' | head -1 || true
+      args:
+        executable: /bin/bash
+      register: act
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ groups['nha_rhel_a'][0] }}"
+      until: act.stdout | trim | length > 0
+      retries: 30
+      delay: 5
+
+    - name: record the active host (broadcast to every host in the play)
+      ansible.builtin.set_fact:
+        active_host: "{{ act.stdout | trim }}"
+      run_once: true
+
+    # ---------------------------------------------------------------- baseline (on the active only)
+    - name: baseline — current log extent watermark (DISPLAY QMSTATUS CURRLOG)
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf 'DISPLAY QMSTATUS CURRLOG\n' | {{ runmqsc_bin }} {{ qm }} \
+          | grep -oE 'CURRLOG\([^)]*\)' | grep -oE 'S[0-9]+\.LOG' | head -1
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: mqm
+      register: baseline_currlog
+      changed_when: false
+      when: inventory_hostname == active_host
+
+    - name: baseline — timestamp the journal cursor (events since this instant are ours)
+      ansible.builtin.command: date '+%Y-%m-%d %H:%M:%S'
+      register: since_cmd
+      changed_when: false
+      when: inventory_hostname == active_host
+
+    - name: baseline — scrape the nha exporter on the active instance
+      ansible.builtin.uri:
+        url: "{{ node_exporter_url }}"
+        return_content: true
+      register: baseline_scrape
+      when: inventory_hostname == active_host
+
+    - name: baseline — record the active instance's pre-churn extent + disk figures
+      ansible.builtin.set_fact:
+        baseline_extents: "{{ (baseline_scrape.content | regex_findall(_re_extents) | first | default('0')) | int }}"
+        baseline_disk: "{{ (baseline_scrape.content | regex_findall(_re_disk) | first | default('0')) | int }}"
+        since_ts: "{{ since_cmd.stdout | trim }}"
+      when: inventory_hostname == active_host
+
+    # ---------------------------------------------------------------- INDUCE: roll a 32 MB extent
+    # Persistent-message churn on the active instance (spike #808): a throwaway DEFPSIST(YES) queue,
+    # 32 MB of persistent PUTs per iteration (fed to amqsput as ~4 KB lines from base64 /dev/urandom),
+    # CLEAR-ed each pass so depth never caps — the PUT log records already forced the extent writes.
+    # Loop until DISPLAY QMSTATUS CURRLOG advances past the baseline (proves >= one new-extent write,
+    # i.e. >= one logger event), bounded so a genuinely wedged log fails loud instead of looping.
+    - name: induce — churn persistent messages until an extent rolls (active instance)
+      ansible.builtin.shell: |
+        set -o pipefail
+        base='{{ baseline_currlog.stdout | trim }}'
+        printf 'DEFINE QLOCAL(%s) DEFPSIST(YES) MAXDEPTH(999999999) MAXMSGL(4194304) REPLACE\n' \
+          '{{ churn_q }}' | {{ runmqsc_bin }} {{ qm }} >/dev/null
+        for i in $(seq 1 30); do
+          base64 /dev/urandom | head -c 33554432 | fold -w 4096 \
+            | {{ amqsput_bin }} {{ churn_q }} {{ qm }} >/dev/null
+          printf 'CLEAR QLOCAL(%s)\n' '{{ churn_q }}' | {{ runmqsc_bin }} {{ qm }} >/dev/null
+          cur=$(printf 'DISPLAY QMSTATUS CURRLOG\n' | {{ runmqsc_bin }} {{ qm }} \
+            | grep -oE 'CURRLOG\([^)]*\)' | grep -oE 'S[0-9]+\.LOG' | head -1)
+          if [ "$cur" != "$base" ]; then
+            echo "ROLLED base=${base} cur=${cur} iterations=${i}"; exit 0
+          fi
+        done
+        echo "NOROLL base=${base}"; exit 1
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: mqm
+      register: churn
+      changed_when: "'ROLLED' in churn.stdout"
+      failed_when: churn.rc != 0 or 'ROLLED' not in churn.stdout
+      when: inventory_hostname == active_host
+
+    - name: induce — report the roll
+      ansible.builtin.debug:
+        msg: "extent roll induced on {{ active_host }}: {{ churn.stdout | trim }}"
+      when: inventory_hostname == active_host
+
+    # ---------------------------------------------------------------- ASSERT-1: logger event fired
+    # Poll journald on the active instance for a "Logger Event" emitted since our baseline cursor.
+    # The induced roll must have produced >= one; absent within the bounded window == the LOGGEREV
+    # enable (#809) or the mq-event-monitor drain (#514/.github#122) is broken.
+    - name: assert-1 — poll journald for the logger event within a bounded window
+      ansible.builtin.shell: |
+        set -o pipefail
+        journalctl -t {{ event_tag }} --since "{{ since_ts }}" -o cat 2>/dev/null \
+          | grep -c '"Logger Event"' || true
+      args:
+        executable: /bin/bash
+      register: logger_events
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: (logger_events.stdout | trim | int) > 0
+      when: inventory_hostname == active_host
+
+    - name: assert-1 — a logger event fired for the induced roll
+      ansible.builtin.assert:
+        that:
+          - (logger_events.stdout | trim | int) > 0
+        fail_msg: >-
+          No "Logger Event" reached journald (tag {{ event_tag }}) on {{ active_host }} within the
+          bounded window after an extent roll was induced. LOGGEREV may not be ENABLED on the
+          replicated QM (#809), or the mq-event-monitor drain is not running (#514/.github#122).
+        success_msg: >-
+          Logger event(s) observed in journald after the induced roll
+          ({{ logger_events.stdout | trim }} since {{ since_ts }}).
+      when: inventory_hostname == active_host
+
+    # ---------------------------------------------------------------- ASSERT-2: collector reflected it
+    # (a) the active instance's extent/disk series MOVED. Poll the exporter (the collector runs on the
+    #     5s nativeha-state timer, #810) until extents_active OR disk_used exceeds the baseline.
+    - name: assert-2a — poll the nha exporter until the active instance's series moved
+      ansible.builtin.uri:
+        url: "{{ node_exporter_url }}"
+        return_content: true
+      register: post_scrape
+      retries: 12
+      delay: 5
+      until: >-
+        ((post_scrape.content | regex_findall(_re_extents) | first | default('0')) | int) > (baseline_extents | int)
+        or ((post_scrape.content | regex_findall(_re_disk) | first | default('0')) | int) > (baseline_disk | int)
+      when: inventory_hostname == active_host
+
+    - name: assert-2a — the active instance's extent/disk metrics reflect the roll
+      ansible.builtin.assert:
+        that:
+          - >-
+            ((post_scrape.content | regex_findall(_re_extents) | first | default('0')) | int) > (baseline_extents | int)
+            or ((post_scrape.content | regex_findall(_re_disk) | first | default('0')) | int) > (baseline_disk | int)
+        fail_msg: >-
+          The nha exporter on {{ active_host }} did not reflect the induced roll:
+          extents_active {{ baseline_extents }} -> {{ post_scrape.content | regex_findall(_re_extents) | first | default('?') }},
+          disk_used {{ baseline_disk }} -> {{ post_scrape.content | regex_findall(_re_disk) | first | default('?') }}.
+          The loglifecycle collector (#810) may not be running on the 5s timer, or the roll did not land.
+        success_msg: >-
+          Collector reflected the roll on {{ active_host }}:
+          extents_active {{ baseline_extents }} -> {{ post_scrape.content | regex_findall(_re_extents) | first | default('?') }},
+          disk_used {{ baseline_disk }} -> {{ post_scrape.content | regex_findall(_re_disk) | first | default('?') }} bytes.
+      when: inventory_hostname == active_host
+
+    # (b) ALL THREE site-A instances report a FRESH (non-STALE) sample. Runs on every host in the
+    #     play (no active-guard): each scrapes its own :9100, whose single mqlab_log_sample_stale
+    #     line must read 0 — a STALE (1) sample anywhere means that node's filesystem probe timed out.
+    - name: assert-2b — scrape this instance's own exporter (all three)
+      ansible.builtin.uri:
+        url: "{{ node_exporter_url }}"
+        return_content: true
+      register: fresh_scrape
+      retries: 6
+      delay: 5
+      until: (fresh_scrape.content | regex_findall(_re_stale) | first | default('1')) is match('0')
+
+    - name: assert-2b — this instance reports a fresh (non-STALE) log sample
+      ansible.builtin.assert:
+        that:
+          - (fresh_scrape.content | regex_findall(_re_stale) | length) > 0
+          - (fresh_scrape.content | regex_findall(_re_stale) | first) == '0'
+        fail_msg: >-
+          {{ inventory_hostname }} reports a STALE (or missing) log sample: mqlab_log_sample_stale
+          = {{ fresh_scrape.content | regex_findall(_re_stale) | first | default('(absent)') }}.
+          The loglifecycle collector's filesystem probe timed out or is not deployed here (#810).
+        success_msg: "{{ inventory_hostname }} reports mqlab_log_sample_stale=0 (fresh)."
+
+    # ---------------------------------------------------------------- NEGATIVE PATH: drift guardrail
+    # Feed the #809 declare-and-verify the WRONG log type (circular) on the replicated QM. Its first
+    # act reads qm.ini's real LogType (REPLICATED) and asserts the declaration matches — so it MUST
+    # abort with "log-type drift" BEFORE emitting any ALTER (nothing is changed). We catch that abort
+    # in rescue and assert the failure IS the drift guardrail (not some unrelated error — a rescue
+    # that passes on any failure is itself a dead guardrail). Active instance only.
+    - name: negative path — the #809 drift guardrail must fire on a wrong declaration
+      when: inventory_hostname == active_host
+      block:
+        - name: negative path — run the #809 verify with a deliberately wrong mq_log_type
+          ansible.builtin.include_role:
+            name: mq-event-monitor
+            tasks_from: service
+          vars:
+            qmgr_name: "{{ qm }}"
+            mq_log_type: circular # WRONG: this QM runs a replicated log — the verify must reject it
+
+        - name: negative path — reached here means the guardrail did NOT fire (fail loud)
+          ansible.builtin.fail:
+            msg: >-
+              The #809 declare-and-verify did NOT abort on mq_log_type=circular vs the live
+              REPLICATED QM {{ qm }} — the drift guardrail is DEAD. LOGGEREV would be set wrong.
+      rescue:
+        - name: negative path — assert the abort was the #809 drift guardrail (not an unrelated error)
+          ansible.builtin.assert:
+            that:
+              - "'drift' in (ansible_failed_result.msg | default('') | lower)"
+            fail_msg: >-
+              A failure occurred on the wrong-declaration run, but NOT the #809 drift guardrail:
+              {{ ansible_failed_result.msg | default('(no message)') }}. The guardrail cannot be
+              confirmed — treat as a failure.
+            success_msg: >-
+              Drift guardrail fired as expected: the #809 verify refused mq_log_type=circular against
+              the live REPLICATED {{ qm }} and aborted before any ALTER.
+
+    # Restore the correct declaration. The guardrail aborted before any ALTER so nothing changed, but
+    # re-running the verify with the true log type re-asserts LOGGEREV(ENABLED) and leaves the arm
+    # in its correct, verified state.
+    - name: negative path — restore the correct (replicated) declaration
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+        tasks_from: service
+      vars:
+        qmgr_name: "{{ qm }}"
+        mq_log_type: replicated
+      when: inventory_hostname == active_host
+
+    # ---------------------------------------------------------------- cleanup: drop the churn queue
+    - name: cleanup — clear + delete the throwaway churn queue (leave the arm clean)
+      ansible.builtin.shell: |
+        set -o pipefail
+        printf 'CLEAR QLOCAL(%s)\nDELETE QLOCAL(%s) PURGE\n' '{{ churn_q }}' '{{ churn_q }}' \
+          | {{ runmqsc_bin }} {{ qm }}
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: mqm
+      register: churn_cleanup
+      changed_when: "'AMQ8459' in churn_cleanup.stdout or 'AMQ8460' in churn_cleanup.stdout"
+      failed_when: false # best-effort teardown; the queue may already be gone on a re-run
+      when: inventory_hostname == active_host
+
+# ============================================================================
+# RUN (live, from a worktree — this is validation task #815's job, NOT this PR's):
+#
+#   INV=../build/work/inventory.ini
+#   # Full induce-and-assert against the ACTIVE site-A instance (QM auto-discovered):
+#   ansible-playbook -i $INV validate-nativeha-log-lifecycle.yml -e qm_app=NHARAPP
+#
+# Preconditions (why this needs the cold-rebuilt arm, #815): LOGGEREV enabled on the replicated
+# QM (#809), the mq-event-monitor SERVICE draining to journald (#514/.github#122), and the
+# loglifecycle collector on the nativeha-state 5s timer emitting to node_exporter :9100 (#810) —
+# all three are the merged deps this playbook asserts, none present on the pre-Tasks-2/3 arm.
+# ============================================================================
