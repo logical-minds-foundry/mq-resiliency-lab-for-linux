@@ -1,15 +1,15 @@
 [Unit]
-Description=Heal the Grafana port-forward relay if wedged (#946)
+Description=Heal the Grafana port-forward relay if wedged (#984)
 
 [Service]
 Type=oneshot
-# Call mqlab by absolute path — root's minimal PATH has neither `uv` nor mqlab.
-# `mqlab_bin` is the host-runnable console script the observe phase passes in
-# (phases._host_mqlab). MQLAB_REPO_ROOT lets mqlab resolve build/ for its transcript.
-# `obs relay-heal` probes the workstation-facing forward and restarts the relay ONLY
-# when it is wedged (the accept-then-reset fd leak that builds up under sustained use;
-# upstream fix vergil-tooling#2603) — a healthy relay is left alone so live Grafana
-# sessions are not dropped. A non-zero exit (still wedged after a restart) fails the
-# unit loudly; the timer re-fires on the next interval.
-Environment=MQLAB_REPO_ROOT={{ repo_root }}
-ExecStart={{ mqlab_bin }} obs relay-heal
+# Standalone healer — no mqlab / uv / venv. relay-heal.sh needs only bash + curl + systemctl,
+# which root's minimal PATH has. (Was `ExecStart=<mqlab> obs relay-heal`, which required a
+# host-runnable mqlab console script on a minimal-PATH root service; _host_mqlab resolved the
+# venv python symlink back to a nonexistent /usr/bin/mqlab, so the unit died status=203/EXEC
+# — #984.) The script probes the workstation-facing forward and restarts the relay ONLY when
+# it is wedged (the accept-then-reset fd leak under sustained use; durable upstream fix
+# vergil-project/vergil-vm#298) — a healthy relay is left alone so live Grafana sessions are
+# not dropped. A non-zero exit (still wedged after a restart) fails the unit loudly; the timer
+# re-fires on the next interval.
+ExecStart=/usr/bin/env bash {{ repo_root }}/lab/scripts/relay-heal.sh

@@ -688,7 +688,9 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     # beside the interpreter driving this bootstrap — the host venv's own mqlab.
     mqlab_bin = next(a for a in host_argv if a.startswith("mqlab_bin="))
     assert host_argv[host_argv.index(mqlab_bin) - 1] == "-e"
-    assert mqlab_bin == f"mqlab_bin={Path(sys.executable).resolve().parent / 'mqlab'}"
+    # NOT .resolve(): resolving the .venv/bin/python3 symlink lands on the base
+    # interpreter and the sibling becomes a nonexistent /usr/bin/mqlab (203/EXEC, #984).
+    assert mqlab_bin == f"mqlab_bin={Path(sys.executable).parent / 'mqlab'}"
     obs_argv = next(a for a in playbooks if a[1] == "observability.yml")
     # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
     # nodes (cluster + commons) — a cluster node + a commons node both appear.
