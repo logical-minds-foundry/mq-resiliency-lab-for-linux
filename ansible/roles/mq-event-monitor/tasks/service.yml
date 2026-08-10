@@ -10,14 +10,56 @@
 # enabled — #721). A must-apply command that fails now fails loudly, and the collector's
 # RUNNING state is proven, not assumed.
 
-# LOGGEREV(ENABLED) dropped from the class list: it is only valid on a linear-logging queue
-# manager, and this lab is circular-logging everywhere — ALTER QMGR ... LOGGEREV(ENABLED)
-# is rejected WHOLESALE (AMQ8518E) and NO class applies. Revisit only if linear logging is
-# ever adopted. A clean ALTER of the remaining 11 classes returns rc 0 + AMQ8005I.
-- name: enable instrumentation events (#514)
+# LOGGEREV is now LOG-TYPE-AWARE via declare-and-verify (#809, epic .github#145), resolving the
+# #721 note. LOGGEREV is only valid on a linear/replicated-logging queue manager; the arm DECLARES
+# its log type (mq_log_type, default circular; Native HA arms declare replicated) and the two steps
+# below (1) VERIFY the declaration against the live QM's actual LogType read from qm.ini — the
+# authority — failing loud on drift, then (2) emit LOGGEREV(ENABLED) on replicated arms and an
+# explicit LOGGEREV(DISABLED) on circular arms. Both are ACCEPTED (spike #808: on a circular QM,
+# LOGGEREV(ENABLED) is rejected wholesale with AMQ8518E, but LOGGEREV(DISABLED) is accepted as an
+# AMQ8005I no-op) — so a single must-apply ALTER carries a LOGGEREV clause on EVERY arm and the
+# circular branch is a VERIFIED NEGATIVE, not an untested omission. (DISPLAY QMGR LOGTYPE does not
+# exist — it is a syntax error, AMQ8405I; the log type lives only in qm.ini's Log: stanza.)
+#
+# The live QM's qm.ini is the authority; the declaration is checked against it, never trusted over
+# it. This slurp runs on the active instance (Native HA replicates qm.ini to every node).
+- name: read the live queue manager's actual log type from qm.ini (#809)
+  ansible.builtin.slurp:
+    src: "/var/mqm/qmgrs/{{ qmgr_name }}/qm.ini"
+  become: true
+  become_user: mqm
+  register: qm_ini
+
+- name: extract the actual LogType from the qm.ini Log stanza (#809)
+  ansible.builtin.set_fact:
+    _qm_actual_logtype: >-
+      {{ (qm_ini.content | b64decode
+          | regex_search('(?im)^[ \t]*LogType[ \t]*=[ \t]*(\w+)', '\1')
+          | default([], true) | first | default('')) | upper }}
+
+- name: assert the declared log type matches the live QM's qm.ini — fail loud on drift (#809)
+  ansible.builtin.assert:
+    that:
+      - _qm_actual_logtype | length > 0
+      - >-
+        (mq_log_type == 'replicated' and _qm_actual_logtype == 'REPLICATED')
+        or (mq_log_type == 'circular' and _qm_actual_logtype == 'CIRCULAR')
+    fail_msg: >-
+      Declared mq_log_type={{ mq_log_type }} but the live QM {{ qmgr_name }} reports
+      LogType={{ _qm_actual_logtype | default('(unreadable)') }} in qm.ini — log-type drift;
+      refusing to proceed (LOGGEREV would be wrong for the real log type).
+    success_msg: >-
+      Log type verified: declared mq_log_type={{ mq_log_type }} matches qm.ini
+      LogType={{ _qm_actual_logtype }}.
+    quiet: true
+
+# One must-apply ALTER for all 12 classes. The LOGGEREV clause is chosen from the (now verified)
+# log type: ENABLED on replicated/linear (valid), DISABLED on circular (accepted no-op, the verified
+# negative). Both return AMQ8005I, so the must-apply assertion below is uniform across arms.
+- name: enable instrumentation events (log-type-aware LOGGEREV) (#514/#809)
   ansible.builtin.shell: |
     set -o pipefail
-    printf "ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) CMDEV(NODISPLAY)\n" \
+    printf "ALTER QMGR AUTHOREV(ENABLED) CHADEV(ENABLED) CHLEV(ENABLED) CONFIGEV(ENABLED) INHIBTEV(ENABLED) LOCALEV(ENABLED) PERFMEV(ENABLED) REMOTEEV(ENABLED) SSLEV(ENABLED) STRSTPEV(ENABLED) {{ 'LOGGEREV(ENABLED)' if mq_log_type == 'replicated' else 'LOGGEREV(DISABLED)' }} CMDEV(NODISPLAY)\n" \
       | /opt/mqm/bin/runmqsc {{ qmgr_name }}
   args:
     executable: /bin/bash
