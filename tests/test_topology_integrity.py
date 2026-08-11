@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from mqlab.inventory import lab_inventory
 from mqlab.roster import lab_roster
-from mqlab.stacks import lab_stacks
+from mqlab.stacks import (
+    lab_stacks,
+    stack_dr_hosts,
+    stack_members,
+    stack_members_effective,
+)
 
 
 def _lab_groups() -> dict[str, list[str]]:
@@ -126,6 +131,28 @@ def test_rdqm_stack_composed():
     assert s.qm.req_queue == "RDQM.SVC.REQUEST"
     assert s.qm.svc_conn == "10.60.0.50"
     assert "mqweb_admin_password" in s.secrets
+
+
+def test_rdqm_rhel_declares_its_dr_groups():
+    # #188: the dr_groups marker names the DR (site-B) group `bootstrap --no-dr` skips.
+    # Its presence is the signal that this stack supports HA-only bring-up.
+    assert lab_stacks()["rdqm-rhel"].dr_groups == ["rdqm_b"]
+
+
+def test_rdqm_rhel_dr_hosts_are_site_b():
+    # #188: the dr_groups marker resolves to exactly the three site-B guests.
+    assert stack_dr_hosts("rdqm-rhel") == ["rdqm-b1", "rdqm-b2", "rdqm-b3"]
+
+
+def test_rdqm_rhel_effective_members_drop_site_b_under_no_dr():
+    # #188: --no-dr brings up the site-A members only; a full bootstrap is unchanged.
+    full = stack_members("rdqm-rhel")
+    assert full is not None
+    effective = stack_members_effective("rdqm-rhel", no_dr=True)
+    assert effective is not None
+    assert effective == [m for m in full if not m.startswith("rdqm-b")]
+    assert "rdqm-b1" not in effective
+    assert stack_members_effective("rdqm-rhel", no_dr=False) == full
 
 
 def test_logsearch_node_present_and_mgmt_only():
