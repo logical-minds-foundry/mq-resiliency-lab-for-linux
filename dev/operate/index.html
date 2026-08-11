@@ -1490,7 +1490,12 @@ hardcoded (<code>{short}APP</code> / <code>{short}SVC</code>).</p>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>mqlab<span class="w"> </span>status<span class="w">                      </span><span class="c1"># topology joined with live virsh state</span>
 </code></pre></div>
 <p><code>mqlab bootstrap</code> runs from the first unsatisfied phase, so a re-run resumes;
-<code>--from &lt;phase&gt;</code> / <code>--only &lt;phase&gt;</code> force or narrow it. Observability comes up
+<code>--from &lt;phase&gt;</code> / <code>--only &lt;phase&gt;</code> force or narrow it. <code>--no-dr</code> brings up the
+<strong>HA site only</strong> — it skips the stack's DR-site guests (its <code>dr_groups</code>) and the
+DR provisioning for a lighter footprint under load, and is stateless (re-run
+without it to add DR over the live HA site). For the Pacemaker/SAN stack the
+shared-storage peer stays up to keep its DRBD mirror intact, so <code>--no-dr</code> there
+drops the DR <em>cluster</em> nodes rather than the whole of site B. Observability comes up
 with <code>mqlab commons up</code> (it provisions the <code>obs</code> guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 <code>mqlab teardown &lt;stack&gt;</code> (shared commons are reclaimed when the last stack exits).</p>
