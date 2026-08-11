@@ -38,9 +38,7 @@ vergil = "v2.1"
 #   - instances.cloud : a native-x86 GCP host (driver=kvm, escapes the TCG tax)
 # Run them with `vrg-vm <verb> --name local` / `--name cloud`. They are independent
 # boxes (own state, volume, fingerprint) and may run simultaneously (vergil-vm#242).
-# NOTE: a bare `vrg-vm <verb>` (no --name) builds a THIRD, unnamed default box from
-# this base alone — always pass --name local|cloud.
-cpus   = 12                   # local/Lima sizing; the cloud instance overrides these to match its `instance` machine type (#405)
+cpus   = 24                   # local/Lima sizing — doubled from 12 (#991): full-lab load hit ~71% CPU steal and Native HA couldn't hold quorum; the Mac's main job right now is this lab. The cloud instance overrides these to match its `instance` machine type (#405)
 memory = "64GiB"
 # nested KVM (vergil-vm#131): /dev/kvm for the nested lab guests. Native KVM on the
 # x86 cloud host; the arm64 Mac falls back to TCG unless macOS 15+ on M3+.
