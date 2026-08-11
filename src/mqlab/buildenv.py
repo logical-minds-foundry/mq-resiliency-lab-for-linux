@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mqlab.paths import repo_root
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -35,8 +37,15 @@ class BuildEnvError(RuntimeError):
     """build/ cannot be characterised or wired."""
 
 
-def _git(args: list[str]) -> str:  # pragma: no cover - real git subprocess (injected in tests)
-    return subprocess.run(args, capture_output=True, text=True, check=True).stdout.strip()  # noqa: S603
+def _git(args: list[str]) -> str:
+    # Run relative to the repo root, NOT the process cwd. mqlab also runs as a root systemd
+    # service with cwd=/ (e.g. lab-net-state), where a cwd-relative `git rev-parse` exits 128
+    # ("not a git repository") and crashes the command (#989). repo_root() is cwd-independent
+    # (MQLAB_REPO_ROOT / a walk from __file__), so git always resolves the real checkout — the
+    # buildenv sibling of the #984 _host_mqlab fix.
+    return subprocess.run(  # noqa: S603
+        args, capture_output=True, text=True, check=True, cwd=repo_root()
+    ).stdout.strip()
 
 
 def is_worktree(*, run: Callable[[list[str]], str] = _git) -> bool:
