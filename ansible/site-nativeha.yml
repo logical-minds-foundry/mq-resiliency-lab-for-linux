@@ -158,4 +158,8 @@
     app_conn: "nha-rhel-a1-data-a.client.com(1414),nha-rhel-a2-data-a.client.com(1414),nha-rhel-a3-data-a.client.com(1414)"
     app_tls: true
 
+# Skip the DR (CRR) replication half entirely under `bootstrap --no-dr` (#188): with
+# no site-B up there is nothing to replicate to. Default (dr_enabled unset → true) runs
+# it, so the full HADR provision is unchanged.
 - import_playbook: _nativeha-dr-replication.yml
+  when: dr_enabled | default(true) | bool

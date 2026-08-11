@@ -441,6 +441,7 @@ stacks:
     short: NHAR
     cluster_group: nha_rhel_a
     groups: [nha_rhel_a, nha_rhel_b]
+    dr_groups: [nha_rhel_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
     qm: {}
