@@ -17,7 +17,12 @@
 # supplied below — matching topology.yaml's rdqm-rhel qm: block — so the phase
 # stays pure and setup_dict (the #356 regression) is never referenced.
 - import_playbook: _rdqm-cluster-ha.yml
+# Skip the entire site-B HA group build under `bootstrap --no-dr` (#188): with no site-B
+# up there is nothing to replicate to, and the qm-create below auto-detects the absent
+# group and creates HA-only (-reh). Default (dr_enabled unset → true) runs it, so the full
+# HADR provision is unchanged.
 - import_playbook: _rdqm-dr-replication.yml
+  when: dr_enabled | default(true) | bool
 
 # Secure the RDQM HA + DR replication links with TLS (#545) — the last
 # optional-plaintext MQ path. Runs on every node of both HA groups AFTER the groups
@@ -25,7 +30,9 @@
 # because the certs + tlshd service must be up before crtmqm -re opens a DRBD TLS
 # handshake. Per IBM "Secure replication for DR/HA RDQM".
 - name: secure RDQM replication links with TLS (certs + tlshd)
-  hosts: rdqm_a:rdqm_b
+  # Under `bootstrap --no-dr` (#188) site-B is not brought up, so drop rdqm_b from the
+  # pattern — the play still secures the HA link on rdqm_a. Default (unset → true) unchanged.
+  hosts: "rdqm_a{{ ':rdqm_b' if (dr_enabled | default(true) | bool) else '' }}"
   gather_facts: false
   roles:
     - rdqm-replication-tls
@@ -57,7 +64,9 @@
 # enable -> create -> remove lifecycle, so the coordinated-create access is not
 # standing infrastructure (IBM's removable guidance).
 - name: remove the temporary mqm SSH access (post-create)
-  hosts: rdqm_a:rdqm_b
+  # Under `bootstrap --no-dr` (#188) site-B is absent, so drop rdqm_b — the temporary
+  # access still gets stripped on rdqm_a. Default (unset → true) keeps both sites.
+  hosts: "rdqm_a{{ ':rdqm_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   gather_facts: false
   tasks:
@@ -80,7 +89,11 @@
 # no-op. Verified live 2026-07-11 (the manual form of these exact steps took a stuck cold rebuild
 # to HA Normal + DR Normal on both sites).
 - name: reconcile RDQM replication after the coordinated create (heal cold-create split-brain + bring up DR) (#559)
-  hosts: rdqm_a:rdqm_b
+  # Under `bootstrap --no-dr` (#188) site-B is absent, so drop rdqm_b — this play still
+  # heals the site-A HA secondaries. Its DR steps (bring-up + DR-link gate) already
+  # self-guard on the `<qm>.dr` resource file, which the HA-only (-reh) create never
+  # writes, so they no-op cleanly. Default (unset → true) keeps the full HA+DR reconcile.
+  hosts: "rdqm_a{{ ':rdqm_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   gather_facts: false
   vars:
@@ -331,7 +344,10 @@
 # the QM's authority records via DRBD (block-level, with the DataPath), but the OS
 # principals the records resolve against are node-local, so every node needs them.
 - name: authz service accounts on every rdqm node (HA + DR) (#74/#620)
-  hosts: rdqm_a:rdqm_b
+  # Under `bootstrap --no-dr` (#188) site-B is absent, so drop rdqm_b — the accounts still
+  # land on every HA node (rdqm_a). Default (unset → true) keeps both sites so authorization
+  # survives a DR takeover (spec §6 substrate-consistency invariant).
+  hosts: "rdqm_a{{ ':rdqm_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   roles: [mq-authz-accounts]
 
