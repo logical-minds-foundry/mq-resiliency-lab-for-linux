@@ -229,6 +229,19 @@
         mq_log_type: replicated
       when: inventory_hostname == active_host
 
+# HA-site (Live group) TLS keystore — apply it here ONLY when the DR half is skipped
+# (`bootstrap --no-dr`, dr_enabled=false). Site-A TLS is otherwise deployed inside
+# _nativeha-ubuntu-dr-replication.yml (step 2, both groups), which --no-dr skips
+# wholesale — so without this, NHAUAPP comes up with TLS channels (APP/MON.SVRCONN,
+# SSLCAUTH REQUIRED, CERTLABL) but no key repository: every handshake fails AMQ9660E,
+# the mutual-TLS app requester below and the client-mode exporter (observe phase)
+# cannot connect, and no metrics flow (#1011). Placed BEFORE site-distributed-shared
+# so the keystore exists before the app requester connects over TLS. The full-HADR
+# path is unchanged: when dr_enabled is true this is a no-op and the DR playbook
+# applies TLS to both groups as before.
+- import_playbook: site-nativeha-ubuntu-tls.yml
+  when: not (dr_enabled | default(true) | bool)
+
 - import_playbook: site-distributed-shared.yml
   vars:
     our_qm: "{{ qm_app }}"
