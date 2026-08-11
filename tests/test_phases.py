@@ -60,6 +60,7 @@ TOPO = (
     "    os: ubuntu\n"
     "    short: PCMK\n"
     "    groups: [san_a, pcmk_a, pcmk_b]\n"
+    "    dr_groups: [pcmk_b]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
     "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
@@ -772,3 +773,62 @@ def test_build_states_helper_shape():
         "qm_up": True,
         "observe": False,
     }
+
+
+# --------------------------------------------------------------------------- #
+# --no-dr phase shaping (#188). The seeded pcmk-ubuntu declares dr_groups: [pcmk_b],
+# so pcmk-b1 is the DR (site-B) guest the effective-member phases must drop.
+# --------------------------------------------------------------------------- #
+def test_vms_no_dr_brings_up_site_a_only(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    targets = _batched_targets(PHASES[1].build_steps(stack, None, no_dr=True))
+    assert "pcmk-a1" in targets  # site-A HA guests still come up
+    assert "pcmk-b1" not in targets  # the DR guest is skipped
+    assert "obs" in targets and "svc-sim" in targets  # commons are always included
+
+
+def test_vms_full_brings_up_both_sites(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    targets = _batched_targets(PHASES[1].build_steps(stack, None, no_dr=False))
+    assert "pcmk-b1" in targets  # default keeps the full HADR set
+
+
+def _provision_step(steps):
+    return next(s for s in steps if s.label.endswith("provision"))
+
+
+def test_provision_no_dr_emits_dr_enabled_false(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[2].build_steps(stack, None, no_dr=True)
+    argv = _provision_step(steps).command.argv
+    assert "-e" in argv
+    assert "dr_enabled=false" in argv
+    # the site-dns --limit must also drop the absent DR guest (else UNREACHABLE)
+    dns_argv = next(s for s in steps if "site-dns.yml" in s.command.argv).command.argv
+    limit = dns_argv[dns_argv.index("--limit") + 1]
+    assert "pcmk-a1" in limit and "pcmk-b1" not in limit
+
+
+def test_provision_full_omits_dr_enabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[2].build_steps(stack, None, no_dr=False)
+    assert not any("dr_enabled" in a for a in _provision_step(steps).command.argv)
+
+
+def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[3].build_steps(stack, None, no_dr=True)
+    obs_argv = next(s.command.argv for s in steps if "observability.yml" in s.command.argv)
+    limit = obs_argv[obs_argv.index("--limit") + 1]
+    assert "pcmk-a1" in limit
+    assert "pcmk-b1" not in limit
