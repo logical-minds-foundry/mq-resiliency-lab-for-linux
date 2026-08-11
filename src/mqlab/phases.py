@@ -41,7 +41,7 @@ from mqlab.paths import lab_script, repo_root
 from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
-from mqlab.stacks import Stack, stack_members
+from mqlab.stacks import Stack, stack_members_effective
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -67,7 +67,7 @@ class Phase:
     """
 
     name: str
-    build_steps: Callable[[Stack, Any], list[CommandStep]]
+    build_steps: Callable[..., list[CommandStep]]
     satisfied: Callable[[Stack, dict[str, Any]], bool]
     ensure: tuple[str, ...] = ()
 
@@ -136,13 +136,18 @@ def _non_mq_commons_hosts() -> set[str]:
     return {host for g in _NON_MQ_COMMONS_GROUPS for host in (all_groups.get(g) or [])}
 
 
-def all_vms(stack: Stack) -> list[str]:
-    """Every VM bootstrap must bring up for this stack: members + commons, deduped.
+def all_vms(stack: Stack, *, no_dr: bool = False) -> list[str]:
+    """Every VM a bootstrap must bring up for this stack: members + commons, deduped.
 
     Public so the sequencer (cli.py) can ensure the same VM set's boxes before the
     vms phase runs them — one source of truth for "the stack's VMs", not a literal.
+
+    Under `no_dr` (#188) the members are the EFFECTIVE (site-A) set — the stack's
+    `dr_groups` hosts are excluded — so the guest-enumerating phases (vms/provision-
+    dns/observe `--limit`) target only the HA site. Commons are always included; they
+    are shared and CPU-cheap. Default `no_dr=False` keeps the full HADR set unchanged.
     """
-    members = stack_members(stack.name) or []
+    members = stack_members_effective(stack.name, no_dr=no_dr) or []
     vms = list(members)
     for host in _commons_members():
         if host not in vms:
@@ -178,8 +183,11 @@ def _qm_extra_vars(stack: Stack) -> list[str]:
 # --------------------------------------------------------------------------- #
 # net phase
 # --------------------------------------------------------------------------- #
-def _net_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+def _net_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
     """Define, autostart, and start every lab network the stack needs — idempotently.
+
+    Accepts `no_dr` for a uniform builder signature but IGNORES it: libvirt networks
+    are CPU-free, so there is no footprint reason to skip any under `--no-dr` (#188).
 
     The lab's networks are global (lab/networks/net-*.xml), shared across stacks;
     a stack needs them all up. This delegates to the already-idempotent
@@ -295,7 +303,7 @@ def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
     return len(set(boxes)) != len(boxes)
 
 
-def _vms_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+def _vms_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
     """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs, in
     contiguous batches of at most `boot_batch` (#638), serializing a batch whose guests
     share a box (#859).
@@ -314,7 +322,7 @@ def _vms_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG
     listed order, so the HADR bring-up order still holds either way (#859).
     """
     topo = _topology()
-    vms = _all_vms(stack)
+    vms = _all_vms(stack, no_dr=no_dr)
     batches = _batch_guests(vms, _boot_batch())
     steps: list[CommandStep] = []
     for index, batch in enumerate(batches, start=1):
@@ -338,7 +346,9 @@ def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
 # --------------------------------------------------------------------------- #
 # provision phase
 # --------------------------------------------------------------------------- #
-def _rhel_nat_nic_steps(stack: Stack, script: str, label: str) -> list[CommandStep]:
+def _rhel_nat_nic_steps(
+    stack: Stack, script: str, label: str, *, no_dr: bool = False
+) -> list[CommandStep]:
     """Emit an (upload, sudo-run) CommandStep pair for lab/scripts/<script> per RHEL
     node in this stack that declares NICs, run over the Vagrant NAT channel.
 
@@ -355,7 +365,7 @@ def _rhel_nat_nic_steps(stack: Stack, script: str, label: str) -> list[CommandSt
     nodes = _topology().get("nodes") or {}
     lab = repo_root() / "lab"
     steps: list[CommandStep] = []
-    for name in all_vms(stack):
+    for name in all_vms(stack, no_dr=no_dr):
         spec = nodes.get(name) or {}
         if "rhel" not in str(spec.get("platform", "")).lower():
             continue  # netplan (Ubuntu) arm — not subject to the ifup/ifdown race
@@ -381,7 +391,7 @@ def _rhel_nat_nic_steps(stack: Stack, script: str, label: str) -> list[CommandSt
     return steps
 
 
-def _nic_config_steps(stack: Stack) -> list[CommandStep]:
+def _nic_config_steps(stack: Stack, *, no_dr: bool = False) -> list[CommandStep]:
     """NM-native, authoritative lab-NIC configuration for the RHEL9 nodes (#866).
 
     The root-cause companion to the #860 assurance guard. The RHEL9 race (triage
@@ -401,10 +411,10 @@ def _nic_config_steps(stack: Stack) -> list[CommandStep]:
     immediately after as the fail-loud backstop and is intended to become a rare
     no-op now that the config is deterministic at the source.
     """
-    return _rhel_nat_nic_steps(stack, "nic-config.sh", "nic-config")
+    return _rhel_nat_nic_steps(stack, "nic-config.sh", "nic-config", no_dr=no_dr)
 
 
-def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
+def _nic_assure_steps(stack: Stack, *, no_dr: bool = False) -> list[CommandStep]:
     """Post-boot NIC-assurance guard for the RHEL9 nodes in this stack (#860).
 
     vagrant-libvirt's RedHat configure_networks writes an ifcfg for every lab NIC,
@@ -426,12 +436,18 @@ def _nic_assure_steps(stack: Stack) -> list[CommandStep]:
     folder in this lab) and then invoked with sudo, passing that node's declared
     topology NIC IPs as the expected set.
     """
-    return _rhel_nat_nic_steps(stack, "nic-assure.sh", "nic-assure")
+    return _rhel_nat_nic_steps(stack, "nic-assure.sh", "nic-assure", no_dr=no_dr)
 
 
-def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+def _provision_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
     """Configure + assure NICs, bring up DNS, then run the stack's provision playbook
     with the #351 QM extra-vars.
+
+    Under `no_dr` (#188) the guest-enumerating steps (NIC passes + the site-dns
+    `--limit`) target only the effective (site-A) members — a DNS `--limit` that named
+    an absent site-B node would fail UNREACHABLE — and the stack's provision playbook
+    is passed `-e dr_enabled=false` so it gates its own DR touch-points off. The
+    default (`no_dr=False`) is byte-for-byte the full-HADR provision.
 
     The RHEL9 NIC bring-up goes first, before any Ansible-over-net-mgmt play runs:
     the NM-native config step (#866, `_nic_config_steps`) makes NetworkManager
@@ -452,14 +468,18 @@ def _provision_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noq
         msg = f"stack {stack.name!r} has no provision playbook — cannot bootstrap"
         raise ValueError(msg)
     ansible = repo_root() / "ansible"
-    nodes = ",".join(all_vms(stack))
+    nodes = ",".join(all_vms(stack, no_dr=no_dr))
+    # --no-dr provisions the HA site only: tell the playbook to skip its DR touch-points
+    # (spec §3.4). Default omits the var, so the playbook's `dr_enabled | default(true)`
+    # keeps the full HADR provision byte-for-byte unchanged.
+    dr_vars = ["-e", "dr_enabled=false"] if no_dr else []
     cmd = Command(
-        ["ansible-playbook", Path(stack.provision).name, *_qm_extra_vars(stack)],
+        ["ansible-playbook", Path(stack.provision).name, *_qm_extra_vars(stack), *dr_vars],
         cwd=ansible,
     )
     return [
-        *_nic_config_steps(stack),
-        *_nic_assure_steps(stack),
+        *_nic_config_steps(stack, no_dr=no_dr),
+        *_nic_assure_steps(stack, no_dr=no_dr),
         CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
         CommandStep(
             f"{stack.name} provision dns",
@@ -501,8 +521,13 @@ def _host_mqlab() -> str:
     return str(Path(sys.executable).parent / "mqlab")
 
 
-def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa: ARG001
+def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
     """Render the targets + dashboard, then provision the obs stack for this QM.
+
+    Under `no_dr` (#188) the `observability.yml --limit` names only the effective
+    (site-A) members: that playbook keys instrumentation on site-A/site-B group
+    membership, so a limit that named an absent site-B node would fail UNREACHABLE
+    (spec §3.3). Default (`no_dr=False`) limits to the full HADR VM set unchanged.
 
     Rendering is emitted as `mqlab obs ...` subprocess steps (invoked by bare
     name via $PATH) rather than rendered eagerly here, so build_steps stays pure
@@ -518,7 +543,7 @@ def _observe_build_steps(stack: Stack, deps: Any) -> list[CommandStep]:  # noqa:
     rendered first.
     """
     ansible = repo_root() / "ansible"
-    nodes = ",".join(all_vms(stack))
+    nodes = ",".join(all_vms(stack, no_dr=no_dr))
     return [
         # --stack scopes the exporter deployment list to THIS stack, so observing one
         # stack never stands up (crash-looping) exporter units for un-provisioned ones

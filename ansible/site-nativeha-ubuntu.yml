@@ -55,7 +55,10 @@
 # node lists change. Native HA replicates the QM's authority records via raft, but the
 # OS principals the records resolve against are node-local, so every node needs them.
 - name: authz service accounts on every nativeha-ubuntu node (HA + DR)
-  hosts: nha_ubuntu_a:nha_ubuntu_b
+  # Under `bootstrap --no-dr` (#188) site-B is not brought up, so drop nha_ubuntu_b
+  # from the pattern — else this play targets absent DR guests and fails UNREACHABLE.
+  # Default (dr_enabled unset → true) keeps the full HA+DR host set unchanged.
+  hosts: "nha_ubuntu_a{{ ':nha_ubuntu_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   # `authz` tag (#235): lets the Stage-2 authorization be (re)applied on an
   # already-provisioned arm via `--tags authz`, without a full arm re-provision.
@@ -238,4 +241,8 @@
     app_conn: "nha-ubuntu-a1-data-a.client.com(1414),nha-ubuntu-a2-data-a.client.com(1414),nha-ubuntu-a3-data-a.client.com(1414)"
     app_tls: true
 
+# Skip the DR (CRR) replication half entirely under `bootstrap --no-dr` (#188): with
+# no site-B up there is nothing to replicate to. Default (dr_enabled unset → true) runs
+# it, so the full HADR provision is unchanged.
 - import_playbook: _nativeha-ubuntu-dr-replication.yml
+  when: dr_enabled | default(true) | bool

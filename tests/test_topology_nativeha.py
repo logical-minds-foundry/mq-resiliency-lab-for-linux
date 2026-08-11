@@ -11,7 +11,7 @@ import pathlib
 
 import yaml
 
-from mqlab.stacks import lab_stacks
+from mqlab.stacks import lab_stacks, stack_dr_hosts, stack_members, stack_members_effective
 
 
 def _topology() -> dict:
@@ -99,6 +99,28 @@ def test_nativeha_ubuntu_one_consolidated_full_hadr_stack():
     assert set(s.groups) == {"nha_ubuntu_a", "nha_ubuntu_b"}
     assert s.cluster_group == "nha_ubuntu_a"
     assert s.provision == "ansible/site-nativeha-ubuntu.yml"
+
+
+def test_nativeha_ubuntu_declares_its_dr_groups():
+    # #188: the dr_groups marker names the DR (site-B) group `bootstrap --no-dr` skips.
+    # Its presence is the signal that this stack supports HA-only bring-up.
+    assert lab_stacks()["nativeha-ubuntu"].dr_groups == ["nha_ubuntu_b"]
+
+
+def test_nativeha_ubuntu_dr_hosts_are_site_b():
+    # #188: the dr_groups marker resolves to exactly the three site-B guests.
+    assert stack_dr_hosts("nativeha-ubuntu") == ["nha-ubuntu-b1", "nha-ubuntu-b2", "nha-ubuntu-b3"]
+
+
+def test_nativeha_ubuntu_effective_members_drop_site_b_under_no_dr():
+    # #188: --no-dr brings up the site-A members only; a full bootstrap is unchanged.
+    full = stack_members("nativeha-ubuntu")
+    assert full is not None
+    effective = stack_members_effective("nativeha-ubuntu", no_dr=True)
+    assert effective is not None
+    assert effective == [m for m in full if not m.startswith("nha-ubuntu-b")]
+    assert "nha-ubuntu-b1" not in effective
+    assert stack_members_effective("nativeha-ubuntu", no_dr=False) == full
 
 
 def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():

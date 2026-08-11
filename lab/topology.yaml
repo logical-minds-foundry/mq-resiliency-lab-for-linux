@@ -463,6 +463,7 @@ stacks:
     short: NHAU
     cluster_group: nha_ubuntu_a
     groups: [nha_ubuntu_a, nha_ubuntu_b]
+    dr_groups: [nha_ubuntu_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-nativeha-ubuntu.yml
     secrets: [mqweb_admin_password]
     qm: {}
