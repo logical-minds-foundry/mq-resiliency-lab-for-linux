@@ -425,6 +425,7 @@ stacks:
     short: RDQM
     cluster_group: rdqm_a
     groups: [rdqm_a, rdqm_b]
+    dr_groups: [rdqm_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-rdqm.yml
     secrets: [mqweb_admin_password]
     qm: { vip: 10.10.1.100, vip_b: 10.10.2.100 }
