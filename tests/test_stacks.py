@@ -15,7 +15,9 @@ from mqlab.stacks import (
     dashboard_folder_for,
     lab_stacks,
     rhel_stack_unsupported_reason,
+    stack_dr_hosts,
     stack_members,
+    stack_members_effective,
     stack_san_targets,
 )
 
@@ -256,6 +258,71 @@ def test_stack_members_dedupes_host_in_multiple_groups(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(topo)
     members = stack_members("my-stack")
     assert members == ["h1", "h2"]  # h1 appears in both grp_a and grp_b — listed once
+
+
+# --------------------------------------------------------------------------- #
+# dr_groups marker + effective-member helpers (#188)
+# --------------------------------------------------------------------------- #
+def test_stack_dr_hosts_empty_when_stack_declares_no_dr_groups(monkeypatch, tmp_path):
+    """The seeded stacks carry no dr_groups, so a stack that declares none has no DR
+    hosts — the marker's absence is what makes `--no-dr` inapplicable (#188)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    assert stack_dr_hosts("pcmk-ubuntu") == []
+
+
+def test_stack_dr_hosts_unknown_stack_is_empty(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    assert stack_dr_hosts("no-such-stack") == []
+
+
+def test_stack_dr_hosts_flattens_and_dedupes(monkeypatch, tmp_path):
+    """dr_groups flatten in declared order and a host in two DR groups lists once —
+    the same pure-membership read as stack_members."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    topo = (
+        "nodes:\n"
+        "  a1: {}\n"
+        "  b1: {}\n"
+        "  b2: {}\n"
+        "groups:\n"
+        "  grp_a:  [a1]\n"
+        "  grp_b1: [b1, b2]\n"
+        "  grp_b2: [b2]\n"
+        "stacks:\n"
+        "  my-stack:\n"
+        "    mechanism: native-ha\n"
+        "    os: ubuntu\n"
+        "    short: TEST\n"
+        "    groups: [grp_a, grp_b1, grp_b2]\n"
+        "    dr_groups: [grp_b1, grp_b2]\n"
+        "    provision: null\n"
+        "    secrets: []\n"
+        "    qm: {}\n"
+        "    alloc: {}\n"
+        "    verbs: {}\n"
+        "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
+    )
+    (tmp_path / "lab").mkdir(parents=True)
+    (tmp_path / "lab" / "topology.yaml").write_text(topo)
+    # b2 is in both grp_b1 and grp_b2 — listed once, in first-seen order.
+    assert stack_dr_hosts("my-stack") == ["b1", "b2"]
+    # and the effective members subtract exactly those DR hosts.
+    assert stack_members_effective("my-stack", no_dr=True) == ["a1"]
+    assert stack_members_effective("my-stack", no_dr=False) == ["a1", "b1", "b2"]
+
+
+def test_stack_members_effective_full_when_not_no_dr(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    assert stack_members_effective("pcmk-ubuntu", no_dr=False) == stack_members("pcmk-ubuntu")
+
+
+def test_stack_members_effective_unknown_stack_is_none(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    assert stack_members_effective("no-such-stack", no_dr=True) is None
 
 
 def test_stack_san_targets_returns_san_hosts_for_pcmk(monkeypatch, tmp_path):

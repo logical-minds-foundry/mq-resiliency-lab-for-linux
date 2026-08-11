@@ -109,6 +109,9 @@ class Stack:
                        This is the correct probe target for qm-status — NOT groups[0], which
                        may be a SAN host with no Pacemaker/MQ tooling. None for reserved stacks.
         groups:        ordered list of atomic group names (site-A + site-B + SANs).
+        dr_groups:     the DR (site-B) groups this stack's `groups` includes — the ones a
+                       `bootstrap --no-dr` skips (#188). Empty for a stack that does not
+                       support HA-only bring-up; its non-empty presence is the marker.
         qm:            QmConfig — names derived from short, VIPs/svc_conn from topology.
         provision:     path to the top-level Ansible playbook, or None (reserved stacks).
         secrets:       list of Vault/secret names required to provision this stack.
@@ -122,6 +125,7 @@ class Stack:
     verbs: dict[str, Any]
     cluster_group: str | None
     groups: list[str]
+    dr_groups: list[str]
     qm: QmConfig
     provision: str | None
     secrets: list[str]
@@ -211,6 +215,7 @@ def lab_stacks() -> dict[str, Stack]:
             verbs=dict(cfg.get("verbs") or {}),
             cluster_group=cfg.get("cluster_group") or None,
             groups=list(cfg.get("groups") or []),
+            dr_groups=list(cfg.get("dr_groups") or []),
             qm=_qm_from_stack(short, dict(cfg.get("qm") or {}), svc_name, svc_conn),
             provision=cfg.get("provision"),
             secrets=list(cfg.get("secrets") or []),
@@ -271,3 +276,37 @@ def stack_members(name: str) -> list[str] | None:
             if host not in members:
                 members.append(host)
     return members
+
+
+def stack_dr_hosts(name: str) -> list[str]:
+    """Hosts contributed by a stack's `dr_groups` — its DR / site-B members (#188).
+
+    Empty for a stack that declares no `dr_groups` (or an unknown stack). Read the
+    same pure-membership way as `stack_members`, so the effective-member subtraction
+    and the topology come from one source.
+    """
+    data = _topology()
+    stacks = data.get("stacks") or {}
+    all_groups: dict[str, list[str]] = {
+        g: list(hosts) for g, hosts in (data.get("groups") or {}).items()
+    }
+    hosts: list[str] = []
+    for g in (stacks.get(name) or {}).get("dr_groups", []):
+        for host in all_groups.get(g, []):
+            if host not in hosts:
+                hosts.append(host)
+    return hosts
+
+
+def stack_members_effective(name: str, *, no_dr: bool) -> list[str] | None:
+    """`stack_members`, minus the `dr_groups` hosts when `no_dr` — the guests a
+    bring-up actually starts (#188).
+
+    Full membership when `no_dr` is False (a byte-for-byte-unchanged bootstrap), or
+    None for an unknown stack (mirroring `stack_members`).
+    """
+    members = stack_members(name)
+    if members is None or not no_dr:
+        return members
+    dr = set(stack_dr_hosts(name))
+    return [m for m in members if m not in dr]
