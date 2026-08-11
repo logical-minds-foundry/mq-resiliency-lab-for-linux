@@ -31,7 +31,12 @@ mqlab status                      # topology joined with live virsh state
 ```
 
 `mqlab bootstrap` runs from the first unsatisfied phase, so a re-run resumes;
-`--from <phase>` / `--only <phase>` force or narrow it. Observability comes up
+`--from <phase>` / `--only <phase>` force or narrow it. `--no-dr` brings up the
+**HA site only** — it skips the stack's DR-site guests (its `dr_groups`) and the
+DR provisioning for a lighter footprint under load, and is stateless (re-run
+without it to add DR over the live HA site). For the Pacemaker/SAN stack the
+shared-storage peer stays up to keep its DRBD mirror intact, so `--no-dr` there
+drops the DR *cluster* nodes rather than the whole of site B. Observability comes up
 with `mqlab commons up` (it provisions the `obs` guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 `mqlab teardown <stack>` (shared commons are reclaimed when the last stack exits).

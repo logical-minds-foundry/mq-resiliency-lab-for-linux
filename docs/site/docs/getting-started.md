@@ -144,6 +144,19 @@ step fails, bootstrap halts and prints the resume hint (`mqlab bootstrap <stack>
 --from <phase>`). Add `--step` to pause after each step and go poke at the live
 system; `--from <phase>` / `--only <phase>` force the phase selection by hand.
 
+**Lighter footprint with `--no-dr`.** Most day-to-day work doesn't need the DR
+site — it matters only when you're actively testing cross-site failover. Under a
+full lab load the DR (site-B) guests add enough replication and CPU pressure that
+a stack's HA site can struggle to hold quorum. `mqlab bootstrap <stack> --no-dr`
+brings up **only the HA site**: it skips the DR-site guests and the DR
+provisioning, leaving a stack that forms HA and runs its workload on a fraction of
+the footprint. Which guests are skipped is the stack's `dr_groups` in
+[`topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml).
+The flag is **stateless** — it shapes only that bring-up and never tears anything
+down — so adding DR later is simply re-running `mqlab bootstrap <stack>` *without*
+it, over the live HA site. A stack that declares no DR site to skip rejects
+`--no-dr` rather than mis-provisioning.
+
 The lab's shape is a single source of truth:
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml)
 — the libvirt networks (data, heartbeat, WAN, client, SVC, SAN), every guest's
