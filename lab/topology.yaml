@@ -409,6 +409,13 @@ stacks:
     short: PCMK
     cluster_group: pcmk_a
     groups: [san_a, pcmk_a, san_b, pcmk_b]
+    # DR (site-B) groups skipped by `bootstrap --no-dr` (#188). Option B (#997): only
+    # pcmk_b — the 3 heavy DR cluster nodes, the dominant footprint cost — is dropped;
+    # san_b stays UP so the san_a→san_b HA DRBD pair keeps its unchanged two-peer
+    # `--clear-bitmap` bring-up (no single-peer-DRBD surgery on the HA building block).
+    # Deliberate, approved deviation from the epic's "no DR replication" criterion: the
+    # cross-site DRBD mirror keeps running under --no-dr, traded for that simplicity.
+    dr_groups: [pcmk_b]
     provision: ansible/site-pcmk.yml
     secrets: [pcmk_hacluster_password, mqweb_admin_password]
     qm: { vip: 10.10.1.200, vip_b: 10.10.2.200, vip_ext: 10.60.0.10, vip_ext_b: 10.60.0.20 }

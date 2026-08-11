@@ -66,14 +66,20 @@
 # silently skips the whole san_a/san_b DRBD+target stage and marches on to the
 # cluster plays against half a topology. Wait for every node before any work.
 - name: wait for all DR-arm hosts to be SSH-ready (cold-boot guard)
-  hosts: pcmk_ubuntu
+  # Under `bootstrap --no-dr` (#188) the pcmk_b DR cluster is not brought up, so exclude
+  # it from the stack aggregate (`pcmk_ubuntu:!pcmk_b`) — else this play waits on absent
+  # DR guests and fails UNREACHABLE. san_b stays IN (Option B, #997 — the san_a→san_b
+  # DRBD pair is two-peer). Default (dr_enabled unset → true) keeps the full aggregate.
+  hosts: "pcmk_ubuntu{{ ':!pcmk_b' if not (dr_enabled | default(true) | bool) else '' }}"
   gather_facts: false
   tasks:
     - name: wait for connection
       ansible.builtin.wait_for_connection:
         timeout: 180
 
-- hosts: pcmk_ubuntu
+# Same `--no-dr` exclusion as the cold-boot guard above (#188): drop the absent pcmk_b
+# DR cluster, keep san_b up (Option B, #997). Default keeps the full aggregate.
+- hosts: "pcmk_ubuntu{{ ':!pcmk_b' if not (dr_enabled | default(true) | bool) else '' }}"
   become: true
   tasks:
     - name: acl package for unprivileged become

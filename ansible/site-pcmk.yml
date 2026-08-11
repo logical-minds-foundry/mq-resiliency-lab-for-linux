@@ -18,13 +18,23 @@
 # pcmk-ubuntu qm: block and to the nativeha arm's inline svc_conn precedent — so
 # the phase stays pure and setup_dict (the #356 regression) is never referenced.
 - import_playbook: _pcmk-cluster-ha.yml
+# Skip the site-B DR half entirely under `bootstrap --no-dr` (#188): the pcmk_b DR
+# recovery cluster is not brought up, so there is nothing to stand up here. san_b
+# stays up (Option B, #997) but this import only does its DR-CUTOVER prep (the LIO
+# package it exports the LUN from at a forced cutover) — never reached under --no-dr —
+# so fully skipping it is safe. Default (dr_enabled unset → true) runs it, so the full
+# HADR provision is byte-for-byte unchanged.
 - import_playbook: _pcmk-dr-replication.yml
+  when: dr_enabled | default(true) | bool
 
 # Stage 2 authorization (#74): the OAM service principals (mqapp/mqmon/mqsvc)
 # must exist on EVERY app-QM node before any setmqaut grant, and on both HA + DR
 # sites so authorization survives failover (the substrate-consistency invariant).
 - name: authz service accounts on every app-QM node (HA + DR)
-  hosts: pcmk_a:pcmk_b
+  # Under `bootstrap --no-dr` (#188) the pcmk_b DR cluster is not brought up, so drop
+  # it from the pattern — else this play targets absent DR guests and fails UNREACHABLE.
+  # Default (dr_enabled unset → true) keeps the full HA+DR host set unchanged.
+  hosts: "pcmk_a{{ ':pcmk_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   roles: [mq-authz-accounts]
 
