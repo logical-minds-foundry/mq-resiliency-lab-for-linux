@@ -31,6 +31,28 @@ def test_nativeha_rhel_stack_uses_mqmonitor_verbs():
     assert "runmqras" in stack.verbs["diagnostics"]["cmd"]
 
 
+def test_nativeha_rhel_declares_its_dr_groups():
+    # #188: the dr_groups marker names the DR (site-B) group `bootstrap --no-dr` skips.
+    # Its presence is the signal that this stack supports HA-only bring-up.
+    assert lab_stacks()["nativeha-rhel"].dr_groups == ["nha_rhel_b"]
+
+
+def test_nativeha_rhel_dr_hosts_are_site_b():
+    # #188: the dr_groups marker resolves to exactly the three site-B guests.
+    assert stack_dr_hosts("nativeha-rhel") == ["nha-rhel-b1", "nha-rhel-b2", "nha-rhel-b3"]
+
+
+def test_nativeha_rhel_effective_members_drop_site_b_under_no_dr():
+    # #188: --no-dr brings up the site-A members only; a full bootstrap is unchanged.
+    full = stack_members("nativeha-rhel")
+    assert full is not None
+    effective = stack_members_effective("nativeha-rhel", no_dr=True)
+    assert effective is not None
+    assert effective == [m for m in full if not m.startswith("nha-rhel-b")]
+    assert "nha-rhel-b1" not in effective
+    assert stack_members_effective("nativeha-rhel", no_dr=False) == full
+
+
 def test_one_consolidated_full_hadr_stack():
     stacks = lab_stacks()
     s = stacks["nativeha-rhel"]
