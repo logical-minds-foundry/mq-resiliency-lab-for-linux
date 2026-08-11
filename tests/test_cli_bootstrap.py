@@ -62,6 +62,7 @@ TOPO = (
     "    short: PCMK\n"
     "    cluster_group: pcmk_a\n"
     "    groups: [san_a, pcmk_a, pcmk_b]\n"
+    "    dr_groups: [pcmk_b]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    secrets: [pcmk_hacluster_password, mqweb_admin_password]\n"
     "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10, svc_conn: 10.60.0.50 }\n"
@@ -171,6 +172,30 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
     assert "ansible-playbook" in argv0s  # provision + observe playbooks
     assert "mqlab" in argv0s  # observe render steps
     assert not any(a == "virsh" for a in argv0s)  # net phase satisfied -> skipped
+
+
+def test_no_dr_on_stack_without_dr_groups_fails_loud(monkeypatch, tmp_path):
+    # rdqm-rhel (INFRA_TOPO) declares no dr_groups, so --no-dr has no DR site to skip:
+    # the guard fails loud (spec §3.5) before any lab I/O rather than mis-provisioning.
+    _seed_infra(monkeypatch, tmp_path)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "rdqm-rhel", "--no-dr"])
+    assert result.exit_code == 2
+    assert "declares no DR site" in result.output
+
+
+def test_no_dr_threads_into_phases_excluding_site_b(monkeypatch, tmp_path):
+    # End-to-end: --no-dr on a dr_groups-bearing stack threads no_dr into the phase
+    # builders, so the vms phase brings up the site-A guests only (pcmk-b1 skipped).
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=True, vms=False))
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(24)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--no-dr"])
+    assert result.exit_code == 0
+    up = [a for c in runner.recorded if c.argv[:2] == ["vagrant", "up"] for a in c.argv]
+    assert "pcmk-a1" in up  # HA site guest comes up
+    assert "pcmk-b1" not in up  # DR guest skipped end-to-end
 
 
 def test_bootstrap_only_runs_one_phase(monkeypatch, tmp_path):

@@ -2008,14 +2008,29 @@ def _select_phases(
 
 
 def _bootstrap_run(
-    stack_name: str, *, only: str | None = None, from_phase: str | None = None, step: bool
+    stack_name: str,
+    *,
+    only: str | None = None,
+    from_phase: str | None = None,
+    step: bool,
+    no_dr: bool = False,
 ) -> None:
     """Bring a stack up by running its bring-up phases (net → vms → provision →
     observe) from the first unsatisfied one, so a re-run resumes. --only/--from
     override the selection. Each phase fails loud: a step failure halts the run
-    and prints a resume hint naming the failing phase."""
+    and prints a resume hint naming the failing phase.
+
+    --no-dr (#188) brings up the HA site only: it shapes the phases it runs (site-A
+    guests, `dr_enabled=false` to the provision) and never tears down a site-B some
+    earlier full bootstrap left running. Stateless — nothing is persisted."""
     venvsync.ensure_venv_current()  # sync dev venv to uv.lock before subprocesses spawn (#776)
     stack = _lookup_stack_or_exit(stack_name)
+    # Fail loud before any lab I/O: --no-dr on a stack that declares no DR site to skip
+    # would otherwise pass dr_enabled=false to a playbook that does not honour it — and
+    # bring up site-A guests only to fail provisioning (spec §3.5).
+    if no_dr and not stack.dr_groups:
+        typer.echo(f"{stack.name} declares no DR site to skip (no dr_groups)", err=True)
+        raise typer.Exit(code=2)
     _gate_stack_host_arch(stack)  # #847: abort a RHEL stack on aarch64 pre-bake
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
@@ -2054,7 +2069,7 @@ def _bootstrap_run(
                 # only for the phases actually selected this run.
                 _ensure_prereqs_for_stack(stack, phase, step=step)
                 run_steps(
-                    phase.build_steps(stack, deps),
+                    phase.build_steps(stack, deps, no_dr=no_dr),
                     runner=deps.runner,
                     renderer=deps.renderer,
                     transcript=deps.transcript,
@@ -2097,15 +2112,20 @@ def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstra
     from_phase: _FromOpt = None,
     only: _OnlyOpt = None,
     step: _StepFlag = False,
+    no_dr: Annotated[
+        bool,
+        typer.Option("--no-dr", help="skip the DR site — bring up the HA site only"),
+    ] = False,
 ) -> None:
     """Bring up a whole stack in one command: net → vms → provision → observe.
 
     Runs from the first unsatisfied phase, so a re-run resumes. Use --from PHASE
-    to force a starting phase or --only PHASE to run a single phase. Run
-    `mqlab doctor` first to pre-flight the host."""
+    to force a starting phase or --only PHASE to run a single phase. --no-dr brings
+    up only the HA site (skips the DR guests + DR provisioning) for a lighter
+    footprint. Run `mqlab doctor` first to pre-flight the host."""
     _validate_phase_name(from_phase, "--from")
     _validate_phase_name(only, "--only")
-    _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step)
+    _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step, no_dr=no_dr)
 
 
 def _other_stacks_up(deps: Deps, exclude: str) -> bool:
