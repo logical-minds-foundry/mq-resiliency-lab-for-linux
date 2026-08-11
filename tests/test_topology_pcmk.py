@@ -12,9 +12,39 @@ import pathlib
 
 import yaml
 
+from mqlab.stacks import lab_stacks, stack_dr_hosts, stack_members, stack_members_effective
+
 
 def _topology() -> dict:
     return yaml.safe_load(pathlib.Path("lab/topology.yaml").read_text())
+
+
+def test_pcmk_ubuntu_declares_pcmk_b_as_its_dr_group():
+    # #188/#997 (Option B): the dr_groups marker names the DR cluster group `--no-dr`
+    # skips. Only pcmk_b (the 3 heavy DR cluster nodes) is dropped — san_b stays up so
+    # the san_a→san_b HA DRBD pair keeps its two-peer bring-up. Its presence is the
+    # signal that this stack supports HA-only bring-up.
+    assert lab_stacks()["pcmk-ubuntu"].dr_groups == ["pcmk_b"]
+
+
+def test_pcmk_ubuntu_dr_hosts_are_the_three_pcmk_b_nodes():
+    # #188: the dr_groups marker resolves to exactly the three site-B cluster guests
+    # (NOT san-b, which Option B keeps up as the DRBD secondary).
+    assert stack_dr_hosts("pcmk-ubuntu") == ["pcmk-b1", "pcmk-b2", "pcmk-b3"]
+
+
+def test_pcmk_ubuntu_effective_members_drop_pcmk_b_but_keep_san_b_under_no_dr():
+    # #997 Option B: --no-dr drops the pcmk-b* DR cluster nodes but KEEPS san-b (the
+    # DRBD secondary), so the HA storage mirror stays two-peer; a full bootstrap is
+    # unchanged. Pins the Option-B semantics: pcmk-b* out, san-b in.
+    full = stack_members("pcmk-ubuntu")
+    assert full is not None
+    effective = stack_members_effective("pcmk-ubuntu", no_dr=True)
+    assert effective is not None
+    assert effective == [m for m in full if not m.startswith("pcmk-b")]
+    assert "pcmk-b1" not in effective
+    assert "san-b" in effective  # Option B keeps the DR-peer SAN up
+    assert stack_members_effective("pcmk-ubuntu", no_dr=False) == full
 
 
 def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
