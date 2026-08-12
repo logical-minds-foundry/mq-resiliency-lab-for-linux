@@ -43,6 +43,7 @@ FIXTURE: dict = {
     "groups": {
         "infra": ["infra-client", "infra-svc"],
         "obs_box": ["obs"],
+        "logsearch_box": ["logsearch"],
         "probe": ["mon-probe"],
         "svc": ["svc-sim"],
         "app": ["app-client"],
@@ -68,9 +69,17 @@ FIXTURE: dict = {
     },
 }
 
-# The curated support-host order the board must emit (infra pair first, then obs, probe,
-# svc, app) — driven off the commons groups, NOT hardcoded in the builder.
-SUPPORT_HOSTS = ["infra-client", "infra-svc", "obs", "mon-probe", "svc-sim", "app-client"]
+# The curated support-host order the board must emit (infra pair first, then obs and its
+# logsearch sibling, then probe, svc, app) — driven off the commons groups, NOT hardcoded.
+SUPPORT_HOSTS = [
+    "infra-client",
+    "infra-svc",
+    "obs",
+    "logsearch",
+    "mon-probe",
+    "svc-sim",
+    "app-client",
+]
 
 EMPTY: dict = {"groups": {}, "svc": {}, "stacks": {}}
 
@@ -80,6 +89,7 @@ EDGE: dict = {
     "groups": {
         "infra": ["infra-client", "infra-svc"],
         "obs_box": [],
+        "logsearch_box": [],
         "probe": [],
         "svc": [],
         "app": [],
@@ -160,6 +170,7 @@ def test_defining_service_pill_is_role_specific():
     # exporter units; app watches the requester unit — all via the systemd collector.
     assert "named.service" in blob and "bind9.service" in blob
     assert "prometheus.service" in blob and "grafana-server.service" in blob
+    assert "opensearch.service" in blob  # logsearch watches the OpenSearch tier
     assert "mq-app-requester" in blob
 
 
@@ -174,6 +185,7 @@ def test_domain_metric_is_the_roles_one_signal():
     assert "ibmmq_queue_depth" not in exprs  # the dubious depth stat is gone (#502)
     assert "rate(app_roundtrip_total[1m])" in exprs  # app-client round-trip
     assert "lab_dns_queries_total" in exprs  # DNS q/s (future bind exporter, object-driven)
+    assert "node_filesystem_avail_bytes" in exprs  # logsearch disk % (the log store's resource)
 
 
 def test_no_hardcoded_host_literals_hosts_come_from_groups():
