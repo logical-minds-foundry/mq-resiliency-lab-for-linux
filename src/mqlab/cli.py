@@ -2068,8 +2068,17 @@ def _bootstrap_run(
                 # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
                 # only for the phases actually selected this run.
                 _ensure_prereqs_for_stack(stack, phase, step=step)
+                steps = phase.build_steps(stack, deps, no_dr=no_dr)
+                if phase.name == "observe":
+                    # logsearch is a CORE observability layer (#1018), not opt-in: render
+                    # the fan-out gate + provision the tier at the FRONT of observe, before
+                    # this phase configures Alloy — so the fleet ships to a live OpenSearch
+                    # instead of hot-looping into a disk-fill. The VM is booted by the vms
+                    # phase (all_vms includes logsearch); the vagrant-up here is then an
+                    # idempotent no-op. Empty list when the topology has no logsearch tier.
+                    steps = _logsearch_up_steps() + steps
                 run_steps(
-                    phase.build_steps(stack, deps, no_dr=no_dr),
+                    steps,
                     runner=deps.runner,
                     renderer=deps.renderer,
                     transcript=deps.transcript,

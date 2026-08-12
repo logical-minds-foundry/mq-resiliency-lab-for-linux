@@ -110,12 +110,12 @@ def _logsearch_members() -> list[str]:
     """Hosts of the logsearch tier (topology group `logsearch_box`), or [] when the
     group is absent (a lab whose topology carries no logsearch node).
 
-    Deliberately SEPARATE from _commons_members: logsearch is wired into commons
-    up/status/down explicitly (#832), but kept OUT of the commons group set so
-    all_vms does NOT force-boot the heavy (6 GB) logsearch node on every per-stack
-    bootstrap — the tier stays opt-in, and its Alloy fan-out is inert until it is
-    brought up (the gate file is absent). Read from topology the same way
-    _commons_members reads a group's hosts, so there is one source of truth.
+    Kept as its own group (not folded into the commons groups), but logsearch is a
+    CORE observability layer (#1018): all_vms() includes it, so every `bootstrap`
+    boots and provisions it. It was originally opt-in (#832), but Alloy on every node
+    ships to it unconditionally — an always-shipping producer needs an always-present
+    consumer, or the fan-out hot-loops into a disk-fill. Read from topology the same
+    way _commons_members reads a group's hosts, so there is one source of truth.
     """
     all_groups: dict[str, list[str]] = _topology().get("groups") or {}
     return list(all_groups.get(_LOGSEARCH_GROUP) or [])
@@ -144,12 +144,14 @@ def all_vms(stack: Stack, *, no_dr: bool = False) -> list[str]:
 
     Under `no_dr` (#188) the members are the EFFECTIVE (site-A) set — the stack's
     `dr_groups` hosts are excluded — so the guest-enumerating phases (vms/provision-
-    dns/observe `--limit`) target only the HA site. Commons are always included; they
-    are shared and CPU-cheap. Default `no_dr=False` keeps the full HADR set unchanged.
+    dns/observe `--limit`) target only the HA site. Commons AND the logsearch tier are
+    always included (site-independent core layers): commons are shared/CPU-cheap, and
+    logsearch is a core observability layer (#1018) — Alloy ships to it unconditionally,
+    so it must come up on every bootstrap. Default `no_dr=False` keeps the full HADR set.
     """
     members = stack_members_effective(stack.name, no_dr=no_dr) or []
     vms = list(members)
-    for host in _commons_members():
+    for host in _commons_members() + _logsearch_members():
         if host not in vms:
             vms.append(host)
     return vms
