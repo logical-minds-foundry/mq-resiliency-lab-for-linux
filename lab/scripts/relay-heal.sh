@@ -19,7 +19,7 @@ set -euo pipefail
 # src/mqlab/relay.py (WORKSTATION_GRAFANA_URL / RELAY_UNITS) — this script is standalone so it
 # cannot import them. Override the probe URL via RELAY_PROBE_URL (used by tests).
 PROBE_URL="${RELAY_PROBE_URL:-http://localhost:3000/api/health}"
-RELAY_UNITS=(vergil-portforward-3000.socket vergil-portforward-3000.service)
+RELAY_UNITS=(vergil-portforward-3000.service)
 
 # systemctl needs root. The systemd unit already runs as root (empty prefix); a human running
 # this by hand does not, so prefix with sudo only then.
