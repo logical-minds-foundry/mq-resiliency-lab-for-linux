@@ -8,6 +8,8 @@ deleteDatasources:
     orgId: 1
   - name: Loki
     orgId: 1
+  - name: OpenSearch
+    orgId: 1
 datasources:
   - name: Prometheus
     type: prometheus
@@ -20,3 +22,16 @@ datasources:
     uid: loki  # pinned — dashboard Logs panels reference {type: loki, uid: loki}
     access: proxy
     url: http://localhost:3100
+  # OpenSearch log-search tier (#1025, epic .github#198). Typed `elasticsearch` — the
+  # built-in core datasource, no plugin: OpenSearch is ES-API compatible for log search,
+  # so the leaner no-plugin path is used (the dedicated grafana-opensearch-datasource
+  # plugin is NOT installed in the obs Grafana). Plaintext http on the mgmt plane (#827):
+  # the logsearch tier runs the security plugin disabled, so no TLS and no credentials.
+  - name: OpenSearch
+    type: elasticsearch
+    uid: opensearch  # pinned — #169 Wave 1b Logs panels reference {type: elasticsearch, uid: opensearch}
+    access: proxy
+    url: http://{{ logsearch_mgmt_ip }}:9200
+    jsonData:
+      index: "logs-*"        # Data Prepper writes the log stream to the logs-* index
+      timeField: "@timestamp"

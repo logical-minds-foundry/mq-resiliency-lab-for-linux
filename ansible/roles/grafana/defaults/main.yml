@@ -13,3 +13,11 @@ grafana_anonymous: false
 grafana_rendering: false
 grafana_rendering_server_url: "http://localhost:8081/render"
 grafana_rendering_callback_url: "http://localhost:3000/"
+# Log-search tier mgmt IP (#1025, epic .github#198). Unlike Prometheus/Loki — which
+# are co-located with Grafana on the obs box and reached at localhost — OpenSearch runs
+# on the separate `logsearch` node, reachable only over the mgmt plane. The datasource
+# provisioning is BAKED into the obs box (grafana install half), so this must resolve at
+# bake time; the address is the topology's STATIC mgmt NIC for the logsearch node
+# (lab/topology.yaml: logsearch net-mgmt 10.50.0.4), the same fixed-address convention as
+# obs (.2) / probe (.3) and mirroring src/mqlab/logsearch.py OPENSEARCH_HOST. Overridable.
+logsearch_mgmt_ip: "10.50.0.4"
