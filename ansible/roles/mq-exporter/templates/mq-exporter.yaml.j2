@@ -22,7 +22,12 @@ global:
     # force monitoredQueues=* — left off (Phase-0 doc §3, "likely prune").
     useStatistics: false
     logLevel: error
-    pollInterval: 0s
+    # Non-zero (#1014): object status is gathered in the background at this cadence
+    # and /metrics serves the cached result, so a scrape returns instantly. A 0s
+    # pollInterval forces a synchronous object gather on every scrape, which under
+    # the fire-hose object scope takes ~24s — overrunning Prometheus' 10s scrape and
+    # timeout and wedging the exporter (overlapping gathers, no metrics land).
+    pollInterval: {{ mq_exporter_poll_interval }}
     tzOffset: 0h
     # Fire-hose knob (#944): drop the 1h default so newly-created queues become
     # visible promptly at the next wildcard rediscovery pass (Phase-0 doc §3 caveat).
