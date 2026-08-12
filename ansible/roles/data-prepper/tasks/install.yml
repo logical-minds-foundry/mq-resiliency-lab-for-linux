@@ -92,7 +92,7 @@
       User={{ data_prepper_user }}
       Group={{ data_prepper_user }}
       WorkingDirectory={{ data_prepper_data_dir }}
-      Environment=JAVA_OPTS=-Xms{{ data_prepper_heap }} -Xmx{{ data_prepper_heap }}
+      Environment="JAVA_OPTS=-Xms{{ data_prepper_heap }} -Xmx{{ data_prepper_heap }}"
       ExecStart={{ data_prepper_home }}/bin/data-prepper
       LimitNOFILE=65536
       TimeoutStartSec=180

@@ -37,9 +37,12 @@ from pathlib import Path
 
 import jinja2
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE_ROOT = REPO_ROOT / "ansible"
+
+DATA_PREPPER_INSTALL = ANSIBLE_ROOT / "roles" / "data-prepper" / "tasks" / "install.yml"
 
 
 def _ansible_jinja_env() -> jinja2.Environment:
@@ -90,6 +93,55 @@ def test_ansible_template_parses(template: Path) -> None:
             f"Jinja template fails to parse and would break at deploy/render time: "
             f"{rel}: {exc.message} (line {exc.lineno})"
         )
+
+
+def _data_prepper_unit_content() -> str:
+    """Extract the inline systemd-unit `content:` block that `install.yml`'s copy
+    task drops at `/etc/systemd/system/data-prepper.service`.
+
+    The unit is authored inline (not a `.j2`), so the generic parse guard above
+    never touches it. This pulls the exact Jinja source that Ansible renders.
+    """
+    tasks = yaml.safe_load(DATA_PREPPER_INSTALL.read_text(encoding="utf-8"))
+    for task in tasks:
+        copy = task.get("ansible.builtin.copy", {})
+        if copy.get("dest") == "/etc/systemd/system/data-prepper.service":
+            return copy["content"]
+    raise AssertionError(
+        "data-prepper install.yml no longer has a copy task rendering "
+        "/etc/systemd/system/data-prepper.service — has the unit moved?"
+    )
+
+
+def test_data_prepper_unit_environment_line_is_single_quoted() -> None:
+    """The systemd unit's JVM heap flags must both survive (#1024).
+
+    Rendered *unquoted*, `Environment=JAVA_OPTS=-Xms1g -Xmx1g` makes systemd split
+    on the space into `JAVA_OPTS=-Xms1g` plus a bogus bare `-Xmx1g`
+    ("Invalid environment assignment, ignoring: -Xmx1g") — so `-Xmx` is silently
+    dropped and the heap is uncapped. The value must be a single quoted
+    assignment: `Environment="JAVA_OPTS=…"`.
+    """
+    env = _ansible_jinja_env()
+    context = {
+        "data_prepper_user": "data-prepper",
+        "data_prepper_home": "/usr/share/data-prepper",
+        "data_prepper_data_dir": "/var/lib/data-prepper",
+        "data_prepper_heap": "1g",
+    }
+    rendered = env.from_string(_data_prepper_unit_content()).render(context)
+
+    env_lines = [ln.strip() for ln in rendered.splitlines() if ln.strip().startswith("Environment")]
+    assert env_lines == ['Environment="JAVA_OPTS=-Xms1g -Xmx1g"'], (
+        "the data-prepper Environment= line must be a single quoted assignment so "
+        f"systemd keeps -Xmx; got {env_lines!r}"
+    )
+    # The quoted form is the whole point: an unquoted `Environment=JAVA_OPTS=` is
+    # exactly the regression (systemd would split it and drop -Xmx).
+    assert 'Environment="JAVA_OPTS=' in rendered
+    assert "Environment=JAVA_OPTS=" not in rendered
+    # -Xmx must appear only inside the quoted value, never as a bare token.
+    assert rendered.count("-Xmx") == 1
 
 
 def test_parse_guard_catches_malformed_expression() -> None:
