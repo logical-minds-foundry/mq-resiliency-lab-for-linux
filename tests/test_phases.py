@@ -156,10 +156,11 @@ def test_first_unsatisfied_observe_gap(monkeypatch, tmp_path):
     assert first_unsatisfied(stack, states) == 3
 
 
-# --- logsearch membership (#832): a separate member set, NOT a commons group ---
-# logsearch is wired into commons up/status/down explicitly, but is deliberately kept
-# OUT of the commons group set so it is not force-booted by every per-stack bootstrap
-# (all_vms) — the 6 GB logsearch node stays opt-in (fan-out inert when it is absent).
+# --- logsearch membership (#1018): its own group, but a CORE observability layer ---
+# logsearch is kept as its own group (logsearch_box), NOT folded into the commons
+# groups — but it IS included in all_vms so every bootstrap boots + provisions it.
+# Alloy ships to it unconditionally, so an opt-in consumer (#832) let the fan-out
+# hot-loop into a disk-fill; observability is a requirement, not opt-in.
 
 _LOGSEARCH_TOPO = TOPO.replace(
     "  app-client: {}\n",
@@ -187,14 +188,16 @@ def test_logsearch_members_empty_when_group_absent(monkeypatch, tmp_path):
     assert _logsearch_members() == []
 
 
-def test_logsearch_not_in_commons_members_or_all_vms(monkeypatch, tmp_path):
+def test_logsearch_in_all_vms_but_not_a_commons_member(monkeypatch, tmp_path):
+    # logsearch is its own group (never a commons member), yet all_vms includes it so
+    # every bootstrap boots + provisions the tier — a core observability layer (#1018).
     from mqlab.phases import _commons_members, all_vms
 
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(_LOGSEARCH_TOPO)
     assert "logsearch" not in _commons_members()
-    assert "logsearch" not in all_vms(lab_stacks()["pcmk-ubuntu"])
+    assert "logsearch" in all_vms(lab_stacks()["pcmk-ubuntu"])
 
 
 # --- satisfied predicate edge branches ---
