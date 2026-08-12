@@ -87,12 +87,6 @@
       -Xmx{{ opensearch_heap }}
   notify: restart opensearch
 
-- name: systemd drop-in dir for opensearch (per-run admin-password drop-in lands here)
-  ansible.builtin.file:
-    path: /etc/systemd/system/opensearch.service.d
-    state: directory
-    mode: "0755"
-
 - name: install the systemd unit (INERT — not enabled/started here; configure half owns that)
   ansible.builtin.copy:
     dest: /etc/systemd/system/opensearch.service

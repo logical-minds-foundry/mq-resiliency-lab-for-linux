@@ -6,40 +6,15 @@
 # invokes this via `tasks_from: configure`; the un-baked full-role path runs it as the
 # second half of main.yml.
 
-# --- credential seam (spec §10, plan Task 4 Step 1) ------------------------------------
-# lab-secret.sh auto-generates + persists the value under build/state/secrets/ (gitignored,
-# host-durable) — the SAME seam grafana's admin password uses. Runs on the control host;
-# fail loud if it cannot be materialized, NEVER a default password.
-- name: materialize the OpenSearch admin credential from the lab secret seam
-  ansible.builtin.command:
-    cmd: "{{ playbook_dir }}/../lab/scripts/lab-secret.sh opensearch_admin_password"
-  delegate_to: localhost
-  become: false
-  run_once: true
-  changed_when: false
-  register: opensearch_admin_secret
-
-- name: assert the admin credential was materialized (no silent default)
-  ansible.builtin.assert:
-    that:
-      - opensearch_admin_secret.stdout | trim | length > 0
-    fail_msg: >-
-      opensearch: the admin credential could not be materialized from the lab secret seam
-      (lab/scripts/lab-secret.sh opensearch_admin_password) — refusing to bring the tier up
-      with a default password.
-
-# Injected as a per-run SECRET drop-in (mirrors grafana's admin.conf), mode 0600, never
-# baked. v1 runs the security plugin disabled (opensearch.yml), so the engine does not
-# currently consume this — but wiring the seam now keeps the credential path real and makes
-# a future security-on flip (follow-on #819) a one-line opensearch.yml change.
-- name: opensearch admin-password env drop-in (per-run secret)
-  ansible.builtin.copy:
-    dest: /etc/systemd/system/opensearch.service.d/admin.conf
-    mode: "0600"
-    content: |
-      [Service]
-      Environment=OPENSEARCH_INITIAL_ADMIN_PASSWORD={{ opensearch_admin_secret.stdout | trim }}
-  notify: restart opensearch
+# --- no admin credential under min (epic .github#198) ---------------------------------
+# There is deliberately NO admin-password seam here. It existed only to feed the security
+# plugin's `OPENSEARCH_INITIAL_ADMIN_PASSWORD` bootstrap, and this role now installs the min
+# (core-only) distribution, which ships WITHOUT that plugin — there is no admin user to
+# provision and the engine consumes no such credential. Materializing a lab secret for a
+# value nothing reads, and asserting fail-loud on it, would be a dead gate; the plaintext
+# telemetry-plane posture (#827) makes the credential unnecessary in v1. A future
+# security-on flip (follow-on #819) reintroduces both the security-carrying distribution and
+# this seam together.
 
 # --- service enable + start -----------------------------------------------------------
 - name: enable + start opensearch
@@ -52,13 +27,19 @@
 - name: wait for the OpenSearch cluster to accept requests
   # green or yellow are BOTH healthy here; only red / unreachable is a failure. On a
   # single node with the replicas:0 template below, health should read green.
+  #
+  # Budget re-tuned to the min (core-only) reality (epic .github#198): without the security
+  # plugin's startup work, core OpenSearch binds :9200 in ~1-2 min on this node. 36 retries x
+  # 5 s = 180 s gives comfortable headroom over that while still FAILING LOUD — if the tier
+  # never accepts requests the play aborts here rather than letting a half-up logsearch node
+  # limp forward (Data Prepper / Dashboards downstream both depend on this store).
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ opensearch_http_port }}/_cluster/health"
     method: GET
     status_code: 200
   register: opensearch_health
   until: opensearch_health.status == 200 and opensearch_health.json.status in ['green', 'yellow']
-  retries: 60
+  retries: 36
   delay: 5
 
 # --- logs-* index template BEFORE any sink writes (connector spike gating finding) -----

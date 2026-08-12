@@ -12,11 +12,13 @@ path.repo: ["{{ opensearch_repo_dir }}"]
 
 # v1 telemetry-plane posture (spec §10 tenet + follow-on #819). The logsearch tier lives on
 # the lab's DELIBERATELY-UNHARDENED telemetry plane and is exposed only on the node's
-# mgmt-only NIC. The security plugin is disabled for v1: this matches the connector +
-# snapshot spikes' proven end-to-end config (the Data Prepper http sink and `mqlab logsearch`
-# health path both target plain http://:9200), and OpenSearch's admin-password bootstrap is
-# incompatible with both the inert-bake split and the existing hex lab-secret (which fails
-# OpenSearch's password-complexity validator). Whether to add a security demonstration is the
-# named follow-on #819; the admin credential SEAM is still materialized + injected by the
-# configure half, so flipping this to `false` later is a one-line change.
-plugins.security.disabled: true
+# mgmt-only NIC, so it runs plaintext http://:9200 (the Data Prepper http sink and
+# `mqlab logsearch` health path both target it) — matching the connector + snapshot spikes'
+# proven end-to-end config.
+#
+# There is NO `plugins.security.disabled` setting here on purpose. This role installs the min
+# (core-only) distribution (epic .github#198), which ships WITHOUT the security plugin — so
+# the plugin that registers that setting is absent, and leaving the line in would make it an
+# UNKNOWN setting that OpenSearch refuses to start on. Adding a security demonstration is the
+# named follow-on #819; that would switch back to a security-carrying distribution AND
+# reintroduce the setting together.
