@@ -114,9 +114,10 @@ class RoleSpec:
     domain_mappings: list[dict[str, Any]] | None = None
 
 
-# The curated support-host order: infra (the DNS pair) first, then obs, probe, svc, app.
-# Each entry is a commons GROUP; its hosts expand from topology `groups` (infra → two).
-_SUPPORT_GROUPS = ["infra", "obs_box", "probe", "svc", "app"]
+# The curated support-host order: infra (the DNS pair) first, then obs and its
+# observability sibling logsearch, then probe, svc, app. Each entry is a commons GROUP;
+# its hosts expand from topology `groups` (infra → two).
+_SUPPORT_GROUPS = ["infra", "obs_box", "logsearch_box", "probe", "svc", "app"]
 
 _ROLE_SPEC: dict[str, RoleSpec] = {
     # DNS q/s has no exporter yet (the systemd collector only proves `named` is running);
@@ -135,6 +136,18 @@ _ROLE_SPEC: dict[str, RoleSpec] = {
         domain_title="scrape ✓",
         domain="count(up == 1)",
         domain_unit="short",
+    ),
+    # logsearch has no OpenSearch metrics exporter (Data Prepper is the log connector, not
+    # a Prometheus source), so its one domain signal is node-driven: root-fs usage — the
+    # log store's critical resource and the exact failure mode that fills the box. The
+    # defining-service pill watches the OpenSearch tier units.
+    "logsearch_box": RoleSpec(
+        role="Log search",
+        unit="opensearch.service|opensearch-dashboards.service|data-prepper.service",
+        domain_title="disk %",
+        domain='100 * (1 - node_filesystem_avail_bytes{{host="{host}",mountpoint="/"}}'
+        ' / node_filesystem_size_bytes{{host="{host}",mountpoint="/"}})',
+        domain_unit="percent",
     ),
     "probe": RoleSpec(
         role="MQ probe",
