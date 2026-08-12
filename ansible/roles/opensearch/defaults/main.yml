@@ -10,8 +10,15 @@
 opensearch_version: "3.8.0"
 # OpenSearch tarball arch tokens are x64 / arm64 (NOT amd64), unlike loki/alloy.
 opensearch_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
-opensearch_pkg: "opensearch-{{ opensearch_version }}-linux-{{ opensearch_arch }}"
-opensearch_url: "https://artifacts.opensearch.org/releases/bundle/opensearch/{{ opensearch_version }}/{{ opensearch_pkg }}.tar.gz"
+# min (core-only) distribution: OpenSearch WITHOUT the bundled plugins — critically,
+# without the security plugin. This is the deliberate v1 posture (epic .github#198): the
+# logsearch tier runs plaintext on the unhardened telemetry plane (#827), so the security
+# plugin is pure cold-boot cost (slow start, an admin-bootstrap dance the lab does not use).
+# The min tarball extracts to the SAME `opensearch-{{ opensearch_version }}/` top-level dir
+# as the bundle (verified against the 3.8.0 core artifact), so install.yml's creates:/src:
+# references need no change. Note `/releases/core/` (min) vs the bundle's `/releases/bundle/`.
+opensearch_pkg: "opensearch-min-{{ opensearch_version }}-linux-{{ opensearch_arch }}"
+opensearch_url: "https://artifacts.opensearch.org/releases/core/opensearch/{{ opensearch_version }}/{{ opensearch_pkg }}.tar.gz"
 
 # Install layout. The tarball is self-contained (bundles its own JDK), mirroring the
 # loki/alloy/prometheus binary-tarball roles (the deb is rejected: its postinstall
