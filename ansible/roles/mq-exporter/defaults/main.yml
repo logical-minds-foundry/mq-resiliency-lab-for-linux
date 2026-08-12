@@ -35,6 +35,12 @@ mq_exporter_config: "{{ mq_exporter_confdir }}/mq-exporter-{{ mq_exporter_instan
 mq_exporter_queue_selector: [PUT, GET, GENERAL, OPENCLOSE, INQSET, EXTENDED]
 mq_exporter_show_inactive_channels: true
 mq_exporter_rediscover_interval: 1m
+# Object-status poll cadence (#1014): object status is polled in the background at
+# this interval so /metrics serves cached results instantly. This decouples scrape
+# time from the ~24s fire-hose object gather (a pollInterval of 0s forces a
+# synchronous gather on every scrape, which overruns Prometheus' 10s scrape/timeout
+# and wedges the exporter). Resource/publication metrics stay continuous regardless.
+mq_exporter_poll_interval: "1m"
 # Wildcard ALL objects, including SYSTEM.* (#423): filtering is a display concern,
 # not a scrape concern, and the system series (e.g. SYSTEM.CLUSTER.* churn) is a
 # proven leading indicator we want for free — a production deployment would filter,
