@@ -115,27 +115,33 @@ def test_heap_dropin_disables_alwayspretouch() -> None:
     assert "-Xmx" in content, f"heap.options drop-in lost its -Xmx heap size; got: {content!r}"
 
 
-def test_install_drops_performance_analyzer_javaagent() -> None:
-    """install.yml must strip the Performance Analyzer -javaagent line from the base
-    config/jvm.options (unused by logsearch; heavy class-load instrumentation, #1034)."""
+def test_install_never_removes_the_core_javaagent() -> None:
+    """Regression guard (#1038): install.yml must NEVER remove/absent the
+    `agent/opensearch-agent.jar` -javaagent line from jvm.options.
+
+    #1034 mis-identified this line as the optional Performance Analyzer and stripped it
+    with a `lineinfile state=absent` task. It is actually the REQUIRED core OpenSearch
+    3.x Java Agent that provides `org.opensearch.javaagent.bootstrap.AgentPolicy` (the
+    SecurityManager replacement). Without it, OpenSearch core crash-loops at startup with
+    `NoClassDefFoundError: AgentPolicy$AnyCanExit`. Any task that absents or comments out
+    that line must never come back.
+    """
     tasks = _load_tasks(INSTALL_TASKS)
-    matches = [
-        line
+    # Any lineinfile/replace task that MATCHES the agent line is an offender: install.yml
+    # has no legitimate reason to absent it, blank it, or comment it out. Matching that
+    # regexp at all means the task is reaching for the required agent line.
+    offenders = [
+        {"name": task.get("name"), key: module}
         for task in tasks
-        if isinstance((line := task.get("ansible.builtin.lineinfile")), dict)
-        and line.get("state") == "absent"
-        and "opensearch-agent" in str(line.get("regexp", ""))
+        for key in ("ansible.builtin.lineinfile", "ansible.builtin.replace")
+        if isinstance((module := task.get(key)), dict)
+        and "opensearch-agent" in str(module.get("regexp", ""))
     ]
-    assert len(matches) == 1, (
-        "install.yml must have exactly one lineinfile state=absent task removing the "
-        f"opensearch-agent.jar javaagent line; found {len(matches)}"
-    )
-    lineinfile = matches[0]
-    assert str(lineinfile["path"]).endswith("config/jvm.options"), (
-        f"perf-analyzer removal must target config/jvm.options; got path {lineinfile.get('path')!r}"
-    )
-    assert r"agent/opensearch-agent\.jar" in lineinfile["regexp"], (
-        f"perf-analyzer removal regexp must match the agent jar line; got {lineinfile['regexp']!r}"
+    assert not offenders, (
+        "install.yml has a task that removes the core OpenSearch Java Agent "
+        "(agent/opensearch-agent.jar) from jvm.options. That agent is REQUIRED — it "
+        "provides AgentPolicy (the SecurityManager replacement); removing it crash-loops "
+        f"OpenSearch with NoClassDefFoundError: AgentPolicy$AnyCanExit (#1038). Found: {offenders}"
     )
 
 
