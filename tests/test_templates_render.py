@@ -33,6 +33,7 @@ owned upstream. This guard is the robust, false-positive-free repo-local floor.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import jinja2
@@ -43,6 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ANSIBLE_ROOT = REPO_ROOT / "ansible"
 
 DATA_PREPPER_INSTALL = ANSIBLE_ROOT / "roles" / "data-prepper" / "tasks" / "install.yml"
+ALLOY_CONFIG = ANSIBLE_ROOT / "roles" / "alloy" / "templates" / "config.alloy.j2"
 
 
 def _ansible_jinja_env() -> jinja2.Environment:
@@ -142,6 +144,55 @@ def test_data_prepper_unit_environment_line_is_single_quoted() -> None:
     assert "Environment=JAVA_OPTS=" not in rendered
     # -Xmx must appear only inside the quoted value, never as a bare token.
     assert rendered.count("-Xmx") == 1
+
+
+def test_alloy_journal_relabel_drops_own_log_shipping_units() -> None:
+    """The Alloy journal relabel must DROP the log-shipping components' own units (#1029).
+
+    Without a drop rule, Alloy's `loki.source.journal` re-scrapes Alloy's own
+    `sending queue is full` errors (and Data Prepper's) and re-ships them to both
+    Loki and the OpenSearch bridge — a self-amplifying feedback loop that grew to
+    ~90% of all log volume under backpressure (epic .github#198). The
+    `loki.relabel "journal"` block must carry an `action = "drop"` rule whose unit
+    regex matches both `alloy.service` and `data-prepper.service`.
+    """
+    env = _ansible_jinja_env()
+    # `bool` is an Ansible-native filter (not a Jinja builtin); the config uses it
+    # to gate the OpenSearch fan-out. Register a faithful stand-in so the template
+    # renders. `default` is a Jinja builtin and needs no registration.
+    env.filters["bool"] = lambda v: (
+        v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on", "t", "y")
+    )
+    context = {
+        "inventory_hostname": "obs",
+        "loki_push_url": "http://loki.obs:3100/loki/api/v1/push",
+    }
+    rendered = env.from_string(ALLOY_CONFIG.read_text(encoding="utf-8")).render(context)
+
+    # A drop action must be present in the rendered config.
+    assert re.search(r'action\s*=\s*"drop"', rendered), (
+        'the Alloy journal relabel must carry an `action = "drop"` rule to break '
+        f"the #1029 self-ingestion feedback loop; rendered config:\n{rendered}"
+    )
+
+    # The drop rule's unit regex must match BOTH log-shipping units. Pull the regex
+    # literal that sits in the same `rule { ... }` block as the drop action.
+    drop_rule = re.search(
+        r"rule\s*\{[^}]*?regex\s*=\s*\"(?P<re>[^\"]+)\"[^}]*?action\s*=\s*\"drop\"[^}]*?\}",
+        rendered,
+        re.DOTALL,
+    )
+    assert drop_rule, (
+        'could not find a `rule { ... regex = ... action = "drop" ... }` block in the '
+        f"rendered Alloy config; rendered config:\n{rendered}"
+    )
+    unit_regex = drop_rule.group("re")
+    compiled = re.compile(unit_regex)
+    for unit in ("alloy.service", "data-prepper.service"):
+        assert compiled.search(unit), (
+            f"the #1029 drop regex {unit_regex!r} must match the log-shipping unit "
+            f"{unit!r} so its own journal entries are never re-shipped"
+        )
 
 
 def test_parse_guard_catches_malformed_expression() -> None:

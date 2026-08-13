@@ -5,6 +5,16 @@
 loki.relabel "journal" {
   forward_to = []
 
+  // Break the self-ingestion feedback loop (#1029, epic .github#198): drop the
+  // log-shipping components' OWN journal entries. Otherwise Alloy's
+  // "sending queue is full" errors (and Data Prepper's) get re-scraped and
+  // re-sent, amplifying to ~90% of all log volume under any backpressure.
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    regex         = "(alloy|data-prepper)\.service"
+    action        = "drop"
+  }
+
   rule {
     source_labels = ["__journal__systemd_unit"]
     target_label  = "unit"
