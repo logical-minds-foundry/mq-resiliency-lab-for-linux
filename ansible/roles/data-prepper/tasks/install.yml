@@ -95,7 +95,7 @@
       Environment="JAVA_OPTS=-Xms{{ data_prepper_heap }} -Xmx{{ data_prepper_heap }}"
       ExecStart={{ data_prepper_home }}/bin/data-prepper
       LimitNOFILE=65536
-      TimeoutStartSec=180
+      TimeoutStartSec=900
       Restart=on-failure
 
       [Install]

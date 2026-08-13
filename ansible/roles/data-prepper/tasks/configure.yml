@@ -21,9 +21,13 @@
 # Readiness = the otel_logs_source gRPC port is accepting connections. That is the
 # endpoint #831's Alloy fan-out dials, so a listening :21892 is the meaningful "ready
 # to ingest" signal (Data Prepper binds the pipeline source once the pipeline is up).
+# 15-min budget (900 s): Data Prepper is a JVM that starts slowly under macOS host
+# oversubscription on a cold boot — #1022 got past OpenSearch (widened in #1034) only
+# to time out here at the old 180 s. Matches the OpenSearch readiness budget; still
+# FAIL-LOUD (aborts if the port never binds). See #1040/#1034, epic .github#198.
 - name: wait for the Data Prepper otel_logs_source to accept connections
   ansible.builtin.wait_for:
     host: 127.0.0.1
     port: "{{ data_prepper_otel_logs_port }}"
     state: started
-    timeout: 180
+    timeout: 900

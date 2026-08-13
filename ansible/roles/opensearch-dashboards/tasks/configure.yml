@@ -44,6 +44,10 @@
   # Dashboards reports red/yellow while it boots + connects to OpenSearch, green once ready.
   # green or yellow are BOTH "server up + serving the saved-objects API" here; only red /
   # unreachable is a failure (mirrors the opensearch role's green|yellow health tolerance).
+  # 15-min budget (180 retries x 5 s delay = 900 s): Dashboards is the last logsearch-tier
+  # service to start and so the most starved under macOS host oversubscription on a cold
+  # boot (#1022). Matches the OpenSearch (#1034) and Data Prepper (#1040) readiness budgets;
+  # still FAIL-LOUD (aborts if it never reports green/yellow). See #1040, epic .github#198.
   ansible.builtin.uri:
     url: "http://localhost:{{ opensearch_dashboards_server_port }}/api/status"
     method: GET
@@ -52,7 +56,7 @@
   until: >-
     opensearch_dashboards_status.status == 200
     and opensearch_dashboards_status.json.status.overall.state in ['green', 'yellow']
-  retries: 60
+  retries: 180
   delay: 5
 
 # --- default logs-* index pattern (plan Task 5 Step 3) ---------------------------------
