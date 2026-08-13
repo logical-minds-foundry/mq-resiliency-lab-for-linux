@@ -45,6 +45,8 @@ htmlcov/
 junit.xml
 licenses.json
 pip-audit.json
+quality-mypy.xml
+quality-ruff.json
 .ty_cache/
 
 # Python bytecode
