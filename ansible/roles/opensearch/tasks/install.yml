@@ -56,18 +56,6 @@
     state: link
     force: true
 
-# The min distro's base config/jvm.options ships `21-:-javaagent:agent/opensearch-agent.jar`
-# (OpenSearch Performance Analyzer — ByteBuddy class instrumentation loaded at JVM start).
-# logsearch does not use Performance Analyzer, and the load-time instrumentation adds real
-# class-load CPU cost to an already CPU-heavy bootstrap under host oversubscription
-# (#1034, epic .github#198). Strip the line so the JVM starts without the agent.
-- name: drop the Performance Analyzer javaagent (unused by logsearch; heavy class-load instrumentation)
-  ansible.builtin.lineinfile:
-    path: "{{ opensearch_home }}/config/jvm.options"
-    regexp: '^21-:-javaagent:agent/opensearch-agent\.jar'
-    state: absent
-  notify: restart opensearch
-
 - name: opensearch data + snapshot-repo dirs
   ansible.builtin.file:
     path: "{{ item }}"
