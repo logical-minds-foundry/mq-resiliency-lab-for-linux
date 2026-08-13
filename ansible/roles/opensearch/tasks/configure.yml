@@ -28,18 +28,20 @@
   # green or yellow are BOTH healthy here; only red / unreachable is a failure. On a
   # single node with the replicas:0 template below, health should read green.
   #
-  # Budget re-tuned to the min (core-only) reality (epic .github#198): without the security
-  # plugin's startup work, core OpenSearch binds :9200 in ~1-2 min on this node. 36 retries x
-  # 5 s = 180 s gives comfortable headroom over that while still FAILING LOUD — if the tier
-  # never accepts requests the play aborts here rather than letting a half-up logsearch node
-  # limp forward (Data Prepper / Dashboards downstream both depend on this store).
+  # Budget widened to the host-contended cold-boot reality (#1034, epic .github#198):
+  # startup can legitimately take many minutes when the macOS host is oversubscribed
+  # (nested-VM CPU/memory contention swings the JVM bootstrap from ~50 s to ~8.5 min —
+  # measured on cold-boot run #1022). 180 retries x 5 s = 900 s (15 min) covers that
+  # while still FAILING LOUD — if the tier never accepts requests the play aborts here
+  # rather than letting a half-up logsearch node limp forward (Data Prepper / Dashboards
+  # downstream both depend on this store).
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ opensearch_http_port }}/_cluster/health"
     method: GET
     status_code: 200
   register: opensearch_health
   until: opensearch_health.status == 200 and opensearch_health.json.status in ['green', 'yellow']
-  retries: 36
+  retries: 180
   delay: 5
 
 # --- logs-* index template BEFORE any sink writes (connector spike gating finding) -----

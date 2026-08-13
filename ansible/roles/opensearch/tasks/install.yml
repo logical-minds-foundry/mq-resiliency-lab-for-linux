@@ -56,6 +56,18 @@
     state: link
     force: true
 
+# The min distro's base config/jvm.options ships `21-:-javaagent:agent/opensearch-agent.jar`
+# (OpenSearch Performance Analyzer — ByteBuddy class instrumentation loaded at JVM start).
+# logsearch does not use Performance Analyzer, and the load-time instrumentation adds real
+# class-load CPU cost to an already CPU-heavy bootstrap under host oversubscription
+# (#1034, epic .github#198). Strip the line so the JVM starts without the agent.
+- name: drop the Performance Analyzer javaagent (unused by logsearch; heavy class-load instrumentation)
+  ansible.builtin.lineinfile:
+    path: "{{ opensearch_home }}/config/jvm.options"
+    regexp: '^21-:-javaagent:agent/opensearch-agent\.jar'
+    state: absent
+  notify: restart opensearch
+
 - name: opensearch data + snapshot-repo dirs
   ansible.builtin.file:
     path: "{{ item }}"
@@ -76,6 +88,12 @@
     mode: "0640"
   notify: restart opensearch
 
+# jvm.options.d is applied LAST, so -XX:-AlwaysPreTouch here overrides the launcher's
+# default +AlwaysPreTouch (verified live). AlwaysPreTouch pre-faults the WHOLE heap at
+# startup; under macOS host memory pressure (many nested VMs oversubscribing the host)
+# that pre-fault is pathologically slow and dominated a 7-min pre-Node-init bootstrap
+# gap on a cold boot (#1034, epic .github#198). Disabling it lets the heap fault in
+# lazily instead of stalling bring-up up front.
 - name: JVM heap drop-in
   ansible.builtin.copy:
     dest: "{{ opensearch_home }}/config/jvm.options.d/heap.options"
@@ -85,6 +103,7 @@
     content: |
       -Xms{{ opensearch_heap }}
       -Xmx{{ opensearch_heap }}
+      -XX:-AlwaysPreTouch
   notify: restart opensearch
 
 - name: install the systemd unit (INERT — not enabled/started here; configure half owns that)
