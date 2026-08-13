@@ -87,7 +87,7 @@
       Group={{ opensearch_dashboards_user }}
       ExecStart={{ opensearch_dashboards_home }}/bin/opensearch-dashboards
       WorkingDirectory={{ opensearch_dashboards_home }}
-      TimeoutStartSec=180
+      TimeoutStartSec=900
       Restart=on-failure
 
       [Install]
