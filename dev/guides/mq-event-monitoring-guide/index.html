@@ -1517,9 +1517,9 @@ collector under a small <strong>supervising wrapper</strong>, started via <code>
 leads its own process group, and stop that whole group with a negative-PID <code>kill</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>DEFINE SERVICE(MQ.EVENT.MONITOR) REPLACE +
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>  CONTROL(QMGR) SERVTYPE(SERVER) +
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD(&#39;/usr/bin/setsid&#39;) STARTARG(&#39;-w -- /path/to/your/wrapper +QMNAME+&#39;) +
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD(&#39;/bin/kill&#39;) STOPARG(&#39;-TERM -- -+MQ_SERVER_PID+&#39;) +
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR(&#39;Drain SYSTEM.ADMIN.*.EVENT to JSON&#39;)
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  STARTCMD('/usr/bin/setsid') STARTARG('-w -- /path/to/your/wrapper +QMNAME+') +
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>  STOPCMD('/bin/kill') STOPARG('-TERM -- -+MQ_SERVER_PID+') +
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  DESCR('Drain SYSTEM.ADMIN.*.EVENT to JSON')
 </code></pre></div>
 <p>The <code>+QMNAME+</code> / <code>+MQ_SERVER_PID+</code> replaceable inserts <strong>require the <code>+</code>
 delimiters</strong> — without them MQ passes the literal token, not the value, and

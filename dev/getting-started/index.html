@@ -1678,7 +1678,7 @@ NICs and platform, and the stack registry itself. See the
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
 </code></pre></div>
 <p>When you're done, tear a stack back down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack&#39;s guests + overlay disks</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
 </code></pre></div>
 <p><code>teardown</code> reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
 other stack is still up — pass <code>--commons</code> to force their removal, or leave them

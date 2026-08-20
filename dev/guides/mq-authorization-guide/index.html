@@ -1755,14 +1755,14 @@ is never a window in which an unmapped identity is admitted, and so
    (there is exactly one per queue manager — see Appendix B).</li>
 </ol>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>ALTER QMGR CHLAUTH(ENABLED)
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>ALTER QMGR DEADQ(&#39;SYSTEM.DEAD.LETTER.QUEUE&#39;)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>ALTER QMGR DEADQ('SYSTEM.DEAD.LETTER.QUEUE')
 </code></pre></div>
 <ol>
 <li><strong>Lay the deny-all back-stop first.</strong> A wildcard <code>ADDRESSMAP</code> with
    <code>USERSRC(NOACCESS)</code> refuses every connection that no more-specific rule
    matches. <code>ACTION(REPLACE)</code> keeps the statement idempotent.</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>SET CHLAUTH(&#39;*&#39;) TYPE(ADDRESSMAP) ADDRESS(&#39;*&#39;) USERSRC(NOACCESS) ACTION(REPLACE)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) ACTION(REPLACE)
 </code></pre></div>
 <ol>
 <li><strong>Map each partner's certificate DN to its service identity.</strong> One
@@ -1771,13 +1771,13 @@ is never a window in which an unmapped identity is admitted, and so
    back-stop, these are the only admitted paths.</li>
 </ol>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a># Application clients (request/reply over a server-connection channel)
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>SET CHLAUTH(&#39;APP.SVRCONN&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=apps&#39;) USERSRC(MAP) MCAUSER(&#39;appsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>SET CHLAUTH('APP.SVRCONN') TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=apps') USERSRC(MAP) MCAUSER('appsvc') ACTION(REPLACE)
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a># Monitoring clients (read-only)
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>SET CHLAUTH(&#39;MON.SVRCONN&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=ops&#39;) USERSRC(MAP) MCAUSER(&#39;monsvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>SET CHLAUTH('MON.SVRCONN') TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=ops') USERSRC(MAP) MCAUSER('monsvc') ACTION(REPLACE)
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a># A partner queue manager&#39;s receiver channel
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>SET CHLAUTH(&#39;PARTNER.TO.ME&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=gateway&#39;) USERSRC(MAP) MCAUSER(&#39;mcasvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a># A partner queue manager's receiver channel
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>SET CHLAUTH('PARTNER.TO.ME') TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=gateway') USERSRC(MAP) MCAUSER('mcasvc') ACTION(REPLACE)
 </code></pre></div>
 <p>Where subject DNs are not unique across partners, pin the issuer as well with
    <code>SSLCERTI('&lt;issuer DN&gt;')</code>.</p>
@@ -2077,15 +2077,15 @@ authorization, does <strong>not</strong> relax the OS-account requirement.</p>
 <h2 id="appendix-c-complete-configuration-examples">Appendix C: Complete configuration examples<a class="headerlink" href="#appendix-c-complete-configuration-examples" title="Permanent link">&para;</a></h2>
 <p><strong>CHLAUTH — back-stop first, then the maps (idempotent):</strong></p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ALTER QMGR CHLAUTH(ENABLED)
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>ALTER QMGR DEADQ(&#39;SYSTEM.DEAD.LETTER.QUEUE&#39;)
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>ALTER QMGR DEADQ('SYSTEM.DEAD.LETTER.QUEUE')
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a># Deny-all back-stop — laid before any map
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>SET CHLAUTH(&#39;*&#39;) TYPE(ADDRESSMAP) ADDRESS(&#39;*&#39;) USERSRC(NOACCESS) ACTION(REPLACE)
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) ACTION(REPLACE)
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a># Per-role SSLPEERMAP identity maps (more specific than the back-stop)
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>SET CHLAUTH(&#39;APP.SVRCONN&#39;)   TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=apps&#39;)    USERSRC(MAP) MCAUSER(&#39;appsvc&#39;) ACTION(REPLACE)
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>SET CHLAUTH(&#39;MON.SVRCONN&#39;)   TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=ops&#39;)     USERSRC(MAP) MCAUSER(&#39;monsvc&#39;) ACTION(REPLACE)
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>SET CHLAUTH(&#39;PARTNER.TO.ME&#39;) TYPE(SSLPEERMAP) SSLPEER(&#39;O=Example,OU=gateway&#39;) USERSRC(MAP) MCAUSER(&#39;mcasvc&#39;) ACTION(REPLACE)
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>SET CHLAUTH('APP.SVRCONN')   TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=apps')    USERSRC(MAP) MCAUSER('appsvc') ACTION(REPLACE)
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>SET CHLAUTH('MON.SVRCONN')   TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=ops')     USERSRC(MAP) MCAUSER('monsvc') ACTION(REPLACE)
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>SET CHLAUTH('PARTNER.TO.ME') TYPE(SSLPEERMAP) SSLPEER('O=Example,OU=gateway') USERSRC(MAP) MCAUSER('mcasvc') ACTION(REPLACE)
 <a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
 <a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>REFRESH SECURITY TYPE(CONNAUTH)
 </code></pre></div>
