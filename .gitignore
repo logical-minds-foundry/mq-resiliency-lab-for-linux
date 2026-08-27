@@ -49,12 +49,6 @@ licenses/
 .vagrant/
 *.box
 
-# Ephemeral lab working tree — nested-VM images, vagrant boxes, libvirt disks.
-# The dev VM mounts this; nothing here is precious or version-controlled.
-# Ignore contents but keep the dir present in fresh clones via .gitkeep.
-build/*
-!build/.gitkeep
-
 # Vergil global scratch — nothing source-controlled lives here.
 
 # Vergil worktree convention — parallel-agent issue worktrees and host venv.
