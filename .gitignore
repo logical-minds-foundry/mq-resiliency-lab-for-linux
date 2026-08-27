@@ -1,14 +1,43 @@
-# Brainstorming visual-companion scratch
-.superpowers/
-
-# OS / editor cruft
-.DS_Store
-Thumbs.db
+# >>> vergil-managed: base + python (managed by vrg-gitignore-sync; do not edit) >>>
 *.swp
 *.swo
 *~
+*.bak
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db
+.env
+.env.*
+*.log
+.venv/
+.worktrees/
+.vergil/
+.superpowers/
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+build/
+dist/
+coverage.xml
+junit.xml
+licenses.json
+docs/site/site/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+pip-audit.json
+quality-ruff.json
+quality-mypy.xml
+# <<< vergil-managed <<<
+
+# Brainstorming visual-companion scratch
+
+# OS / editor cruft
 
 # Local env / secrets — never commit IBM MQ entitlement or license artifacts
 *.env
@@ -19,7 +48,6 @@ licenses/
 # Vagrant / VM provisioning state (refined once the fabric design lands)
 .vagrant/
 *.box
-*.log
 
 # Ephemeral lab working tree — nested-VM images, vagrant boxes, libvirt disks.
 # The dev VM mounts this; nothing here is precious or version-controlled.
@@ -28,35 +56,23 @@ build/*
 !build/.gitkeep
 
 # Vergil global scratch — nothing source-controlled lives here.
-.vergil/
 
 # Vergil worktree convention — parallel-agent issue worktrees and host venv.
-.worktrees/
 .venv-host/
 
 # Test/coverage/report artifacts. The tool caches (.pytest_cache, .mypy_cache,
 # .ruff_cache, .venv) self-ignore via a tool-written .gitignore inside each dir;
 # these report files do NOT, so vrg-validate leaks them to the repo root.
-.coverage
 .coverage.*
-coverage.xml
 coverage.json
 htmlcov/
-junit.xml
-licenses.json
-pip-audit.json
-quality-mypy.xml
-quality-ruff.json
 .ty_cache/
 
 # Python bytecode
-__pycache__/
-*.pyc
 
 # Staged/generated docs artifacts — vrg-docs-stage copies the root
 # CHANGELOG.md/releases sources here and mkdocs builds into site/. The
 # sources (CHANGELOG.md, releases/) are committed; these copies are
 # regenerated on every build.
-docs/site/site/
 docs/site/docs/changelog.md
 docs/site/docs/releases/
