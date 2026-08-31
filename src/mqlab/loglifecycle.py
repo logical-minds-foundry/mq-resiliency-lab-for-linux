@@ -72,7 +72,7 @@ def parse_disk(df_out: str) -> dict[str, int | None]:
     try:
         total_blocks = int(fields[-5])
         used_blocks = int(fields[-4])
-    except (IndexError, ValueError):
+    except IndexError, ValueError:
         return {"used_bytes": None, "total_bytes": None}
     return {"used_bytes": used_blocks * 1024, "total_bytes": total_blocks * 1024}
 
@@ -135,7 +135,7 @@ def probe(cmd: list[str], timeout: int) -> str | None:
     """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE)."""
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         return None
     return cp.stdout if cp.returncode == 0 else None
 

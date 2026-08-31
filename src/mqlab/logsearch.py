@@ -184,7 +184,7 @@ def disk_full(allocation: list[dict[str, Any]], threshold: int = DISK_FULL_PERCE
         try:
             if float(row.get("disk.percent", 0)) >= threshold:
                 return True
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return False
 

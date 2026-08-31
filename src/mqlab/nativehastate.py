@@ -191,7 +191,7 @@ def probe(cmd: list[str], timeout: int) -> str | None:
     """Run cmd bounded; return stdout on success, None on timeout/nonzero/OSError (-> STALE)."""
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         return None
     return cp.stdout if cp.returncode == 0 else None
 

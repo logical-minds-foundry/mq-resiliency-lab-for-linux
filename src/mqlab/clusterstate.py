@@ -207,7 +207,7 @@ def probe(cmd: list[str], timeout: int, *, ignore_rc: bool = False) -> str | Non
     """
     try:
         cp = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)  # noqa: S603
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         return None
     if ignore_rc:
         return cp.stdout

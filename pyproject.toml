@@ -1,7 +1,7 @@
 [project]
 name = "mqlab"
 version = "1.0.0"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.14,<3.15"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6", "typer>=0.12", "rich>=13", "cryptography>=42"]
@@ -15,7 +15,7 @@ mqlab = "mqlab.cli:main"
 # must live in the same venv. Declaring it here keeps the two co-resolved by uv —
 # one venv holds one `ansible-core`, so `ansible-lint`'s module and the `ansible`
 # CLI it shells out to can never skew. See #691.
-dev = ["ruff", "mypy", "ty", "pytest", "pytest-cov", "pip-audit", "pip-licenses", "types-PyYAML", "ansible-lint"]
+dev = ["ruff", "mypy", "ty", "pytest", "pytest-cov", "pip-audit", "pip-licenses", "types-PyYAML", "ansible-lint", "pytest-xdist"]
 # Docs toolchain. vrg-container-docs runs `uv sync --group docs && uv run
 # mkdocs ...`; the cd-docs/ci-docs pipelines build the same way. Kept out of
 # the default groups so routine `uv run`/vrg-validate stay lean.
@@ -29,7 +29,7 @@ build-backend = "hatchling.build"
 packages = ["src/mqlab"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 100
 
 [tool.ruff.lint]
@@ -42,7 +42,7 @@ select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "SIM", "TCH", "ARG
 "tests/**" = ["S101", "S106", "S603", "S607", "ARG", "E402"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
