@@ -23,16 +23,16 @@ jobs:
     uses: vergil-project/vergil-actions/.github/workflows/ci-audit.yml@v2.1
     with:
       language: python
-      versions: '["3.12"]'
-      container-tag: '3.12'
+      versions: '["3.14"]'
+      container-tag: '3.14'
       container-suffix: python
 
   quality:
     uses: vergil-project/vergil-actions/.github/workflows/ci-quality.yml@v2.1
     with:
       language: python
-      versions: '["3.12"]'
-      container-tag: '3.12'
+      versions: '["3.14"]'
+      container-tag: '3.14'
       container-suffix: python
 
   security:
@@ -52,15 +52,15 @@ jobs:
       # satisfy the required CI gates — a skipped CodeQL job never reports and
       # blocks every merge (#491).
       upload-sarif: true
-      container-tag: '3.12'
+      container-tag: '3.14'
       container-suffix: python
 
   test:
     uses: vergil-project/vergil-actions/.github/workflows/ci-test.yml@v2.1
     with:
       language: python
-      versions: '["3.12"]'
-      container-tag: '3.12'
+      versions: '["3.14"]'
+      container-tag: '3.14'
       container-suffix: python
 
   version:
@@ -68,7 +68,7 @@ jobs:
     with:
       language: python
       run-release: ${{ inputs.run-release != 'false' }}
-      container-tag: '3.12'
+      container-tag: '3.14'
       container-suffix: python
 
   # Strict docs build, so a PR that breaks the site fails here instead of
