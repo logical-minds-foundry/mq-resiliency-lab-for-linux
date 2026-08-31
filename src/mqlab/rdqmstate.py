@@ -282,7 +282,7 @@ def probe(cmd: list[str], timeout: int, *, merge_stderr: bool = False) -> str | 
         cp = subprocess.run(  # noqa: S603
             cmd, stdout=subprocess.PIPE, stderr=stderr, text=True, timeout=timeout, check=False
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired, OSError:
         return None
     return cp.stdout if cp.returncode == 0 else None
 

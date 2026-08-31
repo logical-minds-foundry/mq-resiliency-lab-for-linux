@@ -48,7 +48,7 @@ def cold_boot_age_days(*, now: Callable[[], datetime] = _now) -> int | None:
         return None
     try:
         stamped = datetime.fromisoformat(stamp.read_text().strip())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None  # a corrupt/unreadable stamp is "unknown", never an error
     return (now() - stamped).days
 

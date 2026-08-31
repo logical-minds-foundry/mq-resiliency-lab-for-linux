@@ -9,7 +9,7 @@ primary-language = "python"
 ghas = true
 
 [ci]
-versions = ["3.12"]
+versions = ["3.14"]
 integration-tests = false
 
 [publish]
