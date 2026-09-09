@@ -24,3 +24,12 @@ def test_setup_script_is_strict_and_points_at_next_command() -> None:
     assert "uv sync" in text, "script must materialize the environment"
     assert "mqlab bootstrap" in text, "script must point the user at the bring-up command"
     assert "mqlab doctor" in text, "script must point the user at the pre-flight gate"
+
+
+def test_setup_script_targets_pinned_python_314() -> None:
+    # The runtime side of the 3.12 -> 3.14 migration (#1063): setup must gate on
+    # (and provision) 3.14, and carry no stale 3.12 reference.
+    text = SETUP.read_text()
+    assert "uv python find 3.14" in text, "setup must gate on Python 3.14"
+    assert "uv python install 3.14" in text, "setup must install 3.14 on a miss"
+    assert "3.12" not in text, "setup still references the pre-migration Python 3.12"

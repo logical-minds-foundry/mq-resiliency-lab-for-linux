@@ -19,8 +19,9 @@ edition, is fetched automatically by the tooling).
 - **An x86-64 Linux host with root/sudo** and nested virtualization — the lab
   creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly
   12 vCPU / 64 GiB). `mqlab doctor` reports anything missing.
-- **[uv](https://docs.astral.sh/uv/)** and **Python 3.12** — the orchestrator's
-  runtime.
+- **[uv](https://docs.astral.sh/uv/)** and **Python 3.14** — the orchestrator's
+  runtime. `uv` provisions and manages its own pinned 3.14 interpreter (the base
+  OS Python is left untouched), so you do not install Python yourself.
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
 - **gpg** — to verify the signed release below.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
@@ -68,14 +69,21 @@ From inside the extracted tree, build the Python environment and pre-flight the
 host:
 
 ```bash
-./scripts/setup     # checks uv + Python 3.12, then runs `uv sync` to build the venv
+./scripts/setup     # checks uv + Python 3.14, then runs `uv sync` to build the venv
 mqlab doctor        # pre-flight the host: arch, KVM, libvirt, and required tools
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
-Python 3.12 are present (failing loud if not), runs `uv sync` to materialize the
-virtual environment, and prints the next commands. `mqlab doctor` then confirms
-the host can actually run the guests before you commit to a bring-up.
+a uv-managed Python 3.14 are present — installing 3.14 via `uv` if missing —
+runs `uv sync` to materialize the virtual environment, and prints the next
+commands. `mqlab doctor` then confirms the host can actually run the guests
+before you commit to a bring-up.
+
+!!! note "After a Python-version bump"
+    The pinned Python version lives in `.python-version`. If it changes (or you
+    are upgrading from an older checkout), re-run `./scripts/setup` (or
+    `uv sync`) to rebuild the `.venv` against the pinned interpreter — an
+    existing venv is **not** rebuilt automatically.
 
 ## 4. Bring up your first stack
 

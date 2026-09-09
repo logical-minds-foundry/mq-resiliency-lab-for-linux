@@ -7,7 +7,10 @@ license-files = ["LICENSE"]
 dependencies = ["pymqrest>=1.2,<2", "ansible-core>=2.16", "pyyaml>=6", "typer>=0.12", "rich>=13", "cryptography>=42"]
 
 [project.scripts]
-mqlab = "mqlab.cli:main"
+# The entry point is the thin launcher, not cli:main directly, so a venv too
+# stale to parse the package still resolves to a module that surfaces
+# remediation instead of a raw SyntaxError. See src/mqlab/launcher.py (#1063).
+mqlab = "mqlab.launcher:main"
 
 [dependency-groups]
 # `ansible-lint` is version-matched tooling for `ansible-core` (a runtime
@@ -27,6 +30,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mqlab"]
+
+[tool.uv]
+# Never seed the venv from the base OS interpreter. `.python-version` (= 3.14)
+# already tells uv which feature version to use; `only-managed` forces that
+# interpreter to be a uv-downloaded, uv-managed build even when a matching
+# system 3.14 exists — so the lab's runtime can never silently depend on
+# whatever Python the host happens to ship. This closes the regression in #1063,
+# where a pre-bump venv was seeded from the OS's 3.12 and then could not parse
+# the 3.14 code. The base OS Python is left untouched. See `.python-version`.
+python-preference = "only-managed"
 
 [tool.ruff]
 target-version = "py314"
