@@ -52,8 +52,8 @@ Almost everything is fetched automatically — IBM **MQ Advanced for Developers*
 - **An x86-64 Linux host with root/sudo** and nested virtualization — the lab
   creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly
   12 vCPU / 64 GiB). `mqlab doctor` reports anything missing.
-- **[uv](https://docs.astral.sh/uv/) and Python 3.12** — the orchestrator's
-  runtime.
+- **[uv](https://docs.astral.sh/uv/) and Python 3.14** — the orchestrator's
+  runtime (`uv` provisions its own pinned 3.14; the base OS Python is untouched).
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
 - **gpg** — to verify the signed release below.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
@@ -97,14 +97,15 @@ From inside the extracted tree, build the environment, pre-flight the host, then
 bring up your first stack:
 
 ```bash
-./scripts/setup                 # checks uv + Python 3.12, then runs `uv sync` to build the venv
+./scripts/setup                 # checks uv + Python 3.14, then runs `uv sync` to build the venv
 mqlab doctor                    # pre-flight the host: arch, KVM, libvirt, required tools
 mqlab bootstrap pcmk-ubuntu     # bring up a full HA/DR stack: net → vms → provision → observe
 mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
-Python 3.12 are present (failing loud if not), runs `uv sync` to materialize the
+a uv-managed Python 3.14 are present (installing 3.14 via `uv` if missing), runs
+`uv sync` to materialize the
 virtual environment, and prints the next commands. `mqlab bootstrap pcmk-ubuntu`
 then sequences the whole bring-up — the canonical starting arm is **`pcmk-ubuntu`**
 (Pacemaker/SAN on Ubuntu, subscription-free and x86-native) — and leaves you with
