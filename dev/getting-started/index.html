@@ -1510,8 +1510,9 @@ edition, is fetched automatically by the tooling).</p>
 <li><strong>An x86-64 Linux host with root/sudo</strong> and nested virtualization — the lab
   creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly
   12 vCPU / 64 GiB). <code>mqlab doctor</code> reports anything missing.</li>
-<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> and <strong>Python 3.12</strong> — the orchestrator's
-  runtime.</li>
+<li><strong><a href="https://docs.astral.sh/uv/">uv</a></strong> and <strong>Python 3.14</strong> — the orchestrator's
+  runtime. <code>uv</code> provisions and manages its own pinned 3.14 interpreter (the base
+  OS Python is left untouched), so you do not install Python yourself.</li>
 <li><strong>libvirt / QEMU / Vagrant</strong> — the virtualization stack the guests run on.</li>
 <li><strong>gpg</strong> — to verify the signed release below.</li>
 <li><strong>A RHEL subscription</strong> — only for the RHEL-based arms (RDQM, Native HA on
@@ -1545,13 +1546,21 @@ a key fetched out-of-band</strong> — not any key bundled in the tarball:</p>
 <h2 id="3-set-up-and-pre-flight-the-host">3. Set up and pre-flight the host<a class="headerlink" href="#3-set-up-and-pre-flight-the-host" title="Permanent link">&para;</a></h2>
 <p>From inside the extracted tree, build the Python environment and pre-flight the
 host:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>./scripts/setup<span class="w">     </span><span class="c1"># checks uv + Python 3.12, then runs `uv sync` to build the venv</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>./scripts/setup<span class="w">     </span><span class="c1"># checks uv + Python 3.14, then runs `uv sync` to build the venv</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>doctor<span class="w">        </span><span class="c1"># pre-flight the host: arch, KVM, libvirt, and required tools</span>
 </code></pre></div>
 <p><code>./scripts/setup</code> sets up the <strong>environment</strong>, not the lab: it verifies <code>uv</code> and
-Python 3.12 are present (failing loud if not), runs <code>uv sync</code> to materialize the
-virtual environment, and prints the next commands. <code>mqlab doctor</code> then confirms
-the host can actually run the guests before you commit to a bring-up.</p>
+a uv-managed Python 3.14 are present — installing 3.14 via <code>uv</code> if missing —
+runs <code>uv sync</code> to materialize the virtual environment, and prints the next
+commands. <code>mqlab doctor</code> then confirms the host can actually run the guests
+before you commit to a bring-up.</p>
+<div class="admonition note">
+<p class="admonition-title">After a Python-version bump</p>
+<p>The pinned Python version lives in <code>.python-version</code>. If it changes (or you
+are upgrading from an older checkout), re-run <code>./scripts/setup</code> (or
+<code>uv sync</code>) to rebuild the <code>.venv</code> against the pinned interpreter — an
+existing venv is <strong>not</strong> rebuilt automatically.</p>
+</div>
 <h2 id="4-bring-up-your-first-stack">4. Bring up your first stack<a class="headerlink" href="#4-bring-up-your-first-stack" title="Permanent link">&para;</a></h2>
 <p>One command stands up a whole HA/DR stack. The canonical starting arm is
 <strong><code>pcmk-ubuntu</code></strong> — Pacemaker/SAN on Ubuntu, subscription-free and x86-native:</p>
