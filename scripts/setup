@@ -12,8 +12,13 @@ die() { echo "setup: $*" >&2; exit 1; }
 # 1. Prerequisite checks (fail loud, no silent fallback).
 command -v uv >/dev/null 2>&1 || die "uv not found — install it: https://docs.astral.sh/uv/getting-started/installation/"
 
-if ! uv python find 3.12 >/dev/null 2>&1; then
-    die "Python 3.12 not available to uv — install it (e.g. 'uv python install 3.12')"
+# The lab pins Python 3.14 (.python-version) and depends on a uv-MANAGED
+# interpreter, never the base OS Python (pyproject [tool.uv] only-managed, #1063).
+# If uv can't already find a managed 3.14, install one — don't die: uv downloads
+# and manages its own build, so this needs no host Python upgrade.
+if ! uv python find 3.14 >/dev/null 2>&1; then
+    echo "setup: uv-managed Python 3.14 not found — installing it (uv python install 3.14)…"
+    uv python install 3.14 || die "Python 3.14 install failed — install it by hand: 'uv python install 3.14'"
 fi
 
 # 2. Materialize the environment.
