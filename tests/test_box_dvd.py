@@ -139,6 +139,20 @@ def test_build_boxes_skips_dvd_on_rhel_reuse_decision(monkeypatch):
     assert verified == []
 
 
+def test_build_boxes_ensures_exporter_binary_for_exporter_box(monkeypatch, tmp_path):
+    # An obs/mq-ubuntu bake needs the prebuilt mq_prometheus, so build_boxes ensures
+    # it (in the Go container) before baking — #1065.
+    verified: list = []
+    _stub_build_env(monkeypatch, verified)
+    ensured: list = []
+    monkeypatch.setattr(box, "cache", lambda *parts: tmp_path)
+    monkeypatch.setattr(
+        box.mqexporter, "ensure_mq_exporter_binary", lambda root: ensured.append(root)
+    )
+    box.build_boxes(["obs-ubuntu2404"], force=True)
+    assert ensured == [tmp_path]
+
+
 def test_build_boxes_skips_dvd_for_non_base_box(monkeypatch):
     verified: list = []
     _stub_build_env(monkeypatch, verified)

@@ -22,10 +22,10 @@ from typing import Any
 
 import typer
 
-from mqlab import cli, venvsync
+from mqlab import cli, mqexporter, venvsync
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import StepFailedError, run_steps
-from mqlab.paths import repo_root, state
+from mqlab.paths import cache, repo_root, state
 from mqlab.platforms import (
     box_build_arch,
     box_build_domain_virt,
@@ -427,6 +427,11 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     # standalone `box build` doesn't die at box registration on a fresh checkout
     # (#737); idempotent when bootstrap already rendered it.
     ensure_resolved()
+    # Build (once) + cache the prebuilt mq_prometheus binary before any box that bakes
+    # it in (#1065): the Go-container build replaces the in-guest cgo build that
+    # overflowed the fatbox guest. Cache-hit is a no-op; the bake copies the artifact.
+    if mqexporter.needs_exporter_binary(names):
+        mqexporter.ensure_mq_exporter_binary(cache())
     for name in names:
         if _rhel_base_needs_dvd(name, force=force):
             verify_rhel_dvd(_RHEL_VERSION)

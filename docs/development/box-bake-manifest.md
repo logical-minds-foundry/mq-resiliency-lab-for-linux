@@ -116,7 +116,7 @@ pre-config state:
 | `loki` | ✅ full | All-install (loki binary + logcli + static config). |
 | `prometheus` | ✅ install half | Binary + **static** `prometheus.yml` + recording rules + unit baked; the topology-rendered `targets/{node,ibmmq}.json` (`mqlab obs targets` → `build/work/…`) stay per-run. |
 | `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. |
-| `mq-exporter` (`build`) | ✅ build entry | The slow cgo build of `mq_prometheus` against the MQ SDK + Go toolchain. **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install`, apt `golang-go`) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install` for the runtime libs) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 
 ### `infra-ubuntu2404` → `ansible/bake-infra.yml`
 
@@ -136,7 +136,7 @@ their ~15–20 min of per-run installs.
 |------|---------|-------|
 | `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-distributed-shared.yml`. Baked, not fetched per-run — kills the #659 acl stall. |
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path — the **server set includes client + SDK + samples**, so one install serves svc (server + QM), app (client + SDK for pymqi), and the exporter's cgo SDK. No QM created. |
-| `mq-exporter` (`build`) | ✅ build entry | The slow cgo `mq_prometheus` build + Go toolchain (mon-probe paid ~2.8 min/run). Its `mq-install` include is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container, copied in — #1065; no in-guest Go toolchain, which used to auto-download a full Go toolchain and overflow this guest). Its `mq-install` include (runtime libs) is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 
@@ -157,8 +157,9 @@ the RDQM box — **no DRBD/RDQM and no kernel pin** are baked.
 Per-run skips are enforced by #648-style **skip-if-baked** guards rather than a
 role split: `mq-install`/`mq-client` gate the ~700 MB tar copy + unpack on a stat
 of the installed `/opt/mqm/inc/cmqc.h`, and `alloy`'s install half gates the
-GitHub download on a stat of `/usr/local/bin/alloy`. The `mq_prometheus` cgo build
-already `creates:`-guards on its baked binary. So the repointed commons run only
+GitHub download on a stat of `/usr/local/bin/alloy`. The `mq_prometheus` install
+copies the prebuilt binary and skips on a stat of the baked binary (#1065). So the
+repointed commons run only
 per-run config + service start (QMs/channels, the app-requester, exporter
 instances, `config.alloy`), never the baked installs.
 
@@ -242,8 +243,8 @@ Verified by reading each role's `tasks/main.yml`:
    UbuntuLinux deb tar, `apt-get install`). The RHEL rdqm box installs MQ via
    `rdqm-install` (LinuxX64 rpm tar). Listing both would break on RHEL.
 2. **`mq-exporter` build is in `bake-obs`, not `bake-mq-rdqm`.** It is Ubuntu-only
-   (includes the Ubuntu-deb `mq-install`, apt `golang-go`) and the exporter runs on
-   the obs/probe box.
+   (includes the Ubuntu-deb `mq-install` for the runtime libs; the binary is prebuilt
+   in the Go container — #1065) and the exporter runs on the obs/probe box.
 3. **`node-exporter` and `loki` are baked as full roles** (not split): their config
    is static, so the whole role is effectively install.
 
