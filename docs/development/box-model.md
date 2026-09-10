@@ -25,10 +25,10 @@ carries only the install surface that role needs, nothing more. The taxonomy is
 |-----|------|------|----------------------|-------|
 | `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
 | `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
-| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the slow cgo `mq_prometheus` build + MQ SDK |
+| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime |
 | `logsearch-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `logsearch` | OpenSearch + OpenSearch Dashboards + Data Prepper + node-exporter + alloy |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the cgo `mq_prometheus` build + `acl` |
+| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` |
 | `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
 
@@ -44,7 +44,8 @@ and are not baked.
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-ubuntu2404` box: its server-set install carries the client and SDK too, so a
 single baked image serves the simulated upstream (server + QM), the application
-client (client + SDK for pymqi), and the probe's exporter (cgo SDK).
+client (client + SDK for pymqi), and the probe's exporter (MQ runtime libs; the
+`mq_prometheus` binary itself is prebuilt in the Go container, #1065).
 
 ### The RHEL9 flavors (the kernel-pin dilemma)
 

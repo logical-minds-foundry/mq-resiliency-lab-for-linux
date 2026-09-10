@@ -3,7 +3,10 @@
 # loop the per-instance unit (instance.yml) per stack, instead of re-running the
 # slow cgo build for every exporter. Every step here is idempotent (`creates:` /
 # idempotent modules), so a second run is a no-op.
-- name: install full MQ (client libs + SDK for the cgo build)
+# The exporter binary links the MQ server binding libmqm_r dynamically at runtime
+# (the unit sets LD_LIBRARY_PATH=/opt/mqm/lib64), so the node still needs the MQ
+# runtime. (The cgo *build* moved out of the guest — see below, #1065.)
+- name: install MQ (the runtime libs the exporter links at run time)
   ansible.builtin.include_role:
     name: mq-install
 
@@ -16,47 +19,29 @@
     mode: "0755"
   become: true
 
-- name: build toolchain (Go + git)
-  ansible.builtin.apt:
-    name:
-      - golang-go
-      - git
-      - build-essential
-    update_cache: true
-  become: true
+# mq_prometheus is built OUT of band — once, on the host, in the Go container
+# (ghcr.io/vergil-project/dev-go) against the MQ SDK from the cached MQ tarball; see
+# lab/scripts/build-mq-exporter-binary.sh + src/mqlab/mqexporter.py (#1065). The old
+# in-guest path installed golang-go and ran a cgo `go build` here, but a newer
+# mq-metric-samples go.mod auto-downloaded the entire Go toolchain and overflowed the
+# fatbox build guest's disk. We just copy the prebuilt binary from the host-durable
+# cache (`mq_exporter_media_dir`, the fat-box bake overrides it — mirrors mq_media_dir).
+# Skip-if-baked (#648/#659): the obs/mq-ubuntu fat box already carries it, so gate the
+# copy on the installed marker (a live run's worktree build/ cache may be empty).
+- name: check for an already-installed mq_prometheus (baked)
+  ansible.builtin.stat:
+    path: /usr/local/bin/mq_prometheus
+  register: mq_prometheus_bin
 
-# Per-run GitHub fetch: retry so a rate-limited parallel-boot DNS burst (#648)
-# does not fail the one-shot cold rebuild. The git module is idempotent (a settled
-# checkout re-runs as a no-op), so retries are safe and steady-state resolves fine.
-- name: fetch mq-metric-samples source
-  ansible.builtin.git:
-    repo: https://github.com/ibm-messaging/mq-metric-samples.git
-    dest: /usr/local/src/mq-metric-samples
-    version: "{{ mq_exporter_ref }}"
+- name: install the prebuilt mq_prometheus exporter binary (#1065)
+  ansible.builtin.copy:
+    src: "{{ mq_exporter_media_dir }}/mq_prometheus-x64"
+    dest: /usr/local/bin/mq_prometheus
+    owner: root
+    group: root
+    mode: "0755"
   become: true
-  register: mq_samples_git
-  until: mq_samples_git is succeeded
-  retries: 5
-  delay: 10
-
-# cgo against /opt/mqm — the whole reason the node carries the full MQ SDK.
-# Idempotent: `creates` skips the (slow, network-fetching) build on re-runs. The
-# build also pulls Go modules from the network, so it gets the same #648 retry:
-# on a flake the binary is not created, so `creates` lets the retry re-run it.
-- name: build mq_prometheus
-  ansible.builtin.command:
-    cmd: go build -o /usr/local/bin/mq_prometheus ./cmd/mq_prometheus
-    chdir: /usr/local/src/mq-metric-samples
-    creates: /usr/local/bin/mq_prometheus
-  environment:
-    CGO_CFLAGS: -I/opt/mqm/inc
-    CGO_LDFLAGS: -L/opt/mqm/lib64
-    GOFLAGS: -mod=mod
-  become: true
-  register: mq_prometheus_build
-  until: mq_prometheus_build is succeeded
-  retries: 5
-  delay: 10
+  when: not mq_prometheus_bin.stat.exists
 
 # TLS (#250): one app-org ops keystore (+ .sth stash) for the exporter, shared by
 # every per-QM instance on this probe. Placed once; pki-distribute is idempotent.

@@ -258,6 +258,20 @@ case "$BAKE" in
     ;;
 esac
 
+# The obs + mq-ubuntu bakes install a PREBUILT mq_prometheus (#1065): built once in the
+# Go container by `mqlab` (build_boxes ensures it before this bake), copied in by the
+# mq-exporter role — no in-guest Go toolchain (which auto-downloaded a full toolchain
+# and overflowed this guest's disk). Point mq_exporter_media_dir at the host-durable
+# cache and fail loud if the artifact is absent.
+case "$BAKE" in
+  obs | mq-ubuntu)
+    EXPORTER_BIN="$MAIN_ROOT/build/cache/mq-exporter/mq_prometheus-x64"
+    test -f "$EXPORTER_BIN" \
+      || { echo "ERROR: prebuilt mq_prometheus not found at $EXPORTER_BIN for the ${BAKE} bake — \`mqlab box build\` ensures it; build it first" >&2; exit 1; }
+    BAKE_EXTRA_VARS+=(-e "mq_exporter_media_dir=$MAIN_ROOT/build/cache/mq-exporter")
+    ;;
+esac
+
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
 # aarch64 needs UEFI (AAVMF) firmware: on the arm 'virt' machine ACPI requires UEFI (#736),

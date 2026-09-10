@@ -54,6 +54,15 @@ mq_exporter_poll_interval: "1m"
 # NOTE: exact mq-metric-samples wildcard syntax is build-verified on the first cold boot.
 mq_exporter_monitored_queues: "*,SYSTEM.*"
 mq_exporter_monitored_channels: "*,SYSTEM.*"
-# mq-metric-samples source ref. TODO(#172): pin to a release tag once the first
-# cold boot confirms the build — master is a placeholder for reproducibility.
-mq_exporter_ref: master
+# mq-metric-samples source ref the shipped mq_prometheus was built from. Pinned
+# (#172 resolved): unpinned `master` dragged in a Go-version bump that broke the
+# bake (#1065). The binary is built from this ref by src/mqlab/mqexporter.py
+# (MQ_EXPORTER_REF), kept in sync via tests/test_mqexporter.py; this default is what
+# the version manifest reports (manifest._OBS_VAR_MAP -> mq_metric_samples_ref).
+mq_exporter_ref: v5.7.1
+
+# Where the prebuilt mq_prometheus binary is copied from (#1065). Defaults to the
+# per-run path (playbook's sibling build/cache/mq-exporter); the obs / mq-ubuntu
+# fat-box bake overrides it (-e mq_exporter_media_dir=<main-worktree>/build/cache/
+# mq-exporter) so the bake reads from the host-durable cache. Mirrors mq_media_dir.
+mq_exporter_media_dir: "{{ playbook_dir }}/../build/cache/mq-exporter"
