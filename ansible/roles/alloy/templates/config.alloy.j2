@@ -11,7 +11,11 @@ loki.relabel "journal" {
   // re-sent, amplifying to ~90% of all log volume under any backpressure.
   rule {
     source_labels = ["__journal__systemd_unit"]
-    regex         = "(alloy|data-prepper)\.service"
+    // River raw (backtick) string: no escape processing, so the literal `\.` reaches
+    // the regex engine as an escaped dot. A double-quoted "\." is an INVALID River
+    // escape and made Alloy reject the whole config — crash-looping it fleet-wide so
+    // no logs reached Loki or OpenSearch (#1068; regressed from #1029).
+    regex         = `(alloy|data-prepper)\.service`
     action        = "drop"
   }
 

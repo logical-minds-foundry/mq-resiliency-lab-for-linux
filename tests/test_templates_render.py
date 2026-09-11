@@ -177,8 +177,10 @@ def test_alloy_journal_relabel_drops_own_log_shipping_units() -> None:
 
     # The drop rule's unit regex must match BOTH log-shipping units. Pull the regex
     # literal that sits in the same `rule { ... }` block as the drop action.
+    # The regex literal may be a double-quoted OR a backtick raw string (the latter is
+    # required for an escaped `\.`, which is an invalid double-quoted River escape — #1068).
     drop_rule = re.search(
-        r"rule\s*\{[^}]*?regex\s*=\s*\"(?P<re>[^\"]+)\"[^}]*?action\s*=\s*\"drop\"[^}]*?\}",
+        r"rule\s*\{[^}]*?regex\s*=\s*[\"`](?P<re>[^\"`]+)[\"`][^}]*?action\s*=\s*\"drop\"[^}]*?\}",
         rendered,
         re.DOTALL,
     )
