@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1067",
+  "branch": "feature/1067-grafana-verify-retry",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-11T14:51:01Z",
+  "updated_at": "2026-09-11T14:51:01Z",
+  "git": {
+    "base_sha": "11a069530c3d6d4aea576a6b106efa75c763b9bd",
+    "head_sha": "5d3fd72cf770958cbd2b0aecb5f20cf1fd4c6315"
+  },
+  "pr_metadata": {
+    "title": "fix(obs): retry the grafana port-forward verify so it doesn't race the relay restart",
+    "summary": "The observe phase's grafana health check curled localhost:3000 once immediately after restarting the port-forward relay, racing its re-bind and flaking bootstrap with connection-refused; add --retry-connrefused so it waits the relay out, still fail-loud after the budget.",
+    "notes": "Surfaced by the epic-198 #1022 cold boot (all phases failed=0, then exit 7 on this verify; Grafana healthy seconds later). One-line behavior change in phases.py + a test asserting the retry flag. Cloud-safe (no workflow files). vrg-validate green. Verify after merge with a cold mqlab bootstrap completing exit 0 through the observe verify \u2014 folded into the #1022 re-run.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
