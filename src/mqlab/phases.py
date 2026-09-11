@@ -607,9 +607,26 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
             "heal grafana port-forward relay",
             Command(["sudo", "systemctl", "restart", *RELAY_UNITS]),
         ),
+        # Retry, don't single-shot: `systemctl restart` above returns before the
+        # socket-proxy relay has re-bound :3000, so an immediate curl races it and
+        # gets connection-refused, flaking the whole bootstrap (#1067). --retry-
+        # connrefused waits the relay out; still fail-loud once the budget is spent.
         CommandStep(
             "verify grafana reachable (workstation forward)",
-            Command(["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]),
+            Command(
+                [
+                    "curl",
+                    "-fsS",
+                    "--retry",
+                    "10",
+                    "--retry-connrefused",
+                    "--retry-delay",
+                    "2",
+                    "-m",
+                    "5",
+                    f"{WORKSTATION_GRAFANA_URL}/api/health",
+                ]
+            ),
         ),
     ]
 
