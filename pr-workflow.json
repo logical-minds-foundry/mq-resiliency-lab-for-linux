@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1068",
+  "branch": "feature/1068-alloy-escape",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-11T15:09:21Z",
+  "updated_at": "2026-09-11T15:09:21Z",
+  "git": {
+    "base_sha": "11a069530c3d6d4aea576a6b106efa75c763b9bd",
+    "head_sha": "46663e3be56a04dfaad19bb950f7ce3d50262e79"
+  },
+  "pr_metadata": {
+    "title": "fix(obs): use a River raw string for the Alloy journal-drop regex",
+    "summary": "The #1029 journal-drop regex used an invalid double-quoted River escape (\\.), so Alloy rejected its config and crash-looped fleet-wide \u2014 no logs to Loki or OpenSearch; switch to a backtick raw string and add a render guard that catches invalid River escapes at vrg-validate time.",
+    "notes": "Root cause of epic-198 #1022's empty OpenSearch. Live-validated: patching the running obs guest to the backtick form brought Alloy active and OpenSearch's today index went 0->1086 docs, queue-full settled to 0 (the #1029 drop rule breaks the amplification loop). Two non-blocking follow-up observations (logs still land): Data Prepper's ParseJsonProcessor errors on plain-text journal lines (noise), and transient restart backpressure. Cloud-safe (no workflow files). vrg-validate green. Full-fleet proof is the #1022 re-run after merge.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
