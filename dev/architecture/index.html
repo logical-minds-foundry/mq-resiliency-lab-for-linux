@@ -1583,7 +1583,12 @@ up the gate file is absent and the fan-out is cleanly <strong>inert</strong>.</p
 <p><strong>Indices.</strong> Logs land in daily <strong><code>logs-YYYY.MM.DD</code></strong> indices under an index
 template with <strong><code>number_of_replicas: 0</code></strong> — load-bearing on a single node, which can
 never place a replica shard (the default <code>replicas: 1</code> would read <em>yellow</em> forever).</p>
-<p><strong>Security (v1).</strong> The OpenSearch security plugin is <strong>disabled</strong> — plain http on
+<p><strong>Query surface.</strong> Two ways in: <strong>OpenSearch Dashboards</strong> (<code>:5601</code>), and — for the
+same panels as the rest of the fleet — a pinned <strong>Grafana OpenSearch datasource</strong>
+(<code>uid: opensearch</code>, plaintext <code>http://10.50.0.4:9200</code>) that sits alongside Grafana's
+Prometheus and Loki datasources, so the log corpus is queryable from the obs Grafana too.</p>
+<p><strong>Security (v1).</strong> OpenSearch runs the <strong>min (core-only) distribution</strong> — zero
+plugins, so there is <strong>no security plugin at all</strong> — serving plain http on
 <code>:9200</code> (OpenSearch) / <code>:5601</code> (Dashboards), no auth. This is a deliberate v1 posture
 for a <strong>management-plane-only</strong> service (spec §10); authentication is a follow-on.</p>
 <p><strong>Persistence.</strong> The logsearch node's guest disk is <strong>ephemeral</strong> (like every lab
