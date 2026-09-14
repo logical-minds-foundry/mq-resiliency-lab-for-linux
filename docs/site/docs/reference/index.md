@@ -143,6 +143,9 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
 - **[Native HA + CRR manual setup](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/nativeha-crr-setup-guide.md)**
   and its
   **[CRR TLS reference](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/nativeha-crr-tls-guide.md)**.
+- **[Native HA CRR 9.4.5 → 10.0 rolling-upgrade runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/nativeha-mq-upgrade-runbook.md)**
+  — Recovery-site-first ordering, quiesce-and-assert gates, the
+  point-of-no-return / back-out, and DR failover→failback validation.
 - **[MQ TLS coverage](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/tls-coverage.md)**
   — the lab-wide no-plaintext invariant, every path and its TLS state.
 - **[mqweb endpoint verification](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md)**
