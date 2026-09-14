@@ -4,9 +4,17 @@
 # RHEL/RDQM tarball (LinuxX64), so a fresh clone has both arms' artifacts (#276).
 # Never commit these binaries.
 set -euo pipefail
-VER="9.4.5.0"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Single authoritative MQ-version pin (#1071) — the same bare 4-part string
+# manifest.DEFAULT_MQ_VERSION reads. Bump the version in lab/mq-version, not here.
+PIN="$ROOT/lab/mq-version"
+[ -f "$PIN" ] || {
+  echo "MQ version pin not found: $PIN" >&2
+  exit 1
+}
+VER="$(tr -d '[:space:]' <"$PIN")"
 BASE="https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv"
-DEST="$(cd "$(dirname "$0")/.." && pwd)/build/cache/mq"
+DEST="$ROOT/build/cache/mq"
 mkdir -p "$DEST"
 
 # The Ubuntu suffix tracks the host arch (= the native Ubuntu guest arch); LinuxX64

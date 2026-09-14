@@ -60,6 +60,15 @@ def manifests_root() -> Path:
     return repo_root() / "manifests"
 
 
+def mq_version_pin_path() -> Path:
+    """The single authoritative MQ-version pin — a bare 4-part version string (#1071).
+
+    Committed at ``lab/mq-version``; every MQ consumer (manifest.DEFAULT_MQ_VERSION,
+    scripts/fetch-mq.sh) resolves to it, so a version bump is a one-line edit here.
+    """
+    return repo_root() / "lab" / "mq-version"
+
+
 def selection_state_path(setup: str) -> Path:
     """Manifest selection pin for a live setup — shared state/ (#266, #286)."""
     return state("manifests", f"{setup}.yaml")
