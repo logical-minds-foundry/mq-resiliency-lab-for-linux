@@ -18,7 +18,12 @@
 - name: assert MQ >= 9.4.4 CD (Native HA off-container floor)
   ansible.builtin.assert:
     that:
-      - "'9.4.4' in mqver.stdout or '9.4.5' in mqver.stdout or '9.4.6' in mqver.stdout"
+      # Real version comparison against the 9.4.4 floor, so any level at or above it
+      # passes — including 10.0 (the MQ 10 upgrade, epic .github#219). The old
+      # string-membership check ('9.4.4'/'9.4.5'/'9.4.6' in mqver.stdout) enumerated
+      # levels and would have silently rejected 10.0. dspmqver -b -f 2 emits the bare
+      # 4-part version, so a direct version() comparison is sound. (#1072)
+      - "mqver.stdout is version('9.4.4', '>=')"
     fail_msg: "MQ level {{ mqver.stdout }} is below the 9.4.4 Native HA floor"
     success_msg: "MQ level OK for Native HA: {{ mqver.stdout }}"
 
