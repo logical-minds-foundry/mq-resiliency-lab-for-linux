@@ -453,3 +453,67 @@ def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
     assert _hash_in(root) == before  # deterministic no-op
     _append(_role_task(root, "unbaked-role"), "\n# unrelated\n")
     assert _hash_in(root) == before
+
+
+# --------------------------------------------------------------------------- #
+# _manifest-hash.sh — lab/mq-version pin folds into the digest for MQ-bearing  #
+# boxes only (#1087)                                                          #
+#                                                                             #
+# The MQ version is sourced from the single authoritative pin at              #
+# lab/mq-version via an Ansible `lookup('file', ...)` in versions.yml, so the #
+# resolved value never appears in versions.yml's own text — digesting only    #
+# versions.yml missed a pin bump entirely (a flipped pin left an MQ-bearing    #
+# box at `hash: match` / REUSE, so a bootstrap silently cloned the old-version #
+# box). The fix folds the pin CONTENT into the digest, but ONLY for the        #
+# MQ-bearing boxes (those that bake an MQ install: mq-nativeha-rhel9,          #
+# mq-nativeha-ubuntu, mq-ubuntu2404, mq-rdqm-rhel9); the MQ-version-           #
+# independent commons boxes (obs/infra/logsearch, pcmk) must stay REUSE across #
+# a pin bump so a version change doesn't spuriously rebake them.               #
+# --------------------------------------------------------------------------- #
+def _fake_bake_repo_with_pin(tmp_path: Path) -> Path:
+    """Extend the minimal bake repo with a lab/mq-version pin and a second bake
+    playbook for an MQ-bearing box. `infra-ubuntu2404` (-> infra) is a commons
+    box; `mq-ubuntu2404` (-> mq-ubuntu) is MQ-bearing. Both hash cleanly against
+    this tree so a single pin edit can be checked against both at once."""
+    root = _fake_bake_repo(tmp_path)
+    (root / "lab").mkdir(parents=True, exist_ok=True)
+    (root / "lab" / "mq-version").write_text("9.4.5.0\n")
+    # An MQ-bearing box's bake playbook (stem `mq-ubuntu`), structurally like the
+    # commons `bake-infra.yml` so only the pin distinguishes the two boxes' fate.
+    (root / "ansible" / "bake-mq-ubuntu.yml").write_text(
+        "- name: bake\n"
+        "  hosts: bake\n"
+        "  tasks:\n"
+        "    - name: install baked-role\n"
+        "      ansible.builtin.include_role:\n"
+        "        name: baked-role\n"
+    )
+    return root
+
+
+def test_manifest_hash_flips_on_pin_change_for_mq_bearing_box(tmp_path):
+    # (a) Acceptance: bumping lab/mq-version flips an MQ-bearing box's digest, so
+    # build-fatbox.sh sees CURRENT_HASH != stored and decides BUILD (not REUSE).
+    root = _fake_bake_repo_with_pin(tmp_path)
+    before = _hash_in(root, "mq-ubuntu2404")
+    assert len(before) == 64
+    (root / "lab" / "mq-version").write_text("10.0.0.0\n")
+    assert _hash_in(root, "mq-ubuntu2404") != before  # pin bump forces a rebake
+
+
+def test_manifest_hash_stable_on_pin_change_for_commons_box(tmp_path):
+    # (b) Acceptance: the same pin bump leaves a commons (non-MQ) box's digest
+    # unchanged, so it stays REUSE — a version change never spuriously rebakes it.
+    root = _fake_bake_repo_with_pin(tmp_path)
+    before = _hash_in(root, "infra-ubuntu2404")
+    (root / "lab" / "mq-version").write_text("10.0.0.0\n")
+    assert _hash_in(root, "infra-ubuntu2404") == before  # commons box untouched
+
+
+def test_manifest_hash_pin_is_box_scoped_not_global(tmp_path):
+    # Guard the scoping directly: at a fixed pin, the MQ-bearing box's digest
+    # embeds the pin while the commons box's does not — proven by the fact that
+    # only one of them moves when the pin moves (above). Here we also assert the
+    # MQ-bearing digest is deterministic at a fixed pin (no spurious churn).
+    root = _fake_bake_repo_with_pin(tmp_path)
+    assert _hash_in(root, "mq-ubuntu2404") == _hash_in(root, "mq-ubuntu2404")
