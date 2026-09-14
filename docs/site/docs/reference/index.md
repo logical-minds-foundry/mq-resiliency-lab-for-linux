@@ -8,7 +8,7 @@ lockstep with the lab. For the narrative walk-through of how these pieces fit
 together, see [Architecture](../architecture/index.md); to drive the running
 lab, see [Operate & Observe](../operate/index.md).
 
-The lab pins IBM **MQ 9.4** (currently `9.4.5.0`, see
+The lab pins IBM **MQ 10.0** (currently `10.0.0.0`, see
 [`ansible/group_vars/all/versions.yml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/group_vars/all/versions.yml)).
 
 ## Topology
