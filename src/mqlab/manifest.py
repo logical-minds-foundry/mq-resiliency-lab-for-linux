@@ -8,12 +8,13 @@ manifest overlay the obs provision consumes.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from mqlab.hostfacts import AARCH64, X86_64, probe
-from mqlab.paths import manifests_root, repo_root
+from mqlab.paths import manifests_root, mq_version_pin_path, repo_root
 from mqlab.platforms import box_build_arch
 
 if TYPE_CHECKING:
@@ -65,9 +66,28 @@ _OS_PREFIX = {
 # Canonical arch (hostfacts) -> the arch token in the MQ-for-Developers tarball name.
 _MQ_ARCH_TOKEN = {AARCH64: "ARM64", X86_64: "X64"}
 
-# Canonical MQ-for-Developers version. The #350 stack/commons bootstrap ensures a
-# platform's tarball at this version. Mirrors scripts/fetch-mq.sh's VER. (#333)
-DEFAULT_MQ_VERSION = "9.4.5.0"
+_FOUR_PART_VERSION = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
+
+
+def _read_mq_version_pin() -> str:
+    """Read the single authoritative MQ-version pin (``lab/mq-version``, #1071).
+
+    Returns the bare 4-part version string every MQ consumer resolves to. A missing
+    or malformed pin is an error — never a silent default: a wrong MQ version must
+    fail loudly at import, not fall back to a stale literal.
+    """
+    path = mq_version_pin_path()
+    text = path.read_text().strip()
+    if not _FOUR_PART_VERSION.match(text):
+        raise ValueError(f"MQ version pin {path} is not a bare 4-part version: {text!r}")
+    return text
+
+
+# Canonical MQ-for-Developers version, read from the single authoritative pin
+# (lab/mq-version, #1071). The #350 stack/commons bootstrap ensures a platform's
+# tarball at this version; scripts/fetch-mq.sh resolves the same pin. cli.py imports
+# this symbol — keep it exported. (#333)
+DEFAULT_MQ_VERSION = _read_mq_version_pin()
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
