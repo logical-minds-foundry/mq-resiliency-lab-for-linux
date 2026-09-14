@@ -42,7 +42,10 @@ _CONTEXT = {
 
 
 def _render(**overrides: object) -> str:
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=False)  # noqa: S701
+    # autoescape=True is a render-time no-op here — this config is not HTML and the
+    # interpolated values carry no markup — but it satisfies CodeQL/bandit
+    # (py/jinja2/autoescape-false), matching the other template-render tests.
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=True)
     env.filters["bool"] = lambda v: (
         v if isinstance(v, bool) else str(v).strip().lower() in {"true", "1", "yes", "on"}
     )
