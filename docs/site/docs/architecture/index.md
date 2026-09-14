@@ -157,7 +157,13 @@ up the gate file is absent and the fan-out is cleanly **inert**.
 template with **`number_of_replicas: 0`** — load-bearing on a single node, which can
 never place a replica shard (the default `replicas: 1` would read *yellow* forever).
 
-**Security (v1).** The OpenSearch security plugin is **disabled** — plain http on
+**Query surface.** Two ways in: **OpenSearch Dashboards** (`:5601`), and — for the
+same panels as the rest of the fleet — a pinned **Grafana OpenSearch datasource**
+(`uid: opensearch`, plaintext `http://10.50.0.4:9200`) that sits alongside Grafana's
+Prometheus and Loki datasources, so the log corpus is queryable from the obs Grafana too.
+
+**Security (v1).** OpenSearch runs the **min (core-only) distribution** — zero
+plugins, so there is **no security plugin at all** — serving plain http on
 `:9200` (OpenSearch) / `:5601` (Dashboards), no auth. This is a deliberate v1 posture
 for a **management-plane-only** service (spec §10); authentication is a follow-on.
 
