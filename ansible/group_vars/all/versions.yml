@@ -2,5 +2,11 @@
 # Defaults for manifest-driven versions (#266). The mqlab manifest overlay overrides
 # these at provision time; absent a manifest, these reproduce today's behavior so
 # nothing breaks before manifests exist.
-mq_version: "9.4.5.0"
+#
+# mq_version is sourced from the single authoritative MQ-version pin (lab/mq-version,
+# #1071) rather than duplicating the literal here — the same bare 4-part pin that
+# manifest.DEFAULT_MQ_VERSION and scripts/fetch-mq.sh read. lookup('file', …) runs on
+# the controller (repo checkout), where playbook_dir is <repo>/ansible, so '../lab/…'
+# resolves the repo-root pin. | trim drops the pin's trailing newline. (#1072)
+mq_version: "{{ lookup('file', playbook_dir + '/../lab/mq-version') | trim }}"
 grafana_version: "" # "" = let apt pick (current float); a concrete value pins it
