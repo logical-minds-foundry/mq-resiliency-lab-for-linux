@@ -35,6 +35,17 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 _UA = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
+# IBM's edge tightened its bot heuristic: a lone User-Agent now gets HTTP 403
+# (even on pages that used to return 200). It waves a request through only when
+# the browser-shaped triad is all present — a real `Accept`, an `Accept-Language`,
+# AND an `Accept-Encoding`. We ask for `identity` (no compression) on purpose so
+# urllib hands back a plain-text body with nothing to decompress. See #1070.
+_HEADERS = {
+    "User-Agent": _UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "identity",
+}
 _CONTENT_API = "https://www.ibm.com/docs/api/v1/content/"
 
 
@@ -90,7 +101,7 @@ class _TextExtractor(HTMLParser):
 
 
 def _get(url: str) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "text/html"})  # noqa: S310
+    req = urllib.request.Request(url, headers=_HEADERS)  # noqa: S310
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
         if resp.status != 200:
             raise RuntimeError(f"HTTP {resp.status} for {url}")
