@@ -20,6 +20,18 @@
 #     guards), so build-fatbox.sh decided REUSE and the box silently drifted from
 #     the code. Now a role-level bake change flips the hash and forces a rebuild.
 #
+#   * for the MQ-BEARING boxes only, the lab/mq-version pin CONTENT (#1087) - the
+#     single authoritative MQ-version pin (mqlab.paths.mq_version_pin_path). The
+#     baked MQ version is sourced from that pin via an Ansible
+#     `lookup('file', '.../lab/mq-version')` in versions.yml, so the RESOLVED
+#     version never appears in versions.yml's own text - digesting only
+#     versions.yml missed a pin bump entirely (a flipped 9.4.5 -> 10.0 left an
+#     MQ-bearing box at REUSE, so a bootstrap silently cloned the old-version box
+#     and, via the skip-if-baked guard, came up on the old MQ). Folding the pin
+#     content in flips those boxes to BUILD on a bump. The MQ-version-independent
+#     commons boxes (obs/infra/logsearch, pcmk) DELIBERATELY exclude it, so a
+#     version bump never spuriously rebakes them.
+#
 # The <box> argument is the full box name (mq-rdqm-rhel9, infra-ubuntu2404, ...),
 # but the bake playbook is named by the shorter STEM (bake-mq-rdqm.yml,
 # bake-infra.yml, ...). That box->stem map is the same one build-fatbox.sh uses;
@@ -47,20 +59,27 @@ set -euo pipefail
 BOX="${1:?usage: _manifest-hash.sh <box>}"
 cd "$(dirname "$0")"
 
-# Map the full box name to its bake-playbook STEM (must match build-fatbox.sh).
+# Map the full box name to its bake-playbook STEM (must match build-fatbox.sh) and
+# whether it BAKES AN MQ INSTALL. MQ-bearing boxes fold the lab/mq-version pin into
+# the digest so a version bump invalidates their cache (#1087); commons boxes must
+# not, so a bump never spuriously rebakes them.
+MQ_BEARING=0
 case "$BOX" in
-  mq-rdqm-rhel9)    BAKE_STEM=mq-rdqm ;;
+  mq-rdqm-rhel9)    BAKE_STEM=mq-rdqm; MQ_BEARING=1 ;;
   obs-ubuntu2404)   BAKE_STEM=obs ;;
   logsearch-ubuntu2404) BAKE_STEM=logsearch ;;
   infra-ubuntu2404) BAKE_STEM=infra ;;
-  mq-ubuntu2404)    BAKE_STEM=mq-ubuntu ;;
-  mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel ;;
-  mq-nativeha-ubuntu) BAKE_STEM=nativeha-ubuntu ;;
+  mq-ubuntu2404)    BAKE_STEM=mq-ubuntu; MQ_BEARING=1 ;;
+  mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel; MQ_BEARING=1 ;;
+  mq-nativeha-ubuntu) BAKE_STEM=nativeha-ubuntu; MQ_BEARING=1 ;;
   pcmk-ubuntu)      BAKE_STEM=pcmk-ubuntu ;;
   *) echo "ERROR: unknown box: '${BOX}'" >&2; exit 2 ;;
 esac
 
 PINS="../../ansible/group_vars/all/versions.yml"
+# The single authoritative MQ-version pin (mqlab.paths.mq_version_pin_path), read
+# relative to this script (the worktree) like every other input above.
+MQ_VERSION_PIN="../../lab/mq-version"
 BAKE_REL="ansible/bake-${BAKE_STEM}.yml"
 BAKE="../../${BAKE_REL}"
 ROLES_DIR="../../ansible/roles"
@@ -112,6 +131,13 @@ done
   printf 'box=%s\n' "$BOX"
   printf 'bake=%s\n' "$BAKE_REL"
   if [ -f "$PINS" ]; then cat "$PINS"; fi
+  # MQ-bearing boxes only: the resolved MQ version lives in lab/mq-version (a
+  # lookup() in versions.yml), so fold its content in — a pin bump must flip the
+  # digest and force a rebake (#1087). Commons boxes skip this block entirely.
+  if [ "$MQ_BEARING" = 1 ] && [ -f "$MQ_VERSION_PIN" ]; then
+    printf 'mq_version_pin='
+    cat "$MQ_VERSION_PIN"
+  fi
   if [ -f "$BAKE" ]; then cat "$BAKE"; fi
   # Every file of every resolved role, name-sorted then path-sorted for a stable
   # digest. Paths (not just content) enter the stream, so a rename/move flips it.
