@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1104",
+  "branch": "feature/1104-crr-rename",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-15T19:29:31Z",
+  "updated_at": "2026-09-15T19:29:31Z",
+  "git": {
+    "base_sha": "54f2beb871fd63f7b35805b40fed1a93d98a59e5",
+    "head_sha": "1a2d13f7463b8f10feadc231661f22d0494ac9b3"
+  },
+  "pr_metadata": {
+    "title": "refactor(nativeha): rename the CRR Native HA stack to nativeha-rhel-crr / NHARCAPP (#1104)",
+    "summary": "Full atomic rename of the CRR Native HA stack (key nativeha-rhel->nativeha-rhel-crr, short NHAR->NHARC/NHARCAPP, groups nha_rhel_crr_a/b, nodes nha-rhel-crr-*) across topology, the composing playbooks, parity/clusterboard/observability, and tests, so the CRR stack still works and can coexist with the coming IRR sibling; async behaviour is byte-for-byte unchanged.",
+    "notes": "Plan Task 2 of epic #227. Scope went beyond the plan's headline file list where the CRR functional path required it (site-nativeha-tls.yml, validate-nativeha-log-lifecycle.yml, the nativeha-state service template, fault suite, and the qmboard UID test which derives lab-qm-nharc from the short) \u2014 these are called out in the commit body. Box name mq-nativeha-rhel9 and bake stem nativeha-rhel deliberately kept (they are the box, not the stack). DNS FQDNs regenerate from node names (dns.py); only the hardcoded our_conn/app_conn CONNAME literals were edited. WAN IPs left as literals for Task 4 to parameterize. Validation green: 1200 tests, 100% branch coverage, full lint/type/audit.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
