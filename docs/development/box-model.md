@@ -141,7 +141,15 @@ this is the pivot the rebuild tiers in §4 turn on.
 The builder REUSEs a cached box only while it is still valid on two axes:
 
 - **Manifest hash** — a sha256 over the version-pin set and the bake inputs. If it
-  differs from the stamped hash, the cache is void and the box is rebuilt.
+  differs from the stamped hash, the cache is void and the box is rebuilt. For the
+  **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-ubuntu2404`, `mq-nativeha-rhel9`,
+  `mq-nativeha-ubuntu` — the boxes flagged `MQ_BEARING=1` in
+  [`lab/boxes/_manifest-hash.sh`](../../lab/boxes/_manifest-hash.sh)) the
+  single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
+  into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
+  BUILD on the next bootstrap while the commons boxes (`obs-ubuntu2404`,
+  `logsearch-ubuntu2404`, `infra-ubuntu2404`, and `pcmk-ubuntu`) stay REUSE — a
+  pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
 - **Graduated age** — under 7 days: REUSE silently; 7–14 days: REUSE but emit a
   NOTICE to refresh; **14 days or older: REFUSE** (non-zero exit) demanding
   `--rebuild-box`, because a bake that old may miss base-OS security updates.
