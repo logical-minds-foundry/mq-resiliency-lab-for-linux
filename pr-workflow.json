@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1103",
+  "branch": "feature/1103-irr-facts-spike",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-15T19:19:11Z",
+  "updated_at": "2026-09-15T19:19:11Z",
+  "git": {
+    "base_sha": "54f2beb871fd63f7b35805b40fed1a93d98a59e5",
+    "head_sha": "ff73f92d153ca6110a9253ef78e0c3af7b50de77"
+  },
+  "pr_metadata": {
+    "title": "docs(report): IRR setup facts spike \u2014 MQ 10.0 Native HA in-region replication (#1103)",
+    "summary": "Adds a cited facts report pinning the MQ 10.0 Native HA IRR setup deltas (SyncReplication=Yes + SyncConsistency=Strict in NativeHARecoveryGroup, no NativeHAInstance stanza, default port 9415, strict-sync start-ordering, 10.0 floor, Developer-edition availability) that gate epic .github#227 Tasks 3/4/5.",
+    "notes": "Investigation task (no production code) \u2014 docs-only, validation green (markdownlint + full pytest 100% cov + audit). Report at docs/reports/2026-09-15-mq10-nativeha-irr-setup-facts-spike.md. IBM 10.0.x sources cached under build/refs/ibm-docs/ (gitignored). Reviewer heads-up: the spike surfaces TWO facts that conflict with the plan and need a design decision before Tasks 3/4/5 build \u2014 (1) IBM IRR is a two-node single-instance-per-group topology, NOT two 3-node HA groups as Task 5 assumes; (2) the CRR->IRR delta is two NativeHARecoveryGroup keys, not the single SyncConsistency line the plan's best-known form used. Both are flagged in the report's Implications section.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
