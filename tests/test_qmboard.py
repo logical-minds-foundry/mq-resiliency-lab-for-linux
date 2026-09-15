@@ -247,7 +247,7 @@ def test_real_topology_smoke_one_valid_board_per_app_qm():
         assert path.name == f"{board['uid']}.json"
         # each real board renders as time-series trends
         assert any(p["type"] == "timeseries" for p in board["panels"])
-    assert {"lab-qm-pcmk", "lab-qm-rdqm", "lab-qm-nhar", "lab-qm-nhau"} <= uids
+    assert {"lab-qm-pcmk", "lab-qm-rdqm", "lab-qm-nharc", "lab-qm-nhau"} <= uids
 
 
 def test_write_renders_provisioned_stacks_only(monkeypatch, tmp_path):

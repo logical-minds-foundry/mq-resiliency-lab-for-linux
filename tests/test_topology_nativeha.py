@@ -1,4 +1,4 @@
-"""Topology coverage for the Native HA stacks — nativeha-rhel (#246, #267, #350) and
+"""Topology coverage for the Native HA stacks — nativeha-rhel-crr (#246, #267, #350) and
 its OS-as-only-variable peer nativeha-ubuntu (#417).
 
 Each stack is ONE consolidated full-HADR stack (not the older _ha/_dr triple), and —
@@ -19,7 +19,7 @@ def _topology() -> dict:
 
 
 def test_nativeha_rhel_stack_uses_mqmonitor_verbs():
-    stack = lab_stacks()["nativeha-rhel"]
+    stack = lab_stacks()["nativeha-rhel-crr"]
     assert stack.mechanism == "native-ha"
     # lifecycle is the mqmonitor@ systemd unit, NOT endmqm/strmqm/pcs
     assert "mqmonitor@" in stack.verbs["qm-up"]["cmd"]
@@ -34,31 +34,35 @@ def test_nativeha_rhel_stack_uses_mqmonitor_verbs():
 def test_nativeha_rhel_declares_its_dr_groups():
     # #188: the dr_groups marker names the DR (site-B) group `bootstrap --no-dr` skips.
     # Its presence is the signal that this stack supports HA-only bring-up.
-    assert lab_stacks()["nativeha-rhel"].dr_groups == ["nha_rhel_b"]
+    assert lab_stacks()["nativeha-rhel-crr"].dr_groups == ["nha_rhel_crr_b"]
 
 
 def test_nativeha_rhel_dr_hosts_are_site_b():
     # #188: the dr_groups marker resolves to exactly the three site-B guests.
-    assert stack_dr_hosts("nativeha-rhel") == ["nha-rhel-b1", "nha-rhel-b2", "nha-rhel-b3"]
+    assert stack_dr_hosts("nativeha-rhel-crr") == [
+        "nha-rhel-crr-b1",
+        "nha-rhel-crr-b2",
+        "nha-rhel-crr-b3",
+    ]
 
 
 def test_nativeha_rhel_effective_members_drop_site_b_under_no_dr():
     # #188: --no-dr brings up the site-A members only; a full bootstrap is unchanged.
-    full = stack_members("nativeha-rhel")
+    full = stack_members("nativeha-rhel-crr")
     assert full is not None
-    effective = stack_members_effective("nativeha-rhel", no_dr=True)
+    effective = stack_members_effective("nativeha-rhel-crr", no_dr=True)
     assert effective is not None
-    assert effective == [m for m in full if not m.startswith("nha-rhel-b")]
-    assert "nha-rhel-b1" not in effective
-    assert stack_members_effective("nativeha-rhel", no_dr=False) == full
+    assert effective == [m for m in full if not m.startswith("nha-rhel-crr-b")]
+    assert "nha-rhel-crr-b1" not in effective
+    assert stack_members_effective("nativeha-rhel-crr", no_dr=False) == full
 
 
 def test_one_consolidated_full_hadr_stack():
     stacks = lab_stacks()
-    s = stacks["nativeha-rhel"]
+    s = stacks["nativeha-rhel-crr"]
     # the keystone: both sites (HA + DR) in one stack (#267); commons (svc/app) are
     # shared and provisioned separately, so they are NOT in the stack's groups (#350)
-    assert set(s.groups) == {"nha_rhel_a", "nha_rhel_b"}
+    assert set(s.groups) == {"nha_rhel_crr_a", "nha_rhel_crr_b"}
     # no partial throwaway stacks
     assert "nativeha_ha" not in stacks
     assert "nativeha_dr" not in stacks
@@ -66,8 +70,8 @@ def test_one_consolidated_full_hadr_stack():
 
 def test_platform_qualified_node_groups():
     g = _topology()["groups"]
-    assert set(g["nha_rhel_a"]) == {"nha-rhel-a1", "nha-rhel-a2", "nha-rhel-a3"}
-    assert set(g["nha_rhel_b"]) == {"nha-rhel-b1", "nha-rhel-b2", "nha-rhel-b3"}
+    assert set(g["nha_rhel_crr_a"]) == {"nha-rhel-crr-a1", "nha-rhel-crr-a2", "nha-rhel-crr-a3"}
+    assert set(g["nha_rhel_crr_b"]) == {"nha-rhel-crr-b1", "nha-rhel-crr-b2", "nha-rhel-crr-b3"}
 
 
 def test_nativeha_rhel_nodes_boot_the_baked_fat_box():
@@ -76,12 +80,12 @@ def test_nativeha_rhel_nodes_boot_the_baked_fat_box():
     # and no extra_disk — Native HA replicates in MQ's raft log, not DRBD.
     nodes = _topology()["nodes"]
     for h in (
-        "nha-rhel-a1",
-        "nha-rhel-a2",
-        "nha-rhel-a3",
-        "nha-rhel-b1",
-        "nha-rhel-b2",
-        "nha-rhel-b3",
+        "nha-rhel-crr-a1",
+        "nha-rhel-crr-a2",
+        "nha-rhel-crr-a3",
+        "nha-rhel-crr-b1",
+        "nha-rhel-crr-b2",
+        "nha-rhel-crr-b3",
     ):
         assert nodes[h]["platform"] == "mq-nativeha-rhel9"
         assert "extra_disk" not in nodes[h]
@@ -90,10 +94,10 @@ def test_nativeha_rhel_nodes_boot_the_baked_fat_box():
 def test_stack_parses_without_a_vip():
     # Native HA has no floating VIP (multi-instance CONNAME list instead);
     # QmConfig.vip must be optional for the stack to parse.
-    s = lab_stacks()["nativeha-rhel"]
-    assert s.qm.qm_app == "NHARAPP"  # short-derived (#351)
+    s = lab_stacks()["nativeha-rhel-crr"]
+    assert s.qm.qm_app == "NHARCAPP"  # short-derived (#351)
     assert s.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
-    assert s.qm.req_queue == "NHAR.SVC.REQUEST"
+    assert s.qm.req_queue == "NHARC.SVC.REQUEST"
     assert s.qm.vip == ""
 
 
@@ -185,7 +189,7 @@ def test_nativeha_ubuntu_stack_parses_without_a_vip():
 def test_nativeha_arms_use_collision_free_resources():
     """The two coexisting stacks must not share exporter ports, app_unit, or node IPs."""
     stacks = lab_stacks()
-    rhel, ubuntu = stacks["nativeha-rhel"], stacks["nativeha-ubuntu"]
+    rhel, ubuntu = stacks["nativeha-rhel-crr"], stacks["nativeha-ubuntu"]
     # distinct app exporter ports + scrape unit so both can run at once (#417). The
     # svc exporter is now a single shared SVCQM target (#446), so there is no per-stack
     # svc port to collide on.

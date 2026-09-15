@@ -6,5 +6,5 @@ Description=Render lab_nativeha_state + lab_loglifecycle_state textfiles (Native
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 /usr/local/bin/lab-nativeha-state --qm {{ nativeha_qm | default('NHARAPP') }}
-ExecStart=/usr/bin/python3 /usr/local/bin/lab-loglifecycle-state --qm {{ nativeha_qm | default('NHARAPP') }}
+ExecStart=/usr/bin/python3 /usr/local/bin/lab-nativeha-state --qm {{ nativeha_qm | default('NHARCAPP') }}
+ExecStart=/usr/bin/python3 /usr/local/bin/lab-loglifecycle-state --qm {{ nativeha_qm | default('NHARCAPP') }}

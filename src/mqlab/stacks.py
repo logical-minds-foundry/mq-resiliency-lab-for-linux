@@ -141,7 +141,7 @@ class Stack:
 def rhel_stack_unsupported_reason(stack: Stack, facts: HostFacts) -> str | None:
     """Why this stack cannot run on this host, or None when it can (#847).
 
-    The RHEL stacks (``os == "rhel"``: rdqm-rhel, nativeha-rhel) require an
+    The RHEL stacks (``os == "rhel"``: rdqm-rhel, nativeha-rhel-crr) require an
     x86_64 host. RHEL is not — and is not expected to become — available for
     Apple Silicon, and emulated cross-arch box builds are disabled by design
     (#103 D11), so on an aarch64 host only the Ubuntu stacks are supported

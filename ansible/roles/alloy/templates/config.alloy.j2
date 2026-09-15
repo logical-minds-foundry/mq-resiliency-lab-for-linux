@@ -45,7 +45,7 @@ loki.relabel "journal" {
 
   // #742: On Native HA the queue manager — and the mq-event-monitor collector (#515),
   // which runs as an MQ SERVICE inside the QM's systemd cgroup — log under the QM's own
-  // unit (e.g. mqmonitor@NHARAPP.service), so their journal entries carry a NON-empty
+  // unit (e.g. mqmonitor@NHARCAPP.service), so their journal entries carry a NON-empty
   // _SYSTEMD_UNIT. The systemd_unit-empty fallback above therefore never fires for them
   // and they are mislabeled unit="mqmonitor@<QM>.service" — hiding MQ core logs and the
   // #516 mq-events boards. Force `unit` from the syslog identifier for the known MQ
