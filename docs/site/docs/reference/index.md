@@ -8,8 +8,17 @@ lockstep with the lab. For the narrative walk-through of how these pieces fit
 together, see [Architecture](../architecture/index.md); to drive the running
 lab, see [Operate & Observe](../operate/index.md).
 
-The lab pins IBM **MQ 10.0** (currently `10.0.0.0`, see
-[`ansible/group_vars/all/versions.yml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/group_vars/all/versions.yml)).
+The lab pins IBM **MQ 10.0** (currently `10.0.0.0`). The version lives in **one
+authoritative place** — the single-source pin file
+[`lab/mq-version`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version).
+Every consumer reads that pin rather than duplicating the literal:
+`manifest.DEFAULT_MQ_VERSION`, `scripts/fetch-mq.sh`, the Ansible `mq_version`
+default
+([`ansible/group_vars/all/versions.yml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/group_vars/all/versions.yml)),
+and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
+auto-invalidates those baked images — see
+[`docs/development/box-model.md`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)).
+Bump `lab/mq-version` to rebase the whole lab in one edit.
 
 ## Topology
 
