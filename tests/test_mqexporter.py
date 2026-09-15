@@ -35,8 +35,26 @@ def test_needs_exporter_binary_false_otherwise():
 
 
 def test_exporter_binary_path_is_under_cache_mq_exporter(tmp_path):
-    expected = tmp_path / "mq-exporter" / "mq_prometheus-x64"
+    expected = tmp_path / "mq-exporter" / mqexporter.binary_name()
     assert mqexporter.exporter_binary_path(tmp_path) == expected
+
+
+def test_binary_name_is_arch_suffixed():
+    assert mqexporter.binary_name("arm64") == "mq_prometheus-arm64"
+    assert mqexporter.binary_name("x64") == "mq_prometheus-x64"
+
+
+def test_target_arch_maps_host_machine(monkeypatch):
+    # Both branches: the host machine string -> the build-target arch suffix (#1100).
+    for machine, expected in (
+        ("aarch64", "arm64"),
+        ("arm64", "arm64"),
+        ("x86_64", "x64"),
+        ("amd64", "x64"),
+    ):
+        monkeypatch.setattr(mqexporter.platform, "machine", lambda m=machine: m)
+        assert mqexporter._target_arch() == expected
+        assert mqexporter.binary_name() == f"mq_prometheus-{expected}"
 
 
 def test_ensure_returns_cached_binary_without_building(tmp_path):
