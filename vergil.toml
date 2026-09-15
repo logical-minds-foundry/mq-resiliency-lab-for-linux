@@ -94,10 +94,10 @@ disk = "300GiB"               # nested guest qcow2 images are the risk, not RAM
 backend  = "off-platform"
 provider = "gcp"
 region   = "us-east1"
-zone     = "us-east1-b"        # reservation mq-lab-n2-8 (#405); us-central1 N2 capacity exhausted 2026-06-29
-instance = "n2-standard-8"    # 8 vCPU / 32 GiB; N2/Intel → nested-virt-capable; ~$0.39/hr while running; must match the reservation's machine type
-cpus   = 8                    # match n2-standard-8 (overrides the base 12) — declaring more than the
-memory = "32GiB"              # machine type provides warns about under-capacity; this is all the reservation gives (#405)
+zone     = "us-east1-b"        # reservation mq-lab-n2-16 (#1102); us-central1 N2 capacity exhausted 2026-06-29 (#405)
+instance = "n2-standard-16"   # 16 vCPU / 64 GiB; N2/Intel → nested-virt-capable; ~$0.78/hr while running; must match the reservation's machine type. Doubled from n2-standard-8 for closer parity with the local Lima box (#1102)
+cpus   = 16                   # match n2-standard-16 (overrides the base 24) — declaring more than the
+memory = "64GiB"              # machine type provides warns about under-capacity; this is all the reservation gives (#1102)
 volume   = "400GiB"           # PERSISTENT data disk — outlives the ephemeral VM (cloud analog of `disk`).
                               # Doubled 200→400 GiB alongside the boot disk (.github#120): headroom for the
                               # growing RHEL-DVD/box-archive footprint on the data mount.
