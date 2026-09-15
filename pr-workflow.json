@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1105",
+  "branch": "feature/1105-netem-knob",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-15T19:17:50Z",
+  "updated_at": "2026-09-15T19:17:50Z",
+  "git": {
+    "base_sha": "54f2beb871fd63f7b35805b40fed1a93d98a59e5",
+    "head_sha": "8667e9637842c3996aa703d35255821ffa9c338f"
+  },
+  "pr_metadata": {
+    "title": "feat(netem): tunable WAN latency knob on the cross-region plane (#1105)",
+    "summary": "Add a thin mqlab netem set|clear|show sub-app shelling lab/scripts/net-latency.sh, which applies delay-only tc netem on every tap enslaved to virbr-wan (the cross-region plane) so a one-way delay D yields a symmetric RTT of ~2D, and never shapes the HA/heartbeat bridges.",
+    "notes": "Attach point chosen empirically in a veth/netns sandbox: bridge-root netem is a no-op on guest<->guest traffic (RTT stayed ~0.04ms; inter-guest frames are L2-switched between tap ports), while per-tap egress netem on every virbr-wan tap gives symmetric RTT ~= 2D (10ms one-way -> a->b 20.1ms, b->a 20.1ms; single tap -> 10ms). Script enumerates only 'ip link show master virbr-wan', so virbr-hb-* is structurally excluded; clear removes netem and lets the kernel restore the default qdisc. End-to-end verified against a live virbr-wan bridge with two netns guests (set/show/clear + symmetry both directions). TDD via CliRunner+RecordingRunner (5 tests); 100% branch coverage on src/ held; vrg-validate green (shellcheck incl.). Plan Task 6 of epic logical-minds-foundry/.github#227.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
