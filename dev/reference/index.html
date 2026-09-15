@@ -1399,8 +1399,17 @@ derives from a single source of truth — <code>lab/topology.yaml</code> — so 
 lockstep with the lab. For the narrative walk-through of how these pieces fit
 together, see <a href="../architecture/">Architecture</a>; to drive the running
 lab, see <a href="../operate/">Operate &amp; Observe</a>.</p>
-<p>The lab pins IBM <strong>MQ 10.0</strong> (currently <code>10.0.0.0</code>, see
-<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/group_vars/all/versions.yml"><code>ansible/group_vars/all/versions.yml</code></a>).</p>
+<p>The lab pins IBM <strong>MQ 10.0</strong> (currently <code>10.0.0.0</code>). The version lives in <strong>one
+authoritative place</strong> — the single-source pin file
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version"><code>lab/mq-version</code></a>.
+Every consumer reads that pin rather than duplicating the literal:
+<code>manifest.DEFAULT_MQ_VERSION</code>, <code>scripts/fetch-mq.sh</code>, the Ansible <code>mq_version</code>
+default
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/group_vars/all/versions.yml"><code>ansible/group_vars/all/versions.yml</code></a>),
+and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
+auto-invalidates those baked images — see
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md"><code>docs/development/box-model.md</code></a>).
+Bump <code>lab/mq-version</code> to rebase the whole lab in one edit.</p>
 <h2 id="topology">Topology<a class="headerlink" href="#topology" title="Permanent link">&para;</a></h2>
 <p>The lab shape — guest VMs, networks, role×site groups, and the stacks that
 compose them — is declared in
