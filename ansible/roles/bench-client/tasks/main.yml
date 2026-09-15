@@ -1,0 +1,23 @@
+# Deploy the purpose-built benchmark client on the app host (#1106, epic #227).
+# On-demand tool, NOT a managed service — deliberately not entangled with the
+# always-on mq-app-requester stream. Runs from /home/vagrant so its
+# `import app_requester` resolves against the sibling app_requester.py the
+# app-requester role deploys (script dir on sys.path[0]).
+- name: deploy the benchmark client
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../clients/bench_client.py"
+    dest: /home/vagrant/bench_client.py
+    owner: vagrant
+    group: vagrant
+    mode: "0644"
+
+# A thin convenience wrapper baking this stack's QM/conn/TLS defaults. The sweep
+# passes extra args ("$@") that override them (argparse: last occurrence wins),
+# so one wrapper still targets NHARCAPP or NHARIAPP via `mq-bench --qm <QM>`.
+- name: benchmark client wrapper (mq-bench)
+  ansible.builtin.template:
+    src: mq-bench.j2
+    dest: /home/vagrant/mq-bench
+    owner: vagrant
+    group: vagrant
+    mode: "0755"
