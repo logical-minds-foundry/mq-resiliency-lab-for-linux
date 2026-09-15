@@ -35,7 +35,9 @@
 
 - name: install the prebuilt mq_prometheus exporter binary (#1065)
   ansible.builtin.copy:
-    src: "{{ mq_exporter_media_dir }}/mq_prometheus-x64"
+    # Arch-suffixed artifact (#1100): the host builds mq_prometheus for the guest arch
+    # (aarch64 on Apple Silicon, x86_64 in the cloud). dest stays arch-neutral.
+    src: "{{ mq_exporter_media_dir }}/mq_prometheus-{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
     dest: /usr/local/bin/mq_prometheus
     owner: root
     group: root

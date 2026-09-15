@@ -18,6 +18,7 @@ seam so it is never exercised under unit test.
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 from typing import TYPE_CHECKING
@@ -33,7 +34,12 @@ if TYPE_CHECKING:
 # tests/test_mqexporter.py so the two declarations never drift.
 MQ_EXPORTER_REF = "v5.7.1"
 DEV_GO_IMAGE = "ghcr.io/vergil-project/dev-go:1.25"
-BINARY_NAME = "mq_prometheus-x64"
+BINARY_STEM = "mq_prometheus"
+# The build target arch selects the Go container --platform, the MQ SDK media, and the
+# cached artifact name. Build for the HOST arch (== the lab guest arch): aarch64 on
+# Apple Silicon, x86_64 in the cloud — never a fixed amd64 (#1100; the #1065 x86-only
+# build broke arm64 bakes with `exec format error`).
+_DOCKER_PLATFORM = {"x64": "linux/amd64", "arm64": "linux/arm64"}
 # The fat boxes whose bake installs mq_prometheus: obs (the observability probe) and
 # the mq-ubuntu commons (mon-probe). Only these need the prebuilt binary present.
 EXPORTER_BOXES = frozenset({"obs-ubuntu2404", "mq-ubuntu2404"})
@@ -45,9 +51,20 @@ def needs_exporter_binary(box_names: Iterable[str]) -> bool:
     return bool(EXPORTER_BOXES.intersection(box_names))
 
 
+def _target_arch() -> str:
+    """The build target arch suffix ('arm64' | 'x64'), keyed on this host (== the lab
+    guest arch: aarch64 on Apple Silicon, x86_64 in the cloud)."""
+    return "arm64" if platform.machine().lower() in {"aarch64", "arm64"} else "x64"
+
+
+def binary_name(arch: str | None = None) -> str:
+    """The cached exporter artifact name for `arch` (default: this host's arch)."""
+    return f"{BINARY_STEM}-{arch or _target_arch()}"
+
+
 def exporter_binary_path(cache_root: Path) -> Path:
-    """Durable-cache location of the prebuilt exporter binary."""
-    return cache_root / "mq-exporter" / BINARY_NAME
+    """Durable-cache location of the prebuilt exporter binary (host-arch)."""
+    return cache_root / "mq-exporter" / binary_name()
 
 
 def _runtime() -> str:  # pragma: no cover
@@ -63,8 +80,10 @@ def _runtime() -> str:  # pragma: no cover
 
 
 def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cover
-    """Run the dev-go container to build the binary into out_dir. amd64 always — the
-    lab's guests are x86, so the artifact must be linux/amd64 regardless of host."""
+    """Run the dev-go container to build the binary into out_dir, native to this host's
+    arch (the dev-go image is multi-arch, so arm64 runs without emulation). The build
+    script keys the MQ SDK media and output name off TARGET_ARCH."""
+    arch = _target_arch()
     out_dir.mkdir(parents=True, exist_ok=True)
     script = paths.repo_root() / _BUILD_SCRIPT
     subprocess.run(  # noqa: S603 - fixed argv; trusted repo/cache paths
@@ -72,7 +91,7 @@ def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cov
             _runtime(),
             "run",
             "--rm",
-            "--platform=linux/amd64",
+            f"--platform={_DOCKER_PLATFORM[arch]}",
             "-v",
             f"{cache_root}:/cache",
             "-v",
@@ -81,6 +100,8 @@ def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cov
             f"{script}:/build.sh:ro",
             "-e",
             f"MQ_EXPORTER_REF={MQ_EXPORTER_REF}",
+            "-e",
+            f"TARGET_ARCH={arch}",
             DEV_GO_IMAGE,
             "bash",
             "/build.sh",
