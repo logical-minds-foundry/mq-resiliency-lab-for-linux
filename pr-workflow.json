@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1106",
+  "branch": "feature/1106-bench-client",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-15T19:17:33Z",
+  "updated_at": "2026-09-15T19:17:33Z",
+  "git": {
+    "base_sha": "54f2beb871fd63f7b35805b40fed1a93d98a59e5",
+    "head_sha": "b906c4ae4dd298f6224ef93a555512793bc0bd16"
+  },
+  "pr_metadata": {
+    "title": "feat(bench): purpose-built Native HA benchmark client (persistent throughput/latency, percentiles)",
+    "summary": "Adds clients/bench_client.py, a controlled persistent-commit benchmark (warmup + measure, p50/p95/p99/max commit latency, steady-state throughput, JSONL results record) reusing app_requester's stats/textfile/reconnect helpers, plus a bench-client Ansible role that deploys it to app-client on demand parameterized by target QM.",
+    "notes": "Task 7 of epic #227. Scope: bench client + deploy path only (netem knob is Task 6, sweep runner + experiment is Task 8). Pure logic (nearest-rank percentiles, depth-trend flag, JSONL record shape) is unit-tested in tests/test_bench_client.py; clients/ is outside the --cov=src gate by design so the pymqi PUT/commit loop is not unit-tested. bench_client.py does 'import app_requester' (the dr_flow<-dr_mqi in-dir reuse pattern); the bench-client role is wired into the app play in site-distributed-shared.yml AFTER app-requester so app_requester.py is co-located for that runtime import. Validation: vrg-container-run -- vrg-validate green (1216 tests, 100% src coverage, lint/audit clean). Note: vrg-commit produced the commit without a Co-Authored-By trailer and the wrapper offers no trailer/amend flag (raw git + vrg-git reset are denied), so the trailer could not be added.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
