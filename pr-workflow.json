@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1112",
+  "branch": "feature/1112-fatbox-exporter-arch",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-15T19:11:43Z",
+  "updated_at": "2026-09-15T19:11:43Z",
+  "git": {
+    "base_sha": "54f2beb871fd63f7b35805b40fed1a93d98a59e5",
+    "head_sha": "a5eed1c5ca459e616aca43d72d62208510d4b1bc"
+  },
+  "pr_metadata": {
+    "title": "fix(box): arch-suffix the prebuilt mq_prometheus check in build-fatbox.sh (follow-up to #1100)",
+    "summary": "One coupling point #1100 missed: build-fatbox.sh's obs/mq-ubuntu pre-bake existence check hardcoded mq_prometheus-x64, so arm64 bakes failed 'prebuilt mq_prometheus not found' (cache has mq_prometheus-arm64). Derive the suffix from the baker's own --arch.",
+    "notes": "Verified: vrg-validate all green (common/lint incl. shellcheck/typecheck/test 1199 passed @100% cov/audit). Exhaustive grep confirms this was the last x64 hardcoding (mqexporter.py, build-mq-exporter-binary.sh, mq-exporter role already arch-aware from #1100/#1101). One-line-class change (case on ARCH -> arm64|x64) matching binary_name(). Unblocks nativeha-ubuntu --no-dr bring-up on Apple Silicon (mq-nativeha box already builds; obs/mq-ubuntu were the last blocked bakes).",
+    "linkage": "Closes"
+  },
+  "submitted": null
+}
