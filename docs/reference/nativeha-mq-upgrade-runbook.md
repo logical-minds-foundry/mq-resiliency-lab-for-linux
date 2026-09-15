@@ -185,6 +185,22 @@ Then end the group with a controlled (quiesce) shutdown:
 endmqm -w <QMGR>     # controlled/quiesce end of this Native HA group
 ```
 
+**Stop the mqweb server too — before the package upgrade.** Ending the queue
+manager is **not** sufficient: the embedded web (mqweb) server also holds
+`/opt/mqm` open, and the IBM MQ 10.0 package upgrade refuses to run while it is
+up. Stop it before the `dnf`/`apt` step in §2.2:
+
+```bash
+endmqweb                     # or, in this lab: systemctl stop mqweb
+```
+
+Why this is not optional: with the mqweb server still running, the 10.0 RPM
+`%prein` scriptlet **aborts** the upgrade with *"Installation of this fix pack
+can not proceed because /opt/mqm is running. Run the command
+/opt/mqm/bin/endmqweb"* — so the mqweb server must be down on every node of a
+group before that group's MQ installation is upgraded. (Verified in the #1074
+execution.)
+
 ### 3.2 Native HA / CRR group gate (`dspmq`, findings-pinned)
 
 The group-level health gate is `dspmq -o nativeha -g`. Field semantics are from
@@ -317,13 +333,29 @@ validation.
 Record the `dspmq -o nativeha -g` output at each checkpoint as the validation
 evidence.
 
-> Lab-arm note: in this lab the switchover round trip is driven by
-> `mqlab dr cutover` (origin → DR) and `mqlab dr failback` (DR → origin). The
+> Lab-arm note: on the native-HA arm the switchover round trip is driven **today**
+> by the Ansible playbook `ansible/site-nativeha-switchover.yml`, run directly:
+>
+> ```bash
+> ansible-playbook site-nativeha-switchover.yml -e target_live=b   # cutover:  site A -> site B
+> ansible-playbook site-nativeha-switchover.yml -e target_live=a   # failback: site B -> site A
+> ```
+>
+> `target_live=b` makes site B the Live group (cutover); `target_live=a` restores
+> site A as Live (failback). The playbook performs the `qm.ini` role edit
+> directly — `GroupRole` in the `NativeHALocalInstance` stanza and `Enabled` in
+> the `NativeHARecoveryGroup` stanza — then restarts the `mqmonitor@<QMGR>`
+> systemd unit to apply the role swap; verify with `dspmq -o nativeha -g`. The
 > switchover/failover IBM Docs illustrate role changes with container
-> `oc`/`kubectl` commands, but on the VM arm the underlying mechanism is the
-> `qm.ini` edit the automation performs directly — `GroupRole` in the
-> `NativeHALocalInstance` stanza and `Enabled` in the `NativeHARecoveryGroup`
-> stanza — followed by `endmqm`/`strmqm` and verified with `dspmq -o nativeha -g`.
+> `oc`/`kubectl` commands, but on the VM arm the underlying mechanism is this
+> direct `qm.ini` edit.
+>
+> The `mqlab dr cutover` / `mqlab dr failback` verbs do **not** drive the
+> native-HA arm today: those verbs are **rdqm-only** (`src/mqlab/cli.py` refuses
+> a non-rdqm stack — *"only the rdqm mechanism has an rdqm-dr-cutover flow"*).
+> Native-HA `mqlab dr` wrappers over the playbook above are future/aspirational,
+> tracked by the DR-commands automation epic
+> (`vergil-project/.github#38`); until they land, use the playbook directly.
 
 ## 6. Ubuntu-arm applicability — same procedure
 
