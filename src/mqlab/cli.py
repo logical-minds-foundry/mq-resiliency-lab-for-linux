@@ -1865,6 +1865,49 @@ def dr_failback(stack: str, rpo0_drill: _Rpo0DrillOpt = False) -> None:
     _dr_run(stack, "b2a", "failback", rpo0_drill=rpo0_drill)
 
 
+# --- netem: tunable WAN latency on the cross-region plane (#1105) ----------------
+# A thin wrapper over lab/scripts/net-latency.sh, which owns the tc attach-point
+# decision: a root `netem` delay qdisc on every tap enslaved to virbr-wan (guest<->
+# guest traffic never traverses the bridge's own root qdisc, so bridge-root netem is
+# a no-op on it). A symmetric one-way delay D on every tap yields RTT ~= 2D, and the
+# HA/heartbeat bridges (virbr-hb-*) are structurally excluded. Mirrors the pki/dr
+# command-wraps-script shape; step_mode=False (one shot, nothing to pause between).
+netem_app = typer.Typer(
+    help="inject WAN latency on the cross-region plane (tc netem, delay-only)",
+    no_args_is_help=True,
+)
+app.add_typer(netem_app, name="netem")
+
+_NET_LATENCY_SCRIPT = "net-latency.sh"
+
+
+def _netem(action: str, *args: str) -> None:
+    argv = ["bash", str(lab_script(_NET_LATENCY_SCRIPT)), action, *args]
+    _execute(f"netem-{action}", [CommandStep(f"netem {action}", Command(argv))], step_mode=False)  # noqa: S607
+
+
+@netem_app.command("set")
+def netem_set(
+    delay: Annotated[
+        str, typer.Option("--delay", help="one-way delay on virbr-wan, e.g. 10ms (RTT ~= 2x)")
+    ],
+) -> None:
+    """Apply a symmetric one-way delay on the cross-region plane (RTT ~= 2 x delay)."""
+    _netem("set", delay)
+
+
+@netem_app.command("clear")
+def netem_clear() -> None:
+    """Remove all netem shaping from virbr-wan (restore the default qdisc)."""
+    _netem("clear")
+
+
+@netem_app.command("show")
+def netem_show() -> None:
+    """Show the current netem qdisc on each virbr-wan tap."""
+    _netem("show")
+
+
 @app.command("parity")
 def parity_matrix() -> None:
     """Print the cross-arm capability matrix (which verbs each arm supports)."""
