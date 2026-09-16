@@ -1,0 +1,21 @@
+---
+# bench-client (#1106, epic #227): the purpose-built Native HA benchmark client
+# on the app host. UNLIKE app-requester (the always-on request/reply stream),
+# this is an ON-DEMAND measurement tool — no systemd service. The epic's sweep
+# (Task 8) invokes it per {mode, delay} point via the `mq-bench` wrapper.
+#
+# It reuses app_requester.py's helpers at runtime (`import app_requester`), so
+# app_requester.py must already be co-located on the app host — the app-requester
+# role deploys it earlier in the same play. Parameterized by target QM: the CRR
+# app QM by default; the sweep overrides --qm per mode (NHARCAPP | NHARIAPP).
+bench_client_qm: "{{ our_qm }}"
+bench_client_conn: "{{ app_conn }}"
+bench_client_tls: "{{ app_tls | default(true) }}"
+bench_client_channel: APP.SVRCONN
+bench_client_queue: APP.REPLY
+# The app-client keystore stem + label placed by the mq-client role (#250).
+bench_client_keyrepo: /home/vagrant/ssl/key
+bench_client_certlabel: app-client
+# Publishes into the same node-exporter drop zone the app-requester role
+# provisions (group-writable, setgid). The bench --textfile is opt-in per run.
+bench_client_textfile_dir: /var/lib/node_exporter/textfile

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# mq-bench (#1106, epic #227) — on-demand wrapper for the Native HA benchmark
+# client. Bakes this stack's QM/conn/TLS defaults; any extra args passed to
+# mq-bench are appended after them, so a later --qm/--offered-rate/--delay-ms/
+# --mode/--results wins (argparse takes the last occurrence). The sweep drives
+# this per {mode, delay} point:
+#   ./mq-bench --qm NHARIAPP --mode strict --delay-ms 10 --offered-rate 500 \
+#              --results /path/results.jsonl
+set -euo pipefail
+
+exec /home/vagrant/mqvenv/bin/python /home/vagrant/bench_client.py \
+  --qm {{ bench_client_qm }} \
+  --conn "{{ bench_client_conn }}" \
+  --channel {{ bench_client_channel }} \
+  --queue {{ bench_client_queue }} \
+{% if bench_client_tls | bool %}
+  --keyrepo {{ bench_client_keyrepo }} \
+  --certlabel {{ bench_client_certlabel }} \
+{% endif %}
+  "$@"
