@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "964",
+  "branch": "feature/964-qm-board",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-16T19:55:18Z",
+  "updated_at": "2026-09-16T19:55:18Z",
+  "git": {
+    "base_sha": "b37e1d8b072897ad817437c3792ff1335ba99181",
+    "head_sha": "99b610199266a4efda0c51a11ceba39aee91ff84"
+  },
+  "pr_metadata": {
+    "title": "feat(obs): portable work-edition QM-view board (workqmboard.py)",
+    "summary": "Adds work_qm_dashboard() \u2014 the first portable, $qmgr-scoped work-edition board (spec \u00a77.1): a status+services band, a 3\u00d72 trend grid (rate() on the schema-note \u00a74.1 counters), an empty=healthy \u2462 Attention services table, and a marked ES-feed seam for Wave 1b \u2014 binding only schema-note ibmmq_qmgr_* series, with a drill-link carrying $qmgr to the Queue/channel board.",
+    "notes": "Continues the existing origin/feature/964-qm-board (original generator + interim tuning), now finalized. Key review points: (1) \u2462 Attention is empty=healthy by pushing the filter INTO the PromQL (!= 2 on the two service-status gauges, == 0 on listeners) so healthy services produce no series \u2014 not by row color; \u2460 keeps always-on service pills as the calm-state census. (2) Board is QM-scoped and binds ONLY schema-note qmgr-class metrics \u2014 no ibmmq_queue_/ibmmq_channel_ (those are the Flow board, #965); every name maps to prometheus-schema-note.md \u00a74.1. (3) ES feed is a clearly-marked SEAM (Wave 1b/#966) \u2014 no Loki wired, no ${logs} var. (4) Portable: every panel on ${datasource}, no hardcoded lab QM names; publication-driven trend panels are spanNulls gap-tolerant per the failover finding (\u00a75). vrg-validate GREEN: 1229 passed, 100% coverage. Post-merge Step-7 live-Grafana tuning is human-gated and NOT done here. Citation doc (was Deliverable B) is split into its own task per the 1:1 PR-per-task rule.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
