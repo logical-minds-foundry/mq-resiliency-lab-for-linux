@@ -59,7 +59,7 @@ mq_exporter_monitored_channels: "*,SYSTEM.*"
 # bake (#1065). The binary is built from this ref by src/mqlab/mqexporter.py
 # (MQ_EXPORTER_REF), kept in sync via tests/test_mqexporter.py; this default is what
 # the version manifest reports (manifest._OBS_VAR_MAP -> mq_metric_samples_ref).
-mq_exporter_ref: v5.7.1
+mq_exporter_ref: v6.0.0
 
 # Where the prebuilt mq_prometheus binary is copied from (#1065). Defaults to the
 # per-run path (playbook's sibling build/cache/mq-exporter); the obs / mq-ubuntu

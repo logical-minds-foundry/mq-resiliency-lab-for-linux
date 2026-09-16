@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 # The mq-metric-samples git ref the binary is built from. MUST stay in sync with the
 # `mq_exporter_ref` role default (which the version manifest reports) — asserted in
 # tests/test_mqexporter.py so the two declarations never drift.
-MQ_EXPORTER_REF = "v5.7.1"
+MQ_EXPORTER_REF = "v6.0.0"
 DEV_GO_IMAGE = "ghcr.io/vergil-project/dev-go:1.25"
 BINARY_STEM = "mq_prometheus"
 # The build target arch selects the Go container --platform, the MQ SDK media, and the
