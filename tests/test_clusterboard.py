@@ -205,8 +205,8 @@ def test_nativeha_status_band_is_one_compact_full_width_row():
     # the integrity tile still carries the gated hazard expr (no false green on no-data)
     integ = tiles[4]["targets"][0]["expr"]
     assert "cluster_nha_insync == 0" in integ and "count(cluster_nha_role) > 0" in integ
-    assert 'cluster_resource_owner{resource="NHARAPP"}' in integ
-    assert 'cluster_resource_owner{resource="NHARAPP"}' in tiles[0]["targets"][0]["expr"]
+    assert 'cluster_resource_owner{resource="NHARCAPP"}' in integ
+    assert 'cluster_resource_owner{resource="NHARCAPP"}' in tiles[0]["targets"][0]["expr"]
 
 
 def test_role_mapping_codes_active_replica_unknown():
@@ -229,18 +229,18 @@ def test_role_mapping_codes_active_replica_unknown():
 def test_nativeha_instance_cols_for_a_site():
     from mqlab.clusterboard import _nativeha_instance_cols
 
-    cols = _nativeha_instance_cols("nha-rhel-a.*")
+    cols = _nativeha_instance_cols("nha-rhel-crr-a.*")
     assert [c[0] for c in cols] == ["online", "role", "in-sync", "HA Normal"]
     assert cols[1][2] == "role"  # the role column uses the role mapping
     assert "cluster_nha_role_code" in cols[1][1]
     # every column is scoped to the site's members
-    assert all('member=~"nha-rhel-a.*"' in expr for _, expr, _ in cols)
+    assert all('member=~"nha-rhel-crr-a.*"' in expr for _, expr, _ in cols)
 
 
 def test_nativeha_board_uid_sections_and_tags():
-    d = render_cluster_dashboard({}, arm="nativeha-rhel")
-    assert d["uid"] == "lab-nativeha-rhel-cluster"
-    assert "nativeha-rhel" in d["tags"]
+    d = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
+    assert d["uid"] == "lab-nativeha-rhel-crr-cluster"
+    assert "nativeha-rhel-crr" in d["tags"]
     by_title = {p.get("title", ""): p for p in d["panels"]}
     # matrices are labelled by FIXED site (A/B), never by the dynamic live/recovery role (#279)
     assert "Site A" in by_title
@@ -258,8 +258,8 @@ def test_nativeha_board_uid_sections_and_tags():
         if p["type"] == "table":
             assert "Live" not in p["title"] and "Recovery" not in p["title"]
     # Site A scopes to a-nodes, Site B to b-nodes
-    assert any('member=~"nha-rhel-a.*"' in t["expr"] for t in site_a["targets"])
-    assert any('member=~"nha-rhel-b.*"' in t["expr"] for t in site_b["targets"])
+    assert any('member=~"nha-rhel-crr-a.*"' in t["expr"] for t in site_a["targets"])
+    assert any('member=~"nha-rhel-crr-b.*"' in t["expr"] for t in site_b["targets"])
     # no PCMK-only plumbing leaks into the nativeha board
     blob = json.dumps(d)
     assert "corosync" not in blob and "cluster_drbd" not in blob and "iSCSI" not in blob
@@ -285,10 +285,12 @@ def test_pcmk_board_scopes_shared_metrics_to_pcmk_groups():
 def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
     # the nha board's shared cluster_quorate (integrity) is scoped to nha groups; its
     # cluster_node_online lives only in the instance matrices, scoped by member regex.
-    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    d = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     blob = json.dumps(d)
     for m in re.finditer(r"cluster_quorate(\{[^}]*\})?", blob):
-        assert "nha_rhel_a|nha_rhel_b" in (m.group(1) or ""), "unscoped quorate on nha board"
+        assert "nha_rhel_crr_a|nha_rhel_crr_b" in (m.group(1) or ""), (
+            "unscoped quorate on nha board"
+        )
     for m in re.finditer(r"cluster_node_online(\{[^}]*\})?", blob):
         assert "nha-rhel-" in (m.group(1) or ""), "unscoped node_online on nha board"
     assert "pcmk_a|pcmk_b" not in blob  # no PCMK scope leaks onto the nha board
@@ -297,7 +299,7 @@ def test_nativeha_board_scopes_shared_metrics_to_nha_groups():
 def test_nativeha_board_has_full_section_parity_minus_storage():
     # the nha board carries everything after ② that PCMK has — CRR card, timeline, logs,
     # perf, network — but NO storage (Native HA has no DRBD/SAN tier).
-    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    d = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     titles = [p.get("title", "") for p in d["panels"]]
     types = {p["type"] for p in d["panels"]}
     assert any("Cross-region replication (CRR)" in t for t in titles)  # ③ CRR row header
@@ -323,18 +325,18 @@ def test_nativeha_board_has_full_section_parity_minus_storage():
 def test_nativeha_log_panel_includes_ibm_mq_diagnostic_stream():
     # the logs panel carries a description so an empty panel doesn't read as broken (#279),
     # and since #282/#822 it targets the ibm-mq diagnostic (AMQERR JSON) stream.
-    d = render_cluster_dashboard({}, arm="nativeha-rhel")
+    d = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     logs = next(p for p in d["panels"] if p["type"] == "logs")
     assert "AMQERR" in logs["description"]
     assert "ibm-mq" in logs["targets"][0]["expr"]
-    assert 'host=~"nha-rhel-.*"' in logs["targets"][0]["expr"]
+    assert 'host=~"nha-rhel-crr-.*"' in logs["targets"][0]["expr"]
 
 
 def test_nativeha_perf_uses_nha_groups_and_no_san_disk():
     from mqlab.clusterboard import nativeha_perf_section
 
     blob = json.dumps(nativeha_perf_section("promtest", y=0))
-    assert "nha_rhel_a|nha_rhel_b" in blob  # CPU scoped to nha nodes
+    assert "nha_rhel_crr_a|nha_rhel_crr_b" in blob  # CPU scoped to nha nodes
     assert "node_disk" not in blob  # no SAN disk I/O panel
     assert "virbr-hb" in blob and "virbr-wan" in blob  # raft + CRR throughput
 
@@ -350,9 +352,9 @@ def test_nativeha_ubuntu_board_is_the_rhel_board_reparameterized():
     # QM + group + prefix are all the Ubuntu arm's, and the RHEL arm's never leak in.
     # (substring checks — json.dumps escapes the quotes in the PromQL label selectors)
     assert "NHAUAPP" in blob
-    assert "NHARAPP" not in blob
+    assert "NHARCAPP" not in blob
     assert "nha_ubuntu_a|nha_ubuntu_b" in blob
-    assert "nha_rhel_a|nha_rhel_b" not in blob
+    assert "nha_rhel_crr_a|nha_rhel_crr_b" not in blob
     assert "nha-ubuntu-" in blob
     assert "nha-rhel-" not in blob
     # quorate stays scoped to THIS arm's groups (no cross-arm metric leak)
@@ -385,7 +387,7 @@ def test_nativeha_crr_card_is_replication_health_not_group_roles():
 def test_site_role_chip_flips_live_recovery_by_data():
     from mqlab.clusterboard import _site_role_badge
 
-    chip = _site_role_badge("nha-rhel-a.*", "promtest", 0, 7)
+    chip = _site_role_badge("nha-rhel-crr-a.*", "promtest", 0, 7)
     # the chip derives its role from the site's instances (max role code: 2=Active→LIVE,
     # 3=Leader→RECOVERY) so it flips on failover; green LIVE vs blue RECOVERY (a healthy
     # standby, not a yellow warning), background-lit (#399)
@@ -393,7 +395,7 @@ def test_site_role_chip_flips_live_recovery_by_data():
     assert opts["2"]["text"] == "LIVE" and opts["2"]["color"] == "green"
     assert opts["3"]["text"] == "RECOVERY" and opts["3"]["color"] == "blue"
     assert chip["options"]["colorMode"] == "background"
-    assert 'member=~"nha-rhel-a.*"' in chip["targets"][0]["expr"]
+    assert 'member=~"nha-rhel-crr-a.*"' in chip["targets"][0]["expr"]
     # it is a compact chip beside the matrix (narrow), not a full row
     assert chip["gridPos"]["w"] == 5 and chip["gridPos"]["h"] == 7
 
@@ -745,6 +747,6 @@ def test_pcmk_and_nativeha_boards_unchanged_by_rdqm_arm():
     pcmk = render_cluster_dashboard({}, arm="pcmk-ubuntu")
     assert pcmk["uid"] == "lab-pcmk-ubuntu-cluster"
     assert "③ Storage — DRBD / SAN" in [p.get("title", "") for p in pcmk["panels"]]
-    nha = render_cluster_dashboard({}, arm="nativeha-rhel")
-    assert nha["uid"] == "lab-nativeha-rhel-cluster"
+    nha = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
+    assert nha["uid"] == "lab-nativeha-rhel-crr-cluster"
     assert "rdqm" not in json.dumps(nha)  # no rdqm plumbing leaked onto the nha board

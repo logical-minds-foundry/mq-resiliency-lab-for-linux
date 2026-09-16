@@ -276,38 +276,39 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
 
-  # --- Native HA arm (#246, #267): six RHEL x86_64 nodes, shared-nothing
-  # (raft log replication — NO extra_disk). Site A = nha_rhel_a (HA, Phase 1);
-  # site B = nha_rhel_b (CRR/DR, Phase 3). x86 is forced (not RHEL); the Ubuntu
+  # --- Native HA CRR arm (#246, #267, #227): six RHEL x86_64 nodes, shared-nothing
+  # (raft log replication — NO extra_disk). Site A = nha_rhel_crr_a (HA, Phase 1);
+  # site B = nha_rhel_crr_b (CRR/DR, Phase 3). x86 is forced (not RHEL); the Ubuntu
   # peer arm (nha-ubuntu-*, #417) is below. HA replication on net-hb-a; CRR over net-wan.
   # These arms run native KVM/host-passthrough on an x86 host (TCG only on arm64/macOS).
-  # Host octets .9x — clear of every other arm's block (both RHEL arms).
-  nha-rhel-a1:
+  # Host octets .9x — clear of every other arm's block (both RHEL arms). The nodes carry
+  # an explicit -crr- infix (#227 Task 2) so this CRR arm coexists with the IRR sibling.
+  nha-rhel-crr-a1:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.91, net-data-a: 10.10.1.91, net-hb-a: 172.16.1.91, net-wan: 10.99.0.91, net-ext: 10.60.0.91 }
-  nha-rhel-a2:
+  nha-rhel-crr-a2:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.92, net-data-a: 10.10.1.92, net-hb-a: 172.16.1.92, net-wan: 10.99.0.92, net-ext: 10.60.0.92 }
-  nha-rhel-a3:
+  nha-rhel-crr-a3:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.93, net-data-a: 10.10.1.93, net-hb-a: 172.16.1.93, net-wan: 10.99.0.93, net-ext: 10.60.0.93 }
-  nha-rhel-b1:
+  nha-rhel-crr-b1:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.94, net-data-b: 10.10.2.91, net-hb-b: 172.16.2.91, net-wan: 10.99.0.94 }
-  nha-rhel-b2:
+  nha-rhel-crr-b2:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.95, net-data-b: 10.10.2.92, net-hb-b: 172.16.2.92, net-wan: 10.99.0.95 }
-  nha-rhel-b3:
+  nha-rhel-crr-b3:
     platform: mq-nativeha-rhel9
     cpus: 2
     memory: 2048
@@ -368,8 +369,8 @@ groups:
   pcmk_b: [pcmk-b1, pcmk-b2, pcmk-b3]
   rdqm_a: [rdqm-a1, rdqm-a2, rdqm-a3]
   rdqm_b: [rdqm-b1, rdqm-b2, rdqm-b3]
-  nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]
-  nha_rhel_b: [nha-rhel-b1, nha-rhel-b2, nha-rhel-b3]
+  nha_rhel_crr_a: [nha-rhel-crr-a1, nha-rhel-crr-a2, nha-rhel-crr-a3]
+  nha_rhel_crr_b: [nha-rhel-crr-b1, nha-rhel-crr-b2, nha-rhel-crr-b3]
   nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]
   nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2, nha-ubuntu-b3]
   svc:   [svc-sim]
@@ -443,17 +444,17 @@ stacks:
       qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
       qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
-  nativeha-rhel:
+  nativeha-rhel-crr:
     mechanism: native-ha
     os: rhel
-    short: NHAR
-    cluster_group: nha_rhel_a
-    groups: [nha_rhel_a, nha_rhel_b]
-    dr_groups: [nha_rhel_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
+    short: NHARC
+    cluster_group: nha_rhel_crr_a
+    groups: [nha_rhel_crr_a, nha_rhel_crr_b]
+    dr_groups: [nha_rhel_crr_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-nativeha.yml
     secrets: [mqweb_admin_password]
     qm: {}
-    alloc: { exporter_app_port: 9161, app_unit: app-nhar, svc_port: 1414 }
+    alloc: { exporter_app_port: 9161, app_unit: app-nhar-crr, svc_port: 1414 }
     verbs:
       qm-create:   { playbook: site-nativeha.yml }
       qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
@@ -463,7 +464,7 @@ stacks:
       dr-failback: { playbook: site-nativeha-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
   # nativeha-ubuntu (#417, Phase 2 of #246): the OS-as-only-variable peer of
-  # nativeha-rhel. Identical mechanism/verbs (mqmonitor@ systemd lifecycle, qm.ini
+  # nativeha-rhel-crr. Identical mechanism/verbs (mqmonitor@ systemd lifecycle, qm.ini
   # GroupRole switchover); only the QM names (NHAU*), the groups (nha_ubuntu_*),
   # the exporter ports/app_unit, and the provision playbook differ. Built to coexist
   # with pcmk-ubuntu on one host (collision-free IPs/ports).
