@@ -65,24 +65,24 @@ def test_count_extents_empty_listing_is_zero():
 def test_instance_role_active_and_replica_from_dspmq_nativeha():
     # thin wrapper over nativehastate.parse_nativeha_x — role lowercased for the metric label.
     out = (
-        "QMNAME(QM1) INSTANCE(nha-rhel-a1) ROLE(Active) INSYNC(yes) QUORUM(3/3) "
+        "QMNAME(QM1) INSTANCE(nha-rhel-crr-a1) ROLE(Active) INSYNC(yes) QUORUM(3/3) "
         "HASTATUS(Normal) GRPROLE(Live)\n"
-        " INSTANCE(nha-rhel-a1) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
-        " INSTANCE(nha-rhel-a2) ROLE(Replica) INSYNC(yes) HASTATUS(Normal)\n"
+        " INSTANCE(nha-rhel-crr-a1) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
+        " INSTANCE(nha-rhel-crr-a2) ROLE(Replica) INSYNC(yes) HASTATUS(Normal)\n"
     )
-    assert loglifecycle.instance_role(out, "nha-rhel-a1") == "active"
-    assert loglifecycle.instance_role(out, "nha-rhel-a2") == "replica"
+    assert loglifecycle.instance_role(out, "nha-rhel-crr-a1") == "active"
+    assert loglifecycle.instance_role(out, "nha-rhel-crr-a2") == "replica"
 
 
 def test_instance_role_unknown_when_instance_absent():
-    out = " INSTANCE(nha-rhel-a1) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
+    out = " INSTANCE(nha-rhel-crr-a1) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
     assert loglifecycle.instance_role(out, "nha-rhel-zz") == "unknown"
 
 
 def test_render_prom_is_node_exporter_textfile():
     row = {
         "qm": "QM1",
-        "instance": "nha-rhel-a1",
+        "instance": "nha-rhel-crr-a1",
         "role": "active",
         "used_bytes": 100,
         "total_bytes": 200,
@@ -91,7 +91,7 @@ def test_render_prom_is_node_exporter_textfile():
         "stale": 0,
     }
     text = loglifecycle.render_prom(row)
-    labels = 'qm="QM1",instance="nha-rhel-a1",role="active"'
+    labels = 'qm="QM1",instance="nha-rhel-crr-a1",role="active"'
     assert f"mqlab_log_disk_used_bytes{{{labels}}} 100" in text
     assert f"mqlab_log_disk_total_bytes{{{labels}}} 200" in text
     assert f"mqlab_log_extents_active{{{labels}}} 2" in text
@@ -104,7 +104,7 @@ def test_render_prom_stale_omits_values_but_always_emits_stale_flag():
     # only the labeled stale flag is emitted, set to 1, so the cell reads STALE (not 'no data').
     row = {
         "qm": "QM1",
-        "instance": "nha-rhel-a3",
+        "instance": "nha-rhel-crr-a3",
         "role": "replica",
         "used_bytes": None,
         "total_bytes": None,
@@ -115,13 +115,13 @@ def test_render_prom_stale_omits_values_but_always_emits_stale_flag():
     text = loglifecycle.render_prom(row)
     assert "mqlab_log_disk_used_bytes" not in text
     assert "mqlab_log_extents_active" not in text
-    assert 'mqlab_log_sample_stale{qm="QM1",instance="nha-rhel-a3",role="replica"} 1' in text
+    assert 'mqlab_log_sample_stale{qm="QM1",instance="nha-rhel-crr-a3",role="replica"} 1' in text
 
 
 def test_render_prom_defaults_stale_to_zero_when_absent():
-    row = {"qm": "QM1", "instance": "nha-rhel-a1", "role": "active"}
+    row = {"qm": "QM1", "instance": "nha-rhel-crr-a1", "role": "active"}
     text = loglifecycle.render_prom(row)
-    assert 'mqlab_log_sample_stale{qm="QM1",instance="nha-rhel-a1",role="active"} 0' in text
+    assert 'mqlab_log_sample_stale{qm="QM1",instance="nha-rhel-crr-a1",role="active"} 0' in text
 
 
 def test_probe_returns_stdout_then_none_on_failure(monkeypatch):
@@ -161,15 +161,15 @@ def _fresh_probe(cmd, timeout):
     if cmd[0] == "ls":
         return "S0000000.LOG\nS0000001.LOG\nR0000009.LOG\namqhlctl.lfh\n"
     return (  # the dspmq -o nativeha -x role source
-        "QMNAME(NHARAPP) INSTANCE(nha-rhel-a2) ROLE(Active) QUORUM(3/3) GRPROLE(Live)\n"
-        " INSTANCE(nha-rhel-a2) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
+        "QMNAME(NHARCAPP) INSTANCE(nha-rhel-crr-a2) ROLE(Active) QUORUM(3/3) GRPROLE(Live)\n"
+        " INSTANCE(nha-rhel-crr-a2) ROLE(Active) INSYNC(yes) HASTATUS(Normal)\n"
     )
 
 
 def test_collect_renders_fresh_sample_tagged_by_instance_and_role(monkeypatch):
     monkeypatch.setattr(loglifecycle, "probe", _fresh_probe)
-    text = loglifecycle.collect("nha-rhel-a2", "NHARAPP")
-    labels = 'qm="NHARAPP",instance="nha-rhel-a2",role="active"'
+    text = loglifecycle.collect("nha-rhel-crr-a2", "NHARCAPP")
+    labels = 'qm="NHARCAPP",instance="nha-rhel-crr-a2",role="active"'
     assert f"mqlab_log_disk_used_bytes{{{labels}}} {10485760 * 1024}" in text
     assert f"mqlab_log_disk_total_bytes{{{labels}}} {41943040 * 1024}" in text
     assert f"mqlab_log_extents_active{{{labels}}} 2" in text
@@ -179,8 +179,8 @@ def test_collect_renders_fresh_sample_tagged_by_instance_and_role(monkeypatch):
 
 def test_collect_marks_stale_and_role_unknown_when_all_sources_time_out(monkeypatch):
     monkeypatch.setattr(loglifecycle, "probe", lambda cmd, timeout: None)
-    text = loglifecycle.collect("nha-rhel-a3", "NHARAPP")
-    labels = 'qm="NHARAPP",instance="nha-rhel-a3",role="unknown"'
+    text = loglifecycle.collect("nha-rhel-crr-a3", "NHARCAPP")
+    labels = 'qm="NHARCAPP",instance="nha-rhel-crr-a3",role="unknown"'
     assert "mqlab_log_disk_used_bytes" not in text  # df stale -> omitted
     assert "mqlab_log_extents_active" not in text  # ls stale -> omitted
     assert f"mqlab_log_sample_stale{{{labels}}} 1" in text
@@ -189,17 +189,19 @@ def test_collect_marks_stale_and_role_unknown_when_all_sources_time_out(monkeypa
 def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
     monkeypatch.setattr(loglifecycle, "probe", _fresh_probe)
     out = tmp_path / "lab_loglifecycle_state.prom"
-    loglifecycle.main(["--qm", "NHARAPP", "--instance", "nha-rhel-a2", "--out", str(out)])
+    loglifecycle.main(["--qm", "NHARCAPP", "--instance", "nha-rhel-crr-a2", "--out", str(out)])
     text = out.read_text()
-    assert 'mqlab_log_extents_active{qm="NHARAPP",instance="nha-rhel-a2",role="active"} 2' in text
+    assert (
+        'mqlab_log_extents_active{qm="NHARCAPP",instance="nha-rhel-crr-a2",role="active"} 2' in text
+    )
     assert not (tmp_path / "lab_loglifecycle_state.prom.tmp").exists()  # atomic move cleaned up
 
 
 def test_main_defaults_instance_to_hostname(tmp_path, monkeypatch):
     monkeypatch.setattr(loglifecycle, "probe", _fresh_probe)
     monkeypatch.setattr(
-        loglifecycle.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-a2"})()
+        loglifecycle.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-crr-a2"})()
     )
     out = tmp_path / "c.prom"
-    loglifecycle.main(["--qm", "NHARAPP", "--out", str(out)])
-    assert 'instance="nha-rhel-a2",role="active"' in out.read_text()
+    loglifecycle.main(["--qm", "NHARCAPP", "--out", str(out)])
+    assert 'instance="nha-rhel-crr-a2",role="active"' in out.read_text()
