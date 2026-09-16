@@ -25,13 +25,17 @@ live on the exporter. The contract's failover finding (§5) is a design input:
   floor (QM status, uptime, services, connection count) — those keep reporting across a
   failover because they come from PCF/command-queue polling, not publications.
 
-Structure (spec §7.1):
+Structure (spec §7.1; interactive-tuning pass folded the v1 ③ Attention row into ①):
 
-- ① **Status band** — QM status · uptime · services (folded) · connections.
-- ② **Trend band** — message rate (put vs get, ``rate()`` on the §4.1 counters) ·
-  recovery-log % · connections over time.
-- ③ **Attention** — which service piece is down (channel-initiator · command-server ·
-  listeners), the three signals the ① services pill folds.
+- ① **Status & services** — QM status · uptime · connections, plus the three service pieces
+  (channel-initiator · command-server · listeners) folded in directly as compact up/down
+  pills. One dense row: v1's separate "which piece is down" row is gone — up/down for three
+  academic services didn't earn a full row of its own.
+- ② **Trends** — a 3×2 grid of derivatives and resource/health tachometers. Row A: message
+  rate (put vs get, ``rate()`` on the §4.1 counters) · byte throughput · recovery-log %.
+  Row B: CPU load (1/5/15-min) · MQI failure rate (any failed verb / s, empty = healthy) ·
+  log write latency. Every y-axis is floored at 0 (recovery-log % fully pinned 0–100) so a
+  calm series can't auto-zoom into a misleading diagonal.
 - ④ **Event / error feed** — a **SEAM only**. The ES feed content is Wave 1b (#966), blocked
   on LogSearch; this ships a clearly-marked placeholder, **no** Loki panel (work has no
   Loki; the feed is built once against Elasticsearch, spec §4).
@@ -61,20 +65,7 @@ _QM = '{qmgr="$qmgr"}'
 # series reads no-data, never a false healthy (fail-loud).
 _QM_STATUS_MAP: list[dict[str, Any]] = [*_STATUS_MAP, _STALE_MAP]
 
-# The folded services pill: 1 (all up) / 0 (something down) / -1 (no data), + STALE.
-_SERVICES_MAP: list[dict[str, Any]] = [
-    {
-        "type": "value",
-        "options": {
-            "-1": {"text": "No data", "color": "grey", "index": 0},
-            "0": {"text": "⚠ issue", "color": "red", "index": 1},
-            "1": {"text": "✓ up", "color": "green", "index": 2},
-        },
-    },
-    _STALE_MAP,
-]
-
-# A single service piece's up/down pill (③ Attention): -1 no-data / 0 down / 1 up, + STALE.
+# A single service piece's up/down pill (folded into ① Status): -1 no-data / 0 down / 1 up, + STALE.
 _UPDOWN_MAP: list[dict[str, Any]] = [
     {
         "type": "value",
@@ -119,13 +110,6 @@ def _listeners_ok() -> str:
     return f"(max(ibmmq_qmgr_active_listeners{_QM}) > bool 0)"
 
 
-def _services_expr() -> str:
-    # The folded plumbing pill: channel-initiator running ∧ command-server running ∧ ≥1 active
-    # listener. Each term is a plain 0/1 vector (max() strips labels so they multiply); an
-    # absent series → empty product → vector(-1) (no data), never a false green.
-    return f"{_initiator_ok()} * {_command_server_ok()} * {_listeners_ok()} or vector(-1)"
-
-
 def _msg_put_rate() -> str:
     # §4.1 counter → rate(). $__rate_interval adapts to the target Prometheus scrape step, so
     # the board is portable to work's exporter without hardcoding a window (spec §5).
@@ -143,6 +127,50 @@ def _recovery_log_expr() -> str:
     return f"max(ibmmq_qmgr_log_current_primary_space_in_use_percentage{_QM})"
 
 
+def _byte_put_rate() -> str:
+    # §4.1 byte counter → rate(): data *volume* put, the companion to the message-count rate.
+    return f"sum(rate(ibmmq_qmgr_interval_mqput_mqput1_total_bytes{_QM}[$__rate_interval]))"
+
+
+def _byte_get_rate() -> str:
+    return f"sum(rate(ibmmq_qmgr_interval_destructive_get_total_bytes{_QM}[$__rate_interval]))"
+
+
+def _cpu_load(window: str) -> str:
+    # QM-host CPU load average (gauge, already a percentage). window ∈ {one, five, fifteen}.
+    return f"max(ibmmq_qmgr_cpu_load_{window}_minute_average_percentage{_QM})"
+
+
+# The MQI failures that mean an app genuinely can't do its work: the connect→open→put→close
+# lifecycle. Deliberately EXCLUDES failed_mqget (and browse): in MQ, an MQGET that returns
+# MQRC_NO_MSG_AVAILABLE (2033) — the normal "empty queue" poll — increments failed_mqget, so a
+# healthy lab with any polling consumer shows a constant non-zero failed_mqget. Folding that in
+# would paint a permanent line and destroy the "empty = healthy" reading this panel is for.
+# (A __name__=~ regex union can't be used: rate() drops __name__, collapsing every failed_*
+# series to one identical labelset — "vector cannot contain metrics with the same labelset".)
+_MQI_FAILURE_VERBS = (
+    "failed_mqconn_mqconnx_count",
+    "failed_mqopen_count",
+    "failed_mqput_count",
+    "failed_mqput1_count",
+    "failed_mqclose_count",
+)
+
+
+def _mqi_failure_rate() -> str:
+    # Genuine MQI failures / s — one leading-indicator line (empty = healthy). Per-verb
+    # sum(rate()) added together (see _MQI_FAILURE_VERBS for why not a regex union).
+    return " + ".join(
+        f"sum(rate(ibmmq_qmgr_{verb}{_QM}[$__rate_interval]))" for verb in _MQI_FAILURE_VERBS
+    )
+
+
+def _log_write_latency() -> str:
+    # Recovery-log write latency (gauge, seconds) — Native-HA disk/replication health: rising
+    # latency is an early RPO-risk signal, well before the recovery-log % itself moves.
+    return f"max(ibmmq_qmgr_log_write_latency_seconds{_QM})"
+
+
 # ── panel assembly ──────────────────────────────────────────────────────────────
 
 
@@ -151,6 +179,21 @@ def _gap_tolerant(panel: dict[str, Any]) -> dict[str, Any]:
     publication gap: connect across nulls so a multi-minute re-subscription hole reads as the
     system behaving correctly, not a dead panel (schema-note §5, spec §6)."""
     panel["fieldConfig"]["defaults"].setdefault("custom", {})["spanNulls"] = True
+    return panel
+
+
+def _axis(
+    panel: dict[str, Any], *, lo: float | None = None, hi: float | None = None
+) -> dict[str, Any]:
+    """Pin a trend panel's y-axis so Grafana can't auto-zoom a low, calm series into a
+    misleading full-height diagonal (the recovery-log % v1 complaint). ``lo`` alone anchors the
+    floor (rates/latencies never go negative) while real spikes size the top; ``lo`` + ``hi``
+    fixes the whole range (recovery-log % → 0–100, an honest headroom-to-full view)."""
+    defaults = panel["fieldConfig"]["defaults"]
+    if lo is not None:
+        defaults["min"] = lo
+    if hi is not None:
+        defaults["max"] = hi
     return panel
 
 
@@ -166,9 +209,12 @@ def _banner(y: int) -> dict[str, Any]:
 
 
 def _status_band(y: int) -> list[dict[str, Any]]:
-    """① The failover-resilient status floor (all §3 object-status): QM status · uptime ·
-    services (folded) · connections. The status tile carries the drill-link to the Flow
-    board, passing $qmgr and the chosen $datasource through so the drill lands scoped."""
+    """① Status & services — the failover-resilient §3 object-status floor in one dense row:
+    QM status · uptime · connections, then the three service pieces (channel-initiator ·
+    command-server · listeners) folded in directly as compact up/down pills. v1's separate
+    "which piece is down" row is gone — the pieces live here. The status tile carries the
+    drill-link to the Flow board, passing $qmgr + the chosen $datasource so the drill lands
+    scoped."""
     status = _stat(
         "QM status",
         _status_expr(),
@@ -193,18 +239,7 @@ def _status_band(y: int) -> list[dict[str, Any]]:
         6,
         y,
         unit="dtdurations",
-        w=6,
-        h=4,
-        value_size=_COMPACT_VALUE_SIZE,
-    )
-    services = _stat(
-        "Services",
-        _services_expr(),
-        DS_REF,
-        12,
-        y,
-        mappings=_SERVICES_MAP,
-        w=6,
+        w=5,
         h=4,
         value_size=_COMPACT_VALUE_SIZE,
     )
@@ -212,74 +247,31 @@ def _status_band(y: int) -> list[dict[str, Any]]:
         "Connections",
         _connections_expr(),
         DS_REF,
-        18,
+        11,
         y,
-        w=6,
+        w=4,
         h=4,
         value_size=_COMPACT_VALUE_SIZE,
     )
-    return [status, uptime, services, connections]
-
-
-def _trend_band(y: int) -> list[dict[str, Any]]:
-    """② Trends (the derivative + the *when*): message rate (put vs get on one graph — the
-    depth derivative) · recovery-log % · connections over time. The two publication-driven
-    panels are gap-tolerant across a failover; connections comes from the §3 floor."""
-    msg_rate = _gap_tolerant(
-        _timeseries(
-            "Message rate (put vs get / s)",
-            [_t("A", _msg_put_rate(), "put / s"), _t("B", _msg_get_rate(), "get / s")],
-            DS_REF,
-            0,
-            y,
-            w=8,
-            unit="short",
-        )
-    )
-    recovery = _gap_tolerant(
-        _timeseries(
-            "Recovery log %",
-            [_t("A", _recovery_log_expr(), "log used")],
-            DS_REF,
-            8,
-            y,
-            w=8,
-            unit="percent",
-        )
-    )
-    connections = _timeseries(
-        "Connections over time",
-        [_t("A", _connections_expr(), "connections")],
-        DS_REF,
-        16,
-        y,
-        w=8,
-    )
-    return [msg_rate, recovery, connections]
-
-
-def _attention_band(y: int) -> list[dict[str, Any]]:
-    """③ Attention — which service piece is down: the three signals the ① services pill folds,
-    each as its own up/down pill so a glance names the culprit."""
     initiator = _stat(
-        "Channel initiator",
+        "Chl initiator",
         f"{_initiator_ok()} or vector(-1)",
         DS_REF,
-        0,
+        15,
         y,
         mappings=_UPDOWN_MAP,
-        w=8,
+        w=3,
         h=4,
         value_size=_COMPACT_VALUE_SIZE,
     )
     command_server = _stat(
-        "Command server",
+        "Cmd server",
         f"{_command_server_ok()} or vector(-1)",
         DS_REF,
-        8,
+        18,
         y,
         mappings=_UPDOWN_MAP,
-        w=8,
+        w=3,
         h=4,
         value_size=_COMPACT_VALUE_SIZE,
     )
@@ -287,14 +279,109 @@ def _attention_band(y: int) -> list[dict[str, Any]]:
         "Listeners",
         f"{_listeners_ok()} or vector(-1)",
         DS_REF,
-        16,
+        21,
         y,
         mappings=_UPDOWN_MAP,
-        w=8,
+        w=3,
         h=4,
         value_size=_COMPACT_VALUE_SIZE,
     )
-    return [initiator, command_server, listeners]
+    return [status, uptime, connections, initiator, command_server, listeners]
+
+
+def _trend_band(y: int) -> list[dict[str, Any]]:
+    """② Trends — a 3×2 grid of derivatives and resource/health tachometers.
+    Row A (y): message rate (put vs get on one graph — the depth derivative) · byte throughput
+    (the volume companion) · recovery-log %. Row B (y+7): CPU load (1/5/15-min) · MQI failure
+    rate (any failed verb / s, empty = healthy) · log write latency. The publication-driven
+    panels (message/byte rate, recovery-log %) are gap-tolerant across a failover; every panel
+    is y-axis-floored at 0, and recovery-log % is fully pinned 0–100 so a calm series can't
+    auto-zoom into a misleading diagonal (the v1 complaint)."""
+    y2 = y + 7
+    msg_rate = _axis(
+        _gap_tolerant(
+            _timeseries(
+                "Message rate (put vs get / s)",
+                [_t("A", _msg_put_rate(), "put / s"), _t("B", _msg_get_rate(), "get / s")],
+                DS_REF,
+                0,
+                y,
+                w=8,
+                unit="short",
+            )
+        ),
+        lo=0,
+    )
+    byte_rate = _axis(
+        _gap_tolerant(
+            _timeseries(
+                "Byte throughput (put vs get / s)",
+                [_t("A", _byte_put_rate(), "put B/s"), _t("B", _byte_get_rate(), "get B/s")],
+                DS_REF,
+                8,
+                y,
+                w=8,
+                unit="Bps",
+            )
+        ),
+        lo=0,
+    )
+    recovery = _axis(
+        _gap_tolerant(
+            _timeseries(
+                "Recovery log % (log space in use)",
+                [_t("A", _recovery_log_expr(), "log used")],
+                DS_REF,
+                16,
+                y,
+                w=8,
+                unit="percent",
+            )
+        ),
+        lo=0,
+        hi=100,
+    )
+    cpu = _axis(
+        _timeseries(
+            "CPU load (1 / 5 / 15-min avg %)",
+            [
+                _t("A", _cpu_load("one"), "1-min"),
+                _t("B", _cpu_load("five"), "5-min"),
+                _t("C", _cpu_load("fifteen"), "15-min"),
+            ],
+            DS_REF,
+            0,
+            y2,
+            w=8,
+            unit="percent",
+        ),
+        lo=0,
+    )
+    mqi_fail = _axis(
+        _timeseries(
+            "MQI failure rate (failed verbs / s)",
+            [_t("A", _mqi_failure_rate(), "failures / s")],
+            DS_REF,
+            8,
+            y2,
+            w=8,
+            unit="short",
+        ),
+        lo=0,
+    )
+    log_latency = _axis(
+        _timeseries(
+            "Log write latency (s)",
+            [_t("A", _log_write_latency(), "write latency")],
+            DS_REF,
+            16,
+            y2,
+            w=8,
+            unit="s",
+        ),
+        lo=0,
+    )
+    return [msg_rate, byte_rate, recovery, cpu, mqi_fail, log_latency]
 
 
 def _es_feed_seam(y: int) -> dict[str, Any]:
@@ -322,13 +409,21 @@ def work_qm_dashboard() -> dict[str, Any]:
     every panel follows. Returns the Grafana dashboard dict; `portable_dashboard` rewrites
     all datasources to the template variables (the portability contract)."""
     panels: list[dict[str, Any]] = [_banner(y=0)]
-    panels.append(_row_header("① QM status — status · uptime · services · connections", y=2))
+    panels.append(
+        _row_header(
+            "① Status & services — status · uptime · connections · initiator · cmd-server · listeners",
+            y=2,
+        )
+    )
     panels.extend(_status_band(y=3))
-    panels.append(_row_header("② Trends — message rate · recovery-log % · connections", y=7))
+    panels.append(
+        _row_header(
+            "② Trends — message & byte rate · recovery-log % · CPU load · MQI failures · log latency",
+            y=7,
+        )
+    )
     panels.extend(_trend_band(y=8))
-    panels.append(_row_header("③ Attention — which service piece is down", y=15))
-    panels.extend(_attention_band(y=16))
-    panels.append(_es_feed_seam(y=20))
+    panels.append(_es_feed_seam(y=22))
     return portable_dashboard(
         "Queue Manager — Health & Trend (portable)",
         QM_BOARD_UID,
