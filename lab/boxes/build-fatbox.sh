@@ -265,7 +265,10 @@ esac
 # cache and fail loud if the artifact is absent.
 case "$BAKE" in
   obs | mq-ubuntu)
-    EXPORTER_BIN="$MAIN_ROOT/build/cache/mq-exporter/mq_prometheus-x64"
+    # Arch-suffixed artifact (#1100/#1112): the host builds mq_prometheus for its own
+    # arch (aarch64 -> arm64, x86_64 -> x64), matching mqexporter.binary_name().
+    case "$ARCH" in aarch64) EXPORTER_SUFFIX=arm64 ;; *) EXPORTER_SUFFIX=x64 ;; esac
+    EXPORTER_BIN="$MAIN_ROOT/build/cache/mq-exporter/mq_prometheus-${EXPORTER_SUFFIX}"
     test -f "$EXPORTER_BIN" \
       || { echo "ERROR: prebuilt mq_prometheus not found at $EXPORTER_BIN for the ${BAKE} bake — \`mqlab box build\` ensures it; build it first" >&2; exit 1; }
     BAKE_EXTRA_VARS+=(-e "mq_exporter_media_dir=$MAIN_ROOT/build/cache/mq-exporter")
