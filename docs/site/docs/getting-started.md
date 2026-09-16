@@ -177,7 +177,7 @@ The four stacks bootstrap knows about:
 |-------|-----------|-----|
 | `pcmk-ubuntu` | Pacemaker/SAN (shared-LUN HA + cross-site DR) | Ubuntu |
 | `rdqm-rhel` | RDQM (DRBD replicated HA/DR) | RHEL |
-| `nativeha-rhel` | Native HA (raft-log replication) | RHEL |
+| `nativeha-rhel-crr` | Native HA (raft-log replication) | RHEL |
 | `nativeha-ubuntu` | Native HA (raft-log replication) | Ubuntu |
 
 Two `mqlab vm` utilities render or reach the guests directly:

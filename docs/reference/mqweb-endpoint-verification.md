@@ -28,7 +28,7 @@ mqlab rest render      # writes build/work/rest/endpoints.json; echoes per-site 
 ```
 
 Confirm the output matches the table below (topology-derived; addresses shown for
-convenience). The QM names are `<short>APP` (PCMKAPP, RDQMAPP, NHAUAPP, NHARAPP)
+convenience). The QM names are `<short>APP` (PCMKAPP, RDQMAPP, NHAUAPP, NHARCAPP)
 and `SVCQM` for the counterparty.
 
 | Stack | QM | Site-A endpoint | Site-B endpoint |
@@ -36,7 +36,7 @@ and `SVCQM` for the counterparty.
 | `pcmk-ubuntu` (VIP) | PCMKAPP | `https://10.10.1.200:9443` | `https://10.10.2.200:9443` |
 | `rdqm-rhel` (VIP) | RDQMAPP | `https://10.10.1.100:9443` | `https://10.10.2.100:9443` |
 | `nativeha-ubuntu` (active instance) | NHAUAPP | `https://10.10.1.{11,12,13}:9443` | `https://10.10.2.{11,12,13}:9443` |
-| `nativeha-rhel` (active instance) | NHARAPP | `https://10.10.1.{91,92,93}:9443` | `https://10.10.2.{91,92,93}:9443` |
+| `nativeha-rhel-crr` (active instance) | NHARCAPP | `https://10.10.1.{91,92,93}:9443` | `https://10.10.2.{91,92,93}:9443` |
 | `svc-sim` (counterparty, net-ext) | SVCQM | `https://10.60.0.50:9443` | — |
 
 ## Step 1 — probe each live endpoint (TLS + auth)
@@ -64,7 +64,7 @@ curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" https://<active-node-data-
 | `pcmk-ubuntu` (site A `10.10.1.200`) | | | ☐ |
 | `rdqm-rhel` (site A `10.10.1.100`) | | | ☐ |
 | `nativeha-ubuntu` (active in site A) | | | ☐ |
-| `nativeha-rhel` (active in site A) | | | ☐ |
+| `nativeha-rhel-crr` (active in site A) | | | ☐ |
 | `svc-sim` (`10.60.0.50`) | | | ☐ |
 
 ## Step 2 — HA failover (within site A)
@@ -116,10 +116,10 @@ address must be one of `mqlab rest render`'s site-B addresses for that stack. Th
 (`b` = cutover A→B, `a` = fail back B→A).
 
 ```bash
-# rhel arm (NHARAPP) shown; ubuntu arm: site-nativeha-ubuntu-switchover.yml + NHAUAPP
+# rhel arm (NHARCAPP) shown; ubuntu arm: site-nativeha-ubuntu-switchover.yml + NHAUAPP
 ansible-playbook ansible/site-nativeha-switchover.yml -e target_live=b   # cutover A -> B
 # resolve the new active instance in site B, then probe its data-plane IP:
-ssh nha-rhel-b1 "su - mqm -c '/opt/mqm/bin/dspmq -m NHARAPP -o nativeha -x'"   # find ROLE(Active) INSTANCE(...)
+ssh nha-rhel-crr-b1 "su - mqm -c '/opt/mqm/bin/dspmq -m NHARCAPP -o nativeha -x'"   # find ROLE(Active) INSTANCE(...)
 curl -sk -u "$MQWEB_ADMIN_USER:$MQWEB_ADMIN_PASSWORD" https://<site-B-active-ip>:9443/ibmmq/rest/v2/admin/qmgr | head
 ansible-playbook ansible/site-nativeha-switchover.yml -e target_live=a   # fail back B -> A
 ```
@@ -132,7 +132,7 @@ ansible-playbook ansible/site-nativeha-switchover.yml -e target_live=a   # fail 
 | Stack | Site-B active answers after A→B? | Matches `mqlab rest render` site-B? | Site-A active answers after B→A? | Result |
 |---|---|---|---|---|
 | `nativeha-ubuntu` (NHAUAPP) | | | | ☐ |
-| `nativeha-rhel` (NHARAPP) | | | | ☐ |
+| `nativeha-rhel-crr` (NHARCAPP) | | | | ☐ |
 
 ## Sign-off
 

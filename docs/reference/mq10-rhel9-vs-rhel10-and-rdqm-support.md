@@ -7,7 +7,11 @@
 > HA-strategy decisions, not to prescribe them.
 >
 > Out of scope: Native HA CRR/IRR design (separate brainstorm). This doc only
-> touches CRR/IRR where it bears on the RDQM-vs-Native-HA strategic picture.
+> touches CRR/IRR where it bears on the RDQM-vs-Native-HA strategic picture. For
+> the arm the lab actually ships (CRR) and the one it evaluated and **deferred**
+> (IRR — a 1 Live + 1 Recovery strict-sync topology that is DR *without* HA, not a
+> peer of the six-instance CRR arm), see
+> [`docs/reports/2026-09-15-mq10-nativeha-irr-setup-facts-spike.md`](../reports/2026-09-15-mq10-nativeha-irr-setup-facts-spike.md).
 >
 > Convention: each claim is tagged **[data]** (what a cited source actually
 > says) or **[judgment]** (our reasoning on top). Numbers and support claims are

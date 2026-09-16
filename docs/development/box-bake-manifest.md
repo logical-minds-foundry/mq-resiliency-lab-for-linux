@@ -142,8 +142,8 @@ their ~15–20 min of per-run installs.
 
 ### `mq-nativeha-rhel9` → `ansible/bake-nativeha-rhel.yml` (#667, epic .github#88)
 
-The RHEL native-HA peer of `bake-mq-rdqm.yml`, for the six `nha-rhel-*` nodes
-(`nha-rhel-a1..3`, `nha-rhel-b1..3`) repointed to this box so a bootstrap skips
+The RHEL native-HA peer of `bake-mq-rdqm.yml`, for the six `nha-rhel-crr-*` nodes
+(`nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3`) repointed to this box so a bootstrap skips
 their per-run base-MQ install. Native HA replicates in the raft log, so — unlike
 the RDQM box — **no DRBD/RDQM and no kernel pin** are baked.
 
@@ -254,7 +254,7 @@ Verified by reading each role's `tasks/main.yml`:
 the bundled DRBD/Pacemaker/MQSeriesRDQM in one pre-QM pass — it is not just the
 RDQM add-on. The name is nonetheless accurate: it is the install path **for an
 RDQM node** (which requires MQ), and it is used *only* by the RDQM plays. **Native
-HA does not use it** — `nha-rhel` installs via `mq-nativeha/tasks/install-RedHat.yml`
+HA does not use it** — `nha-rhel-crr` installs via `mq-nativeha/tasks/install-RedHat.yml`
 (its own MQ-product install), so no DRBD is ever baked into a native-HA image.
 
 The real smell this surfaces is duplication, not misnaming: the MQ-product install

@@ -145,10 +145,15 @@ Do **not** upgrade one node, test, then the next: that is the cautious
 node-by-node approach the doc explicitly warns against, and it needlessly
 extends the group's degraded window.
 
-> Note (CRR vs IRR): the IRR sibling procedure adds a `SyncConsistency=Strict`
-> caveat (a Strict Live instance stops if it cannot replicate to Recovery). The
-> **CRR** path — this runbook — does not require that `SyncConsistency` dance for
-> the switchover path.
+> Note (CRR vs IRR): IBM also offers **IRR** (In-Region Replication), a
+> strict-sync alternative (`SyncConsistency=Strict`) where a Strict Live instance
+> stops if it cannot replicate to Recovery. The lab **evaluated IRR and did not
+> adopt it**: IRR is a two-node, single-instance-per-group topology (1 Live +
+> 1 Recovery, **no in-group HA**) — DR *without* HA, not a mirror of this
+> six-instance CRR arm — so the once-planned CRR-vs-IRR comparison was cut. See
+> [`docs/reports/2026-09-15-mq10-nativeha-irr-setup-facts-spike.md`](../reports/2026-09-15-mq10-nativeha-irr-setup-facts-spike.md).
+> The **CRR** path — this runbook — does not require that `SyncConsistency`
+> handling on the switchover path.
 
 ### 2.3 Choose the sequence — Sequence A (outage) is the default
 

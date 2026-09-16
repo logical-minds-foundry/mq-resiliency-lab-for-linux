@@ -24,7 +24,7 @@ carries only the install surface that role needs, nothing more. The taxonomy is
 | Box | Base | Arch | Role(s) that boot it | Bakes |
 |-----|------|------|----------------------|-------|
 | `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
-| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-a1..3`, `nha-rhel-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime |
 | `logsearch-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `logsearch` | OpenSearch + OpenSearch Dashboards + Data Prepper + node-exporter + alloy |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |

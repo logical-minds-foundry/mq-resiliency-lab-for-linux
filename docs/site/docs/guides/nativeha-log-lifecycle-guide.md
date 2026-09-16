@@ -3,7 +3,7 @@
 - **MQ version:** 9.4
 - **Status:** Active
 - **Last validated in lab:** 2026-08-10 — verified against a live `native-ha`
-  arm (queue manager `NHARAPP`, MQ 9.4.5, RHEL 9.6) during the log-lifecycle
+  arm (queue manager `NHARCAPP`, MQ 9.4.5, RHEL 9.6) during the log-lifecycle
   spike (#808). The verified specifics — log type, extent naming, watermarks,
   logger-event fields, and the reclaim-health behaviour — are recorded in
   `docs/reports/2026-08-10-nativeha-log-lifecycle-spike.md`.
