@@ -25,17 +25,22 @@ live on the exporter. The contract's failover finding (§5) is a design input:
   floor (QM status, uptime, services, connection count) — those keep reporting across a
   failover because they come from PCF/command-queue polling, not publications.
 
-Structure (spec §7.1; interactive-tuning pass folded the v1 ③ Attention row into ①):
+Structure (spec §7.1, the signal-in-the-noise model §6.4):
 
 - ① **Status & services** — QM status · uptime · connections, plus the three service pieces
-  (channel-initiator · command-server · listeners) folded in directly as compact up/down
-  pills. One dense row: v1's separate "which piece is down" row is gone — up/down for three
-  academic services didn't earn a full row of its own.
+  (channel-initiator · command-server · listeners) as compact **always-on** up/down pills:
+  the calm-state census a glance can read, the failover-resilient §3 object-status floor.
 - ② **Trends** — a 3×2 grid of derivatives and resource/health tachometers. Row A: message
   rate (put vs get, ``rate()`` on the §4.1 counters) · byte throughput · recovery-log %.
   Row B: CPU load (1/5/15-min) · MQI failure rate (any failed verb / s, empty = healthy) ·
   log write latency. Every y-axis is floored at 0 (recovery-log % fully pinned 0–100) so a
   calm series can't auto-zoom into a misleading diagonal.
+- ③ **Attention — services down** — the empty=healthy hero (spec §6.4). A table whose PromQL
+  *itself* filters to only the DOWN services (``!= 2`` for the two service statuses, ``== 0``
+  for listeners), so a healthy service produces **no series** and the table is **empty when
+  all is well** — the literal signal in the noise, achieved **in-query, never by row color**.
+  When a piece is down it names which. Complements ①: ① is the always-visible census, ③ the
+  "is anything wrong?" hero.
 - ④ **Event / error feed** — a **SEAM only**. The ES feed content is Wave 1b (#966), blocked
   on LogSearch; this ships a clearly-marked placeholder, **no** Loki panel (work has no
   Loki; the feed is built once against Elasticsearch, spec §4).
@@ -49,7 +54,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mqlab.clusterboard import _STALE_MAP, _STATUS_MAP, _row_header, _stat, _t, _timeseries
+from mqlab.clusterboard import _STALE_MAP, _STATUS_MAP, _ds, _row_header, _stat, _t, _timeseries
 from mqlab.workboards import DS_REF, datasource_var, portable_dashboard, qmgr_var
 
 # The pinned Grafana uid / filename stem for this board, and the Queue/channel board's uid
@@ -182,16 +187,14 @@ def _gap_tolerant(panel: dict[str, Any]) -> dict[str, Any]:
     return panel
 
 
-def _axis(
-    panel: dict[str, Any], *, lo: float | None = None, hi: float | None = None
-) -> dict[str, Any]:
+def _axis(panel: dict[str, Any], *, lo: float = 0, hi: float | None = None) -> dict[str, Any]:
     """Pin a trend panel's y-axis so Grafana can't auto-zoom a low, calm series into a
-    misleading full-height diagonal (the recovery-log % v1 complaint). ``lo`` alone anchors the
-    floor (rates/latencies never go negative) while real spikes size the top; ``lo`` + ``hi``
-    fixes the whole range (recovery-log % → 0–100, an honest headroom-to-full view)."""
+    misleading full-height diagonal (the recovery-log % v1 complaint). ``lo`` anchors the floor
+    (defaults to 0 — rates/latencies/percentages never go negative) while real spikes size the
+    top; adding ``hi`` fixes the whole range (recovery-log % → 0–100, an honest
+    headroom-to-full view)."""
     defaults = panel["fieldConfig"]["defaults"]
-    if lo is not None:
-        defaults["min"] = lo
+    defaults["min"] = lo
     if hi is not None:
         defaults["max"] = hi
     return panel
@@ -403,6 +406,105 @@ def _es_feed_seam(y: int) -> dict[str, Any]:
     }
 
 
+# ── ③ Attention — services down (empty = healthy) ────────────────────────────────
+
+# Every row this table can show is a DOWN service, so any numeric value means "attention":
+# a single range mapping (whole real line) paints it red with a "⚠ DOWN" label. There is no
+# green state — a healthy service is *absent*, not a green row (that is the whole point).
+_ATTENTION_MAP: list[dict[str, Any]] = [
+    {
+        "type": "range",
+        "options": {
+            "from": None,
+            "to": None,
+            "result": {"text": "⚠ DOWN", "color": "red", "index": 0},
+        },
+    },
+]
+
+# The qmgr-class labels the union carries but the Attention table doesn't need shown — dropped
+# so the table reads as a clean "Service | State" pair.
+_ATTENTION_DROP_LABELS = ("qmgr", "platform", "description", "hostname", "__name__")
+
+
+def _attention_expr() -> str:
+    """The ③ Attention union: one row per DOWN service, and **no series at all when every
+    service is healthy** (empty = healthy). The filter lives in the PromQL — ``!= 2`` on the
+    two service-status gauges (2 = running) and ``== 0`` on the listener count — so a healthy
+    service is filtered *out* and simply doesn't appear; `label_replace` tags each surviving
+    series with the human-readable ``service`` name. This is spec §6.4's "push the filter into
+    the query, not the row color". Binds only schema-note §3.1 qmgr-class object-status series
+    (failover-resilient), so the panel keeps working across a Native-HA failover."""
+    initiator = (
+        f"label_replace(ibmmq_qmgr_channel_initiator_status{_QM} != 2, "
+        f'"service", "Channel initiator", "qmgr", ".*")'
+    )
+    command = (
+        f"label_replace(ibmmq_qmgr_command_server_status{_QM} != 2, "
+        f'"service", "Command server", "qmgr", ".*")'
+    )
+    listeners = (
+        f"label_replace(ibmmq_qmgr_active_listeners{_QM} == 0, "
+        f'"service", "Listeners", "qmgr", ".*")'
+    )
+    return f"{initiator}\nor {command}\nor {listeners}"
+
+
+def _attention_panel(y: int) -> dict[str, Any]:
+    """③ Attention — a query-filtered table that is **empty when the QM's services are all
+    healthy** and grows one red "⚠ DOWN" row per stopped service (spec §6.4). Instant table
+    format; the `service` label becomes the row name and the value column is mapped to the
+    DOWN indicator. Datasource is `${datasource}` via `_ds(DS_REF)` (portable)."""
+    return {
+        "type": "table",
+        "title": "③ Attention — services down (empty = all healthy)",
+        "datasource": _ds(DS_REF),
+        "gridPos": {"h": 6, "w": 24, "x": 0, "y": y},
+        "targets": [
+            {
+                "refId": "A",
+                "expr": _attention_expr(),
+                "format": "table",
+                "instant": True,
+                "datasource": _ds(DS_REF),
+            }
+        ],
+        "transformations": [
+            {
+                "id": "organize",
+                "options": {
+                    "renameByName": {
+                        "service": "Service",
+                        "Value": "State",
+                        "Value #A": "State",
+                    },
+                    "excludeByName": {
+                        "Time": True,
+                        **dict.fromkeys(_ATTENTION_DROP_LABELS, True),
+                    },
+                },
+            },
+        ],
+        "fieldConfig": {
+            "defaults": {"custom": {"align": "left"}},
+            "overrides": [
+                {
+                    "matcher": {"id": "byName", "options": "State"},
+                    "properties": [
+                        {
+                            "id": "custom.cellOptions",
+                            "value": {"type": "color-background", "mode": "basic"},
+                        },
+                        {"id": "mappings", "value": _ATTENTION_MAP},
+                        {"id": "color", "value": {"mode": "fixed"}},
+                    ],
+                }
+            ],
+        },
+        "options": {"cellHeight": "sm", "showHeader": True},
+    }
+
+
 def work_qm_dashboard() -> dict[str, Any]:
     """The portable work-edition QM-view board (spec §7.1). Datasource-portable and
     QM-scoped: pick a Prometheus (`$datasource`) and a queue manager (`$qmgr`) on import;
@@ -411,19 +513,26 @@ def work_qm_dashboard() -> dict[str, Any]:
     panels: list[dict[str, Any]] = [_banner(y=0)]
     panels.append(
         _row_header(
-            "① Status & services — status · uptime · connections · initiator · cmd-server · listeners",
+            "① Status & services — status · uptime · connections · service pills",
             y=2,
         )
     )
     panels.extend(_status_band(y=3))
     panels.append(
         _row_header(
-            "② Trends — message & byte rate · recovery-log % · CPU load · MQI failures · log latency",
+            "② Trends — message/byte rate · recovery-log % · CPU · MQI failures · latency",
             y=7,
         )
     )
     panels.extend(_trend_band(y=8))
-    panels.append(_es_feed_seam(y=22))
+    panels.append(
+        _row_header(
+            "③ Attention — services down (empty = healthy; filter in query, not row color)",
+            y=22,
+        )
+    )
+    panels.append(_attention_panel(y=23))
+    panels.append(_es_feed_seam(y=29))
     return portable_dashboard(
         "Queue Manager — Health & Trend (portable)",
         QM_BOARD_UID,

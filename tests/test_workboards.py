@@ -237,17 +237,31 @@ def test_write_work_dashboards_writes_files_under_out_dir(tmp_path):
 
 # Every ibmmq_* series the QM board is allowed to bind — the schema-note contract subset it
 # uses (all qmgr-class; §3.1 object-status + §4.1 publication-driven). Binding anything else
-# is a contract violation the board must never commit.
+# (any queue-/channel-class series, or a name not in the schema note) is a contract violation
+# the board must never commit. Every name below maps to a row in prometheus-schema-note.md.
 _QM_CONTRACT_METRICS = {
+    # ① status & services + ③ attention — §3.1 object-status floor (failover-resilient)
     "ibmmq_qmgr_status",
     "ibmmq_qmgr_uptime",
     "ibmmq_qmgr_connection_count",
     "ibmmq_qmgr_channel_initiator_status",
     "ibmmq_qmgr_command_server_status",
     "ibmmq_qmgr_active_listeners",
+    # ② trends — §4.1 publication-driven (message/byte rate, recovery-log %, CPU, MQI, latency)
     "ibmmq_qmgr_interval_mqput_mqput1_total_count",
     "ibmmq_qmgr_interval_destructive_get_total_count",
+    "ibmmq_qmgr_interval_mqput_mqput1_total_bytes",
+    "ibmmq_qmgr_interval_destructive_get_total_bytes",
     "ibmmq_qmgr_log_current_primary_space_in_use_percentage",
+    "ibmmq_qmgr_cpu_load_one_minute_average_percentage",
+    "ibmmq_qmgr_cpu_load_five_minute_average_percentage",
+    "ibmmq_qmgr_cpu_load_fifteen_minute_average_percentage",
+    "ibmmq_qmgr_failed_mqconn_mqconnx_count",
+    "ibmmq_qmgr_failed_mqopen_count",
+    "ibmmq_qmgr_failed_mqput_count",
+    "ibmmq_qmgr_failed_mqput1_count",
+    "ibmmq_qmgr_failed_mqclose_count",
+    "ibmmq_qmgr_log_write_latency_seconds",
 }
 
 
@@ -291,6 +305,28 @@ def test_work_qm_board_has_flow_drilldown_carrying_qmgr():
     blob = json.dumps(work_qm_dashboard())
     assert f"/d/{FLOW_BOARD_UID}" in blob  # drill to the Queue/channel board (#965)
     assert "var-qmgr=$qmgr" in blob  # carrying the selected QM through
+
+
+def test_work_qm_board_attention_is_empty_healthy_via_query_filter():
+    dash = work_qm_dashboard()
+    att = [
+        p
+        for p in dash["panels"]
+        if p.get("type") == "table" and "attention" in p.get("title", "").lower()
+    ]
+    assert att, "expected a ③ Attention table panel"
+    exprs = " ".join(t["expr"] for p in att for t in p["targets"])
+    # empty = healthy is pushed into the PromQL: a healthy service is filtered OUT by the
+    # comparison (so it produces no series and the row is absent), NOT hidden by row color
+    assert "!= 2" in exprs  # the two service-status gauges (2 = running)
+    assert "== 0" in exprs  # the listener count
+    # the surviving rows name which service is down
+    assert "Channel initiator" in exprs
+    assert "Command server" in exprs
+    assert "Listeners" in exprs
+    # binds only qmgr-class object-status series (still QM-scoped, still contract-only)
+    assert "$qmgr" in exprs
+    assert "ibmmq_queue_" not in exprs and "ibmmq_channel_" not in exprs
 
 
 def test_work_qm_board_es_feed_is_a_seam_not_a_wired_panel():
