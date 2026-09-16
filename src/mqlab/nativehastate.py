@@ -1,4 +1,4 @@
-"""Native-HA cluster-state collector for the lab-nativeha-rhel-cluster cockpit (#279).
+"""Native-HA cluster-state collector for the lab-nativeha-rhel-crr-cluster cockpit (#279).
 
 Stdlib-only so this exact file deploys verbatim to the nha nodes as
 /usr/local/bin/lab-nativeha-state and runs on a 5s systemd timer, AND is imported by the
@@ -216,7 +216,7 @@ def collect(node: str, qm: str, now: int) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for the deployed collector: `lab-nativeha-state --qm NHARAPP`."""
+    """Entry point for the deployed collector: `lab-nativeha-state --qm NHARCAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
     ap.add_argument("--node", default=os.uname().nodename)

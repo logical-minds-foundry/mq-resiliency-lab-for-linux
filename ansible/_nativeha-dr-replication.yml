@@ -1,7 +1,7 @@
 # Building block (#350 Task 2): site-B Native HA Recovery group + TLS + Cross-Region
 # Replication (#246 Phase 3 / #267). Bodies moved verbatim from the former
 # site-nativeha-dr.yml (steps 2-6). Composed by site-nativeha.yml AFTER the live
-# group, the folded our-side MQSC, and the distributed-shared layer — so NHARAPP
+# group, the folded our-side MQSC, and the distributed-shared layer — so NHARCAPP
 # already has the app/SVC objects and the Recovery group inherits them by CRR.
 # CRR over net-wan; restart order (Recovery then Live) is load-bearing.
 
@@ -11,30 +11,30 @@
 #    it adopts the Live QMId. Starting it as a plain group here would permanently
 #    set its own QMId and CRR would be rejected (AMQ3256E). Its first start is the
 #    ordered restart in step 5, after crr.yml (step 4) sets GroupRole=Recovery. (#389)
-- hosts: nha_rhel_b
+- hosts: nha_rhel_crr_b
   become: true
   tasks:
     - name: acl package for unprivileged become
       ansible.builtin.dnf:
         name: acl
-- hosts: nha_rhel_b
+- hosts: nha_rhel_crr_b
   become: true
   vars:
     qm_name: "{{ qm_app }}"
     nha_start: false
     nha_site_nodes:
-      - { name: nha-rhel-b1, hb: 172.16.2.91, data: 10.10.2.91 }
-      - { name: nha-rhel-b2, hb: 172.16.2.92, data: 10.10.2.92 }
-      - { name: nha-rhel-b3, hb: 172.16.2.93, data: 10.10.2.93 }
+      - { name: nha-rhel-crr-b1, hb: 172.16.2.91, data: 10.10.2.91 }
+      - { name: nha-rhel-crr-b2, hb: 172.16.2.92, data: 10.10.2.92 }
+      - { name: nha-rhel-crr-b3, hb: 172.16.2.93, data: 10.10.2.93 }
   roles:
     - mq-nativeha
 
 # mqweb: stateless per-node admin REST/Console on every instance (design §1/§8.3, #39).
-- hosts: nha_rhel_b
+- hosts: nha_rhel_crr_b
   roles: [mqweb]
 
 # 2. TLS (lab-pki .p12) on every instance of both groups.
-- hosts: nha_rhel_a:nha_rhel_b
+- hosts: nha_rhel_crr_a:nha_rhel_crr_b
   become: true
   vars:
     qm_name: "{{ qm_app }}"
@@ -43,7 +43,7 @@
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/tls.yml
 
 # 3. CRR — Live group (site A): replicate to the Recovery group (site B) over net-wan.
-- hosts: nha_rhel_a
+- hosts: nha_rhel_crr_a
   become: true
   vars:
     qm_name: "{{ qm_app }}"
@@ -57,7 +57,7 @@
     - ansible.builtin.import_tasks: roles/mq-nativeha/tasks/crr.yml
 
 # 4. CRR — Recovery group (site B): knows the Live group (site A); Enabled=No.
-- hosts: nha_rhel_b
+- hosts: nha_rhel_crr_b
   become: true
   vars:
     qm_name: "{{ qm_app }}"
@@ -74,7 +74,7 @@
 #    site-B recovery group this is its FIRST start (deferred in step 1), now in
 #    GroupRole=Recovery, so the Live group rebases it on contact. For the live
 #    group this is a restart to pick up its CRR stanza. Order is load-bearing.
-- hosts: nha_rhel_b:nha_rhel_a
+- hosts: nha_rhel_crr_b:nha_rhel_crr_a
   become: true
   vars: { qm_name: "{{ qm_app }}" }
   tasks:

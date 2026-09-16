@@ -93,6 +93,14 @@
       ansible.builtin.include_role:
         name: app-requester
 
+    # The purpose-built benchmark client (#1106) — on-demand, not a service.
+    # After app-requester so app_requester.py is co-located (bench_client.py
+    # reuses it at runtime). Parameterized by target QM; the epic's sweep
+    # (Task 8) invokes ./mq-bench per {mode, delay} point.
+    - name: deploy the benchmark client
+      ansible.builtin.include_role:
+        name: bench-client
+
   handlers:
     - name: apply mq keepalive sysctl
       become: true

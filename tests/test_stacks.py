@@ -80,12 +80,12 @@ TOPO = (
     "  rdqm-b1: {}\n"
     "  rdqm-b2: {}\n"
     "  rdqm-b3: {}\n"
-    "  nha-rhel-a1: {}\n"
-    "  nha-rhel-a2: {}\n"
-    "  nha-rhel-a3: {}\n"
-    "  nha-rhel-b1: {}\n"
-    "  nha-rhel-b2: {}\n"
-    "  nha-rhel-b3: {}\n"
+    "  nha-rhel-crr-a1: {}\n"
+    "  nha-rhel-crr-a2: {}\n"
+    "  nha-rhel-crr-a3: {}\n"
+    "  nha-rhel-crr-b1: {}\n"
+    "  nha-rhel-crr-b2: {}\n"
+    "  nha-rhel-crr-b3: {}\n"
     "groups:\n"
     "  san_a:      [san-a]\n"
     "  san_b:      [san-b]\n"
@@ -93,8 +93,8 @@ TOPO = (
     "  pcmk_b:     [pcmk-b1, pcmk-b2, pcmk-b3]\n"
     "  rdqm_a:     [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  rdqm_b:     [rdqm-b1, rdqm-b2, rdqm-b3]\n"
-    "  nha_rhel_a: [nha-rhel-a1, nha-rhel-a2, nha-rhel-a3]\n"
-    "  nha_rhel_b: [nha-rhel-b1, nha-rhel-b2, nha-rhel-b3]\n"
+    "  nha_rhel_crr_a: [nha-rhel-crr-a1, nha-rhel-crr-a2, nha-rhel-crr-a3]\n"
+    "  nha_rhel_crr_b: [nha-rhel-crr-b1, nha-rhel-crr-b2, nha-rhel-crr-b3]\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
@@ -135,19 +135,19 @@ TOPO = (
     "      qm-status: { cmd: '/opt/mqm/bin/rdqmstatus -m {qm}' }\n"
     "      qm-up:     { cmd: \"su mqm -c '/opt/mqm/bin/strmqm {qm}'\" }\n"
     "      qm-down:   { cmd: \"su mqm -c '/opt/mqm/bin/endmqm -w {qm}'\" }\n"
-    "  nativeha-rhel:\n"
+    "  nativeha-rhel-crr:\n"
     "    mechanism: native-ha\n"
     "    os: rhel\n"
-    "    short: NHAR\n"
-    "    cluster_group: nha_rhel_a\n"
-    "    groups: [nha_rhel_a, nha_rhel_b]\n"
+    "    short: NHARC\n"
+    "    cluster_group: nha_rhel_crr_a\n"
+    "    groups: [nha_rhel_crr_a, nha_rhel_crr_b]\n"
     "    provision: ansible/site-nativeha.yml\n"
     "    secrets: [mqweb_admin_password]\n"
     "    qm: { svc_conn: 10.60.0.50 }\n"
     "    alloc:\n"
     "      exporter_app_port: 9161\n"
     "      exporter_svc_port: 9162\n"
-    "      app_unit: app-nhar\n"
+    "      app_unit: app-nhar-crr\n"
     "      svc_port: 1414\n"
     "    verbs:\n"
     "      qm-create:   { playbook: site-nativeha.yml }\n"
@@ -180,7 +180,7 @@ def test_four_canonical_stacks(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    assert set(stacks) == {"pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel", "nativeha-ubuntu"}
+    assert set(stacks) == {"pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"}
     pu = stacks["pcmk-ubuntu"]
     assert pu.mechanism == "pacemaker-san"
     assert pu.os == "ubuntu"
@@ -337,7 +337,7 @@ def test_stack_san_targets_empty_for_non_san_stacks(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     assert stack_san_targets("rdqm-rhel") == []
-    assert stack_san_targets("nativeha-rhel") == []
+    assert stack_san_targets("nativeha-rhel-crr") == []
 
 
 def test_stack_san_targets_unknown_stack_is_empty(monkeypatch, tmp_path):
@@ -381,9 +381,9 @@ def test_cluster_group_populated_for_real_stacks(monkeypatch, tmp_path):
     stacks = lab_stacks()
     # pcmk-ubuntu: groups[0] is san_a (SAN host), cluster_group must be pcmk_a
     assert stacks["pcmk-ubuntu"].cluster_group == "pcmk_a"
-    # rdqm-rhel and nativeha-rhel also carry their cluster_group
+    # rdqm-rhel and nativeha-rhel-crr also carry their cluster_group
     assert stacks["rdqm-rhel"].cluster_group == "rdqm_a"
-    assert stacks["nativeha-rhel"].cluster_group == "nha_rhel_a"
+    assert stacks["nativeha-rhel-crr"].cluster_group == "nha_rhel_crr_a"
 
 
 def test_nativeha_ubuntu_is_reserved(monkeypatch, tmp_path):
@@ -398,6 +398,18 @@ def test_nativeha_ubuntu_is_reserved(monkeypatch, tmp_path):
     assert nhu.cluster_group is None
 
 
+def test_crr_stack_names(monkeypatch, tmp_path):
+    """The CRR Native HA stack is keyed nativeha-rhel-crr with short NHARC (#227 Task 2):
+    the QM derives as NHARCAPP and the groups are the renamed nha_rhel_crr_a/b."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)  # TOPO keys the stack 'nativeha-rhel-crr', short 'NHARC'
+    stacks = lab_stacks()
+    assert "nativeha-rhel-crr" in stacks
+    assert stacks["nativeha-rhel-crr"].short == "NHARC"
+    assert stacks["nativeha-rhel-crr"].qm.qm_app == "NHARCAPP"
+    assert stacks["nativeha-rhel-crr"].groups == ["nha_rhel_crr_a", "nha_rhel_crr_b"]
+
+
 def test_qm_names_derive_from_short(monkeypatch, tmp_path):
     """Each stack's app QM derives from short (#351); the svc QM is the single shared
     SVCQM for every stack (#446)."""
@@ -406,13 +418,13 @@ def test_qm_names_derive_from_short(monkeypatch, tmp_path):
     stacks = lab_stacks()
     assert stacks["pcmk-ubuntu"].qm.qm_app == "PCMKAPP"
     assert stacks["rdqm-rhel"].qm.qm_app == "RDQMAPP"
-    assert stacks["nativeha-rhel"].qm.qm_app == "NHARAPP"
+    assert stacks["nativeha-rhel-crr"].qm.qm_app == "NHARCAPP"
     assert stacks["nativeha-ubuntu"].qm.qm_app == "NHAUAPP"
     # svc is shared across all stacks
     assert {s.qm.qm_svc for s in stacks.values()} == {"SVCQM"}
     # each stack still owns a distinct request queue on that shared SVCQM
     assert stacks["pcmk-ubuntu"].qm.req_queue == "PCMK.SVC.REQUEST"
-    assert stacks["nativeha-rhel"].qm.req_queue == "NHAR.SVC.REQUEST"
+    assert stacks["nativeha-rhel-crr"].qm.req_queue == "NHARC.SVC.REQUEST"
 
 
 def test_dashboard_folder_derives_from_mechanism_and_os(monkeypatch, tmp_path):
@@ -423,7 +435,7 @@ def test_dashboard_folder_derives_from_mechanism_and_os(monkeypatch, tmp_path):
     stacks = lab_stacks()
     assert stacks["pcmk-ubuntu"].dashboard_folder == "PCMK (Ubuntu)"
     assert stacks["rdqm-rhel"].dashboard_folder == "RDQM (RHEL)"
-    assert stacks["nativeha-rhel"].dashboard_folder == "Native HA (RHEL)"
+    assert stacks["nativeha-rhel-crr"].dashboard_folder == "Native HA (RHEL)"
     assert stacks["nativeha-ubuntu"].dashboard_folder == "Native HA (Ubuntu)"
 
 
@@ -443,7 +455,7 @@ def test_rhel_stack_on_aarch64_is_unsupported(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     stacks = lab_stacks()
-    for name in ("rdqm-rhel", "nativeha-rhel"):
+    for name in ("rdqm-rhel", "nativeha-rhel-crr"):
         reason = rhel_stack_unsupported_reason(stacks[name], ARM)
         assert reason is not None
         assert name in reason  # names the offending stack
@@ -456,7 +468,7 @@ def test_rhel_stack_on_x86_is_supported(monkeypatch, tmp_path):
     _seed(tmp_path)
     stacks = lab_stacks()
     assert rhel_stack_unsupported_reason(stacks["rdqm-rhel"], X86) is None
-    assert rhel_stack_unsupported_reason(stacks["nativeha-rhel"], X86) is None
+    assert rhel_stack_unsupported_reason(stacks["nativeha-rhel-crr"], X86) is None
 
 
 def test_ubuntu_stack_is_supported_on_either_arch(monkeypatch, tmp_path):

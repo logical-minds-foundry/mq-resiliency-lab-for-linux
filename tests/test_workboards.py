@@ -22,7 +22,7 @@ from mqlab.workboards import (
 )
 
 # Lab-specific names that must NEVER leak into a portable board (the anti-contract).
-_LAB_NAMES = ("NHAUAPP", "NHARAPP", "SVCQM", "RDQMAPP", "APP.REPLY", "APP.SVRCONN", "PCMKAPP")
+_LAB_NAMES = ("NHAUAPP", "NHARCAPP", "SVCQM", "RDQMAPP", "APP.REPLY", "APP.SVRCONN", "PCMKAPP")
 
 
 def _all_datasources(board):

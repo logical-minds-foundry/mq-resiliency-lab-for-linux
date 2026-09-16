@@ -257,7 +257,7 @@ def test_lab_mq_renderers_read_the_real_topology():
     # the real topology renders without error and covers all four canonical stacks
     exporters = json.loads(lab_mq_exporters())["mq_exporters"]
     qms = {e["qm"] for e in exporters}
-    assert {"PCMKAPP", "RDQMAPP", "NHARAPP", "NHAUAPP"} <= qms
+    assert {"PCMKAPP", "RDQMAPP", "NHARCAPP", "NHAUAPP"} <= qms
     # exactly one shared svc QM, and no per-stack {short}SVC survivors (#446)
     assert "SVCQM" in qms
     assert not any(q.endswith("SVC") for q in qms)
