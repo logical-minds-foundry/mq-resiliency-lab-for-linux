@@ -15,7 +15,7 @@ The four stack names are:
 |---|---|---|---|
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL | `RDQMAPP` |
 | `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu | `PCMKAPP` |
-| `nativeha-rhel` | Native HA (log-replicated HA) | RHEL | `NHARAPP` |
+| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL | `NHARCAPP` |
 | `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu | `NHAUAPP` |
 
 Queue-manager names are derived from each stack's short token — no literal is
@@ -132,6 +132,46 @@ assertion behind the DR framing.
     topology `dr-cutover` / `dr-failback` verbs), and the **Pacemaker/SAN** arm
     uses `lab/scripts/pcmk-dr-cutover.sh`. Run `mqlab parity` to print the
     cross-arm capability matrix.
+
+## Inject WAN latency (`mqlab netem`)
+
+The cross-region plane (`virbr-wan`) carries the CRR/DR replication traffic. To
+study how a stack behaves under real inter-region distance — replication lag, the
+strict-sync commit tax, switchover timing — `mqlab netem` injects a tunable,
+**delay-only** latency on that plane and nothing else:
+
+```bash
+mqlab netem set --delay 10ms   # one-way delay on virbr-wan (RTT ≈ 2 × delay)
+mqlab netem show               # show the current qdisc on each virbr-wan tap
+mqlab netem clear              # remove all shaping, restore the default qdisc
+```
+
+The delay is applied symmetrically on **every guest tap enslaved to
+`virbr-wan`**, so a one-way delay `D` yields a round-trip of `≈ 2D` in both
+directions. The HA / heartbeat planes (`virbr-hb-a`, `virbr-hb-b`) are never
+touched — intra-group Native HA replication is same-site and must stay unshaped.
+`set` / `clear` / `show` shell out to `tc` / `ip` under `sudo` on the libvirt
+host (they need `CAP_NET_ADMIN`).
+
+### Measuring the sync tax with the benchmark client
+
+`clients/bench_client.py` is the purpose-built instrument for the latency sweep.
+It PUT+commits persistent messages under syncpoint at a chosen offered rate and
+reports commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
+`{mode, delay, msg_size, rate}` point, while emitting a node-exporter textfile for
+the live dashboards:
+
+```bash
+python3 clients/bench_client.py --qm NHARCAPP --conn <conname-list> \
+  --mode strict --delay-ms 10 --msg-size 2048 \
+  --warmup-seconds 30 --measure-seconds 120 --results bench.jsonl
+```
+
+Pair it with `mqlab netem set` to quantify how injected WAN delay lands on the
+commit critical path — the cost strict-sync replication puts on every commit
+versus async CRR. It reuses `app_requester.py`'s metrics/reconnect plumbing and
+is deliberately separate from that always-on cockpit stream (which is
+"good-enough noise", not a measurement tool).
 
 ## The Watcher
 

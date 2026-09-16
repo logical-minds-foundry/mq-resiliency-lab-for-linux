@@ -38,12 +38,12 @@ Native HA peer). Every row below is securable — and secured — on that build.
 
 | # | Path | Arms | Mechanism | Cipher / identity | Secured |
 |---|------|------|-----------|-------------------|---------|
-| 1 | App client → app QM | pcmk, nha-rhel, nha-ubuntu, rdqm-rhel | `APP.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
+| 1 | App client → app QM | pcmk, nha-rhel-crr, nha-ubuntu, rdqm-rhel | `APP.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
 | 2 | Ops exporter → app & svc QMs | all QMs | `MON.SVRCONN` (SVRCONN, mutual) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` | ✅ |
-| 3 | Inter-QM, app side | pcmk, nha-rhel, nha-ubuntu, rdqm-rhel | `<QM>.SVCQM` (SDR) + `SVCQM.<QM>` (RCVR) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=svc-org` | ✅ |
+| 3 | Inter-QM, app side | pcmk, nha-rhel-crr, nha-ubuntu, rdqm-rhel | `<QM>.SVCQM` (SDR) + `SVCQM.<QM>` (RCVR) | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=svc-org` | ✅ |
 | 4 | Inter-QM, svc side | shared SVCQM | `SVCQM.<QM>` (SDR) + `<QM>.SVCQM` (RCVR) + `SVC.SVRCONN` | `ANY_TLS13_OR_HIGHER`, `SSLPEER O=app-org` / `O=svc-org` | ✅ |
-| 5 | Native HA within-group raft replication | nha-rhel, nha-ubuntu | `NativeHALocalInstance` `CipherSpec` (net-hb :9414) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
-| 6 | Native HA **CRR cross-region** replication | nha-rhel (HA/DR) | `NativeHALocalInstance` `CipherSpec` (net-wan :9415) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
+| 5 | Native HA within-group raft replication | nha-rhel-crr, nha-ubuntu | `NativeHALocalInstance` `CipherSpec` (net-hb :9414) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
+| 6 | Native HA **CRR cross-region** replication | nha-rhel-crr (HA/DR) | `NativeHALocalInstance` `CipherSpec` (net-wan :9415) | `ANY_TLS12` → `ECDHE_RSA_AES_256_GCM_SHA384` | ✅ |
 | 7 | RDQM **HA** replication links | rdqm-rhel | `crtmqm -re`/`-reh` + `tlshd` (kernel TLS) | KTLS; certs SAN `encrypted.remote` | ✅ [^545] |
 | 8 | RDQM **DR** replication link | rdqm-rhel | `crtmqm -re`/`-red` + `tlshd` (kernel TLS) | KTLS; certs SAN `encrypted.remote` | ✅ [^545] |
 

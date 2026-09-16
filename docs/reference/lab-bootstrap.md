@@ -100,8 +100,8 @@ canonical registry (`lab/topology.yaml → stacks:`):
 |---|---|---|---|
 | `pcmk-ubuntu` | Pacemaker/SAN, full HA + cross-site DR (san-a/b + pcmk-a1..3 + pcmk-b1..3) | `site-pcmk.yml` | pacemaker-san |
 | `rdqm-rhel` | RDQM/RHEL HA + 3+3 DR (rdqm-a1..3 + rdqm-b1..3) | `site-rdqm.yml` | rdqm |
-| `nativeha-rhel` | Native HA (RHEL) — raft-log replication + 3+3 CRR | `site-nativeha.yml` | native-ha |
-| `nativeha-ubuntu` | Native HA (Ubuntu) — the OS-as-only-variable peer of `nativeha-rhel` | `site-nativeha-ubuntu.yml` | native-ha |
+| `nativeha-rhel-crr` | Native HA (RHEL) — raft-log replication + 3+3 CRR | `site-nativeha.yml` | native-ha |
+| `nativeha-ubuntu` | Native HA (Ubuntu) — the OS-as-only-variable peer of `nativeha-rhel-crr` | `site-nativeha-ubuntu.yml` | native-ha |
 
 `mqlab parity` prints the live cross-arm capability matrix (which verb each arm
 supports).
@@ -163,15 +163,25 @@ mqlab dr cutover  rdqm-rhel          # cross-site cutover A → B (a2b)
 mqlab dr failback rdqm-rhel          # failback B → A (b2a); add --rpo0-drill to assert no message loss
 ```
 
-### Native HA — `nativeha-rhel` / `nativeha-ubuntu`
+### Native HA — `nativeha-rhel-crr` / `nativeha-ubuntu`
 
 Shared-nothing raft-log replication (no SAN, no extra disk). The two arms are
 OS-as-only-variable peers and can coexist on one host.
 
 ```bash
+mqlab bootstrap nativeha-rhel-crr    # net → vms → provision (site-nativeha.yml, raft HA + CRR) → observe
 mqlab bootstrap nativeha-ubuntu      # net → vms → provision (site-nativeha-ubuntu.yml, raft HA + CRR) → observe
 mqlab qm status nativeha-ubuntu      # dspmq -o nativeha -x
 ```
+
+The RHEL CRR arm (`nativeha-rhel-crr`, QM `NHARCAPP`, groups `nha_rhel_crr_a` /
+`nha_rhel_crr_b`, nodes `nha-rhel-crr-*`) pairs a Live group in site A with a
+Recovery group in site B over async CRR. To exercise it under realistic
+inter-region distance, inject tunable WAN latency on the cross-region plane with
+`mqlab netem set --delay <d>` (see
+[Operate & Observe → Inject WAN latency](../site/docs/operate/index.md)); the
+`clients/bench_client.py` benchmark client measures the resulting commit-latency
+percentiles.
 
 ---
 

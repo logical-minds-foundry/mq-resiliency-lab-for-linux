@@ -40,7 +40,7 @@ Data Center B). Queue-manager names derive from each stack's `short` token
 |---|---|---|---|---|---|---|
 | `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL | `RDQM` | `rdqm_a` | `rdqm_b` | `10.10.1.100` / `10.10.2.100` |
-| `nativeha-rhel` | Native HA (log-replicated HA) | RHEL | `NHAR` | `nha_rhel_a` | `nha_rhel_b` | per-instance (no VIP) |
+| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL | `NHARC` | `nha_rhel_crr_a` | `nha_rhel_crr_b` | per-instance (no VIP) |
 | `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
 
 Native HA has no floating VIP — clients reach the active instance directly (see
@@ -96,7 +96,7 @@ Each record is `{stack, kind, endpoints}`, where `kind` is one of:
 |---|---|---|---|
 | `pcmk-ubuntu` | `vip` | `https://10.10.1.200:9443` | `https://10.10.2.200:9443` |
 | `rdqm-rhel` | `vip` | `https://10.10.1.100:9443` | `https://10.10.2.100:9443` |
-| `nativeha-rhel` | `active-instance` | `10.10.1.91-93:9443` | `10.10.2.91-93:9443` |
+| `nativeha-rhel-crr` | `active-instance` | `10.10.1.91-93:9443` | `10.10.2.91-93:9443` |
 | `nativeha-ubuntu` | `active-instance` | `10.10.1.11-13:9443` | `10.10.2.11-13:9443` |
 | `svc-sim` | `counterparty` | `https://10.60.0.50:9443` | — |
 

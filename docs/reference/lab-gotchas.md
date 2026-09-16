@@ -43,7 +43,7 @@ machine`. The nodes themselves are fine — the *batch* fails, so a resume limps
 forward one batch at a time and never completes a cold rebuild in one pass.
 
 **Cause.** Nodes that boot from the **same** baked box (e.g. the six
-`nha-rhel-*` on `mq-nativeha-rhel9`, or the three `mq-ubuntu2404` commons) race
+`nha-rhel-crr-*` on `mq-nativeha-rhel9`, or the three `mq-ubuntu2404` commons) race
 on staging that box's base volume into the libvirt pool the first time it's
 used. The concurrent clones trip Vagrant's per-machine lock. Once the volume is
 staged, later clones from it are fine.

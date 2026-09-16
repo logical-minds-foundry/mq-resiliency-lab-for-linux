@@ -74,7 +74,7 @@ Admin readability: where a fabric IP is kept, the host still gets its lab FQDN i
    e.g. add `<short>-vip-b.client.com` to the topology + generator. Small
    B-style follow-up; do it before (or as the first step of) C2.
 2. **Per-arm confirmation.** `our_conn`/`app_conn` are per-arm literals across all
-   four arms (nha-ubuntu, nha-rhel, rdqm, pcmk); confirm each swapped FQDN matches
+   four arms (nha-ubuntu, nha-rhel-crr, rdqm, pcmk); confirm each swapped FQDN matches
    a name the generator actually emits (spot-checked live for nha-ubuntu: `dig`
    resolves `nha-ubuntu-a2-data-a.client.com` → `10.10.1.12`).
 3. **`REVDNS` stays `ENABLED`** (QM default; already the case) — hostname

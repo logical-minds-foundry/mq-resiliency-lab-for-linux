@@ -87,7 +87,7 @@ Pacemaker). One instance is the Active leader; failover is automatic. Crucially
 it has **no VIP** — clients connect by a 3-instance CONNAME list and reconnect
 to whichever instance is Active. Cross-site resilience is an asynchronous **CRR**
 (Cross-Region Replication) relationship with a manual cutover. The lab runs it on
-both an Ubuntu arm (`NHAUAPP`) and a RHEL arm (`NHARAPP`).
+both an Ubuntu arm (`NHAUAPP`) and a RHEL arm (`NHARCAPP`).
 
 <!-- markdownlint-disable-next-line MD013 MD033 -->
 <iframe class="diagram" src="diagrams/06-native-ha-arm.html" style="width:100%;height:560px;border:0;border-radius:8px;" title="Native HA arm"></iframe>

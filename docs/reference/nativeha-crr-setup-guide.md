@@ -33,8 +33,8 @@ time; the rest are in-sync replicas ready to take over.
 
 | Region | Role | Instances | HA replication NIC (`net-hb`) | Data NIC | CRR NIC (`net-wan`) |
 |---|---|---|---|---|---|
-| Region A | **Live** group | `nha-rhel-a1`, `a2`, `a3` | `172.16.1.91–93` | `10.10.1.91–93` | `10.99.0.91–93` |
-| Region B | **Recovery** group | `nha-rhel-b1`, `b2`, `b3` | `172.16.2.91–93` | `10.10.2.91–93` | `10.99.0.94–96` |
+| Region A | **Live** group | `nha-rhel-crr-a1`, `a2`, `a3` | `172.16.1.91–93` | `10.10.1.91–93` | `10.99.0.91–93` |
+| Region B | **Recovery** group | `nha-rhel-crr-b1`, `b2`, `b3` | `172.16.2.91–93` | `10.10.2.91–93` | `10.99.0.94–96` |
 
 Two replication paths run on **dedicated NICs**, each on its own port:
 
@@ -76,8 +76,8 @@ host names and `net-hb-b` addresses.
 Run on each node, using **that node's own name** as the instance name:
 
 ```bash
-# On nha-rhel-a1 (repeat on a2, a3 with their own names)
-crtmqm -lr nha-rhel-a1 -lf 8192 -lp 10 -ls 10 -p 1414 QMNATIVE
+# On nha-rhel-crr-a1 (repeat on a2, a3 with their own names)
+crtmqm -lr nha-rhel-crr-a1 -lf 8192 -lp 10 -ls 10 -p 1414 QMNATIVE
 ```
 
 - `-lr <name>` — create a Native HA (log-replicated) instance; `<name>` is this
@@ -94,13 +94,13 @@ dedicated `net-hb` NIC, port **9414**:
 
 ```ini
 NativeHAInstance:
-   Name=nha-rhel-a1
+   Name=nha-rhel-crr-a1
    ReplicationAddress=172.16.1.91(9414)
 NativeHAInstance:
-   Name=nha-rhel-a2
+   Name=nha-rhel-crr-a2
    ReplicationAddress=172.16.1.92(9414)
 NativeHAInstance:
-   Name=nha-rhel-a3
+   Name=nha-rhel-crr-a3
    ReplicationAddress=172.16.1.93(9414)
 ```
 
@@ -180,7 +180,7 @@ NativeHALocalInstance:
 
 ## 5. (Recovery group) Form the second group
 
-Repeat §3 and §4 on the Region B nodes (`nha-rhel-b1–b3`), using the `net-hb-b`
+Repeat §3 and §4 on the Region B nodes (`nha-rhel-crr-b1–b3`), using the `net-hb-b`
 addresses (`172.16.2.91–93`) in the `NativeHAInstance` stanzas. The same queue
 manager name (`QMNATIVE`) and the same keystore are used — the Recovery group is
 a second, independent three-node group of the *same* queue manager.
@@ -292,9 +292,9 @@ the `site-nativeha*` playbooks. The mapping:
 | §3.3 `mqmonitor@` systemd | `mq-nativeha/tasks/main.yml` (link + enable the unit) |
 | §3 form Live group | `ansible/site-nativeha.yml` |
 | §4 TLS keystore + stash + stanza | `mq-nativeha/tasks/tls.yml` |
-| §5 form Recovery group | `ansible/site-nativeha-dr.yml` (host group `nha_rhel_b`) |
+| §5 form Recovery group | `ansible/_nativeha-dr-replication.yml` (host group `nha_rhel_crr_b`) |
 | §6 CRR group stanzas | `mq-nativeha/tasks/crr.yml` |
-| §6.3 ordered restart | `ansible/site-nativeha-dr.yml` (final play) |
+| §6.3 ordered restart | `ansible/_nativeha-dr-replication.yml` (final play) |
 | §7 switchover / failback | `mqlab dr cutover` / `mqlab dr failback` |
 
 The HA-group formation in `main.yml` is shared **verbatim** across RHEL and
