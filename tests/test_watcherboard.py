@@ -95,7 +95,7 @@ EDGE: dict = {
         "app": [],
     },
     "svc": {"short": "SVC"},
-    "stacks": {"nativeha-rhel": {"mechanism": "native-ha", "short": "NHAR", "groups": []}},
+    "stacks": {"nativeha-rhel-crr": {"mechanism": "native-ha", "short": "NHARC", "groups": []}},
 }
 
 
@@ -275,7 +275,7 @@ def test_edge_empty_support_group_and_groupless_stack():
     assert "infra-client" in labels and "infra-svc" in labels
     assert "obs" not in labels
     # a stack with no groups still emits its rollup row (object-driven)
-    assert "nativeha-rhel" in labels
+    assert "nativeha-rhel-crr" in labels
 
 
 def test_dashboard_path_is_under_work_grafana_dashboards():
@@ -293,7 +293,7 @@ def test_real_topology_renders_a_valid_watcher_board():
         assert host in labels, f"real topology: no support row for {host}"
     # … and a rollup row for every real stack (pcmk / rdqm / nhar / nhau) — including both
     # native-ha stacks, which the old truncated stripe collapsed to an ambiguous "nati…"
-    for stack in ("pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel", "nativeha-ubuntu"):
+    for stack in ("pcmk-ubuntu", "rdqm-rhel", "nativeha-rhel-crr", "nativeha-ubuntu"):
         assert stack in labels, f"real topology: no stack row for {stack}"
 
 
@@ -414,7 +414,7 @@ def test_stack_row_carries_its_full_name_in_column_two():
 
 
 def test_both_native_ha_stacks_are_distinguishable_in_real_topology():
-    # #505 motivation: the old truncated stripe collapsed nativeha-rhel and nativeha-ubuntu
+    # #505 motivation: the old truncated stripe collapsed nativeha-rhel-crr and nativeha-ubuntu
     # to an ambiguous "nati…"; the column-2 name now tells them apart.
     blob = _bold_texts(json.loads(lab_watcher_dashboard())["panels"])
-    assert "**nativeha-rhel**" in blob and "**nativeha-ubuntu**" in blob
+    assert "**nativeha-rhel-crr**" in blob and "**nativeha-ubuntu**" in blob

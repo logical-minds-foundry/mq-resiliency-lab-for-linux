@@ -14,28 +14,28 @@ def test_parse_nativeha_x_extracts_quorum_group_role_and_per_instance_state():
     assert out["quorum_current"] == 3
     assert out["quorum_total"] == 3
     assert out["group_role"] == "Live"
-    assert out["instances"]["nha-rhel-a1"] == {
+    assert out["instances"]["nha-rhel-crr-a1"] == {
         "role": "Active",
         "insync": True,
         "hastatus": "Normal",
     }
-    assert out["instances"]["nha-rhel-a2"]["role"] == "Replica"
-    assert set(out["instances"]) == {"nha-rhel-a1", "nha-rhel-a2", "nha-rhel-a3"}
+    assert out["instances"]["nha-rhel-crr-a2"]["role"] == "Replica"
+    assert set(out["instances"]) == {"nha-rhel-crr-a1", "nha-rhel-crr-a2", "nha-rhel-crr-a3"}
 
 
 def test_parse_nativeha_x_handles_degraded_unknown_and_not_insync():
     # a degraded snapshot: quorum lost (1/3), the leader Unknown, a replica not in-sync
     text = (
-        "QMNAME(QMNATIVE) ROLE(Unknown) INSTANCE(nha-rhel-a1) INSYNC(no) QUORUM(1/3) "
+        "QMNAME(QMNATIVE) ROLE(Unknown) INSTANCE(nha-rhel-crr-a1) INSYNC(no) QUORUM(1/3) "
         "HASTATUS(Abnormal) GRPROLE(Live)\n"
-        " INSTANCE(nha-rhel-a1) ROLE(Unknown) INSYNC(no) HASTATUS(Abnormal)\n"
-        " INSTANCE(nha-rhel-a2) ROLE(Replica) INSYNC(no) HASTATUS(Normal)\n"
+        " INSTANCE(nha-rhel-crr-a1) ROLE(Unknown) INSYNC(no) HASTATUS(Abnormal)\n"
+        " INSTANCE(nha-rhel-crr-a2) ROLE(Replica) INSYNC(no) HASTATUS(Normal)\n"
     )
     out = nativehastate.parse_nativeha_x(text)
     assert out["quorum_current"] == 1
-    assert out["instances"]["nha-rhel-a1"]["role"] == "Unknown"
-    assert out["instances"]["nha-rhel-a1"]["insync"] is False
-    assert out["instances"]["nha-rhel-a2"]["insync"] is False
+    assert out["instances"]["nha-rhel-crr-a1"]["role"] == "Unknown"
+    assert out["instances"]["nha-rhel-crr-a1"]["insync"] is False
+    assert out["instances"]["nha-rhel-crr-a2"]["insync"] is False
 
 
 def test_parse_nativeha_x_without_quorum_line_leaves_summary_none():
@@ -56,15 +56,16 @@ def test_render_recovery_leader_role_codes_as_healthy_not_unknown():
         "quorum_total": 3,
         "group_role": "Recovery",
         "instances": {
-            "nha-rhel-b1": {"role": "Leader", "insync": True, "hastatus": "Normal"},
-            "nha-rhel-b2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-crr-b1": {"role": "Leader", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-crr-b2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
         },
     }
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-b1", qm="QMNATIVE", hax=hax, grp=None, now=1, fresh_sources=()
+        node="nha-rhel-crr-b1", qm="QMNATIVE", hax=hax, grp=None, now=1, fresh_sources=()
     )
-    assert 'cluster_nha_role_code{node="nha-rhel-b1",member="nha-rhel-b1"} 3' in out  # Leader
-    assert 'cluster_node_online{node="nha-rhel-b1",member="nha-rhel-b1"} 1' in out  # online
+    # Leader
+    assert 'cluster_nha_role_code{node="nha-rhel-crr-b1",member="nha-rhel-crr-b1"} 3' in out
+    assert 'cluster_node_online{node="nha-rhel-crr-b1",member="nha-rhel-crr-b1"} 1' in out  # online
     # the Recovery leader does not run the QM, so it is not an Active owner
     assert "cluster_resource_owner" not in out
 
@@ -135,10 +136,10 @@ def test_parse_nativeha_g_tolerates_unknown_backlog_for_waiting_recovery():
     assert out["Live"]["connected"] is False
     # render must still emit the group's role/status (degraded), just omit the backlog line
     rendered = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-b1", qm="QMNATIVE", hax=None, grp=out, now=1, fresh_sources=()
+        node="nha-rhel-crr-b1", qm="QMNATIVE", hax=None, grp=out, now=1, fresh_sources=()
     )
-    assert 'cluster_nha_group_status{node="nha-rhel-b1",group="Recovery"' in rendered
-    assert 'cluster_nha_group_backlog{node="nha-rhel-b1",group="Recovery"}' not in rendered
+    assert 'cluster_nha_group_status{node="nha-rhel-crr-b1",group="Recovery"' in rendered
+    assert 'cluster_nha_group_backlog{node="nha-rhel-crr-b1",group="Recovery"}' not in rendered
 
 
 def test_parse_nativeha_x_tolerates_nonnumeric_quorum():
@@ -154,32 +155,37 @@ def test_render_emits_quorum_owner_and_per_instance_metrics():
         "quorum_total": 3,
         "group_role": "Live",
         "instances": {
-            "nha-rhel-a1": {"role": "Active", "insync": True, "hastatus": "Normal"},
-            "nha-rhel-a2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-crr-a1": {"role": "Active", "insync": True, "hastatus": "Normal"},
+            "nha-rhel-crr-a2": {"role": "Replica", "insync": True, "hastatus": "Normal"},
         },
     }
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-a1",
+        node="nha-rhel-crr-a1",
         qm="QMNATIVE",
         hax=hax,
         grp=None,
         now=1781455000,
         fresh_sources=("nativeha_x",),
     )
-    assert 'cluster_quorate{node="nha-rhel-a1"} 1' in out
-    assert 'cluster_nha_quorum{node="nha-rhel-a1"} 3' in out
-    assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 1' in out
-    assert 'cluster_nha_role{node="nha-rhel-a1",member="nha-rhel-a1",role="Active"} 1' in out
-    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a1"} 2' in out  # Active
-    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a2"} 1' in out  # Replica
-    assert 'cluster_nha_hastatus_ok{node="nha-rhel-a1",member="nha-rhel-a1"} 1' in out  # Normal
-    assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a2"} 1' in out
+    assert 'cluster_quorate{node="nha-rhel-crr-a1"} 1' in out
+    assert 'cluster_nha_quorum{node="nha-rhel-crr-a1"} 3' in out
+    assert 'cluster_node_online{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 1' in out
     assert (
-        'cluster_resource_owner{node="nha-rhel-a1",resource="QMNATIVE",holder="nha-rhel-a1"} 1'
-        in out
+        'cluster_nha_role{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1",role="Active"} 1' in out
+    )
+    # Active
+    assert 'cluster_nha_role_code{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 2' in out
+    # Replica
+    assert 'cluster_nha_role_code{node="nha-rhel-crr-a1",member="nha-rhel-crr-a2"} 1' in out
+    # Normal
+    assert 'cluster_nha_hastatus_ok{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 1' in out
+    assert 'cluster_nha_insync{node="nha-rhel-crr-a1",member="nha-rhel-crr-a2"} 1' in out
+    assert (
+        'cluster_resource_owner{node="nha-rhel-crr-a1",resource="QMNATIVE",'
+        'holder="nha-rhel-crr-a1"} 1' in out
     )
     assert (
-        'cluster_state_last_write_timestamp{node="nha-rhel-a1",source="nativeha_x"} 1781455000'
+        'cluster_state_last_write_timestamp{node="nha-rhel-crr-a1",source="nativeha_x"} 1781455000'
         in out
     )
 
@@ -189,28 +195,33 @@ def test_render_quorum_lost_and_unknown_leader_branches():
         "quorum_current": 1,
         "quorum_total": 3,
         "group_role": "Live",
-        "instances": {"nha-rhel-a1": {"role": "Unknown", "insync": False, "hastatus": "Abnormal"}},
+        "instances": {
+            "nha-rhel-crr-a1": {"role": "Unknown", "insync": False, "hastatus": "Abnormal"}
+        },
     }
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-a1",
+        node="nha-rhel-crr-a1",
         qm="QMNATIVE",
         hax=hax,
         grp=None,
         now=1,
         fresh_sources=(),
     )
-    assert 'cluster_quorate{node="nha-rhel-a1"} 0' in out  # 1 < majority(2)
-    assert 'cluster_node_online{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Unknown
-    assert 'cluster_nha_role_code{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Unknown
-    assert 'cluster_nha_hastatus_ok{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out  # Abnormal
-    assert 'cluster_nha_insync{node="nha-rhel-a1",member="nha-rhel-a1"} 0' in out
+    assert 'cluster_quorate{node="nha-rhel-crr-a1"} 0' in out  # 1 < majority(2)
+    # Unknown
+    assert 'cluster_node_online{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 0' in out
+    # Unknown
+    assert 'cluster_nha_role_code{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 0' in out
+    # Abnormal
+    assert 'cluster_nha_hastatus_ok{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 0' in out
+    assert 'cluster_nha_insync{node="nha-rhel-crr-a1",member="nha-rhel-crr-a1"} 0' in out
     assert "cluster_resource_owner" not in out  # no Active -> no owner line
     assert "last_write_timestamp" not in out  # empty fresh_sources
 
 
 def test_render_unknown_quorum_omits_quorate():
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-a1",
+        node="nha-rhel-crr-a1",
         qm="QMNATIVE",
         hax={
             "quorum_current": None,
@@ -246,23 +257,23 @@ def test_render_group_metrics_live_omits_absent_crr_facets():
         },
     }
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-a1",
+        node="nha-rhel-crr-a1",
         qm="QMNATIVE",
         hax=None,
         grp=grp,
         now=1,
         fresh_sources=("nativeha_g",),
     )
-    assert 'cluster_nha_group_role{node="nha-rhel-a1",group="Live",role="Live"} 1' in out
-    assert 'cluster_nha_group_status{node="nha-rhel-a1",group="Live",status="Normal"} 1' in out
+    assert 'cluster_nha_group_role{node="nha-rhel-crr-a1",group="Live",role="Live"} 1' in out
+    assert 'cluster_nha_group_status{node="nha-rhel-crr-a1",group="Live",status="Normal"} 1' in out
     # Live has no CRR facets -> those metrics carry no Live series
-    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Live"}' not in out
-    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Live"}' not in out
-    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Live"}' not in out
+    assert 'cluster_nha_connected{node="nha-rhel-crr-a1",group="Live"}' not in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-crr-a1",group="Live"}' not in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-crr-a1",group="Live"}' not in out
     # Recovery carries the CRR signal
-    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 1' in out
-    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Recovery"} 1' in out
-    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 0' in out
+    assert 'cluster_nha_connected{node="nha-rhel-crr-a1",group="Recovery"} 1' in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-crr-a1",group="Recovery"} 1' in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-crr-a1",group="Recovery"} 0' in out
 
 
 def test_render_group_degraded_recovery_emits_zero_and_backlog():
@@ -276,18 +287,19 @@ def test_render_group_degraded_recovery_emits_zero_and_backlog():
         },
     }
     out = nativehastate.render_nativeha_state_prom(
-        node="nha-rhel-a1",
+        node="nha-rhel-crr-a1",
         qm="QMNATIVE",
         hax=None,
         grp=grp,
         now=1,
         fresh_sources=(),
     )
-    assert 'cluster_nha_connected{node="nha-rhel-a1",group="Recovery"} 0' in out
-    assert 'cluster_nha_group_insync{node="nha-rhel-a1",group="Recovery"} 0' in out
-    assert 'cluster_nha_group_backlog{node="nha-rhel-a1",group="Recovery"} 512' in out
+    assert 'cluster_nha_connected{node="nha-rhel-crr-a1",group="Recovery"} 0' in out
+    assert 'cluster_nha_group_insync{node="nha-rhel-crr-a1",group="Recovery"} 0' in out
+    assert 'cluster_nha_group_backlog{node="nha-rhel-crr-a1",group="Recovery"} 512' in out
     assert (
-        'cluster_nha_group_status{node="nha-rhel-a1",group="Recovery",status="Abnormal"} 1' in out
+        'cluster_nha_group_status{node="nha-rhel-crr-a1",group="Recovery",'
+        'status="Abnormal"} 1' in out
     )
 
 
@@ -329,11 +341,11 @@ def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
     monkeypatch.setattr(nativehastate, "probe", fake_probe)
     out = tmp_path / "lab_nativeha_state.prom"
     nativehastate.main(
-        ["--qm", "QMNATIVE", "--node", "nha-rhel-a1", "--out", str(out), "--now", "1781455000"]
+        ["--qm", "QMNATIVE", "--node", "nha-rhel-crr-a1", "--out", str(out), "--now", "1781455000"]
     )
     text = out.read_text()
-    assert 'cluster_quorate{node="nha-rhel-a1"} 1' in text
-    assert 'cluster_nha_group_role{node="nha-rhel-a1",group="Live",role="Live"} 1' in text
+    assert 'cluster_quorate{node="nha-rhel-crr-a1"} 1' in text
+    assert 'cluster_nha_group_role{node="nha-rhel-crr-a1",group="Live",role="Live"} 1' in text
     assert 'source="nativeha_x"' in text
     assert 'source="nativeha_g"' in text
     assert not (tmp_path / "lab_nativeha_state.prom.tmp").exists()  # atomic move cleaned up
@@ -342,7 +354,7 @@ def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
 def test_main_marks_sources_stale_when_probes_time_out(tmp_path, monkeypatch):
     monkeypatch.setattr(nativehastate, "probe", lambda cmd, timeout: None)
     out = tmp_path / "c.prom"
-    nativehastate.main(["--qm", "QMNATIVE", "--node", "nha-rhel-a1", "--out", str(out)])
+    nativehastate.main(["--qm", "QMNATIVE", "--node", "nha-rhel-crr-a1", "--out", str(out)])
     text = out.read_text()
     assert "cluster_quorate" not in text  # -x stale -> omitted
     assert "last_write_timestamp" not in text  # nothing fresh
@@ -354,14 +366,14 @@ def test_main_defaults_node_to_hostname_and_now_to_clock(tmp_path, monkeypatch):
         nativehastate, "probe", lambda cmd, timeout: xtext if cmd[-1].endswith("-x") else None
     )
     monkeypatch.setattr(
-        nativehastate.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-a2"})()
+        nativehastate.os, "uname", lambda: type("U", (), {"nodename": "nha-rhel-crr-a2"})()
     )
     monkeypatch.setattr(nativehastate.time, "time", lambda: 1781455999.0)
     out = tmp_path / "c.prom"
     nativehastate.main(["--qm", "QMNATIVE", "--out", str(out)])
     text = out.read_text()
-    assert 'cluster_quorate{node="nha-rhel-a2"} 1' in text
+    assert 'cluster_quorate{node="nha-rhel-crr-a2"} 1' in text
     assert (
-        'cluster_state_last_write_timestamp{node="nha-rhel-a2",source="nativeha_x"} 1781455999'
+        'cluster_state_last_write_timestamp{node="nha-rhel-crr-a2",source="nativeha_x"} 1781455999'
         in text
     )

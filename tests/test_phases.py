@@ -433,8 +433,8 @@ _BOX_TOPO = {
         "fat-ubuntu": {"box": "mq-ubuntu2404"},
     },
     "nodes": {
-        "nha-rhel-a1": {"platform": "fat-rhel"},
-        "nha-rhel-a2": {"platform": "fat-rhel"},
+        "nha-rhel-crr-a1": {"platform": "fat-rhel"},
+        "nha-rhel-crr-a2": {"platform": "fat-rhel"},
         "svc-sim": {"platform": "fat-ubuntu"},
         "san-a": {},  # no platform → host-resolved base box
         "san-b": {},  # no platform → host-resolved base box
@@ -444,7 +444,7 @@ _BOX_TOPO = {
 
 def test_guest_box_resolves_platform_to_box():
     """A guest's contention key is the box its platform clones (via the registry)."""
-    assert _guest_box("nha-rhel-a1", _BOX_TOPO) == "mq-nativeha-rhel9"
+    assert _guest_box("nha-rhel-crr-a1", _BOX_TOPO) == "mq-nativeha-rhel9"
     assert _guest_box("svc-sim", _BOX_TOPO) == "mq-ubuntu2404"
 
 
@@ -468,12 +468,12 @@ def test_guest_box_unknown_platform_fails_loud():
 @pytest.mark.parametrize(
     ("batch", "expected"),
     [
-        (["nha-rhel-a1", "nha-rhel-a2"], True),  # same fat box → contends
-        (["nha-rhel-a1", "svc-sim"], False),  # distinct boxes → no contention
+        (["nha-rhel-crr-a1", "nha-rhel-crr-a2"], True),  # same fat box → contends
+        (["nha-rhel-crr-a1", "svc-sim"], False),  # distinct boxes → no contention
         (["san-a", "san-b"], True),  # both host-resolved base box → contends
-        (["nha-rhel-a1", "svc-sim", "san-a"], False),  # all distinct
-        (["nha-rhel-a1", "svc-sim", "nha-rhel-a2"], True),  # one repeat is enough
-        (["nha-rhel-a1"], False),  # a lone guest never contends with itself
+        (["nha-rhel-crr-a1", "svc-sim", "san-a"], False),  # all distinct
+        (["nha-rhel-crr-a1", "svc-sim", "nha-rhel-crr-a2"], True),  # one repeat is enough
+        (["nha-rhel-crr-a1"], False),  # a lone guest never contends with itself
         ([], False),  # empty batch → nothing to serialize
     ],
 )

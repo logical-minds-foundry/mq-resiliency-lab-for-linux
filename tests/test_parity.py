@@ -41,7 +41,7 @@ def test_matrix_covers_exactly_the_declared_arms() -> None:
     assert set(MATRIX) == {
         "pcmk-ubuntu",
         "rdqm-rhel",
-        "nativeha-rhel",
+        "nativeha-rhel-crr",
         "nativeha-ubuntu",
     }
 

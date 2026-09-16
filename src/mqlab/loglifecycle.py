@@ -199,7 +199,7 @@ def collect(instance: str, qm: str, log_root: str = _LOG_ROOT) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point for the deployed collector: `lab-loglifecycle-state --qm NHARAPP`."""
+    """Entry point for the deployed collector: `lab-loglifecycle-state --qm NHARCAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
     ap.add_argument("--instance", default=os.uname().nodename)

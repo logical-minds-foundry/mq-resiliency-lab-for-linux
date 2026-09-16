@@ -56,9 +56,9 @@ def test_needed_local_boxes_resolves_fat_infra_box(monkeypatch):
 def test_needed_local_boxes_resolves_fat_nativeha_rhel_box(monkeypatch):
     # #88/#667: the six nha-rhel-* nodes resolve to the mq-nativeha-rhel9 fat box.
     monkeypatch.setattr(
-        cli, "_resolved_nodes", lambda: {"nha-rhel-a1": {"box": "mq-nativeha-rhel9"}}
+        cli, "_resolved_nodes", lambda: {"nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"}}
     )
-    needed = cli._needed_local_boxes(["nha-rhel-a1"])
+    needed = cli._needed_local_boxes(["nha-rhel-crr-a1"])
     assert needed["mq-nativeha-rhel9"].endswith("build-fatbox.sh")
 
 

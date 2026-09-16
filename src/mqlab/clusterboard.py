@@ -171,9 +171,9 @@ _REFIDS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # emitted by EVERY arm's collector into one Prometheus, so every board query over them MUST be
 # scoped to its own arm's ansible groups — otherwise one cluster's nodes leak into another's
 # board (#279: the nha arm's nodes showed up on the PCMK board). cluster_resource_owner is
-# additionally resource-scoped (mq_qm vs NHARAPP), so it needs no group scope.
+# additionally resource-scoped (mq_qm vs NHARCAPP), so it needs no group scope.
 _PCMK_SEL = '{groups=~"pcmk_a|pcmk_b"}'
-_NHA_SEL = '{groups=~"nha_rhel_a|nha_rhel_b"}'
+_NHA_SEL = '{groups=~"nha_rhel_crr_a|nha_rhel_crr_b"}'
 _RDQM_SEL = '{groups=~"rdqm_a|rdqm_b"}'
 _RDQM_GROUPS = 'groups=~"rdqm_a|rdqm_b"'  # bare matcher for injecting into a wider selector
 
@@ -182,10 +182,10 @@ _RDQM_GROUPS = 'groups=~"rdqm_a|rdqm_b"'  # bare matcher for injecting into a wi
 # ansible group selector, the host/instance name prefix, the board uid, and the title
 # differ — all derived from the arm name here so there is no second hardcoded board.
 _NHA_ARM_SPEC: dict[str, dict[str, str]] = {
-    "nativeha-rhel": {
-        "qm": "NHARAPP",
-        "groups": "nha_rhel_a|nha_rhel_b",
-        "prefix": "nha-rhel",
+    "nativeha-rhel-crr": {
+        "qm": "NHARCAPP",
+        "groups": "nha_rhel_crr_a|nha_rhel_crr_b",
+        "prefix": "nha-rhel-crr",
         "title": "Native HA Cluster · Infrastructure View",
     },
     "nativeha-ubuntu": {
@@ -303,7 +303,7 @@ _STORAGE_COLS: list[Column] = [
 
 
 def _nativeha_instance_cols(site_regex: str) -> list[Column]:
-    """Native-HA instances-matrix columns for one site (member regex selects nha-rhel-a.* /
+    """Native-HA instances-matrix columns for one site (member regex selects nha-rhel-crr-a.* /
     -b.*): online · role (coded → Active/Replica/Unknown) · in-sync · HA Normal. No
     corosync/pacemaker/iSCSI/DRBD/fence — Native HA has none (spec §5 ②)."""
     member = f'member=~"{site_regex}"'
@@ -451,7 +451,7 @@ def _integrity_from_expr(expr: str, ds_uid: str, y: int) -> dict[str, Any]:
     return panel
 
 
-def _nativeha_integrity_expr(qm: str = "NHARAPP", sel: str = _NHA_SEL) -> str:
+def _nativeha_integrity_expr(qm: str = "NHARCAPP", sel: str = _NHA_SEL) -> str:
     """Native HA cannot split-brain (raft quorum). The hazard reframes around availability +
     durability: quorum-lost ∨ no-Active ∨ replica-not-in-sync, gated on data present so
     no-data reads STALE (spec §6). qm/sel select the arm (RHEL by default)."""
@@ -464,7 +464,7 @@ def _nativeha_integrity_expr(qm: str = "NHARAPP", sel: str = _NHA_SEL) -> str:
 
 
 def nativeha_status_band(
-    ds_uid: str, y: int, qm: str = "NHARAPP", sel: str = _NHA_SEL
+    ds_uid: str, y: int, qm: str = "NHARCAPP", sel: str = _NHA_SEL
 ) -> list[dict[str, Any]]:
     """① Cluster status as ONE compact full-width row of five equal tiles — Active instance ·
     Quorum · Instances in-sync · HA status · Integrity. Integrity is a tile among equals (not a
@@ -758,7 +758,7 @@ def _nativeha_timeline(ds_uid: str, y: int) -> dict[str, Any]:
 
 
 def _nativeha_log_row(
-    loki_uid: str, y: int, prefix: str = "nha-rhel", qm: str = "NHARAPP"
+    loki_uid: str, y: int, prefix: str = "nha-rhel-crr", qm: str = "NHARCAPP"
 ) -> dict[str, Any]:
     """Native HA logs: MQ-related journald units on the nha hosts, severity-filtered by
     the shared $level toggle. Since #282 MQ's own diagnostic log (AMQERR JSON) is emitted
@@ -874,7 +874,7 @@ def nativeha_crr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
 
 
 def nativeha_perf_section(
-    ds_uid: str, y: int, groups: str = "nha_rhel_a|nha_rhel_b"
+    ds_uid: str, y: int, groups: str = "nha_rhel_crr_a|nha_rhel_crr_b"
 ) -> list[dict[str, Any]]:
     """Perf from existing node metrics: CPU busy%, intra-site raft (net-hb) throughput, and
     cross-region CRR (net-wan) throughput. No SAN disk — Native HA has no storage tier.
@@ -1445,13 +1445,13 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
 
 _ARM_NAMES = {
     "pcmk-ubuntu": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
-    "nativeha-rhel": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
+    "nativeha-rhel-crr": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
     "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region · Ubuntu 24.04 LTS",
     "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr) · RHEL 9 (x86_64)",
 }
 _ARM_KIND = {
     "pcmk-ubuntu": "PCMK Cluster",
-    "nativeha-rhel": "Native HA Cluster",
+    "nativeha-rhel-crr": "Native HA Cluster",
     "nativeha-ubuntu": "Native HA Cluster",
     "rdqm-rhel": "RDQM Cluster",
 }
@@ -1481,7 +1481,7 @@ def _row_header(title: str, y: int) -> dict[str, Any]:
     }
 
 
-def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel") -> dict[str, Any]:
+def _nativeha_board(ds_uid: str, arm: str = "nativeha-rhel-crr") -> dict[str, Any]:
     """The Native HA cockpit, top-to-bottom: title banner · ① hero + integrity · ② instances
     matrices (Live / Recovery) · ③ CRR card · failover+CRR timeline · logs · perf · network.
     No storage section — Native HA has no DRBD/SAN tier. One assembly serves both Native HA

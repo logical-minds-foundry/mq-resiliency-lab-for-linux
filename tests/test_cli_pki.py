@@ -20,7 +20,7 @@ _FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "pymqrest", "svc-responder
 
 # The app-org QM CNs derived from each stack's #351 short token (<short>APP), and
 # the single shared svc-org counterparty CN (SVCQM) every stack talks to (#446).
-_APP_CNS = {"PCMKAPP", "RDQMAPP", "NHARAPP"}
+_APP_CNS = {"PCMKAPP", "RDQMAPP", "NHARCAPP"}
 _SVC_CNS = {"SVCQM"}
 
 # The full entity set the stack model produces for this topology.
@@ -37,8 +37,8 @@ _PKI_TOPO = (
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n    os: rhel\n    short: RDQM\n"
     "    groups: []\n    qm: {}\n"
-    "  nativeha-rhel:\n"
-    "    mechanism: native-ha\n    os: rhel\n    short: NHAR\n"
+    "  nativeha-rhel-crr:\n"
+    "    mechanism: native-ha\n    os: rhel\n    short: NHARC\n"
     "    groups: []\n    qm: {}\n"
     "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
 )
