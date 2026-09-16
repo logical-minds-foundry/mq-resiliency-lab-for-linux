@@ -846,6 +846,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inject-wan-latency-mqlab-netem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inject WAN latency (mqlab netem)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Inject WAN latency (mqlab netem)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#measuring-the-sync-tax-with-the-benchmark-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measuring the sync tax with the benchmark client
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-watcher" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1369,6 +1397,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#inject-wan-latency-mqlab-netem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inject WAN latency (mqlab netem)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Inject WAN latency (mqlab netem)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#measuring-the-sync-tax-with-the-benchmark-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measuring the sync tax with the benchmark client
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-watcher" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1468,10 +1524,10 @@ The four stack names are:</p>
 <td><code>PCMKAPP</code></td>
 </tr>
 <tr>
-<td><code>nativeha-rhel</code></td>
+<td><code>nativeha-rhel-crr</code></td>
 <td>Native HA (log-replicated HA)</td>
 <td>RHEL</td>
-<td><code>NHARAPP</code></td>
+<td><code>NHARCAPP</code></td>
 </tr>
 <tr>
 <td><code>nativeha-ubuntu</code></td>
@@ -1575,6 +1631,36 @@ topology <code>dr-cutover</code> / <code>dr-failback</code> verbs), and the <str
 uses <code>lab/scripts/pcmk-dr-cutover.sh</code>. Run <code>mqlab parity</code> to print the
 cross-arm capability matrix.</p>
 </div>
+<h2 id="inject-wan-latency-mqlab-netem">Inject WAN latency (<code>mqlab netem</code>)<a class="headerlink" href="#inject-wan-latency-mqlab-netem" title="Permanent link">&para;</a></h2>
+<p>The cross-region plane (<code>virbr-wan</code>) carries the CRR/DR replication traffic. To
+study how a stack behaves under real inter-region distance — replication lag, the
+strict-sync commit tax, switchover timing — <code>mqlab netem</code> injects a tunable,
+<strong>delay-only</strong> latency on that plane and nothing else:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>netem<span class="w"> </span><span class="nb">set</span><span class="w"> </span>--delay<span class="w"> </span>10ms<span class="w">   </span><span class="c1"># one-way delay on virbr-wan (RTT ≈ 2 × delay)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>netem<span class="w"> </span>show<span class="w">               </span><span class="c1"># show the current qdisc on each virbr-wan tap</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>mqlab<span class="w"> </span>netem<span class="w"> </span>clear<span class="w">              </span><span class="c1"># remove all shaping, restore the default qdisc</span>
+</code></pre></div>
+<p>The delay is applied symmetrically on <strong>every guest tap enslaved to
+<code>virbr-wan</code></strong>, so a one-way delay <code>D</code> yields a round-trip of <code>≈ 2D</code> in both
+directions. The HA / heartbeat planes (<code>virbr-hb-a</code>, <code>virbr-hb-b</code>) are never
+touched — intra-group Native HA replication is same-site and must stay unshaped.
+<code>set</code> / <code>clear</code> / <code>show</code> shell out to <code>tc</code> / <code>ip</code> under <code>sudo</code> on the libvirt
+host (they need <code>CAP_NET_ADMIN</code>).</p>
+<h3 id="measuring-the-sync-tax-with-the-benchmark-client">Measuring the sync tax with the benchmark client<a class="headerlink" href="#measuring-the-sync-tax-with-the-benchmark-client" title="Permanent link">&para;</a></h3>
+<p><code>clients/bench_client.py</code> is the purpose-built instrument for the latency sweep.
+It PUT+commits persistent messages under syncpoint at a chosen offered rate and
+reports commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
+<code>{mode, delay, msg_size, rate}</code> point, while emitting a node-exporter textfile for
+the live dashboards:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>python3<span class="w"> </span>clients/bench_client.py<span class="w"> </span>--qm<span class="w"> </span>NHARCAPP<span class="w"> </span>--conn<span class="w"> </span>&lt;conname-list&gt;<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--mode<span class="w"> </span>strict<span class="w"> </span>--delay-ms<span class="w"> </span><span class="m">10</span><span class="w"> </span>--msg-size<span class="w"> </span><span class="m">2048</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--warmup-seconds<span class="w"> </span><span class="m">30</span><span class="w"> </span>--measure-seconds<span class="w"> </span><span class="m">120</span><span class="w"> </span>--results<span class="w"> </span>bench.jsonl
+</code></pre></div>
+<p>Pair it with <code>mqlab netem set</code> to quantify how injected WAN delay lands on the
+commit critical path — the cost strict-sync replication puts on every commit
+versus async CRR. It reuses <code>app_requester.py</code>'s metrics/reconnect plumbing and
+is deliberately separate from that always-on cockpit stream (which is
+"good-enough noise", not a measurement tool).</p>
 <h2 id="the-watcher">The Watcher<a class="headerlink" href="#the-watcher" title="Permanent link">&para;</a></h2>
 <p>The <strong>Watcher</strong> is the management/observability plane — the <code>net-mgmt</code> side of the
 lab that observes every node but never carries transit traffic. It runs on the
@@ -1591,11 +1677,11 @@ lab that observes every node but never carries transit traffic. It runs on the
   surfaces it alongside the metrics.</li>
 </ul>
 <h3 id="mqlab-obs-verbs"><code>mqlab obs</code> verbs<a class="headerlink" href="#mqlab-obs-verbs" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># emit lab_network_state metrics from virsh (host-side)</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># emit lab_network_state metrics from virsh (host-side)</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
 </code></pre></div>
 <p>The render verbs are pure topology→file projections; the observe phase of
 <code>mqlab commons up</code> runs them and hands the output to <code>site-obs.yml</code>, so a normal
@@ -1606,10 +1692,10 @@ Prepper — see <a href="../architecture/#the-log-search-tier-full-text-over-the
 is a sibling of <code>obs</code>: it comes up with <code>mqlab commons up</code> (after <code>obs</code>) and is
 reclaimed by <code>mqlab commons down</code>, so there is no separate bring-up verb. Once it is
 up, <code>mqlab logsearch</code> is the operator surface over it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>status<span class="w">            </span><span class="c1"># cluster health + disk-used + read-only/full check</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>open<span class="w">              </span><span class="c1"># print the OpenSearch Dashboards URL</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>snapshot<span class="w">          </span><span class="c1"># take a snapshot -&gt; host-durable build/state/logsearch/</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>restore<span class="w"> </span><span class="o">[</span>--snapshot<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># restore latest (or a named) host snapshot</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>status<span class="w">            </span><span class="c1"># cluster health + disk-used + read-only/full check</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>open<span class="w">              </span><span class="c1"># print the OpenSearch Dashboards URL</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>snapshot<span class="w">          </span><span class="c1"># take a snapshot -&gt; host-durable build/state/logsearch/</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>restore<span class="w"> </span><span class="o">[</span>--snapshot<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># restore latest (or a named) host snapshot</span>
 </code></pre></div>
 <ul>
 <li><strong><code>status</code></strong> reports <code>_cluster/health</code>, per-node disk-used, and any read-only /

@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="_diagram.css"/>
 </head><body>
 <h2>Native HA arm — log-replicated HA in a site, async CRR across the WAN</h2>
-<p class="subtitle">3 instances, log-based (raft) synchronous replication, automatic failover, RPO 0 in-site. No shared storage and <b>no VIP</b> — clients use a 3-instance CONNAME list + auto-reconnect. Two OS arms: <code>nha-ubuntu</code> and <code>nha-rhel</code>.</p>
+<p class="subtitle">3 instances, log-based (raft) synchronous replication, automatic failover, RPO 0 in-site. No shared storage and <b>no VIP</b> — clients use a 3-instance CONNAME list + auto-reconnect. Two OS arms: <code>nha-ubuntu</code> and <code>nha-rhel-crr</code>.</p>
 
 <div class="callout">
   <b>No VIP, no shared disk.</b> Native HA replicates the recovery log across 3 instances over the heartbeat net; one instance is the raft <b>leader (Active)</b>. There is no floating IP — clients reach the QM by a comma-separated list of all three instance addresses and reconnect to whichever is Active. Cross-site resilience is a <b>separate, asynchronous CRR</b> relationship with a manual cutover — never a stretched sync group.
@@ -14,7 +14,7 @@
 <div class="wrap">
   <div class="panel">
     <h3>The building block — one queue manager, 3-instance HA + async CRR</h3>
-    <p class="sub">QM <code>NHAUAPP</code> / <code>NHARAPP</code> — automatic HA inside DC-A, manual async CRR to DC-B.</p>
+    <p class="sub">QM <code>NHAUAPP</code> / <code>NHARCAPP</code> — automatic HA inside DC-A, manual async CRR to DC-B.</p>
     <div class="row">
       <div class="box">
         <h4>Data Center A — LIVE</h4>
