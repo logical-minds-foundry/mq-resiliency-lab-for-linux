@@ -1,5 +1,5 @@
 ---
-loki_version: "3.1.1"  # confirm current stable in Task 11; URL must resolve
+loki_version: "3.7.7"  # obs version-currency (#1131); drives BOTH loki + logcli URLs
 loki_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 loki_pkg: "loki-linux-{{ loki_arch }}"
 loki_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/{{ loki_pkg }}.zip"
