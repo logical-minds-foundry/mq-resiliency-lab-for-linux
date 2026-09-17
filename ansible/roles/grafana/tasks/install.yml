@@ -26,6 +26,17 @@
     name: "{{ ('grafana=' + grafana_version) if grafana_version | default('') else 'grafana' }}"
     update_cache: true
 
+# Defense-in-depth for the version pin (#1132): apt-mark hold equivalent. When the
+# pin is set, hold the package so an unqualified `apt upgrade` on a live box cannot
+# float grafana off the baked version; only an explicit unhold + re-pin (a version
+# step-function) moves it. Skipped when grafana_version is "" (float mode), where a
+# hold would freeze whatever apt happened to pick.
+- name: hold grafana at the pinned version (defense-in-depth) (#1132)
+  ansible.builtin.dpkg_selections:
+    name: grafana
+    selection: hold
+  when: grafana_version | default('') | length > 0
+
 - name: provisioning dirs
   ansible.builtin.file:
     path: "{{ item }}"
