@@ -4,7 +4,7 @@
 prometheus: "2.53.2" # ansible/roles/prometheus/defaults
 node_exporter: "1.12.1" # ansible/roles/node-exporter/defaults
 loki: "3.1.1" # ansible/roles/loki/defaults
-alloy: "1.3.1" # ansible/roles/alloy/defaults
+alloy: "1.19.2" # ansible/roles/alloy/defaults
 grafana: "" # apt-float today; "" = let apt pick (pin later by step-function)
 mq_metric_samples_ref: "v6.0.0" # ansible/roles/mq-exporter/defaults (mq_exporter_ref) == mqexporter.MQ_EXPORTER_REF; pinned #1120 (retires #172)
 # logsearch tier (#829, epic .github#149). OpenSearch + Dashboards share one upstream
