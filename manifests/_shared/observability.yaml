@@ -1,11 +1,11 @@
 # Shared obs stack — a singleton served by `mqlab obs up` for every arm (#266).
-# Values track today's role defaults. grafana still floats (apt-pick; pin later by
-# step-function); the exporter ref is now pinned to the role default (#1120, retires #172).
+# Values track today's role defaults. The exporter ref is pinned to the role default
+# (#1120, retires #172); grafana is now pinned (obs currency, epic .github#236, #1132).
 prometheus: "2.53.2" # ansible/roles/prometheus/defaults
 node_exporter: "1.12.1" # ansible/roles/node-exporter/defaults
 loki: "3.7.7" # ansible/roles/loki/defaults
 alloy: "1.19.2" # ansible/roles/alloy/defaults
-grafana: "" # apt-float today; "" = let apt pick (pin later by step-function)
+grafana: "13.2.2" # matches grafana_version in ansible/group_vars/all/versions.yml (BAKE-authoritative); pinned #1132 (obs currency)
 mq_metric_samples_ref: "v6.0.0" # ansible/roles/mq-exporter/defaults (mq_exporter_ref) == mqexporter.MQ_EXPORTER_REF; pinned #1120 (retires #172)
 # logsearch tier (#829, epic .github#149). OpenSearch + Dashboards share one upstream
 # version; pin both here so a re-bake never changes the engine version under an existing
