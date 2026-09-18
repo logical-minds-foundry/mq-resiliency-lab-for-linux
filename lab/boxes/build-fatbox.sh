@@ -215,17 +215,19 @@ virsh -c qemu:///system destroy "$BUILD_DOM" 2>/dev/null || true
 virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true
 sudo rm -f "$IMG"
 sudo cp "$BASE_IMG" "$IMG"
-# Grow the transient build disk past the base cloud image's ~8.7G. The heaviest bakes
+# Grow the transient build disk past the base cloud image's ~8.7G so the heaviest bakes
 # — obs (full MQ for the exporter SDK + MQ web/liberty + prometheus/grafana/loki + the
-# prebuilt exporter) and mq-ubuntu — overflowed the base capacity mid-install once the
-# obs version-currency bumps landed (#1144: "No space left on device" writing
-# mq_wlp.tar.gz, /dev/vda1 100% at 8.7G with ~2G of staged tarballs in /tmp). The cloud
-# image's cloud-init growpart already expands the root partition/fs to fill the disk on
-# first boot (proven: the fs auto-grows to the base capacity today), so a pre-boot qcow2
-# resize is all that's needed — no in-guest step. qcow2 stays sparse, so the headroom
-# costs no host space until used, and the packaged box inherits the roomier root (also
-# heading off runtime disk-fill on the lab guests). Relative grow: safe for any base size.
-sudo qemu-img resize "$IMG" +12G
+# prebuilt exporter) and mq-ubuntu — stop overflowing mid-install (#1144: "No space left
+# on device" writing mq_wlp.tar.gz, /dev/vda1 100% at 8.7G with ~2G of staged tarballs in
+# /tmp). Resize to an ABSOLUTE 18G, which MUST stay under the box's declared
+# virtual_size:20 (the metadata.json below, ~line 408): the build VM's growpart fills p1
+# to the build-disk size, and vagrant instantiates every guest at virtual_size:20, so a
+# packaged box whose p1 exceeds 20G is truncated at guest-create — the GPT backup header
+# is lost and the guest drops to initramfs ("LABEL=cloudimg-rootfs does not exist"). That
+# is exactly what a relative +12G (→ ~22G) did to obs (#1144 → this fix #1146). 18G gives
+# ~2x the room the 8.7G overflow needed while leaving the guest's own growpart headroom to
+# fill p1 to 20G on first boot, same as the un-resized boxes. qcow2 stays sparse.
+sudo qemu-img resize "$IMG" 18G
 
 # 3. RHEL bakes need the install DVD attached as a cdrom: rdqm-install builds its offline
 #    dnf repo from it (BaseOS+AppStream) to resolve the MQ rpms' base-OS deps. Stage it into
