@@ -61,11 +61,11 @@
   changed_when: "'MQWB' not in (setmqweb.stderr | default(''))"
   failed_when: false
 
-# Start non-blocking: Liberty can be slow to come up (minutes under macOS-era x86 TCG
-# emulation, and on a fresh arm64 node), and a blocking `state: started` makes provision wait on — and
-# time out with — the systemd job. --no-block returns immediately; REST becomes ready
-# asynchronously (the message path does not depend on it). Idempotent: starting an
-# already-active unit is a no-op.
+# Start non-blocking: --no-block returns immediately so ansible never blocks on the
+# systemd start job. The per-node readiness gate at the end of this role (paired with
+# the play's `serial: 1`, #1148) is what staggers the cold starts — mqweb is a full
+# Liberty JVM whose class-load I/O saturated the shared guest disk when all nodes
+# started at once. Idempotent: starting an already-active unit is a no-op.
 - name: start mqweb without blocking on its (slow) readiness
   ansible.builtin.systemd:
     name: mqweb.service
@@ -92,3 +92,28 @@
     search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
   retries: 5
   delay: 5
+
+# Readiness gate (bounded, non-fatal) — the last thing this role does, so with the
+# play's `serial: 1` mqweb is fully up on this node (post-TLS-restart) before the next
+# node starts its Liberty JVM. Isolated, mqweb reaches ready in ~20s, so this both ends
+# the shared-disk stampede AND keeps mqweb from bleeding contention into the observe
+# phase. Non-fatal (`failed_when: false`) preserves the design intent that the message
+# path never blocks on mqweb: if a node is not ready within the cap we warn and proceed
+# rather than fail provision. Port 9443 is the IBM mqweb HTTPS default (#1148).
+- name: wait for mqweb REST/console to be ready (bounded, non-fatal)
+  ansible.builtin.wait_for:
+    port: 9443
+    host: 127.0.0.1
+    timeout: 300
+  become: true
+  register: mqweb_ready
+  failed_when: false
+
+- name: note if mqweb did not reach ready in time (non-fatal)
+  ansible.builtin.debug:
+    msg: >-
+      mqweb REST not ready on {{ inventory_hostname }} within 300s — non-fatal,
+      the message path is unaffected ({{ mqweb_ready.msg | default('') }})
+  # failed_when:false above always marks the task ok, so detect the timeout by the
+  # elapsed wait rather than a failed state.
+  when: (mqweb_ready.elapsed | default(0)) | int >= 300

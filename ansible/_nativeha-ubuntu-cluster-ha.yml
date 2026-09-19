@@ -24,5 +24,12 @@
     - mq-nativeha
 
 # mqweb: stateless per-node admin REST/Console on every instance (design §1/§8.3, #39).
+# serial: 1 — bring mqweb up one node at a time. mqweb is a full Liberty JVM whose
+# cold start is the heaviest class-load I/O in the stack; starting all 3 at once
+# saturated the shared guest disk (one qcow2 store) and, via the old fire-and-forget
+# start, kept churning into the observe phase and dragged OpenSearch to a crawl.
+# Alone, mqweb reaches ready in ~20s, so serializing costs little and ends the
+# stampede (the role now waits for readiness per node) (#1148).
 - hosts: nha_ubuntu_a
+  serial: 1
   roles: [mqweb]
