@@ -2129,7 +2129,16 @@ def _bootstrap_run(
                     pauser=deps.pauser,
                 )
             except StepFailedError as exc:
-                hint = f"resume with: mqlab bootstrap {stack_name} --from {phase.name}"
+                # Carry --no-dr into the resume hint (#1163). The flag shapes which
+                # guests every phase targets (site-A only, dr_enabled=false), so a
+                # resume that dropped it would re-enter in full-HADR mode and fail
+                # UNREACHABLE on the site-B guests this run never booted (#188) — the
+                # opposite of clean re-entry. The hint must reproduce the run's own
+                # footprint; the VAL-A path is `bootstrap nativeha-ubuntu --no-dr`.
+                # --step is deliberately NOT carried: it is a per-invocation interaction
+                # choice, not a footprint-shaping flag, and a resume runs fine unpaused.
+                dr_flag = " --no-dr" if no_dr else ""
+                hint = f"resume with: mqlab bootstrap {stack_name} --from {phase.name}{dr_flag}"
                 typer.echo(hint, err=True)  # to the CLI's stderr, where the operator sees it
                 deps.transcript.write(hint)
                 raise typer.Exit(code=exc.exit_code) from exc
