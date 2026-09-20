@@ -41,5 +41,10 @@
   roles: [pcmk-stonith]
 - hosts: pcmk_b
   roles: [mq-install]
+# serial: 1 — cold-start mqweb one node at a time (#1161, generalizing #1151's
+# play-level serialization from _nativeha-ubuntu-cluster-ha.yml to every mqweb play).
+# mqweb is a full Liberty JVM whose concurrent cold-start compounds the nested-virt tax;
+# the role's own bounded non-fatal readiness gate staggers the come-up per node.
 - hosts: pcmk_b
+  serial: 1
   roles: [mqweb]  # REST on every QM (design §1), per-node (spec §8.3)

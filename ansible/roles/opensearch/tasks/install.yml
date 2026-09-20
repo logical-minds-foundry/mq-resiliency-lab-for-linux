@@ -117,7 +117,13 @@
       LimitMEMLOCK=infinity
       LimitAS=infinity
       LimitFSIZE=infinity
-      TimeoutStartSec=180
+      # Coherent with the real readiness gate (configure.yml: 180 retries x 5 s =
+      # 900 s). The old 180 s here was inconsistent with that 900 s gate (#1162,
+      # epic .github#249). For a Type=simple unit TimeoutStartSec is non-gating
+      # (systemd marks the service active on exec), so this is a declared-budget
+      # reconciliation — the fatal 900 s uri loop in configure.yml is the effective
+      # OpenSearch readiness budget under the nested-virt JVM cold-start tax.
+      TimeoutStartSec=900
       Restart=on-failure
 
       [Install]
