@@ -878,6 +878,28 @@ def test_bootstrap_failure_prints_resume_hint(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
     assert result.exit_code == 2
     assert "mqlab bootstrap pcmk-ubuntu --from provision" in result.output
+    # A full-HADR run's hint must NOT carry --no-dr — resuming it would wrongly skip
+    # the DR site the original run built (#1163).
+    assert "--no-dr" not in result.output
+
+
+def test_bootstrap_no_dr_failure_hint_carries_no_dr(monkeypatch, tmp_path):
+    # Clean re-entry (#1163): a --no-dr run that fails mid-phase must hint a resume that
+    # ALSO carries --no-dr. Without it the operator's resume re-enters in full-HADR mode
+    # and each phase re-targets the site-B guests this run never booted, failing
+    # UNREACHABLE (#188) — the exact VAL-A path is `bootstrap nativeha-ubuntu --no-dr`.
+    # pcmk-ubuntu declares dr_groups: [pcmk_b], so --no-dr has a DR site to skip.
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    # First provision step (render dns zones) fails (exit 2).
+    runner = RecordingRunner(results=[ScriptedResult([], exit_code=2)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
+    result = CliRunner().invoke(
+        cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision", "--no-dr"]
+    )
+    assert result.exit_code == 2
+    assert "mqlab bootstrap pcmk-ubuntu --from provision --no-dr" in result.output
 
 
 def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
