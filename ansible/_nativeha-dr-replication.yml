@@ -30,7 +30,12 @@
     - mq-nativeha
 
 # mqweb: stateless per-node admin REST/Console on every instance (design §1/§8.3, #39).
+# serial: 1 — cold-start mqweb one node at a time (#1161, generalizing #1151's
+# play-level serialization from _nativeha-ubuntu-cluster-ha.yml to every mqweb play).
+# mqweb is a full Liberty JVM whose concurrent cold-start compounds the nested-virt tax;
+# the role's own bounded non-fatal readiness gate staggers the come-up per node.
 - hosts: nha_rhel_crr_b
+  serial: 1
   roles: [mqweb]
 
 # 2. TLS (lab-pki .p12) on every instance of both groups.
