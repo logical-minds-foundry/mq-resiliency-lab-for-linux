@@ -36,7 +36,7 @@ import yaml
 
 from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
-from mqlab.orchestrator import CommandStep
+from mqlab.orchestrator import CommandStep, RetryPolicy
 from mqlab.paths import lab_script, repo_root
 from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
@@ -161,6 +161,32 @@ def all_vms(stack: Stack, *, no_dr: bool = False) -> list[str]:
 _all_vms = all_vms
 
 
+def _boot_order(stack: Stack, *, no_dr: bool = False) -> list[str]:
+    """The vms-phase BOOT order: the stack's full VM set with the infra/DNS nodes
+    hoisted to the front (#1164), everything else in `all_vms` order behind them.
+
+    `all_vms` appends the infra nodes at the TAIL of the commons order
+    (`[obs_box, probe, svc, app, infra]`, topology.yaml) — and members boot ahead of
+    commons — so the DNS node (`infra-client`, every guest's *sole* resolver via
+    host-resolver) otherwise boots after all its dependents. Booting the infra nodes
+    FIRST means each is up, and has had the longest time to settle its multi-NIC
+    bring-up, before the dependents that reach it in the provision phase (site-dns.yml
+    `wait_for_connection`) — closing the boot-layer half of the `no route to host`
+    race (spec §4.4). It is a STABLE partition: the infra hosts keep their relative
+    order and every other guest keeps the authoritative HADR order (SANs first, site-A
+    before site-B), so nothing else is reshuffled. A topology with no infra group (the
+    hoist set is empty) returns `all_vms` unchanged.
+
+    Ordering only — the OTHER `all_vms` consumers (provision/observe `--limit`, box
+    ensure) are order-independent set enumerations, so they keep calling `all_vms`.
+    """
+    vms = all_vms(stack, no_dr=no_dr)
+    infra = _non_mq_commons_hosts()
+    lead = [vm for vm in vms if vm in infra]
+    rest = [vm for vm in vms if vm not in infra]
+    return lead + rest
+
+
 def _qm_extra_vars(stack: Stack) -> list[str]:
     """The #351 QM extra-vars for a stack's provision/obs plays, sourced from stack.qm.
 
@@ -225,6 +251,19 @@ def _net_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG00
 # + the RDQM drbdpool vdb creates) spikes host disk I/O hard enough to time a heavy
 # guest (infra-client, 4 NICs) out on SSH ('inaccessible') while its siblings come up.
 _DEFAULT_BOOT_BATCH = 4
+
+
+# Bounded retry for a `vagrant up <batch>` step (#1164). A batch boot can fail
+# TRANSIENTLY when the base management-NIC DHCP lease times out
+# (`Fog::Errors::TimeoutError`) under several heavy guests booting at once on a
+# TCG-slow arm64 host — `vagrant up` is idempotent (already-up guests are skipped), so
+# re-running the same batch is safe and usually clears a transient lease timeout. The
+# policy is bounded and fails loud after its cap (never an unbounded loop that could
+# mask a genuine boot/config error, spec §8). Declared here as DATA on the step; the
+# retry loop itself lives in the orchestrator (`run_steps`), keeping phases.py pure.
+# On the healthy x86 cloud the first attempt succeeds, so retry never fires — no parity
+# regression, only added resilience on the flaky nested-virt host.
+_BOOT_RETRY = RetryPolicy(attempts=3, base_delay=15.0, backoff=2.0, max_delay=60.0)
 
 
 def _boot_batch() -> int:
@@ -322,9 +361,15 @@ def _vms_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[Co
     distinct boxes keeps the parallel default: distinct volumes don't contend, and the
     disk-I/O ceiling is already bounded by the batch size. `--no-parallel` preserves the
     listed order, so the HADR bring-up order still holds either way (#859).
+
+    Boot order is `_boot_order` (not raw `all_vms`): the infra/DNS nodes lead so every
+    guest's sole resolver is up first (#1164). Each batch step carries the bounded
+    `_BOOT_RETRY` policy so a transient IP-lease `Fog::Errors::TimeoutError` retries
+    (with backoff, in the orchestrator) instead of aborting the whole bootstrap, then
+    fails loud once the bounded cap is spent (spec §4.4/§8).
     """
     topo = _topology()
-    vms = _all_vms(stack, no_dr=no_dr)
+    vms = _boot_order(stack, no_dr=no_dr)
     batches = _batch_guests(vms, _boot_batch())
     steps: list[CommandStep] = []
     for index, batch in enumerate(batches, start=1):
@@ -335,7 +380,7 @@ def _vms_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[Co
             if len(batches) == 1
             else f"{stack.name} vms up [{index}/{len(batches)}]"
         )
-        steps.append(CommandStep(label, cmd))
+        steps.append(CommandStep(label, cmd, retry=_BOOT_RETRY))
     return steps
 
 

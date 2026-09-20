@@ -838,3 +838,109 @@ def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
     limit = obs_argv[obs_argv.index("--limit") + 1]
     assert "pcmk-a1" in limit
     assert "pcmk-b1" not in limit
+
+
+# --------------------------------------------------------------------------- #
+# Boot-layer hardening (#1164): infra-first boot ordering + bounded boot-retry.
+# --------------------------------------------------------------------------- #
+# A topology that carries the infra group (the DNS nodes) in the commons set, so
+# all_vms appends infra at the TAIL — the pre-#1164 order _boot_order corrects.
+TOPO_INFRA = (
+    "nodes:\n"
+    "  san-a: {}\n"
+    "  pcmk-a1: {}\n"
+    "  obs: {}\n"
+    "  mon-probe: {}\n"
+    "  svc-sim: {}\n"
+    "  app-client: {}\n"
+    "  infra-client: {}\n"
+    "  infra-svc: {}\n"
+    "groups:\n"
+    "  san_a:   [san-a]\n"
+    "  pcmk_a:  [pcmk-a1]\n"
+    "  obs_box: [obs]\n"
+    "  probe:   [mon-probe]\n"
+    "  svc:     [svc-sim]\n"
+    "  app:     [app-client]\n"
+    "  infra:   [infra-client, infra-svc]\n"
+    "stacks:\n"
+    "  pcmk-ubuntu:\n"
+    "    mechanism: pacemaker-san\n"
+    "    os: ubuntu\n"
+    "    short: PCMK\n"
+    "    groups: [san_a, pcmk_a]\n"
+    "    provision: ansible/site-pcmk.yml\n"
+    "    secrets: []\n"
+    "    qm: {}\n"
+    "    alloc: {}\n"
+    "    verbs: {}\n"
+    "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
+    "commons:\n"
+    "  groups: [obs_box, probe, svc, app, infra]\n"
+    "  provision: ansible/site-obs.yml\n"
+)
+
+
+def _seed_infra(tmp_path) -> None:
+    lab = tmp_path / "lab"
+    nets = lab / "networks"
+    nets.mkdir(parents=True)
+    (lab / "topology.yaml").write_text(TOPO_INFRA)
+    for n in ("net-mgmt", "net-data-a"):
+        (nets / f"{n}.xml").write_text(NET_XML.format(name=n))
+
+
+def test_boot_order_hoists_infra_to_front(monkeypatch, tmp_path):
+    """_boot_order leads with the infra/DNS nodes and keeps every other guest in the
+    authoritative all_vms (HADR) order behind them — a stable partition (#1164)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_infra(tmp_path)
+    from mqlab.phases import _boot_order, _non_mq_commons_hosts, all_vms
+
+    stack = lab_stacks()["pcmk-ubuntu"]
+    order = _boot_order(stack)
+    # all_vms appends infra at the tail; _boot_order hoists it to the front.
+    assert set(_non_mq_commons_hosts()) == {"infra-client", "infra-svc"}
+    assert order[:2] == ["infra-client", "infra-svc"]
+    assert order.index("infra-client") < order.index("san-a")
+    assert order.index("infra-client") < order.index("app-client")
+    # Same VM set, just reordered — nothing dropped or duplicated.
+    assert sorted(order) == sorted(all_vms(stack))
+    # Stable: the non-infra guests keep their all_vms relative order.
+    rest_expected = [vm for vm in all_vms(stack) if vm not in {"infra-client", "infra-svc"}]
+    assert order[2:] == rest_expected
+
+
+def test_boot_order_unchanged_without_infra_group(monkeypatch, tmp_path):
+    """A topology with no infra group (empty hoist set) returns all_vms unchanged."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)  # base fixture: no infra group
+    from mqlab.phases import _boot_order, all_vms
+
+    stack = lab_stacks()["pcmk-ubuntu"]
+    assert _boot_order(stack) == all_vms(stack)
+
+
+def test_vms_build_steps_boot_infra_first(monkeypatch, tmp_path):
+    """The built vagrant-up batches boot the infra nodes before their dependents."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_infra(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    targets = _batched_targets(PHASES[1].build_steps(stack, None))
+    assert targets[:2] == ["infra-client", "infra-svc"]
+    assert targets.index("infra-client") < targets.index("san-a")
+
+
+def test_vms_build_steps_attach_bounded_boot_retry(monkeypatch, tmp_path):
+    """Every vagrant-up batch step carries the bounded _BOOT_RETRY policy (#1164) so a
+    transient IP-lease timeout retries instead of aborting the bootstrap."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    from mqlab.phases import _BOOT_RETRY
+
+    stack = lab_stacks()["pcmk-ubuntu"]
+    steps = PHASES[1].build_steps(stack, None)
+    assert steps  # sanity: batches were emitted
+    assert all(s.retry is _BOOT_RETRY for s in steps)
+    # Bounded and fail-loud by construction: a finite attempt cap, not an unbounded loop.
+    assert _BOOT_RETRY.attempts >= 2
