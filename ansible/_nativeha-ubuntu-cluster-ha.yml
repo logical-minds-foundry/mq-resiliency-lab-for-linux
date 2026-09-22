@@ -32,4 +32,7 @@
 # stampede (the role now waits for readiness per node) (#1148).
 - hosts: nha_ubuntu_a
   serial: 1
-  roles: [mqweb]
+  roles:
+    - role: mqweb
+      # per-node mqweb retired — infeasible at 2-vCPU scale (#1154); client-mode pending (#266/#1171)
+      when: mqweb_enabled | default(false)

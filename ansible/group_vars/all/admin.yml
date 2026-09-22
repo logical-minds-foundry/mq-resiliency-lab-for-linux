@@ -3,3 +3,12 @@
 # as MQWEB_ADMIN_PASSWORD. Never committed.
 mqweb_admin_user: mqadmin
 mqweb_admin_password: "{{ lookup('env', 'MQWEB_ADMIN_PASSWORD') }}"
+
+# Per-node mqweb is RETIRED (#1171): a per-node Liberty/mqweb cold-start is infeasible
+# on the 2-vCPU QM nodes at this lab's scale (VAL-A evidence, #1154 — a node never
+# reached `started` and another thrashed off SSH under setmqweb). mqweb/REST is a
+# non-critical, currently-unused placeholder, so the per-node role invocation is gated
+# OFF by default here; the stack/DR plays run mqweb only when this is true. The
+# replacement is a single client-mode mqweb on the observability node (#266). Flip to
+# true only to exercise the legacy per-node path deliberately.
+mqweb_enabled: false
