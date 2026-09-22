@@ -36,7 +36,10 @@
 # the role's own bounded non-fatal readiness gate staggers the come-up per node.
 - hosts: nha_rhel_crr_b
   serial: 1
-  roles: [mqweb]
+  roles:
+    - role: mqweb
+      # per-node mqweb retired — infeasible at 2-vCPU scale (#1154); client-mode pending (#266/#1171)
+      when: mqweb_enabled | default(false)
 
 # 2. TLS (lab-pki .p12) on every instance of both groups.
 - hosts: nha_rhel_crr_a:nha_rhel_crr_b
