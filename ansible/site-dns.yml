@@ -52,6 +52,47 @@
       # loudly at the real systemd tasks that follow.
       failed_when: false
 
+    # apt auto-updates stall the cold provision (#1173). On a freshly-booted Ubuntu node
+    # apt-daily-upgrade.timer fires within minutes and unattended-upgrade grabs the dpkg
+    # lock (verified: unattended-upgrade holding /var/lib/dpkg/lock-frontend), so the
+    # stack's later apt tasks block on the lock — a ~20-min silent stall. The lab boxes are
+    # pinned/ephemeral and must NOT auto-update at boot (epic #70 §4.5), so — at this
+    # earliest all-hosts touch — mask the timers (they never (re-)fire) and then wait out
+    # any in-flight run before provisioning continues. Debian/Ubuntu only (RHEL uses dnf).
+    - name: detect a Debian/Ubuntu guest (apt present)
+      ansible.builtin.stat:
+        path: /etc/debian_version
+      register: _apt_debian
+      changed_when: false
+    - name: mask apt auto-update timers so they never fire on the pinned box (#1173)
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        masked: true
+      loop:
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      when: _apt_debian.stat.exists
+    # noqa command-instead-of-module: `systemctl is-active` is a state QUERY (the systemd
+    # module acts on units); matches the is-system-running gate above.
+    - name: wait for the apt auto-update services to go idle (dpkg lock free) (#1173)  # noqa: command-instead-of-module
+      # The timer already fired on boot, so its service (apt-daily-upgrade.service →
+      # unattended-upgrade) may still hold the dpkg lock. `is-active` prints one state per
+      # unit; wait until NEITHER is active. The `until` is the real gate (fail-loud after a
+      # bounded ~10-min budget); failed_when:false keeps is-active's non-zero rc (which it
+      # returns when a unit is not active — exactly our success) from tripping a task
+      # failure. Not stopped/killed — a mid-dpkg kill would corrupt state; we let the
+      # in-flight run finish and release the lock.
+      ansible.builtin.command: systemctl is-active apt-daily.service apt-daily-upgrade.service
+      register: _apt_svc
+      # apt-daily* are oneshot units: they report 'activating' while running (not 'active'),
+      # then 'inactive'/'failed' when done. Wait until NEITHER unit is in any busy state.
+      until: (_apt_svc.stdout_lines | intersect(['active', 'activating', 'deactivating', 'reloading'])) | length == 0
+      retries: 60
+      delay: 10
+      changed_when: false
+      failed_when: false
+      when: _apt_debian.stat.exists
+
 # The BIND9 install (package + /etc/bind/zones scaffolding) is BAKED into the
 # infra-ubuntu2404 box (ansible/bake-infra.yml), so per-run we run ONLY bind-dns's
 # configure half: the topology-rendered zone data and this node's
