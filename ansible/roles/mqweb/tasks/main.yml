@@ -61,6 +61,23 @@
   changed_when: "'MQWB' not in (setmqweb.stderr | default(''))"
   failed_when: false
 
+# Was mqweb already running BEFORE this play? On a first bootstrap it is not, so the
+# fresh start below already loads the just-rendered TLS keystore + mqwebuser.xml (both
+# written above). A restart would then be redundant AND would race the slow (~215s on
+# nested arm64) initial cold-start: the restart's strmqweb finds the server lock held
+# ("file lock obtained, and server process is running", exit 22), the Type=forking unit
+# fails, and systemd reaps the still-initialising JVM (#1169). So the TLS restart below
+# fires ONLY when mqweb was already running (a genuine cert rotation on a live server),
+# gated on this probe. `is-active --quiet` → rc 0 iff active; non-fatal probe.
+# noqa command-instead-of-module: `systemctl is-active` is a read-only state query;
+# the systemd module has no equivalent no-op status action (matches site-dns.yml).
+- name: check whether mqweb was already running (gate the TLS restart, #1169)  # noqa: command-instead-of-module
+  ansible.builtin.command: systemctl is-active --quiet mqweb.service
+  register: mqweb_pre_active
+  changed_when: false
+  failed_when: false
+  become: true
+
 # Start non-blocking: --no-block returns immediately so ansible never blocks on the
 # systemd start job. The per-node readiness gate at the end of this role (paired with
 # the play's `serial: 1`, #1148) is what staggers the cold starts — mqweb is a full
@@ -75,7 +92,10 @@
 
 # Liberty reads its keyStore/ssl config at startup, so a cert/config change needs
 # a restart to take effect. --no-block keeps provision from waiting on the slow
-# come-up. Only when the rendered XML actually changed.
+# come-up. Only when the rendered XML actually changed AND mqweb was already running
+# before this play (#1169): on a first bootstrap the fresh start above already has the
+# new config, so restarting would only race its slow cold-start. On a later run that
+# rotates the cert against a live server, `mqweb_pre_active.rc == 0` and this fires.
 # Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882,
 # extending #881): a non-transient failure satisfies `until` on attempt 1 (fail-loud).
 - name: restart mqweb to pick up the TLS cert (non-blocking)
@@ -84,7 +104,7 @@
     state: restarted
     no_block: true
   become: true
-  when: mqweb_tls | bool and mqwebuser_xml is changed
+  when: mqweb_tls | bool and mqwebuser_xml is changed and mqweb_pre_active.rc == 0
   register: mqweb_restart
   until: >-
     mqweb_restart is succeeded or
@@ -117,3 +137,23 @@
   # failed_when:false above always marks the task ok, so detect the timeout by the
   # elapsed wait rather than a failed state.
   when: (mqweb_ready.elapsed | default(0)) | int >= 300
+
+# Fail-loud-vs-slow (#1169): the gate above is non-fatal by design (the message path
+# never blocks on mqweb REST). But a unit that actually FAILED to start is a real
+# defect, not "just slow" — and treating the two alike is exactly what let a reaped
+# mqweb be reported as a green bootstrap. Surface a failed unit distinctly (still
+# non-fatal: the data path is unaffected) so an operator / live-lab validation sees it.
+- name: detect a failed mqweb unit (distinct from slow-but-coming-up, #1169)  # noqa: command-instead-of-module
+  ansible.builtin.command: systemctl is-active mqweb.service
+  register: mqweb_post_active
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: warn loudly if mqweb failed to start (non-fatal, #1169)
+  ansible.builtin.debug:
+    msg: >-
+      mqweb unit is '{{ mqweb_post_active.stdout | default('unknown') | trim }}' on
+      {{ inventory_hostname }} — it FAILED to start (not merely slow). The message
+      path is unaffected, but the REST/console plane is down; investigate.
+  when: (mqweb_post_active.stdout | default('') | trim) == 'failed'
