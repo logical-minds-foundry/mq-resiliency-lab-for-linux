@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1178",
+  "branch": "feature/1178-obs-box-merge",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-09-24T13:29:31Z",
+  "updated_at": "2026-09-24T13:29:31Z",
+  "git": {
+    "base_sha": "092e554959c5547bc2683bc3aef5d42d83fa3e70",
+    "head_sha": "92bddf6d7811fc417c60ef5f83e92d75e113d760"
+  },
+  "pr_metadata": {
+    "title": "feat(box): bake the log-search tier into the obs box (additive) \u2014 box-fit gate passes (#1178)",
+    "summary": "Fold the OpenSearch/Dashboards/Data-Prepper install-half roles into bake-obs.yml so one obs box bakes the whole observability platform (metrics + logs); box-fit gate measured + a full re-bake proves the merged box builds cleanly at 7.12 GiB actual \u2014 ~11 GiB under the 18/20 GiB ceiling.",
+    "notes": "Epic #267 Task 1. Additive by design (keeps this PR vrg-validate-green); the coordinated removal (retire bake-logsearch.yml + logsearch-ubuntu2404 fleet entry + the logsearch node) moves to #1179 (noted there) so topology<->box<->bake stay consistent in one PR. Box-fit gate (docs/reports/2026-09-24-obs-box-fit-gate.md): obs 5.57 + logsearch 3.29 GiB, merged proven at 7.12 GiB actual vs 18 GiB partition/20 GiB ceiling. Merged-box re-bake succeeded (721s, box added + cached). vrg-validate green. Bootable-services proof rides VAL #1177 (cold-rebuild).",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
