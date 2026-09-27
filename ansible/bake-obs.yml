@@ -1,9 +1,11 @@
 ---
-# Bake the obs-ubuntu2404 box image (#602, epic .github#70 Task 1).
+# Bake the obs-ubuntu2404 box image (#602, epic .github#70 Task 1; log-search tier
+# folded in by the consolidation, epic .github#267).
 #
-# ADDITIVE FOUNDATION: installs only the image-bakeable software for the
-# observability box — the Grafana/Prometheus/Loki stack binaries + static config,
-# the fleet agents' binaries, and the (slow, cgo) mq_prometheus exporter build. It
+# ADDITIVE FOUNDATION: installs only the image-bakeable software for the unified
+# observability box — the Grafana/Prometheus/Loki metrics stack, the log-search stack
+# (OpenSearch/Dashboards/Data Prepper, folded in for #267), the fleet agents' binaries,
+# and the (slow, cgo) mq_prometheus exporter build. It
 # drops NO topology-rendered scrape targets or dashboards and bakes NO admin-password
 # secret; those stay in the per-run (configure) path (site-obs.yml et al.), which this
 # playbook does not touch. Run against a single `bake` host:
@@ -85,3 +87,28 @@
       ansible.builtin.include_role:
         name: mq-exporter
         tasks_from: build
+
+    # --- Consolidation (epic .github#267): the log-search tier is folded onto the obs
+    # box so one instrumentation machine runs the whole observability platform (metrics
+    # + logs). These are the INSTALL halves only (same #642 inert-boot contract as the
+    # metrics stack above): binaries/packages + static config + inert units baked; NO
+    # enable/start, NO secrets, NO per-run renders — those stay in the configure path
+    # (site-logsearch.yml, retargeted to obs in the consolidation). Placed AFTER the cgo
+    # mq_prometheus build so the #885 apt-clean headroom protects that space-hungry build;
+    # the log stack installs from tarballs (its own bundled JDKs), not apt. The merged
+    # footprint fits the 18 G build disk with ~9 G headroom (box-fit gate, #1178). Retired
+    # from bake-logsearch.yml in the consolidation's node/box-removal task.
+    - name: opensearch (install half — binary + static opensearch.yml + unit, no start)
+      ansible.builtin.include_role:
+        name: opensearch
+        tasks_from: install
+
+    - name: opensearch-dashboards (install half — package + static config + unit, no start)
+      ansible.builtin.include_role:
+        name: opensearch-dashboards
+        tasks_from: install
+
+    - name: data-prepper (install half — binary + static config + pipelines + unit, no start)
+      ansible.builtin.include_role:
+        name: data-prepper
+        tasks_from: install
