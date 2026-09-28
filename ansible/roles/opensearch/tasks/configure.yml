@@ -2,7 +2,7 @@
 # CONFIGURE (epic .github#70): the per-run half of opensearch — the admin credential seam,
 # the service enable+start, the logs-* index template, the native _snapshot fs repo, and
 # restore-on-bring-up. Split out of the bakeable install half so the baked box stays inert
-# (no boot-time auto-start in a pre-config state). site-logsearch.yml (later #149 task)
+# (no boot-time auto-start in a pre-config state). site-obs.yml (later #149 task)
 # invokes this via `tasks_from: configure`; the un-baked full-role path runs it as the
 # second half of main.yml.
 
@@ -59,7 +59,7 @@
 # --- restore-on-bring-up (snapshot spike; guarded, LOGGED no-op when no snapshot) ------
 - name: look for the latest host-side snapshot artifact (control host)
   # The host snapshot store is build/state/logsearch/, resolved via `mqlab build path state`
-  # by the CALLER (site-logsearch.yml passes opensearch_snapshot_state_dir) — the role never
+  # by the CALLER (site-obs.yml passes opensearch_snapshot_state_dir) — the role never
   # hardcodes a build/<X> path. Empty/absent => a fresh build with no snapshot => a clean,
   # LOGGED no-op (spec §7 accepted tradeoff), never a silent skip.
   ansible.builtin.find:

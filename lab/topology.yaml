@@ -48,12 +48,14 @@ boxes:
     box: mq-nativeha-rhel9
     arch: x86_64
     dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
-  # The fat obs box (#605, epic .github#70): the cloud-image/ubuntu-24.04 base with the
-  # observability stack (prometheus/grafana/loki binaries + node-exporter + alloy) and the
-  # slow cgo mq_prometheus exporter build + MQ SDK BAKED IN (lab/boxes/build-fatbox.sh
-  # --box obs-ubuntu2404). The obs node boots this instead of the host-resolved Ubuntu
-  # platform so a bootstrap skips the stack install; the per-run path only renders the
-  # topology targets/dashboards (site-obs.yml, configure halves). host-resolved (#103) —
+  # The fat obs box (#605, epic .github#70; log-search tier folded in #1178/#1179, epic
+  # .github#267): the cloud-image/ubuntu-24.04 base with the observability stack
+  # (prometheus/grafana/loki binaries + node-exporter + alloy), the slow cgo mq_prometheus
+  # exporter build + MQ SDK, AND the log-search stack (OpenSearch + OpenSearch Dashboards +
+  # Data Prepper) BAKED IN (lab/boxes/build-fatbox.sh --box obs-ubuntu2404). The obs node
+  # boots this instead of the host-resolved Ubuntu platform so a bootstrap skips the stack
+  # install; the per-run path renders the topology targets/dashboards and runs the metrics +
+  # log-search configure halves (site-obs.yml). host-resolved (#103) —
   # arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
   # x86_64 on the cloud), so the guest arch is not pinned (no DVD — Ubuntu registers online).
   obs-ubuntu2404:
@@ -105,17 +107,6 @@ boxes:
   # stay host-resolved on the base box (design D8, deferred to the SAN-hosts epic #108).
   pcmk-ubuntu:
     box: pcmk-ubuntu
-  # The fat logsearch box (#830, epic .github#149): the cloud-image/ubuntu-24.04 base
-  # with the log-search stack (OpenSearch + OpenSearch Dashboards + Data Prepper) plus
-  # node-exporter + alloy BAKED IN (lab/boxes/build-fatbox.sh --box logsearch-ubuntu2404).
-  # The logsearch node boots this instead of the host-resolved Ubuntu platform so a
-  # bootstrap skips the stack install; the per-run configure half (service enable+start,
-  # credential seam, index templates, snapshot repo, live-endpoint pipelines) still runs
-  # (site-logsearch.yml, #832). host-resolved (#103) — arch tracks the host: the box is
-  # baked natively per host (arm64 on Apple Silicon, x86_64 on the cloud), so the guest
-  # arch is not pinned. No DVD (Ubuntu registers online).
-  logsearch-ubuntu2404:
-    box: logsearch-ubuntu2404
 
 # No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
 # (default_platform(facts)) so guests track the host arch (native-preferred, #276).
@@ -150,13 +141,19 @@ nodes:
     # cross-site DR cutover and keeps producing on the survivor.
     nics: { net-mgmt: 10.50.0.60, net-data-a: 10.10.1.60, net-data-b: 10.10.2.60 }
 
-  # --- Observability (#103): obs runs Prometheus+Grafana on the mgmt plane only;
-  # mon-probe carries net-data NICs for the (Plan B) client-mode MQ exporters, plus
-  # net-ext to reach the SVC counterparty QM across the inter-business WAN (#182). ---
+  # --- Observability (#103; log-search consolidated in #1179, epic .github#267): obs runs
+  # the WHOLE observability platform on the mgmt plane only — Prometheus + Grafana + Loki +
+  # the mq_prometheus exporter (metrics) AND OpenSearch + OpenSearch Dashboards + Data
+  # Prepper (logs). The former logsearch node (2 vCPU / 6 GB, its own mgmt IP) was folded in:
+  # one adequately-resourced instrumentation node with localhost inter-service links beats
+  # two undersized ones (spec §5.1). Sized cpus:4 / memory:10240 (the 2+2 vCPU, 4096+6144 MB
+  # combined figure); bump only if a cold-rebuild shows pressure. mon-probe carries net-data
+  # NICs for the (Plan B) client-mode MQ exporters, plus net-ext to reach the SVC
+  # counterparty QM across the inter-business WAN (#182). ---
   obs:
-    platform: obs-ubuntu2404  # boot the baked obs stack (#605); NICs/resources unchanged
-    cpus: 2
-    memory: 4096
+    platform: obs-ubuntu2404  # boot the baked obs stack (metrics + logs, #605/#1178); mgmt-plane only
+    cpus: 4
+    memory: 10240
     nics: { net-mgmt: 10.50.0.2 }
   mon-probe:
     platform: mq-ubuntu2404  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
@@ -164,16 +161,10 @@ nodes:
     memory: 1024
     nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }
 
-  # --- Log search (#830, epic .github#149): logsearch runs the OpenSearch +
-  # OpenSearch Dashboards + Data Prepper log-search stack. It ingests logs from Alloy
-  # over the management plane, so it carries a net-mgmt NIC ONLY — no data/hb/san/ext
-  # exposure. Sized for the JVM stack (OpenSearch + Dashboards + Data Prepper). Its
-  # per-run bring-up is site-logsearch.yml (#832). ---
-  logsearch:
-    platform: logsearch-ubuntu2404  # boot the baked log-search stack (#830); mgmt-plane only
-    cpus: 2
-    memory: 6144
-    nics: { net-mgmt: 10.50.0.4 }
+  # --- Log search: the OpenSearch + OpenSearch Dashboards + Data Prepper log-search stack
+  # no longer runs on a dedicated node — it was consolidated onto `obs` (#1179, epic
+  # .github#267). The former `logsearch` node (2 vCPU / 6 GB, its own mgmt NIC) is retired;
+  # its services now share obs's resources with localhost inter-service links. ---
 
   # --- DNS infrastructure (#474, epic .github#21): per-side authoritative
   # nameservers, their own failure domain so DNS can be broken and measured
@@ -380,16 +371,9 @@ groups:
   obs_box: [obs]
   probe:   [mon-probe]
   infra:   [infra-client, infra-svc]
-  # logsearch_box (not "logsearch") so the group name never collides with the host
-  # named logsearch — same convention as obs_box. This group makes the inventory
-  # render the logsearch host so site-logsearch.yml (hosts: logsearch) and the
-  # `mqlab logsearch` ad-hoc calls resolve it (#830/#832). It is its own group (not
-  # folded into the commons groups), but logsearch is a CORE observability layer:
-  # all_vms() includes it and `bootstrap` brings it up + provisions it on every run
-  # (#1018). It was originally opt-in, but Alloy ships to it unconditionally, so an
-  # opt-in consumer let the fan-out hot-loop into a disk-fill — observability is a
-  # requirement, not opt-in.
-  logsearch_box: [logsearch]
+  # The log-search tier (OpenSearch + Dashboards + Data Prepper) has NO group of its own:
+  # it was consolidated onto the obs node (#1179, epic .github#267), so those services ride
+  # the obs_box group. `mqlab logsearch` ad-hoc calls now resolve to the obs host.
 
 # stacks: — canonical 4-stack registry (#350). Each stack is the authoritative
 # union of its old arm (mechanism/verbs/short) and its full-HADR distributed setup

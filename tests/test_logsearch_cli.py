@@ -522,40 +522,41 @@ def test_restore_api_unreachable_exits_two(monkeypatch, tmp_path) -> None:
     assert result.exit_code == 2
 
 
-# --- fleet-wide fan-out gate (#832): topology-derived endpoint + gate body -------
-# The Alloy->OpenSearch fan-out endpoint is DERIVED from topology (the logsearch
-# node's net-mgmt NIC) + Data Prepper's OTLP/gRPC logs port — never hardcoded, so
-# a topology IP change flows straight through to the gate file (and thus to every
-# node's alloy config via group_vars/all/logsearch.yml).
+# --- fleet-wide fan-out gate (#832; retargeted to obs #1179): topology-derived endpoint --
+# The log-search tier was consolidated onto obs, so the Alloy->OpenSearch fan-out endpoint
+# is DERIVED from the OBS node's net-mgmt NIC + Data Prepper's OTLP/gRPC logs port — never
+# hardcoded, so a topology IP change flows straight through to the gate file (and thus to
+# every node's alloy config via group_vars/all/logsearch.yml). It stays a routable IP, not
+# localhost: Alloy on every fleet node ships to Data Prepper on obs across the mgmt plane.
 
 _FANOUT_TOPO = {
-    "nodes": {"logsearch": {"nics": {"net-mgmt": "10.50.0.4"}}},
-    "groups": {"logsearch_box": ["logsearch"]},
+    "nodes": {"obs": {"nics": {"net-mgmt": "10.50.0.2"}}},
+    "groups": {"obs_box": ["obs"]},
 }
 
 
-def test_logsearch_mgmt_ip_from_topology() -> None:
-    assert logsearch.logsearch_mgmt_ip(_FANOUT_TOPO) == "10.50.0.4"
+def test_obs_mgmt_ip_from_topology() -> None:
+    assert logsearch.obs_mgmt_ip(_FANOUT_TOPO) == "10.50.0.2"
 
 
 def test_fanout_endpoint_pairs_ip_with_data_prepper_port() -> None:
     # port mirrors the data-prepper role default data_prepper_otel_logs_port (21892)
     assert logsearch.DATA_PREPPER_OTLP_LOGS_PORT == 21892
-    assert logsearch.fanout_endpoint(_FANOUT_TOPO) == "10.50.0.4:21892"
+    assert logsearch.fanout_endpoint(_FANOUT_TOPO) == "10.50.0.2:21892"
 
 
 def test_fanout_gate_is_enabled_with_derived_endpoint() -> None:
     assert logsearch.fanout_gate(_FANOUT_TOPO) == {
         "enabled": True,
-        "endpoint": "10.50.0.4:21892",
+        "endpoint": "10.50.0.2:21892",
     }
 
 
-def test_logsearch_mgmt_ip_missing_node_raises() -> None:
-    with pytest.raises(logsearch.LogsearchError, match="no 'logsearch' node"):
-        logsearch.logsearch_mgmt_ip({"nodes": {}})
+def test_obs_mgmt_ip_missing_node_raises() -> None:
+    with pytest.raises(logsearch.LogsearchError, match="no 'obs' node"):
+        logsearch.obs_mgmt_ip({"nodes": {}})
 
 
-def test_logsearch_mgmt_ip_missing_nic_raises() -> None:
+def test_obs_mgmt_ip_missing_nic_raises() -> None:
     with pytest.raises(logsearch.LogsearchError, match="no net-mgmt"):
-        logsearch.logsearch_mgmt_ip({"nodes": {"logsearch": {"nics": {}}}})
+        logsearch.obs_mgmt_ip({"nodes": {"obs": {"nics": {}}}})

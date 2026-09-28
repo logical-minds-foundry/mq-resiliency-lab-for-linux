@@ -2,7 +2,7 @@
 # CONFIGURE (epic .github#149, issue #939): the per-run half of data-prepper — the
 # service enable+start and the readiness wait. Split out of the bakeable install half
 # so the baked box stays inert (no boot-time auto-start in a pre-config state).
-# site-logsearch.yml (#832) invokes this via `tasks_from: configure`; the un-baked
+# site-obs.yml (#832) invokes this via `tasks_from: configure`; the un-baked
 # full-role path runs it as the second half of main.yml.
 #
 # Dependency ordering (owned by the #832 site play, not this role): the opensearch

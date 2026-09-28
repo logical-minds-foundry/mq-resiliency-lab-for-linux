@@ -93,11 +93,11 @@
     # + logs). These are the INSTALL halves only (same #642 inert-boot contract as the
     # metrics stack above): binaries/packages + static config + inert units baked; NO
     # enable/start, NO secrets, NO per-run renders — those stay in the configure path
-    # (site-logsearch.yml, retargeted to obs in the consolidation). Placed AFTER the cgo
-    # mq_prometheus build so the #885 apt-clean headroom protects that space-hungry build;
+    # (site-obs.yml, into which the log-stack configure was folded, #1179). Placed AFTER the
+    # cgo mq_prometheus build so the #885 apt-clean headroom protects that space-hungry build;
     # the log stack installs from tarballs (its own bundled JDKs), not apt. The merged
-    # footprint fits the 18 G build disk with ~9 G headroom (box-fit gate, #1178). Retired
-    # from bake-logsearch.yml in the consolidation's node/box-removal task.
+    # footprint fits the 18 G build disk with ~9 G headroom (box-fit gate, #1178). The
+    # standalone bake-logsearch.yml was retired with the logsearch box (#1179).
     - name: opensearch (install half — binary + static opensearch.yml + unit, no start)
       ansible.builtin.include_role:
         name: opensearch

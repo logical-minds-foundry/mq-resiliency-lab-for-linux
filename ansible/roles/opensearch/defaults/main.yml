@@ -45,7 +45,7 @@ opensearch_index_pattern: "logs-*"
 # number_of_replicas:0 is load-bearing on a single node (connector spike, spec §6): the
 # default replicas:1 reads yellow forever. The template must exist BEFORE any sink writes.
 opensearch_number_of_replicas: 0
-# Host-side snapshot store. The CALLER (site-logsearch.yml, later #149 task) resolves
+# Host-side snapshot store. The CALLER (site-obs.yml, later #149 task) resolves
 # build/state/logsearch/ via `mqlab build path state` and passes it here — the role never
 # hardcodes a build/<X> path. Empty => restore-on-bring-up is a clean, LOGGED no-op.
 opensearch_snapshot_state_dir: ""

@@ -155,38 +155,37 @@ def test_rdqm_rhel_effective_members_drop_site_b_under_no_dr():
     assert stack_members_effective("rdqm-rhel", no_dr=False) == full
 
 
-def test_logsearch_node_present_and_mgmt_only():
-    """The logsearch node (#830, epic .github#149): boots the baked
-    logsearch-ubuntu2404 box, sized for the OpenSearch/Data Prepper stack, and
-    lives on the management plane ONLY (one net-mgmt NIC — it ingests logs from
-    Alloy over mgmt, no data/hb/san/ext exposure)."""
+def test_logsearch_node_and_box_group_retired():
+    """The log-search tier was consolidated onto obs (#1179, epic .github#267): the
+    `logsearch` node, the `logsearch_box` group, and the `logsearch-ubuntu2404` box are
+    all gone from topology — those services now ride the obs node / obs_box group."""
     import yaml
 
     from mqlab.paths import repo_root
 
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    node = topo["nodes"]["logsearch"]
-    assert node["platform"] == "logsearch-ubuntu2404"
-    assert node["memory"] >= 6144
-    assert set(node["nics"]) == {"net-mgmt"}
-
-
-def test_logsearch_box_group_renders_but_is_not_a_commons_group():
-    """The logsearch node lives in the `logsearch_box` group (#832) so the inventory
-    renders it (site-logsearch.yml `hosts: logsearch` + the `mqlab logsearch` ad-hoc
-    calls resolve it). It is NOT a commons group: logsearch is wired into commons
-    up/status/down explicitly, but kept out of the per-stack all_vms boot set."""
-    import yaml
-
-    from mqlab.paths import repo_root
-
-    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    assert topo["groups"]["logsearch_box"] == ["logsearch"]
-    assert "logsearch_box" not in topo["commons"]["groups"]
-    # the inventory (a pure function of topology) renders the host under the group
+    assert "logsearch" not in topo["nodes"]
+    assert "logsearch_box" not in topo["groups"]
+    assert "logsearch-ubuntu2404" not in topo["boxes"]
+    # the rendered inventory (a pure function of topology) no longer carries the host/group
     inv = lab_inventory()
-    assert "[logsearch_box]" in inv
-    assert "logsearch ansible_host=10.50.0.4" in inv
+    assert "[logsearch_box]" not in inv
+    assert "logsearch ansible_host" not in inv
+
+
+def test_obs_absorbed_the_logsearch_tier():
+    """obs runs the whole observability platform now (metrics + logs) — sized to the
+    combined 4 vCPU / 10 GB figure (spec §5.1), still mgmt-plane only."""
+    import yaml
+
+    from mqlab.paths import repo_root
+
+    topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    obs = topo["nodes"]["obs"]
+    assert obs["platform"] == "obs-ubuntu2404"
+    assert obs["cpus"] == 4
+    assert obs["memory"] == 10240
+    assert set(obs["nics"]) == {"net-mgmt"}
 
 
 def test_dns_infra_nodes_present_and_attached():

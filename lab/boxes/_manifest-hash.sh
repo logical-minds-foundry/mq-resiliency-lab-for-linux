@@ -29,7 +29,7 @@
 #     MQ-bearing box at REUSE, so a bootstrap silently cloned the old-version box
 #     and, via the skip-if-baked guard, came up on the old MQ). Folding the pin
 #     content in flips those boxes to BUILD on a bump. The MQ-version-independent
-#     commons boxes (obs/infra/logsearch, pcmk) DELIBERATELY exclude it, so a
+#     commons boxes (obs/infra, pcmk) DELIBERATELY exclude it, so a
 #     version bump never spuriously rebakes them.
 #
 # The <box> argument is the full box name (mq-rdqm-rhel9, infra-ubuntu2404, ...),
@@ -67,7 +67,6 @@ MQ_BEARING=0
 case "$BOX" in
   mq-rdqm-rhel9)    BAKE_STEM=mq-rdqm; MQ_BEARING=1 ;;
   obs-ubuntu2404)   BAKE_STEM=obs ;;
-  logsearch-ubuntu2404) BAKE_STEM=logsearch ;;
   infra-ubuntu2404) BAKE_STEM=infra ;;
   mq-ubuntu2404)    BAKE_STEM=mq-ubuntu; MQ_BEARING=1 ;;
   mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel; MQ_BEARING=1 ;;

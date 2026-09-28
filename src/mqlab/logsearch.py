@@ -45,11 +45,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # --- tier endpoints (mgmt plane) ------------------------------------------------
-# The logsearch node carries a mgmt-only NIC (topology #830). mqlab runs on the
-# libvirt host, which sits on the mgmt plane and reaches the guest directly — the
-# same convention as obs's GRAFANA_URL (10.50.0.2) / probe (10.50.0.3); logsearch
-# is the next free mgmt IP (.4, plan Task 8). Overridable per-invocation.
-OPENSEARCH_HOST = "10.50.0.4"
+# The log-search tier was consolidated onto the obs node (#1179, epic .github#267):
+# OpenSearch + Dashboards + Data Prepper now share obs's mgmt-only NIC (10.50.0.2).
+# mqlab runs on the libvirt host, which sits on the mgmt plane and reaches the guest
+# directly — the same address as obs's GRAFANA_URL (10.50.0.2). Overridable per-invocation.
+OPENSEARCH_HOST = "10.50.0.2"
 OPENSEARCH_PORT = 9200
 DASHBOARDS_PORT = 5601
 
@@ -58,9 +58,10 @@ DASHBOARDS_PORT = 5601
 # the host store resolves through `mqlab build path state` (state("logsearch")).
 SNAPSHOT_REPO = "logsearch-fs"
 REMOTE_REPO_DIR = "/var/lib/opensearch/snapshots"
-# The Ansible inventory host/group the transport ad-hoc calls target (topology #830 /
-# site-logsearch.yml #832 supply it at runtime; the CLI just names it).
-INVENTORY_HOST = "logsearch"
+# The Ansible inventory host the transport ad-hoc calls target. Since the log-search
+# tier was consolidated onto obs (#1179), OpenSearch lives on the obs host, so the
+# snapshot/restore ad-hoc runs target `obs`.
+INVENTORY_HOST = "obs"
 
 # Informational flood-stage threshold for the disk line. The AUTHORITATIVE full
 # signal is the read-only-allow-delete index block OpenSearch itself sets at the
@@ -100,47 +101,51 @@ def dashboards_url(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
-# --- fleet-wide fan-out gate (#832) ---------------------------------------------
+# --- fleet-wide fan-out gate (#832; retargeted to obs #1179) ---------------------
 # #831 added an Alloy fan-out block to config.alloy.j2 gated on `alloy_fanout_opensearch`
 # + `opensearch_dataprepper_endpoint`. This tier turns that gate ON fleet-wide (spec
 # §6/§13, "the same source set Loki receives, for parity") by rendering a gate file
-# (build/work/logsearch/fanout.json) that group_vars/all/logsearch.yml reads. The fan-out
-# endpoint is the logsearch node's mgmt IP + Data Prepper's OTLP/gRPC logs port. The IP is
-# DERIVED from topology (never hardcoded — a topology change flows straight through); the
+# (build/work/logsearch/fanout.json) that group_vars/all/logsearch.yml reads. Since the
+# log-search tier was consolidated onto obs (#1179), Data Prepper now runs on the obs node,
+# so the fan-out endpoint is the OBS node's mgmt IP + Data Prepper's OTLP/gRPC logs port.
+# It stays a routable IP (NOT localhost): Alloy on every fleet node ships to Data Prepper
+# on obs across the mgmt plane — only obs's own Alloy would resolve it to loopback. The IP
+# is DERIVED from topology (never hardcoded — a topology change flows straight through); the
 # port mirrors the data-prepper role default `data_prepper_otel_logs_port`.
 DATA_PREPPER_OTLP_LOGS_PORT = 21892
 
 
-def logsearch_mgmt_ip(topo: dict[str, Any]) -> str:
-    """The logsearch node's net-mgmt IP, resolved from topology.
+def obs_mgmt_ip(topo: dict[str, Any]) -> str:
+    """The obs node's net-mgmt IP, resolved from topology — the address Data Prepper
+    (consolidated onto obs, #1179) listens on for the fleet-wide Alloy fan-out.
 
     Raises LogsearchError — loudly, never a bogus/empty endpoint — when the node or
     its mgmt NIC is absent, so a fan-out is never pointed at an unresolved endpoint.
     """
-    node = (topo.get("nodes") or {}).get("logsearch")
+    node = (topo.get("nodes") or {}).get("obs")
     if node is None:
         raise LogsearchError(
-            "mqlab logsearch: topology has no 'logsearch' node — cannot derive the "
-            "Alloy fan-out endpoint. Was lab/topology.yaml edited (#830)?"
+            "mqlab logsearch: topology has no 'obs' node — cannot derive the "
+            "Alloy fan-out endpoint. Was lab/topology.yaml edited (#1179)?"
         )
     ip = (node.get("nics") or {}).get("net-mgmt")
     if not ip:
         raise LogsearchError(
-            "mqlab logsearch: the logsearch node has no net-mgmt NIC in topology — "
+            "mqlab logsearch: the obs node has no net-mgmt NIC in topology — "
             "cannot derive the Alloy fan-out endpoint."
         )
     return str(ip)
 
 
 def fanout_endpoint(topo: dict[str, Any]) -> str:
-    """The Alloy fan-out target — ``<logsearch-mgmt-ip>:<otlp-logs-port>``."""
-    return f"{logsearch_mgmt_ip(topo)}:{DATA_PREPPER_OTLP_LOGS_PORT}"
+    """The Alloy fan-out target — ``<obs-mgmt-ip>:<otlp-logs-port>``."""
+    return f"{obs_mgmt_ip(topo)}:{DATA_PREPPER_OTLP_LOGS_PORT}"
 
 
 def fanout_gate(topo: dict[str, Any]) -> dict[str, Any]:
     """The rendered gate-file body group_vars/all/logsearch.yml consumes: fleet-wide
-    fan-out ENABLED, pointed at the topology-derived Data Prepper endpoint. Its absence
-    (no gate file) is what makes fan-out cleanly inert when logsearch is not brought up."""
+    fan-out ENABLED, pointed at the topology-derived Data Prepper endpoint (on obs, #1179).
+    Its absence (no gate file) is what makes fan-out cleanly inert when obs is not up."""
     return {"enabled": True, "endpoint": fanout_endpoint(topo)}
 
 
@@ -176,6 +181,12 @@ def disk_summary(allocation: list[dict[str, Any]]) -> str:
     return "; ".join(parts) if parts else "unknown"
 
 
+# Bound as a named tuple (not an inline `except (TypeError, ValueError):`) so `ruff format`
+# leaves it alone — with no `as` binding the formatter strips the grouping parens, which is
+# invalid Python 3; a name reference sidesteps that edge case.
+_DISK_PARSE_ERRORS = (TypeError, ValueError)
+
+
 def disk_full(allocation: list[dict[str, Any]], threshold: int = DISK_FULL_PERCENT) -> bool:
     """True when any node's disk-used percent is at/above the flood-stage threshold."""
     for row in allocation:
@@ -184,7 +195,7 @@ def disk_full(allocation: list[dict[str, Any]], threshold: int = DISK_FULL_PERCE
         try:
             if float(row.get("disk.percent", 0)) >= threshold:
                 return True
-        except TypeError, ValueError:
+        except _DISK_PARSE_ERRORS:
             continue
     return False
 
@@ -284,7 +295,7 @@ def _request(method: str, url: str, body: dict[str, Any] | None = None) -> Any:
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
         raise LogsearchError(
             f"mqlab logsearch: cannot reach OpenSearch at {url}: {exc}. "
-            f"Is the logsearch node up (mqlab vm status) and site-logsearch.yml applied?"
+            f"Is the obs node up (mqlab vm status) and site-obs.yml applied?"
         ) from exc
     return json.loads(raw) if raw else {}
 
@@ -334,7 +345,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-_HostOpt = typer.Option(OPENSEARCH_HOST, "--host", help="logsearch node mgmt IP/host")
+_HostOpt = typer.Option(OPENSEARCH_HOST, "--host", help="obs node mgmt IP/host (log-search tier)")
 _PortOpt = typer.Option(OPENSEARCH_PORT, "--port", help="OpenSearch http port")
 
 

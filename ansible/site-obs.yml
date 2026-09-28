@@ -91,3 +91,29 @@
       ansible.builtin.include_role:
         name: grafana
         tasks_from: configure
+
+    # --- Log-search tier (OpenSearch + Dashboards + Data Prepper), consolidated onto obs
+    # (#1179, epic .github#267). Formerly the standalone site-logsearch.yml (hosts:
+    # logsearch, #832); now folded here so the whole observability platform (metrics + logs)
+    # comes up on the obs box in ONE configure sequence with localhost inter-service links.
+    # ORDER is load-bearing: OpenSearch first (the store the other two depend on) — its
+    # configure enables+starts OpenSearch, PUTs the `logs` index template (replicas:0, load-
+    # bearing on a single node), creates the `logsearch-fs` snapshot repo, and restores the
+    # last snapshot on bring-up (caller passes opensearch_snapshot_state_dir; empty = clean
+    # no-op). Then Data Prepper (sinks to localhost:9200, so AFTER OpenSearch + its template),
+    # then Dashboards (queries OpenSearch on localhost, so after the store). node-exporter is
+    # re-applied fleet-wide by observability.yml — not repeated here. ---
+    - name: opensearch configure (per-run enable + start, index template, snapshot repo, restore)
+      ansible.builtin.include_role:
+        name: opensearch
+        tasks_from: configure
+
+    - name: data-prepper configure (per-run enable + start; sinks to localhost:9200)
+      ansible.builtin.include_role:
+        name: data-prepper
+        tasks_from: configure
+
+    - name: opensearch-dashboards configure (per-run enable + start; after opensearch)
+      ansible.builtin.include_role:
+        name: opensearch-dashboards
+        tasks_from: configure

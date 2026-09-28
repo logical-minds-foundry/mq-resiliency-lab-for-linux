@@ -2,7 +2,7 @@
 # CONFIGURE (epic .github#70): the per-run half of opensearch-dashboards — the admin
 # credential seam, the service enable+start, the /api/status wait, and the default logs-*
 # index pattern. Split out of the bakeable install half so the baked box stays inert (no
-# boot-time auto-start in a pre-config state). site-logsearch.yml (later #149 task) invokes
+# boot-time auto-start in a pre-config state). site-obs.yml (later #149 task) invokes
 # this via `tasks_from: configure`; the un-baked full-role path runs it as the second half of
 # main.yml.
 

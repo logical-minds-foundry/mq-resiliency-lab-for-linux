@@ -79,16 +79,6 @@ TOPO = (
     "  provision: ansible/site-obs.yml\n"
 )
 
-# Same topology plus the logsearch tier (its own node + group) — for the core-layer
-# bring-up test (#1018): every bootstrap must boot + provision logsearch.
-LOGSEARCH_TOPO = TOPO.replace(
-    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n",
-    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n  logsearch: {nics: {net-mgmt: 10.50.0.4}}\n",
-).replace(
-    "  app:     [app-client]\n",
-    "  app:     [app-client]\n  logsearch_box: [logsearch]\n",
-)
-
 NET_XML = "<network><name>{name}</name></network>\n"
 
 
@@ -184,11 +174,12 @@ def test_bootstrap_runs_from_first_unsatisfied(monkeypatch, tmp_path):
     assert not any(a == "virsh" for a in argv0s)  # net phase satisfied -> skipped
 
 
-def test_bootstrap_observe_brings_up_logsearch_when_present(monkeypatch, tmp_path):
-    # logsearch is a CORE observability layer (#1018): when the topology carries it, the
-    # observe phase provisions the tier (site-logsearch.yml) at its front, so the fleet's
-    # Alloy ships to a live OpenSearch instead of hot-looping. --only observe isolates it.
-    _seed(monkeypatch, tmp_path, LOGSEARCH_TOPO)
+def test_bootstrap_observe_provisions_the_consolidated_logsearch_tier(monkeypatch, tmp_path):
+    # The log-search tier is a CORE observability layer (#1018) and was consolidated onto obs
+    # (#1179): its configure is folded into site-obs.yml and its snapshot-restore seam
+    # (opensearch_snapshot_state_dir) is threaded into the observe phase's site-obs.yml call,
+    # so a bootstrap brings metrics + logs up on obs in one sequence. --only observe isolates it.
+    _seed(monkeypatch, tmp_path)
     monkeypatch.setattr(
         cli,
         "_probe_all",
@@ -200,7 +191,11 @@ def test_bootstrap_observe_brings_up_logsearch_when_present(monkeypatch, tmp_pat
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
     assert result.exit_code == 0
     argv = [" ".join(c.argv) for c in runner.recorded]
-    assert any("site-logsearch.yml" in a for a in argv)  # logsearch provisioned in observe
+    # site-obs.yml (now carrying the folded log-stack configure) runs, threading the
+    # log-search snapshot-restore seam — proof the tier comes up as part of obs's observe.
+    assert any("site-obs.yml" in a and "opensearch_snapshot_state_dir=" in a for a in argv)
+    # No standalone site-logsearch.yml play survives the consolidation.
+    assert not any("site-logsearch.yml" in a for a in argv)
 
 
 def test_no_dr_on_stack_without_dr_groups_fails_loud(monkeypatch, tmp_path):

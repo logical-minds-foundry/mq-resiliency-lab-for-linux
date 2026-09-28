@@ -37,7 +37,7 @@ _CONTEXT = {
     "loki_push_url": "http://10.50.0.2:3100/loki/api/v1/push",
     "alloy_tail_mqweb": True,
     "alloy_fanout_opensearch": True,
-    "opensearch_dataprepper_endpoint": "10.50.0.4:21892",
+    "opensearch_dataprepper_endpoint": "10.50.0.2:21892",  # Data Prepper on obs (#1179)
 }
 
 
