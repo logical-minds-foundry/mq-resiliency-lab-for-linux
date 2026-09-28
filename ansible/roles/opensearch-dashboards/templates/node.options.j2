@@ -1,0 +1,7 @@
+# Managed by ansible/roles/opensearch-dashboards (#1180, epic .github#267). One Node option
+# per line (the OpenSearch Dashboards launcher reads this file into NODE_OPTIONS). Bounds the
+# Dashboards Node old-space heap so it coexists with the two obs JVMs (OpenSearch 2g heap,
+# Data Prepper 512m heap) and the Go services (Prometheus/Grafana/Loki + exporter) on the
+# shared 10 GB obs node without OOM (spec §5.4). Static + install-time => bakeable, mirroring
+# opensearch_dashboards.yml. See docs/reports/2026-09-28-obs-coexistence-jvm-budget.md.
+--max-old-space-size={{ opensearch_dashboards_max_old_space_mb }}
