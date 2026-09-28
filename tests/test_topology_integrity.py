@@ -174,8 +174,11 @@ def test_logsearch_node_and_box_group_retired():
 
 
 def test_obs_absorbed_the_logsearch_tier():
-    """obs runs the whole observability platform now (metrics + logs) — sized to the
-    combined 4 vCPU / 10 GB figure (spec §5.1), still mgmt-plane only."""
+    """obs runs the whole observability platform now (metrics + logs), still mgmt-plane
+    only. Sized at >= 8 vCPU (#1186): VAL #1177 proved the combined-figure 4 vCPU
+    (spec §5.1's starting point) is CPU-starved during observe — Grafana's plugin
+    backends timed out and were killed before the log JVMs even started (memory fine).
+    Deliberately over-allocated; the hypervisor time-slices across the lab's nodes."""
     import yaml
 
     from mqlab.paths import repo_root
@@ -183,7 +186,9 @@ def test_obs_absorbed_the_logsearch_tier():
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     obs = topo["nodes"]["obs"]
     assert obs["platform"] == "obs-ubuntu2404"
-    assert obs["cpus"] == 4
+    assert obs["cpus"] >= 8, (
+        "obs must have >= 8 vCPU for the consolidated observability stack (#1186)"
+    )
     assert obs["memory"] == 10240
     assert set(obs["nics"]) == {"net-mgmt"}
 
