@@ -19,11 +19,16 @@
     mode: "0644"
   become: true
 
-# REST API on this QM — the every-QM hard requirement (design §1), via the shared
-# mqweb role (de-duped from this role's former inline mqweb steps).
+# REST API on this QM — via the shared mqweb role (de-duped from this role's former
+# inline mqweb steps). Gated on `mqweb_enabled` (default off): per-node mqweb was retired
+# on 2-vCPU nested-virt (#1171 gated the 8 HA/DR stack plays' `roles: [mqweb]`), but this
+# `mq-qmgr` include stayed ungated so svc-sim's SVCQM still ran a per-node mqweb. With the
+# flag off, no node runs per-node mqweb; the role stays in place so `mqweb_enabled: true`
+# brings it back (#1188).
 - name: enable the admin REST API (mqweb)
   ansible.builtin.include_role:
     name: mqweb
+  when: mqweb_enabled | default(false)
 
 - name: enable + start the queue-manager service
   ansible.builtin.systemd:
