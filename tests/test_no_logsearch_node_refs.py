@@ -46,12 +46,22 @@ def _contains_retired_ip(text: str) -> bool:
 
 
 def _runtime_files() -> list:
-    """Every file under the runtime roots (text read with errors ignored downstream)."""
+    """Every runtime SOURCE/config file under the runtime roots.
+
+    Excludes compiled Python artifacts (``__pycache__`` dirs, ``.pyc``/``.pyo``): a
+    stale ``src/mqlab/__pycache__/logsearch.cpython-*.pyc`` from the pre-consolidation
+    ``logsearch.py`` still carried the old ``10.50.0.4`` literal in its bytecode and
+    false-tripped this guard on a checkout that had it cached, though the source is
+    clean (#1184). We scan source/config, never build artifacts.
+    """
     files: list = []
     for root in _RUNTIME_ROOTS:
         for path in (repo_root() / root).rglob("*"):
-            if path.is_file():
-                files.append(path)
+            if not path.is_file():
+                continue
+            if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
+                continue
+            files.append(path)
     return files
 
 
@@ -62,6 +72,17 @@ def test_ip_matcher_matches_exact_literal_only():
     assert not _contains_retired_ip("net-mgmt: 10.50.0.41")  # rdqm-b1 — must NOT trip
     assert not _contains_retired_ip("net-mgmt: 10.50.0.2")  # obs — the retarget target
     assert not _contains_retired_ip("no ip here at all")
+
+
+def test_runtime_scan_excludes_compiled_artifacts():
+    # Guard the guard (#1184): the scan must never read __pycache__/*.pyc. A stale
+    # bytecode cache of the pre-consolidation logsearch.py carried the retired
+    # 10.50.0.4 literal and false-tripped the IP check on a checkout that had it.
+    scanned = _runtime_files()
+    assert scanned, "runtime scan returned no files — runtime roots mis-resolved?"
+    assert all(
+        "__pycache__" not in p.parts and p.suffix not in {".pyc", ".pyo"} for p in scanned
+    ), "runtime-file scan must exclude compiled Python artifacts (#1184)"
 
 
 def test_no_retired_logsearch_ip_literal_in_runtime_paths():
