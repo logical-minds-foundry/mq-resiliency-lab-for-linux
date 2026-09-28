@@ -30,7 +30,13 @@ opensearch_data_dir: /var/lib/opensearch
 # path.repo — the native _snapshot filesystem repository dir (snapshot spike decision).
 opensearch_repo_dir: /var/lib/opensearch/snapshots
 opensearch_user: opensearch
-opensearch_heap: "2g"                 # JVM heap (tunable; node is sized ~6-8 GB, spec §5)
+# JVM heap (-Xms=-Xmx via the jvm.options.d drop-in). COEXISTENCE CAP (#1180, epic
+# .github#267): OpenSearch otherwise defaults to ~50 % of RAM (~5 GB on the 10 GB obs node),
+# which would starve the co-located services. It is pinned at 2g — the primary log store's
+# working floor — and budgeted alongside Data Prepper (512m), Dashboards' Node old-space
+# (1024m), and the Go services + OS so the six services coexist in 10 GB with margin. See
+# docs/reports/2026-09-28-obs-coexistence-jvm-budget.md.
+opensearch_heap: "2g"
 opensearch_http_port: 9200
 # The logsearch node carries a mgmt-only NIC (topology, later #149 task), so binding all
 # interfaces is effectively mgmt-plane-only exposure (spec §10) — no baked-in IP literal.
