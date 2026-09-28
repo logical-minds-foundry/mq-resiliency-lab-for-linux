@@ -37,7 +37,13 @@ data_prepper_home: /usr/share/data-prepper
 # dir must be writable by the service user (else logging would fail silently).
 data_prepper_data_dir: /var/lib/data-prepper
 data_prepper_user: data-prepper
-data_prepper_heap: "1g"                 # JVM heap, passed via JAVA_OPTS (node sized ~6-8 GB)
+# JVM heap, passed via JAVA_OPTS (-Xms=-Xmx). COEXISTENCE CAP (#1180, epic .github#267):
+# the obs consolidation puts Data Prepper on the shared 10 GB obs node beside OpenSearch (2g
+# heap), Dashboards' Node runtime, and the Go services (Prometheus/Grafana/Loki + exporter).
+# Data Prepper is a lightweight OTLP->parse_json->OpenSearch forwarder, so its heap is capped
+# down from the old standalone 1g to 512m to return headroom to the shared budget without
+# starving the connector. See docs/reports/2026-09-28-obs-coexistence-jvm-budget.md.
+data_prepper_heap: "512m"
 
 # --- pipeline knobs (proven end-to-end by the connector spike) ---
 # otel_logs_source gRPC port. Default DP logs port; the value #831's Alloy fan-out

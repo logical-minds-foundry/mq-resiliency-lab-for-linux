@@ -18,6 +18,32 @@ opensearch_dashboards_url: "https://artifacts.opensearch.org/releases/bundle/ope
 opensearch_dashboards_home: /usr/share/opensearch-dashboards
 opensearch_dashboards_user: opensearch-dashboards
 
+# --- coexistence: Node heap cap (#1180, epic .github#267) ------------------------------
+# The obs consolidation co-locates Dashboards' Node runtime on the shared 10 GB obs node
+# with two JVMs (OpenSearch 2g heap, Data Prepper 512m heap) and the Go services
+# (Prometheus/Grafana/Loki + exporter). Node otherwise sizes its old-space heap from the
+# machine's total RAM, so on the shared box it must be bounded explicitly. Written to
+# config/node.options (the canonical OSD Node-options mechanism; one option per line) so the
+# old-space heap is capped and the memory circuit-breaker (a % of max-old-space-size)
+# tracks it. See docs/reports/2026-09-28-obs-coexistence-jvm-budget.md.
+opensearch_dashboards_max_old_space_mb: 1024
+
+# --- nested-virt migration/timeout hardening (#1180, kills the #249 deadlock) ----------
+# Dashboards' request to OpenSearch defaults to a 30 s `opensearch.requestTimeout`. Under
+# nested-virt (arm64-on-macOS) slowness that request timed out MID saved-objects migration,
+# half-creating `.kibana_1` and then deadlocking forever ("Another OpenSearch Dashboards
+# instance appears to be migrating…") — the observed epic #249 failure. Raise the client and
+# shard timeouts to the nested reality so the migration's requests cannot time out mid-flight.
+# NOTE: OpenSearch Dashboards (a Kibana 7.10.2 fork) has NO `migrations.retryAttempts` key
+# (that is a later-Kibana setting; OSD fatally rejects unknown config keys). The real migration
+# budget knob here is `migrations.scrollDuration` — the scroll keepalive for the per-batch reads
+# of the migration — widened from the 15m default so a slow migration's scroll context cannot
+# expire between batches. requestTimeout is the direct fix; scrollDuration + shardTimeout are
+# belt-and-suspenders alongside the faster responses the bigger consolidated node yields.
+opensearch_dashboards_request_timeout_ms: 120000
+opensearch_dashboards_shard_timeout_ms: 120000
+opensearch_dashboards_migrations_scroll_duration: "30m"
+
 # --- server binding (spec §10: mgmt-plane-only) ---------------------------------------
 # server.host binds the Dashboards HTTP listener. The logsearch node carries a mgmt-only
 # NIC (topology, later #149 task), so binding all interfaces is effectively mgmt-plane-only

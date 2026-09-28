@@ -4,6 +4,15 @@ server.host: "{{ opensearch_dashboards_server_host }}"
 server.port: {{ opensearch_dashboards_server_port }}
 opensearch.hosts: {{ opensearch_dashboards_opensearch_hosts }}
 
+# Nested-virt migration/timeout hardening (#1180, epic .github#267). The default 30 s
+# opensearch.requestTimeout fired mid saved-objects migration under arm64-on-macOS slowness
+# (#249), half-creating `.kibana_1` and deadlocking. Raise the client + shard request timeouts
+# and widen the migration scroll keepalive so the migration completes. See the role defaults
+# and docs/reports/2026-09-28-obs-coexistence-jvm-budget.md. (OSD has no migrations.retryAttempts.)
+opensearch.requestTimeout: {{ opensearch_dashboards_request_timeout_ms }}
+opensearch.shardTimeout: {{ opensearch_dashboards_shard_timeout_ms }}
+migrations.scrollDuration: "{{ opensearch_dashboards_migrations_scroll_duration }}"
+
 {% if opensearch_dashboards_security_enabled | bool %}
 # security-on posture (follow-on #819): authenticate to OpenSearch with the admin seam.
 # NOTE: enabling this baked path with a real credential requires moving the secret to a

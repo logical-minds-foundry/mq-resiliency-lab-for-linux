@@ -71,6 +71,19 @@
     mode: "0640"
   notify: restart opensearch-dashboards
 
+# Coexistence heap cap (#1180, epic .github#267): bound the Node old-space heap so Dashboards
+# coexists with the two obs JVMs + the Go services in the shared 10 GB obs node (spec §5.4).
+# config/node.options is the canonical OSD Node-options mechanism (the launcher reads it into
+# NODE_OPTIONS); static + install-time => bakeable, mirroring opensearch_dashboards.yml above.
+- name: deploy the static node.options (Node old-space heap cap)
+  ansible.builtin.template:
+    src: node.options.j2
+    dest: "{{ opensearch_dashboards_home }}/config/node.options"
+    owner: "{{ opensearch_dashboards_user }}"
+    group: "{{ opensearch_dashboards_user }}"
+    mode: "0640"
+  notify: restart opensearch-dashboards
+
 - name: install the systemd unit (INERT — not enabled/started here; configure half owns that)
   ansible.builtin.copy:
     dest: /etc/systemd/system/opensearch-dashboards.service
