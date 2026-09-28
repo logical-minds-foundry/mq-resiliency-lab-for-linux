@@ -14,9 +14,11 @@
 #   * fan-out is cleanly INERT when the file is absent (logsearch not brought up) —
 #     the lookup tolerates a missing file and defaults to OFF.
 #
-# The gate file shape: {"enabled": true, "endpoint": "<logsearch-mgmt-ip>:21892"}.
-# The endpoint is the logsearch node's mgmt IP + Data Prepper's OTLP/gRPC logs port,
-# derived from topology by mqlab (never hardcoded here).
+# The gate file shape: {"enabled": true, "endpoint": "<obs-mgmt-ip>:21892"}.
+# The endpoint is the obs node's mgmt IP + Data Prepper's OTLP/gRPC logs port (the
+# log-search tier was consolidated onto obs, #1179), derived from topology by mqlab
+# (never hardcoded here). It stays a routable IP, NOT localhost: Alloy on every fleet
+# node ships to Data Prepper on obs across the mgmt plane.
 #
 # A missing file is a LEGITIMATE state (logsearch not deployed — not a hidden error).
 # `errors='ignore'` returns None (NOT '') for a missing file, and `None | length`

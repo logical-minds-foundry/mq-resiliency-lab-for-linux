@@ -45,7 +45,6 @@ from mqlab.phases import (
     PHASES,
     _commons_members,
     _host_mqlab,
-    _logsearch_members,
     _non_mq_commons_hosts,
     all_vms,
     build_states,
@@ -686,8 +685,9 @@ def _logsearch_fanout_path() -> Path:
 
 def _render_logsearch_fanout() -> Path:
     """Write build/work/logsearch/fanout.json enabling fleet-wide Alloy->OpenSearch
-    fan-out at the topology-derived Data Prepper endpoint (logsearch mgmt IP : 21892).
-    Mirrors _render_reach_peers — the idiomatic 'rendered gate file' seam."""
+    fan-out at the topology-derived Data Prepper endpoint (obs mgmt IP : 21892 — the
+    log-search tier was consolidated onto obs in #1179). Mirrors _render_reach_peers —
+    the idiomatic 'rendered gate file' seam."""
     import json as _json
 
     import yaml as _yaml
@@ -844,10 +844,16 @@ def _obs_up_steps() -> list[CommandStep]:
 
     watcher_dashboard_path().write_text(lab_watcher_dashboard())
 
+    # The fleet-wide Alloy->OpenSearch fan-out gate (#832): its endpoint is Data Prepper
+    # on obs (log-search tier consolidated onto obs, #1179). Rendered eagerly here — like
+    # the targets/inventory above — so group_vars/all/logsearch.yml reads it and turns the
+    # fan-out ON when site-obs.yml runs. Its absence leaves fan-out cleanly inert.
+    gate = _render_logsearch_fanout()
+
     return [
         CommandStep(
-            "render targets + inventory + dashboard",
-            Command(["echo", f"rendered -> {targets}, {inv}, {dash}"]),  # noqa: S607
+            "render targets + inventory + dashboard + fan-out gate",
+            Command(["echo", f"rendered -> {targets}, {inv}, {dash}, {gate}"]),  # noqa: S607
         ),
         CommandStep(
             "monitoring create",
@@ -858,9 +864,18 @@ def _obs_up_steps() -> list[CommandStep]:
         CommandStep(
             "provision monitoring",
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
-            # picked up — matches dr-provision.sh.
+            # picked up — matches dr-provision.sh. opensearch_snapshot_state_dir threads the
+            # host-durable snapshot bucket so the folded OpenSearch configure (#1179) restores
+            # the last snapshot on bring-up; empty (role default) is a clean no-op.
             Command(
-                ["ansible-playbook", "site-obs.yml", *_obs_exporter_args(), *_obs_manifest_args()],  # noqa: S607
+                [
+                    "ansible-playbook",
+                    "site-obs.yml",
+                    *_obs_exporter_args(),
+                    *_obs_manifest_args(),
+                    "-e",
+                    f"opensearch_snapshot_state_dir={state('logsearch')}",
+                ],  # noqa: S607
                 cwd=repo_root() / "ansible",
             ),
         ),
@@ -965,59 +980,10 @@ def _commons_up_steps() -> list[CommandStep]:
                 ),
             )
         )
-    # logsearch tier (#832): a sibling of obs, brought up AFTER it. Appended last so the
-    # obs box + probe exporters (site-obs.yml) land first; then the fan-out gate is
-    # rendered and the logsearch node stood up so subsequent per-stack observe runs fan
-    # the same corpus out to OpenSearch (spec §6/§13). Skipped cleanly when the topology
-    # carries no logsearch tier — the tier is optional.
-    steps += _logsearch_up_steps()
+    # The log-search tier (OpenSearch + Dashboards + Data Prepper) was consolidated onto obs
+    # (#1179): it now comes up as part of _obs_up_steps() above — the fan-out gate is rendered
+    # there and site-obs.yml runs the folded log-stack configure. No separate bring-up.
     return steps
-
-
-def _logsearch_up_steps() -> list[CommandStep]:
-    """Bring-up steps for the logsearch tier (#832), or [] when the topology carries no
-    logsearch node. Ordered: render the fan-out gate file, `vagrant up logsearch`, then
-    the per-run configure play (site-logsearch.yml). The play passes
-    `opensearch_snapshot_state_dir` = the host-durable state bucket (opensearch role
-    seam) so a rebuild restores the last snapshot; empty would be a clean no-op.
-
-    The fan-out gate is rendered eagerly here (like _obs_up_steps renders its targets/
-    inventory at build time) so its endpoint is the topology-derived logsearch mgmt IP.
-    """
-    if not _logsearch_members():
-        return []
-
-    gate = _render_logsearch_fanout()
-    snapshot_state_dir = state("logsearch")
-    return [
-        CommandStep(
-            "render logsearch fan-out gate",
-            Command(["echo", f"rendered fleet-wide fan-out gate -> {gate}"]),  # noqa: S607
-        ),
-        CommandStep(
-            "logsearch create",
-            Command(  # noqa: S607
-                ["vagrant", "up", "logsearch"],
-                cwd=repo_root() / "lab",
-                env=_vagrant_env(),
-            ),
-        ),
-        CommandStep(
-            "provision logsearch",
-            # bare filename, run from ansible/ so ansible.cfg (inventory path) applies —
-            # matches the site-obs.yml provision step.
-            Command(
-                [
-                    "ansible-playbook",
-                    "site-logsearch.yml",
-                    "-e",
-                    f"opensearch_snapshot_state_dir={snapshot_state_dir}",
-                    *_obs_manifest_args(),
-                ],
-                cwd=repo_root() / "ansible",
-            ),
-        ),
-    ]
 
 
 @commons_app.command("up")
@@ -1031,8 +997,8 @@ def commons_up(step: _StepFlag = False) -> None:
 @commons_app.command("status")
 def commons_status() -> None:
     """Show commons health (topology joined with live virsh state)."""
-    # logsearch is a shared-tier sibling of obs (#832) — surface it here too.
-    guests = _commons_members() + _logsearch_members()
+    # The log-search tier rides the obs node now (#1179) — obs is already in commons.
+    guests = _commons_members()
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("commons-status", timestamp)
     try:
@@ -1045,14 +1011,13 @@ def commons_status() -> None:
 
 @commons_app.command("down")
 def commons_down(step: _StepFlag = False) -> None:
-    """Destroy all commons VMs (obs + probe + svc + app + logsearch)."""
-    # Remove the fan-out gate file so fleet-wide Alloy fan-out reverts to inert once the
-    # logsearch node is gone — a subsequent observe run must not fan out to a torn-down
-    # Data Prepper endpoint (#832). work/ is regenerated, so deleting the render is safe.
-    if _logsearch_members():
-        _logsearch_fanout_path().unlink(missing_ok=True)
-    # logsearch is reclaimed with the shared tier (a sibling of obs, #832).
-    members = _commons_members() + _logsearch_members()
+    """Destroy all commons VMs (obs + probe + svc + app)."""
+    # Remove the fan-out gate file so fleet-wide Alloy fan-out reverts to inert once obs is
+    # gone — a subsequent observe run must not fan out to a torn-down Data Prepper endpoint
+    # (#832; log-search tier consolidated onto obs, #1179). work/ is regenerated, so
+    # deleting the render is safe.
+    _logsearch_fanout_path().unlink(missing_ok=True)
+    members = _commons_members()
     _execute_stateful("commons-down", members, _plan_destroy, step_mode=step)
 
 
@@ -1077,7 +1042,6 @@ _LOCAL_BOX_BUILDERS = {
     "mq-nativeha-rhel9": "lab/boxes/build-fatbox.sh",
     "mq-nativeha-ubuntu": "lab/boxes/build-fatbox.sh",
     "pcmk-ubuntu": "lab/boxes/build-fatbox.sh",
-    "logsearch-ubuntu2404": "lab/boxes/build-fatbox.sh",
 }
 
 
@@ -2113,13 +2077,12 @@ def _bootstrap_run(
                 _ensure_prereqs_for_stack(stack, phase, step=step)
                 steps = phase.build_steps(stack, deps, no_dr=no_dr)
                 if phase.name == "observe":
-                    # logsearch is a CORE observability layer (#1018), not opt-in: render
-                    # the fan-out gate + provision the tier at the FRONT of observe, before
-                    # this phase configures Alloy — so the fleet ships to a live OpenSearch
-                    # instead of hot-looping into a disk-fill. The VM is booted by the vms
-                    # phase (all_vms includes logsearch); the vagrant-up here is then an
-                    # idempotent no-op. Empty list when the topology has no logsearch tier.
-                    steps = _logsearch_up_steps() + steps
+                    # The log-search tier is a CORE observability layer (#1018) and now rides
+                    # the obs node (#1179): its bring-up is folded into site-obs.yml (run by
+                    # the observe steps). Render the fleet-wide Alloy->OpenSearch fan-out gate
+                    # here, before this phase configures Alloy, so the fleet ships to a live
+                    # (obs) Data Prepper instead of hot-looping into a disk-fill.
+                    _render_logsearch_fanout()
                 run_steps(
                     steps,
                     runner=deps.runner,

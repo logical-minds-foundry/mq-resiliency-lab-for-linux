@@ -68,12 +68,13 @@ def test_local_box_builders_registry_covers_base_and_fat_boxes():
     for fat in (
         "mq-rdqm-rhel9",
         "obs-ubuntu2404",
-        "logsearch-ubuntu2404",
         "infra-ubuntu2404",
         "mq-ubuntu2404",
         "mq-nativeha-rhel9",
     ):
         assert reg[fat].endswith("build-fatbox.sh")
+    # The standalone logsearch-ubuntu2404 box was retired (#1179) — folded into obs.
+    assert "logsearch-ubuntu2404" not in reg
 
 
 def test_box_build_steps_passes_box_flag_for_fatbox(monkeypatch, tmp_path):
@@ -135,11 +136,10 @@ def test_unknown_box_dies():
     assert "no-such-box" in (result.stderr + result.stdout)
 
 
-def test_logsearch_box_accepted_by_builder(tmp_path):
-    # #952: the logsearch-ubuntu2404 box is registered in the Python FLEET (#830) but
-    # build-fatbox.sh carries its OWN --box allowlist that had drifted — the box was
-    # rejected with "unknown --box", so the tier could not be baked at all. A clean-cache
-    # --dry-run must now be ACCEPTED (decision BUILD), proving the case arm exists.
+def test_logsearch_box_rejected_by_builder(tmp_path):
+    # The log-search tier was consolidated onto obs (#1179): the logsearch-ubuntu2404 case
+    # arm was removed from build-fatbox.sh's --box allowlist, so the retired box name must
+    # now be REJECTED (unknown --box) rather than baked.
     result = _run(
         "--box",
         "logsearch-ubuntu2404",
@@ -152,9 +152,8 @@ def test_logsearch_box_accepted_by_builder(tmp_path):
         "--dry-run",
         cache_dir=tmp_path / "boxes",
     )
-    assert result.returncode == 0, result.stderr
-    assert "unknown --box" not in (result.stderr + result.stdout)
-    assert "BUILD" in result.stdout
+    assert result.returncode != 0
+    assert "logsearch-ubuntu2404" in (result.stderr + result.stdout)
 
 
 def test_missing_domain_type_dies():
@@ -313,16 +312,6 @@ def test_manifest_hash_covers_ubuntu_ha_boxes():
     assert _manifest_hash("mq-nativeha-ubuntu") != _manifest_hash("pcmk-ubuntu")
 
 
-def test_manifest_hash_covers_logsearch_box():
-    # #952 (same #649-class guard): the logsearch-ubuntu2404 -> logsearch stem map must
-    # fire (not an unknown-box error, not a silent empty digest), digesting its own
-    # bake-logsearch.yml + role closure — a deterministic 64-char, box-specific hash.
-    h = _manifest_hash("logsearch-ubuntu2404")
-    assert len(h) == 64
-    assert h == _manifest_hash("logsearch-ubuntu2404")  # deterministic
-    assert h != _manifest_hash("obs-ubuntu2404")  # its own bake playbook enters the hash
-
-
 def test_manifest_hash_requires_a_box():
     result = subprocess.run(  # noqa: S603
         ["bash", str(_MANIFEST)], capture_output=True, text=True, check=False
@@ -467,7 +456,7 @@ def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
 # box). The fix folds the pin CONTENT into the digest, but ONLY for the        #
 # MQ-bearing boxes (those that bake an MQ install: mq-nativeha-rhel9,          #
 # mq-nativeha-ubuntu, mq-ubuntu2404, mq-rdqm-rhel9); the MQ-version-           #
-# independent commons boxes (obs/infra/logsearch, pcmk) must stay REUSE across #
+# independent commons boxes (obs/infra, pcmk) must stay REUSE across          #
 # a pin bump so a version change doesn't spuriously rebake them.               #
 # --------------------------------------------------------------------------- #
 def _fake_bake_repo_with_pin(tmp_path: Path) -> Path:

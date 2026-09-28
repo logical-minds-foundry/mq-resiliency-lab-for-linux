@@ -37,7 +37,7 @@ import yaml
 from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
 from mqlab.orchestrator import CommandStep, RetryPolicy
-from mqlab.paths import lab_script, repo_root
+from mqlab.paths import lab_script, repo_root, state
 from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
@@ -100,25 +100,11 @@ def _commons_members() -> list[str]:
     return members
 
 
-# The Ansible group the logsearch node lives in (topology #830/#832). Named `_box`
-# (not `logsearch`) so the group name never collides with the host named `logsearch`
-# — the same convention as obs_box vs the obs host (Ansible warns on group==host).
-_LOGSEARCH_GROUP = "logsearch_box"
-
-
-def _logsearch_members() -> list[str]:
-    """Hosts of the logsearch tier (topology group `logsearch_box`), or [] when the
-    group is absent (a lab whose topology carries no logsearch node).
-
-    Kept as its own group (not folded into the commons groups), but logsearch is a
-    CORE observability layer (#1018): all_vms() includes it, so every `bootstrap`
-    boots and provisions it. It was originally opt-in (#832), but Alloy on every node
-    ships to it unconditionally — an always-shipping producer needs an always-present
-    consumer, or the fan-out hot-loops into a disk-fill. Read from topology the same
-    way _commons_members reads a group's hosts, so there is one source of truth.
-    """
-    all_groups: dict[str, list[str]] = _topology().get("groups") or {}
-    return list(all_groups.get(_LOGSEARCH_GROUP) or [])
+# The log-search tier (OpenSearch + Dashboards + Data Prepper) no longer has a node or
+# group of its own: it was consolidated onto the obs node (#1179, epic .github#267), so
+# those services ride the obs_box commons group and come up with the rest of commons.
+# `all_vms()` therefore no longer needs a separate logsearch member set — obs is already
+# in `_commons_members()`.
 
 
 # Commons groups that run no MQ — infrastructure-only nodes (DNS + core services,
@@ -144,14 +130,14 @@ def all_vms(stack: Stack, *, no_dr: bool = False) -> list[str]:
 
     Under `no_dr` (#188) the members are the EFFECTIVE (site-A) set — the stack's
     `dr_groups` hosts are excluded — so the guest-enumerating phases (vms/provision-
-    dns/observe `--limit`) target only the HA site. Commons AND the logsearch tier are
-    always included (site-independent core layers): commons are shared/CPU-cheap, and
-    logsearch is a core observability layer (#1018) — Alloy ships to it unconditionally,
-    so it must come up on every bootstrap. Default `no_dr=False` keeps the full HADR set.
+    dns/observe `--limit`) target only the HA site. Commons are always included
+    (site-independent core layers, shared/CPU-cheap) — and since the log-search tier was
+    consolidated onto obs (#1179), the whole observability platform (metrics + logs) comes
+    up with commons via obs_box. Default `no_dr=False` keeps the full HADR set.
     """
     members = stack_members_effective(stack.name, no_dr=no_dr) or []
     vms = list(members)
-    for host in _commons_members() + _logsearch_members():
+    for host in _commons_members():
         if host not in vms:
             vms.append(host)
     return vms
@@ -581,8 +567,9 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
     — the render happens when the runner executes the step. The obs playbook runs
     with this stack's #351 QM extra-vars so the exporters target the right QM.
 
-    Two playbooks (#381): site-obs.yml stands up the obs box (prometheus/grafana)
-    + the probe's MQ exporters; observability.yml instruments the cluster NODES
+    Two playbooks (#381): site-obs.yml stands up the obs box — prometheus/grafana +
+    the log-search tier (OpenSearch/Dashboards/Data Prepper, consolidated onto obs in
+    #1179) + the probe's MQ exporters; observability.yml instruments the cluster NODES
     with node-exporter + the per-mechanism state collector (cluster-state /
     nativeha-state / rdqm-state) whose textfiles feed the `cluster_*` cockpit
     metrics. observability.yml is `hosts: all`, so it is --limited to THIS stack's
@@ -612,6 +599,11 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
                     "site-obs.yml",
                     "-e",
                     f"@{mq_exporters_path()}",
+                    # The log-search tier's OpenSearch configure (folded into site-obs.yml,
+                    # #1179) restores the last host-durable snapshot on bring-up; empty (the
+                    # role default) makes that a clean, logged no-op (opensearch role seam).
+                    "-e",
+                    f"opensearch_snapshot_state_dir={state('logsearch')}",
                     *_qm_extra_vars(stack),
                 ],
                 cwd=ansible,

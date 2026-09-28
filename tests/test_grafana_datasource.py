@@ -6,9 +6,13 @@ log-search tier: it **renders** `roles/grafana/templates/datasource.yml.j2` with
 representative `logsearch_mgmt_ip`, parses the YAML, and asserts the OpenSearch
 datasource is wired exactly as #169 Wave 1b will reference it.
 
+Since the log-search tier was consolidated onto obs (#1179, epic .github#267), OpenSearch
+is co-located with Grafana, so the datasource default reaches it at `localhost` (like
+Prometheus/Loki) — the cross-node mgmt-plane hop to the old `logsearch` node is gone.
+
 Why this matters concretely: the OpenSearch datasource's `uid` is a pinned contract
 (`opensearch`) that dashboards reference by `{type: elasticsearch, uid: opensearch}`;
-if it drifts, or the URL loses the mgmt IP / `:9200`, or `OpenSearch` falls out of
+if it drifts, or the URL loses the host / `:9200`, or `OpenSearch` falls out of
 `deleteDatasources` (so a re-provision can't recreate it with the pinned uid — the
 #279 idempotence pattern), the tier silently fails to render its logs. The parse-only
 guard would not catch any of those.
@@ -24,10 +28,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE = REPO_ROOT / "ansible" / "roles" / "grafana" / "templates" / "datasource.yml.j2"
 
-# A representative logsearch mgmt IP. Matches the role default / topology static NIC,
-# but the test asserts the rendered URL against THIS value so it proves the variable is
-# actually interpolated (not that it happens to equal a hardcoded string).
-_MGMT_IP = "10.50.0.4"
+# The OpenSearch host the datasource points at. Since the tier is co-located on obs
+# (#1179), the role default is `localhost`; the test asserts the rendered URL against THIS
+# value so it proves the variable is actually interpolated (not a hardcoded string).
+_MGMT_IP = "localhost"
 
 
 def _render() -> dict:
@@ -62,7 +66,7 @@ def test_opensearch_datasource_is_pinned_and_plaintext() -> None:
     )
     assert os_ds["access"] == "proxy"
     assert os_ds["url"] == f"http://{_MGMT_IP}:9200", (
-        "URL must interpolate the logsearch mgmt IP and target plaintext :9200"
+        "URL must interpolate the OpenSearch host (localhost, co-located on obs) and target :9200"
     )
     # Plaintext posture (#827): no TLS, no credentials wired into the datasource.
     assert "basicAuth" not in os_ds

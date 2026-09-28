@@ -10,15 +10,17 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The lab bakes **eight fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
+The lab bakes **seven fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
 `infra-ubuntu2404`, and `mq-ubuntu2404` (#659) from the bootstrap-performance
 epic; `mq-nativeha-rhel9` (#667) from the follow-on native-HA-RHEL baking epic
-(`logical-minds-foundry/.github#88`); `mq-nativeha-ubuntu` (#103 T6) and
+(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu` (#103 T6) and
 `pcmk-ubuntu` (#103 T7) from the arch-native box-building epic
-(`logical-minds-foundry/.github#103`); and `logsearch-ubuntu2404` (#830) from the
-log-search epic (`logical-minds-foundry/.github#149`). Each carries, as a **baked
-golden image**, the slow install work that never varies per run, so a per-run
-bootstrap can skip it.
+(`logical-minds-foundry/.github#103`). The log-search stack (OpenSearch + Dashboards
++ Data Prepper, `logical-minds-foundry/.github#149`) was originally its own
+`logsearch-ubuntu2404` box, but the observability-consolidation epic
+(`logical-minds-foundry/.github#267`) folded it into `obs-ubuntu2404` (#1178) and
+retired the standalone box (#1179). Each box carries, as a **baked golden image**,
+the slow install work that never varies per run, so a per-run bootstrap can skip it.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -31,9 +33,8 @@ bootstrap can skip it.
 This document is the classification. The **bake playbooks**
 (`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
 `ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`,
-`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`,
-`ansible/bake-logsearch.yml`) and the single-host inventory
-(`ansible/inventory/bake-host.ini`) are the mechanism.
+`ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`) and the
+single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
@@ -81,10 +82,10 @@ the configure step, so the rule is: **bake the install half, leave the service
 inert** (unit present, not started), and let the per-run configure half drop the
 instance config and start it. This is why the split roles above bake only their
 install halves (e.g. `alloy` needs a per-run `config.alloy`; on the obs box
-`loki`/`prometheus`/`grafana` are started by `site-obs.yml`; and on the logsearch
-box `opensearch`/`opensearch-dashboards`/`data-prepper` are started — after their
-per-run renders (index template, snapshot repo, pipelines) — by
-`site-logsearch.yml`).
+`loki`/`prometheus`/`grafana` — and, since the log-search tier was consolidated onto
+obs (#1179), `opensearch`/`opensearch-dashboards`/`data-prepper`, after their per-run
+renders (index template, snapshot repo, pipelines) — are all started by
+`site-obs.yml`).
 
 Two services are the deliberate **benign exceptions**, left *enabled* at bake
 (#642) because they have no per-run config dependency and cannot boot in a broken
@@ -109,14 +110,25 @@ pre-config state:
 
 ### `obs-ubuntu2404` → `ansible/bake-obs.yml`
 
+Since the observability-consolidation epic (`logical-minds-foundry/.github#267`), this
+box bakes the **whole** observability platform: the metrics stack
+(Prometheus/Grafana/Loki + the `mq_prometheus` exporter) **and** the log-search stack
+(OpenSearch + Dashboards + Data Prepper), folded in from the retired
+`logsearch-ubuntu2404` box (#1178/#1179). All are baked **inert** (install half only):
+binaries/packages + static config + inert units are baked; service enable+start and every
+per-run render stay in `site-obs.yml`.
+
 | Role | In bake | Notes |
 |------|---------|-------|
 | `node-exporter` | ✅ full | All-install. |
-| `alloy` | ✅ install half | As above. |
+| `alloy` | ✅ install half | As above. On obs, alloy also carries the fleet-wide OpenSearch fan-out, gated per-run by `group_vars/all/logsearch.yml`. |
 | `loki` | ✅ full | All-install (loki binary + logcli + static config). |
 | `prometheus` | ✅ install half | Binary + **static** `prometheus.yml` + recording rules + unit baked; the topology-rendered `targets/{node,ibmmq}.json` (`mqlab obs targets` → `build/work/…`) stay per-run. |
-| `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. |
+| `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. Its OpenSearch datasource now points at `localhost` (co-located, #1179). |
 | `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install` for the runtime libs) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
+| `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
+| `data-prepper` | ✅ install half | JDK-bundled binary + data dir + static config + pipeline templates + inert unit baked; the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait stay per-run (#939). Its OpenSearch sink is `localhost:9200` (co-located). |
 
 ### `infra-ubuntu2404` → `ansible/bake-infra.yml`
 
@@ -196,24 +208,11 @@ stay host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a Pacemaker box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 
-### `logsearch-ubuntu2404` → `ansible/bake-logsearch.yml` (#830, epic .github#149)
-
-The log-search-tier box, for the single `logsearch` node (mgmt-plane only,
-`net-mgmt 10.50.0.4`) repointed to this box so a bootstrap skips the ~heavy
-OpenSearch/Dashboards/Data-Prepper install. Host-resolved: baked natively per host
-(arm64 or x86), guest arch not pinned. Every stack piece is baked **inert** — the
-binaries/packages + static config + inert systemd units are baked, but no service
-is enabled or started and no per-run render (index template, snapshot repo,
-live-endpoint pipelines) or credential seam is laid down; those all stay in the
-per-run configure path (`site-logsearch.yml`, #832).
-
-| Role | In bake | Notes |
-|------|---------|-------|
-| `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
-| `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. On the logsearch node alloy also carries the fleet-wide OpenSearch fan-out, gated per-run by `group_vars/all/logsearch.yml`. |
-| `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
-| `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
-| `data-prepper` | ✅ install half | JDK-bundled binary + data dir + static config + pipeline templates + inert unit baked; the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait stay per-run (#939). |
+> The log-search stack (`opensearch`, `opensearch-dashboards`, `data-prepper`)
+> formerly baked into a standalone `logsearch-ubuntu2404` box (`ansible/bake-logsearch.yml`,
+> #830). The observability-consolidation epic (`logical-minds-foundry/.github#267`)
+> folded those roles into `obs-ubuntu2404` (#1178) and retired the standalone box and its
+> bake playbook (#1179) — see the `obs-ubuntu2404` table above.
 
 ## Stays configure (per-run) — never baked
 

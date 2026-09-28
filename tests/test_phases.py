@@ -156,48 +156,31 @@ def test_first_unsatisfied_observe_gap(monkeypatch, tmp_path):
     assert first_unsatisfied(stack, states) == 3
 
 
-# --- logsearch membership (#1018): its own group, but a CORE observability layer ---
-# logsearch is kept as its own group (logsearch_box), NOT folded into the commons
-# groups — but it IS included in all_vms so every bootstrap boots + provisions it.
-# Alloy ships to it unconditionally, so an opt-in consumer (#832) let the fan-out
-# hot-loop into a disk-fill; observability is a requirement, not opt-in.
-
-_LOGSEARCH_TOPO = TOPO.replace(
-    "  app-client: {}\n",
-    "  app-client: {}\n  logsearch: {nics: {net-mgmt: 10.50.0.4}}\n",
-).replace(
-    "  app:     [app-client]\n",
-    "  app:     [app-client]\n  logsearch_box: [logsearch]\n",
-)
+# --- observability consolidation (#1179): the log-search tier rides obs, no own group ---
+# The log-search tier (OpenSearch + Dashboards + Data Prepper) was consolidated onto the
+# obs node (epic .github#267): the `logsearch` node / `logsearch_box` group are retired and
+# the separate `_logsearch_members` helper is gone. obs comes up with the rest of commons
+# (obs_box) and is therefore already part of all_vms via `_commons_members`.
 
 
-def test_logsearch_members_reads_logsearch_box_group(monkeypatch, tmp_path):
-    from mqlab.phases import _logsearch_members
+def test_logsearch_member_helper_is_retired(monkeypatch, tmp_path):
+    from mqlab import phases
 
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "lab" / "topology.yaml").write_text(_LOGSEARCH_TOPO)
-    assert _logsearch_members() == ["logsearch"]
+    _seed(tmp_path)
+    assert not hasattr(phases, "_logsearch_members")
+    assert not hasattr(phases, "_LOGSEARCH_GROUP")
 
 
-def test_logsearch_members_empty_when_group_absent(monkeypatch, tmp_path):
-    from mqlab.phases import _logsearch_members
-
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed(tmp_path)  # base TOPO has no logsearch_box group
-    assert _logsearch_members() == []
-
-
-def test_logsearch_in_all_vms_but_not_a_commons_member(monkeypatch, tmp_path):
-    # logsearch is its own group (never a commons member), yet all_vms includes it so
-    # every bootstrap boots + provisions the tier — a core observability layer (#1018).
+def test_obs_is_in_all_vms_via_commons(monkeypatch, tmp_path):
+    # obs (the consolidated observability node) rides the obs_box commons group, so
+    # all_vms includes it on every bootstrap without a separate logsearch member set.
     from mqlab.phases import _commons_members, all_vms
 
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "lab" / "topology.yaml").write_text(_LOGSEARCH_TOPO)
-    assert "logsearch" not in _commons_members()
-    assert "logsearch" in all_vms(lab_stacks()["pcmk-ubuntu"])
+    _seed(tmp_path)
+    assert "obs" in _commons_members()
+    assert "obs" in all_vms(lab_stacks()["pcmk-ubuntu"])
 
 
 # --- satisfied predicate edge branches ---

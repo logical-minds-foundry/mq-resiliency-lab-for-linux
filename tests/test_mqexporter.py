@@ -31,7 +31,7 @@ def test_needs_exporter_binary_true_for_exporter_boxes():
 
 def test_needs_exporter_binary_false_otherwise():
     assert not mqexporter.needs_exporter_binary([])
-    assert not mqexporter.needs_exporter_binary(["logsearch-ubuntu2404", "infra-ubuntu2404"])
+    assert not mqexporter.needs_exporter_binary(["pcmk-ubuntu", "infra-ubuntu2404"])
 
 
 def test_exporter_binary_path_is_under_cache_mq_exporter(tmp_path):

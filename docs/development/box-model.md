@@ -16,8 +16,8 @@ live on disk, see [`build-layout.md`](build-layout.md).
 
 ## 1. The nine local-built boxes
 
-The lab builds **nine boxes locally**: the bare `rhel/9.6-x86_64` base box plus
-**eight per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
+The lab builds **eight boxes locally**: the bare `rhel/9.6-x86_64` base box plus
+**seven per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
 carries only the install surface that role needs, nothing more. The taxonomy is
 **role × platform × host-arch**:
 
@@ -25,14 +25,13 @@ carries only the install surface that role needs, nothing more. The taxonomy is
 |-----|------|------|----------------------|-------|
 | `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
 | `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
-| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, plus the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime |
-| `logsearch-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `logsearch` | OpenSearch + OpenSearch Dashboards + Data Prepper + node-exporter + alloy |
+| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` |
 | `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
 
-**Host-resolved vs. arch-pinned.** The six Ubuntu fat boxes are **host-resolved**:
+**Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
 Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
 The two RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`) are **`x86_64`-only**;
@@ -148,7 +147,7 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
   BUILD on the next bootstrap while the commons boxes (`obs-ubuntu2404`,
-  `logsearch-ubuntu2404`, `infra-ubuntu2404`, and `pcmk-ubuntu`) stay REUSE — a
+  `infra-ubuntu2404`, and `pcmk-ubuntu`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
 - **Graduated age** — under 7 days: REUSE silently; 7–14 days: REUSE but emit a
   NOTICE to refresh; **14 days or older: REFUSE** (non-zero exit) demanding
@@ -173,7 +172,7 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all eight fat boxes (plus the base box, and
+  the BUILD path and re-bakes all seven fat boxes (plus the base box, and
   re-acquires the entitlement-gated state media). This is the only tier that pays
   the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;

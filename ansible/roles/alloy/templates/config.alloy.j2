@@ -100,8 +100,10 @@ loki.source.file "mqweb" {
 // #831 logsearch fan-out (gating spike #826, docs/reports/2026-07-29-alloy-opensearch-connector-spike.md).
 // Alloy has NO native Elasticsearch/OpenSearch exporter, so the "fan-out sink to
 // OpenSearch" is an OTLP/gRPC exporter aimed at a Data Prepper otel_logs_source;
-// Data Prepper (a separate component on the logsearch node, #830/#832) is what
-// writes to OpenSearch. This block ONLY adds a receive/export path — the existing
+// Data Prepper (co-located with OpenSearch on the obs node — the log-search tier was
+// consolidated onto obs, #1179) is what writes to OpenSearch. The fan-out endpoint is
+// obs's mgmt IP (a routable hop for every fleet node's Alloy), NOT localhost. This block
+// ONLY adds a receive/export path — the existing
 // loki.source.* blocks above forward here as a second target and the loki.write
 // "obs" path is left entirely alone (transport is a swappable boundary).
 otelcol.receiver.loki "opensearch_bridge" {   // Loki log entries -> OTLP logs (Alloy-native bridge)
