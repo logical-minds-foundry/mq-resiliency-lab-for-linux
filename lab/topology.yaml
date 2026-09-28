@@ -152,7 +152,12 @@ nodes:
   # counterparty QM across the inter-business WAN (#182). ---
   obs:
     platform: obs-ubuntu2404  # boot the baked obs stack (metrics + logs, #605/#1178); mgmt-plane only
-    cpus: 4
+    # 8 vCPU (#1186): the consolidated obs node runs the metrics stack (Prometheus/Grafana/
+    # Loki) AND the log stack (OpenSearch/Dashboards/Data Prepper). VAL #1177 proved 4 vCPU
+    # is CPU-starved during observe — Grafana's plugin backends timed out and were killed
+    # before the log JVMs even started (memory was fine). Deliberately over-allocated; the
+    # hypervisor time-slices, since the lab's nodes need CPU at different lifecycle moments.
+    cpus: 8
     memory: 10240
     nics: { net-mgmt: 10.50.0.2 }
   mon-probe:
