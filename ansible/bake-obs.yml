@@ -27,6 +27,10 @@
   tasks:
     # Fleet agents' binaries (same as every box). node-exporter is all-install;
     # alloy is split → install half only.
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
     - name: node metrics agent (node-exporter, full role — static config)
       ansible.builtin.include_role:
         name: node-exporter

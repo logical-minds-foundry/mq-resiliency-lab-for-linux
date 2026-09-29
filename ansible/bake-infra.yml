@@ -25,6 +25,10 @@
     # exception): static host-metrics exporter, no per-run config, races nothing, cannot
     # boot in a broken pre-config state. alloy is inert (install half only) — it needs a
     # per-run config.alloy, so its enable+start is deferred to the observe phase.
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
     - name: node metrics agent (node-exporter, full role — static config, enabled)
       ansible.builtin.include_role:
         name: node-exporter
