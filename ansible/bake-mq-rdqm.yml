@@ -59,6 +59,10 @@
     # the download/unpack cost per run. node-exporter is all-install (static config,
     # left enabled — benign exception); alloy is split, so only its install half
     # (binary + unit) is baked here (inert — it needs a per-run config.alloy).
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
     - name: node metrics agent (node-exporter, full role — static config, enabled)
       ansible.builtin.include_role:
         name: node-exporter

@@ -62,6 +62,10 @@
     # per-run config that races nothing and cannot boot in a broken pre-config state. alloy
     # is baked INERT — only its install half (binary + unit), NOT the service: it needs a
     # per-run config.alloy (rendered in the observe phase), so its enable+start is deferred.
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
     - name: node metrics agent (node-exporter, full role — static config, enabled)
       ansible.builtin.include_role:
         name: node-exporter

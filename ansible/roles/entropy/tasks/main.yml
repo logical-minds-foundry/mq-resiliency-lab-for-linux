@@ -1,0 +1,34 @@
+---
+# Entropy daemon — feed the kernel RNG pool on headless nested-virt VMs so Java's
+# SecureRandom never blocks during JVM cold-start.
+#
+# ROOT CAUSE (#1190, root-caused via systematic-debugging while driving VAL #1177):
+# the OpenSearch tarball's bundled JDK ships `securerandom.source=file:/dev/random` +
+# `securerandom.strongAlgorithms=NativePRNGBlocking`. On a headless nested-virt arm64 VM
+# with no hardware RNG and no entropy daemon, `bin/opensearch` wedges in its very first
+# helper — `org.opensearch.tools.launchers.TempDirectory` (mints a secure temp-dir name
+# BEFORE the node JVM launches) — blocked on `/dev/random`. That hangs the whole launcher:
+# no cluster log, never binds :9200, `jstack` can't attach, CPU burns going nowhere. The
+# helpers are invoked with minimal args and NEVER read `jvm.options`, so a
+# `-Djava.security.egd` line there cannot fix it — the fix must be OS-wide.
+#
+# A running entropy daemon keeps the kernel pool full so `/dev/random`/NativePRNGBlocking
+# never blocks. This is a general nested-virt JVM cold-start hazard (Liberty/mqweb is Java
+# too), so it is baked into EVERY box's baseline next to node-exporter.
+#
+# BAKED ENABLED (a #642 benign exception, like node-exporter/rdqm.service): entropy has no
+# per-run config, serves a pure system function from boot, races nothing, and MUST be up
+# before the observe/provision phases start their JVMs. So it is enabled+started at bake and
+# left running, rather than deferred to a per-run start.
+
+- name: install the entropy daemon (haveged on Debian, rng-tools on RedHat)
+  ansible.builtin.package:
+    name: "{{ entropy_pkg }}"
+    state: present
+
+- name: enable + start the entropy daemon
+  ansible.builtin.systemd:
+    name: "{{ entropy_service }}"
+    enabled: true
+    state: started
+    daemon_reload: true
