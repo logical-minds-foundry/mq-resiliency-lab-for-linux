@@ -21,10 +21,25 @@
 # before the observe/provision phases start their JVMs. So it is enabled+started at bake and
 # left running, rather than deferred to a per-run start.
 
-- name: install the entropy daemon (haveged on Debian, rng-tools on RedHat)
-  ansible.builtin.package:
+# Refresh the package cache in the SAME task as the install: a freshly-built bake box has
+# a stale/empty apt cache, so a bare `package` install fails with "No package matching
+# 'haveged' is available" even though haveged is in Ubuntu universe (VAL #1177 bake fail,
+# #1192). Every other apt-installing bake role does `update_cache: true` (loki, grafana,
+# pcmk-*); pcmk installs pacemaker — also universe — this way, proving universe is enabled.
+- name: install the entropy daemon (Debian — haveged from universe)
+  ansible.builtin.apt:
     name: "{{ entropy_pkg }}"
     state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: install the entropy daemon (RedHat — rng-tools from base)
+  ansible.builtin.dnf:
+    name: "{{ entropy_pkg }}"
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'RedHat'
 
 - name: enable + start the entropy daemon
   ansible.builtin.systemd:
