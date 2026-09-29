@@ -70,10 +70,13 @@ def test_entropy_role_installs_and_enables_a_daemon() -> None:
     """The entropy role must actually install a package AND enable+start its service —
     a role that only installs (never starts) leaves the pool unfed at boot."""
     tasks = yaml.safe_load((ENTROPY_ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
-    installs = any(
-        ("ansible.builtin.package" in t or "ansible.builtin.apt" in t or "package" in t)
-        for t in _iter_tasks(tasks)
-        if isinstance(t, dict)
+    apt = next(
+        (
+            t["ansible.builtin.apt"]
+            for t in _iter_tasks(tasks)
+            if isinstance(t, dict) and "ansible.builtin.apt" in t
+        ),
+        None,
     )
     svc = next(
         (
@@ -83,10 +86,28 @@ def test_entropy_role_installs_and_enables_a_daemon() -> None:
         ),
         None,
     )
-    assert installs, "entropy role must install the daemon package"
+    assert apt is not None, "entropy role must install the daemon on Debian via ansible.builtin.apt"
     assert svc is not None, "entropy role must manage the daemon via ansible.builtin.systemd"
     assert svc.get("state") == "started", "entropy daemon must be started at bake"
     assert svc.get("enabled") is True, "entropy daemon must be enabled (survive reboot) at bake"
+
+
+def test_entropy_debian_install_refreshes_apt_cache() -> None:
+    """The Debian install MUST refresh the apt cache (#1192): a freshly-built bake box has a
+    stale/empty cache, so a no-update install fails with 'No package matching haveged' even
+    though haveged is in universe. This guards that exact bake regression."""
+    tasks = yaml.safe_load((ENTROPY_ROLE / "tasks" / "main.yml").read_text(encoding="utf-8"))
+    apt = next(
+        (
+            t["ansible.builtin.apt"]
+            for t in _iter_tasks(tasks)
+            if isinstance(t, dict) and "ansible.builtin.apt" in t
+        ),
+        None,
+    )
+    assert apt is not None and apt.get("update_cache") is True, (
+        "entropy role's Debian apt install must set update_cache: true (#1192)"
+    )
 
 
 def test_entropy_daemon_is_distro_selected() -> None:
