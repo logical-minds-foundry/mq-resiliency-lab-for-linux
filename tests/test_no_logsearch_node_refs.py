@@ -115,10 +115,10 @@ def test_topology_has_no_logsearch_node_group_or_box():
 
 def test_obs_absorbed_the_logsearch_resources():
     # The consolidation grew obs to hold metrics + logs. Started at the combined 4 vCPU
-    # (spec §5.1) but VAL #1177 proved that CPU-starves observe, so obs is now >= 8 vCPU
-    # (#1186); memory stays at the combined 10 GB.
+    # (spec §5.1); VAL #1177 proved that CPU-starves observe, so obs grew to 8 (#1186) then
+    # 12 (#1194, alongside serializing the observe startup); memory stays at the combined 10 GB.
     obs = _topology()["nodes"]["obs"]
-    assert obs["cpus"] >= 8
+    assert obs["cpus"] >= 12
     assert obs["memory"] == 10240
 
 

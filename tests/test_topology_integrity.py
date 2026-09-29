@@ -186,8 +186,9 @@ def test_obs_absorbed_the_logsearch_tier():
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     obs = topo["nodes"]["obs"]
     assert obs["platform"] == "obs-ubuntu2404"
-    assert obs["cpus"] >= 8, (
-        "obs must have >= 8 vCPU for the consolidated observability stack (#1186)"
+    assert obs["cpus"] >= 12, (
+        "obs must have >= 12 vCPU for the consolidated observability stack (#1194: the "
+        "metrics + log tiers cold-start on one node; serialized startup + this over-allocation)"
     )
     assert obs["memory"] == 10240
     assert set(obs["nics"]) == {"net-mgmt"}

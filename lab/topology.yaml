@@ -152,12 +152,15 @@ nodes:
   # counterparty QM across the inter-business WAN (#182). ---
   obs:
     platform: obs-ubuntu2404  # boot the baked obs stack (metrics + logs, #605/#1178); mgmt-plane only
-    # 8 vCPU (#1186): the consolidated obs node runs the metrics stack (Prometheus/Grafana/
-    # Loki) AND the log stack (OpenSearch/Dashboards/Data Prepper). VAL #1177 proved 4 vCPU
-    # is CPU-starved during observe — Grafana's plugin backends timed out and were killed
-    # before the log JVMs even started (memory was fine). Deliberately over-allocated; the
-    # hypervisor time-slices, since the lab's nodes need CPU at different lifecycle moments.
-    cpus: 8
+    # 12 vCPU (#1194): the consolidated obs node runs the metrics stack (Prometheus/Grafana/
+    # Loki/Alloy) AND the log stack (OpenSearch/Dashboards/Data Prepper). VAL #1177 measured
+    # CPU saturation during observe (load ~27 on 8 cores; memory fine at ~1G/10G): the metrics
+    # Go services' startup burst (prometheus 154% + grafana 128% + loki 108% + alloy 70%)
+    # starved OpenSearch's JVM cold-start (37%) so it never reached green. The primary fix is
+    # serializing the observe startup (site-obs.yml: log tier before metrics, #1194); this bump
+    # to 12 adds headroom. Deliberately over-allocated — the host has 24 vCPU and in a 3+3
+    # topology only ~2 of 6 nodes are active at once, so the hypervisor time-slices freely.
+    cpus: 12
     memory: 10240
     nics: { net-mgmt: 10.50.0.2 }
   mon-probe:
