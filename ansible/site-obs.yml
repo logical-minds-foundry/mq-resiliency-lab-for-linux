@@ -62,9 +62,44 @@
     # §4.5.1) was removed — a blanket upgrade fights the pinned baked stack. OS currency
     # now comes from rebuilding the box, not updating at boot.
 
-    # loki is on the obs box ONLY and is not re-applied fleet-wide by observability.yml,
-    # so its per-run enable+start lives here (#642). A data store — bring it up before
-    # grafana's Loki datasource is queried.
+    # STARTUP ORDER IS LOAD-BEARING (#1194). The heavy log-tier JVM/Node cold-starts run
+    # FIRST, each gated to ready, on the still-idle node — THEN the light metrics Go services.
+    # VAL #1177 measured the reverse order CPU-starving OpenSearch: the metrics services'
+    # startup burst (prometheus 154% + grafana 128% + loki 108% + alloy 70%) pegged all cores
+    # while OpenSearch's JVM — which came last — got ~37% of one core and never reached green
+    # (load ~27 on 8 cores; memory fine). Because the three log-tier roles already carry
+    # readiness gates (OpenSearch: cluster green; Data Prepper: otel source accepting;
+    # Dashboards: /api/status green), ordering them first makes each heavy cold-start happen
+    # while the node is quiet, one at a time, before the metrics burst.
+
+    # --- Log-search tier FIRST (OpenSearch + Data Prepper + Dashboards), consolidated onto obs
+    # (#1179, epic .github#267; formerly the standalone site-logsearch.yml, hosts: logsearch
+    # #832). OpenSearch is the store the other two depend on — its configure enables+starts
+    # OpenSearch, waits for the cluster to go green, PUTs the `logs` index template (replicas:0,
+    # load-bearing on a single node), creates the `logsearch-fs` snapshot repo, and restores the
+    # last snapshot on bring-up (caller passes opensearch_snapshot_state_dir; empty = clean
+    # no-op). Then Data Prepper (sinks to localhost:9200, so AFTER OpenSearch + its template),
+    # then Dashboards (queries OpenSearch on localhost, so after the store). ---
+    - name: opensearch configure (per-run enable + start, index template, snapshot repo, restore)
+      ansible.builtin.include_role:
+        name: opensearch
+        tasks_from: configure
+
+    - name: data-prepper configure (per-run enable + start; sinks to localhost:9200)
+      ansible.builtin.include_role:
+        name: data-prepper
+        tasks_from: configure
+
+    - name: opensearch-dashboards configure (per-run enable + start; after opensearch)
+      ansible.builtin.include_role:
+        name: opensearch-dashboards
+        tasks_from: configure
+
+    # --- Metrics tier SECOND: the light Go services start fast and, with the heavy JVMs
+    # already up and gated-ready, their startup burst no longer starves a cold-starting JVM.
+    # loki is on the obs box ONLY and not re-applied fleet-wide by observability.yml, so its
+    # per-run enable+start lives here (#642); bring it up before grafana's Loki datasource is
+    # queried. node-exporter is re-applied fleet-wide by observability.yml — not repeated here. ---
     - name: loki configure (per-run enable + start)
       ansible.builtin.include_role:
         name: loki
@@ -90,30 +125,4 @@
     - name: grafana configure (per-run dashboard tree + admin-password secret)
       ansible.builtin.include_role:
         name: grafana
-        tasks_from: configure
-
-    # --- Log-search tier (OpenSearch + Dashboards + Data Prepper), consolidated onto obs
-    # (#1179, epic .github#267). Formerly the standalone site-logsearch.yml (hosts:
-    # logsearch, #832); now folded here so the whole observability platform (metrics + logs)
-    # comes up on the obs box in ONE configure sequence with localhost inter-service links.
-    # ORDER is load-bearing: OpenSearch first (the store the other two depend on) — its
-    # configure enables+starts OpenSearch, PUTs the `logs` index template (replicas:0, load-
-    # bearing on a single node), creates the `logsearch-fs` snapshot repo, and restores the
-    # last snapshot on bring-up (caller passes opensearch_snapshot_state_dir; empty = clean
-    # no-op). Then Data Prepper (sinks to localhost:9200, so AFTER OpenSearch + its template),
-    # then Dashboards (queries OpenSearch on localhost, so after the store). node-exporter is
-    # re-applied fleet-wide by observability.yml — not repeated here. ---
-    - name: opensearch configure (per-run enable + start, index template, snapshot repo, restore)
-      ansible.builtin.include_role:
-        name: opensearch
-        tasks_from: configure
-
-    - name: data-prepper configure (per-run enable + start; sinks to localhost:9200)
-      ansible.builtin.include_role:
-        name: data-prepper
-        tasks_from: configure
-
-    - name: opensearch-dashboards configure (per-run enable + start; after opensearch)
-      ansible.builtin.include_role:
-        name: opensearch-dashboards
         tasks_from: configure
