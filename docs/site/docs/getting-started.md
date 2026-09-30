@@ -70,13 +70,17 @@ host:
 
 ```bash
 ./scripts/setup     # checks uv + Python 3.14, then runs `uv sync` to build the venv
+. .venv/bin/activate   # put `mqlab` (and its companion tools) on PATH
 mqlab doctor        # pre-flight the host: arch, KVM, libvirt, and required tools
 ```
 
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
 a uv-managed Python 3.14 are present — installing 3.14 via `uv` if missing —
 runs `uv sync` to materialize the virtual environment, and prints the next
-commands. `mqlab doctor` then confirms the host can actually run the guests
+commands. It cannot change your shell's `PATH`, so activate the venv once per
+shell. The bare `mqlab` commands on this site assume it is active. (Prefixing
+each command with `uv run`, e.g. `uv run mqlab doctor`, works too.)
+`mqlab doctor` then confirms the host can actually run the guests
 before you commit to a bring-up.
 
 !!! note "After a Python-version bump"
