@@ -80,3 +80,13 @@ opensearch_dashboards_index_pattern: "logs-*"
 # Deterministic saved-object id makes the create idempotent (re-create returns 409 = present).
 opensearch_dashboards_index_pattern_id: "logs-star"
 opensearch_dashboards_time_field: "time"
+
+# --- post-green API call budget (#1214) -----------------------------------------------
+# The two idempotent post-green calls (index-pattern create, defaultIndex setting) can take
+# tens of seconds while Dashboards finishes startup work after /api/status reports green (a
+# cold-boot defaultIndex POST took ~50 s, past the uri module's default 30 s timeout). Give
+# each request an explicit generous timeout, and retry a slow/timed-out attempt (safe: both
+# calls are idempotent). Still fail-loud: the play aborts once the retry budget is spent.
+opensearch_dashboards_api_timeout_s: 120
+opensearch_dashboards_api_retries: 5
+opensearch_dashboards_api_retry_delay_s: 10
