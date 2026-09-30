@@ -64,6 +64,13 @@
 # (spec §2 non-goal). Idempotent create against the Dashboards saved-objects API with a
 # deterministic id: 200 on first create, 409 when it already exists. `osd-xsrf` is the
 # required CSRF header for state-changing Dashboards API calls.
+# Post-green slowness (#1214): /api/status green does NOT mean Dashboards serves
+# state-changing calls promptly; it is still finishing startup work, so the first
+# saved-objects / settings calls can take tens of seconds (a cold-boot defaultIndex POST took
+# ~50 s and succeeded server-side AFTER the uri default 30 s timeout had failed the play).
+# Both calls are idempotent, so each gets an explicit generous per-request timeout plus
+# bounded retries. Success criteria stay strict, and a persistent failure still fails the
+# play loud once the retry budget is spent (no ignore_errors).
 - name: create the default logs-* index pattern (idempotent)
   ansible.builtin.uri:
     url: >-
@@ -77,6 +84,11 @@
         title: "{{ opensearch_dashboards_index_pattern }}"
         timeFieldName: "{{ opensearch_dashboards_time_field }}"
     status_code: [200, 409]
+    timeout: "{{ opensearch_dashboards_api_timeout_s }}"
+  register: opensearch_dashboards_index_pattern_create
+  until: opensearch_dashboards_index_pattern_create.status in [200, 409]
+  retries: "{{ opensearch_dashboards_api_retries }}"
+  delay: "{{ opensearch_dashboards_api_retry_delay_s }}"
 
 # Make it the default so Discover opens straight onto the corpus (also idempotent).
 - name: set logs-* as the default index pattern (idempotent)
@@ -90,3 +102,8 @@
     body:
       value: "{{ opensearch_dashboards_index_pattern_id }}"
     status_code: 200
+    timeout: "{{ opensearch_dashboards_api_timeout_s }}"
+  register: opensearch_dashboards_default_index
+  until: opensearch_dashboards_default_index.status == 200
+  retries: "{{ opensearch_dashboards_api_retries }}"
+  delay: "{{ opensearch_dashboards_api_retry_delay_s }}"
