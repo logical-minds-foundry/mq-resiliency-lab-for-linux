@@ -28,22 +28,39 @@ virsh -c qemu:///system list --all
 lab is down.)
 
 Don't drive the guests through raw `virsh` for lifecycle — operate them through
-the lab's own CLI, **`mqlab`**, in this repo's virtualenv:
+the lab's own CLI, **`mqlab`**, run from this repo's checkout with **`uv run`**:
 
 ```sh
-.venv/bin/mqlab vm inventory   # the node map (names ↔ IPs ↔ roles)
-.venv/bin/mqlab vm roster      # roster view of the nodes
-.venv/bin/mqlab status         # per-stack phase / queue-manager status
-.venv/bin/mqlab bootstrap      # bring a stack up
-.venv/bin/mqlab teardown       # take a stack down
+uv run mqlab vm inventory          # the node map (names ↔ IPs ↔ roles)
+uv run mqlab vm roster             # roster view of the nodes
+uv run mqlab status                # per-stack phase / queue-manager status
+uv run mqlab bootstrap <stack>     # bring a stack up
+uv run mqlab teardown <stack>      # take a stack down
 ```
+
+`uv run` syncs the project environment if it needs to, then runs `mqlab` with
+the venv's `bin/` on `PATH`. That is what lets the companion tools `mqlab` calls
+by bare name (`ansible-playbook` and the rest) resolve. Calling the venv's
+`mqlab` by its path, without its `bin/` on `PATH`, skips that step and fails
+mid-run with `ansible-playbook: command not found`.
+
+**The dev-vs-runtime boundary.** Keep three things distinct:
+
+- **`uv run mqlab <cmd>`** is how an *operator* invokes the CLI from a
+  development checkout. It is an invocation convention for the dev loop only.
+- **Runtime code and scripts never embed `uv run`.** `mqlab`, its playbooks and
+  its helper scripts call companion tools by bare name and rely on `PATH`. They
+  never shell out through `uv run` and never hard-code a venv path.
+- **Release-tarball users** follow `./scripts/setup` and the site docs
+  (`docs/site/docs/getting-started.md`). There, `scripts/setup` builds the venv
+  and prints the next commands.
 
 ---
 
 ## 2. The node map and SSH
 
 Nodes sit on **`10.50.0.0/24`** (render the authoritative map with
-`mqlab vm inventory`). A representative Native-HA + counterparty slice:
+`uv run mqlab vm inventory`). A representative Native-HA + counterparty slice:
 
 | Node | IP | Role |
 |---|---|---|
@@ -162,7 +179,7 @@ produced a COA/COD). `Feedback 259 = MQFB_COA`, `260 = MQFB_COD`.
 | Need | Command |
 |---|---|
 | See the lab guests | `virsh -c qemu:///system list --all` |
-| Node map / status | `.venv/bin/mqlab vm inventory` · `mqlab status` |
+| Node map / status | `uv run mqlab vm inventory` · `uv run mqlab status` |
 | SSH to a node | `ssh -i ~/.vagrant.d/insecure_private_key -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no vagrant@10.50.0.<n>` |
 | Find active Native-HA node | `sudo dspmq -o nativeha -x` on a1/a2/a3 |
 | DISPLAY queues | `printf "DISPLAY QLOCAL(*)\n" \| sudo -u mqm runmqsc <QM>` |
