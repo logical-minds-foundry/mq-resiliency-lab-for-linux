@@ -125,6 +125,19 @@ defaults: { cpus: 1, memory: 1024 }
 # reintroduces the contention. Must be a positive integer; defaults to 4 when unset.
 boot_batch: 4
 
+# env_profiles — per-environment staging-lever overrides (#1202, epic .github#275; design:
+# .github epics/275-bootstrap-staging/spec.md §2 "Staging levers"). MQLAB_ENV=macos|cloud
+# selects one profile, deep-merged onto this base topology at load (src/mqlab/topology.py):
+# the same stack runs throttled on macOS and maximal on cloud without forking topology.
+# Unset/empty MQLAB_ENV = this base unchanged; an unknown value fails loud (no silent
+# default). A profile may override only `boot_batch` and per-node `cpus`, e.g.
+#   macos: { boot_batch: 2, nodes: { obs: { cpus: 8 } } }
+# Seeded EMPTY on purpose: lever values are filled one at a time from perf evidence
+# (validation #1200), never guessed. Keys must stay within {macos, cloud} (guardrail test).
+env_profiles:
+  macos: {}
+  cloud: {}
+
 nodes:
   # --- SVC service VM + app client (the distributed message path) ---
   svc-sim:
