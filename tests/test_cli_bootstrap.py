@@ -1033,13 +1033,17 @@ def test_probe_all_builds_states_dict(monkeypatch, tmp_path):
     )
 
 
+# The probe targets (#1212 gate): pcmk_a[0] for qm-status, obs_box for Prometheus.
+_PROBE_TARGETS_UP = {"pcmk-a1": "running", "obs": "running"}
+
+
 def test_probe_all_qm_down_when_status_nonzero(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
     runner = RecordingRunner(
         results=[
             _net_listing({}),
-            _dom_listing({}),
+            _dom_listing(_PROBE_TARGETS_UP),
             ScriptedResult([], exit_code=1),  # qm-status fails -> not provisioned
             ScriptedResult([], exit_code=1),  # prometheus unreachable -> observe False
         ]
@@ -1055,7 +1059,7 @@ def test_probe_all_observe_false_when_port_absent(monkeypatch, tmp_path):
     runner = RecordingRunner(
         results=[
             _net_listing({}),
-            _dom_listing({}),
+            _dom_listing(_PROBE_TARGETS_UP),
             ScriptedResult([], exit_code=0),
             # targets respond but this stack's exporter port (9157) is not present
             _targets_json(9999),
@@ -1063,6 +1067,73 @@ def test_probe_all_observe_false_when_port_absent(monkeypatch, tmp_path):
     )
     states = cli._probe_all(_deps(runner), stack)
     assert states["observe"] is False
+
+
+def _deps_console(runner):
+    """_deps, plus the renderer's captured console text (to assert skip notes)."""
+    buf = io.StringIO()
+    deps = cli.Deps(
+        runner=runner,
+        renderer=Renderer(Console(file=buf, force_terminal=False, width=200)),
+        transcript=Transcript(transcript_path("bootstrap", "20260627T000000Z")),
+        pauser=_NoPause(),
+    )
+    return deps, buf
+
+
+def test_probe_all_skips_ssh_and_http_when_domains_down(monkeypatch, tmp_path):
+    # #1212: a cold lab (no domains) must not SSH to a missing cluster node (the
+    # load-tuned connect budget cost ~4 min) nor curl a missing Prometheus. Only the
+    # two virsh probes run; both states are unsatisfied; each skip is logged.
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    runner = RecordingRunner(results=[_net_listing({}), _dom_listing({})])
+    deps, buf = _deps_console(runner)
+    states = cli._probe_all(deps, stack)
+    assert states["qm_up"] is False
+    assert states["observe"] is False
+    assert len(runner.recorded) == 2
+    assert not any(c.argv[0] in ("ansible", "curl") for c in runner.recorded)
+    out = buf.getvalue()
+    assert "qm-status probe skipped: domain(s) not running: pcmk-a1" in out
+    assert "observe probe skipped: domain(s) not running: obs" in out
+    log = deps.transcript.path.read_text()
+    assert "qm-status probe skipped: domain(s) not running: pcmk-a1" in log
+    assert "observe probe skipped: domain(s) not running: obs" in log
+
+
+def test_probe_all_skips_only_the_probe_whose_target_is_down(monkeypatch, tmp_path):
+    # Cluster node running, obs shut off: qm-status still runs and decides; the
+    # observe probe is skipped (a "shut off" domain is not RUNNING).
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    runner = RecordingRunner(
+        results=[
+            _net_listing({}),
+            _dom_listing({"pcmk-a1": "running", "obs": "shut off"}),
+            ScriptedResult([], exit_code=0),  # qm-status runs -> up
+        ]
+    )
+    states = cli._probe_all(_deps(runner), stack)
+    assert states["qm_up"] is True
+    assert states["observe"] is False
+    assert [c.argv[0] for c in runner.recorded][2:] == ["ansible"]
+
+
+def test_probe_all_skips_qm_status_when_cluster_group_has_no_hosts(monkeypatch, tmp_path):
+    # A cluster_group absent from topology has no target guest: nothing to SSH to,
+    # so the probe is skipped with a logged reason rather than run against nothing.
+    _seed(monkeypatch, tmp_path, topo=TOPO.replace("cluster_group: pcmk_a", "cluster_group: ghost"))
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    runner = RecordingRunner(
+        results=[_net_listing({}), _dom_listing(_PROBE_TARGETS_UP), _targets_json(9157)]
+    )
+    deps, buf = _deps_console(runner)
+    states = cli._probe_all(deps, stack)
+    assert states["qm_up"] is False
+    assert states["observe"] is True
+    assert [c.argv[0] for c in runner.recorded][2:] == ["curl"]
+    assert "qm-status probe skipped: no target hosts" in buf.getvalue()
 
 
 def test_probe_all_qm_down_when_no_status_verb(monkeypatch, tmp_path):
