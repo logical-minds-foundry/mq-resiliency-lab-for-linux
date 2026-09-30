@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from mqlab.perf import NullSink, PerfRecord, PerfSink
-from mqlab.perfsampler import GuestSample
+from mqlab.perfsampler import GuestSample, LocalSample
 
 
 def test_perf_record_collects_steps_and_serialises():
@@ -28,9 +28,10 @@ def test_perf_record_keeps_per_step_detail_in_phase_first_seen_order():
     data = json.loads(rec.to_json())
     assert list(data["phases"]) == ["net", "vms"]
     assert data["phases"]["net"]["steps"] == [
-        {"label": "networks up", "seconds": 1.5, "retries": 0},
-        {"label": "late net step", "seconds": 0.5, "retries": 0},
+        {"label": "networks up", "seconds": 1.5, "retries": 0, "ok": True},
+        {"label": "late net step", "seconds": 0.5, "retries": 0, "ok": True},
     ]
+    assert data["phases"]["net"]["failed"] == 0
     assert data["phases"]["net"]["seconds"] == 2.0
     assert data["started_at"] == 0.0
     assert data["notes"] == []
@@ -47,8 +48,30 @@ def test_perf_record_is_a_perf_sink():
     assert data["phases"]["provision"] == {
         "seconds": 42.0,
         "retries": 1,
-        "steps": [{"label": "provision qm", "seconds": 42.0, "retries": 1}],
+        "steps": [{"label": "provision qm", "seconds": 42.0, "retries": 1, "ok": True}],
+        "failed": 0,
     }
+
+
+def test_a_failed_step_is_kept_marked_and_counted_in_its_phase():
+    """#1215: the failing step's time is IN the phase total, marked ok=false, and the
+    phase counts it — in the JSON and the human summary."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    rec.step("observe", "render targets", 0.25, 0)
+    rec.step("observe", "site-obs", 584.0, 1, ok=False)
+    data = json.loads(rec.to_json())
+    assert data["phases"]["observe"] == {
+        "seconds": 584.25,
+        "retries": 1,
+        "steps": [
+            {"label": "render targets", "seconds": 0.25, "retries": 0, "ok": True},
+            {"label": "site-obs", "seconds": 584.0, "retries": 1, "ok": False},
+        ],
+        "failed": 1,
+    }
+    line = next(ln for ln in rec.human_summary().splitlines() if "observe" in ln)
+    assert "584.25s" in line
+    assert "2 step(s), 1 retr(y/ies), 1 FAILED" in line
 
 
 def test_human_summary_lists_unphased_steps_and_notes():
@@ -74,6 +97,7 @@ def test_human_summary_of_an_empty_record_says_so():
 def test_null_sink_accepts_and_discards():
     sink: PerfSink = NullSink()
     assert sink.step("vms", "vms up", 1.0, 0) is None
+    assert sink.step("vms", "vms up", 1.0, 0, ok=False) is None
 
 
 def test_note_appends_to_notes_in_order():
@@ -90,20 +114,56 @@ def test_add_sample_serialises_after_the_existing_keys():
         15.0,
         host_cpu=40.5,
         host_iowait=2.0,
-        guests={"obs": GuestSample(steal_pct=3.25), "qm-a": GuestSample(steal_pct=None)},
+        guests={
+            "obs": GuestSample(
+                steal_pct=3.25, busy_pct=61.5, iowait_pct=4.0, load1=2.5, load5=1.75, load15=1.0
+            ),
+            "qm-a": GuestSample(steal_pct=None, load1=0.1, load5=0.2, load15=0.3),
+        },
         host_cpus=24,
+        local=LocalSample(steal_pct=6.5, busy_pct=48.0, iowait_pct=1.25),
     )
     rec.add_sample(30.0, host_cpu=None, host_iowait=None, guests={})
     data = json.loads(rec.to_json())
     # The Task-1 keys keep their order; samples is appended last.
     assert list(data) == ["stack", "started_at", "phases", "milestones", "notes", "samples"]
+    no_self = {"self_steal": None, "self_busy": None, "self_iowait": None}
     assert data["samples"] == [
         {
             "t": 15.0,
-            "host": {"cpu": 40.5, "iowait": 2.0, "cpus": 24},
-            "guests": {"obs": {"steal": 3.25}, "qm-a": {"steal": None}},
+            # the #1203 host keys unchanged, the #1215 self_* keys added after them
+            "host": {
+                "cpu": 40.5,
+                "iowait": 2.0,
+                "cpus": 24,
+                "self_steal": 6.5,
+                "self_busy": 48.0,
+                "self_iowait": 1.25,
+            },
+            "guests": {
+                "obs": {
+                    "steal": 3.25,
+                    "busy": 61.5,
+                    "iowait": 4.0,
+                    "load1": 2.5,
+                    "load5": 1.75,
+                    "load15": 1.0,
+                },
+                "qm-a": {
+                    "steal": None,
+                    "busy": None,
+                    "iowait": None,
+                    "load1": 0.1,
+                    "load5": 0.2,
+                    "load15": 0.3,
+                },
+            },
         },
-        {"t": 30.0, "host": {"cpu": None, "iowait": None, "cpus": None}, "guests": {}},
+        {
+            "t": 30.0,
+            "host": {"cpu": None, "iowait": None, "cpus": None, **no_self},
+            "guests": {},
+        },
     ]
 
 
@@ -142,6 +202,38 @@ def test_human_summary_renders_peak_and_mean_steal_per_guest_and_host_load():
     # a guest with only baseline readings says so rather than inventing a number.
     qm = next(ln for ln in lines if "steal qm-a" in ln)
     assert "no reading" in qm
+
+
+def test_human_summary_renders_vergil_vm_and_guest_busy_iowait_load():
+    """#1215: the Vergil VM's own steal/busy/iowait and each guest's busy/iowait/load1
+    appear as mean/peak lines; load is unitless (0.01), percentages 0.1%."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    rec.add_sample(
+        15.0,
+        host_cpu=10.0,
+        host_iowait=1.0,
+        guests={"obs": GuestSample(steal_pct=None, load1=1.0)},
+        local=LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None),
+    )
+    rec.add_sample(
+        30.0,
+        host_cpu=10.0,
+        host_iowait=1.0,
+        guests={"obs": GuestSample(steal_pct=1.0, busy_pct=90.0, iowait_pct=6.0, load1=4.5)},
+        local=LocalSample(steal_pct=12.0, busy_pct=40.0, iowait_pct=3.0),
+    )
+    rec.add_sample(45.0, host_cpu=None, host_iowait=None, guests={})  # local probe failed
+    lines = rec.human_summary().splitlines()
+
+    def line(label: str) -> str:
+        return next(ln for ln in lines if ln.strip().startswith(label))
+
+    assert "mean 12.0%  peak 12.0%  (1 reading(s))" in line("vergil-vm steal")
+    assert "mean 40.0%" in line("vergil-vm busy")
+    assert "mean 3.0%" in line("vergil-vm iowait")
+    assert "mean 90.0%" in line("busy obs")
+    assert "peak 6.0%" in line("iowait obs")
+    assert "mean 2.75  peak 4.50  (2 reading(s))" in line("load1 obs")
 
 
 def test_human_summary_without_any_host_reading_says_so():

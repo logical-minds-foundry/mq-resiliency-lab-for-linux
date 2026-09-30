@@ -1,9 +1,12 @@
 """Host-contention sampler (#1203): vCPU steal per guest + host CPU/iowait, into a PerfRecord.
 
 During a bootstrap a daemon thread snapshots, every `interval` seconds, the host's CPU and
-iowait (`virsh nodecpustats --percent`, plus the host CPU count from `virsh nodeinfo`) and
-each guest's vCPU steal% (deltas of the aggregate `cpu` line of the guest's `/proc/stat`,
-read over ssh), and appends one sample to the run's `PerfRecord` (epic #275 spec §1).
+iowait (`virsh nodecpustats --percent`, plus the host CPU count from `virsh nodeinfo`),
+the sampling (Vergil) VM's OWN steal/busy/iowait % (#1215: deltas of its local
+`/proc/stat` aggregate line — it is itself a guest of the outer hypervisor), and each
+guest's vCPU steal/busy/iowait % (deltas of the aggregate `cpu` line of the guest's
+`/proc/stat`) plus its `/proc/loadavg` (#1215) — both read in ONE ssh round trip per guest
+— and appends one sample to the run's `PerfRecord` (epic #275 spec §1).
 
 Non-fatal, never silent: every probe runs in its own try/except, and a failure degrades
 to a recorded `note` in the report (deduplicated — a guest that is not up yet is noted
@@ -23,6 +26,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from mqlab.inventory import INSECURE_KEY, SSH_COMMON_ARGS, SSH_USER
@@ -33,13 +37,18 @@ if TYPE_CHECKING:
     from mqlab.perf import PerfRecord
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
-# The aggregate `cpu` line is always first in /proc/stat.
-_PROC_STAT_CMD = "head -n1 /proc/stat"
+# The aggregate `cpu` line is always first in /proc/stat; /proc/loadavg rides the SAME ssh
+# round trip (#1215: one call per guest per tick, never more).
+_GUEST_PROBE_CMD = "head -n1 /proc/stat && cat /proc/loadavg"
+_LOCAL_PROC_STAT = Path("/proc/stat")
 # Unattended probes must never prompt or hang on connect: fail fast into a note instead.
 _SSH_PROBE_ARGS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR")
 # /proc/stat cpu columns: user nice system idle iowait irq softirq steal guest guest_nice.
 # guest/guest_nice are already included in user/nice, so the total is the first eight.
+# Busy = user + nice + system + irq + softirq (#1215); idle, iowait and steal are not busy.
 _STEAL_COL = 7
+_IOWAIT_COL = 4
+_BUSY_COLS = (0, 1, 2, 5, 6)
 _TOTAL_COLS = 8
 _MAX_PROBE_WORKERS = 16
 
@@ -55,15 +64,34 @@ class HostSample:
 
 @dataclass(frozen=True)
 class GuestSample:
-    """One guest reading. `steal_pct` is None for a baseline reading (no delta yet)."""
+    """One guest reading. The /proc/stat-delta percentages (steal, busy, iowait) are None
+    for a baseline reading (no delta yet); the load averages are point-in-time readings
+    of /proc/loadavg (None only from a source that does not read it)."""
 
     steal_pct: float | None
+    busy_pct: float | None = None
+    iowait_pct: float | None = None
+    load1: float | None = None
+    load5: float | None = None
+    load15: float | None = None
+
+
+@dataclass(frozen=True)
+class LocalSample:
+    """The sampling (Vergil) VM's own CPU reading from its local /proc/stat (#1215):
+    steal/busy/iowait %, all None for the baseline reading (no delta yet)."""
+
+    steal_pct: float | None
+    busy_pct: float | None
+    iowait_pct: float | None
 
 
 class SampleSource(Protocol):
     """Where the sampler gets its readings. Each call may raise; the Sampler notes it."""
 
     def host(self) -> HostSample: ...
+
+    def local(self) -> LocalSample: ...
 
     def guest(self, name: str) -> GuestSample: ...
 
@@ -127,6 +155,13 @@ class Sampler:
             self._failed("host", exc)
         else:
             self._succeeded("host")
+        local: LocalSample | None = None
+        try:
+            local = self._source.local()
+        except Exception as exc:  # noqa: BLE001 - recorded as a note; sampling continues
+            self._failed("vergil-vm", exc)
+        else:
+            self._succeeded("vergil-vm")
         guests: dict[str, GuestSample] = {}
         if self._guests:
             workers = min(len(self._guests), _MAX_PROBE_WORKERS)
@@ -145,6 +180,7 @@ class Sampler:
             host_iowait=host.iowait_pct if host else None,
             guests=guests,
             host_cpus=host.cpus if host else None,
+            local=local,
         )
 
     def _loop(self) -> None:
@@ -186,10 +222,30 @@ class Sampler:
 
 @dataclass(frozen=True)
 class CpuCounters:
-    """The aggregate /proc/stat `cpu` counters the steal delta needs (in USER_HZ ticks)."""
+    """The aggregate /proc/stat `cpu` counters the CPU deltas need (in USER_HZ ticks)."""
 
     steal: int
     total: int
+    busy: int = 0
+    iowait: int = 0
+
+
+@dataclass(frozen=True)
+class CpuPcts:
+    """Steal / busy / iowait as % of all CPU ticks elapsed between two readings."""
+
+    steal: float
+    busy: float
+    iowait: float
+
+
+@dataclass(frozen=True)
+class LoadAvg:
+    """/proc/loadavg's 1/5/15-minute load averages."""
+
+    load1: float
+    load5: float
+    load15: float
 
 
 def parse_nodecpustats(text: str) -> tuple[float, float]:
@@ -215,22 +271,61 @@ def parse_nodeinfo_cpus(text: str) -> int:
 
 
 def parse_proc_stat_cpu(text: str) -> CpuCounters:
-    """The aggregate `cpu` line of /proc/stat -> steal + total ticks. Raises if malformed."""
+    """The aggregate `cpu` line of /proc/stat -> steal/busy/iowait/total ticks. Raises if
+    malformed."""
     parts = text.split()
     if len(parts) < _TOTAL_COLS + 1 or parts[0] != "cpu":
         raise ValueError(f"not an aggregate /proc/stat cpu line: {text!r}")
     values = [int(v) for v in parts[1 : _TOTAL_COLS + 1]]
-    return CpuCounters(steal=values[_STEAL_COL], total=sum(values))
+    return CpuCounters(
+        steal=values[_STEAL_COL],
+        total=sum(values),
+        busy=sum(values[i] for i in _BUSY_COLS),
+        iowait=values[_IOWAIT_COL],
+    )
 
 
-def steal_pct(prev: CpuCounters, cur: CpuCounters) -> float | None:
-    """Steal % over the interval between two readings; None when there is no valid delta
-    (no ticks elapsed, or the counters went backwards because the guest rebooted)."""
+def parse_loadavg(text: str) -> LoadAvg:
+    """A /proc/loadavg line (`0.52 0.58 0.59 1/467 12345`) -> 1/5/15-minute load averages.
+    Raises if malformed."""
+    parts = text.split()
+    try:
+        load1, load5, load15 = (float(v) for v in parts[:3])
+    except ValueError as exc:  # too few fields (unpack) or a non-numeric one
+        raise ValueError(f"not a /proc/loadavg line: {text!r}") from exc
+    return LoadAvg(load1, load5, load15)
+
+
+def parse_guest_probe(text: str) -> tuple[CpuCounters, LoadAvg]:
+    """The guest probe's output (`_GUEST_PROBE_CMD`): the /proc/stat aggregate line, then
+    the /proc/loadavg line. Raises if either is missing or malformed."""
+    lines = text.splitlines()
+    if len(lines) < 2:  # noqa: PLR2004 - exactly the probe's two lines
+        raise ValueError(f"guest probe output lacks the /proc/stat + /proc/loadavg lines: {text!r}")
+    return parse_proc_stat_cpu(lines[0]), parse_loadavg(lines[1])
+
+
+def cpu_pcts(prev: CpuCounters, cur: CpuCounters) -> CpuPcts | None:
+    """Steal/busy/iowait % over the interval between two readings; None when there is no
+    valid delta (no ticks elapsed, or a counter went backwards because the machine
+    rebooted)."""
     d_total = cur.total - prev.total
     d_steal = cur.steal - prev.steal
-    if d_total <= 0 or d_steal < 0:
+    d_busy = cur.busy - prev.busy
+    d_iowait = cur.iowait - prev.iowait
+    if d_total <= 0 or min(d_steal, d_busy, d_iowait) < 0:
         return None
-    return d_steal / d_total * 100
+    return CpuPcts(
+        steal=d_steal / d_total * 100,
+        busy=d_busy / d_total * 100,
+        iowait=d_iowait / d_total * 100,
+    )
+
+
+def read_local_proc_stat() -> str:
+    """The sampling VM's own /proc/stat aggregate line (a local file read — no ssh)."""
+    with _LOCAL_PROC_STAT.open(encoding="ascii") as fh:
+        return fh.readline()
 
 
 def run_bounded(argv: list[str], timeout: float) -> str:
@@ -249,11 +344,13 @@ def run_bounded(argv: list[str], timeout: float) -> str:
 
 
 class RealSource:
-    """The lab SampleSource: host via virsh, guest steal via ssh + /proc/stat deltas.
+    """The lab SampleSource: host via virsh, the Vergil VM itself via its local
+    /proc/stat, and guests via ONE ssh call each (/proc/stat deltas + /proc/loadavg).
 
     Guests are reached at their net-mgmt address with the same login, key and host-key
-    options the Ansible inventory uses (`mqlab.inventory`). The first reading of each
-    guest is a baseline (`steal_pct=None`); every later one is the delta since the last.
+    options the Ansible inventory uses (`mqlab.inventory`). The first /proc/stat reading
+    of each guest (and of the local VM) is a baseline (percentages None); every later one
+    is the delta since the last.
     """
 
     def __init__(
@@ -261,13 +358,16 @@ class RealSource:
         addresses: Mapping[str, str],
         *,
         run: Callable[[list[str], float], str] = run_bounded,
+        read_local: Callable[[], str] = read_local_proc_stat,
         timeout: float = 10.0,
     ) -> None:
         self.addresses = dict(addresses)
         self._run = run
+        self._read_local = read_local
         self._timeout = timeout
         self._cpus: int | None = None
         self._prev: dict[str, CpuCounters] = {}
+        self._prev_local: CpuCounters | None = None
 
     @classmethod
     def from_topology(cls, topo: Mapping[str, Any], **kwargs: Any) -> RealSource:
@@ -288,6 +388,14 @@ class RealSource:
         )
         return HostSample(cpu_pct=usage, iowait_pct=iowait, cpus=self._cpus)
 
+    def local(self) -> LocalSample:
+        cur = parse_proc_stat_cpu(self._read_local())
+        prev, self._prev_local = self._prev_local, cur
+        pcts = None if prev is None else cpu_pcts(prev, cur)
+        if pcts is None:
+            return LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
+        return LocalSample(steal_pct=pcts.steal, busy_pct=pcts.busy, iowait_pct=pcts.iowait)
+
     def guest(self, name: str) -> GuestSample:
         addr = self.addresses.get(name)
         if addr is None:
@@ -299,9 +407,17 @@ class RealSource:
             "-i",
             os.path.expanduser(INSECURE_KEY),  # noqa: PTH111 - ssh argv wants a str path
             f"{SSH_USER}@{addr}",
-            _PROC_STAT_CMD,
+            _GUEST_PROBE_CMD,
         ]
-        cur = parse_proc_stat_cpu(self._run(argv, self._timeout))
+        cur, load = parse_guest_probe(self._run(argv, self._timeout))
         prev = self._prev.get(name)
         self._prev[name] = cur
-        return GuestSample(steal_pct=None if prev is None else steal_pct(prev, cur))
+        pcts = None if prev is None else cpu_pcts(prev, cur)
+        return GuestSample(
+            steal_pct=pcts.steal if pcts else None,
+            busy_pct=pcts.busy if pcts else None,
+            iowait_pct=pcts.iowait if pcts else None,
+            load1=load.load1,
+            load5=load.load5,
+            load15=load.load15,
+        )

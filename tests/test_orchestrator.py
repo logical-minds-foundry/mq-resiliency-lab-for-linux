@@ -203,10 +203,12 @@ def test_run_steps_retry_exhausted_fails_loud(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 class FakePerfSink:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, float, int]] = []
+        self.calls: list[tuple[str, str, float, int, bool]] = []
 
-    def step(self, phase: str, label: str, seconds: float, retries: int) -> None:
-        self.calls.append((phase, label, seconds, retries))
+    def step(
+        self, phase: str, label: str, seconds: float, retries: int, *, ok: bool = True
+    ) -> None:
+        self.calls.append((phase, label, seconds, retries, ok))
 
 
 def test_run_steps_feeds_perf_sink_phase_label_seconds_retries(tmp_path, monkeypatch):
@@ -243,27 +245,54 @@ def test_run_steps_feeds_perf_sink_phase_label_seconds_retries(tmp_path, monkeyp
         perf=sink,
     )
     assert sink.calls == [
-        ("net", "networks up", 2.0, 0),
-        ("vms", "vms up [1/1]", 7.5, 2),
-        ("", "legacy", 0.25, 0),
+        ("net", "networks up", 2.0, 0, True),
+        ("vms", "vms up [1/1]", 7.5, 2, True),
+        ("", "legacy", 0.25, 0, True),
     ]
 
 
-def test_run_steps_does_not_feed_perf_sink_for_a_failed_step(tmp_path, monkeypatch):
-    runner = RecordingRunner(results=[ScriptedResult([], exit_code=4)])
+def test_run_steps_feeds_perf_sink_the_failed_step_marked_not_ok(tmp_path, monkeypatch):
+    """#1215: the failing step is the one worth timing — it reaches the sink with its
+    final attempt's seconds and retry count, ok=False, and the failure still propagates."""
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult([]),  # networks up: ok
+            ScriptedResult([], exit_code=4),  # observe: attempt 1 fails
+            ScriptedResult([], exit_code=4),  # observe: attempt 2 (last) fails
+        ]
+    )
     sink = FakePerfSink()
-    with pytest.raises(StepFailedError):
+    # networks up 1.0s; observe attempt 1 = 5s, attempt 2 = 584s (the final attempt).
+    clock = iter([0.0, 1.0, 10.0, 15.0, 20.0, 604.0])
+    policy = RetryPolicy(attempts=2, base_delay=0.0, backoff=1.0, max_delay=0.0)
+    with pytest.raises(StepFailedError) as caught:
         run_steps(
-            [CommandStep("boom", Command(["false"]), phase="net")],
+            [
+                CommandStep("networks up", Command(["true"]), phase="net"),
+                CommandStep("site-obs", Command(["false"]), retry=policy, phase="observe"),
+                CommandStep("never runs", Command(["true"]), phase="observe"),
+            ],
             runner=runner,
             renderer=_renderer(),
             transcript=_transcript(tmp_path, monkeypatch),
             step_mode=False,
             pauser=SpyPauser(),
-            now=lambda: 0.0,
+            now=lambda: next(clock),
+            sleep=RecordingSleep(),
             perf=sink,
         )
-    assert sink.calls == []
+    assert caught.value.exit_code == 4
+    assert (caught.value.elapsed, caught.value.retries) == (584.0, 1)
+    assert sink.calls == [
+        ("net", "networks up", 1.0, 0, True),
+        ("observe", "site-obs", 584.0, 1, False),
+    ]
+
+
+def test_step_failed_error_timing_defaults_to_zero():
+    """Raisers outside the run loop (cli, logsearch) need not supply perf timing."""
+    exc = StepFailedError("fetch", 4)
+    assert (exc.elapsed, exc.retries) == (0.0, 0)
 
 
 def test_command_step_phase_defaults_to_empty():

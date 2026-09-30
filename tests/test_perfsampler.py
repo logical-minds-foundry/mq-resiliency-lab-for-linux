@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+from dataclasses import astuple
 from typing import Any
 
 import pytest
@@ -18,16 +19,22 @@ from mqlab.inventory import INSECURE_KEY
 from mqlab.perf import PerfRecord
 from mqlab.perfsampler import (
     CpuCounters,
+    CpuPcts,
     GuestSample,
     HostSample,
+    LoadAvg,
+    LocalSample,
     RealSource,
     Sampler,
     SampleSource,
+    cpu_pcts,
+    parse_guest_probe,
+    parse_loadavg,
     parse_nodecpustats,
     parse_nodeinfo_cpus,
     parse_proc_stat_cpu,
+    read_local_proc_stat,
     run_bounded,
-    steal_pct,
 )
 
 # Real output captured from `virsh -c qemu:///system nodecpustats --percent` / `nodeinfo`
@@ -47,6 +54,31 @@ NUMA cell(s):        1
 Memory size:         65710000 KiB
 """
 PROC_STAT = "cpu  31044 0 25511 6238486 1109 0 686 0 0 0\n"
+# `cat /proc/loadavg` on a lab guest.
+LOADAVG = "0.52 0.58 0.59 1/467 12345\n"
+
+
+def _g(steal: float | None) -> dict[str, float | None]:
+    """A guest's serialised sample as the FakeSource produces it (steal only)."""
+    return {
+        "steal": steal,
+        "busy": None,
+        "iowait": None,
+        "load1": None,
+        "load5": None,
+        "load15": None,
+    }
+
+
+# The FakeSource's host + local readings, serialised.
+HOST = {
+    "cpu": 12.5,
+    "iowait": 1.5,
+    "cpus": 24,
+    "self_steal": 1.0,
+    "self_busy": 30.0,
+    "self_iowait": 2.0,
+}
 
 
 class FakeSource:
@@ -56,11 +88,17 @@ class FakeSource:
         self._steal = {name: list(vals) for name, vals in steal.items()}
         self.failing = failing or set()
         self.host_fails = False
+        self.local_fails = False
 
     def host(self) -> HostSample:
         if self.host_fails:
             raise RuntimeError("virsh exited 1: failed to connect")
         return HostSample(cpu_pct=12.5, iowait_pct=1.5, cpus=24)
+
+    def local(self) -> LocalSample:
+        if self.local_fails:
+            raise OSError("/proc/stat unreadable")
+        return LocalSample(steal_pct=1.0, busy_pct=30.0, iowait_pct=2.0)
 
     def guest(self, name: str) -> GuestSample:
         if name in self.failing:
@@ -92,7 +130,7 @@ def test_ticked_n_times_records_n_samples_with_expected_steal():
     assert [s["t"] for s in samples] == [15.0, 30.0, 45.0]
     assert [s["guests"]["obs"]["steal"] for s in samples] == [None, 2.0, 7.5]
     assert [s["guests"]["qm-a"]["steal"] for s in samples] == [None, 0.5, 1.0]
-    assert samples[0]["host"] == {"cpu": 12.5, "iowait": 1.5, "cpus": 24}
+    assert samples[0]["host"] == HOST
     assert rec.notes == []
 
 
@@ -105,9 +143,9 @@ def test_a_failing_guest_records_one_note_but_sampling_continues():
     samples = _samples(rec)
     assert len(samples) == 3
     assert [s["guests"] for s in samples] == [
-        {"obs": {"steal": 1.0}},
-        {"obs": {"steal": 2.0}},
-        {"obs": {"steal": 3.0}},
+        {"obs": _g(1.0)},
+        {"obs": _g(2.0)},
+        {"obs": _g(3.0)},
     ]
     # Repeated identical failures are noted once (not once per tick) ...
     assert len(rec.notes) == 1
@@ -146,7 +184,7 @@ def test_a_recovered_probe_is_noted_with_its_failure_count():
     src.failing = set()
     sampler.tick()
     assert rec.notes[-1] == "guest obs: sample recovered after 2 failed probe(s)"
-    assert _samples(rec)[-1]["guests"] == {"obs": {"steal": 4.0}}
+    assert _samples(rec)[-1]["guests"] == {"obs": _g(4.0)}
 
 
 def test_a_failing_host_probe_records_none_and_a_note():
@@ -154,19 +192,43 @@ def test_a_failing_host_probe_records_none_and_a_note():
     src = FakeSource({"obs": [1.0]})
     src.host_fails = True
     Sampler(rec, src, ["obs"], interval=0, clock=_clock([5.0])).tick()
-    assert _samples(rec)[0]["host"] == {"cpu": None, "iowait": None, "cpus": None}
-    assert _samples(rec)[0]["guests"] == {"obs": {"steal": 1.0}}
+    assert _samples(rec)[0]["host"] == {
+        **HOST,
+        "cpu": None,
+        "iowait": None,
+        "cpus": None,
+    }
+    assert _samples(rec)[0]["guests"] == {"obs": _g(1.0)}
     assert rec.notes == [
         "host: sample unavailable (RuntimeError: virsh exited 1: failed to connect)"
     ]
 
 
+def test_a_failing_local_probe_records_none_and_a_note_but_keeps_the_host():
+    """#1215: the Vergil VM's own /proc/stat is its own probe — its failure is noted and
+    blanks only the self_* fields, never the virsh host reading or the guests."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    src = FakeSource({"obs": [1.0, 2.0]})
+    src.local_fails = True
+    sampler = Sampler(rec, src, ["obs"], interval=0, clock=_clock([5.0, 6.0]))
+    sampler.tick()
+    assert _samples(rec)[0]["host"] == {
+        **HOST,
+        "self_steal": None,
+        "self_busy": None,
+        "self_iowait": None,
+    }
+    assert rec.notes == ["vergil-vm: sample unavailable (OSError: /proc/stat unreadable)"]
+    src.local_fails = False
+    sampler.tick()
+    assert _samples(rec)[1]["host"] == HOST
+    assert rec.notes[-1] == "vergil-vm: sample recovered after 1 failed probe(s)"
+
+
 def test_no_guests_still_samples_the_host():
     rec = PerfRecord(stack="s", started_at=0.0)
     Sampler(rec, FakeSource({}), [], interval=0, clock=_clock([5.0])).tick()
-    assert _samples(rec) == [
-        {"t": 5.0, "host": {"cpu": 12.5, "iowait": 1.5, "cpus": 24}, "guests": {}}
-    ]
+    assert _samples(rec) == [{"t": 5.0, "host": HOST, "guests": {}}]
 
 
 def test_start_stop_runs_the_loop_on_a_daemon_thread():
@@ -299,12 +361,39 @@ def test_parse_nodeinfo_fails_loud_without_cpu_line():
 
 def test_parse_proc_stat_cpu():
     assert parse_proc_stat_cpu(PROC_STAT) == CpuCounters(
-        steal=0, total=31044 + 0 + 25511 + 6238486 + 1109 + 0 + 686 + 0
+        steal=0,
+        total=31044 + 0 + 25511 + 6238486 + 1109 + 0 + 686 + 0,
+        busy=31044 + 0 + 25511 + 0 + 686,
+        iowait=1109,
     )
 
 
-def test_parse_proc_stat_cpu_reads_the_steal_column():
-    assert parse_proc_stat_cpu("cpu  10 0 10 70 0 0 0 10 5 0").steal == 10
+def test_parse_proc_stat_cpu_reads_the_steal_busy_and_iowait_columns():
+    # user nice system idle iowait irq softirq steal guest guest_nice
+    c = parse_proc_stat_cpu("cpu  10 1 20 70 7 2 3 11 5 0")
+    assert c == CpuCounters(steal=11, total=124, busy=10 + 1 + 20 + 2 + 3, iowait=7)
+
+
+def test_parse_loadavg():
+    assert parse_loadavg(LOADAVG) == LoadAvg(0.52, 0.58, 0.59)
+
+
+@pytest.mark.parametrize("text", ["", "0.52 0.58", "0.52 x 0.59 1/467 12345"])
+def test_parse_loadavg_fails_loud_on_bad_input(text):
+    with pytest.raises(ValueError, match="/proc/loadavg"):
+        parse_loadavg(text)
+
+
+def test_parse_guest_probe_reads_both_lines_of_the_one_ssh_call():
+    assert parse_guest_probe(PROC_STAT + LOADAVG) == (
+        parse_proc_stat_cpu(PROC_STAT),
+        LoadAvg(0.52, 0.58, 0.59),
+    )
+
+
+def test_parse_guest_probe_fails_loud_without_the_loadavg_line():
+    with pytest.raises(ValueError, match="lacks the /proc/stat"):
+        parse_guest_probe(PROC_STAT)
 
 
 @pytest.mark.parametrize(
@@ -316,17 +405,29 @@ def test_parse_proc_stat_cpu_fails_loud_on_bad_input(text):
         parse_proc_stat_cpu(text)
 
 
-def test_steal_pct_is_the_delta_ratio():
-    assert steal_pct(CpuCounters(steal=10, total=1000), CpuCounters(steal=30, total=1200)) == 10.0
+def test_cpu_pcts_are_the_delta_ratios_of_one_total():
+    prev = CpuCounters(steal=10, total=1000, busy=100, iowait=5)
+    cur = CpuCounters(steal=30, total=1200, busy=180, iowait=15)
+    assert cpu_pcts(prev, cur) == CpuPcts(steal=10.0, busy=40.0, iowait=5.0)
 
 
 @pytest.mark.parametrize(
     "later",
-    [CpuCounters(steal=5, total=2000), CpuCounters(steal=10, total=1000)],
-    ids=["counter-reset (guest rebooted)", "no elapsed ticks"],
+    [
+        CpuCounters(steal=5, total=2000, busy=200, iowait=10),
+        CpuCounters(steal=20, total=2000, busy=50, iowait=10),
+        CpuCounters(steal=20, total=2000, busy=200, iowait=1),
+        CpuCounters(steal=10, total=1000, busy=100, iowait=5),
+    ],
+    ids=["steal reset", "busy reset", "iowait reset", "no elapsed ticks"],
 )
-def test_steal_pct_is_none_when_no_valid_delta(later):
-    assert steal_pct(CpuCounters(steal=10, total=1000), later) is None
+def test_cpu_pcts_is_none_when_no_valid_delta(later):
+    assert cpu_pcts(CpuCounters(steal=10, total=1000, busy=100, iowait=5), later) is None
+
+
+def test_read_local_proc_stat_reads_the_aggregate_line():
+    """A local file read of this (Linux) machine's /proc/stat — not a lab call."""
+    assert parse_proc_stat_cpu(read_local_proc_stat()).total > 0
 
 
 # --- run_bounded -------------------------------------------------------------------------
@@ -382,27 +483,51 @@ def test_real_source_host_parses_virsh_and_caches_cpu_count():
 
 
 def test_real_source_guest_first_reading_is_a_baseline_then_deltas():
+    # user nice system idle iowait irq softirq steal guest guest_nice
     run = FakeRun(
         {
             "ssh": [
-                "cpu  100 0 100 700 0 0 0 100 0 0\n",
-                "cpu  150 0 150 850 0 0 0 150 0 0\n",
+                "cpu  100 0 100 700 0 0 0 100 0 0\n" + LOADAVG,
+                "cpu  150 0 170 850 30 0 0 150 0 0\n2.00 1.50 1.25 3/470 12400\n",
             ]
         }
     )
     src = RealSource({"obs": "192.168.121.10"}, run=run)
-    assert src.guest("obs") == GuestSample(steal_pct=None)
-    assert src.guest("obs") == GuestSample(steal_pct=50 / 300 * 100)
+    assert src.guest("obs") == GuestSample(
+        steal_pct=None, busy_pct=None, iowait_pct=None, load1=0.52, load5=0.58, load15=0.59
+    )
+    # delta total = 50 + 70 + 150 + 30 + 50 = 350 ticks
+    # astuple order: steal, busy, iowait, then the three load averages
+    assert astuple(src.guest("obs")) == pytest.approx(
+        (50 / 350 * 100, 120 / 350 * 100, 30 / 350 * 100, 2.0, 1.5, 1.25)
+    )
+    assert len(run.calls) == 2  # exactly ONE ssh round trip per guest per reading
     argv, _ = run.calls[0]
     assert argv[0] == "ssh"
     assert argv[-2] == "vagrant@192.168.121.10"
-    assert argv[-1] == "head -n1 /proc/stat"
+    assert argv[-1] == "head -n1 /proc/stat && cat /proc/loadavg"
     # The same key + host-key opts the Ansible inventory uses for guests (reused, not new).
     assert ["-i", perfsampler.os.path.expanduser(INSECURE_KEY)] == argv[
         argv.index("-i") : argv.index("-i") + 2
     ]
     assert "StrictHostKeyChecking=no" in argv
     assert "BatchMode=yes" in argv
+
+
+def test_real_source_local_reads_the_sampling_vms_own_proc_stat():
+    """#1215: baseline first, then steal/busy/iowait deltas; a counter reset (reboot)
+    yields another all-None reading rather than a negative number."""
+    lines = iter(
+        [
+            "cpu  100 0 100 700 0 0 0 100 0 0\n",
+            "cpu  150 0 150 850 20 0 0 130 0 0\n",  # +300 total: 30 steal, 100 busy, 20 io
+            "cpu  1 0 1 7 0 0 0 1 0 0\n",  # counters went backwards
+        ]
+    )
+    src = RealSource({}, run=FakeRun({}), read_local=lambda: next(lines))
+    assert src.local() == LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
+    assert astuple(src.local()) == pytest.approx((10.0, 100 / 300 * 100, 20 / 300 * 100))
+    assert src.local() == LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
 
 
 def test_real_source_unknown_guest_fails_loud():

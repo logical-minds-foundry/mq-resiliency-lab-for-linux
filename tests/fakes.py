@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from mqlab.perfsampler import GuestSample, HostSample
+from mqlab.perfsampler import GuestSample, HostSample, LocalSample
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -46,6 +46,9 @@ class FakeSampleSource:
 
     def host(self) -> HostSample:
         return HostSample(cpu_pct=10.0, iowait_pct=1.0, cpus=24)
+
+    def local(self) -> LocalSample:
+        return LocalSample(steal_pct=0.5, busy_pct=20.0, iowait_pct=0.25)
 
     def guest(self, name: str) -> GuestSample:
         self.probed.append(name)
