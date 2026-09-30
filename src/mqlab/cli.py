@@ -14,7 +14,7 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, coldboot, parity, venvsync
+from mqlab import buildenv, coldboot, parity, perfdiff, venvsync
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_platforms,
@@ -1876,6 +1876,29 @@ def netem_show() -> None:
 def parity_matrix() -> None:
     """Print the cross-arm capability matrix (which verbs each arm supports)."""
     typer.echo(parity.render_markdown())
+
+
+# --- perf reports (epic .github#275): compare two runs' perf-*.json (#1204) -------------
+perf_app = typer.Typer(
+    help="perf reports: compare two runs (timings + host contention)", no_args_is_help=True
+)
+app.add_typer(perf_app, name="perf")
+
+
+@perf_app.command("diff")
+def perf_diff(
+    a: Annotated[str, typer.Argument(help="perf report A (e.g. the macOS run)")],
+    b: Annotated[str, typer.Argument(help="perf report B (e.g. the x86 cloud run)")],
+) -> None:
+    """Diff two perf reports: per-phase/milestone deltas (A-B) + ratios (A/B), the dominant
+    divergence, and top vCPU-steal contributors. A comparison aid — no pass/fail verdict;
+    cross-hardware numbers are directional (docs/development/perf-and-staging.md)."""
+    try:
+        report = perfdiff.diff(perfdiff.load(a), perfdiff.load(b))
+    except perfdiff.PerfDiffError as exc:
+        typer.echo(f"mqlab perf diff {a} {b}: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(report.render(label_a=a, label_b=b))
 
 
 def _lookup_stack_or_exit(name: str) -> Stack:

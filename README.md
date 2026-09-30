@@ -134,5 +134,8 @@ vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity verg
 
 See [`CLAUDE.md`](CLAUDE.md) for the workflow,
 [`docs/site/docs/develop.md`](docs/site/docs/develop.md) for the developer
-on-ramp, and [`docs/development/release-runbook.md`](docs/development/release-runbook.md)
-for cutting a release.
+on-ramp, [`docs/development/release-runbook.md`](docs/development/release-runbook.md)
+for cutting a release, and
+[`docs/development/perf-and-staging.md`](docs/development/perf-and-staging.md)
+for comparing bootstrap perf reports across macOS and x86 cloud
+(`mqlab perf diff`, `MQLAB_ENV`).
