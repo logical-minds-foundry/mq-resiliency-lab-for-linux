@@ -20,6 +20,14 @@ def prepare_lab_calls(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _clear_mqlab_env(monkeypatch):
+    """Keep the suite hermetic against the developer's shell: an exported MQLAB_ENV
+    (#1202) would apply a per-environment profile to every topology load. Tests that
+    exercise a profile set it explicitly."""
+    monkeypatch.delenv("MQLAB_ENV", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _neutralize_stack_host_arch_gate(monkeypatch):
     """Neutralise cli._gate_stack_host_arch in every test — it calls probe() (real
     host I/O) to abort a RHEL stack on aarch64 before any box bake (#847). Unit

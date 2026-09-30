@@ -32,8 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
-
+from mqlab import topology
 from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
 from mqlab.orchestrator import CommandStep, RetryPolicy
@@ -76,8 +75,7 @@ class Phase:
 # Topology helpers (pure reads — no subprocess).
 # --------------------------------------------------------------------------- #
 def _topology() -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    return data
+    return topology.load()  # effective topology: base + MQLAB_ENV profile (#1202)
 
 
 def _commons_members() -> list[str]:

@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from mqlab import topology
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts, probe
-from mqlab.paths import repo_root, resolved_topology_path
+from mqlab.paths import resolved_topology_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -166,7 +167,7 @@ def ensure_resolved(*, facts: HostFacts | None = None, topo: dict[str, Any] | No
     facts = facts if facts is not None else probe()
     require_native_kvm(facts)
     if topo is None:
-        topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+        topo = topology.load()  # effective topology: base + MQLAB_ENV profile (#1202)
     path = resolved_topology_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_resolved(topo, facts))
