@@ -196,3 +196,75 @@ def test_run_steps_retry_exhausted_fails_loud(tmp_path, monkeypatch):
     assert caught.value.exit_code == 2
     assert len(runner.recorded) == 2  # both allowed attempts spent
     assert sleeper.delays == [1.0]  # one backoff between the two attempts
+
+
+# --------------------------------------------------------------------------- #
+# PerfSink threading (#1201)
+# --------------------------------------------------------------------------- #
+class FakePerfSink:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, float, int]] = []
+
+    def step(self, phase: str, label: str, seconds: float, retries: int) -> None:
+        self.calls.append((phase, label, seconds, retries))
+
+
+def test_run_steps_feeds_perf_sink_phase_label_seconds_retries(tmp_path, monkeypatch):
+    """Each completed step reaches the sink with its phase, label, successful-attempt
+    seconds and retry count; a step with no phase reports "" (#1201)."""
+    runner = RecordingRunner(
+        results=[
+            ScriptedResult([]),  # networks up: ok first try
+            ScriptedResult([], exit_code=1),  # vms up: attempt 1 fails
+            ScriptedResult([], exit_code=1),  # vms up: attempt 2 fails
+            ScriptedResult([]),  # vms up: attempt 3 succeeds
+            ScriptedResult([]),  # unphased step
+        ]
+    )
+    transcript = _transcript(tmp_path, monkeypatch)
+    # (start, end) per attempt: 2.0s, then 1s + 1s failed attempts, then 7.5s success,
+    # then 0.25s.
+    clock = iter([0.0, 2.0, 10.0, 11.0, 20.0, 21.0, 30.0, 37.5, 40.0, 40.25])
+    sink = FakePerfSink()
+    policy = RetryPolicy(attempts=3, base_delay=0.0, backoff=1.0, max_delay=0.0)
+    run_steps(
+        [
+            CommandStep("networks up", Command(["true"]), phase="net"),
+            CommandStep("vms up [1/1]", Command(["true"]), retry=policy, phase="vms"),
+            CommandStep("legacy", Command(["true"])),
+        ],
+        runner=runner,
+        renderer=_renderer(),
+        transcript=transcript,
+        step_mode=False,
+        pauser=SpyPauser(),
+        now=lambda: next(clock),
+        sleep=RecordingSleep(),
+        perf=sink,
+    )
+    assert sink.calls == [
+        ("net", "networks up", 2.0, 0),
+        ("vms", "vms up [1/1]", 7.5, 2),
+        ("", "legacy", 0.25, 0),
+    ]
+
+
+def test_run_steps_does_not_feed_perf_sink_for_a_failed_step(tmp_path, monkeypatch):
+    runner = RecordingRunner(results=[ScriptedResult([], exit_code=4)])
+    sink = FakePerfSink()
+    with pytest.raises(StepFailedError):
+        run_steps(
+            [CommandStep("boom", Command(["false"]), phase="net")],
+            runner=runner,
+            renderer=_renderer(),
+            transcript=_transcript(tmp_path, monkeypatch),
+            step_mode=False,
+            pauser=SpyPauser(),
+            now=lambda: 0.0,
+            perf=sink,
+        )
+    assert sink.calls == []
+
+
+def test_command_step_phase_defaults_to_empty():
+    assert CommandStep("a", Command(["true"])).phase == ""

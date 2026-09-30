@@ -7,9 +7,12 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from mqlab.perf import NullSink
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from mqlab.perf import PerfSink
     from mqlab.render import Renderer
     from mqlab.runner import Command, CommandRunner
     from mqlab.transcript import Transcript
@@ -63,11 +66,16 @@ class CommandStep:
     `retry` is an optional bounded RetryPolicy: when set, a non-zero exit is retried
     (with backoff) up to the policy's cap before the run fails loud. Default None is a
     single attempt — the pre-#1164 behaviour every non-boot step keeps.
+
+    `phase` names the bootstrap phase the step belongs to (net / vms / provision /
+    observe) so its timing is grouped in the perf report (#1201). Default "" is
+    "unphased" — existing callers are unaffected until a phase builder stamps it.
     """
 
     label: str
     command: Command
     retry: RetryPolicy | None = None
+    phase: str = ""
 
 
 class StepFailedError(RuntimeError):
@@ -77,6 +85,10 @@ class StepFailedError(RuntimeError):
         super().__init__(f"step {label!r} failed with exit {exit_code}")
         self.label = label
         self.exit_code = exit_code
+
+
+# Module-level default so `run_steps` has no mutable/call-in-default (ruff B008).
+_NULL_SINK = NullSink()
 
 
 class Pauser(Protocol):
@@ -92,10 +104,11 @@ def _run_step_with_retry(
     sink: Callable[[str], None],
     now: Callable[[], float],
     sleep: Callable[[float], None],
-) -> float:
+) -> tuple[float, int]:
     """Run one step, retrying a transient non-zero exit per its RetryPolicy (bounded).
 
-    Returns the successful attempt's elapsed seconds. A step with no policy is a single
+    Returns ``(elapsed, retries)``: the successful attempt's elapsed seconds and how
+    many retries it took (0 = first attempt succeeded). A step with no policy is a single
     attempt (the pre-#1164 behaviour). When the exit stays non-zero after the last
     allowed attempt the run fails loud with StepFailedError — the retry is a
     transient-failure mitigation, never a mask for a genuine boot/config error (spec §8).
@@ -109,7 +122,7 @@ def _run_step_with_retry(
         exit_code = runner.run(step.command, sink)
         elapsed = now() - started
         if exit_code == 0:
-            return elapsed
+            return elapsed, attempt - 1
         exhausted = policy is None or attempt >= attempts
         if not exhausted:
             delay = policy.delay_before(attempt)  # type: ignore[union-attr]  # policy is not None here
@@ -136,7 +149,13 @@ def run_steps(
     pauser: Pauser,
     now: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    perf: PerfSink = _NULL_SINK,
 ) -> None:
+    """Run each step in order, failing loud on a non-zero exit.
+
+    Every completed step's (phase, label, elapsed, retries) is fed to `perf` — a no-op
+    NullSink unless the caller collects a perf report (#1201).
+    """
     total = len(steps)
     completed = 0
     elapsed_total = 0.0
@@ -149,7 +168,7 @@ def run_steps(
             renderer.output(line)
             transcript.write(line)
 
-        elapsed = _run_step_with_retry(
+        elapsed, retries = _run_step_with_retry(
             step,
             runner=runner,
             renderer=renderer,
@@ -160,6 +179,7 @@ def run_steps(
         )
         renderer.ok(step.label, elapsed)
         transcript.write(f"OK: {step.label} {elapsed:.2f}s")
+        perf.step(step.phase, step.label, elapsed, retries)
         completed += 1
         elapsed_total += elapsed
         if step_mode and index < total:
