@@ -43,6 +43,7 @@ from mqlab.paths import (
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.perfrun import BootstrapPerf
 from mqlab.phases import (
+    OBS_GROUP,
     PHASES,
     _commons_members,
     _host_mqlab,
@@ -50,6 +51,7 @@ from mqlab.phases import (
     all_vms,
     build_states,
     first_unsatisfied,
+    group_hosts,
 )
 from mqlab.platforms import (
     PlatformError,
@@ -1930,7 +1932,27 @@ def _gate_stack_host_arch(stack: Stack) -> None:
 PROMETHEUS_URL = "http://10.50.0.2:9090"
 
 
-def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
+def _probe_skipped_down(deps: Deps, probe: str, domains: dict[str, str], hosts: list[str]) -> bool:
+    """True (and say why, echoed + teed) iff a probe's target guests are not all RUNNING.
+
+    The pre-flight gate (#1212): `_probe_all` has already read every domain's state,
+    so a probe whose target guest isn't running is unsatisfied by definition — running
+    it only burns the load-tuned SSH connect budget (#590: ~4 min on a cold lab) or an
+    HTTP timeout to reach the same False. An empty host list (the target group is
+    absent from topology) has nothing to probe and is skipped the same way. Never
+    silent: the skip reason lands in the run transcript.
+    """
+    down = [h for h in hosts if classify(domains, h) != RUNNING]
+    if hosts and not down:
+        return False
+    reason = f"domain(s) not running: {', '.join(down)}" if down else "no target hosts"
+    message = f"{probe} probe skipped: {reason}"
+    deps.renderer.note(message)
+    deps.transcript.write(message)
+    return True
+
+
+def _probe_qm_up(deps: Deps, stack: Stack, domains: dict[str, str]) -> bool:
     """True iff the stack's QM reports up via its qm-status verb (provision phase).
 
     Resolves the stack's `qm-status` verb (the same per-stack dispatch dict the
@@ -1942,12 +1964,18 @@ def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
     Pacemaker or MQ tooling and would always return a non-zero exit code.
 
     A stack with no qm-status verb or no cluster_group (reserved stack) is, by
-    definition, not provisioned — returns False with no runner call.
+    definition, not provisioned — returns False with no runner call. Likewise when
+    the probe's target guest (`<cluster_group>[0]`, per the already-probed
+    `domains`) is not RUNNING (#1212): no SSH attempt, a logged skip, False.
     """
     impl = stack.verbs.get("qm-status")
     if not impl:
         return False
     if not stack.cluster_group:
+        return False
+    # Gate on exactly the host the ansible pattern below targets ([0]), so a running
+    # target keeps today's semantics byte-for-byte.
+    if _probe_skipped_down(deps, "qm-status", domains, group_hosts(stack.cluster_group)[:1]):
         return False
     [(kind, value)] = impl.items()
     # pcs/cmd are the only status shapes in the registry; both run a shell command
@@ -1962,15 +1990,19 @@ def _probe_qm_up(deps: Deps, stack: Stack) -> bool:
     return code == 0
 
 
-def _probe_observe(deps: Deps, stack: Stack) -> bool:
+def _probe_observe(deps: Deps, stack: Stack, domains: dict[str, str]) -> bool:
     """True iff this stack's exporter is a healthy Prometheus target (observe phase).
 
     Queries Prometheus' /api/v1/targets and checks the stack's app exporter port
     (from alloc.exporter_app_port) appears among the active targets with health
-    "up". A stack with no exporter port allocated cannot be observed.
+    "up". A stack with no exporter port allocated cannot be observed, nor can one
+    whose obs guest (OBS_GROUP, where Prometheus runs) is not RUNNING in the
+    already-probed `domains` (#1212: skipped with a logged reason, no HTTP call).
     """
     port = stack.alloc.get("exporter_app_port")
     if not port:
+        return False
+    if _probe_skipped_down(deps, "observe", domains, group_hosts(OBS_GROUP)):
         return False
     cmd = Command(
         ["curl", "-fsS", "-m", "5", f"{PROMETHEUS_URL}/api/v1/targets"],  # noqa: S607
@@ -2011,12 +2043,14 @@ def _probe_all(deps: Deps, stack: Stack) -> dict[str, Any]:
     virsh (nets + domains), the stack's qm-status verb (provision truth), and the
     Prometheus targets query (observe truth), then assembles them via build_states
     so the shape matches the registry's contract exactly. Fail-loud: each probe
-    surfaces its real exit/parse result; nothing is swallowed.
+    surfaces its real exit/parse result; nothing is swallowed. The domain states
+    gate the qm-status and observe probes (#1212): a probe whose target guest is not
+    running is skipped (logged) rather than left to time out against a missing VM.
     """
     nets = _probe_net_states(deps)
     domains = _probe_states(deps)
-    qm_up = _probe_qm_up(deps, stack)
-    observe = _probe_observe(deps, stack)
+    qm_up = _probe_qm_up(deps, stack, domains)
+    observe = _probe_observe(deps, stack, domains)
     return build_states(nets=nets, domains=domains, qm_up=qm_up, observe=observe)
 
 

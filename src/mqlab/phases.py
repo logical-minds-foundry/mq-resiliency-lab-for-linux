@@ -131,6 +131,22 @@ def _non_mq_commons_hosts() -> set[str]:
     return {host for g in _NON_MQ_COMMONS_GROUPS for host in (all_groups.get(g) or [])}
 
 
+# The commons group holding the obs host (Prometheus lives there) — the observe probe's
+# target. Named obs_box, not obs, so the group never collides with the host (topology).
+OBS_GROUP = "obs_box"
+
+
+def group_hosts(group: str) -> list[str]:
+    """Hosts of one topology group, in declared order ([] for an unknown group).
+
+    Read from topology the same way _commons_members / _non_mq_commons_hosts read a
+    group's hosts, so the pre-flight probe gate (#1212) maps a probe's target group to
+    its guests (and so to their `lab_<guest>` domains) from the one source.
+    """
+    all_groups: dict[str, list[str]] = _topology().get("groups") or {}
+    return list(all_groups.get(group) or [])
+
+
 def all_vms(stack: Stack, *, no_dr: bool = False) -> list[str]:
     """Every VM a bootstrap must bring up for this stack: members + commons, deduped.
 
