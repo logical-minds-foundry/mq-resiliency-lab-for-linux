@@ -24,12 +24,13 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | Perf record format (`src/mqlab/perf.py`) | #1201 | merged |
 | `MQLAB_ENV` profiles (`src/mqlab/topology.py`) | #1202 | merged |
 | Host-contention sampler (steal, host CPU/IO) | #1203 | merged |
-| Bootstrap writes the perf report | #1205 | not built |
-| `mqlab perf diff` (this page) | #1204 | this change |
+| Bootstrap writes the perf report | #1205 | merged |
+| `mqlab perf diff` (this page) | #1204 | merged |
+| Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | this change |
 
-Until #1205 lands, **no bootstrap writes a perf report**, so there is nothing
-real to diff yet. `mqlab perf diff` already works on any file in the
-`PerfRecord.to_json()` format.
+Every `mqlab bootstrap` writes a perf report (§3), including one that fails
+partway or finds nothing to do. `mqlab perf diff` works on any file in the
+`PerfRecord.to_json()` format, including reports written before #1215.
 
 ## 2. The parallel-run procedure
 
@@ -90,11 +91,10 @@ obvious from the variable's name.
 
 ## 3. Where the perf report lands
 
-Emission is Task 3 of the epic (#1205) and **is not built yet**. Its file
-name and exact location are defined by that change, not here. The plan puts
-it with the bootstrap's run record, which lives in the `runs` directory of the
-shared `state` bucket. Resolve that directory with `mqlab build path`, and
-never hardcode a `build/` path:
+Each bootstrap writes `perf-<timestamp>.json` beside its
+`<timestamp>-bootstrap.log` transcript, in the `runs` directory of the shared
+`state` bucket. Resolve that directory with `mqlab build path`, and never
+hardcode a `build/` path:
 
 ```bash
 ls "$(uv run mqlab build path state)/runs/"
@@ -102,6 +102,73 @@ ls "$(uv run mqlab build path state)/runs/"
 
 Copy the macOS and cloud reports to one machine (any file names) and pass them
 to `mqlab perf diff`.
+
+### Report fields
+
+The JSON is additive: new fields are added, existing ones are never renamed,
+so older reports still diff.
+
+- **`started_at`** is the Unix time the perf clock started. Since #1215 it
+  starts *before* the bootstrap pre-flight, and every sample's `t` is seconds
+  since then.
+- **`phases.<name>`** has `seconds` and `retries` (summed over its steps),
+  `failed` (how many of its steps failed, #1215) and `steps`. Each step has
+  `label`, `seconds`, `retries` and `ok`. Phases appear in run order:
+  - **`preflight`** (#1215) holds the pre-flight calls that run before any
+    phase is selected: `render inventory` and `probe lab state`. On a cold
+    lab the probe can take minutes (#1212), and before #1215 that time was not
+    in the report at all. It is a report phase only; you cannot resume
+    `--from preflight`.
+  - **`net` / `vms` / `provision` / `observe`** are the bootstrap phases.
+- **A failed step is kept** (#1215) with `"ok": false`. Its `seconds` are its
+  *final* attempt's elapsed time and its `retries` are the attempts before
+  that, which is the same final-attempt rule a successful step uses. It counts
+  in its phase's `seconds` and `failed`. Before #1215 the failing step was
+  dropped, so a failed `observe` read as under a second when its `site-obs.yml`
+  step had actually run for almost 10 minutes.
+- **`milestones`** holds per-VM `boot:<vm>` / `boot_retries:<vm>` and the
+  observe readiness waits. A failed `vms` batch gives no `boot:` milestone.
+- **`samples[]`** holds one entry per sampler tick (every 15 s):
+  - `host.cpu`, `host.iowait` and `host.cpus` come from
+    `virsh nodecpustats --percent` / `virsh nodeinfo` on the lab host.
+  - `host.self_steal`, `host.self_busy` and `host.self_iowait` (#1215) are the
+    **Vergil VM's own** CPU. The Vergil VM runs `mqlab` and libvirt, and it
+    is itself a guest of the outer hypervisor (Apple Hypervisor on macOS, the
+    cloud hypervisor on x86). These fields are deltas of its local
+    `/proc/stat` aggregate line; no ssh is involved.
+  - `guests.<name>` has `steal`, `busy` and `iowait` (#1215 added the last
+    two), which are deltas of the guest's `/proc/stat` aggregate line. It also
+    has `load1`, `load5` and `load15` (#1215) from the guest's
+    `/proc/loadavg`. Both files are read in the **same** ssh call, so there is
+    still one round trip per guest per tick.
+  - **busy** is (user + nice + system + irq + softirq) / total ticks.
+    **iowait** and **steal** are their own columns over the same total.
+    Total is the first eight `/proc/stat` columns, since guest time is
+    already inside user/nice.
+  - A percentage is `null` on the first reading of a guest or of the Vergil
+    VM, because a delta needs two readings. It is also `null` after a counter
+    reset (a reboot). A guest whose probe failed is absent from that tick. A
+    failed Vergil-VM probe leaves the `self_*` fields `null`. Each failure is
+    recorded once in `notes` (key `guest <name>`, `host` or `vergil-vm`), and
+    recovery is noted too.
+
+Example sample (values illustrative):
+
+```json
+{
+  "t": 615.2,
+  "host": {"cpu": 62.4, "iowait": 3.1, "cpus": 24,
+           "self_steal": 11.8, "self_busy": 58.0, "self_iowait": 2.9},
+  "guests": {
+    "obs": {"steal": 1.6, "busy": 97.2, "iowait": 0.4,
+            "load1": 7.9, "load5": 6.2, "load15": 3.4}
+  }
+}
+```
+
+The bootstrap's closing perf summary prints the mean and peak of each of
+these: host cpu/iowait, `vergil-vm` steal/busy/iowait, and per guest
+steal/busy/iowait/load1. A phase with a failed step is flagged `N FAILED`.
 
 ## 4. Reading `mqlab perf diff`
 
@@ -114,10 +181,12 @@ to `mqlab perf diff`.
 
 Sections:
 
-- **Phases.** Summed seconds per phase (`net` / `vms` / `provision` /
-  `observe`), with each side's retries. Steps with no phase appear as
-  `(unphased)`. A phase present on one side only is listed with `—` for the
-  missing side.
+- **Phases.** Summed seconds per phase (`preflight` / `net` / `vms` /
+  `provision` / `observe`), with each side's retries. A phase that has a
+  failed step on either side ends with `FAILED steps A/B <n>/<m>`. That
+  step's time *is* in the phase seconds (§3). A report without the `failed`
+  key counts as 0. Steps with no phase appear as `(unphased)`. A phase
+  present on one side only is listed with `—` for the missing side.
 - **Milestones.** Named points such as `opensearch_green`, with the same
   delta and ratio. A milestone recorded on one side only is shown, not dropped.
 - **Dominant divergence.** The phase, present on both sides, with the largest
@@ -130,6 +199,10 @@ Sections:
   empty, and this shows `(no readable steal samples)` with a note. A report
   with no `samples` key at all (written before the #1203 sampler) shows `n/a`
   and a note explains why. The diff still runs in both cases.
+- **Host means.** For each side, the mean host `cpu` and `iowait` and the
+  Vergil VM's own `self_steal`, `self_busy` and `self_iowait` (§3) over the
+  samples. A field with no reading (for example a report written before #1215
+  has no `self_*` fields) shows `—`.
 - **Notes.** Each report's own `notes` (degraded or unavailable samples),
   plus diff-level notes: a stack mismatch between A and B, missing samples,
   or sample entries that had no readable steal value (counted, then skipped).
@@ -148,6 +221,18 @@ shows `observe` dominating alongside high steal on `obs` points at CPU
 contention. If `observe` dominates with *low* steal, the cause is more likely
 I/O or memory bandwidth. Measuring and separating those cases is the reason
 the sampler exists.
+
+Since #1215 the samples can help separate those cases. The following is
+interpretation, not a measured rule:
+
+- High **guest busy** with high **load1** but low guest steal means the guest
+  is saturated by its own work. In the first macOS baseline, guests
+  intermittently missed the 10 s ssh probe while showing under 2 % steal,
+  which was the gap this closes.
+- High **guest iowait** points at storage.
+- High **`self_steal`** means the outer hypervisor is starving the Vergil VM
+  itself, and with it every nested guest. Guest steal is measured against the
+  Vergil VM's vCPUs, so it cannot show this.
 
 ## 5. One lever at a time
 
@@ -196,5 +281,10 @@ Prior art this procedure draws on:
   <https://www.brendangregg.com/activebenchmarking.html>
 - `proc_stat(5)`: the `steal` field of `/proc/stat` is "Stolen time, which is
   the time spent in other operating systems when running in a virtualized
-  environment". This is the source of the per-guest steal %.
+  environment". This is the source of the per-guest steal %, and (#1215) of
+  busy % and iowait % and the Vergil VM's own steal/busy/iowait.
   <https://man7.org/linux/man-pages/man5/proc_stat.5.html>
+- `proc_loadavg(5)`: the first three fields of `/proc/loadavg` are the 1, 5
+  and 15 minute load averages (runnable plus uninterruptible-sleep tasks).
+  This is the source of the per-guest `load1`/`load5`/`load15`.
+  <https://man7.org/linux/man-pages/man5/proc_loadavg.5.html>

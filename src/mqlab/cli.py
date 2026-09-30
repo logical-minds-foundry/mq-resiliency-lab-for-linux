@@ -2103,8 +2103,13 @@ def _bootstrap_run(
     deps = build_deps("bootstrap", timestamp)
     # Perf capture (#1205): additive + non-fatal — BootstrapPerf never raises into the run
     # or changes its exit status; the report is written in `finally`, so a bootstrap that
-    # fails partway still gets one (that is the most valuable data).
-    perf: BootstrapPerf | None = None
+    # fails partway still gets one (that is the most valuable data). It starts BEFORE the
+    # pre-flight (#1215) so the inventory render + lab-state probe are on the perf clock,
+    # each timed as a `preflight` step (wrapped here at the call site; the probe itself
+    # is untouched).
+    perf = BootstrapPerf.start(
+        stack.name, lambda: all_vms(stack, no_dr=no_dr), renderer=deps.renderer
+    )
     try:
         # The vms phase's `vagrant up` step carries env=None, so it inherits this
         # process's environment. Export the vagrant env up front so bring-up sees
@@ -2119,10 +2124,11 @@ def _bootstrap_run(
         # build/work/inventory.ini. A stale file (pre-cutover, missing the aggregate
         # groups) silently no-ops those plays (acl install, cold-boot guard). Always
         # render fresh here in the sequencer — phases.py stays pure.
-        _render_inventory(deps)
-        states = _probe_all(deps, stack)
+        perf.preflight("render inventory", lambda: _render_inventory(deps))
+        states = perf.preflight("probe lab state", lambda: _probe_all(deps, stack))
         selected = _select_phases(stack, states, only=only, from_phase=from_phase)
         if not selected:
+            perf.nothing_to_do()
             deps.renderer.note(f"{stack_name}: already satisfied — nothing to do")
             return
         # Inject the stack's secrets as env vars for the provision playbook (#373):
@@ -2133,9 +2139,6 @@ def _bootstrap_run(
         if any(phase.name == "provision" for phase in selected):
             for secret in stack.secrets:
                 os.environ[secret.upper()] = _source_secret(deps, secret)
-        perf = BootstrapPerf.start(
-            stack.name, lambda: all_vms(stack, no_dr=no_dr), renderer=deps.renderer
-        )
         for phase in selected:  # one phase at a time so a failure names its phase
             try:
                 # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
@@ -2179,8 +2182,7 @@ def _bootstrap_run(
         deps.renderer.error(str(exc))
         raise typer.Exit(code=2) from exc
     finally:
-        if perf is not None:
-            perf.finish(deps.transcript.path, timestamp)
+        perf.finish(deps.transcript.path, timestamp)
         deps.transcript.close()
 
 

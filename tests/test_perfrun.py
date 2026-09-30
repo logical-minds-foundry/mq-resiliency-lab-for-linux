@@ -106,6 +106,8 @@ def _report(runs: Path, ts: str = "20260930T000000Z") -> dict:
 def test_phase_literals_match_the_phase_registry():
     assert (perfrun._VMS, perfrun._OBSERVE) == (phases.VMS, phases.OBSERVE)
     assert {phases.VMS, phases.OBSERVE} <= {p.name for p in phases.PHASES}
+    # The pre-flight is reported as a phase but is never a resumable PHASES entry.
+    assert perfrun.PREFLIGHT not in {p.name for p in phases.PHASES}
 
 
 @pytest.mark.parametrize("milestone", sorted(READINESS_TASKS))
@@ -194,7 +196,9 @@ def test_start_samples_every_guest_immediately_with_the_record_as_t_origin(
     perf._sampler.stop()
     assert perf.record.started_at == 1000.0
     assert perf.record.samples[0].t == 4.0
-    assert perf.record.samples[0].guest_steal == {"a": 2.5, "b": 2.5}
+    steal = {n: g.steal_pct for n, g in perf.record.samples[0].guests.items()}
+    assert steal == {"a": 2.5, "b": 2.5}
+    assert perf.record.samples[0].local is not None
     assert sorted(fake_perf_source.probed) == ["a", "b"]
 
 
@@ -245,6 +249,74 @@ def test_finish_attributes_each_batch_time_and_retries_to_every_vm_in_it(runs, t
     assert BOOT_ATTRIBUTION in notes
     assert "boot: no timing for app-client, svc-sim (their vms batch did not complete)" in notes
     assert not any("readiness" in n or "opensearch" in n for n in notes)  # observe never ran
+
+
+def test_a_failed_vms_batch_is_not_attributed_as_a_boot(runs, tmp_path):
+    """#1215: the failed batch's step is now recorded (ok=False) — it must not become a
+    boot:<vm> milestone, and its VMs are reported untimed."""
+    perf = _perf()
+    batch = _vms_step("s vms up [1/1]", "obs")
+    perf.register_phase("vms", [batch])
+    perf.record.step("vms", batch.label, 600.0, 2, ok=False)
+    perf.failed("vms", 1)
+    perf.finish(tmp_path / "absent.log", "20260930T000000Z")
+    report = _report(runs)
+    assert "boot:obs" not in report["milestones"]
+    assert "boot: no timing for obs (their vms batch did not complete)" in report["notes"]
+    assert report["phases"]["vms"]["seconds"] == 600.0
+    assert report["phases"]["vms"]["failed"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# preflight (#1215) — the pre-flight calls on the perf clock
+# --------------------------------------------------------------------------- #
+def test_preflight_times_the_call_and_passes_its_result_through():
+    perf = _perf()
+    clock = iter([10.0, 250.5])
+    assert perf.preflight("probe lab state", lambda: {"ok": 1}, now=lambda: next(clock)) == {
+        "ok": 1
+    }
+    (step,) = perf.record.steps
+    assert (step.phase, step.label, step.seconds, step.retries, step.ok) == (
+        "preflight",
+        "probe lab state",
+        240.5,
+        0,
+        True,
+    )
+
+
+def test_preflight_records_a_raising_call_as_failed_and_reraises():
+    perf = _perf()
+    clock = iter([0.0, 3.0])
+
+    def boom() -> None:
+        raise RuntimeError("virsh unreachable")
+
+    with pytest.raises(RuntimeError, match="virsh unreachable"):
+        perf.preflight("probe lab state", boom, now=lambda: next(clock))
+    (step,) = perf.record.steps
+    assert (step.seconds, step.ok) == (3.0, False)
+
+
+def test_preflight_timing_failure_is_a_warning_never_a_run_failure(monkeypatch):
+    renderer, buf = _renderer()
+    perf = _perf(renderer)
+
+    def broken(*_a: object, **_k: object) -> None:
+        raise ValueError("record is wedged")
+
+    monkeypatch.setattr(perf.record, "add_step", broken)
+    assert perf.preflight("render inventory", lambda: 7) == 7
+    assert any("pre-flight step 'render inventory' not timed" in n for n in perf.record.notes)
+    assert "perf: WARNING" in buf.getvalue()
+
+
+def test_nothing_to_do_is_the_reported_outcome(runs, tmp_path):
+    perf = _perf()
+    perf.nothing_to_do()
+    perf.finish(tmp_path / "absent.log", "20260930T000000Z")
+    assert "bootstrap: already satisfied — nothing to do" in _report(runs)["notes"]
 
 
 def test_finish_with_no_timed_batch_notes_only_the_gap(runs, tmp_path):

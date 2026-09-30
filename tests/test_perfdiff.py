@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 from mqlab import cli, perfdiff
 from mqlab.perf import PerfRecord
 from mqlab.perfdiff import PerfDiffError, diff, load
-from mqlab.perfsampler import GuestSample
+from mqlab.perfsampler import GuestSample, LocalSample
 
 
 def _record(stack: str, phases: dict[str, float], milestones: dict[str, float]) -> dict[str, Any]:
@@ -176,6 +176,8 @@ def test_empty_reports_render():
         (lambda r: r["phases"].update(vms=5), "phase 'vms'"),
         (lambda r: r["phases"]["vms"].update(seconds="1"), "phase 'vms'"),
         (lambda r: r["phases"]["vms"].update(retries=1.5), "phase 'vms'"),
+        (lambda r: r["phases"]["vms"].update(failed="1"), "phase 'vms'"),
+        (lambda r: r["phases"]["vms"].update(failed=True), "phase 'vms'"),
         (lambda r: r.update(stack=3), "'stack'"),
         (lambda r: r.update(notes="oops"), "'notes'"),
         (lambda r: r.update(notes=[1]), "'notes'"),
@@ -306,7 +308,7 @@ def test_genuine_sampler_output_is_read_and_baselines_are_not_unreadable():
     rec.add_sample(5.0, 80.0, 10.0, {"obs": GuestSample(40.0), "qm1": GuestSample(5.0)}, 8)
     rec.add_sample(10.0, 70.0, 20.0, {"obs": GuestSample(20.0)}, 8)
     a: dict[str, Any] = json.loads(rec.to_json())
-    assert a["samples"][0]["guests"]["obs"] == {"steal": None}
+    assert a["samples"][0]["guests"]["obs"]["steal"] is None
     report = diff(a, _record("s", {}, {}))
     assert report.steal_a is not None
     assert [(c.guest, c.mean_steal_pct, c.samples) for c in report.steal_a] == [
@@ -314,6 +316,69 @@ def test_genuine_sampler_output_is_read_and_baselines_are_not_unreadable():
         ("qm1", 5.0, 1),
     ]
     assert not any("A:" in n and "no readable steal" in n for n in report.notes)
+
+
+# --- #1215: failed steps + the host/Vergil-VM means ------------------------------------
+
+
+def test_failed_steps_are_counted_per_side_and_flagged_in_the_table():
+    rec = PerfRecord(stack="s", started_at=0.0)
+    rec.step("observe", "render targets", 0.5, 0)
+    rec.step("observe", "site-obs", 584.0, 0, ok=False)
+    a: dict[str, Any] = json.loads(rec.to_json())
+    b = _record("s", {"observe": 120.0}, {})
+    del b["phases"]["observe"]["failed"]  # a report predating #1215: no `failed` key
+    report = diff(a, b)
+    (observe,) = report.phases
+    assert (observe.a, observe.b) == (584.5, 120.0)  # the failed step's time is IN it
+    assert (observe.a_failed, observe.b_failed) == (1, 0)
+    row = next(ln for ln in report.render().splitlines() if ln.strip().startswith("observe"))
+    assert row.endswith("0/0  FAILED steps A/B 1/0")
+
+
+def test_no_failed_steps_leaves_the_row_unflagged():
+    a, b = _macos_vs_cloud()
+    assert "FAILED" not in diff(a, b).render()
+
+
+def test_host_and_vergil_vm_means_per_side():
+    rec = PerfRecord(stack="s", started_at=0.0)
+    local = LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
+    rec.add_sample(0.0, 80.0, 10.0, {}, 8, local=local)  # baseline self reading
+    rec.add_sample(5.0, 70.0, 20.0, {}, 8, local=LocalSample(9.0, 50.0, 3.0))
+    rec.add_sample(10.0, None, None, {})  # both probes failed this tick
+    a: dict[str, Any] = json.loads(rec.to_json())
+    b = _record("s", {}, {})
+    report = diff(a, b)
+    assert report.host_a == {
+        "cpu": 75.0,
+        "iowait": 15.0,
+        "self_steal": 9.0,
+        "self_busy": 50.0,
+        "self_iowait": 3.0,
+    }
+    assert report.host_b is None
+    text = report.render()
+    assert "A host means: cpu 75.0%  iowait 15.0%  self_steal 9.0%" in text
+    assert "B host means: n/a (no samples)" in text
+
+
+def test_a_pre_1215_report_has_no_self_readings():
+    rec = _record("s", {}, {})
+    rec["samples"] = [{"t": 0.0, "host": {"cpu": 5.0, "iowait": 0.5, "cpus": 24}, "guests": {}}]
+    report = diff(rec, rec)
+    assert report.host_a is not None
+    assert report.host_a["self_steal"] is None
+    assert "self_steal —" in report.render()
+
+
+def test_samples_without_a_host_mapping_are_skipped_and_noted():
+    rec = _record("s", {}, {})
+    rec["samples"] = ["garbage", {"t": 1.0, "host": {"cpu": 4.0}}]
+    report = diff(rec, _record("s", {}, {}))
+    assert report.host_a is not None
+    assert report.host_a["cpu"] == 4.0
+    assert "A: 1 sample(s) had no host mapping; skipped" in report.notes
 
 
 # --- load() ----------------------------------------------------------------------------

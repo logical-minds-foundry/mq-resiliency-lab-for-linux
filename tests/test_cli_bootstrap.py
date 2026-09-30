@@ -1264,7 +1264,13 @@ def test_bootstrap_writes_a_perf_report_grouped_by_the_four_phases(
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
     assert report["stack"] == "pcmk-ubuntu"
-    assert list(report["phases"]) == ["net", "vms", "provision", "observe"]
+    # #1215: the pre-flight is on the perf clock, as its own phase ahead of the four.
+    assert list(report["phases"]) == ["preflight", "net", "vms", "provision", "observe"]
+    assert [s["label"] for s in report["phases"]["preflight"]["steps"]] == [
+        "render inventory",
+        "probe lab state",
+    ]
+    assert report["samples"][0]["host"]["self_busy"] == 20.0  # the Vergil VM's own reading
     ms = report["milestones"]
     # 9 VMs in batches of 4: san-a is in batch 1, app-client alone in batch 3.
     assert ms["boot:san-a"] == ms["boot:pcmk-a3"]
@@ -1295,7 +1301,11 @@ def test_bootstrap_writes_the_perf_report_even_when_it_fails_partway(monkeypatch
     assert result.exit_code == 3  # the bootstrap's own exit status, unchanged by perf
     (path,) = _perf_reports(tmp_path)
     report = json.loads(path.read_text())
-    assert list(report["phases"]) == ["net", "vms", "provision"]
+    assert list(report["phases"]) == ["preflight", "net", "vms", "provision"]
+    # #1215: the failing step is recorded (ok=false) and counted in its phase.
+    provision = report["phases"]["provision"]
+    assert provision["failed"] == 1
+    assert [s["ok"] for s in provision["steps"]][-1] is False
     assert "bootstrap FAILED in phase provision (exit 3)" in report["notes"]
     assert "boot:pcmk-b1" not in report["milestones"]  # --no-dr: site-B never booted
 
@@ -1311,3 +1321,47 @@ def test_a_perf_failure_never_fails_or_changes_the_bootstrap(monkeypatch, tmp_pa
     out = buf.getvalue()
     assert "perf: WARNING" in out
     assert "runs dir is read-only" in out
+
+
+def test_an_already_satisfied_bootstrap_still_reports_its_preflight(monkeypatch, tmp_path):
+    """#1215: the pre-flight probe is timed even when it finds nothing to do."""
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=True, observe=True),
+    )
+    deps, _ = _perf_deps(RecordingRunner())
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
+    _stub_ensure(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    assert list(report["phases"]) == ["preflight"]
+    assert report["phases"]["preflight"]["failed"] == 0
+    assert "bootstrap: already satisfied — nothing to do" in report["notes"]
+
+
+def test_a_failing_preflight_probe_is_timed_and_still_fails_the_bootstrap(monkeypatch, tmp_path):
+    """#1215: a probe that raises is recorded (ok=false) and its error propagates."""
+    _seed(monkeypatch, tmp_path)
+
+    def broken_probe(deps, stack):
+        raise RuntimeError("virsh unreachable")
+
+    monkeypatch.setattr(cli, "_probe_all", broken_probe)
+    deps, _ = _perf_deps(RecordingRunner())
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
+    _stub_ensure(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert isinstance(result.exception, RuntimeError)
+    assert "virsh unreachable" in str(result.exception)
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    steps = report["phases"]["preflight"]["steps"]
+    assert [(s["label"], s["ok"]) for s in steps] == [
+        ("render inventory", True),
+        ("probe lab state", False),
+    ]
+    assert "bootstrap did not complete (stopped outside a step; see transcript)" in report["notes"]

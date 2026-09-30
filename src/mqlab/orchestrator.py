@@ -79,12 +79,21 @@ class CommandStep:
 
 
 class StepFailedError(RuntimeError):
-    """A command step exited non-zero; the run halts loudly."""
+    """A command step exited non-zero; the run halts loudly.
 
-    def __init__(self, label: str, exit_code: int) -> None:
+    `elapsed` (the final attempt's seconds) and `retries` are what the run loop records
+    for the failed step in the perf report (#1215); raisers outside the run loop leave
+    them at their zero defaults.
+    """
+
+    def __init__(
+        self, label: str, exit_code: int, *, elapsed: float = 0.0, retries: int = 0
+    ) -> None:
         super().__init__(f"step {label!r} failed with exit {exit_code}")
         self.label = label
         self.exit_code = exit_code
+        self.elapsed = elapsed
+        self.retries = retries
 
 
 # Module-level default so `run_steps` has no mutable/call-in-default (ruff B008).
@@ -110,8 +119,10 @@ def _run_step_with_retry(
     Returns ``(elapsed, retries)``: the successful attempt's elapsed seconds and how
     many retries it took (0 = first attempt succeeded). A step with no policy is a single
     attempt (the pre-#1164 behaviour). When the exit stays non-zero after the last
-    allowed attempt the run fails loud with StepFailedError — the retry is a
-    transient-failure mitigation, never a mask for a genuine boot/config error (spec §8).
+    allowed attempt the run fails loud with StepFailedError (carrying that final
+    attempt's elapsed seconds and the retry count, for the perf report — #1215) — the
+    retry is a transient-failure mitigation, never a mask for a genuine boot/config
+    error (spec §8).
     """
     policy = step.retry
     attempts = policy.attempts if policy is not None else 1
@@ -136,7 +147,7 @@ def _run_step_with_retry(
             continue
         renderer.fail(step.label, exit_code)
         transcript.write(f"FAILED: {step.label} exit {exit_code}")
-        raise StepFailedError(step.label, exit_code)
+        raise StepFailedError(step.label, exit_code, elapsed=elapsed, retries=attempt - 1)
 
 
 def run_steps(
@@ -154,7 +165,9 @@ def run_steps(
     """Run each step in order, failing loud on a non-zero exit.
 
     Every completed step's (phase, label, elapsed, retries) is fed to `perf` — a no-op
-    NullSink unless the caller collects a perf report (#1201).
+    NullSink unless the caller collects a perf report (#1201). The step that FAILS is fed
+    too, with `ok=False` and its final attempt's elapsed + retries (#1215: the failing
+    step is exactly the one worth timing), before the StepFailedError propagates.
     """
     total = len(steps)
     completed = 0
@@ -168,15 +181,19 @@ def run_steps(
             renderer.output(line)
             transcript.write(line)
 
-        elapsed, retries = _run_step_with_retry(
-            step,
-            runner=runner,
-            renderer=renderer,
-            transcript=transcript,
-            sink=sink,
-            now=now,
-            sleep=sleep,
-        )
+        try:
+            elapsed, retries = _run_step_with_retry(
+                step,
+                runner=runner,
+                renderer=renderer,
+                transcript=transcript,
+                sink=sink,
+                now=now,
+                sleep=sleep,
+            )
+        except StepFailedError as exc:
+            perf.step(step.phase, step.label, exc.elapsed, exc.retries, ok=False)
+            raise
         renderer.ok(step.label, elapsed)
         transcript.write(f"OK: {step.label} {elapsed:.2f}s")
         perf.step(step.phase, step.label, elapsed, retries)

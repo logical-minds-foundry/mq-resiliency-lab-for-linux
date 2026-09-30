@@ -4,11 +4,14 @@ Epic .github#275 Task 5. Consumes two `PerfRecord.to_json()` documents (see
 `mqlab.perf`) — typically the same commit bootstrapped on macOS/arm64 (A) and x86
 cloud (B) — and reports, A against B:
 
-- per-phase seconds: delta (A - B) and ratio (A / B), plus each side's retries;
+- per-phase seconds: delta (A - B) and ratio (A / B), plus each side's retries (and
+  failed-step count, #1215 — a failed step's time is IN its phase's seconds);
 - per-milestone seconds: delta and ratio, tolerating a milestone on one side only;
 - the dominant divergence: the phase (present on both sides) with the largest |delta|;
 - each side's top vCPU-steal contributors, when the host-contention ``samples`` key
-  is present (absent -> noted, never fatal).
+  is present (absent -> noted, never fatal);
+- each side's mean host CPU/iowait and the sampling (Vergil) VM's own steal/busy/iowait
+  (#1215), from the same samples.
 
 It is a comparison aid, deliberately with **no pass/fail verdict**: the two sides run on
 different hardware, so the numbers are directional — read the *shape* of the bottleneck,
@@ -60,10 +63,13 @@ class Compared:
 
 @dataclass(frozen=True)
 class PhaseDelta(Compared):
-    """A phase's summed seconds on each side, plus each side's summed retries."""
+    """A phase's summed seconds on each side, plus each side's summed retries and
+    failed-step count (#1215; 0 for a report that predates the ``failed`` key)."""
 
     a_retries: int | None = None
     b_retries: int | None = None
+    a_failed: int | None = None
+    b_failed: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,8 @@ class DiffReport:
     dominant: PhaseDelta | None
     steal_a: list[StealContributor] | None
     steal_b: list[StealContributor] | None
+    host_a: dict[str, float | None] | None = None
+    host_b: dict[str, float | None] | None = None
     a_notes: list[str] = field(default_factory=list)
     b_notes: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -103,7 +111,12 @@ class DiffReport:
             lines.append("  (no phases)")
         for p in self.phases:
             retries = f"{_fmt_int(p.a_retries)}/{_fmt_int(p.b_retries)}"
-            lines.append(f"  {_row(p.name or _UNPHASED, p)}  {retries}")
+            failed = (
+                f"  FAILED steps A/B {_fmt_int(p.a_failed)}/{_fmt_int(p.b_failed)}"
+                if p.a_failed or p.b_failed
+                else ""
+            )
+            lines.append(f"  {_row(p.name or _UNPHASED, p)}  {retries}{failed}")
         lines += ["", f"  {'milestone':<16} {'A s':>10} {'B s':>10} {'A-B s':>10} {'A/B':>8}"]
         if not self.milestones:
             lines.append("  (no milestones)")
@@ -118,6 +131,7 @@ class DiffReport:
                 f"({_fmt_s(d.delta)}s, {_fmt_ratio(d.ratio)})"
             )
         lines += _steal_lines("A", self.steal_a) + _steal_lines("B", self.steal_b)
+        lines += _host_lines("A", self.host_a) + _host_lines("B", self.host_b)
         for side, notes in (("A", self.a_notes), ("B", self.b_notes)):
             lines.extend(f"Report {side} note: {n}" for n in notes)
         lines.extend(f"Note: {n}" for n in self.notes)
@@ -152,6 +166,17 @@ def _steal_lines(side: str, steal: list[StealContributor] | None) -> list[str]:
     return [f"{side} top steal contributors (mean steal %): {body}"]
 
 
+def _host_lines(side: str, host: dict[str, float | None] | None) -> list[str]:
+    if host is None:
+        return [f"{side} host means: n/a (no samples)"]
+    body = "  ".join(f"{k} {_fmt_pct(v)}" for k, v in host.items())
+    return [f"{side} host means: {body}"]
+
+
+def _fmt_pct(v: float | None) -> str:
+    return "—" if v is None else f"{v:.1f}%"
+
+
 # --- validation of the PerfRecord JSON (fail loud) -------------------------------------
 
 
@@ -159,23 +184,32 @@ def _is_num(v: object) -> bool:
     return isinstance(v, int | float) and not isinstance(v, bool)
 
 
-def _phases(rec: dict[str, Any], side: str) -> dict[str, tuple[float, int]]:
+def _is_int(v: object) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _phases(rec: dict[str, Any], side: str) -> dict[str, tuple[float, int, int]]:
+    """name -> (seconds, retries, failed). ``failed`` is optional (#1215: absent in a
+    report that predates it -> 0) but, when present, must be an int."""
     raw = rec.get("phases")
     if not isinstance(raw, dict):
         msg = f"report {side}: 'phases' must be a mapping, got {raw!r}"
         raise PerfDiffError(msg)
-    out: dict[str, tuple[float, int]] = {}
+    out: dict[str, tuple[float, int, int]] = {}
     for name, body in raw.items():
         ok = (
             isinstance(body, dict)
             and _is_num(body.get("seconds"))
-            and isinstance(body.get("retries"), int)
-            and not isinstance(body.get("retries"), bool)
+            and _is_int(body.get("retries"))
+            and _is_int(body.get("failed", 0))
         )
         if not ok:
-            msg = f"report {side}: phase {name!r} needs numeric 'seconds' + int 'retries'"
+            msg = (
+                f"report {side}: phase {name!r} needs numeric 'seconds' + int 'retries' "
+                "(+ int 'failed', if present)"
+            )
             raise PerfDiffError(msg)
-        out[name] = (float(body["seconds"]), int(body["retries"]))
+        out[name] = (float(body["seconds"]), int(body["retries"]), int(body.get("failed", 0)))
     return out
 
 
@@ -272,6 +306,32 @@ def _steal(rec: dict[str, Any], side: str) -> tuple[list[StealContributor] | Non
     return ranked[:TOP_STEAL], notes
 
 
+# The host fields averaged per side (#1215): the lab host's CPU/iowait (virsh) and the
+# sampling VM's own steal/busy/iowait (local /proc/stat). Same defensive stance as the
+# steal contributors: a non-numeric/absent value is simply not a reading (the report's
+# own notes say why a probe failed); a sample with no `host` mapping is counted.
+_HOST_KEYS = ("cpu", "iowait", "self_steal", "self_busy", "self_iowait")
+
+
+def _host_means(rec: dict[str, Any], side: str) -> tuple[dict[str, float | None] | None, list[str]]:
+    samples = rec.get("samples")
+    if not isinstance(samples, list) or not samples:
+        return None, []  # absence/shape already noted by _steal
+    readings: dict[str, list[float]] = {k: [] for k in _HOST_KEYS}
+    unreadable = 0
+    for sample in samples:
+        host = sample.get("host") if isinstance(sample, dict) else None
+        if not isinstance(host, dict):
+            unreadable += 1
+            continue
+        for k in _HOST_KEYS:
+            if _is_num(host.get(k)):
+                readings[k].append(float(host[k]))
+    notes = [f"{side}: {unreadable} sample(s) had no host mapping; skipped"] if unreadable else []
+    means = {k: (sum(v) / len(v) if v else None) for k, v in readings.items()}
+    return means, notes
+
+
 # --- the diff ---------------------------------------------------------------------------
 
 
@@ -301,6 +361,8 @@ def diff(a: dict[str, Any], b: dict[str, Any]) -> DiffReport:
             pb[name][0] if name in pb else None,
             pa[name][1] if name in pa else None,
             pb[name][1] if name in pb else None,
+            pa[name][2] if name in pa else None,
+            pb[name][2] if name in pb else None,
         )
         for name in _union(pa, pb)
     ]
@@ -316,6 +378,9 @@ def diff(a: dict[str, Any], b: dict[str, Any]) -> DiffReport:
     steal_a, na = _steal(ra, "A")
     steal_b, nb = _steal(rb, "B")
     notes += na + nb
+    host_a, ha = _host_means(ra, "A")
+    host_b, hb = _host_means(rb, "B")
+    notes += ha + hb
 
     return DiffReport(
         a_stack=a_stack,
@@ -325,6 +390,8 @@ def diff(a: dict[str, Any], b: dict[str, Any]) -> DiffReport:
         dominant=dominant,
         steal_a=steal_a,
         steal_b=steal_b,
+        host_a=host_a,
+        host_b=host_b,
         a_notes=_notes(ra, "A"),
         b_notes=_notes(rb, "B"),
         notes=notes,

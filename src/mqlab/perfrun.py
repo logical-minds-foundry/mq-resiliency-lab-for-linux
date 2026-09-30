@@ -20,6 +20,10 @@ turns what the run already produces into the report's milestones:
   `_cluster/health` until green|yellow in ONE task, so bind and green are not
   separately observable. It is noted in the record, never fabricated.
   (`opensearch_green` itself means green OR yellow — the wait's own healthy set.)
+* **Pre-flight** (#1215) — the record and sampler start BEFORE the bootstrap's
+  pre-flight (inventory render + `_probe_all` lab-state probe), and each pre-flight
+  call is timed as a step of its own `preflight` phase via `BootstrapPerf.preflight`,
+  so that time appears in the phase table rather than before `started_at`.
 
 Additive and non-fatal, never silent (plan Global Constraints): every perf operation
 is guarded; a failure is shown loudly through the renderer AND noted in the record,
@@ -31,7 +35,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from mqlab import topology
 from mqlab.paths import runs_dir
@@ -46,10 +50,15 @@ if TYPE_CHECKING:
     from mqlab.perfsampler import SampleSource
     from mqlab.render import Renderer
 
+_T = TypeVar("_T")
+
 # Phase names as phases.py stamps them (duplicated as literals to keep this module free
 # of the phases -> topology/stacks import chain; test_perfrun pins them to phases.PHASES).
 _VMS = "vms"
 _OBSERVE = "observe"
+# The bootstrap pre-flight (#1215) is not a PHASES entry (nothing to resume from), but its
+# time is reported as a phase of its own so it shows in the phase table.
+PREFLIGHT = "preflight"
 
 # Readiness milestone -> the ansible task (role-prefixed, exactly as the TASK banner
 # prints it) whose duration IS that milestone. test_perfrun pins each name to the role's
@@ -200,6 +209,33 @@ class BootstrapPerf:
         except Exception as exc:  # noqa: BLE001 - perf is non-fatal; surfaced loudly
             self._degraded(f"could not register the {phase} phase", exc)
 
+    def preflight(
+        self, label: str, fn: Callable[[], _T], *, now: Callable[[], float] = time.monotonic
+    ) -> _T:
+        """Run one pre-flight call, timing it as a `preflight` step (#1215).
+
+        `fn`'s result and exceptions pass through untouched — timing never changes the
+        run. A call that raises is still recorded (ok=False) with its elapsed time.
+        """
+        started = now()
+        try:
+            result = fn()
+        except BaseException:
+            self._preflight_step(label, now() - started, ok=False)
+            raise
+        self._preflight_step(label, now() - started, ok=True)
+        return result
+
+    def _preflight_step(self, label: str, seconds: float, *, ok: bool) -> None:
+        try:
+            self.record.add_step(PREFLIGHT, label, seconds, 0, ok=ok)
+        except Exception as exc:  # noqa: BLE001 - perf is non-fatal; surfaced loudly
+            self._degraded(f"pre-flight step {label!r} not timed", exc)
+
+    def nothing_to_do(self) -> None:
+        """Every phase was already satisfied — the report holds just the pre-flight."""
+        self._outcome = "bootstrap: already satisfied — nothing to do"
+
     def failed(self, phase: str, exit_code: int) -> None:
         """The bootstrap halted on a failed step in `phase` — say so in the report."""
         self._outcome = f"bootstrap FAILED in phase {phase} (exit {exit_code})"
@@ -235,7 +271,8 @@ class BootstrapPerf:
             return
         timed: set[str] = set()
         for s in self.record.steps:
-            if s.phase != _VMS or s.label not in self._batches:
+            # A failed batch (#1215: recorded, ok=False) booted nothing to attribute.
+            if s.phase != _VMS or s.label not in self._batches or not s.ok:
                 continue
             timed.add(s.label)
             for vm in self._batches[s.label]:
