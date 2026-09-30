@@ -23,7 +23,7 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | --- | --- | --- |
 | Perf record format (`src/mqlab/perf.py`) | #1201 | merged |
 | `MQLAB_ENV` profiles (`src/mqlab/topology.py`) | #1202 | merged |
-| Host-contention sampler (steal, host CPU/IO) | #1203 | in flight |
+| Host-contention sampler (steal, host CPU/IO) | #1203 | merged |
 | Bootstrap writes the perf report | #1205 | not built |
 | `mqlab perf diff` (this page) | #1204 | this change |
 
@@ -118,9 +118,13 @@ Sections:
 - **Dominant divergence.** The phase, present on both sides, with the largest
   absolute delta. This is where to look first; it is not a verdict.
 - **Top steal contributors.** For each side, the guests with the highest
-  mean vCPU steal % across the host-contention samples. If a report has no
-  `samples` key (anything written before the #1203 sampler, or with sampling
-  off), this shows `n/a` and a note explains why. The diff still runs.
+  mean vCPU steal % across the host-contention samples. Each sample carries a
+  `guests` map of guest name to `{"steal": <pct>}`. A guest's first reading is
+  a baseline with `"steal": null`; it is expected and skipped. A current perf
+  record always has a `samples` list. When nothing was sampled the list is
+  empty, and this shows `(no readable steal samples)` with a note. A report
+  with no `samples` key at all (written before the #1203 sampler) shows `n/a`
+  and a note explains why. The diff still runs in both cases.
 - **Notes.** Each report's own `notes` (degraded or unavailable samples),
   plus diff-level notes: a stack mismatch between A and B, missing samples,
   or sample entries that had no readable steal value (counted, then skipped).

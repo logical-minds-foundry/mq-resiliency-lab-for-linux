@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 from mqlab import cli, perfdiff
 from mqlab.perf import PerfRecord
 from mqlab.perfdiff import PerfDiffError, diff, load
+from mqlab.perfsampler import GuestSample
 
 
 def _record(stack: str, phases: dict[str, float], milestones: dict[str, float]) -> dict[str, Any]:
@@ -205,11 +206,19 @@ def test_missing_optional_stack_and_notes_are_tolerated():
 
 
 # --- host-contention samples (shape owned by #1203; read defensively) -----------------
+# PerfRecord.to_json() always emits `samples` (empty when nothing was sampled), so a test
+# about a report that predates the sampler deletes the key explicitly.
+
+
+def _predates_sampler(rec: dict[str, Any]) -> dict[str, Any]:
+    """A report written before #1203: PerfRecord.to_json() now always emits `samples`."""
+    del rec["samples"]
+    return rec
 
 
 def test_missing_samples_is_noted_on_each_side():
     a, b = _macos_vs_cloud()
-    report = diff(a, b)
+    report = diff(_predates_sampler(a), _predates_sampler(b))
     assert report.steal_a is None
     assert report.steal_b is None
     assert sum("no host-contention samples" in n for n in report.notes) == 2
@@ -226,7 +235,7 @@ def test_top_steal_contributors_by_mean_steal():
         _sample({"obs": {"steal_pct": 40.0}, "qm1": {"steal": 10.0}, "app": 2.0}),
         _sample({"obs": {"steal_pct": 20.0}, "qm1": {"steal": 30.0}, "app": 4.0}),
     ]
-    report = diff(a, b)
+    report = diff(a, _predates_sampler(b))
     assert report.steal_a is not None
     assert [(c.guest, c.mean_steal_pct, c.samples) for c in report.steal_a] == [
         ("obs", 30.0, 2),
@@ -276,6 +285,35 @@ def test_empty_samples_is_noted_and_renders_none():
     assert report.steal_a == []
     assert any("A: 'samples' is empty" in n for n in report.notes)
     assert "(no readable steal samples)" in report.render()
+
+
+def test_current_format_record_with_no_samples_gives_empty_contributors():
+    """A real post-#1203 PerfRecord that sampled nothing emits `samples: []`."""
+    a, b = _macos_vs_cloud()
+    assert a["samples"] == []
+    report = diff(a, b)
+    assert report.steal_a == []
+    assert report.steal_b == []
+    assert any("A: 'samples' is empty" in n for n in report.notes)
+    assert any("B: 'samples' is empty" in n for n in report.notes)
+    assert not any("no host-contention samples" in n for n in report.notes)
+
+
+def test_genuine_sampler_output_is_read_and_baselines_are_not_unreadable():
+    """Feed PerfRecord.add_sample output (the real #1203 shape) through diff()."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    rec.add_sample(0.0, None, None, {"obs": GuestSample(None), "qm1": GuestSample(None)})
+    rec.add_sample(5.0, 80.0, 10.0, {"obs": GuestSample(40.0), "qm1": GuestSample(5.0)}, 8)
+    rec.add_sample(10.0, 70.0, 20.0, {"obs": GuestSample(20.0)}, 8)
+    a: dict[str, Any] = json.loads(rec.to_json())
+    assert a["samples"][0]["guests"]["obs"] == {"steal": None}
+    report = diff(a, _record("s", {}, {}))
+    assert report.steal_a is not None
+    assert [(c.guest, c.mean_steal_pct, c.samples) for c in report.steal_a] == [
+        ("obs", 30.0, 2),
+        ("qm1", 5.0, 1),
+    ]
+    assert not any("A:" in n and "no readable steal" in n for n in report.notes)
 
 
 # --- load() ----------------------------------------------------------------------------

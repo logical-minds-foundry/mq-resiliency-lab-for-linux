@@ -211,14 +211,14 @@ def _notes(rec: dict[str, Any], side: str) -> list[str]:
 
 
 # --- host-contention samples ------------------------------------------------------------
-# ISOLATED + DEFENSIVE on purpose: the `samples` shape is owned by the sampler (#1203) and
-# was not final when this was written. Assumed (plan Task 2, `add_sample(t, host_cpu,
-# host_iowait, guests)`): a list of mappings, each with a `guests` mapping of guest name ->
-# steal. A guest value is read as a bare number (steal %) or a mapping holding one of
-# `_STEAL_KEYS`. Anything else is skipped and COUNTED into a note — never a crash, never
-# silent. Adapt only this block when #1203's schema lands.
+# ISOLATED + DEFENSIVE on purpose: the `samples` shape is owned by the sampler (#1203,
+# `perf.HostContentionSample.as_dict`): a list of mappings, each with a `guests` mapping of
+# guest name -> {"steal": pct}, where pct is null for a guest's baseline reading (no delta
+# yet). A baseline is expected, so it is skipped without being counted. A guest value is
+# also read as a bare number or a mapping holding `steal_pct`. Anything else is skipped and
+# COUNTED into a note — never a crash, never silent.
 
-_STEAL_KEYS = ("steal_pct", "steal")
+_STEAL_KEYS = ("steal", "steal_pct")
 
 
 def _guest_steal(value: object) -> float | None:
@@ -228,6 +228,14 @@ def _guest_steal(value: object) -> float | None:
     if isinstance(value, int | float) and not isinstance(value, bool):
         return float(value)
     return None
+
+
+def _is_baseline(value: object) -> bool:
+    """A sampler baseline reading: a steal key present with a null value (#1203)."""
+    if not isinstance(value, dict):
+        return False
+    fields = cast("dict[str, object]", value)
+    return any(k in fields and fields[k] is None for k in _STEAL_KEYS)
 
 
 def _steal(rec: dict[str, Any], side: str) -> tuple[list[StealContributor] | None, list[str]]:
@@ -251,7 +259,7 @@ def _steal(rec: dict[str, Any], side: str) -> tuple[list[StealContributor] | Non
         for guest, value in guests.items():
             steal = _guest_steal(value)
             if steal is None:
-                unreadable += 1
+                unreadable += 0 if _is_baseline(value) else 1
             else:
                 per_guest.setdefault(str(guest), []).append(steal)
     notes = []
