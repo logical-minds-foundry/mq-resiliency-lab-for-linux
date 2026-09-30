@@ -24,6 +24,10 @@ if TYPE_CHECKING:
 # Confirmed by the #101 transport spike. With config.ssh.insert_key=false every
 # guest shares Vagrant's insecure key, so the inventory needs one constant path.
 INSECURE_KEY = "~/.vagrant.d/insecure_private_key"
+# The guest login + ssh options every lab-side ssh to a guest uses — Ansible via the
+# rendered inventory, and the perf sampler (#1203) — one definition, not a copy per caller.
+SSH_USER = "vagrant"
+SSH_COMMON_ARGS = ("-o", "StrictHostKeyChecking=no")
 
 
 class InventoryError(RuntimeError):
@@ -67,9 +71,9 @@ def render_inventory(topo: dict[str, Any]) -> str:
         lines.extend(members)
     lines += [
         "[all:vars]",
-        "ansible_user=vagrant",
+        f"ansible_user={SSH_USER}",
         f"ansible_ssh_private_key_file={INSECURE_KEY}",
-        "ansible_ssh_common_args=-o StrictHostKeyChecking=no",
+        f"ansible_ssh_common_args={' '.join(SSH_COMMON_ARGS)}",
         "ansible_python_interpreter=/usr/bin/python3",
     ]
     return "\n".join(lines) + "\n"
