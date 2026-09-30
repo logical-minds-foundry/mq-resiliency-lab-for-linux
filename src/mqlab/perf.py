@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from mqlab.perfsampler import GuestSample
 
 _UNPHASED = "(unphased)"
 
@@ -65,6 +70,35 @@ class _PhaseTotal:
         }
 
 
+@dataclass(frozen=True)
+class HostContentionSample:
+    """One sampler tick (#1203): seconds since the run started, host CPU/iowait % (None
+    when the host probe failed), and each guest's vCPU steal % (None = baseline reading;
+    a guest whose probe failed is absent)."""
+
+    t: float
+    host_cpu: float | None
+    host_iowait: float | None
+    host_cpus: int | None
+    guest_steal: dict[str, float | None]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "t": self.t,
+            "host": {"cpu": self.host_cpu, "iowait": self.host_iowait, "cpus": self.host_cpus},
+            "guests": {name: {"steal": s} for name, s in self.guest_steal.items()},
+        }
+
+
+def _mean_peak(label: str, values: list[float | None]) -> str:
+    """One summary line: mean/peak over the real readings, or say there were none."""
+    real = [v for v in values if v is not None]
+    if not real:
+        return f"  {label:<24} no reading"
+    mean = sum(real) / len(real)
+    return f"  {label:<24} mean {mean:.1f}%  peak {max(real):.1f}%  ({len(real)} reading(s))"
+
+
 @dataclass
 class PerfRecord:
     """The perf data for one run. Mutable by design: the run appends as it goes."""
@@ -74,6 +108,23 @@ class PerfRecord:
     steps: list[StepTiming] = field(default_factory=list)
     milestones: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    samples: list[HostContentionSample] = field(default_factory=list)
+
+    def note(self, text: str) -> None:
+        """Record a degraded/unavailable measurement — the report says so, never hides it."""
+        self.notes.append(text)
+
+    def add_sample(
+        self,
+        t: float,
+        host_cpu: float | None,
+        host_iowait: float | None,
+        guests: Mapping[str, GuestSample],
+        host_cpus: int | None = None,
+    ) -> None:
+        """Append one host-contention sample (the perf sampler's tick, #1203)."""
+        steal = {name: g.steal_pct for name, g in guests.items()}
+        self.samples.append(HostContentionSample(t, host_cpu, host_iowait, host_cpus, steal))
 
     def add_step(self, phase: str, label: str, seconds: float, retries: int) -> None:
         self.steps.append(StepTiming(phase, label, seconds, retries))
@@ -92,6 +143,22 @@ class PerfRecord:
             phases.setdefault(s.phase, _PhaseTotal()).add(s)
         return phases
 
+    def _samples_summary(self) -> list[str]:
+        """Host CPU/iowait and per-guest steal as mean/peak lines (empty if none sampled)."""
+        if not self.samples:
+            return []
+        lines = [
+            f"Samples: {len(self.samples)}",
+            _mean_peak("host cpu", [s.host_cpu for s in self.samples]),
+            _mean_peak("host iowait", [s.host_iowait for s in self.samples]),
+        ]
+        steal: dict[str, list[float | None]] = {}
+        for s in self.samples:
+            for name, value in s.guest_steal.items():
+                steal.setdefault(name, []).append(value)
+        lines.extend(_mean_peak(f"steal {name}", values) for name, values in steal.items())
+        return lines
+
     def to_json(self) -> str:
         """Stable JSON: fixed top-level key order, phases/steps in run order."""
         data = {
@@ -100,6 +167,7 @@ class PerfRecord:
             "phases": {name: total.as_dict() for name, total in self._phases().items()},
             "milestones": dict(self.milestones),
             "notes": list(self.notes),
+            "samples": [s.as_dict() for s in self.samples],
         }
         return json.dumps(data, indent=2)
 
@@ -117,6 +185,7 @@ class PerfRecord:
         if self.milestones:
             lines.append("Milestones:")
             lines.extend(f"  {n:<24} {s:>10.2f}s" for n, s in self.milestones.items())
+        lines.extend(self._samples_summary())
         if self.notes:
             lines.append("Notes:")
             lines.extend(f"  - {note}" for note in self.notes)
