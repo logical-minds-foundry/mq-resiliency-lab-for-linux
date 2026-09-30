@@ -141,6 +141,17 @@ so older reports still diff.
     has `load1`, `load5` and `load15` (#1215) from the guest's
     `/proc/loadavg`. Both files are read in the **same** ssh call, so there is
     still one round trip per guest per tick.
+  - That ssh call does **not** log in each tick (#1221). Every Ubuntu login
+    runs the dynamic MOTD (`landscape-sysinfo`) through PAM. On a busy guest
+    one run outlasted the 15 s tick, and the runs piled up on the node being
+    measured. The probes therefore share one OpenSSH master connection per
+    guest (`ControlMaster=auto`, `ControlPersist=60`), so each guest sees one
+    login per run. The control sockets live in `$(mqlab build path temp)/ssh-mux/`,
+    under a relative `ControlPath=%C` with the probe run from that directory.
+    A worktree's absolute temp path alone is longer than the Unix socket-path
+    limit. A guest that is not up yet opens no master and is retried on the
+    next tick. When the sampler stops it closes the masters (`ssh -O exit`),
+    and any master that did not close is listed in `notes`.
   - **busy** is (user + nice + system + irq + softirq) / total ticks.
     **iowait** and **steal** are their own columns over the same total.
     Total is the first eight `/proc/stat` columns, since guest time is
@@ -288,3 +299,12 @@ Prior art this procedure draws on:
   and 15 minute load averages (runnable plus uninterruptible-sleep tasks).
   This is the source of the per-guest `load1`/`load5`/`load15`.
   <https://man7.org/linux/man-pages/man5/proc_loadavg.5.html>
+- `ssh_config(5)`: `ControlMaster`, `ControlPath` (including the `%C`
+  connection hash) and `ControlPersist` define the connection multiplexing
+  the guest probes use (#1221). <https://man.openbsd.org/ssh_config>
+- `unix(7)`: a Unix socket path is limited by the size of `sun_path` (108 bytes
+  on Linux), which is why the control socket path is kept relative and short.
+  <https://man7.org/linux/man-pages/man7/unix.7.html>
+- `pam_motd(8)`: the PAM module that shows the message of the day at login.
+  On Ubuntu it runs the dynamic MOTD scripts, which the per-tick logins set off.
+  <https://man7.org/linux/man-pages/man8/pam_motd.8.html>

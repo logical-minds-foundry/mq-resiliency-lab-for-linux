@@ -8,6 +8,18 @@ guest's vCPU steal/busy/iowait % (deltas of the aggregate `cpu` line of the gues
 `/proc/stat`) plus its `/proc/loadavg` (#1215) — both read in ONE ssh round trip per guest
 — and appends one sample to the run's `PerfRecord` (epic #275 spec §1).
 
+One login per guest per run, not per tick (#1221): every Ubuntu ssh login runs PAM's
+dynamic MOTD (`landscape-sysinfo`), which on a busy guest outlasts the tick interval and
+piled up. So guest probes multiplex over ONE persistent OpenSSH master per guest
+(`ControlMaster=auto` + `ControlPersist`); each tick's probe is still a single `ssh`
+invocation, now a mux client that reuses the master without logging in again. The
+control sockets live in `ssh_mux_dir()` (build temp bucket) under a RELATIVE
+`ControlPath=%C`, with the probe run from that directory: the absolute build path (a
+worktree's is ~125 chars) would overflow the ~104-byte Unix socket-path limit, while the
+relative name is 40 hex chars whatever the checkout's depth. `Sampler.stop()` closes the
+masters (`ssh -O exit`); a master that will not close is noted, and expires on its own
+after `ControlPersist` idle seconds.
+
 Non-fatal, never silent: every probe runs in its own try/except, and a failure degrades
 to a recorded `note` in the report (deduplicated — a guest that is not up yet is noted
 once, then again when it recovers or at stop if it never did). Nothing here raises into
@@ -30,6 +42,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from mqlab.inventory import INSECURE_KEY, SSH_COMMON_ARGS, SSH_USER
+from mqlab.paths import temp_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -43,6 +56,34 @@ _GUEST_PROBE_CMD = "head -n1 /proc/stat && cat /proc/loadavg"
 _LOCAL_PROC_STAT = Path("/proc/stat")
 # Unattended probes must never prompt or hang on connect: fail fast into a note instead.
 _SSH_PROBE_ARGS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR")
+# Connection multiplexing (#1221): one master (one login, one MOTD run) per guest per run.
+# - ControlMaster=auto: the first probe that authenticates becomes the master; later ones
+#   reuse it. A first connect that FAILS creates no socket (ssh binds it only after auth),
+#   so a guest that is not up yet just fails fast into a note and is retried next tick.
+#   A socket whose master died is refused on connect, and `auto` removes it and becomes
+#   the new master — a stale socket never blocks later ticks.
+# - ControlPath=%C is RELATIVE (40 hex chars): the probe runs with cwd=ssh_mux_dir(), so
+#   the build tree's depth never counts against the Unix socket-path limit.
+# - ControlPersist: the master backgrounds itself (stdio on /dev/null, so it does not
+#   hold the probe's captured pipes open) and outlives each tick; one left behind (stop
+#   could not close it) exits after this many idle seconds, well above the tick interval.
+# - ServerAlive*: a master whose guest went away (rebooted/halted mid-run) dies in ~10s
+#   instead of stalling every later tick's probe until its timeout.
+_CONTROL_PATH = "%C"
+CONTROL_PERSIST_S = 60
+_SSH_MUX_ARGS = (
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    f"ControlPath={_CONTROL_PATH}",
+    "-o",
+    f"ControlPersist={CONTROL_PERSIST_S}",
+    "-o",
+    "ServerAliveInterval=5",
+    "-o",
+    "ServerAliveCountMax=2",
+)
+_SSH_MUX_DIRNAME = "ssh-mux"
 # /proc/stat cpu columns: user nice system idle iowait irq softirq steal guest guest_nice.
 # guest/guest_nice are already included in user/nice, so the total is the first eight.
 # Busy = user + nice + system + irq + softirq (#1215); idle, iowait and steal are not busy.
@@ -94,6 +135,10 @@ class SampleSource(Protocol):
     def local(self) -> LocalSample: ...
 
     def guest(self, name: str) -> GuestSample: ...
+
+    # Release what the source holds open (#1221: ssh masters). Returns one message per
+    # resource that did not release — the Sampler notes each; nothing is raised.
+    def close(self) -> list[str]: ...
 
 
 class Sampler:
@@ -215,6 +260,14 @@ class Sampler:
         self._last_error.clear()
         for key, n in still_failing:
             self._record.note(f"{key}: still unavailable at stop ({n} consecutive failed probe(s))")
+        # Release the source's connections (#1221). Non-fatal, never silent.
+        try:
+            problems = self._source.close()
+        except Exception as exc:  # noqa: BLE001 - recorded as a note; stop must not raise
+            self._record.note(f"sampler: source cleanup failed ({type(exc).__name__}: {exc})")
+        else:
+            for problem in problems:
+                self._record.note(f"sampler: {problem}")
 
 
 # --- the real (lab) source --------------------------------------------------------------
@@ -328,12 +381,20 @@ def read_local_proc_stat() -> str:
         return fh.readline()
 
 
-def run_bounded(argv: list[str], timeout: float) -> str:
-    """Run a probe command bounded by `timeout`; return stdout. FAIL-LOUD: a timeout or
-    non-zero exit raises with the tool's own message (the Sampler turns it into a note)."""
+def ssh_mux_dir() -> Path:
+    """Where the guest ssh control sockets live (#1221): the local build temp bucket,
+    resolved through the build-path API. The probe runs FROM here with a relative
+    `ControlPath`, so this directory's own length is not bound by the socket-path limit."""
+    return temp_dir() / _SSH_MUX_DIRNAME
+
+
+def run_bounded(argv: list[str], timeout: float, *, cwd: Path | None = None) -> str:
+    """Run a probe command (from `cwd`, if given) bounded by `timeout`; return stdout.
+    FAIL-LOUD: a timeout or non-zero exit raises with the tool's own message (the Sampler
+    turns it into a note)."""
     try:
         cp = subprocess.run(  # noqa: S603 - fixed internal argv; tools on PATH (lab)
-            argv, capture_output=True, text=True, timeout=timeout, check=False
+            argv, capture_output=True, text=True, timeout=timeout, check=False, cwd=cwd
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"{argv[0]} timed out after {timeout}s") from exc
@@ -351,23 +412,31 @@ class RealSource:
     options the Ansible inventory uses (`mqlab.inventory`). The first /proc/stat reading
     of each guest (and of the local VM) is a baseline (percentages None); every later one
     is the delta since the last.
+
+    Guest probes multiplex over one ssh master per guest (#1221, see `_SSH_MUX_ARGS`),
+    with control sockets in `mux_dir` (default `ssh_mux_dir()`); `close()` exits every
+    master a probe may have opened.
     """
 
     def __init__(
         self,
         addresses: Mapping[str, str],
         *,
-        run: Callable[[list[str], float], str] = run_bounded,
+        run: Callable[..., str] = run_bounded,
         read_local: Callable[[], str] = read_local_proc_stat,
         timeout: float = 10.0,
+        mux_dir: Path | None = None,
     ) -> None:
         self.addresses = dict(addresses)
         self._run = run
         self._read_local = read_local
         self._timeout = timeout
+        self._mux_dir = mux_dir if mux_dir is not None else ssh_mux_dir()
         self._cpus: int | None = None
         self._prev: dict[str, CpuCounters] = {}
         self._prev_local: CpuCounters | None = None
+        # Guests whose probe authenticated at least once — each has (or had) a master.
+        self._masters: set[str] = set()
 
     @classmethod
     def from_topology(cls, topo: Mapping[str, Any], **kwargs: Any) -> RealSource:
@@ -396,20 +465,30 @@ class RealSource:
             return LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
         return LocalSample(steal_pct=pcts.steal, busy_pct=pcts.busy, iowait_pct=pcts.iowait)
 
+    def _ssh(self, *tail: str) -> list[str]:
+        """The guest ssh argv: the inventory's login/key/host-key options, the unattended
+        probe options, the multiplexing options, then `tail` (destination [+ command])."""
+        return [
+            "ssh",
+            *SSH_COMMON_ARGS,
+            *_SSH_PROBE_ARGS,
+            *_SSH_MUX_ARGS,
+            "-i",
+            os.path.expanduser(INSECURE_KEY),  # noqa: PTH111 - ssh argv wants a str path
+            *tail,
+        ]
+
     def guest(self, name: str) -> GuestSample:
         addr = self.addresses.get(name)
         if addr is None:
             raise LookupError(f"no net-mgmt address for guest {name!r} in topology")
-        argv = [
-            "ssh",
-            *SSH_COMMON_ARGS,
-            *_SSH_PROBE_ARGS,
-            "-i",
-            os.path.expanduser(INSECURE_KEY),  # noqa: PTH111 - ssh argv wants a str path
-            f"{SSH_USER}@{addr}",
-            _GUEST_PROBE_CMD,
-        ]
-        cur, load = parse_guest_probe(self._run(argv, self._timeout))
+        # Re-ensured every probe (cheap), so a `mqlab build clean` mid-run self-heals.
+        self._mux_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        out = self._run(
+            self._ssh(f"{SSH_USER}@{addr}", _GUEST_PROBE_CMD), self._timeout, cwd=self._mux_dir
+        )
+        self._masters.add(name)
+        cur, load = parse_guest_probe(out)
         prev = self._prev.get(name)
         self._prev[name] = cur
         pcts = None if prev is None else cpu_pcts(prev, cur)
@@ -421,3 +500,27 @@ class RealSource:
             load5=load.load5,
             load15=load.load15,
         )
+
+    def _close_master(self, name: str) -> str | None:
+        argv = self._ssh("-O", "exit", f"{SSH_USER}@{self.addresses[name]}")
+        try:
+            self._run(argv, self._timeout, cwd=self._mux_dir)
+        except Exception as exc:  # noqa: BLE001 - returned as a note by close(), never lost
+            return (
+                f"guest {name}: ssh master not closed ({type(exc).__name__}: {exc}); "
+                f"it exits on its own after {CONTROL_PERSIST_S}s idle (ControlPersist)"
+            )
+        return None
+
+    def close(self) -> list[str]:
+        """`ssh -O exit` every master a successful probe opened (concurrently, each bounded
+        by the probe timeout). Returns one message per master that did not close — e.g. it
+        already died with its guest — and never raises. A master opened by a probe that
+        then timed out is not tracked; ControlPersist retires it after its idle period."""
+        names = sorted(self._masters)
+        self._masters.clear()
+        if not names:
+            return []
+        with ThreadPoolExecutor(max_workers=min(len(names), _MAX_PROBE_WORKERS)) as pool:
+            results = list(pool.map(self._close_master, names))
+        return [r for r in results if r is not None]
