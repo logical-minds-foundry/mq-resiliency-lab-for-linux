@@ -148,9 +148,11 @@ def test_install_never_removes_the_core_javaagent() -> None:
 # --- readiness budget widened to 15 min (#1034, epic .github#198) ---------------------
 
 
-def test_readiness_wait_budget_is_15_minutes() -> None:
-    """The cluster-readiness wait must budget ~900 s (180 retries x 5 s delay = 15 min)
-    to cover host-oversubscribed cold boots while staying fail-loud (#1034)."""
+def test_readiness_wait_budget_is_40_minutes() -> None:
+    """The cluster-readiness wait must budget 2400 s (480 retries x 5 s delay = 40 min) to
+    cover the host-oversubscribed cold boot (OpenSearch is ~15 s uncontended but ~20-33 min
+    during a full bootstrap when the 24-core host is oversubscribed) while staying fail-loud
+    (#1197, supersedes the #1034 ~15-min figure)."""
     tasks = _load_tasks(CONFIGURE_TASKS)
     wait = next(
         (t for t in tasks if str(t.get("name", "")).startswith("wait for the OpenSearch cluster")),
@@ -158,5 +160,8 @@ def test_readiness_wait_budget_is_15_minutes() -> None:
     )
     assert wait is not None, "configure.yml has no 'wait for the OpenSearch cluster' task"
     assert "ansible.builtin.uri" in wait, "readiness wait task must use ansible.builtin.uri"
-    assert wait.get("retries") == 180, f"readiness retries must be 180; got {wait.get('retries')!r}"
     assert wait.get("delay") == 5, f"readiness delay must be 5 s; got {wait.get('delay')!r}"
+    assert wait.get("retries", 0) * wait.get("delay", 0) == 2400, (
+        f"readiness budget must be 2400 s (#1197); got {wait.get('retries')!r} x "
+        f"{wait.get('delay')!r}"
+    )

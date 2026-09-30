@@ -37,9 +37,12 @@ OPENSEARCH_CONFIGURE = ROLES / "opensearch" / "tasks" / "configure.yml"
 MIN_JVM_TIMEOUT = 300
 MAX_JVM_TIMEOUT = 3600
 
-# The ~15-min budget the logsearch tier is aligned on (#1034/#1040); OpenSearch's unit
-# is reconciled to it here (#1162). mqweb's own bounded non-fatal readiness gate.
-LOGSEARCH_BUDGET_SECONDS = 900
+# The logsearch-tier readiness budget, widened to the host-oversubscribed cold-boot reality
+# (#1197, supersedes the #1034/#1040/#1162 ~15-min figure): VAL #1177 measured OpenSearch
+# reaching green in ~15 s UNCONTENDED but ~20-33 min during a FULL cold bootstrap, when the
+# 24-core macOS host is CPU-oversubscribed across all 9 guests (obs alone = 12 vCPU) + the
+# dev VM. OpenSearch's unit timeout and its cluster-health gate are reconciled to it.
+LOGSEARCH_BUDGET_SECONDS = 2400
 MQWEB_READINESS_TIMEOUT = 300
 
 

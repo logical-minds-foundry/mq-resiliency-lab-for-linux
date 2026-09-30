@@ -56,7 +56,7 @@
   until: >-
     opensearch_dashboards_status.status == 200
     and opensearch_dashboards_status.json.status.overall.state in ['green', 'yellow']
-  retries: 180
+  retries: 480
   delay: 5
 
 # --- default logs-* index pattern (plan Task 5 Step 3) ---------------------------------

@@ -123,7 +123,7 @@
       # (systemd marks the service active on exec), so this is a declared-budget
       # reconciliation — the fatal 900 s uri loop in configure.yml is the effective
       # OpenSearch readiness budget under the nested-virt JVM cold-start tax.
-      TimeoutStartSec=900
+      TimeoutStartSec=2400
       Restart=on-failure
 
       [Install]

@@ -28,8 +28,12 @@ DATA_PREPPER_INSTALL = ROLES / "data-prepper" / "tasks" / "install.yml"
 DASHBOARDS_CONFIGURE = ROLES / "opensearch-dashboards" / "tasks" / "configure.yml"
 DASHBOARDS_INSTALL = ROLES / "opensearch-dashboards" / "tasks" / "install.yml"
 
-# The ~15-min budget the whole logsearch tier is aligned on (#1034/#1040).
-BUDGET_SECONDS = 900
+# The whole logsearch tier's readiness budget, widened to the host-oversubscribed cold-boot
+# reality (#1197, supersedes the #1034/#1040 ~15-min figure): a full cold bootstrap throttles
+# the JVM/Node cold-starts to ~20-33 min when the 24-core macOS host is oversubscribed across
+# all guests + the dev VM (OpenSearch is ~15 s uncontended). Data Prepper + Dashboards ride
+# the same budget since they cold-start under the same contention.
+BUDGET_SECONDS = 2400
 
 
 def _load_tasks(path: Path) -> list[dict]:
@@ -72,16 +76,16 @@ def test_data_prepper_readiness_wait_budget_is_15_minutes() -> None:
     )
 
 
-def test_data_prepper_unit_start_timeout_is_15_minutes() -> None:
-    """The Data Prepper systemd unit must give the JVM 900 s to start (#1040), matching
-    the readiness wait — and must NOT retain the old 180 s TimeoutStartSec."""
+def test_data_prepper_unit_start_timeout_matches_the_budget() -> None:
+    """The Data Prepper systemd unit must give the JVM the full logsearch budget to start
+    (#1197), matching the readiness wait — and must NOT retain the old 180 s TimeoutStartSec."""
     content = _unit_content(DATA_PREPPER_INSTALL, "/etc/systemd/system/data-prepper.service")
-    assert "TimeoutStartSec=900" in content, (
-        "data-prepper systemd unit must set TimeoutStartSec=900 for host-contended cold "
-        f"boots (#1040); unit content:\n{content}"
+    assert f"TimeoutStartSec={BUDGET_SECONDS}" in content, (
+        f"data-prepper systemd unit must set TimeoutStartSec={BUDGET_SECONDS} for "
+        f"host-oversubscribed cold boots (#1197); unit content:\n{content}"
     )
     assert "TimeoutStartSec=180" not in content, (
-        "data-prepper systemd unit still carries the old TimeoutStartSec=180 — the #1040 "
+        "data-prepper systemd unit still carries the old TimeoutStartSec=180 — the "
         f"widening did not take; unit content:\n{content}"
     )
 
@@ -89,9 +93,9 @@ def test_data_prepper_unit_start_timeout_is_15_minutes() -> None:
 # --- OpenSearch Dashboards --------------------------------------------------------------
 
 
-def test_dashboards_readiness_wait_budget_is_15_minutes() -> None:
-    """The Dashboards /api/status readiness loop must budget ~900 s (180 retries x 5 s
-    delay) (#1040): Dashboards starts last and is the most starved under host
+def test_dashboards_readiness_wait_budget_matches_the_budget() -> None:
+    """The Dashboards /api/status readiness loop must budget the full logsearch budget
+    (retries x 5 s delay) (#1197): Dashboards starts last and is the most starved under host
     oversubscription. Must stay fail-loud (a bounded retries/until that aborts)."""
     tasks = _load_tasks(DASHBOARDS_CONFIGURE)
     wait = next(
@@ -99,25 +103,25 @@ def test_dashboards_readiness_wait_budget_is_15_minutes() -> None:
         None,
     )
     assert wait is not None, (
-        "opensearch-dashboards configure.yml has no uri/until readiness task (#1040)"
-    )
-    assert wait.get("retries") == 180, (
-        "dashboards readiness retries must be widened to 180 (x 5 s = 900 s) for "
-        f"host-contended cold boots (#1040); got {wait.get('retries')!r}"
+        "opensearch-dashboards configure.yml has no uri/until readiness task (#1197)"
     )
     assert wait.get("delay") == 5, (
-        f"dashboards readiness delay must remain 5 s (180 x 5 = 900 s) (#1040); "
-        f"got {wait.get('delay')!r}"
+        f"dashboards readiness delay must remain 5 s (#1197); got {wait.get('delay')!r}"
+    )
+    assert wait.get("retries", 0) * wait.get("delay", 0) == BUDGET_SECONDS, (
+        f"dashboards readiness budget (retries x delay) must be {BUDGET_SECONDS} s for "
+        f"host-oversubscribed cold boots (#1197); got {wait.get('retries')!r} x "
+        f"{wait.get('delay')!r}"
     )
 
 
-def test_dashboards_unit_start_timeout_is_15_minutes() -> None:
-    """The Dashboards systemd unit must give it 900 s to start (#1040), matching the
-    readiness loop — and must NOT retain the old 180 s TimeoutStartSec."""
+def test_dashboards_unit_start_timeout_matches_the_budget() -> None:
+    """The Dashboards systemd unit must give it the full logsearch budget to start (#1197),
+    matching the readiness loop — and must NOT retain the old 180 s TimeoutStartSec."""
     content = _unit_content(DASHBOARDS_INSTALL, "/etc/systemd/system/opensearch-dashboards.service")
-    assert "TimeoutStartSec=900" in content, (
-        "opensearch-dashboards systemd unit must set TimeoutStartSec=900 for "
-        f"host-contended cold boots (#1040); unit content:\n{content}"
+    assert f"TimeoutStartSec={BUDGET_SECONDS}" in content, (
+        f"opensearch-dashboards systemd unit must set TimeoutStartSec={BUDGET_SECONDS} for "
+        f"host-oversubscribed cold boots (#1197); unit content:\n{content}"
     )
     assert "TimeoutStartSec=180" not in content, (
         "opensearch-dashboards systemd unit still carries the old TimeoutStartSec=180 — "
