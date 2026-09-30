@@ -28,20 +28,24 @@
   # green or yellow are BOTH healthy here; only red / unreachable is a failure. On a
   # single node with the replicas:0 template below, health should read green.
   #
-  # Budget widened to the host-contended cold-boot reality (#1034, epic .github#198):
-  # startup can legitimately take many minutes when the macOS host is oversubscribed
-  # (nested-VM CPU/memory contention swings the JVM bootstrap from ~50 s to ~8.5 min —
-  # measured on cold-boot run #1022). 180 retries x 5 s = 900 s (15 min) covers that
-  # while still FAILING LOUD — if the tier never accepts requests the play aborts here
-  # rather than letting a half-up logsearch node limp forward (Data Prepper / Dashboards
-  # downstream both depend on this store).
+  # Budget sized to the host-oversubscribed cold-boot reality (#1197; supersedes the #1034
+  # estimate). VAL #1177 measured OpenSearch reaching green in ~15 s when the host is
+  # UNCONTENDED (fresh reboot of obs alone), but ~20-33 min during a FULL cold bootstrap:
+  # the macOS host (24 cores) is CPU-oversubscribed across all 9 guests (obs alone = 12 vCPU)
+  # plus the dev VM, so OpenSearch's JIT-heavy FIRST run is throttled at the hypervisor
+  # (invisible to the guest load average). It DOES reach green — just slowly — so the old
+  # 900 s (15 min) budget failed the bootstrap prematurely. 480 retries x 5 s = 2400 s
+  # (40 min) covers the throttled cold-start with margin while still FAILING LOUD if the tier
+  # never comes up (Data Prepper / Dashboards downstream both depend on this store). The
+  # real speed fix is reducing host contention during bring-up (bootstrap staging) + the
+  # dedicated-core cloud path (#1196); this budget is what makes the constrained host RELIABLE.
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ opensearch_http_port }}/_cluster/health"
     method: GET
     status_code: 200
   register: opensearch_health
   until: opensearch_health.status == 200 and opensearch_health.json.status in ['green', 'yellow']
-  retries: 180
+  retries: 480
   delay: 5
 
 # --- logs-* index template BEFORE any sink writes (connector spike gating finding) -----

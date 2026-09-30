@@ -30,4 +30,4 @@
     host: 127.0.0.1
     port: "{{ data_prepper_otel_logs_port }}"
     state: started
-    timeout: 900
+    timeout: 2400
