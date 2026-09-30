@@ -98,6 +98,7 @@ bring up your first stack:
 
 ```bash
 ./scripts/setup                 # checks uv + Python 3.14, then runs `uv sync` to build the venv
+. .venv/bin/activate            # put `mqlab` (and its companion tools) on PATH
 mqlab doctor                    # pre-flight the host: arch, KVM, libvirt, required tools
 mqlab bootstrap pcmk-ubuntu     # bring up a full HA/DR stack: net → vms → provision → observe
 mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
@@ -106,7 +107,8 @@ mqlab status pcmk-ubuntu        # phase completion (✓/✗) for this stack
 `./scripts/setup` sets up the **environment**, not the lab: it verifies `uv` and
 a uv-managed Python 3.14 are present (installing 3.14 via `uv` if missing), runs
 `uv sync` to materialize the
-virtual environment, and prints the next commands. `mqlab bootstrap pcmk-ubuntu`
+virtual environment, and prints the next commands. It cannot change your shell's
+`PATH`, so activate the venv (or prefix each command with `uv run`). `mqlab bootstrap pcmk-ubuntu`
 then sequences the whole bring-up — the canonical starting arm is **`pcmk-ubuntu`**
 (Pacemaker/SAN on Ubuntu, subscription-free and x86-native) — and leaves you with
 a **running queue manager**. See

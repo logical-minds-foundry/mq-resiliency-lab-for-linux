@@ -13,8 +13,14 @@ The VM is ephemeral. After a `vrg-vm rebuild`, the host-mounted repo and
 `build/` survive, but the Python env and libvirt/Vagrant state do not.
 
 ```bash
-uv sync          # creates .venv and puts `mqlab` on PATH (so it's `mqlab …`, not `uv run mqlab …`)
+uv sync          # creates .venv (it does NOT put `mqlab` on your shell's PATH)
 ```
+
+From a dev checkout, invoke the CLI as **`uv run mqlab …`**. The bare `mqlab …`
+commands below are shorthand for that, or run them bare after
+`. .venv/bin/activate`. See
+[operating the lab from a dev session](../development/operating-the-lab-from-a-dev-session.md#1-the-vms-are-libvirt-guests-under-qemusystem)
+for the dev-vs-runtime boundary.
 
 Everything else a bring-up needs — the baked boxes, the arch-correct MQ tarball,
 the Ansible galaxy collections, and the PKI CA + keystores — is **ensured

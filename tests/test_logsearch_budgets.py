@@ -127,3 +127,33 @@ def test_dashboards_unit_start_timeout_matches_the_budget() -> None:
         "opensearch-dashboards systemd unit still carries the old TimeoutStartSec=180 — "
         f"the #1040 widening did not take; unit content:\n{content}"
     )
+
+
+DASHBOARDS_DEFAULTS = ROLES / "opensearch-dashboards" / "defaults" / "main.yml"
+# The two idempotent post-green API calls and the strict status each must return (#1214).
+POST_GREEN_CALLS = {
+    "create the default logs-* index pattern (idempotent)": [200, 409],
+    "set logs-* as the default index pattern (idempotent)": 200,
+}
+
+
+def test_dashboards_post_green_api_calls_have_timeout_and_bounded_retries() -> None:
+    """The post-green index-pattern create + defaultIndex calls must carry an explicit
+    per-request timeout above the uri default 30 s and bounded retries (#1214): a cold-boot
+    defaultIndex POST took ~50 s. Success criteria stay strict and there is no ignore_errors,
+    so a persistent failure still fails loud once the retry budget is spent."""
+    defaults = yaml.safe_load(DASHBOARDS_DEFAULTS.read_text(encoding="utf-8"))
+    assert defaults["opensearch_dashboards_api_timeout_s"] > 30
+    assert defaults["opensearch_dashboards_api_retries"] >= 1
+    assert defaults["opensearch_dashboards_api_retry_delay_s"] >= 1
+    tasks = {t.get("name"): t for t in _load_tasks(DASHBOARDS_CONFIGURE)}
+    for name, status in POST_GREEN_CALLS.items():
+        task = tasks.get(name)
+        assert task is not None, f"opensearch-dashboards configure.yml lost task {name!r}"
+        uri = task["ansible.builtin.uri"]
+        assert uri["status_code"] == status, f"{name!r}: status_code must stay {status!r}"
+        assert uri["timeout"] == "{{ opensearch_dashboards_api_timeout_s }}", name
+        assert task["retries"] == "{{ opensearch_dashboards_api_retries }}", name
+        assert task["delay"] == "{{ opensearch_dashboards_api_retry_delay_s }}", name
+        assert f"{task['register']}.status" in task["until"], name
+        assert "ignore_errors" not in task, f"{name!r} must fail loud (no ignore_errors)"
