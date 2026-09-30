@@ -19,6 +19,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from mqlab import cli
+from mqlab import perfrun as cli_perfrun
 from mqlab.cli import _gate_stack_host_arch as _real_gate  # captured before the autouse stub
 from mqlab.cli import _reconcile_box_meta as _real_reconcile_box_meta  # captured before stub
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
@@ -1128,3 +1129,114 @@ def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tm
     assert states["qm_up"] is False
     # only the two virsh probes ran — cluster_group guard prevents the ansible call
     assert len(runner.recorded) == 2
+
+
+# --------------------------------------------------------------------------- #
+# perf capture (#1205): report written per bootstrap, even on failure; non-fatal
+# --------------------------------------------------------------------------- #
+_OS_WAIT = "opensearch : wait for the OpenSearch cluster to accept requests"
+_PROFILE_TASKS_LINES = [
+    f"TASK [{_OS_WAIT}] *********",
+    "Wednesday 23 September 2026  08:21:34 -0400 (0:00:15.853)       0:00:54.556 ***** ",
+    "ok: [obs]",
+    "TASKS RECAP ********************************************************************",
+    "Wednesday 23 September 2026  08:42:15 -0400 (0:20:41.136)       0:21:35.693 ***** ",
+]
+
+
+class _SiteObsRunner(RecordingRunner):
+    """Replays the ansible profile_tasks output on the site-obs.yml step; an optional
+    `fail_on` argv token makes that step exit non-zero."""
+
+    def __init__(self, fail_on: str | None = None) -> None:
+        super().__init__()
+        self.fail_on = fail_on
+
+    def run(self, command, on_line):  # type: ignore[no-untyped-def]
+        self.recorded.append(command)
+        if "site-obs.yml" in command.argv:
+            for line in _PROFILE_TASKS_LINES:
+                on_line(line)
+        return 3 if self.fail_on is not None and self.fail_on in command.argv else 0
+
+
+def _perf_deps(runner):
+    buf = io.StringIO()
+    deps = cli.Deps(
+        runner=runner,
+        renderer=Renderer(Console(file=buf, force_terminal=False, width=200)),
+        transcript=Transcript(transcript_path("bootstrap", "20260627T000000Z")),
+        pauser=_NoPause(),
+    )
+    return deps, buf
+
+
+def _perf_reports(tmp_path):
+    return sorted((tmp_path / "build" / "state" / "runs").glob("perf-*.json"))
+
+
+def _run_perf_bootstrap(monkeypatch, tmp_path, runner, *args):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=False, vms=False))
+    deps, buf = _perf_deps(runner)
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
+    _stub_ensure(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", *args])
+    return result, buf
+
+
+def test_bootstrap_writes_a_perf_report_grouped_by_the_four_phases(
+    monkeypatch, tmp_path, fake_perf_source
+):
+    result, buf = _run_perf_bootstrap(monkeypatch, tmp_path, _SiteObsRunner())
+    assert result.exit_code == 0, result.output
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    assert report["stack"] == "pcmk-ubuntu"
+    assert list(report["phases"]) == ["net", "vms", "provision", "observe"]
+    ms = report["milestones"]
+    # 9 VMs in batches of 4: san-a is in batch 1, app-client alone in batch 3.
+    assert ms["boot:san-a"] == ms["boot:pcmk-a3"]
+    assert ms["boot_retries:app-client"] == 0
+    assert ms["opensearch_green"] == pytest.approx(1241.136)
+    assert "bootstrap completed" in report["notes"]
+    assert report["samples"], "the sampler took at least its immediate sample"
+    # the sampler covers every VM the stack brings up (members + commons)
+    assert set(fake_perf_source.probed) == {
+        "san-a",
+        "pcmk-a1",
+        "pcmk-a2",
+        "pcmk-a3",
+        "pcmk-b1",
+        "obs",
+        "mon-probe",
+        "svc-sim",
+        "app-client",
+    }
+    out = buf.getvalue()
+    assert "Perf summary — pcmk-ubuntu" in out
+    assert f"perf report -> {path}" in out
+
+
+def test_bootstrap_writes_the_perf_report_even_when_it_fails_partway(monkeypatch, tmp_path):
+    runner = _SiteObsRunner(fail_on="site-dns.yml")  # the provision phase's dns step
+    result, _ = _run_perf_bootstrap(monkeypatch, tmp_path, runner, "--no-dr")
+    assert result.exit_code == 3  # the bootstrap's own exit status, unchanged by perf
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    assert list(report["phases"]) == ["net", "vms", "provision"]
+    assert "bootstrap FAILED in phase provision (exit 3)" in report["notes"]
+    assert "boot:pcmk-b1" not in report["milestones"]  # --no-dr: site-B never booted
+
+
+def test_a_perf_failure_never_fails_or_changes_the_bootstrap(monkeypatch, tmp_path):
+    def unwritable(ts):
+        raise PermissionError("runs dir is read-only")
+
+    monkeypatch.setattr(cli_perfrun, "report_path", unwritable)
+    result, buf = _run_perf_bootstrap(monkeypatch, tmp_path, _SiteObsRunner())
+    assert result.exit_code == 0
+    assert _perf_reports(tmp_path) == []
+    out = buf.getvalue()
+    assert "perf: WARNING" in out
+    assert "runs dir is read-only" in out

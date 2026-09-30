@@ -28,7 +28,7 @@ The `states` dict shape (the contract Task 4's `_probe_all` fills):
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -69,6 +69,17 @@ class Phase:
     build_steps: Callable[..., list[CommandStep]]
     satisfied: Callable[[Stack, dict[str, Any]], bool]
     ensure: tuple[str, ...] = ()
+
+
+# The phase names — one source for the registry below AND the `phase=` tag each
+# builder stamps on its steps, so the perf report groups timings by phase (#1205).
+NET, VMS, PROVISION, OBSERVE = "net", "vms", "provision", "observe"
+
+
+def _stamped(phase: str, steps: list[CommandStep]) -> list[CommandStep]:
+    """`steps` with `phase=` set on every one — each builder returns through this, so
+    no emitted step can be left unphased in the perf report (#1205)."""
+    return [replace(step, phase=phase) for step in steps]
 
 
 # --------------------------------------------------------------------------- #
@@ -213,12 +224,15 @@ def _net_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[Co
     down. Emitted as a single step so build_steps stays pure — the idempotent probing
     happens when the runner executes the script.
     """
-    return [
-        CommandStep(
-            "networks up",
-            Command(["bash", str(lab_script("net-up.sh")), *lab_net_names()]),  # noqa: S607
-        )
-    ]
+    return _stamped(
+        NET,
+        [
+            CommandStep(
+                "networks up",
+                Command(["bash", str(lab_script("net-up.sh")), *lab_net_names()]),  # noqa: S607
+            )
+        ],
+    )
 
 
 def _net_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG001
@@ -365,7 +379,7 @@ def _vms_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[Co
             else f"{stack.name} vms up [{index}/{len(batches)}]"
         )
         steps.append(CommandStep(label, cmd, retry=_BOOT_RETRY))
-    return steps
+    return _stamped(VMS, steps)
 
 
 def _vms_satisfied(stack: Stack, states: dict[str, Any]) -> bool:
@@ -508,16 +522,19 @@ def _provision_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> l
         ["ansible-playbook", Path(stack.provision).name, *_qm_extra_vars(stack), *dr_vars],
         cwd=ansible,
     )
-    return [
-        *_nic_config_steps(stack, no_dr=no_dr),
-        *_nic_assure_steps(stack, no_dr=no_dr),
-        CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
-        CommandStep(
-            f"{stack.name} provision dns",
-            Command(["ansible-playbook", "site-dns.yml", "--limit", nodes], cwd=ansible),
-        ),
-        CommandStep(f"{stack.name} provision", cmd),
-    ]
+    return _stamped(
+        PROVISION,
+        [
+            *_nic_config_steps(stack, no_dr=no_dr),
+            *_nic_assure_steps(stack, no_dr=no_dr),
+            CommandStep("render dns zones", Command(["mqlab", "dns", "render"])),
+            CommandStep(
+                f"{stack.name} provision dns",
+                Command(["ansible-playbook", "site-dns.yml", "--limit", nodes], cwd=ansible),
+            ),
+            CommandStep(f"{stack.name} provision", cmd),
+        ],
+    )
 
 
 def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG001
@@ -576,7 +593,7 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
     """
     ansible = repo_root() / "ansible"
     nodes = ",".join(all_vms(stack, no_dr=no_dr))
-    return [
+    steps = [
         # --stack scopes the exporter deployment list to THIS stack, so observing one
         # stack never stands up (crash-looping) exporter units for un-provisioned ones
         # (#503); the node/ibmmq scrape-target renders stay full-topology.
@@ -664,6 +681,7 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
             ),
         ),
     ]
+    return _stamped(OBSERVE, steps)
 
 
 def _observe_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: ARG001
@@ -679,15 +697,15 @@ def _observe_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa: A
 # each name to its real ensure before the phase's steps run, and only for phases
 # actually selected — so `bootstrap --only observe` ensures only exporter PKI.
 PHASES: list[Phase] = [
-    Phase("net", _net_build_steps, _net_satisfied),
-    Phase("vms", _vms_build_steps, _vms_satisfied, ensure=("boxes", "mq")),
+    Phase(NET, _net_build_steps, _net_satisfied),
+    Phase(VMS, _vms_build_steps, _vms_satisfied, ensure=("boxes", "mq")),
     Phase(
-        "provision",
+        PROVISION,
         _provision_build_steps,
         _provision_satisfied,
         ensure=("galaxy", "mq", "pki", "san"),
     ),
-    Phase("observe", _observe_build_steps, _observe_satisfied, ensure=("pki",)),
+    Phase(OBSERVE, _observe_build_steps, _observe_satisfied, ensure=("pki",)),
 ]
 
 

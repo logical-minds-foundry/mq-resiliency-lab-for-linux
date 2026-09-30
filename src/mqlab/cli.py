@@ -41,6 +41,7 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
+from mqlab.perfrun import BootstrapPerf
 from mqlab.phases import (
     PHASES,
     _commons_members,
@@ -2041,7 +2042,12 @@ def _bootstrap_run(
     _gate_stack_host_arch(stack)  # #847: abort a RHEL stack on aarch64 pre-bake
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
-    deps = build_deps("bootstrap", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
+    deps = build_deps("bootstrap", timestamp)
+    # Perf capture (#1205): additive + non-fatal — BootstrapPerf never raises into the run
+    # or changes its exit status; the report is written in `finally`, so a bootstrap that
+    # fails partway still gets one (that is the most valuable data).
+    perf: BootstrapPerf | None = None
     try:
         # The vms phase's `vagrant up` step carries env=None, so it inherits this
         # process's environment. Export the vagrant env up front so bring-up sees
@@ -2070,12 +2076,16 @@ def _bootstrap_run(
         if any(phase.name == "provision" for phase in selected):
             for secret in stack.secrets:
                 os.environ[secret.upper()] = _source_secret(deps, secret)
+        perf = BootstrapPerf.start(
+            stack.name, lambda: all_vms(stack, no_dr=no_dr), renderer=deps.renderer
+        )
         for phase in selected:  # one phase at a time so a failure names its phase
             try:
                 # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
                 # only for the phases actually selected this run.
                 _ensure_prereqs_for_stack(stack, phase, step=step)
                 steps = phase.build_steps(stack, deps, no_dr=no_dr)
+                perf.register_phase(phase.name, steps)
                 if phase.name == "observe":
                     # The log-search tier is a CORE observability layer (#1018) and now rides
                     # the obs node (#1179): its bring-up is folded into site-obs.yml (run by
@@ -2090,8 +2100,10 @@ def _bootstrap_run(
                     transcript=deps.transcript,
                     step_mode=step,
                     pauser=deps.pauser,
+                    perf=perf.record,
                 )
             except StepFailedError as exc:
+                perf.failed(phase.name, exc.exit_code)
                 # Carry --no-dr into the resume hint (#1163). The flag shapes which
                 # guests every phase targets (site-A only, dr_enabled=false), so a
                 # resume that dropped it would re-enter in full-HADR mode and fail
@@ -2105,10 +2117,13 @@ def _bootstrap_run(
                 typer.echo(hint, err=True)  # to the CLI's stderr, where the operator sees it
                 deps.transcript.write(hint)
                 raise typer.Exit(code=exc.exit_code) from exc
+        perf.completed()
     except NoTTYError as exc:
         deps.renderer.error(str(exc))
         raise typer.Exit(code=2) from exc
     finally:
+        if perf is not None:
+            perf.finish(deps.transcript.path, timestamp)
         deps.transcript.close()
 
 

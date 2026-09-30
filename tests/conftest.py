@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab import cli
+from mqlab import cli, perfrun
+from tests.fakes import FakeSampleSource
 
 
 @pytest.fixture(autouse=True)
@@ -80,3 +81,13 @@ def _neutralize_box_gc(monkeypatch):
     which must not run in unit tests. Dedicated tests override this stub to cover the
     GC logic (box.gc_orphaned_images) and the hooks firing."""
     monkeypatch.setattr(cli.box, "gc_orphaned_images_best_effort", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def fake_perf_source(monkeypatch):
+    """Replace the bootstrap perf sampler's lab source (#1205) in every test — the real
+    one shells `virsh` + ssh into guests, which must not run in unit tests. Returns the
+    fake so a test can assert which guests were probed."""
+    source = FakeSampleSource()
+    monkeypatch.setattr(perfrun, "default_source", lambda topo: source)
+    return source
