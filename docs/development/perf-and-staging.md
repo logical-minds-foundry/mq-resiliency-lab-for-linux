@@ -33,6 +33,11 @@ real to diff yet. `mqlab perf diff` already works on any file in the
 
 ## 2. The parallel-run procedure
 
+The commands on this page run `mqlab` from a development checkout, so they use
+`uv run mqlab`. See
+[operating the lab from a dev session](operating-the-lab-from-a-dev-session.md#1-the-vms-are-libvirt-guests-under-qemusystem)
+for why, and for where that convention stops.
+
 1. **Same commit on both platforms.** Check out the same commit (or branch
    head) on the macOS host and on the x86 cloud host. A diff across different
    commits measures the code change *and* the platform at once, and you cannot
@@ -43,18 +48,18 @@ real to diff yet. `mqlab perf diff` already works on any file in the
    ```bash
    # macOS/arm64 host
    export MQLAB_ENV=macos
-   mqlab bootstrap nativeha-ubuntu --no-dr
+   uv run mqlab bootstrap nativeha-ubuntu --no-dr
 
    # x86 cloud host
    export MQLAB_ENV=cloud
-   mqlab bootstrap nativeha-ubuntu --no-dr
+   uv run mqlab bootstrap nativeha-ubuntu --no-dr
    ```
 
 3. **Collect both perf reports** (see §3) onto one machine.
 4. **Diff them**, macOS as A and cloud as B:
 
    ```bash
-   mqlab perf diff macos-perf.json cloud-perf.json
+   uv run mqlab perf diff macos-perf.json cloud-perf.json
    ```
 
 ### How `MQLAB_ENV` actually applies
@@ -92,7 +97,7 @@ shared `state` bucket. Resolve that directory with `mqlab build path`, and
 never hardcode a `build/` path:
 
 ```bash
-ls "$(mqlab build path state)/runs/"
+ls "$(uv run mqlab build path state)/runs/"
 ```
 
 Copy the macOS and cloud reports to one machine (any file names) and pass them

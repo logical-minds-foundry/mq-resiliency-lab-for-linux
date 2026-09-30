@@ -25,18 +25,18 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 
 - Run from a dev session with lab access (see
   [`operating-the-lab-from-a-dev-session.md`](../development/operating-the-lab-from-a-dev-session.md)).
-- Drive `mqlab` from the **host venv** so the bake's `ansible-playbook` resolves:
-  prepend `.venv-host/bin` to `PATH` (a bare `.venv/bin/mqlab` has no ansible and
-  the bake dies `ansible-playbook: command not found`).
+- Invoke the CLI as **`uv run mqlab`** from the checkout. `uv run` puts the venv's
+  `bin/` on `PATH`, so the bake's `ansible-playbook` resolves. Calling the venv's
+  `mqlab` by path without that leaves ansible off `PATH`, and the bake dies with
+  `ansible-playbook: command not found`.
 - The tier is baked from the merged roles; the box bake is the authoritative way
   to get there (a `dspmqver`-style drift check is not enough).
 
 ## Step 1 — cold rebuild (L1, L2)
 
 ```bash
-export PATH="$PWD/.venv-host/bin:$PATH"
-mqlab box build logsearch-ubuntu2404 obs-ubuntu2404 mq-ubuntu2404 infra-ubuntu2404
-mqlab commons up
+uv run mqlab box build logsearch-ubuntu2404 obs-ubuntu2404 mq-ubuntu2404 infra-ubuntu2404
+uv run mqlab commons up
 ```
 
 Box bake is a **separate step before** the bring-up — `commons up` does **not**
@@ -49,8 +49,8 @@ bring-up fails `Couldn't open file lab/<box>` when vagrant can't find one.
 ## Step 2 — baseline (L3, L4, L5)
 
 ```bash
-mqlab logsearch status          # cluster: green (healthy); disk: NN% used
-mqlab logsearch open            # prints the Dashboards + Discover URLs
+uv run mqlab logsearch status          # cluster: green (healthy); disk: NN% used
+uv run mqlab logsearch open            # prints the Dashboards + Discover URLs
 IP=10.50.0.4
 curl -s "http://$IP:9200/logs-*/_count"                 # rising between calls
 curl -s "http://$IP:9200/logs-*/_search" -H 'Content-Type: application/json' \
@@ -66,10 +66,10 @@ journald backlog, so the count climbs fast then tracks live events.
 ## Step 3 — snapshot round-trip (L6, L7)
 
 ```bash
-mqlab logsearch snapshot        # -> build/state/logsearch/snap-<utc>.tar.gz
+uv run mqlab logsearch snapshot        # -> build/state/logsearch/snap-<utc>.tar.gz
 # fresh node:
 ( cd lab && vagrant destroy -f logsearch )   # see gotcha below if it refuses
-mqlab commons up                # re-provision; restore-on-bring-up restores logs-*
+uv run mqlab commons up                # re-provision; restore-on-bring-up restores logs-*
 curl -s "http://10.50.0.4:9200/logs-*/_count"            # corpus present again
 ```
 
@@ -78,15 +78,16 @@ destroy: re-provision then logs `starting with an empty store` and comes up clea
 
 ## Step 4 — loud-not-silent (L8)
 
-`mqlab logsearch status` always prints the `disk:` line; if OpenSearch has flipped
+`uv run mqlab logsearch status` always prints the `disk:` line; if OpenSearch has flipped
 any index to `read_only_allow_delete` at the flood-stage watermark, `status`
 reports it loudly and exits non-zero. (Exercised in unit tests;
 `read_only_indices` is the authoritative full signal, the disk line is advisory.)
 
 ## Gotchas surfaced by this validation
 
-- **Drive the bake from `.venv-host`** — `.venv/bin/mqlab` lacks `ansible-playbook`
-  (exit 127 mid-bake).
+- **Drive the bake with `uv run mqlab`.** Calling the venv's `mqlab` by path,
+  without the venv's `bin/` on `PATH`, cannot find `ansible-playbook` (exit 127
+  mid-bake).
 - **`vagrant destroy logsearch` can refuse** with a vagrant-libvirt state desync
   (`Name 'lab_logsearch' … already taken` on a *destroy*, when vagrant's machine
   id file is gone but the domain still runs). Force via libvirt and re-provision:
