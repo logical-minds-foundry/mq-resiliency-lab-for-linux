@@ -927,3 +927,27 @@ def test_vms_build_steps_attach_bounded_boot_retry(monkeypatch, tmp_path):
     assert all(s.retry is _BOOT_RETRY for s in steps)
     # Bounded and fail-loud by construction: a finite attempt cap, not an unbounded loop.
     assert _BOOT_RETRY.attempts >= 2
+
+
+# --------------------------------------------------------------------------- #
+# perf phase tagging (#1205)
+# --------------------------------------------------------------------------- #
+def test_every_phase_tags_its_steps_with_its_own_name(monkeypatch, tmp_path):
+    """#1205: each Phase.build_steps stamps `phase=<its name>` on every CommandStep it
+    emits, so the perf report groups timings by phase (net/vms/provision/observe)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    stack = lab_stacks()["pcmk-ubuntu"]
+    for phase in PHASES:
+        steps = phase.build_steps(stack, None)
+        assert steps, phase.name
+        assert {s.phase for s in steps} == {phase.name}, phase.name
+
+
+def test_provision_tags_the_rhel_nic_pass_steps_too(monkeypatch, tmp_path):
+    """#1205: the RHEL NIC-config/assure steps are provision steps in the perf report."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed_rhel(tmp_path)
+    steps = PHASES[2].build_steps(lab_stacks()["rdqm-rhel"], None)
+    assert any("nic-assure" in s.label for s in steps)
+    assert {s.phase for s in steps} == {"provision"}

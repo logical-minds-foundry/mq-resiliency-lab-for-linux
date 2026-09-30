@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from mqlab.perfsampler import GuestSample, HostSample
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
@@ -34,3 +36,17 @@ class RecordingRunner:
         for line in result.lines:
             on_line(line)
         return result.exit_code
+
+
+@dataclass
+class FakeSampleSource:
+    """A perf SampleSource (#1205) with canned readings and no live calls (no virsh/ssh)."""
+
+    probed: list[str] = field(default_factory=list)
+
+    def host(self) -> HostSample:
+        return HostSample(cpu_pct=10.0, iowait_pct=1.0, cpus=24)
+
+    def guest(self, name: str) -> GuestSample:
+        self.probed.append(name)
+        return GuestSample(steal_pct=2.5)
