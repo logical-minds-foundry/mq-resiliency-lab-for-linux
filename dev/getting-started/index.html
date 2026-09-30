@@ -1547,12 +1547,16 @@ a key fetched out-of-band</strong> — not any key bundled in the tarball:</p>
 <p>From inside the extracted tree, build the Python environment and pre-flight the
 host:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>./scripts/setup<span class="w">     </span><span class="c1"># checks uv + Python 3.14, then runs `uv sync` to build the venv</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>doctor<span class="w">        </span><span class="c1"># pre-flight the host: arch, KVM, libvirt, and required tools</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>.<span class="w"> </span>.venv/bin/activate<span class="w">   </span><span class="c1"># put `mqlab` (and its companion tools) on PATH</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>mqlab<span class="w"> </span>doctor<span class="w">        </span><span class="c1"># pre-flight the host: arch, KVM, libvirt, and required tools</span>
 </code></pre></div>
 <p><code>./scripts/setup</code> sets up the <strong>environment</strong>, not the lab: it verifies <code>uv</code> and
 a uv-managed Python 3.14 are present — installing 3.14 via <code>uv</code> if missing —
 runs <code>uv sync</code> to materialize the virtual environment, and prints the next
-commands. <code>mqlab doctor</code> then confirms the host can actually run the guests
+commands. It cannot change your shell's <code>PATH</code>, so activate the venv once per
+shell. The bare <code>mqlab</code> commands on this site assume it is active. (Prefixing
+each command with <code>uv run</code>, e.g. <code>uv run mqlab doctor</code>, works too.)
+<code>mqlab doctor</code> then confirms the host can actually run the guests
 before you commit to a bring-up.</p>
 <div class="admonition note">
 <p class="admonition-title">After a Python-version bump</p>
