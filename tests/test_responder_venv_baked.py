@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -26,20 +27,37 @@ def _load(path: Path) -> Any:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _includes(task: dict[str, Any], role: str, tasks_from: str | None) -> bool:
+    spec = task.get("ansible.builtin.include_role")
+    if not isinstance(spec, dict):
+        return False
+    return spec.get("name") == role and spec.get("tasks_from") == tasks_from
+
+
+def _main_bake_tasks(plays: Any) -> list[dict[str, Any]]:
+    """The tasks of THE main bake play: the one play that includes mq-install. The bake
+    playbook may carry other plays (e.g. OS-tuning plays before/after, #1225/#1229), so
+    select by content rather than position; zero or several such plays is an error."""
+    assert isinstance(plays, list), f"{BAKE.name}: expected a list of plays"
+    main = [
+        play["tasks"]
+        for play in plays
+        if isinstance(play, dict)
+        and isinstance(play.get("tasks"), list)
+        and any(_includes(t, "mq-install", None) for t in play["tasks"])
+    ]
+    count = len(main)
+    assert count == 1, f"{BAKE.name}: expected one play including mq-install, got {count}"
+    return main[0]
+
+
 def _bake_tasks() -> list[dict[str, Any]]:
-    plays = _load(BAKE)
-    assert isinstance(plays, list) and len(plays) == 1, f"{BAKE.name}: expected one play"
-    tasks = plays[0]["tasks"]
-    assert isinstance(tasks, list)
-    return tasks
+    return _main_bake_tasks(_load(BAKE))
 
 
 def _role_include_index(tasks: list[dict[str, Any]], role: str, tasks_from: str | None) -> int:
     for i, task in enumerate(tasks):
-        spec = task.get("ansible.builtin.include_role")
-        if not isinstance(spec, dict):
-            continue
-        if spec.get("name") == role and spec.get("tasks_from") == tasks_from:
+        if _includes(task, role, tasks_from):
             return i
     raise AssertionError(f"{BAKE.name} has no include_role {role} (tasks_from={tasks_from})")
 
@@ -60,6 +78,30 @@ def test_bake_builds_the_responder_venv_after_mq_install() -> None:
     mq_install = _role_include_index(tasks, "mq-install", None)
     venv = _role_include_index(tasks, "mq-inter-qm", "install")
     assert mq_install < venv, "bake the responder venv after mq-install (pymqi needs the SDK)"
+
+
+_OTHER_PLAY: dict[str, Any] = {
+    "name": "an OS-tuning play",
+    "hosts": "bake",
+    "tasks": [{"name": "noop", "ansible.builtin.debug": {"msg": "x"}}],
+}
+
+
+def test_main_bake_play_is_selected_among_extra_plays() -> None:
+    """Sibling plays before/after the main bake play (#1225/#1229) must not break the
+    selection: the main play is found by its mq-install include, not by position."""
+    real = _load(BAKE)
+    plays = [_OTHER_PLAY, *real, _OTHER_PLAY]
+    tasks = _main_bake_tasks(plays)
+    mq_install = _role_include_index(tasks, "mq-install", None)
+    assert mq_install < _role_include_index(tasks, "mq-inter-qm", "install")
+
+
+@pytest.mark.parametrize(("copies", "count"), [(0, 0), (2, 2)])
+def test_main_bake_play_selection_fails_loud_on_zero_or_many(copies: int, count: int) -> None:
+    plays = [_OTHER_PLAY] + _load(BAKE) * copies
+    with pytest.raises(AssertionError, match=f"got {count}"):
+        _main_bake_tasks(plays)
 
 
 def test_per_run_role_reuses_the_install_half() -> None:
