@@ -106,6 +106,36 @@ Two services are the deliberate **benign exceptions**, left enabled at bake
   by the `MQSeriesRDQM` package. It is production-intended (reboot survival) and
   verified benign, so it is left enabled rather than fought back down to inert.
 
+### No per-login dynamic MOTD (#1229)
+
+On stock Ubuntu, every SSH session runs PAM's `pam_motd`, interactive or not.
+The first of its two session lines (`motd=/run/motd.dynamic`, with no
+`noupdate`) runs every script in `/etc/update-motd.d/` on each login. The
+`pam_motd(8)` man page documents this: `noupdate` means "Don't run the scripts
+in /etc/update-motd.d to refresh the motd file". `50-landscape-sysinfo` is the
+expensive script. In the #1200 macOS runs, obs had five or more concurrent
+`landscape-sysinfo` processes, each at about 90% CPU for 6–9 minutes. That is
+roughly 4.5 of its 12 vCPUs, and OpenSearch was still not listening at 16
+minutes. The sampler's logins, Ansible's own re-logins (ControlPersist expires
+between plays) and operator SSH all trigger it.
+
+So every baked Ubuntu box (`obs-ubuntu2404`, `infra-ubuntu2404`,
+`mq-ubuntu2404`, `mq-nativeha-ubuntu`, `pcmk-ubuntu`) ends its bake with a play
+that runs the `motd-off` role:
+
+- It comments out both `pam_motd.so` session lines in `/etc/pam.d/sshd` and
+  `/etc/pam.d/login`. Ubuntu 24.04 ships the same pair in both files: openssh's
+  [`debian/openssh-server.sshd.pam.in`](https://git.launchpad.net/ubuntu/+source/openssh/tree/debian/openssh-server.sshd.pam.in?h=ubuntu/noble-updates)
+  and shadow's
+  [`debian/login.pam`](https://git.launchpad.net/ubuntu/+source/shadow/tree/debian/login.pam?h=ubuntu/noble-updates).
+  The edit matches only uncommented lines, so it is idempotent.
+- It masks `motd-news.timer`, so nothing refreshes the MOTD in the background.
+- It then fails the bake loudly if any file under `/etc/pam.d` still has an
+  active `pam_motd` line, or if the timer does not read `masked`.
+
+The static `/etc/motd` is no longer shown at login either. Nothing in the lab
+uses it on these throwaway guests.
+
 ## 3. The build pipeline (`build-fatbox.sh`)
 
 `lab/boxes/build-fatbox.sh` builds a box by **provision-then-snapshot**:
