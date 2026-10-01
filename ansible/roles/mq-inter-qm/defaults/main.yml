@@ -1,0 +1,5 @@
+---
+# The svc responder's pymqi venv (#1227). Owned by mqm so the bindings service runs as
+# mqm. Baked into the mq-ubuntu2404 box (bake-mq-ubuntu.yml -> tasks_from: install) and
+# re-asserted per-run by main.yml, where it is a near no-op once baked.
+mq_inter_qm_responder_venv: /var/mqm/rvenv

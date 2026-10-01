@@ -68,6 +68,20 @@ instead of re-baking. See [`box-model.md`](box-model.md) for the box taxonomy,
 the build pipeline, and the three rebuild tiers (nuclear / VM rebuild / stack
 loop).
 
+## What does *not* live in `build/`: ssh control sockets
+
+The perf sampler's ssh control sockets (#1221) live in
+`$XDG_RUNTIME_DIR/mqlab-ssh-mux/`. When `XDG_RUNTIME_DIR` is unset they live in
+a per-user 0700 directory under the system temp dir,
+`<tmp>/mqlab-ssh-mux-<uid>/`. This is a deliberate exception to the bucket
+model (#1228). Sockets are runtime IPC endpoints, not build artifacts, and they
+must sit on a **local** filesystem that supports Unix sockets. On the macOS dev
+VM `build/` is a virtiofs mount from the host, and OpenSSH cannot bind a control
+socket there (`muxserver_listen: ... Bad file descriptor`, exit 255). Ansible
+does the same thing with `~/.ansible/cp`. Nothing in that directory outlives the
+run that made it, so nothing there needs keeping. See
+[`perf-and-staging.md`](perf-and-staging.md).
+
 ## The `mqlab build` commands
 
 | Command | What it does |

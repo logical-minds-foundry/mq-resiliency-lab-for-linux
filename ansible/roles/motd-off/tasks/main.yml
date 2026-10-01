@@ -1,0 +1,61 @@
+---
+# Disable Ubuntu's per-login dynamic MOTD in a baked box (#1229, epic .github#275).
+#
+# WHY: on Ubuntu every SSH session (interactive or not) runs PAM pam_motd, whose
+# `motd=/run/motd.dynamic` line (no `noupdate`) runs every script in /etc/update-motd.d
+# (pam_motd(8): "noupdate - Don't run the scripts in /etc/update-motd.d to refresh the motd
+# file"). 50-landscape-sysinfo is the expensive one: in the #1200 macOS runs obs had 5+
+# concurrent landscape-sysinfo processes at ~90% CPU each for 6-9 minutes (~4.5 of 12 vCPUs),
+# load 12.9, OpenSearch still not listening at 16 min. The sampler's logins, Ansible's own
+# re-logins (ControlPersist expiry between plays) and operator SSH all trigger it. Nothing
+# in the lab needs a dynamic MOTD on these throwaway guests.
+#
+# HOW: comment out every active pam_motd session line in /etc/pam.d/sshd and
+# /etc/pam.d/login (a `replace` that only matches uncommented lines, so it is idempotent),
+# mask motd-news.timer, then verify fail-loud: no file under /etc/pam.d may still carry an
+# active pam_motd line, and the timer must read `masked`. The edits are plain files and
+# /etc/systemd/system symlinks, so they persist in the converted box image.
+# Debian/Ubuntu only — included by the Ubuntu bake playbooks.
+
+- name: assert this is a Debian/Ubuntu bake host (pam_motd + update-motd.d is Ubuntu machinery)
+  ansible.builtin.assert:
+    that: ansible_os_family == 'Debian'
+    fail_msg: >-
+      motd-off is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
+      do not include it from a RHEL bake.
+
+# replace fails if a listed file is missing (both ship in the Ubuntu base) — fail-loud.
+- name: comment out the pam_motd session lines (no per-login update-motd.d run)
+  ansible.builtin.replace:
+    path: "{{ item }}"
+    regexp: "{{ motd_off_active_regex }}"
+    replace: '# \1  # disabled by motd-off (#1229)'
+  loop: "{{ motd_off_pam_files }}"
+
+- name: stop + mask the motd-news timer so nothing refreshes the MOTD in the background
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop: "{{ motd_off_timers }}"
+
+# noqa command-instead-of-module: a read-only grep over /etc/pam.d is the check itself.
+- name: verify no PAM service still runs pam_motd (fail the bake if one does)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: ["grep", "-rlP", "{{ motd_off_active_regex }}", "/etc/pam.d"]
+  register: _motd_off_active
+  changed_when: false
+  # grep exits 1 when nothing matches (our success), 0 when a file still has an active
+  # pam_motd line (stdout names it), 2 on error; only rc 1 passes.
+  failed_when: _motd_off_active.rc != 1
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: verify the motd-news timer is masked  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'is-enabled'] + motd_off_timers }}"
+  register: _motd_off_timer_state
+  changed_when: false
+  # is-enabled exits non-zero for a masked unit, so judge by its per-unit output instead.
+  failed_when: >-
+    (_motd_off_timer_state.stdout_lines | length) != (motd_off_timers | length)
+    or (_motd_off_timer_state.stdout_lines | unique) != ['masked']
