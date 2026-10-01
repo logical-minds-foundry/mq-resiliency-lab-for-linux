@@ -6,6 +6,19 @@
       "number_of_replicas": {{ opensearch_number_of_replicas }}
     },
     "mappings": {
+      "date_detection": false,
+      "dynamic_templates": [
+        {
+          "mq_comment_inserts": {
+            "match": "ibm_commentInsert*",
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "text",
+              "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } }
+            }
+          }
+        }
+      ],
       "properties": {
         "@timestamp":    { "type": "date" },
         "time":          { "type": "date" },

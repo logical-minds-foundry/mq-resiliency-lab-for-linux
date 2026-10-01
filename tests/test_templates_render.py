@@ -33,6 +33,7 @@ owned upstream. This guard is the robust, false-positive-free repo-local floor.
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -175,6 +176,62 @@ def test_data_prepper_parse_json_is_gated_to_json_looking_bodies() -> None:
         "parse_when": 'startsWith(/body, "{")',
         "tags_on_failure": ["_jsonparsefailure"],
         "handle_failed_events": "skip",
+    }
+
+
+OPENSEARCH_ROLE = ANSIBLE_ROOT / "roles" / "opensearch"
+OPENSEARCH_INDEX_TEMPLATE = OPENSEARCH_ROLE / "templates" / "index-template.json.j2"
+OPENSEARCH_DEFAULTS = OPENSEARCH_ROLE / "defaults" / "main.yml"
+
+
+def _opensearch_index_mappings() -> dict:
+    """Render the logs-* index template with the role defaults; return its mappings."""
+    defaults = yaml.safe_load(OPENSEARCH_DEFAULTS.read_text(encoding="utf-8"))
+    context = {
+        "opensearch_index_pattern": defaults["opensearch_index_pattern"],
+        "opensearch_number_of_replicas": defaults["opensearch_number_of_replicas"],
+    }
+    source = OPENSEARCH_INDEX_TEMPLATE.read_text(encoding="utf-8")
+    template = json.loads(_ansible_jinja_env().from_string(source).render(context))
+    assert template["index_patterns"] == ["logs-*"]
+    return template["template"]["mappings"]
+
+
+def test_opensearch_index_template_disables_date_detection() -> None:
+    """Dynamic date detection must be off on the logs-* template (#1230).
+
+    With it on, the first document of a daily index fixed a date-looking MQ insert
+    (`ibm_commentInsert2`) as `date`, and OpenSearch then rejected every later
+    non-date value in that field with HTTP 400 for the rest of the day.
+    """
+    mappings = _opensearch_index_mappings()
+    assert mappings["date_detection"] is False
+
+
+def test_opensearch_index_template_keeps_declared_date_fields() -> None:
+    """The declared time fields stay `date` with detection off (#1230).
+
+    Dashboards uses `time` and Grafana uses `@timestamp` as the time field;
+    `ibm_datetime` is the MQ record timestamp.
+    """
+    properties = _opensearch_index_mappings()["properties"]
+    for field in ("@timestamp", "time", "ibm_datetime"):
+        assert properties[field] == {"type": "date"}, field
+    assert properties["message"] == {"type": "text"}
+    assert properties["body"] == {"type": "text"}
+
+
+def test_opensearch_index_template_maps_mq_comment_inserts_as_text() -> None:
+    """MQ free-form string inserts map to text + .keyword, never date (#1230)."""
+    dynamic_templates = _opensearch_index_mappings()["dynamic_templates"]
+    entry = next(t["mq_comment_inserts"] for t in dynamic_templates if "mq_comment_inserts" in t)
+    assert entry == {
+        "match": "ibm_commentInsert*",
+        "match_mapping_type": "string",
+        "mapping": {
+            "type": "text",
+            "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+        },
     }
 
 
