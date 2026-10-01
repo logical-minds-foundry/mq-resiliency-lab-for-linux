@@ -53,3 +53,6 @@ class FakeSampleSource:
     def guest(self, name: str) -> GuestSample:
         self.probed.append(name)
         return GuestSample(steal_pct=2.5)
+
+    def close(self) -> list[str]:
+        return []

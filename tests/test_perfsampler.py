@@ -10,7 +10,7 @@ import json
 import sys
 import threading
 from dataclasses import astuple
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -36,6 +36,9 @@ from mqlab.perfsampler import (
     read_local_proc_stat,
     run_bounded,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Real output captured from `virsh -c qemu:///system nodecpustats --percent` / `nodeinfo`
 # and `head -n1 /proc/stat` on the lab host.
@@ -89,6 +92,8 @@ class FakeSource:
         self.failing = failing or set()
         self.host_fails = False
         self.local_fails = False
+        self.close_problems: list[str] = []
+        self.closed = 0
 
     def host(self) -> HostSample:
         if self.host_fails:
@@ -104,6 +109,10 @@ class FakeSource:
         if name in self.failing:
             raise RuntimeError(f"ssh exited 255: connect to {name}: No route to host")
         return GuestSample(steal_pct=self._steal[name].pop(0))
+
+    def close(self) -> list[str]:
+        self.closed += 1
+        return self.close_problems
 
 
 def _clock(values: list[float]):
@@ -273,6 +282,28 @@ def test_stop_notes_probes_still_failing():
     n = len(rec.notes)
     sampler.stop()
     assert len(rec.notes) == n
+
+
+def test_stop_closes_the_source_and_notes_each_connection_that_did_not_close():
+    """#1221: stop releases the source's ssh masters; a failed close is a note, not a raise."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    src = FakeSource({})
+    problem = "guest obs: ssh master not closed (RuntimeError: ssh exited 255: x)"
+    src.close_problems = [problem]
+    Sampler(rec, src, []).stop()
+    assert src.closed == 1
+    assert rec.notes == [f"sampler: {problem}"]
+
+
+def test_stop_notes_a_source_whose_close_raises():
+    rec = PerfRecord(stack="s", started_at=0.0)
+
+    class Broken(FakeSource):
+        def close(self) -> list[str]:
+            raise OSError("mux dir gone")
+
+    Sampler(rec, Broken({}), []).stop()  # never raises
+    assert rec.notes == ["sampler: source cleanup failed (OSError: mux dir gone)"]
 
 
 def test_the_loop_keeps_ticking_every_interval_until_stopped():
@@ -449,6 +480,11 @@ def test_run_bounded_falls_back_to_stdout_when_stderr_empty():
         run_bounded(argv, 10)
 
 
+def test_run_bounded_runs_from_cwd(tmp_path):
+    argv = [sys.executable, "-c", "import os; print(os.getcwd())"]
+    assert run_bounded(argv, 10, cwd=tmp_path).strip() == str(tmp_path)
+
+
 def test_run_bounded_raises_on_timeout():
     argv = [sys.executable, "-c", "import time; time.sleep(5)"]
     with pytest.raises(RuntimeError, match=r"timed out after 0\.2s"):
@@ -461,14 +497,26 @@ def test_run_bounded_raises_on_timeout():
 class FakeRun:
     """Records argv; answers from a queue of (predicate-free) outputs keyed by argv[0]."""
 
-    def __init__(self, outputs: dict[str, list[str]]):
+    def __init__(self, outputs: dict[str, list[str | Exception]]):
         self.outputs = {k: list(v) for k, v in outputs.items()}
         self.calls: list[tuple[list[str], float]] = []
+        self.cwds: list[Path | None] = []
 
-    def __call__(self, argv: list[str], timeout: float) -> str:
+    def __call__(self, argv: list[str], timeout: float, *, cwd: Path | None = None) -> str:
         self.calls.append((argv, timeout))
+        self.cwds.append(cwd)
         key = argv[3] if argv[0] == "virsh" else argv[0]
-        return self.outputs[key].pop(0)
+        out = self.outputs[key].pop(0)
+        if isinstance(out, Exception):
+            raise out
+        return out
+
+
+def _opt(argv: list[str], name: str) -> str:
+    """The value of `-o <name>=<value>` in an ssh argv (fails if absent)."""
+    (value,) = [a.split("=", 1)[1] for a in argv if a.startswith(f"{name}=")]
+    assert argv[argv.index(f"{name}={value}") - 1] == "-o"
+    return value
 
 
 def test_real_source_host_parses_virsh_and_caches_cpu_count():
@@ -482,7 +530,7 @@ def test_real_source_host_parses_virsh_and_caches_cpu_count():
     assert all(t == 7.0 for _, t in run.calls)
 
 
-def test_real_source_guest_first_reading_is_a_baseline_then_deltas():
+def test_real_source_guest_first_reading_is_a_baseline_then_deltas(tmp_path):
     # user nice system idle iowait irq softirq steal guest guest_nice
     run = FakeRun(
         {
@@ -492,7 +540,7 @@ def test_real_source_guest_first_reading_is_a_baseline_then_deltas():
             ]
         }
     )
-    src = RealSource({"obs": "192.168.121.10"}, run=run)
+    src = RealSource({"obs": "192.168.121.10"}, run=run, mux_dir=tmp_path)
     assert src.guest("obs") == GuestSample(
         steal_pct=None, busy_pct=None, iowait_pct=None, load1=0.52, load5=0.58, load15=0.59
     )
@@ -534,6 +582,110 @@ def test_real_source_unknown_guest_fails_loud():
     src = RealSource({}, run=FakeRun({}))
     with pytest.raises(LookupError, match="no net-mgmt address for guest 'ghost'"):
         src.guest("ghost")
+
+
+PROBE_OUT = "cpu  100 0 100 700 0 0 0 100 0 0\n" + LOADAVG
+
+
+def test_real_source_guest_probe_multiplexes_over_one_master_per_guest(tmp_path):
+    """#1221: every guest probe carries the OpenSSH multiplexing options and runs from the
+    control-socket dir (created 0700), so ticks reuse ONE login instead of a fresh one."""
+    mux = tmp_path / "ssh-mux"
+    run = FakeRun({"ssh": [PROBE_OUT, PROBE_OUT]})
+    src = RealSource({"obs": "10.50.0.2"}, run=run, mux_dir=mux)
+    src.guest("obs")
+    src.guest("obs")
+    assert len(run.calls) == 2  # still one ssh invocation per guest per tick
+    for argv, timeout in run.calls:
+        assert _opt(argv, "ControlMaster") == "auto"
+        assert _opt(argv, "ControlPath") == "%C"
+        assert _opt(argv, "ControlPersist") == str(perfsampler.CONTROL_PERSIST_S)
+        assert _opt(argv, "ServerAliveInterval") == "5"
+        assert _opt(argv, "ServerAliveCountMax") == "2"
+        # The existing unattended-probe semantics are kept alongside.
+        assert _opt(argv, "BatchMode") == "yes"
+        assert _opt(argv, "ConnectTimeout") == "5"
+        assert timeout == 10.0
+        assert argv[-2:] == ["vagrant@10.50.0.2", "head -n1 /proc/stat && cat /proc/loadavg"]
+    assert run.cwds == [mux, mux]
+    assert mux.is_dir()
+    assert mux.stat().st_mode & 0o777 == 0o700
+
+
+def test_control_persist_outlives_the_tick_interval():
+    # A master idle between ticks must not expire, or every tick would log in again.
+    assert perfsampler.CONTROL_PERSIST_S > 2 * 15.0
+
+
+# sun_path is 104 bytes on macOS, 108 on Linux (incl. the NUL); ssh first binds the master
+# socket at `<ControlPath>.<16 random chars>` and then renames it, so it needs 17 more.
+_SUN_PATH_MAX = 104
+_SSH_TEMP_SUFFIX = 17
+_PERCENT_C_LEN = 40  # %C = hex SHA1 of the connection tuple
+
+
+def test_control_socket_path_fits_the_unix_socket_limit_for_every_real_guest(tmp_path):
+    """#1221: the socket path ssh binds, for every addressable node of the REAL topology,
+    must fit sun_path. It is relative to the probe's cwd (the mux dir), so the build tree's
+    absolute depth — a worktree's temp dir alone exceeds the limit — never counts."""
+    from mqlab import topology
+
+    src = RealSource.from_topology(topology.load(), run=FakeRun({}), mux_dir=tmp_path)
+    assert src.addresses  # the real topology has addressable guests
+    for name, addr in src.addresses.items():
+        run = FakeRun({"ssh": [PROBE_OUT]})
+        RealSource({name: addr}, run=run, mux_dir=tmp_path).guest(name)
+        control_path = _opt(run.calls[0][0], "ControlPath")
+        assert not control_path.startswith(("/", "~")), control_path  # relative to the cwd
+        bound = len(control_path.replace("%C", "x" * _PERCENT_C_LEN)) + _SSH_TEMP_SUFFIX + 1
+        assert bound <= _SUN_PATH_MAX, (name, bound)
+
+
+def test_ssh_mux_dir_is_in_the_build_temp_bucket():
+    assert perfsampler.ssh_mux_dir() == perfsampler.temp_dir() / "ssh-mux"
+    assert RealSource({})._mux_dir == perfsampler.ssh_mux_dir()
+
+
+def test_a_guest_that_is_not_up_opens_no_master_and_is_retried_next_probe(tmp_path):
+    """A failed first connect leaves no master (ssh binds the socket only after auth), so
+    the next tick simply probes again; only guests that authenticated are closed later."""
+    down = RuntimeError("ssh exited 255: ssh: connect to host 10.50.0.9 port 22: No route")
+    run = FakeRun({"ssh": [down, PROBE_OUT]})
+    src = RealSource({"qm-a": "10.50.0.9"}, run=run, mux_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="No route"):
+        src.guest("qm-a")
+    assert src.close() == []  # nothing to close: it never authenticated
+    assert len(run.calls) == 1
+    assert src.guest("qm-a").load1 == 0.52  # retried on the next probe, same argv
+    assert run.calls[0][0] == run.calls[1][0]
+
+
+def test_close_exits_each_master_and_reports_the_ones_that_would_not_close(tmp_path):
+    gone = RuntimeError(
+        "ssh exited 255: Control socket connect(51ee4a4c): No such file or directory"
+    )
+    run = FakeRun({"ssh": [PROBE_OUT, PROBE_OUT, PROBE_OUT, "", gone]})
+    src = RealSource({"obs": "10.50.0.2", "qm-a": "10.50.0.3"}, run=run, mux_dir=tmp_path)
+    src.guest("obs")
+    src.guest("qm-a")
+    src.guest("obs")
+    problems = src.close()
+    exits = run.calls[3:]
+    assert len(exits) == 2  # one `ssh -O exit` per master, not per probe
+    for argv, timeout in exits:
+        assert argv[-3:-1] == ["-O", "exit"]
+        assert _opt(argv, "ControlPath") == "%C"  # the same socket the probes used
+        assert timeout == 10.0
+    assert {argv[-1] for argv, _ in exits} == {"vagrant@10.50.0.2", "vagrant@10.50.0.3"}
+    assert run.cwds[3:] == [tmp_path, tmp_path]
+    assert len(problems) == 1
+    (problem,) = problems
+    assert problem.startswith("guest ")
+    assert "ssh master not closed (RuntimeError: ssh exited 255: Control socket" in problem
+    assert f"after {perfsampler.CONTROL_PERSIST_S}s idle (ControlPersist)" in problem
+    # Closed once: a second close has nothing left to do.
+    assert src.close() == []
+    assert len(run.calls) == 5
 
 
 def test_real_source_from_topology_maps_net_mgmt_addresses():
