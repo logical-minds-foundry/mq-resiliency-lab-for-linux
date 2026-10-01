@@ -1001,6 +1001,11 @@ def _commons_up_steps() -> list[CommandStep]:
     return steps
 
 
+def _commons_up_before(deps: Deps) -> None:
+    _announce_env(deps)  # the effective env profile + its source, once (#1245)
+    _reserve_hugepages(deps, lambda: _guests_to_boot(deps, _commons_members()))
+
+
 @commons_app.command("up")
 def commons_up(step: _StepFlag = False) -> None:
     """Bring up all commons VMs and provision observability (site-obs.yml)."""
@@ -1013,9 +1018,7 @@ def commons_up(step: _StepFlag = False) -> None:
         "commons-up",
         _commons_up_steps(),
         step_mode=step,
-        before=lambda deps: _reserve_hugepages(
-            deps, lambda: _guests_to_boot(deps, _commons_members())
-        ),
+        before=_commons_up_before,
     )
 
 
@@ -2101,6 +2104,16 @@ def _guests_to_boot(deps: Deps, guests: list[str]) -> list[str]:
     return [g for g in guests if not is_live(states, g)]
 
 
+def _announce_env(deps: Deps) -> topology.EnvResolution:
+    """Print the effective env profile and its source once for this run (#1245).
+
+    Explicit MQLAB_ENV, else the detected platform; an inconclusive detection says in
+    the same one line that the base topology is in use — never a silent profile."""
+    resolution = topology.resolve_env()
+    deps.renderer.note(resolution.describe())
+    return resolution
+
+
 def _reserve_hugepages(
     deps: Deps,
     guests: Callable[[], list[str]],
@@ -2222,6 +2235,10 @@ def _bootstrap_run(
         # _ssh_into's os.environ.update(_vagrant_env()); the secret injection below
         # is the same sequencer-owns-the-env pattern (#373).
         os.environ.update(_vagrant_env())
+        # The effective env profile + its source, printed once and recorded (#1245).
+        env = _announce_env(deps)
+        perf.record.set_env(env.env, env.source)
+        perf.record.note(env.describe())
         # Refresh the ansible inventory before probing/provisioning (#377): the
         # provision/observe playbooks target the #350 stack-aggregate groups
         # (e.g. hosts: pcmk_ubuntu), and _probe_all + provision run ansible against
@@ -2398,6 +2415,7 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("teardown", timestamp)
     try:
+        _announce_env(deps)  # same resolution as bootstrap -> same huge-page lever (#1245)
         members = stack_members(stack.name) or []
         all_stack_vms = all_vms(stack)
         commons_vms = [vm for vm in all_stack_vms if vm not in members]

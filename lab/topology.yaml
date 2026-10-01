@@ -129,8 +129,9 @@ boot_batch: 4
 # .github epics/275-bootstrap-staging/spec.md §2 "Staging levers"). MQLAB_ENV=macos|cloud
 # selects one profile, deep-merged onto this base topology at load (src/mqlab/topology.py):
 # the same stack runs throttled on macOS and maximal on cloud without forking topology.
-# Unset/empty MQLAB_ENV = this base unchanged; an unknown value fails loud (no silent
-# default). A profile may override only `boot_batch`, `memory_backing` and per-node
+# Unset/empty MQLAB_ENV = auto-detect the platform (#1245: Apple Virtualization -> macos,
+# Google Compute Engine -> cloud); inconclusive = this base unchanged, said visibly. An
+# unknown explicit value fails loud (no silent default). A profile may override only `boot_batch`, `memory_backing` and per-node
 # `cpus`, e.g.
 #   macos: { boot_batch: 2, nodes: { obs: { cpus: 8 } } }
 # Seeded EMPTY on purpose: lever values are filled one at a time from perf evidence

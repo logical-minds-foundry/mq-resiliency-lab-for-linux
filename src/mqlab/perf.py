@@ -155,6 +155,15 @@ class PerfRecord:
     milestones: dict[str, float] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     samples: list[HostContentionSample] = field(default_factory=list)
+    # The effective MQLAB_ENV profile and how it was chosen (#1245): env None = the base
+    # topology; env_source is explicit / detected / inconclusive (None = not recorded).
+    env: str | None = None
+    env_source: str | None = None
+
+    def set_env(self, env: str | None, source: str) -> None:
+        """Record which env profile this run used and its source (#1245)."""
+        self.env = env
+        self.env_source = source
 
     def note(self, text: str) -> None:
         """Record a degraded/unavailable measurement — the report says so, never hides it."""
@@ -229,12 +238,16 @@ class PerfRecord:
             "milestones": dict(self.milestones),
             "notes": list(self.notes),
             "samples": [s.as_dict() for s in self.samples],
+            "env": self.env,
+            "env_source": self.env_source,
         }
         return json.dumps(data, indent=2)
 
     def human_summary(self) -> str:
         """A short plain-text table: per-phase totals, then milestones, then notes."""
         lines = [f"Perf summary — {self.stack}"]
+        if self.env_source is not None:
+            lines.append(f"  env: {self.env or 'base'} ({self.env_source})")
         phases = self._phases()
         if not phases:
             lines.append("  (no steps recorded)")
