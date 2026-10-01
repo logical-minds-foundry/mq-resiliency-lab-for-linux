@@ -1,0 +1,139 @@
+---
+# Huge-page reservation on the Vergil VM (the libvirt host) for huge-page-backed lab
+# guests (#1241; evidence: spike #1240). Runs locally, like host-obs.yml:
+#   reserve: ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_needed=<pages>
+#   release: ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true
+# mqlab passes these itself (src/mqlab/hugepages.py): it sizes hugepages_needed from the
+# effective topology — the 2 MiB pages of the guests about to boot, plus a small margin —
+# and runs the reserve before any `vagrant up`, the release when the last stack is down.
+#
+# Reserve semantics: make at least hugepages_needed pages FREE AND UNRESERVED, on top of
+# the pages already committed to running guests (Total - (Free - Rsvd)), so a resume or a
+# second stack never takes pages a live guest holds. If the kernel cannot assemble that
+# many 2 MiB pages (fragmented RAM), drop the page cache, compact, and retry once; if it is
+# still short, FAIL LOUD with needed vs got. There is no fallback to 4 KiB backing — a
+# huge-page-backed guest cannot boot without its pages, so this check runs up front.
+#
+# Runtime-only: `sysctl -w` (never /etc/sysctl.d), so a reboot of the Vergil VM does not
+# re-reserve RAM for guests that no longer exist.
+- name: Huge-page reservation for huge-page-backed lab guests
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  vars:
+    hugepages_needed: 0
+    hugepages_release: false
+    hugepages_page_kib: 2048
+    # Lazily templated: each re-read of /proc/meminfo (register hp_raw) refreshes these.
+    hp_meminfo: "{{ hp_raw.content | b64decode }}"
+    hp_total: '{{ hp_meminfo | regex_findall("HugePages_Total: *([0-9]+)") | first | int }}'
+    hp_free: '{{ hp_meminfo | regex_findall("HugePages_Free: *([0-9]+)") | first | int }}'
+    hp_rsvd: '{{ hp_meminfo | regex_findall("HugePages_Rsvd: *([0-9]+)") | first | int }}'
+    hp_size_kib: '{{ hp_meminfo | regex_findall("Hugepagesize: *([0-9]+)") | first | int }}'
+    # Free pages not yet promised to a mapping (Rsvd pages count as Free until touched).
+    hp_available: "{{ hp_free | int - hp_rsvd | int }}"
+  tasks:
+    - name: Require a reserve size or the release flag
+      ansible.builtin.assert:
+        that:
+          - (hugepages_release | bool) or (hugepages_needed | int > 0)
+        fail_msg: "pass -e hugepages_needed=<2 MiB pages> (reserve) or -e hugepages_release=true"
+        quiet: true
+
+    - name: Read the huge-page counters
+      ansible.builtin.slurp:
+        src: /proc/meminfo
+      register: hp_raw
+
+    - name: Require the 2 MiB default huge-page size
+      ansible.builtin.assert:
+        that:
+          - hp_size_kib | int == hugepages_page_kib | int
+        fail_msg: >-
+          Hugepagesize is {{ hp_size_kib }} kB, not {{ hugepages_page_kib }} kB — this kernel's
+          default huge page is not 2 MiB, so the guest sizing would be wrong.
+        quiet: true
+
+    - name: Reserve
+      when: not (hugepages_release | bool)
+      block:
+        - name: Compute the target pool (committed to running guests + needed)
+          ansible.builtin.set_fact:
+            hp_target: "{{ hp_total | int - hp_available | int + hugepages_needed | int }}"
+            hp_before: "{{ hp_total | int }}"
+
+        - name: Report the reservation plan
+          ansible.builtin.debug:
+            msg: >-
+              huge pages: need {{ hugepages_needed }} free 2 MiB pages; have
+              HugePages_Total={{ hp_total }} Free={{ hp_free }} Rsvd={{ hp_rsvd }}
+              (available {{ hp_available }}); target vm.nr_hugepages={{ hp_target }}
+
+        - name: Set vm.nr_hugepages to the target
+          ansible.builtin.command:
+            argv: [sysctl, -w, "vm.nr_hugepages={{ hp_target }}"]
+          changed_when: true
+          when: hp_available | int < hugepages_needed | int
+
+        - name: Re-read the huge-page counters
+          ansible.builtin.slurp:
+            src: /proc/meminfo
+          register: hp_raw
+
+        - name: Flush dirty pages before dropping caches
+          ansible.builtin.command:
+            argv: [sync]
+          changed_when: false
+          when: hp_available | int < hugepages_needed | int
+
+        # mqlab's perf note keys on this task name (hugepages.RECLAIM_TASK) — keep in sync.
+        - name: "Reclaim: drop caches and compact memory, then retry"
+          ansible.builtin.command:
+            argv: [sysctl, -w, vm.drop_caches=3, vm.compact_memory=1, "vm.nr_hugepages={{ hp_target }}"]
+          changed_when: true
+          when: hp_available | int < hugepages_needed | int
+
+        - name: Re-read the huge-page counters after the retry
+          ansible.builtin.slurp:
+            src: /proc/meminfo
+          register: hp_raw
+
+        - name: Fail loud unless the guests' pages are free
+          ansible.builtin.assert:
+            that:
+              - hp_available | int >= hugepages_needed | int
+            fail_msg: >-
+              huge-page reservation SHORT: needed {{ hugepages_needed }} free 2 MiB pages
+              ({{ hugepages_needed | int * 2 }} MiB) for the guests about to boot, but after
+              drop_caches + compact_memory the kernel holds HugePages_Total={{ hp_total }}
+              (target {{ hp_target }}) with only {{ hp_available }} free+unreserved — got
+              {{ hp_available }} of {{ hugepages_needed }}. Free Vergil VM RAM (stop other
+              workloads / guests) and retry; mqlab never falls back to 4 KiB backing.
+            success_msg: >-
+              huge pages reserved: needed {{ hugepages_needed }}, available {{ hp_available }}
+              (HugePages_Total {{ hp_before }} -> {{ hp_total }})
+
+    - name: Release
+      when: hugepages_release | bool
+      block:
+        - name: Return every huge page to the kernel
+          ansible.builtin.command:
+            argv: [sysctl, -w, vm.nr_hugepages=0]
+          changed_when: true
+
+        - name: Re-read the huge-page counters after the release
+          ansible.builtin.slurp:
+            src: /proc/meminfo
+          register: hp_raw
+
+        - name: Fail loud if any huge page is still held
+          ansible.builtin.assert:
+            that:
+              - hp_total | int == 0
+            fail_msg: >-
+              huge-page release incomplete: HugePages_Total={{ hp_total }} (Free={{ hp_free }})
+              after vm.nr_hugepages=0 — {{ hp_total | int - hp_free | int }} pages are still
+              mapped, so a huge-page-backed guest is still running. Find it with
+              `virsh list --all` before releasing again.
+            success_msg: huge pages released (HugePages_Total=0)

@@ -9,7 +9,7 @@ or an undefined platform.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -51,6 +51,10 @@ class ResolvedNode:
     extra_disk: int | None
     dvd: str | None
     nics: dict[str, str]
+    # Guest RAM backing (#1241): "hugepages" -> the Vagrantfile adds vagrant-libvirt's
+    # memorybacking :hugepages; None -> default 4 KiB backing. Carried per node (from the
+    # effective topology's memory_backing lever) so the Vagrantfile stays a dumb consumer.
+    memory_backing: str | None = None
 
 
 def default_platform(facts: HostFacts) -> str:
@@ -70,13 +74,15 @@ def require_native_kvm(facts: HostFacts) -> None:
 def resolve(topo: dict[str, Any], facts: HostFacts) -> dict[str, ResolvedNode]:
     boxes = topo["boxes"]
     defaults = topo.get("defaults", {})
+    backing = topology.memory_backing(topo)  # validated; never read from MQLAB_ENV here
     out: dict[str, ResolvedNode] = {}
     for name, raw in topo.get("nodes", {}).items():
         spec = raw or {}
         platform = spec.get("platform", default_platform(facts))
         if platform not in boxes:
             raise PlatformError(f"node {name}: unknown platform {platform!r}")
-        out[name] = _provider(name, spec, defaults, platform, boxes[platform], facts)
+        node = _provider(name, spec, defaults, platform, boxes[platform], facts)
+        out[name] = replace(node, memory_backing=backing)
     return out
 
 

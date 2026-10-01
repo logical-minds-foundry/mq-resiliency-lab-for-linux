@@ -51,6 +51,12 @@ Vagrant.configure("2") do |config|
         lv.loader   = n["loader"] if n["loader"]
         lv.nvram    = n["nvram"]  if n["nvram"]
         lv.input(:type => "mouse", :bus => n["input_bus"]) if n["input_bus"]
+        # Huge-page-backed guest RAM (#1241; evidence: spike #1240). Set only when the
+        # effective topology's memory_backing lever says so (the macos env profile) —
+        # mqlab validates the value and reserves the 2 MiB pages before any `vagrant up`.
+        # vagrant-libvirt 0.12.2: Config#memorybacking(option, config = {}) pushes
+        # {name:, config:} and domain.xml.erb renders <memoryBacking><hugepages/></memoryBacking>.
+        lv.memorybacking n["memory_backing"].to_sym if n["memory_backing"]
         # Optional extra data disk (GiB) — e.g. the RDQM drbdpool PV.
         lv.storage(:file, :size => "#{n['extra_disk']}G") if n["extra_disk"]
         # Optional platform DVD (offline dnf repo for repo-less guests).

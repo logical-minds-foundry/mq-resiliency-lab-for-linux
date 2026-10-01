@@ -14,6 +14,7 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 - [3. Where the perf report lands](#3-where-the-perf-report-lands)
 - [4. Reading `mqlab perf diff`](#4-reading-mqlab-perf-diff)
 - [5. One lever at a time](#5-one-lever-at-a-time)
+  - [5.1 Huge-page-backed guest RAM (macOS)](#51-huge-page-backed-guest-ram-macos)
 - [6. Grain of salt: directional, not apples-to-apples](#6-grain-of-salt)
 - [7. References](#7-references)
 
@@ -26,7 +27,8 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | Host-contention sampler (steal, host CPU/IO) | #1203 | merged |
 | Bootstrap writes the perf report | #1205 | merged |
 | `mqlab perf diff` (this page) | #1204 | merged |
-| Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | this change |
+| Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | merged |
+| `memory_backing: hugepages` lever + on-demand reservation (§5.1) | #1241 | this change |
 
 Every `mqlab bootstrap` writes a perf report (§3), including one that fails
 partway or finds nothing to do. `mqlab perf diff` works on any file in the
@@ -79,15 +81,16 @@ obvious from the variable's name.
 - **Values:** unset or empty means the base topology, unchanged. `macos` or
   `cloud` applies that profile. Anything else fails loud (`ValueError`), and
   a value with no matching `env_profiles` entry fails loud too.
-- **Only two levers can be overridden:** top-level `boot_batch` and per-node
-  `cpus`. A profile that touches any other key, or names a node the base does
-  not declare, fails loud. Widening the lever set is a deliberate code change
-  (`_TOP_LEVEL_LEVERS` / `_NODE_LEVERS`), made only when evidence justifies
-  the new lever.
-- **Both profiles start empty** (`macos: {}`, `cloud: {}`). Until a lever is
-  set, `MQLAB_ENV=macos` and `=cloud` both run the base topology. The first
-  parallel run is therefore a pure platform comparison, which is the baseline
-  you want.
+- **Only three levers can be overridden:** top-level `boot_batch`, top-level
+  `memory_backing` (#1241, §5.1) and per-node `cpus`. A profile that touches
+  any other key, or names a node the base does not declare, fails loud. So does
+  a `memory_backing` value other than `hugepages`. Widening the lever set is a
+  deliberate code change (`_TOP_LEVEL_LEVERS` / `_NODE_LEVERS`), made only
+  when evidence justifies the new lever.
+- **The profiles started empty** (`macos: {}`, `cloud: {}`), so the first
+  parallel run was a pure platform comparison. Levers are added one at a time
+  as evidence proves them. Today `macos` sets `memory_backing: hugepages`
+  (§5.1) and `cloud` is still empty.
 
 ## 3. Where the perf report lands
 
@@ -277,6 +280,73 @@ other hurt. Each lever change that proves out is its own small PR. A
 reliability claim needs the consecutive-pass count from the spec (5 clean
 cold bootstraps), not a single green run.
 
+### 5.1 Huge-page-backed guest RAM (macOS)
+
+**Evidence (data, spike #1240).** On the macOS dev VM, with a memory-churning
+load on obs (12 processes looping mmap, touch every 4 KiB page, munmap), an
+idle 1-vCPU guest's page first-touch went from 0.8 µs to 5.7–219 µs and its
+re-touch of already-mapped memory from 0.16 µs to 1.7–153 µs. A pure-CPU load
+on obs, an idle lab, and memory pressure did not reproduce it. With obs and
+the measured guest backed by 2 MiB huge pages, the same churn left the other
+guest at 0.67–1.33 µs / 0.20–0.23 µs, and obs itself completed about 110× more
+churn cycles. Results and method:
+<https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1240>.
+
+**Reading (judgment, from the spike).** The slowdown is not an inherent cost
+of arm64 nested virtualization. It appears when a guest churns memory, and the
+cost is paid in the macOS hypervisor handling the nested guests' 4 KiB
+second-level mappings. Huge pages cut the number of those mappings by up to
+512×. obs's JVM tier (OpenSearch, Data Prepper, Dashboards) is exactly that
+workload, which is why `observe` ran 40–50× longer on macOS than on cloud.
+x86 cloud (Intel nested KVM) does not show the problem, so the `cloud`
+profile keeps the default 4 KiB backing.
+
+**What the lever does** (`env_profiles.macos.memory_backing: hugepages`):
+
+- **Vagrantfile.** The lever reaches `lab/Vagrantfile` through the resolved
+  topology (each node carries `memory_backing`), the same path `cpus` takes,
+  never by reading `MQLAB_ENV`. The Vagrantfile adds vagrant-libvirt's
+  `lv.memorybacking :hugepages`, which renders
+  `<memoryBacking><hugepages/></memoryBacking>` in the domain XML. The
+  syntax is `Config#memorybacking(option, config = {})` in vagrant-libvirt
+  0.12.2 (`lib/vagrant-libvirt/config.rb` and
+  `lib/vagrant-libvirt/templates/domain.xml.erb`), the version the dev VM
+  installs.
+- **Reservation before any `vagrant up`.** A huge-page-backed guest cannot
+  boot without free huge pages. When the `vms` phase is about to run,
+  `mqlab bootstrap` sizes the need from the effective topology: the RAM of
+  each guest it will boot (those not already running), rounded up to 2 MiB
+  pages, plus a 128-page (256 MiB) margin. `mqlab commons up` does the same
+  for the commons. It then runs `ansible/host-hugepages.yml` against
+  localhost with `become`. The play raises `vm.nr_hugepages` (runtime only,
+  never `/etc/sysctl.d`) so that many pages are free on top of those already
+  held by running guests. If the kernel can't assemble them, it runs
+  `sync`, `vm.drop_caches=3` and `vm.compact_memory=1`, then retries once.
+  If it is still short, it **fails loud** with needed vs got, and the bootstrap
+  stops before booting anything. There is no silent fallback to 4 KiB backing.
+  For `nativeha-ubuntu --no-dr` the need is 11,392 pages (22.25 GiB, of
+  which obs is 10 GiB); for the full HADR set it is 14,464 pages (28.25 GiB).
+- **Perf report.** The reservation is a `preflight` step,
+  `reserve huge pages (<N> x 2 MiB)`, and a note records the need, the guests,
+  the before and after `HugePages_*` counters, and whether the reclaim retry
+  ran.
+- **Release on teardown.** `mqlab teardown` resets `vm.nr_hugepages=0` only
+  when the last stack is down, the same condition that reclaims the commons,
+  and only after every destroy step succeeded. `--commons` alone does not
+  release, because another stack's running guests may still hold pages; that
+  case prints `huge pages kept`. The play verifies `HugePages_Total=0` and
+  fails loud if a guest still maps pages.
+
+Keep `MQLAB_ENV=macos` exported for `teardown` as well as `bootstrap`: the
+release is gated on the lever, so a teardown without it leaves the pages
+reserved. Check with `grep HugePages_ /proc/meminfo`, and release by hand
+(from `ansible/`) with
+`ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true`.
+
+Acceptance for the lever is the real gate (#1200): a cold `MQLAB_ENV=macos`
+`nativeha-ubuntu --no-dr` bootstrap with all guests huge-page-backed,
+compared with cloud run 3 (#1237: 987 s; `opensearch_green` 17.7 s).
+
 ## 6. Grain of salt
 
 The two sides run on **fundamentally different hardware**: a macOS laptop
@@ -318,6 +388,15 @@ Prior art this procedure draws on:
 - `unix(7)`: a Unix socket path is limited by the size of `sun_path` (108 bytes
   on Linux), which is why the control socket path is kept relative and short.
   <https://man7.org/linux/man-pages/man7/unix.7.html>
+- Linux kernel, *HugeTLB Pages*: `vm.nr_hugepages`, the `HugePages_Total`
+  / `Free` / `Rsvd` counters in `/proc/meminfo`, and why a runtime
+  allocation can fall short on fragmented memory.
+  <https://docs.kernel.org/admin-guide/mm/hugetlbpage.html>
+- Linux kernel, `/proc/sys/vm`: `drop_caches` and `compact_memory`, used
+  for the reservation's reclaim retry (#1241).
+  <https://docs.kernel.org/admin-guide/sysctl/vm.html>
+- libvirt domain XML, *Memory Backing*: the `<memoryBacking><hugepages/>`
+  element vagrant-libvirt emits. <https://libvirt.org/formatdomain.html#memory-backing>
 - `pam_motd(8)`: the PAM module that shows the message of the day at login.
   On Ubuntu it runs the dynamic MOTD scripts, which the per-tick logins set off.
   <https://man7.org/linux/man-pages/man8/pam_motd.8.html>

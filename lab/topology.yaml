@@ -130,12 +130,21 @@ boot_batch: 4
 # selects one profile, deep-merged onto this base topology at load (src/mqlab/topology.py):
 # the same stack runs throttled on macOS and maximal on cloud without forking topology.
 # Unset/empty MQLAB_ENV = this base unchanged; an unknown value fails loud (no silent
-# default). A profile may override only `boot_batch` and per-node `cpus`, e.g.
+# default). A profile may override only `boot_batch`, `memory_backing` and per-node
+# `cpus`, e.g.
 #   macos: { boot_batch: 2, nodes: { obs: { cpus: 8 } } }
 # Seeded EMPTY on purpose: lever values are filled one at a time from perf evidence
 # (validation #1200), never guessed. Keys must stay within {macos, cloud} (guardrail test).
+#
+# memory_backing: hugepages (#1241; evidence: spike #1240) backs every guest's RAM with
+# 2 MiB huge pages. On Apple Silicon nested virtualization a memory-churning guest (obs's
+# JVM tier) made every guest's page faults 300-1000x slower under 4 KiB backing; huge pages
+# removed it (~110x on obs's churn). x86 cloud does not show the problem, so cloud keeps the
+# default. With the lever set, mqlab reserves the pages on the Vergil VM before any
+# `vagrant up` (ansible/host-hugepages.yml) and releases them when the last stack is down.
 env_profiles:
-  macos: {}
+  macos:
+    memory_backing: hugepages
   cloud: {}
 
 nodes:

@@ -10,9 +10,12 @@ variable:
 - anything else   -> ``ValueError`` (fail loud — never a silent default).
 
 The override surface is deliberately narrow — only the levers the epic spec names
-(``boot_batch`` and per-node ``cpus``) — and a profile touching anything else, or a node
-the base does not declare, fails loud rather than silently inventing topology. Widen
-``_TOP_LEVEL_LEVERS`` / ``_NODE_LEVERS`` when a new lever is proven by evidence.
+(``boot_batch``, per-node ``cpus``, and ``memory_backing`` — #1241's huge-page-backed guest
+RAM, proven by spike #1240) — and a profile touching anything else, or a node the base
+does not declare, fails loud rather than silently inventing topology. Widen
+``_TOP_LEVEL_LEVERS`` / ``_NODE_LEVERS`` when a new lever is proven by evidence. A lever
+with a closed value set (``memory_backing``) is also value-checked, so a typo fails at
+load instead of reaching the Vagrantfile.
 
 Consumers of the levers read through ``load()`` (phases' boot batch, the resolved-topology
 render the Vagrantfile consumes, the Stack registry), so they all see one effective view.
@@ -32,8 +35,18 @@ ENV_VAR = "MQLAB_ENV"
 KNOWN_ENVS = frozenset({"macos", "cloud"})
 
 _PROFILES_KEY = "env_profiles"
-_TOP_LEVEL_LEVERS = frozenset({"boot_batch"})
+# memory_backing (#1241): how guest RAM is backed. "hugepages" = 2 MiB huge pages (the
+# vagrant-libvirt `memorybacking :hugepages` domain element) — the macOS/arm64 nested-virt
+# fix from spike #1240. Absent = the default 4 KiB backing. No other value is accepted.
+MEMORY_BACKING = "memory_backing"
+HUGEPAGES = "hugepages"
+MEMORY_BACKING_VALUES = frozenset({HUGEPAGES})
+
+_TOP_LEVEL_LEVERS = frozenset({"boot_batch", MEMORY_BACKING})
 _NODE_LEVERS = frozenset({"cpus"})
+# Levers whose value must come from a closed set — validated on a profile override AND
+# by memory_backing() wherever a consumer reads it.
+_LEVER_VALUES: dict[str, frozenset[str]] = {MEMORY_BACKING: MEMORY_BACKING_VALUES}
 
 
 def _read_raw() -> dict[str, Any]:
@@ -83,10 +96,31 @@ def _apply(topo: dict[str, Any], profile: Any, env: str) -> None:
         if key == "nodes":
             _apply_nodes(topo.get("nodes") or {}, value, where)
         elif key in _TOP_LEVEL_LEVERS:
+            _check_value(key, value, where)
             topo[key] = copy.deepcopy(value)
         else:
             msg = f"{where} may not override {key!r}; levers: {sorted(_TOP_LEVEL_LEVERS)} + nodes"
             raise ValueError(msg)
+
+
+def _check_value(key: str, value: Any, where: str) -> None:
+    allowed = _LEVER_VALUES.get(key)
+    if allowed is not None and value not in allowed:
+        msg = f"{where}.{key} must be one of {sorted(allowed)}, got {value!r}"
+        raise ValueError(msg)
+
+
+def memory_backing(topo: dict[str, Any]) -> str | None:
+    """The effective ``memory_backing`` lever (#1241): ``"hugepages"`` or None (default).
+
+    Validated here too (not only on a profile override), so a bad value set directly in
+    the base topology fails loud for every consumer rather than reaching the Vagrantfile.
+    """
+    value = topo.get(MEMORY_BACKING)
+    if value is None:
+        return None
+    _check_value(MEMORY_BACKING, value, "topology")
+    return str(value)
 
 
 def _apply_nodes(nodes: dict[str, Any], overrides: Any, where: str) -> None:
