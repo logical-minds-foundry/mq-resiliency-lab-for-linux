@@ -53,6 +53,21 @@
   # MUST exist before the Data Prepper sink first writes logs-* (connector spike): the sink
   # otherwise creates logs-* with the default replicas:1, which reads yellow forever on a
   # single node. Idempotent PUT.
+  #
+  # Date detection is OFF (#1230). With OpenSearch's default dynamic date detection, the
+  # first document of each daily index fixed any date-looking string field as `date`. An
+  # MQ JSON log insert (`ibm_commentInsert2`) sometimes looks like a date, so the whole
+  # day's index then rejected every later non-date insert in that slot with HTTP 400
+  # (~688 docs/min dropped). Now only the fields DECLARED as date in the template
+  # (@timestamp, time, ibm_datetime) are dates. Every other new string field gets the
+  # default dynamic string mapping (text + .keyword). The `mq_comment_inserts` dynamic
+  # template pins the MQ free-form string inserts (ibm_commentInsert1-3) to that same
+  # text + .keyword shape explicitly. The MQ numeric inserts (ibm_arithInsert1-2) are
+  # JSON numbers and are left to the default numeric mapping.
+  # The mapping is fixed when a daily index is created, so a change here applies only from
+  # the next new logs-YYYY.MM.DD index. Docs (OpenSearch 3.8):
+  #   https://docs.opensearch.org/3.8/mappings/#date-detection
+  #   https://docs.opensearch.org/3.8/mappings/#dynamic-templates
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ opensearch_http_port }}/_index_template/{{ opensearch_index_template_name }}"
     method: PUT
