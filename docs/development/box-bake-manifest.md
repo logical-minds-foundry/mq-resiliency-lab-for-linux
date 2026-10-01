@@ -214,6 +214,24 @@ stay host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic
 > folded those roles into `obs-ubuntu2404` (#1178) and retired the standalone box and its
 > bake playbook (#1179) — see the `obs-ubuntu2404` table above.
 
+## Every Ubuntu box: apt auto-updates disabled at bake (#1225)
+
+Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
+`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) opens with its own play that
+runs the `apt-autoupdate-off` role. It runs first so the bake's own apt work never
+races an auto-update run. The RHEL bakes do not include it: the role is
+apt-specific and asserts a Debian-family host.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `apt-autoupdate-off` | ✅ full | Masks `apt-daily{,-upgrade}.timer`, waits out any run already in flight (never kills it mid-dpkg), then masks `apt-daily{,-upgrade}.service` and `unattended-upgrades.service`. Drops `/etc/apt/apt.conf.d/99lab-no-auto-upgrades`, which zeroes every `APT::Periodic::*` knob. Ends with a fail-loud check that every unit reads `masked`. No per-run half. |
+
+Rationale: the weekly cold rebuild plus the staleness gate is the update path,
+so the boxes carry no in-guest updater. See [`box-model.md` §5](box-model.md#5-os-currency-comes-from-rebuilding-the-box).
+The role is in each Ubuntu bake's manifest-hash closure, so introducing it (and
+any later edit to it) flips all five Ubuntu boxes to BUILD. The RHEL boxes are
+unaffected.
+
 ## Stays configure (per-run) — never baked
 
 The whole configure surface: queue-manager and cluster creation
