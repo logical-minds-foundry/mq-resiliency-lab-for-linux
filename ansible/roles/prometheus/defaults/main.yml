@@ -4,3 +4,10 @@ prometheus_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }
 prometheus_pkg: "prometheus-{{ prometheus_version }}.linux-{{ prometheus_arch }}"
 prometheus_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/{{ prometheus_pkg }}.tar.gz"
 prometheus_retention: "24h"   # lab-ephemeral: short retention, data not precious
+
+# Data Prepper core server, co-located on obs (log tier consolidated onto obs, #1179).
+# Scraped for its OpenSearch-sink document counters, which feed the rejected-documents
+# panel and alert (#1238). The port must match the data-prepper role's
+# `data_prepper_server_port` (tests/test_dp_reject_alert.py pins the two together).
+# Static, so it is baked into prometheus.yml with the install half.
+prometheus_data_prepper_target: "localhost:4900"
