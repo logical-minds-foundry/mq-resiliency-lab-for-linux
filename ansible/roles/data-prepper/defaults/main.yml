@@ -45,6 +45,12 @@ data_prepper_user: data-prepper
 # starving the connector. See docs/reports/2026-09-28-obs-coexistence-jvm-budget.md.
 data_prepper_heap: "512m"
 
+# Core server (control API + Prometheus metrics) port (#1238). 4900 is Data Prepper's own
+# default; obs's Prometheus scrapes http://localhost:<this>/metrics/prometheus for the
+# OpenSearch-sink document counters, so the prometheus role's `prometheus_data_prepper_target`
+# must carry the same port (pinned together by tests/test_dp_reject_alert.py).
+data_prepper_server_port: 4900
+
 # --- pipeline knobs (proven end-to-end by the connector spike) ---
 # otel_logs_source gRPC port. Default DP logs port; the value #831's Alloy fan-out
 # targets via `opensearch_dataprepper_endpoint` (roles/alloy/defaults). Plaintext
@@ -63,3 +69,31 @@ data_prepper_index: "logs-%{yyyy.MM.dd}"
 # (spike downstream note #2) into top-level structured fields, so severity /
 # ibm_datetime become queryable instead of buried in a text blob.
 data_prepper_parse_json_source: "body"
+
+# --- OpenSearch-sink dead-letter queue (#1239) ---
+# Documents OpenSearch rejects (mapping conflicts, unparseable dates, ...) were dropped
+# with only a WARN line. The sink's `dlq_file` keeps the rejected payloads on obs's local
+# disk so an operator can see what failed and why, and replay it. The only other DLQ the
+# sink offers is the S3 `dlq` writer, and the lab has no S3.
+# Semantics verified in the 2.16.0 source (BulkIngester.setupDlq / logFailureForDlqObjects):
+# the file is opened ONCE at sink init (CREATE + APPEND), held open for the life of the
+# process, never reopened, and written through a BufferedWriter that is never flushed per
+# record. See docs/reference/data-prepper-dlq.md.
+data_prepper_dlq_dir: "{{ data_prepper_data_dir }}/dlq"
+data_prepper_dlq_file: "{{ data_prepper_dlq_dir }}/opensearch-sink.dlq"
+# The bound. The sink has NO size limit or rotation of its own, so logrotate caps it:
+# a 100M live file plus 4 gzip'd rotations. The records are JSON-bearing text, which gzip
+# shrinks several-fold, so realistic use stays near ~200M of obs disk; the hard ceiling
+# (incompressible data, plus up to one timer interval of overshoot) is ~500M. That is
+# hours of rejects at the hundreds-per-minute rate #1230 saw (estimate: ~1-2 KB a record,
+# so roughly 20-60M an hour) -- enough to diagnose a burst, too small to threaten the
+# OpenSearch indices that share the disk.
+data_prepper_dlq_rotate_size: 100M
+data_prepper_dlq_rotate_count: 4
+# A DEDICATED logrotate config driven by its own hourly timer, deliberately NOT under
+# /etc/logrotate.d: Ubuntu 24.04's stock logrotate.timer fires only daily
+# (OnCalendar=daily), which cannot bound a burst, and keeping the rule out of
+# /etc/logrotate.d means exactly ONE runner ever rotates the file (the daily run and this
+# one, with separate state files, could otherwise race on the same copytruncate).
+data_prepper_dlq_logrotate_conf: /etc/logrotate-data-prepper-dlq.conf
+data_prepper_dlq_logrotate_state: /var/lib/logrotate/data-prepper-dlq.status

@@ -3,3 +3,12 @@
 # off: the logsearch node lives on the lab's mgmt-only telemetry plane with no TLS in
 # v1 (spec §10), consistent with the OpenSearch tier's security-disabled posture (#827).
 ssl: false
+# The core server's port + metrics registry, pinned EXPLICITLY (#1238) because obs's
+# Prometheus scrapes this server's GET /metrics/prometheus for the OpenSearch-sink
+# document counters (the rejected-documents panel + alert). Both values equal Data
+# Prepper 2.16.0's defaults (DataPrepperConfiguration: server_port 4900, metric_registries
+# [Prometheus]); spelling them out keeps the scrape contract visible here instead of
+# resting on an upstream default. The prometheus role's data-prepper target must name the
+# same port (tests/test_dp_reject_alert.py pins the two together).
+server_port: {{ data_prepper_server_port }}
+metric_registries: [Prometheus]

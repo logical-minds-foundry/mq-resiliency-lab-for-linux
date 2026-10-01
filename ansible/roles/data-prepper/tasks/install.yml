@@ -51,6 +51,18 @@
     group: "{{ data_prepper_user }}"
     mode: "0750"
 
+# OpenSearch-sink DLQ dir (#1239), on obs's local disk. DP opens the dlq_file at sink
+# init and FAILS the sink if it cannot ("Failed to open DLQ file", BulkIngester.setupDlq),
+# so the dir must exist and be writable by the service user before the service starts.
+# 0750 and owned by data-prepper: not group/world-writable, so logrotate accepts it.
+- name: data-prepper OpenSearch-sink DLQ dir
+  ansible.builtin.file:
+    path: "{{ data_prepper_dlq_dir }}"
+    state: directory
+    owner: "{{ data_prepper_user }}"
+    group: "{{ data_prepper_user }}"
+    mode: "0750"
+
 # Data Prepper (with `-Ddata-prepper.dir=$HOME`, set by its launcher) auto-reads
 # pipelines from $HOME/pipelines/*.yaml and its server config from
 # $HOME/config/data-prepper-config.yaml. Template both there (through the symlink).
@@ -101,3 +113,32 @@
       [Install]
       WantedBy=multi-user.target
   notify: restart data-prepper
+
+# --- DLQ bound (#1239): a dedicated logrotate rule + hourly timer ---
+# The sink's dlq_file has no size limit or rotation of its own. The rule, its rationale
+# (copytruncate, caps) and the schedule rationale live in the templates + role defaults.
+# The timer is installed here (bakeable, static) but enabled in the configure half, so
+# the baked box stays inert like the data-prepper unit itself.
+- name: logrotate (rotates the DLQ)
+  ansible.builtin.package:
+    name: logrotate
+    state: present
+
+- name: deploy the DLQ logrotate rule (size cap, copytruncate, compress)
+  ansible.builtin.template:
+    src: logrotate-dlq.conf.j2
+    dest: "{{ data_prepper_dlq_logrotate_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: install the DLQ rotate service + hourly timer (INERT — configure half enables it)
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - data-prepper-dlq-rotate.service
+    - data-prepper-dlq-rotate.timer

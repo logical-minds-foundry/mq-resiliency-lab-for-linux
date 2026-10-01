@@ -46,7 +46,7 @@
     mode: "0644"
   notify: restart prometheus
 
-- name: deploy the lab recording rules (lab_network_health)
+- name: deploy the lab rules (lab_network_health recording + log_pipeline alerts, #1238)
   ansible.builtin.copy:
     src: lab.rules.yml
     dest: /etc/prometheus/rules/lab.rules.yml
