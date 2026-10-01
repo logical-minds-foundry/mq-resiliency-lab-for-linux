@@ -224,6 +224,32 @@ base-OS security updates is refused until it is re-baked from a fresh base. This
 keeps the running lab reproducible and the RDQM kernel/module pin intact, while
 still bounding how stale a box's base OS can get.
 
+### No in-guest apt auto-updates (#1225)
+
+The same reasoning rules out Ubuntu's in-guest auto-updater. Every baked Ubuntu
+box (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`, `mq-nativeha-ubuntu`,
+`pcmk-ubuntu`) runs the `apt-autoupdate-off` role as the **first play** of its
+bake. The role masks `apt-daily.timer`, `apt-daily-upgrade.timer`,
+`apt-daily.service`, `apt-daily-upgrade.service` and
+`unattended-upgrades.service`, and drops `/etc/apt/apt.conf.d/99lab-no-auto-upgrades`,
+which sets every `APT::Periodic::*` knob to `"0"`. Nothing fires on first boot.
+
+- **Why this is safe.** The boxes are short-lived and rebuilt cold from a fresh
+  base roughly weekly. The staleness gate in §3 enforces this: a NOTICE at 7 days
+  and a refusal at 14. That rebuild is the update path, so an in-guest updater
+  adds nothing.
+- **Why it matters.** Before #1225 the updater fired on every freshly booted guest
+  and held the dpkg lock, and provision had to wait it out. In the #1200 runs that
+  wait took 18 s, 73 s and 208 s on three otherwise-identical bootstraps. It was
+  both a large cost and the main source of run-to-run variance in provision.
+- **The provision-time guard stays.** `site-dns.yml` still carries the #1173
+  mask-and-wait as a defensive path. It first checks with a read-only
+  `systemctl is-enabled` query. When the units are already masked, as they are on
+  any box baked after #1225, both #1173 steps are skipped and the wait costs about
+  0 s. They only run on a box baked before this change, or on a host still on the
+  plain cloud image (the SAN targets). That play only ever masks; it never unmasks
+  or re-enables anything.
+
 ## 6. The RHEL DVD: one-time download, static archive, auto-stage
 
 Every artifact the boxes bake is anonymously fetchable — IBM MQ and all the
