@@ -72,7 +72,7 @@ data_prepper_parse_json_source: "body"
 # Semantics verified in the 2.16.0 source (BulkIngester.setupDlq / logFailureForDlqObjects):
 # the file is opened ONCE at sink init (CREATE + APPEND), held open for the life of the
 # process, never reopened, and written through a BufferedWriter that is never flushed per
-# record. See docs/reference/logsearch-validation-runbook.md, "Data Prepper DLQ".
+# record. See docs/reference/data-prepper-dlq.md.
 data_prepper_dlq_dir: "{{ data_prepper_data_dir }}/dlq"
 data_prepper_dlq_file: "{{ data_prepper_dlq_dir }}/opensearch-sink.dlq"
 # The bound. The sink has NO size limit or rotation of its own, so logrotate caps it:

@@ -43,5 +43,5 @@ logs-pipeline:
         # Dead-letter queue (#1239): documents OpenSearch rejects are appended here
         # instead of being dropped with a WARN. Local file on obs, bounded by the
         # role's logrotate rule (size cap + copytruncate, because DP holds the file
-        # open and never reopens it). Read/replay: logsearch-validation-runbook.md.
+        # open and never reopens it). Read/replay: docs/reference/data-prepper-dlq.md.
         dlq_file: "{{ data_prepper_dlq_file }}"

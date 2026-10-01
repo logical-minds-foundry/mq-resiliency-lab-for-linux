@@ -165,3 +165,5 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
   — server-side PNG/PDF capture.
 - **[DNS/FQDN inventory](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/dns-fqdn-inventory.md)**
   — where the MQ connection surface uses raw IPs vs FQDNs.
+- **[Data Prepper DLQ](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/data-prepper-dlq.md)**
+  — where OpenSearch-rejected log documents land on obs, and how to read or replay them.
