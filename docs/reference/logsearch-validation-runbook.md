@@ -20,6 +20,7 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 | **L6** | Snapshot round-trip | `mqlab logsearch snapshot` captures `logs-*` and fetches the tarball to `build/state/logsearch/`; after `destroy logsearch` + re-provision, restore-on-bring-up brings the corpus back. |
 | **L7** | Empty-store tradeoff | A destroy with **no** host snapshot re-provisions to a clean empty store (a logged no-op, not a failure). |
 | **L8** | Loud-not-silent | `status` reports disk-used and would surface a read-only / flood-stage-full store loudly (`read_only_allow_delete` index block), failing rather than lying. |
+| **L9** | Rejections are loud | A document OpenSearch rejects moves Data Prepper's `documentErrors` counter, shows on the Watcher's ③ Log pipeline panel, and fires the `DataPrepperDocumentsRejected` Prometheus alert (#1238). |
 
 ## Prerequisites
 
@@ -82,6 +83,41 @@ destroy: re-provision then logs `starting with an empty store` and comes up clea
 any index to `read_only_allow_delete` at the flood-stage watermark, `status`
 reports it loudly and exits non-zero. (Exercised in unit tests;
 `read_only_indices` is the authoritative full signal, the disk line is advisory.)
+
+## Step 5 — OpenSearch rejections are loud (L9)
+
+Since the log tier moved onto obs (#1179), Data Prepper and Prometheus run side by side
+on obs (mgmt plane `10.50.0.2`). When OpenSearch rejects a document, Data Prepper's
+OpenSearch sink logs `Document failed to write to OpenSearch …` and drops it. #1238
+makes the drop visible: Prometheus scrapes Data Prepper's core server
+(`localhost:4900/metrics/prometheus`, job `data-prepper`). The `log_pipeline` rules in
+`lab.rules.yml` alert on the sink's counters, and the Watcher board charts them. The lab
+runs no Alertmanager, so alerts show on Prometheus's Alerts page and the Watcher's
+"log-pipeline alerts" tile. Nothing is sent anywhere.
+
+```bash
+P=http://10.50.0.2:9090
+# 1. the target is up and the sink counters exist (expect 1, then a number)
+curl -s "$P/api/v1/query" --data-urlencode 'query=up{job="data-prepper"}'
+curl -s "$P/api/v1/query" --data-urlencode \
+  'query=logs_pipeline_opensearch_documentErrors_total{job="data-prepper"}'
+# 2. inject one unmappable document: the first line maps the field as text, and the
+#    second sends an object for that field (mapper_parsing_exception, HTTP 400). Run it
+#    on any fleet node except obs (obs's own Data Prepper journal is not shipped, #1029):
+uv run mqlab vm ssh svc-sim
+logger -t mqlab-l9 '{"mqlab_l9_probe":"text"}'; sleep 30
+logger -t mqlab-l9 '{"mqlab_l9_probe":{"nested":1}}'
+# 3. within ~1 min the counter has moved, and ~1 min later the alert is firing
+curl -s "$P/api/v1/query" --data-urlencode \
+  'query=increase(logs_pipeline_opensearch_documentErrors_total[5m])'
+curl -s "$P/api/v1/alerts"     # DataPrepperDocumentsRejected, state "firing"
+```
+
+The alert clears once five minutes pass with no new rejection. If step 1 finds no counter
+while the target is up, the metric name has changed. Correct it in `lab.rules.yml` and the
+`DP_*` constants in `src/mqlab/watcherboard.py`; `tests/test_dp_reject_alert.py` keeps the
+two in step. `DataPrepperSinkMetricsAbsent` covers that case: it fires after 10 minutes
+without the counter.
 
 ## Gotchas surfaced by this validation
 

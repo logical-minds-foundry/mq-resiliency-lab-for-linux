@@ -2,7 +2,7 @@
 dict in → Grafana dashboard dict out, no I/O beyond reading the real topology in the
 `lab_watcher_dashboard()` entry (like clusterboard's cluster_dashboard_paths_and_texts).
 
-Two object-driven sections, top-down, sharing an aligned column grid so the values
+Object-driven sections, top-down, sharing an aligned column grid so the values
 read as columns (the dashboard.py convention — every support host and every stack
 renders a row at all times; a missing signal is a coloured absence, never a vanished
 row):
@@ -19,6 +19,12 @@ row):
     groups fold into the pcmk row's site node sets. QM names derive from each stack's
     #351 short — no QM literal is hardcoded.
 
+  ③ Log pipeline (#1238) — rendered when the topology has an obs node: a time series of
+    the Data Prepper OpenSearch sink's documents written vs rejected (rate of each counter),
+    beside the firing state of the log_pipeline Prometheus alerts and the Data Prepper
+    scrape target. A rejected document is dropped by the sink, so this is where the loss
+    becomes visible.
+
 Design note: the sections read as an aligned "instrument strip" via stat tiles pinned to
 a shared column grid (the closest existing model is dashboard.py's one-row-per-object
 layout). A single Grafana Table cannot carry the per-row-heterogeneous domain metric
@@ -34,7 +40,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from mqlab.clusterboard import _STALE_MAP, _row_header, _stat, cockpit_uid
+from mqlab.clusterboard import _STALE_MAP, _row_header, _stat, _t, _timeseries, cockpit_uid
 from mqlab.paths import repo_root, work
 
 if TYPE_CHECKING:
@@ -139,7 +145,7 @@ _ROLE_SPEC: dict[str, RoleSpec] = {
     ),
     # The log-search tier (OpenSearch + Dashboards + Data Prepper) was consolidated onto the
     # obs node (#1179): it no longer has a tile of its own. Its service/disk health rides the
-    # obs host; a dedicated log-store panel can be re-added under obs_box as a follow-on.
+    # obs host. Its OpenSearch-sink rejections have their own section (③ Log pipeline, #1238).
     "probe": RoleSpec(
         role="MQ probe",
         unit="mq_prometheus.*.service|mq-.*.service",
@@ -478,6 +484,90 @@ def _stack_rows(topo: dict[str, Any], y: int = 0) -> list[dict[str, Any]]:
     return panels
 
 
+# --- ③ Log pipeline: Data Prepper → OpenSearch (#1238) ------------------------------------
+# A document OpenSearch rejects is logged by Data Prepper's OpenSearch sink and DROPPED, so
+# this section makes the loss visible. Metric names are verified against Data Prepper 2.16.0
+# source (see the provenance note in ansible/roles/prometheus/files/lab.rules.yml): the
+# PluginMetrics meter `logs-pipeline.opensearch.<metric>` becomes
+# `logs_pipeline_opensearch_<metric>_total` in the Prometheus scrape. All three are COUNTERS,
+# so the board shows rate(). The pipeline name comes from data-prepper's pipelines.yaml.j2
+# (`logs-pipeline`). If a live scrape disagrees, correct these constants AND the rules file;
+# tests/test_dp_reject_alert.py pins them together.
+DP_JOB = "data-prepper"
+DP_METRIC_PREFIX = "logs_pipeline_opensearch_"
+DP_DOCUMENT_ERRORS = f"{DP_METRIC_PREFIX}documentErrors_total"
+DP_DOCUMENTS_SUCCESS = f"{DP_METRIC_PREFIX}documentsSuccess_total"
+DP_BULK_REQUEST_FAILED = f"{DP_METRIC_PREFIX}bulkRequestFailed_total"
+# The Prometheus alerting rules (lab.rules.yml, group log_pipeline) this section surfaces.
+DP_REJECT_ALERT = "DataPrepperDocumentsRejected"
+DP_ABSENT_ALERT = "DataPrepperSinkMetricsAbsent"
+DP_ALERTS = (DP_REJECT_ALERT, DP_ABSENT_ALERT)
+
+# 0 firing → green "none"; ≥1 firing → red FIRING. `or vector(0)` keeps the tile populated
+# when nothing fires (the ALERTS series only exists while an alert is pending/firing).
+_ALERT_MAP: list[dict[str, Any]] = [
+    {"type": "value", "options": {"0": {"color": _GREEN, "text": "none firing", "index": 0}}},
+    {
+        "type": "range",
+        "options": {"from": 1, "to": None, "result": {"color": _RED, "text": "FIRING", "index": 1}},
+    },
+]
+
+
+def _dp_rate(metric: str) -> str:
+    return f'sum(rate({metric}{{job="{DP_JOB}"}}[1m]))'
+
+
+def _log_pipeline_rows(y: int) -> list[dict[str, Any]]:
+    """③ The log pipeline's OpenSearch-sink health, starting at `y`: a time series of
+    documents written vs rejected (rejected in red, so any rise is unmissable) beside the
+    firing state of the log_pipeline alerts and the Data Prepper scrape target."""
+    ds = "prometheus"
+    series = _timeseries(
+        "OpenSearch sink: documents written vs rejected (/s)",
+        [
+            _t("A", _dp_rate(DP_DOCUMENTS_SUCCESS), "written"),
+            _t("B", _dp_rate(DP_DOCUMENT_ERRORS), "rejected (dropped)"),
+            _t("C", _dp_rate(DP_BULK_REQUEST_FAILED), "bulk requests failed"),
+        ],
+        ds,
+        0,
+        y,
+        w=16,
+        h=7,
+        unit="ops",
+    )
+    series["fieldConfig"]["overrides"] = [
+        {
+            "matcher": {"id": "byName", "options": name},
+            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": colour}}],
+        }
+        for name, colour in (("rejected (dropped)", _RED), ("bulk requests failed", "orange"))
+    ]
+    alert_names = "|".join(DP_ALERTS)
+    alerts = _stat(
+        "log-pipeline alerts",
+        f'count(ALERTS{{alertname=~"{alert_names}",alertstate="firing"}}) or vector(0)',
+        ds,
+        16,
+        y,
+        mappings=_ALERT_MAP,
+        w=8,
+        h=4,
+    )
+    scrape = _stat(
+        "Data Prepper metrics scrape",
+        f'up{{job="{DP_JOB}"}}',
+        ds,
+        16,
+        y + 4,
+        mappings=_UP_MAP,
+        w=8,
+        h=3,
+    )
+    return [series, alerts, scrape]
+
+
 def _max_y(panels: list[dict[str, Any]], default: int) -> int:
     """The first free y below `panels` (their max bottom edge), or `default` when empty."""
     return max((p["gridPos"]["y"] + p["gridPos"]["h"] for p in panels), default=default)
@@ -492,7 +582,16 @@ def build_watcher(topo: dict[str, Any]) -> dict[str, Any]:
     panels.extend(support)
     stacks_y = _max_y(support, default=3)
     panels.append(_row_header("② Stacks — live/DR posture + flow", y=stacks_y))
-    panels.extend(_stack_rows(topo, y=stacks_y + 1))
+    stack_rows = _stack_rows(topo, y=stacks_y + 1)
+    panels.extend(stack_rows)
+    # ③ only when the topology carries an obs node: Data Prepper rides obs (#1179), so a
+    # topology without one has no log pipeline to show (object-driven, like the rows above).
+    if topo.get("groups", {}).get("obs_box"):
+        pipeline_y = _max_y(stack_rows, default=stacks_y + 1)
+        panels.append(
+            _row_header("③ Log pipeline — Data Prepper → OpenSearch rejections", y=pipeline_y)
+        )
+        panels.extend(_log_pipeline_rows(y=pipeline_y + 1))
     return {
         "uid": DASHBOARD_UID,
         "title": "The Watcher · Lab State",
