@@ -146,6 +146,38 @@ def test_data_prepper_unit_environment_line_is_single_quoted() -> None:
     assert rendered.count("-Xmx") == 1
 
 
+DATA_PREPPER_PIPELINES = ANSIBLE_ROOT / "roles" / "data-prepper" / "templates" / "pipelines.yaml.j2"
+
+
+def test_data_prepper_parse_json_is_gated_to_json_looking_bodies() -> None:
+    """parse_json must only run on bodies that start with `{` (#1220).
+
+    Ungated, every plain-text journal line (systemd unit messages, cron/pam,
+    OpenSearch's `[timestamp][LEVEL]` lines) hit the invalid-JSON path and
+    logged an ERROR per event (~447/min on obs). The gate skips those. Anything
+    that looks like JSON but still fails to parse is tagged and stays loud.
+    """
+    env = _ansible_jinja_env()
+    # The one Ansible filter this template uses. Alias Jinja's built-in `tojson`: it is
+    # autoescape-safe (the shared env autoescapes) and still emits valid JSON.
+    env.filters["to_json"] = env.filters["tojson"]
+    context = {
+        "data_prepper_otel_logs_port": 21892,
+        "data_prepper_parse_json_source": "body",
+        "data_prepper_opensearch_hosts": ["http://localhost:9200"],
+        "data_prepper_index": "logs-%{yyyy.MM.dd}",
+    }
+    rendered = env.from_string(DATA_PREPPER_PIPELINES.read_text(encoding="utf-8")).render(context)
+    pipeline = yaml.safe_load(rendered)["logs-pipeline"]
+    parse_json = next(p["parse_json"] for p in pipeline["processor"] if "parse_json" in p)
+    assert parse_json == {
+        "source": "body",
+        "parse_when": 'startsWith(/body, "{")',
+        "tags_on_failure": ["_jsonparsefailure"],
+        "handle_failed_events": "skip",
+    }
+
+
 def test_alloy_journal_relabel_drops_own_log_shipping_units() -> None:
     """The Alloy journal relabel must DROP the log-shipping components' own units (#1029).
 
