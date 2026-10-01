@@ -15,8 +15,23 @@ logs-pipeline:
     # The MQ JSON arrives as a STRING in the OTLP `body` (spike downstream note #2). Parse
     # it and promote its keys (severity, ibm_datetime, host, unit, message, …) to the event
     # root so they land as structured, queryable fields instead of a text blob.
+    #
+    # Gate (#1220): only parse bodies that look like a JSON object. The fleet's plain-text
+    # journal lines (systemd unit messages, cron/pam, OpenSearch's `[ts][LEVEL]` lines) are
+    # not JSON; ungated, each one hit the invalid-JSON path and logged an ERROR (~447/min
+    # on obs, ~2 cores of DP CPU). Those now pass through unparsed, indexed as before.
+    # Every body that parsed before starts with `{` (the parser only accepts an object),
+    # so JSON events are indexed exactly as they were.
+    # Anything that starts with `{` but still fails is a real anomaly: it is tagged
+    # `_jsonparsefailure`, counted in DP's parseErrors metric, and still logged (skip,
+    # not skip_silently), so failures stay loud.
+    # Options verified present in the shipped 2.16.0 ParseJsonProcessorConfig; see
+    # https://docs.opensearch.org/latest/data-prepper/pipelines/configuration/processors/parse-json/
     - parse_json:
         source: "{{ data_prepper_parse_json_source }}"
+        parse_when: 'startsWith(/{{ data_prepper_parse_json_source }}, "{")'
+        tags_on_failure: ["_jsonparsefailure"]
+        handle_failed_events: skip
   sink:
     # v1 OpenSearch runs security DISABLED (#827) — plain http on :9200, no auth. Writes the
     # daily logs-YYYY.MM.DD indices governed by the #827 index template (number_of_replicas:0),
