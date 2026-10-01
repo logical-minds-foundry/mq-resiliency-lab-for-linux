@@ -18,6 +18,15 @@
     state: started
     daemon_reload: true
 
+# The DLQ's hourly size check (#1239). Installed inert by the install half; enabled here
+# alongside the service it bounds.
+- name: enable + start the data-prepper DLQ rotate timer
+  ansible.builtin.systemd:
+    name: data-prepper-dlq-rotate.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
 # Readiness = the otel_logs_source gRPC port is accepting connections. That is the
 # endpoint #831's Alloy fan-out dials, so a listening :21892 is the meaningful "ready
 # to ingest" signal (Data Prepper binds the pipeline source once the pipeline is up).

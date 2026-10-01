@@ -1,0 +1,13 @@
+# Managed by ansible/roles/data-prepper (#1239). Hourly, because Ubuntu 24.04's stock
+# logrotate.timer runs only daily, and a daily check cannot bound a burst of rejects
+# (the size cap is enforced only when logrotate actually runs).
+[Unit]
+Description=Hourly size check of the Data Prepper OpenSearch-sink DLQ
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
