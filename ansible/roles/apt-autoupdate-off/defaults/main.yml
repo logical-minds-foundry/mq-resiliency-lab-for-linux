@@ -1,0 +1,23 @@
+---
+# The Ubuntu apt auto-update machinery this role disables + masks at bake time (#1225).
+# Timers first: they are what (re-)fires the services; masking them stops any new run.
+apt_autoupdate_timers:
+  - apt-daily.timer
+  - apt-daily-upgrade.timer
+
+# The oneshot services the timers start (apt-daily → `apt-get update`,
+# apt-daily-upgrade → unattended-upgrade) plus unattended-upgrades.service, the
+# shutdown-time helper that finishes an interrupted unattended upgrade.
+apt_autoupdate_services:
+  - apt-daily.service
+  - apt-daily-upgrade.service
+  - unattended-upgrades.service
+
+# apt.conf.d drop-in that zeroes every APT::Periodic knob. The high `99` prefix makes it
+# parse AFTER the distro's 10periodic / 20auto-upgrades, so it wins whatever those set.
+apt_autoupdate_conf: /etc/apt/apt.conf.d/99lab-no-auto-upgrades
+
+# Budget for an auto-update run already in flight on the bake host to finish and release
+# the dpkg lock before the services are masked (60 x 10s = 10 min, matching #1173).
+apt_autoupdate_idle_retries: 60
+apt_autoupdate_idle_delay: 10
