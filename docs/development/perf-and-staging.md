@@ -146,12 +146,25 @@ so older reports still diff.
     one run outlasted the 15 s tick, and the runs piled up on the node being
     measured. The probes therefore share one OpenSSH master connection per
     guest (`ControlMaster=auto`, `ControlPersist=60`), so each guest sees one
-    login per run. The control sockets live in `$(mqlab build path temp)/ssh-mux/`,
-    under a relative `ControlPath=%C` with the probe run from that directory.
-    A worktree's absolute temp path alone is longer than the Unix socket-path
-    limit. A guest that is not up yet opens no master and is retried on the
-    next tick. When the sampler stops it closes the masters (`ssh -O exit`),
-    and any master that did not close is listed in `notes`.
+    login per run. The control sockets live in `$XDG_RUNTIME_DIR/mqlab-ssh-mux/`,
+    or in `<system temp dir>/mqlab-ssh-mux-<uid>/` (mode 0700) when
+    `XDG_RUNTIME_DIR` is unset. This is deliberately **not** under `build/`
+    (#1228): on the macOS dev VM `build/` is a virtiofs mount, and ssh cannot
+    create a Unix socket there, so every probe exited 255. See
+    [`build-layout.md`](build-layout.md). The probes use a relative
+    `ControlPath=%C` and run from that directory, so the socket path stays
+    short however deep the directory is. A guest that is not up yet opens no
+    master and is retried on the next tick. When the sampler stops it closes
+    the masters (`ssh -O exit`), and any master that did not close is listed
+    in `notes`.
+  - If the mux can't be set up, probes still run (#1228). This covers a
+    control dir that can't be created or isn't ours, and ssh exiting 255 with
+    a control-socket error such as `muxserver_listen`. The sampler adds one
+    note, `sampler: ssh multiplexing unavailable (...)`, and from then on uses
+    plain `ssh -o ControlMaster=no -o ControlPath=none` for the rest of the
+    run. The failed probe is retried that way at once, so no sample is lost.
+    Each fallback probe is a full login again, so the MOTD pile-up can come
+    back; the note tells you why.
   - **busy** is (user + nice + system + irq + softirq) / total ticks.
     **iowait** and **steal** are their own columns over the same total.
     Total is the first eight `/proc/stat` columns, since guest time is

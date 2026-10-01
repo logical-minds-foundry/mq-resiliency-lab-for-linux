@@ -13,12 +13,15 @@ dynamic MOTD (`landscape-sysinfo`), which on a busy guest outlasts the tick inte
 piled up. So guest probes multiplex over ONE persistent OpenSSH master per guest
 (`ControlMaster=auto` + `ControlPersist`); each tick's probe is still a single `ssh`
 invocation, now a mux client that reuses the master without logging in again. The
-control sockets live in `ssh_mux_dir()` (build temp bucket) under a RELATIVE
-`ControlPath=%C`, with the probe run from that directory: the absolute build path (a
-worktree's is ~125 chars) would overflow the ~104-byte Unix socket-path limit, while the
-relative name is 40 hex chars whatever the checkout's depth. `Sampler.stop()` closes the
-masters (`ssh -O exit`); a master that will not close is noted, and expires on its own
-after `ControlPersist` idle seconds.
+control sockets live in `ssh_mux_dir()` — a per-user 0700 dir on a LOCAL filesystem
+(`$XDG_RUNTIME_DIR`, else the system temp dir), deliberately NOT under `build/` (#1228:
+on macOS `build/` is a virtiofs mount that cannot hold a Unix socket) — under a RELATIVE
+`ControlPath=%C`, with the probe run from that directory, so the socket path is 40 hex
+chars whatever the directory's depth (the Unix socket-path limit is ~104 bytes).
+`Sampler.stop()` closes the masters (`ssh -O exit`); a master that will not close is
+noted, and expires on its own after `ControlPersist` idle seconds. If the control dir
+cannot be set up or cannot hold a socket, the source notes it ONCE and falls back to
+plain non-multiplexed probes for the rest of the run (#1228) — never a failed probe.
 
 Non-fatal, never silent: every probe runs in its own try/except, and a failure degrades
 to a recorded `note` in the report (deduplicated — a guest that is not up yet is noted
@@ -33,7 +36,9 @@ parsing is pure functions tested against fixed strings.
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -42,7 +47,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from mqlab.inventory import INSECURE_KEY, SSH_COMMON_ARGS, SSH_USER
-from mqlab.paths import temp_dir
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -63,7 +67,7 @@ _SSH_PROBE_ARGS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLe
 #   A socket whose master died is refused on connect, and `auto` removes it and becomes
 #   the new master — a stale socket never blocks later ticks.
 # - ControlPath=%C is RELATIVE (40 hex chars): the probe runs with cwd=ssh_mux_dir(), so
-#   the build tree's depth never counts against the Unix socket-path limit.
+#   the directory's depth never counts against the Unix socket-path limit.
 # - ControlPersist: the master backgrounds itself (stdio on /dev/null, so it does not
 #   hold the probe's captured pipes open) and outlives each tick; one left behind (stop
 #   could not close it) exits after this many idle seconds, well above the tick interval.
@@ -83,7 +87,20 @@ _SSH_MUX_ARGS = (
     "-o",
     "ServerAliveCountMax=2",
 )
-_SSH_MUX_DIRNAME = "ssh-mux"
+# The fallback when the mux cannot be set up (#1228): a plain one-shot connection that
+# neither creates nor looks for a control socket.
+_SSH_NO_MUX_ARGS = ("-o", "ControlMaster=no", "-o", "ControlPath=none")
+_SSH_MUX_DIRNAME = "mqlab-ssh-mux"
+# ssh exits 255 for its own errors (connect, auth AND mux setup); these stderr markers are
+# the ones that mean "the control socket could not be created/bound", e.g. on virtiofs:
+# `muxserver_listen: link mux listener ...: Bad file descriptor` (#1228).
+_MUX_FAILURE_MARKERS = (
+    "muxserver_listen",
+    "mux_client",
+    "ControlSocket",
+    "ontrol socket",
+    "unix_listener",
+)
 # /proc/stat cpu columns: user nice system idle iowait irq softirq steal guest guest_nice.
 # guest/guest_nice are already included in user/nice, so the total is the first eight.
 # Busy = user + nice + system + irq + softirq (#1215); idle, iowait and steal are not busy.
@@ -135,6 +152,10 @@ class SampleSource(Protocol):
     def local(self) -> LocalSample: ...
 
     def guest(self, name: str) -> GuestSample: ...
+
+    # Messages queued by the source itself since the last call (#1228: e.g. "ssh
+    # multiplexing unavailable, falling back"); the Sampler drains and notes each per tick.
+    def notes(self) -> list[str]: ...
 
     # Release what the source holds open (#1221: ssh masters). Returns one message per
     # resource that did not release — the Sampler notes each; nothing is raised.
@@ -219,6 +240,7 @@ class Sampler:
                 else:
                     self._succeeded(key)
                     guests[name] = result
+        self._drain_source_notes()
         self._record.add_sample(
             t,
             host_cpu=host.cpu_pct if host else None,
@@ -227,6 +249,15 @@ class Sampler:
             host_cpus=host.cpus if host else None,
             local=local,
         )
+
+    def _drain_source_notes(self) -> None:
+        try:
+            messages = self._source.notes()
+        except Exception as exc:  # noqa: BLE001 - recorded as a note; sampling continues
+            self._record.note(f"sampler: source notes unavailable ({type(exc).__name__}: {exc})")
+            return
+        for message in messages:
+            self._record.note(f"sampler: {message}")
 
     def _loop(self) -> None:
         while True:
@@ -382,16 +413,61 @@ def read_local_proc_stat() -> str:
 
 
 def ssh_mux_dir() -> Path:
-    """Where the guest ssh control sockets live (#1221): the local build temp bucket,
-    resolved through the build-path API. The probe runs FROM here with a relative
+    """Where the guest ssh control sockets live: `$XDG_RUNTIME_DIR/mqlab-ssh-mux` when set,
+    else `<system temp dir>/mqlab-ssh-mux-<uid>`.
+
+    A DOCUMENTED EXCEPTION to "all working state under build/" (docs/development/
+    build-layout.md, #1228): control sockets are runtime IPC endpoints, not build
+    artifacts, and must sit on a local filesystem that supports Unix sockets — on the macOS
+    dev VM `build/` is a virtiofs mount where ssh cannot bind one (every probe exited 255).
+    Ansible does the same with `~/.ansible/cp`. The probe runs FROM here with a relative
     `ControlPath`, so this directory's own length is not bound by the socket-path limit."""
-    return temp_dir() / _SSH_MUX_DIRNAME
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime:
+        return Path(runtime) / _SSH_MUX_DIRNAME
+    return Path(tempfile.gettempdir()) / f"{_SSH_MUX_DIRNAME}-{os.getuid()}"
+
+
+def ensure_private_dir(path: Path) -> None:
+    """Create `path` 0700 if missing; FAIL-LOUD unless it is then a real directory owned by
+    this user (a predictable name in a shared temp dir must not be someone else's, or a
+    symlink to one). A group/other-accessible mode on our own dir is tightened to 0700."""
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    st = path.lstat()
+    if not stat.S_ISDIR(st.st_mode):
+        raise RuntimeError(f"ssh control dir {path} is not a directory")
+    if st.st_uid != os.getuid():
+        raise RuntimeError(f"ssh control dir {path} is owned by uid {st.st_uid}, not us")
+    if st.st_mode & 0o077:
+        path.chmod(0o700)
+
+
+class ProbeError(RuntimeError):
+    """A probe command exited non-zero; keeps the exit code and stderr for callers that
+    must tell one ssh failure from another (#1228: mux setup vs. guest unreachable)."""
+
+    def __init__(self, argv0: str, returncode: int, stderr: str, detail: str) -> None:
+        super().__init__(f"{argv0} exited {returncode}: {detail}")
+        self.returncode = returncode
+        self.stderr = stderr
+
+
+_SSH_OWN_ERROR_RC = 255
+
+
+def is_mux_failure(exc: BaseException) -> bool:
+    """True when an ssh probe failed because its control socket could not be set up."""
+    return (
+        isinstance(exc, ProbeError)
+        and exc.returncode == _SSH_OWN_ERROR_RC
+        and any(marker in exc.stderr for marker in _MUX_FAILURE_MARKERS)
+    )
 
 
 def run_bounded(argv: list[str], timeout: float, *, cwd: Path | None = None) -> str:
     """Run a probe command (from `cwd`, if given) bounded by `timeout`; return stdout.
     FAIL-LOUD: a timeout or non-zero exit raises with the tool's own message (the Sampler
-    turns it into a note)."""
+    turns it into a note); a non-zero exit raises `ProbeError`."""
     try:
         cp = subprocess.run(  # noqa: S603 - fixed internal argv; tools on PATH (lab)
             argv, capture_output=True, text=True, timeout=timeout, check=False, cwd=cwd
@@ -400,7 +476,7 @@ def run_bounded(argv: list[str], timeout: float, *, cwd: Path | None = None) -> 
         raise RuntimeError(f"{argv[0]} timed out after {timeout}s") from exc
     if cp.returncode != 0:
         detail = cp.stderr.strip() or cp.stdout.strip()
-        raise RuntimeError(f"{argv[0]} exited {cp.returncode}: {detail}")
+        raise ProbeError(argv[0], cp.returncode, cp.stderr, detail)
     return cp.stdout
 
 
@@ -415,7 +491,9 @@ class RealSource:
 
     Guest probes multiplex over one ssh master per guest (#1221, see `_SSH_MUX_ARGS`),
     with control sockets in `mux_dir` (default `ssh_mux_dir()`); `close()` exits every
-    master a probe may have opened.
+    master a probe may have opened. If the mux cannot be set up — the dir cannot be made
+    private, or ssh cannot bind a socket in it — the source queues ONE note (drained by
+    the Sampler through `notes()`) and probes without multiplexing for the rest of the run.
     """
 
     def __init__(
@@ -437,6 +515,11 @@ class RealSource:
         self._prev_local: CpuCounters | None = None
         # Guests whose probe authenticated at least once — each has (or had) a master.
         self._masters: set[str] = set()
+        # Mux health (#1228): flipped off once, for the run, on the first setup failure.
+        # Guest probes run concurrently, so the flip + its note are guarded.
+        self._mux_ok = True
+        self._mux_lock = threading.Lock()
+        self._notes: list[str] = []
 
     @classmethod
     def from_topology(cls, topo: Mapping[str, Any], **kwargs: Any) -> RealSource:
@@ -465,14 +548,31 @@ class RealSource:
             return LocalSample(steal_pct=None, busy_pct=None, iowait_pct=None)
         return LocalSample(steal_pct=pcts.steal, busy_pct=pcts.busy, iowait_pct=pcts.iowait)
 
-    def _ssh(self, *tail: str) -> list[str]:
+    def notes(self) -> list[str]:
+        """Drain the messages queued since the last call (the Sampler records each)."""
+        with self._mux_lock:
+            out, self._notes = self._notes, []
+        return out
+
+    def _disable_mux(self, reason: str) -> None:
+        with self._mux_lock:
+            if not self._mux_ok:
+                return
+            self._mux_ok = False
+            self._notes.append(
+                f"ssh multiplexing unavailable ({reason}); guest probes fall back to plain "
+                "non-multiplexed ssh (one login per probe) for the rest of the run"
+            )
+
+    def _ssh(self, *tail: str, mux: bool = True) -> list[str]:
         """The guest ssh argv: the inventory's login/key/host-key options, the unattended
-        probe options, the multiplexing options, then `tail` (destination [+ command])."""
+        probe options, the multiplexing (or, `mux=False`, no-multiplexing) options, then
+        `tail` (destination [+ command])."""
         return [
             "ssh",
             *SSH_COMMON_ARGS,
             *_SSH_PROBE_ARGS,
-            *_SSH_MUX_ARGS,
+            *(_SSH_MUX_ARGS if mux else _SSH_NO_MUX_ARGS),
             "-i",
             os.path.expanduser(INSECURE_KEY),  # noqa: PTH111 - ssh argv wants a str path
             *tail,
@@ -482,12 +582,7 @@ class RealSource:
         addr = self.addresses.get(name)
         if addr is None:
             raise LookupError(f"no net-mgmt address for guest {name!r} in topology")
-        # Re-ensured every probe (cheap), so a `mqlab build clean` mid-run self-heals.
-        self._mux_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        out = self._run(
-            self._ssh(f"{SSH_USER}@{addr}", _GUEST_PROBE_CMD), self._timeout, cwd=self._mux_dir
-        )
-        self._masters.add(name)
+        out = self._probe(name, f"{SSH_USER}@{addr}")
         cur, load = parse_guest_probe(out)
         prev = self._prev.get(name)
         self._prev[name] = cur
@@ -500,6 +595,29 @@ class RealSource:
             load5=load.load5,
             load15=load.load15,
         )
+
+    def _probe(self, name: str, dest: str) -> str:
+        """One guest probe: multiplexed while the mux works; on a mux setup failure, note it
+        once and re-run THIS probe (and every later one) without multiplexing."""
+        if self._mux_ok:
+            try:
+                # Re-ensured every probe (cheap), so a temp-dir cleanup mid-run self-heals.
+                ensure_private_dir(self._mux_dir)
+            except (OSError, RuntimeError) as exc:
+                self._disable_mux(f"control dir {self._mux_dir}: {type(exc).__name__}: {exc}")
+            else:
+                try:
+                    out = self._run(
+                        self._ssh(dest, _GUEST_PROBE_CMD), self._timeout, cwd=self._mux_dir
+                    )
+                except ProbeError as exc:
+                    if not is_mux_failure(exc):
+                        raise
+                    self._disable_mux(f"control socket in {self._mux_dir}: {exc}")
+                else:
+                    self._masters.add(name)
+                    return out
+        return self._run(self._ssh(dest, _GUEST_PROBE_CMD, mux=False), self._timeout)
 
     def _close_master(self, name: str) -> str | None:
         argv = self._ssh("-O", "exit", f"{SSH_USER}@{self.addresses[name]}")
