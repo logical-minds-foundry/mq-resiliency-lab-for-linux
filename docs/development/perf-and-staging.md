@@ -28,7 +28,8 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | Bootstrap writes the perf report | #1205 | merged |
 | `mqlab perf diff` (this page) | #1204 | merged |
 | Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | merged |
-| `memory_backing: hugepages` lever + on-demand reservation (§5.1) | #1241 | this change |
+| `memory_backing: hugepages` lever + on-demand reservation (§5.1) | #1241 | merged |
+| `MQLAB_ENV` auto-detected from the platform; env recorded in the report | #1245 | this change |
 
 Every `mqlab bootstrap` writes a perf report (§3), including one that fails
 partway or finds nothing to do. `mqlab perf diff` works on any file in the
@@ -45,18 +46,21 @@ for why, and for where that convention stops.
    head) on the macOS host and on the x86 cloud host. A diff across different
    commits measures the code change *and* the platform at once, and you cannot
    separate the two.
-2. **Select the environment profile.** Set `MQLAB_ENV` in the shell that runs
-   `mqlab`:
+2. **Check the environment profile.** You don't need to set anything: when
+   `MQLAB_ENV` is unset, `mqlab` detects the platform (#1245) and picks
+   `macos` on the Apple Virtualization dev VM and `cloud` on Google Compute
+   Engine. `bootstrap` prints the result once, for example
+   `environment: macos (detected: DMI product_name='Apple Virtualization Generic Platform', ...)`,
+   and the perf report records it as `env` / `env_source`. Confirm it says
+   what you expect before you compare runs.
 
    ```bash
-   # macOS/arm64 host
-   export MQLAB_ENV=macos
-   uv run mqlab bootstrap nativeha-ubuntu --no-dr
-
-   # x86 cloud host
-   export MQLAB_ENV=cloud
-   uv run mqlab bootstrap nativeha-ubuntu --no-dr
+   uv run mqlab bootstrap nativeha-ubuntu --no-dr   # same command on both hosts
    ```
+
+   To force a profile (for example to test the `cloud` levers on a Mac),
+   export `MQLAB_ENV=macos|cloud` in the shell that runs `mqlab`. An
+   explicit value always wins over detection.
 
 3. **Collect both perf reports** (see §3) onto one machine.
 4. **Diff them**, macOS as A and cloud as B:
@@ -74,13 +78,38 @@ obvious from the variable's name.
   `env_profiles.<env>` from `lab/topology.yaml` onto the base topology. It
   then renders the result to the resolved topology under the `work` bucket,
   and `lab/Vagrantfile` reads that file. Vagrant never reads `MQLAB_ENV`.
-  Export it in the shell that runs `mqlab` (don't prefix a single command
-  only). Every `mqlab` verb that renders the resolved topology re-renders it
-  from whatever `MQLAB_ENV` it sees. So a later `mqlab` call without the
-  variable silently goes back to base values for the next Vagrant load.
-- **Values:** unset or empty means the base topology, unchanged. `macos` or
-  `cloud` applies that profile. Anything else fails loud (`ValueError`), and
-  a value with no matching `env_profiles` entry fails loud too.
+  If you override it, export it in the shell that runs `mqlab` (don't prefix
+  a single command only). Every `mqlab` verb that renders the resolved
+  topology re-renders it from the env it resolves, so a later `mqlab` call
+  without the override goes back to the detected profile for the next Vagrant
+  load.
+- **Values:** `macos` or `cloud` applies that profile and always wins.
+  Anything else fails loud (`ValueError`), and a value with no matching
+  `env_profiles` entry fails loud too.
+- **Unset or empty means auto-detect** (#1245). `mqlab` reads
+  `/sys/class/dmi/id/product_name` and matches it by prefix, the same way
+  `systemd-detect-virt` does
+  ([`src/basic/virt.c`, `dmi_vendor_table`](https://github.com/systemd/systemd/blob/b43fed88efe34889a49a7710a92141849dc4906d/src/basic/virt.c#L197-L198)):
+  `Apple Virtualization` maps to `macos` (the dev VM reports
+  `Apple Virtualization Generic Platform`, with `sys_vendor` `Apple Inc.`),
+  and `Google Compute Engine` maps to `cloud` (Google's documented check is
+  that `dmidecode -s system-product-name` contains that string:
+  [Detect if a VM is running in Compute Engine](https://docs.cloud.google.com/compute/docs/instances/detect-compute-engine)).
+  If DMI doesn't match, it falls back to `systemd-detect-virt` (called by
+  bare name, with a 5 s timeout): `apple` maps to `macos` and `google` to
+  `cloud`. A missing binary, a timeout, or any other answer counts as
+  inconclusive. When detection is inconclusive (bare metal, another
+  hypervisor) `mqlab` uses the base topology and says so in one line:
+  `MQLAB_ENV not set and platform not recognised — using base topology (...)`.
+  It never picks a profile silently.
+- **Visible once per run.** `bootstrap`, `teardown` and `commons up` print
+  the effective env and its source (`explicit`, `detected` or the
+  inconclusive line). The perf report records `env` and `env_source` as
+  top-level fields, plus the same line as a note.
+- **Same answer every time on a host.** Detection reads properties of the host,
+  so every `mqlab` invocation there resolves the same env. `bootstrap` and
+  `teardown` always agree, and `teardown` releases the huge pages
+  `bootstrap` reserved (§5.1).
 - **Only three levers can be overridden:** top-level `boot_batch`, top-level
   `memory_backing` (#1241, §5.1) and per-node `cpus`. A profile that touches
   any other key, or names a node the base does not declare, fails loud. So does
@@ -337,14 +366,14 @@ profile keeps the default 4 KiB backing.
   case prints `huge pages kept`. The play verifies `HugePages_Total=0` and
   fails loud if a guest still maps pages.
 
-Keep `MQLAB_ENV=macos` exported for `teardown` as well as `bootstrap`: the
-release is gated on the lever, so a teardown without it leaves the pages
-reserved. Check with `grep HugePages_ /proc/meminfo`, and release by hand
-(from `ansible/`) with
+The release is gated on the lever, so `teardown` must resolve the same env
+as `bootstrap`. Auto-detection (#1245) guarantees that on the dev VM with no
+`MQLAB_ENV` set. If you override it, override it for both. Check with
+`grep HugePages_ /proc/meminfo`, and release by hand (from `ansible/`) with
 `ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true`.
 
-Acceptance for the lever is the real gate (#1200): a cold `MQLAB_ENV=macos`
-`nativeha-ubuntu --no-dr` bootstrap with all guests huge-page-backed,
+Acceptance for the lever is the real gate (#1200): a cold macOS
+(`env: macos`) `nativeha-ubuntu --no-dr` bootstrap with all guests huge-page-backed,
 compared with cloud run 3 (#1237: 987 s; `opensearch_green` 17.7 s).
 
 ## 6. Grain of salt

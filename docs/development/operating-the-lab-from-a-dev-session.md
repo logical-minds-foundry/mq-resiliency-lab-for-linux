@@ -38,13 +38,19 @@ uv run mqlab bootstrap <stack>     # bring a stack up
 uv run mqlab teardown <stack>      # take a stack down
 ```
 
-On the macOS dev VM, export `MQLAB_ENV=macos` before `bootstrap` **and**
-`teardown`. The macos profile backs guest RAM with 2 MiB huge pages (#1241):
-`bootstrap` reserves them on the Vergil VM before booting guests, and the last
-stack's `teardown` releases them. A `teardown` without the variable leaves them
-reserved. `grep HugePages_ /proc/meminfo` shows the pool. See
+On the macOS dev VM, you don't need to set `MQLAB_ENV`. `mqlab` detects the
+Apple Virtualization platform and selects the `macos` profile (#1245), and
+`bootstrap`, `teardown` and `commons up` each print one line saying so
+(`environment: macos (detected: ...)`). The macos profile backs guest RAM with
+2 MiB huge pages (#1241): `bootstrap` reserves them on the Vergil VM before
+booting guests, and the last stack's `teardown` releases them. Because both
+verbs detect the same platform, they always agree. `grep HugePages_ /proc/meminfo`
+shows the pool. Export `MQLAB_ENV=macos|cloud` only to override detection, and
+then export it for both verbs. See
 [perf and staging §5.1](perf-and-staging.md#51-huge-page-backed-guest-ram-macos)
-for why macOS needs this and cloud does not.
+for why macOS needs this and cloud does not, and
+[how `MQLAB_ENV` applies](perf-and-staging.md#how-mqlab_env-actually-applies) for
+the detection rules.
 
 `uv run` syncs the project environment if it needs to, then runs `mqlab` with
 the venv's `bin/` on `PATH`. That is what lets the companion tools `mqlab` calls

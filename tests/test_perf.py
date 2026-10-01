@@ -125,8 +125,17 @@ def test_add_sample_serialises_after_the_existing_keys():
     )
     rec.add_sample(30.0, host_cpu=None, host_iowait=None, guests={})
     data = json.loads(rec.to_json())
-    # The Task-1 keys keep their order; samples is appended last.
-    assert list(data) == ["stack", "started_at", "phases", "milestones", "notes", "samples"]
+    # The Task-1 keys keep their order; samples, then the #1245 env keys, are appended.
+    assert list(data) == [
+        "stack",
+        "started_at",
+        "phases",
+        "milestones",
+        "notes",
+        "samples",
+        "env",
+        "env_source",
+    ]
     no_self = {"self_steal": None, "self_busy": None, "self_iowait": None}
     assert data["samples"] == [
         {
