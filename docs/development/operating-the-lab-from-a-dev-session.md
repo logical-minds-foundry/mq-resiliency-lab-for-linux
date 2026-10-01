@@ -38,6 +38,14 @@ uv run mqlab bootstrap <stack>     # bring a stack up
 uv run mqlab teardown <stack>      # take a stack down
 ```
 
+On the macOS dev VM, export `MQLAB_ENV=macos` before `bootstrap` **and**
+`teardown`. The macos profile backs guest RAM with 2 MiB huge pages (#1241):
+`bootstrap` reserves them on the Vergil VM before booting guests, and the last
+stack's `teardown` releases them. A `teardown` without the variable leaves them
+reserved. `grep HugePages_ /proc/meminfo` shows the pool. See
+[perf and staging §5.1](perf-and-staging.md#51-huge-page-backed-guest-ram-macos)
+for why macOS needs this and cloud does not.
+
 `uv run` syncs the project environment if it needs to, then runs `mqlab` with
 the venv's `bin/` on `PATH`. That is what lets the companion tools `mqlab` calls
 by bare name (`ansible-playbook` and the rest) resolve. Calling the venv's

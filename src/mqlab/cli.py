@@ -14,7 +14,7 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, coldboot, parity, perfdiff, venvsync
+from mqlab import buildenv, coldboot, hugepages, parity, perfdiff, topology, venvsync
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_platforms,
@@ -41,7 +41,8 @@ from mqlab.paths import (
     work,
 )
 from mqlab.pauser import NoTTYError, TTYPauser
-from mqlab.perfrun import BootstrapPerf
+from mqlab.perf import NullSink
+from mqlab.perfrun import PREFLIGHT, BootstrapPerf, ansible_task_outcomes
 from mqlab.phases import (
     OBS_GROUP,
     PHASES,
@@ -104,10 +105,21 @@ def build_deps(verb: str, timestamp: str) -> Deps:
     )
 
 
-def _execute(verb: str, steps: list[CommandStep], *, step_mode: bool) -> None:
+def _execute(
+    verb: str,
+    steps: list[CommandStep],
+    *,
+    step_mode: bool,
+    before: Callable[[Deps], None] | None = None,
+) -> None:
+    """Run `steps` under one transcript. `before` (optional) runs first with the same
+    deps — e.g. the huge-page reservation `commons up` needs ahead of its `vagrant up`
+    (#1241) — and fails the verb the same loud way a step does."""
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps(verb, timestamp)
     try:
+        if before is not None:
+            before(deps)
         run_steps(
             steps,
             runner=deps.runner,
@@ -994,7 +1006,17 @@ def commons_up(step: _StepFlag = False) -> None:
     """Bring up all commons VMs and provision observability (site-obs.yml)."""
     _prepare_lab()  # commons up shells vagrant — gate + render (#276)
     _ensure_prereqs_for_commons(step=step)
-    _execute("commons-up", _commons_up_steps(), step_mode=step)
+    # Huge-page-backed guests (#1241, macos lever) cannot boot without their pages:
+    # reserve for the commons not already running before any `vagrant up` (no-op when
+    # the lever is unset).
+    _execute(
+        "commons-up",
+        _commons_up_steps(),
+        step_mode=step,
+        before=lambda deps: _reserve_hugepages(
+            deps, lambda: _guests_to_boot(deps, _commons_members())
+        ),
+    )
 
 
 @commons_app.command("status")
@@ -2072,6 +2094,88 @@ def _select_phases(
     return [] if start is None else PHASES[start:]
 
 
+def _guests_to_boot(deps: Deps, guests: list[str]) -> list[str]:
+    """The guests in `guests` that are not live (absent or shut off) per a fresh
+    `virsh list --all` — the ones a `vagrant up` will (re)start."""
+    states = _probe_states(deps)
+    return [g for g in guests if not is_live(states, g)]
+
+
+def _reserve_hugepages(
+    deps: Deps,
+    guests: Callable[[], list[str]],
+    *,
+    perf: BootstrapPerf | None = None,
+) -> None:
+    """Reserve the 2 MiB huge pages huge-page-backed guests need, before `vagrant up`.
+
+    No-op unless the effective topology sets `memory_backing: hugepages` (#1241, the
+    macos env profile) — default and cloud runs never reach `guests()` or the play.
+    `guests()` names the guests about to boot (live ones already hold their pages);
+    their summed RAM plus a margin is the free-page need (hugepages.needed_pages). The
+    host-hugepages.yml play (become, localhost) grows vm.nr_hugepages, retries after
+    drop_caches + compact_memory, and exits non-zero with needed-vs-got when the kernel
+    still falls short — surfaced here as StepFailedError (never a 4 KiB fallback).
+
+    The play is a `preflight` step of the perf report, and the outcome (needed, before/
+    after counters, whether the reclaim retry ran) is noted in it.
+    """
+    topo = topology.load()  # effective topology: base + MQLAB_ENV profile (#1202)
+    if not hugepages.enabled(topo):
+        return
+    to_boot = guests()
+    needed = hugepages.needed_pages(topo, to_boot)
+    if needed == 0:
+        msg = "huge pages: every guest is already running — no reservation needed"
+        deps.renderer.note(msg)
+        if perf is not None:
+            perf.record.note(msg)
+        return
+    before = hugepages.read_meminfo()
+    step = CommandStep(
+        f"reserve huge pages ({needed} x 2 MiB)",
+        hugepages.reserve_command(needed),
+        phase=PREFLIGHT,
+    )
+    run_steps(
+        [step],
+        runner=deps.runner,
+        renderer=deps.renderer,
+        transcript=deps.transcript,
+        step_mode=False,
+        pauser=deps.pauser,
+        perf=perf.record if perf is not None else NullSink(),
+    )
+    after = hugepages.read_meminfo()
+    lines = deps.transcript.path.read_text(encoding="utf-8", errors="replace").splitlines()
+    reclaim = ansible_task_outcomes(lines, [hugepages.RECLAIM_TASK]).get(hugepages.RECLAIM_TASK)
+    retried = reclaim is not None and reclaim.ok
+    msg = (
+        f"huge pages: needed {needed} x 2 MiB ({needed * hugepages.PAGE_MIB} MiB, incl. "
+        f"{hugepages.MARGIN_PAGES}-page margin) for {', '.join(to_boot)}; "
+        f"{'reserved after a drop_caches + compact_memory retry' if retried else 'reserved'}; "
+        f"before {hugepages.summary(before)} -> after {hugepages.summary(after)}"
+    )
+    deps.renderer.note(msg)
+    if perf is not None:
+        perf.record.note(msg)
+
+
+def _release_hugepages(deps: Deps) -> None:
+    """Return the huge pages to the kernel (vm.nr_hugepages=0, verified by the play).
+
+    Callers decide WHEN: only once no lab guest can still be using them (the last stack
+    down). The play fails loud if pages are still mapped, rather than pretending."""
+    run_steps(
+        [CommandStep("release huge pages", hugepages.release_command())],
+        runner=deps.runner,
+        renderer=deps.renderer,
+        transcript=deps.transcript,
+        step_mode=False,
+        pauser=deps.pauser,
+    )
+
+
 def _bootstrap_run(
     stack_name: str,
     *,
@@ -2131,6 +2235,26 @@ def _bootstrap_run(
             perf.nothing_to_do()
             deps.renderer.note(f"{stack_name}: already satisfied — nothing to do")
             return
+        # Huge-page-backed guests (#1241, macos lever): reserve their 2 MiB pages before
+        # the vms phase's first `vagrant up` — only when that phase runs, and a no-op
+        # unless the effective topology sets memory_backing. A short reservation fails
+        # the bootstrap here, loud, rather than letting a guest boot fail mid-batch.
+        if any(phase.name == "vms" for phase in selected):
+            domains = states["domains"]
+            try:
+                _reserve_hugepages(
+                    deps,
+                    lambda: [g for g in all_vms(stack, no_dr=no_dr) if not is_live(domains, g)],
+                    perf=perf,
+                )
+            except StepFailedError as exc:
+                perf.failed(PREFLIGHT, exc.exit_code)
+                typer.echo(
+                    "huge-page reservation failed (needed vs got above); free Vergil VM "
+                    f"RAM, then re-run: mqlab bootstrap {stack_name}",
+                    err=True,
+                )
+                raise typer.Exit(code=exc.exit_code) from exc
         # Inject the stack's secrets as env vars for the provision playbook (#373):
         # its roles read e.g. PCMK_HACLUSTER_PASSWORD via lookup('env', ...). The I/O
         # (lab-secret.sh) lives here in the sequencer, not in pure phases.py — mirrors
@@ -2259,6 +2383,8 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
     - Plans member-VM destroy steps from the live domain states.
     - Decides commons fate: destroy if --commons OR no other stack is still up.
       When commons are kept a note is emitted so the operator knows why.
+    - Releases the huge pages (#1241, only when the memory_backing lever is set) on the
+      last-stack-down condition, after every destroy succeeded — never under running guests.
     - Runs all accumulated steps in one pass (fail-loud on StepFailedError).
 
     Extension point for Task 11: per-stack commons-instance cleanup (svc QM
@@ -2282,7 +2408,17 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
         for note in member_notes:
             deps.renderer.note(note)
 
-        destroy_commons = commons or not _other_stacks_up(deps, exclude=stack.name)
+        # Huge pages (#1241) are released on the SAME condition that reclaims commons
+        # unforced: this is the last stack down. --commons alone is not enough — another
+        # stack's running guests may still hold pages. Probe the reference count only when
+        # something depends on it (unchanged behaviour when the lever is unset).
+        hugepage_lever = hugepages.enabled(topology.load())
+        last_stack_down = (
+            not _other_stacks_up(deps, exclude=stack.name)
+            if (hugepage_lever or not commons)
+            else False
+        )
+        destroy_commons = commons or last_stack_down
 
         commons_steps: list[CommandStep] = []
         if destroy_commons:
@@ -2308,6 +2444,12 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
             step_mode=step,
             pauser=deps.pauser,
         )
+        # Every lab guest is gone now (last stack + its commons destroyed above, and a
+        # failed destroy raised before reaching here), so no running guest holds a page.
+        if hugepage_lever and last_stack_down:
+            _release_hugepages(deps)
+        elif hugepage_lever:
+            deps.renderer.note("huge pages kept — another stack's guests still use them")
         # The destroyed overlays freed their box base images; reclaim any now-orphaned
         # older ones (keep the newest per box). Best-effort — never fail a teardown on
         # a GC hiccup, but a failure is reported, not swallowed (#759).
