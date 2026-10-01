@@ -148,6 +148,7 @@ their ~15–20 min of per-run installs.
 |------|---------|-------|
 | `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-distributed-shared.yml`. Baked, not fetched per-run — kills the #659 acl stall. |
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path — the **server set includes client + SDK + samples**, so one install serves svc (server + QM), app (client + SDK for pymqi), and the exporter's cgo SDK. No QM created. |
+| `mq-inter-qm` (`tasks_from: install`) | ✅ install half | The svc responder's pymqi venv (`/var/mqm/rvenv`, owned by `mqm`; #1227): venv create + the PyPI pymqi install (unpinned, as before) + an import check. Must follow `mq-install` (pymqi compiles against the MQ SDK; the half asserts `cmqc.h` first). The channel MQSC, the SVC QM / responder keystores and the `mq-svc-responder@` service stay per-run in `main.yml`, which re-imports this half as a near no-op (`creates:` guard + pip's satisfied check). Pulling in the role also folds `mq-inter-qm` (and `pki-distribute`, which its `main.yml` includes) into this box's manifest hash: deliberate over-inclusion, so an edit to either rebakes this box. |
 | `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container, copied in — #1065; no in-guest Go toolchain, which used to auto-download a full Go toolchain and overflow this guest). Its `mq-install` include (runtime libs) is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
@@ -239,7 +240,7 @@ The whole configure surface: queue-manager and cluster creation
 `pcmk-stonith`); RDQM/HA/DR state and reconcile (`rdqm-active-node`, `rdqm-state`,
 `cluster-state`, `nativeha-state`, `host-net-state`, `host-resolver`, `net-reach`);
 all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
-`rdqm-ssh-access`); messaging config (`mq-inter-qm`, `mq-event-monitor`,
+`rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-ubuntu2404` (#1227) — `mq-event-monitor`,
 `app-requester`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
 (`drbd-san`, `iscsi-target`, `iscsi-initiator`); and `mqweb` (per-QM REST config +
 injected `mqweb_admin_password`, so it is configure even though the mqweb *server*

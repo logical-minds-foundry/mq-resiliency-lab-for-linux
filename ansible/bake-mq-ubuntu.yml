@@ -56,6 +56,17 @@
       ansible.builtin.include_role:
         name: mq-install
 
+    # The svc responder's pymqi venv (#1227): pymqi compiles against the MQ SDK, so it
+    # MUST follow mq-install above (the install half asserts cmqc.h is present). It was
+    # ~48s/run at provision (venv create + PyPI fetch + C build) on svc-sim; pymqi
+    # changes rarely, so the weekly cold rebake picks up a new release. Install half
+    # ONLY: the channel MQSC, keystores and the responder service stay per-run in
+    # mq-inter-qm's main.yml, whose re-run of this half is a near no-op on a baked box.
+    - name: svc responder pymqi venv (mq-inter-qm install half)
+      ansible.builtin.include_role:
+        name: mq-inter-qm
+        tasks_from: install
+
     # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
     # toolchain — exactly the work worth baking once (mon-probe paid ~2.8 min/run). The
     # build half installs full MQ (idempotent no-op now — cmqc.h is present from mq-install
