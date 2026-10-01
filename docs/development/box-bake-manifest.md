@@ -97,6 +97,22 @@ pre-config state:
   (auto-enabled by `MQSeriesRDQM`); production-intended for reboot survival and
   verified benign, so it is left enabled rather than forced inert.
 
+## Every Ubuntu box: per-login dynamic MOTD disabled at bake (#1229)
+
+Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
+`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) ends with its own play that
+runs the `motd-off` role. The RHEL bakes do not include it: the role is
+Ubuntu-specific and asserts a Debian-family host.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `motd-off` | ✅ full | Comments out the `pam_motd.so` session lines in `/etc/pam.d/sshd` and `/etc/pam.d/login`, so no login runs `/etc/update-motd.d/` (and `50-landscape-sysinfo` with it). Masks `motd-news.timer`. Ends with fail-loud checks: no `/etc/pam.d` file may keep an active `pam_motd` line, and the timer must read `masked`. No per-run half. |
+
+Rationale and evidence: [`box-model.md` §2](box-model.md#no-per-login-dynamic-motd-1229).
+The role is in each Ubuntu bake's manifest-hash closure, so introducing it (and
+any later edit to it) flips all five Ubuntu boxes to BUILD. The RHEL boxes are
+unaffected.
+
 ## Per-box bake sets
 
 ### `mq-rdqm-rhel9` → `ansible/bake-mq-rdqm.yml`

@@ -76,3 +76,14 @@
       ansible.builtin.include_role:
         name: alloy
         tasks_from: install
+
+# The per-login dynamic MOTD is OFF in every baked Ubuntu box (#1229): pam_motd ran
+# /etc/update-motd.d (50-landscape-sysinfo at ~90% CPU per login) on every SSH session.
+# Its own play, LAST, so it is independent of the install work above.
+- name: Disable the per-login dynamic MOTD (pam_motd / update-motd.d, #1229)
+  hosts: bake
+  become: true
+  tasks:
+    - name: comment out pam_motd in /etc/pam.d/{sshd,login} + mask motd-news.timer
+      ansible.builtin.include_role:
+        name: motd-off
