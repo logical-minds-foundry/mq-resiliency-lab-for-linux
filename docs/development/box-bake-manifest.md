@@ -144,7 +144,7 @@ per-run render stay in `site-obs.yml`.
 | `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install` for the runtime libs) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
 | `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
-| `data-prepper` | ✅ install half | JDK-bundled binary + data dir + static config + pipeline templates + inert unit baked; the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait stay per-run (#939). Its OpenSearch sink is `localhost:9200` (co-located). |
+| `data-prepper` | ✅ install half | JDK-bundled binary + data dir + OpenSearch-sink DLQ dir + static config + pipeline templates + inert unit baked, plus the DLQ logrotate rule and its inert hourly rotate timer (#1239); the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait, and the DLQ rotate timer enable, stay per-run (#939, #1239). Its OpenSearch sink is `localhost:9200` (co-located). |
 
 ### `infra-ubuntu2404` → `ansible/bake-infra.yml`
 

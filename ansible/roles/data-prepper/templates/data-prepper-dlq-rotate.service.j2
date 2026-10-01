@@ -1,0 +1,13 @@
+# Managed by ansible/roles/data-prepper (#1239). One logrotate pass over the Data
+# Prepper DLQ only, with its own state file. Fired hourly by
+# data-prepper-dlq-rotate.timer.
+[Unit]
+Description=Rotate the Data Prepper OpenSearch-sink DLQ (size-capped)
+Documentation=man:logrotate(8)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/logrotate --state {{ data_prepper_dlq_logrotate_state }} {{ data_prepper_dlq_logrotate_conf }}
+Nice=19
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

@@ -147,7 +147,47 @@ def test_data_prepper_unit_environment_line_is_single_quoted() -> None:
     assert rendered.count("-Xmx") == 1
 
 
-DATA_PREPPER_PIPELINES = ANSIBLE_ROOT / "roles" / "data-prepper" / "templates" / "pipelines.yaml.j2"
+DATA_PREPPER_ROLE = ANSIBLE_ROOT / "roles" / "data-prepper"
+DATA_PREPPER_TEMPLATES = DATA_PREPPER_ROLE / "templates"
+DATA_PREPPER_PIPELINES = DATA_PREPPER_TEMPLATES / "pipelines.yaml.j2"
+DATA_PREPPER_DEFAULTS = DATA_PREPPER_ROLE / "defaults" / "main.yml"
+DATA_PREPPER_CONFIGURE = DATA_PREPPER_ROLE / "tasks" / "configure.yml"
+
+
+def _data_prepper_context() -> dict:
+    """The data-prepper role defaults, with their `{{ other_default }}` references resolved.
+
+    Rendering from the real defaults (not a hand-copied context) means the tests pin what
+    the role actually ships. Only `data_prepper_arch` needs an Ansible fact; it and the two
+    keys derived from it are dropped (no template under test uses them).
+    """
+    raw = yaml.safe_load(DATA_PREPPER_DEFAULTS.read_text(encoding="utf-8"))
+    fact_derived = ("data_prepper_arch", "data_prepper_pkg", "data_prepper_url")
+    raw = {k: v for k, v in raw.items() if k not in fact_derived}
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined, autoescape=True)
+    context = dict(raw)
+    # Defaults reference each other a few levels deep (dlq_file -> dlq_dir -> data_dir);
+    # re-render until stable.
+    for _ in range(5):
+        context = {
+            k: env.from_string(v).render(context) if isinstance(v, str) and "{{" in v else v
+            for k, v in context.items()
+        }
+    assert not any(isinstance(v, str) and "{{" in v for v in context.values())
+    return context
+
+
+def _render_data_prepper_template(name: str) -> str:
+    env = _ansible_jinja_env()
+    # The one Ansible filter these templates use. Alias Jinja's built-in `tojson`: it is
+    # autoescape-safe (the shared env autoescapes) and still emits valid JSON.
+    env.filters["to_json"] = env.filters["tojson"]
+    source = (DATA_PREPPER_TEMPLATES / name).read_text(encoding="utf-8")
+    return env.from_string(source).render(_data_prepper_context())
+
+
+def _data_prepper_pipeline() -> dict:
+    return yaml.safe_load(_render_data_prepper_template("pipelines.yaml.j2"))["logs-pipeline"]
 
 
 def test_data_prepper_parse_json_is_gated_to_json_looking_bodies() -> None:
@@ -158,18 +198,7 @@ def test_data_prepper_parse_json_is_gated_to_json_looking_bodies() -> None:
     logged an ERROR per event (~447/min on obs). The gate skips those. Anything
     that looks like JSON but still fails to parse is tagged and stays loud.
     """
-    env = _ansible_jinja_env()
-    # The one Ansible filter this template uses. Alias Jinja's built-in `tojson`: it is
-    # autoescape-safe (the shared env autoescapes) and still emits valid JSON.
-    env.filters["to_json"] = env.filters["tojson"]
-    context = {
-        "data_prepper_otel_logs_port": 21892,
-        "data_prepper_parse_json_source": "body",
-        "data_prepper_opensearch_hosts": ["http://localhost:9200"],
-        "data_prepper_index": "logs-%{yyyy.MM.dd}",
-    }
-    rendered = env.from_string(DATA_PREPPER_PIPELINES.read_text(encoding="utf-8")).render(context)
-    pipeline = yaml.safe_load(rendered)["logs-pipeline"]
+    pipeline = _data_prepper_pipeline()
     parse_json = next(p["parse_json"] for p in pipeline["processor"] if "parse_json" in p)
     assert parse_json == {
         "source": "body",
@@ -177,6 +206,98 @@ def test_data_prepper_parse_json_is_gated_to_json_looking_bodies() -> None:
         "tags_on_failure": ["_jsonparsefailure"],
         "handle_failed_events": "skip",
     }
+
+
+DLQ_FILE = "/var/lib/data-prepper/dlq/opensearch-sink.dlq"
+
+
+def test_data_prepper_opensearch_sink_writes_rejects_to_local_dlq_file() -> None:
+    """Rejected documents go to a local DLQ file on obs, not just a WARN line (#1239).
+
+    `dlq_file` and the S3 `dlq` are mutually exclusive in 2.16.0
+    (OpenSearchSinkConfig.isDlqValid); the lab has no S3, so only `dlq_file`.
+    """
+    sinks = _data_prepper_pipeline()["sink"]
+    opensearch = next(s["opensearch"] for s in sinks if "opensearch" in s)
+    assert opensearch["dlq_file"] == DLQ_FILE
+    assert "dlq" not in opensearch
+
+    # DP fails the sink at init if it cannot open the file, so the install half must
+    # create the dir, owned by the service user with an explicit, non-group-writable mode.
+    install = yaml.safe_load(DATA_PREPPER_INSTALL.read_text(encoding="utf-8"))
+    dirs = [t["ansible.builtin.file"] for t in install if "ansible.builtin.file" in t]
+    assert {
+        "path": "{{ data_prepper_dlq_dir }}",
+        "state": "directory",
+        "owner": "{{ data_prepper_user }}",
+        "group": "{{ data_prepper_user }}",
+        "mode": "0750",
+    } in dirs
+
+
+def _logrotate_rule() -> tuple[str, list[str]]:
+    """Parse the rendered DLQ logrotate config into (path, directive lines)."""
+    lines = [
+        line.strip()
+        for line in _render_data_prepper_template("logrotate-dlq.conf.j2").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    header, *body, closing = lines
+    assert header.endswith("{")
+    assert closing == "}"
+    return header.removesuffix("{").strip(), body
+
+
+def test_data_prepper_dlq_logrotate_rule_bounds_the_file() -> None:
+    """The DLQ has no size limit of its own; logrotate caps it (#1239).
+
+    copytruncate (not rename+create) is load-bearing: DP 2.16.0 opens the file once
+    (CREATE+APPEND) and never reopens it, so a rename would leave DP writing into the
+    rotated file. No `create`/`postrotate`: nothing could make DP reopen it.
+    """
+    path, directives = _logrotate_rule()
+    assert path == DLQ_FILE
+    assert sorted(directives) == sorted(
+        [
+            "su data-prepper data-prepper",
+            "size 100M",
+            "rotate 4",
+            "copytruncate",
+            "compress",
+            "missingok",
+            "notifempty",
+        ]
+    )
+
+
+def test_data_prepper_dlq_rotation_runs_hourly_from_a_dedicated_config() -> None:
+    """A size cap only bounds the file if logrotate runs often enough (#1239).
+
+    Ubuntu 24.04's stock logrotate.timer is daily, so a dedicated hourly timer runs
+    logrotate on a config kept OUT of /etc/logrotate.d (exactly one runner), and the
+    configure half enables it.
+    """
+    ctx = _data_prepper_context()
+    conf = ctx["data_prepper_dlq_logrotate_conf"]
+    assert not conf.startswith("/etc/logrotate.d/")
+
+    timer = _render_data_prepper_template("data-prepper-dlq-rotate.timer.j2")
+    assert "OnCalendar=hourly" in timer.splitlines()
+
+    service = _render_data_prepper_template("data-prepper-dlq-rotate.service.j2")
+    exec_start = next(line for line in service.splitlines() if line.startswith("ExecStart="))
+    state = ctx["data_prepper_dlq_logrotate_state"]
+    assert exec_start == f"ExecStart=/usr/sbin/logrotate --state {state} {conf}"
+
+    configure = yaml.safe_load(DATA_PREPPER_CONFIGURE.read_text(encoding="utf-8"))
+    enabled = [t["ansible.builtin.systemd"] for t in configure if "ansible.builtin.systemd" in t]
+    timer_task = {
+        "name": "data-prepper-dlq-rotate.timer",
+        "enabled": True,
+        "state": "started",
+        "daemon_reload": True,
+    }
+    assert timer_task in enabled
 
 
 OPENSEARCH_ROLE = ANSIBLE_ROOT / "roles" / "opensearch"

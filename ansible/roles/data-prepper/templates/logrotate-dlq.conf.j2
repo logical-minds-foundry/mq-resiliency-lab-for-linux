@@ -1,0 +1,25 @@
+# Managed by ansible/roles/data-prepper (#1239). Bounds the OpenSearch sink's dlq_file,
+# which has no size limit or rotation of its own. Run hourly by
+# data-prepper-dlq-rotate.timer, NOT by the daily system logrotate (this file is
+# deliberately outside /etc/logrotate.d, so exactly one runner rotates it).
+#
+# copytruncate, not rename: Data Prepper 2.16.0 opens the DLQ once at sink init
+# (Files.newBufferedWriter with CREATE + APPEND, BulkIngester.setupDlq) and never
+# reopens it, with no signal or reload hook. Rename-and-create would leave DP writing
+# into the rotated (renamed) inode, so the live path would stay empty and the rotated
+# file would grow without bound. copytruncate keeps the inode; because DP opened it
+# O_APPEND, its next write lands at the new end (offset 0), so no sparse hole.
+# The accepted cost: records written between the copy and the truncate are lost, and a
+# record can be split across a rotation (DP's 8 KiB buffer is not line-aligned).
+#
+# size: rotate whenever the file exceeds the cap at a (hourly) run, regardless of age.
+# su: rotate as the file's owner, not root, in the DP-owned directory.
+{{ data_prepper_dlq_file }} {
+    su {{ data_prepper_user }} {{ data_prepper_user }}
+    size {{ data_prepper_dlq_rotate_size }}
+    rotate {{ data_prepper_dlq_rotate_count }}
+    copytruncate
+    compress
+    missingok
+    notifempty
+}
