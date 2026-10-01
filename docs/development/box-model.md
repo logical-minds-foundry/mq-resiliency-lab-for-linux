@@ -27,7 +27,7 @@ carries only the install surface that role needs, nothing more. The taxonomy is
 | `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` |
+| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the svc responder pymqi venv (#1227) |
 | `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
 
@@ -253,6 +253,32 @@ OS currency now comes from **rebuilding the box**, not from updating at boot. Th
 base-OS security updates is refused until it is re-baked from a fresh base. This
 keeps the running lab reproducible and the RDQM kernel/module pin intact, while
 still bounding how stale a box's base OS can get.
+
+### No in-guest apt auto-updates (#1225)
+
+The same reasoning rules out Ubuntu's in-guest auto-updater. Every baked Ubuntu
+box (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`, `mq-nativeha-ubuntu`,
+`pcmk-ubuntu`) runs the `apt-autoupdate-off` role as the **first play** of its
+bake. The role masks `apt-daily.timer`, `apt-daily-upgrade.timer`,
+`apt-daily.service`, `apt-daily-upgrade.service` and
+`unattended-upgrades.service`, and drops `/etc/apt/apt.conf.d/99lab-no-auto-upgrades`,
+which sets every `APT::Periodic::*` knob to `"0"`. Nothing fires on first boot.
+
+- **Why this is safe.** The boxes are short-lived and rebuilt cold from a fresh
+  base roughly weekly. The staleness gate in §3 enforces this: a NOTICE at 7 days
+  and a refusal at 14. That rebuild is the update path, so an in-guest updater
+  adds nothing.
+- **Why it matters.** Before #1225 the updater fired on every freshly booted guest
+  and held the dpkg lock, and provision had to wait it out. In the #1200 runs that
+  wait took 18 s, 73 s and 208 s on three otherwise-identical bootstraps. It was
+  both a large cost and the main source of run-to-run variance in provision.
+- **The provision-time guard stays.** `site-dns.yml` still carries the #1173
+  mask-and-wait as a defensive path. It first checks with a read-only
+  `systemctl is-enabled` query. When the units are already masked, as they are on
+  any box baked after #1225, both #1173 steps are skipped and the wait costs about
+  0 s. They only run on a box baked before this change, or on a host still on the
+  plain cloud image (the SAN targets). That play only ever masks; it never unmasks
+  or re-enables anything.
 
 ## 6. The RHEL DVD: one-time download, static archive, auto-stage
 

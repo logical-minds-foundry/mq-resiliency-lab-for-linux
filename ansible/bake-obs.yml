@@ -14,6 +14,18 @@
 # Full proof (MQ media for the exporter's cgo SDK) rides the actual box build later.
 #
 # See docs/development/box-bake-manifest.md for the authoritative classification.
+
+# In-guest apt auto-updates are permanently OFF in every baked Ubuntu box (#1225): the
+# weekly cold rebuild + box staleness gate is the update path, so nothing may grab the dpkg
+# lock on first boot. Its own play, FIRST, so the bake's own apt work never races it either.
+- name: Disable apt auto-updates for good (weekly cold rebuild is the update path, #1225)
+  hosts: bake
+  become: true
+  tasks:
+    - name: mask apt-daily / apt-daily-upgrade / unattended-upgrades + zero APT::Periodic
+      ansible.builtin.include_role:
+        name: apt-autoupdate-off
+
 - name: Bake obs-ubuntu2404 (install-only; no rendered targets/dashboards, no secrets)
   hosts: bake
   become: true

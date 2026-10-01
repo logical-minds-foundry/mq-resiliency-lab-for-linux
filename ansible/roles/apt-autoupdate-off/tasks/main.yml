@@ -1,0 +1,73 @@
+---
+# Permanently disable Ubuntu's in-guest apt auto-updates in a baked box (#1225, epic
+# .github#275).
+#
+# WHY: on every cold bootstrap apt-daily / apt-daily-upgrade / unattended-upgrades fired on
+# the freshly booted guests and held the dpkg lock, so provisioning had to wait them out
+# (#1173's site-dns.yml wait took 18s / 73s / 208s across three otherwise-identical runs —
+# a large cost and the main source of provision variance). The lab boxes are short-lived and
+# rebuilt cold from a fresh base about weekly; that rebuild, enforced by the box staleness
+# gate (docs/development/box-model.md §3/§5), IS the update path. An in-guest updater is
+# redundant, so the bake turns it off for good: nothing fires on first boot.
+#
+# HOW: mask the timers (no new run can start), wait out any run already in flight on the
+# bake host (never kill it — a mid-dpkg kill corrupts state), then mask the services and
+# zero every APT::Periodic knob. Masks are /etc/systemd/system → /dev/null symlinks, so they
+# persist in the converted box image. A final query verifies every unit reads `masked`
+# (fail-loud). Debian/Ubuntu only — included by the Ubuntu bake playbooks.
+
+- name: assert this is a Debian/Ubuntu bake host (apt auto-update is Ubuntu machinery)
+  ansible.builtin.assert:
+    that: ansible_os_family == 'Debian'
+    fail_msg: >-
+      apt-autoupdate-off is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
+      do not include it from a RHEL bake.
+
+- name: stop + mask the apt auto-update timers so no new run can start
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop: "{{ apt_autoupdate_timers }}"
+
+# noqa command-instead-of-module: `systemctl is-active` is a state QUERY (the systemd
+# module acts on units); same pattern as site-dns.yml's #1173 wait.
+- name: wait for any in-flight apt auto-update run to finish (dpkg lock free)  # noqa: command-instead-of-module
+  # apt-daily* are oneshot units: 'activating' while running, then 'inactive'/'failed'.
+  # The `until` is the real gate: Ansible fails the task when the retries run out without
+  # it holding. failed_when:false only stops is-active's non-zero rc (returned exactly when
+  # a unit is NOT active, i.e. our success) from failing an individual attempt.
+  ansible.builtin.command:
+    argv: ["systemctl", "is-active", "apt-daily.service", "apt-daily-upgrade.service"]
+  register: _apt_autoupdate_busy
+  until: (_apt_autoupdate_busy.stdout_lines | intersect(['active', 'activating', 'deactivating', 'reloading'])) | length == 0
+  retries: "{{ apt_autoupdate_idle_retries }}"
+  delay: "{{ apt_autoupdate_idle_delay }}"
+  changed_when: false
+  failed_when: false
+
+- name: mask the apt auto-update services so nothing starts them on any boot
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop: "{{ apt_autoupdate_services }}"
+
+- name: zero every APT::Periodic knob (belt-and-braces behind the masks)
+  ansible.builtin.copy:
+    src: 99lab-no-auto-upgrades
+    dest: "{{ apt_autoupdate_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: verify every apt auto-update unit is masked  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'is-enabled'] + apt_autoupdate_timers + apt_autoupdate_services }}"
+  register: _apt_autoupdate_state
+  changed_when: false
+  # is-enabled exits non-zero for a masked unit, so judge by its per-unit output instead:
+  # one line per unit, every line must read 'masked'.
+  failed_when: >-
+    (_apt_autoupdate_state.stdout_lines | length) != ((apt_autoupdate_timers + apt_autoupdate_services) | length)
+    or (_apt_autoupdate_state.stdout_lines | unique) != ['masked']

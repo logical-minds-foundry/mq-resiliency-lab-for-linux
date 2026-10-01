@@ -1,0 +1,12 @@
+// Managed by mq-resiliency-lab-for-linux (ansible role apt-autoupdate-off, #1225).
+//
+// In-guest apt auto-updates are permanently OFF in the lab's baked boxes. The boxes are
+// short-lived and rebuilt cold from a fresh base about weekly; that rebuild, enforced by
+// the box staleness gate, is the update path. An in-guest updater is redundant and costs
+// time and run-to-run variance on every boot (it holds the dpkg lock).
+// See docs/development/box-model.md section 5.
+APT::Periodic::Enable "0";
+APT::Periodic::Update-Package-Lists "0";
+APT::Periodic::Download-Upgradeable-Packages "0";
+APT::Periodic::AutocleanInterval "0";
+APT::Periodic::Unattended-Upgrade "0";

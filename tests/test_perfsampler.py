@@ -94,6 +94,7 @@ class FakeSource:
         self.local_fails = False
         self.close_problems: list[str] = []
         self.closed = 0
+        self.pending_notes: list[str] = []
 
     def host(self) -> HostSample:
         if self.host_fails:
@@ -109,6 +110,10 @@ class FakeSource:
         if name in self.failing:
             raise RuntimeError(f"ssh exited 255: connect to {name}: No route to host")
         return GuestSample(steal_pct=self._steal[name].pop(0))
+
+    def notes(self) -> list[str]:
+        out, self.pending_notes = self.pending_notes, []
+        return out
 
     def close(self) -> list[str]:
         self.closed += 1
@@ -304,6 +309,29 @@ def test_stop_notes_a_source_whose_close_raises():
 
     Sampler(rec, Broken({}), []).stop()  # never raises
     assert rec.notes == ["sampler: source cleanup failed (OSError: mux dir gone)"]
+
+
+def test_a_tick_records_each_note_the_source_queued_once():
+    """#1228: a source's own messages (e.g. the ssh-mux fallback) reach the report."""
+    rec = PerfRecord(stack="s", started_at=0.0)
+    src = FakeSource({})
+    sampler = Sampler(rec, src, [], clock=_clock([1.0, 2.0]))
+    src.pending_notes = ["ssh multiplexing unavailable (x); fall back"]
+    sampler.tick()
+    sampler.tick()  # drained: not repeated
+    assert rec.notes == ["sampler: ssh multiplexing unavailable (x); fall back"]
+
+
+def test_a_source_whose_notes_raise_is_noted_and_the_tick_still_records():
+    rec = PerfRecord(stack="s", started_at=0.0)
+
+    class Broken(FakeSource):
+        def notes(self) -> list[str]:
+            raise OSError("queue gone")
+
+    Sampler(rec, Broken({}), [], clock=_clock([1.0])).tick()
+    assert rec.notes == ["sampler: source notes unavailable (OSError: queue gone)"]
+    assert len(rec.samples) == 1
 
 
 def test_the_loop_keeps_ticking_every_interval_until_stopped():
@@ -641,9 +669,157 @@ def test_control_socket_path_fits_the_unix_socket_limit_for_every_real_guest(tmp
         assert bound <= _SUN_PATH_MAX, (name, bound)
 
 
-def test_ssh_mux_dir_is_in_the_build_temp_bucket():
-    assert perfsampler.ssh_mux_dir() == perfsampler.temp_dir() / "ssh-mux"
+def test_ssh_mux_dir_is_under_xdg_runtime_dir_when_set(monkeypatch, tmp_path):
+    """#1228: control sockets live on a LOCAL filesystem, never under build/ (on macOS
+    build/ is virtiofs, where ssh cannot bind a Unix socket)."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    assert perfsampler.ssh_mux_dir() == tmp_path / "mqlab-ssh-mux"
     assert RealSource({})._mux_dir == perfsampler.ssh_mux_dir()
+
+
+def test_ssh_mux_dir_falls_back_to_a_per_user_dir_in_the_system_temp_dir(monkeypatch, tmp_path):
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    monkeypatch.setattr(perfsampler.tempfile, "gettempdir", lambda: str(tmp_path))
+    uid = perfsampler.os.getuid()
+    assert perfsampler.ssh_mux_dir() == tmp_path / f"mqlab-ssh-mux-{uid}"
+
+
+def test_ssh_mux_dir_is_never_under_build(monkeypatch):
+    from mqlab.paths import temp_dir
+
+    monkeypatch.delenv("XDG_RUNTIME_DIR", raising=False)
+    assert not perfsampler.ssh_mux_dir().is_relative_to(temp_dir().parent)
+
+
+def test_an_existing_group_readable_mux_dir_of_ours_is_tightened_to_0700(tmp_path):
+    mux = tmp_path / "mux"
+    mux.mkdir(mode=0o755)
+    mux.chmod(0o755)
+    perfsampler.ensure_private_dir(mux)
+    assert mux.stat().st_mode & 0o777 == 0o700
+
+
+def test_a_mux_dir_that_is_not_a_directory_fails_loud(tmp_path):
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    link = tmp_path / "mux"
+    link.symlink_to(target)  # a planted symlink is refused, not followed
+    with pytest.raises(RuntimeError, match="is not a directory"):
+        perfsampler.ensure_private_dir(link)
+
+
+def test_a_mux_dir_owned_by_someone_else_fails_loud(tmp_path, monkeypatch):
+    monkeypatch.setattr(perfsampler.os, "getuid", lambda: 4242)
+    with pytest.raises(RuntimeError, match="owned by uid .*, not us"):
+        perfsampler.ensure_private_dir(tmp_path)
+
+
+VIRTIOFS_STDERR = (
+    "muxserver_listen: link mux listener f60a3f08.PQ2v19ibC6zdnv63 => f60a3f08: "
+    "Bad file descriptor\n"
+)
+
+
+def _mux_failure() -> perfsampler.ProbeError:
+    return perfsampler.ProbeError("ssh", 255, VIRTIOFS_STDERR, VIRTIOFS_STDERR.strip())
+
+
+def test_a_mux_setup_failure_is_noted_once_and_probes_fall_back_to_plain_ssh(tmp_path):
+    """#1228: on virtiofs ssh cannot bind the control socket and exits 255 with
+    `muxserver_listen`. The probe is re-run WITHOUT multiplexing (so it still yields a
+    sample), the fallback is noted once, and every later probe skips the mux."""
+    run = FakeRun({"ssh": [_mux_failure(), PROBE_OUT, PROBE_OUT, PROBE_OUT]})
+    src = RealSource({"obs": "10.50.0.2", "qm-a": "10.50.0.3"}, run=run, mux_dir=tmp_path)
+    assert src.guest("obs").load1 == 0.52  # this tick's sample is not lost
+    assert src.guest("qm-a").load1 == 0.52
+    assert src.guest("obs").load1 == 0.52
+    argvs = [argv for argv, _ in run.calls]
+    assert _opt(argvs[0], "ControlMaster") == "auto"  # tried the mux once...
+    for argv in argvs[1:]:  # ...then plain ssh for the retry and every later probe
+        assert _opt(argv, "ControlMaster") == "no"
+        assert _opt(argv, "ControlPath") == "none"
+        assert not any(a.startswith("ControlPersist=") for a in argv)
+        assert argv[-1] == "head -n1 /proc/stat && cat /proc/loadavg"
+    assert run.cwds[1:] == [None, None, None]
+    (note,) = src.notes()
+    assert note.startswith(f"ssh multiplexing unavailable (control socket in {tmp_path}: ")
+    assert "muxserver_listen" in note
+    assert "fall back to plain non-multiplexed ssh" in note
+    assert src.notes() == []  # drained, and never queued again
+    assert src.close() == []  # no master was ever opened, so none to exit
+    assert len(run.calls) == 4
+
+
+def test_concurrent_mux_failures_are_noted_once(tmp_path):
+    """Guests are probed concurrently: two probes that both tried the mux and both failed
+    still produce ONE note, and both fall back to a plain probe."""
+    both_tried_mux = threading.Barrier(2, timeout=5)
+
+    def run(argv: list[str], timeout: float, *, cwd: Path | None = None) -> str:
+        if _opt(argv, "ControlMaster") == "auto":
+            both_tried_mux.wait()  # neither fails until both are past the mux check
+            raise _mux_failure()
+        return PROBE_OUT
+
+    src = RealSource({"obs": "10.50.0.2", "qm-a": "10.50.0.3"}, run=run, mux_dir=tmp_path)
+    threads = [threading.Thread(target=src.guest, args=(n,)) for n in ("obs", "qm-a")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert src._prev.keys() == {"obs", "qm-a"}  # both fell back and sampled
+    assert len(src.notes()) == 1
+
+
+def test_an_unusable_mux_dir_is_noted_once_and_probes_fall_back(tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    run = FakeRun({"ssh": [PROBE_OUT, PROBE_OUT]})
+    src = RealSource({"obs": "10.50.0.2"}, run=run, mux_dir=blocker / "mux")
+    src.guest("obs")
+    src.guest("obs")
+    for argv, _ in run.calls:
+        assert _opt(argv, "ControlMaster") == "no"
+    (note,) = src.notes()
+    assert note.startswith(f"ssh multiplexing unavailable (control dir {blocker / 'mux'}: ")
+    assert "NotADirectoryError" in note or "FileExistsError" in note
+
+
+def test_an_ordinary_ssh_255_is_a_failed_probe_not_a_mux_fallback(tmp_path):
+    """A guest that is down also exits 255 — that must stay a noted failure (retried with
+    the mux next tick), not silently switch the whole run to plain ssh."""
+    down = perfsampler.ProbeError(
+        "ssh", 255, "ssh: connect to host 10.50.0.9 port 22: No route to host\n", "No route"
+    )
+    run = FakeRun({"ssh": [down]})
+    src = RealSource({"qm-a": "10.50.0.9"}, run=run, mux_dir=tmp_path)
+    with pytest.raises(perfsampler.ProbeError, match="No route"):
+        src.guest("qm-a")
+    assert src._mux_ok
+    assert src.notes() == []
+    assert len(run.calls) == 1
+
+
+def test_is_mux_failure_needs_exit_255_and_a_mux_marker():
+    assert perfsampler.is_mux_failure(_mux_failure())
+    assert not perfsampler.is_mux_failure(perfsampler.ProbeError("ssh", 1, VIRTIOFS_STDERR, "x"))
+    assert not perfsampler.is_mux_failure(RuntimeError(VIRTIOFS_STDERR))
+    for stderr in (
+        "unix_listener: path too long for Unix domain socket",
+        "ControlSocket abc already exists, disabling multiplexing",
+        "Control socket connect(abc): Permission denied",
+    ):
+        assert perfsampler.is_mux_failure(perfsampler.ProbeError("ssh", 255, stderr, stderr))
+
+
+def test_run_bounded_raises_probe_error_with_exit_code_and_stderr():
+    script = "import sys; sys.stderr.write('muxserver_listen: x'); sys.exit(255)"
+    argv = [sys.executable, "-c", script]
+    with pytest.raises(perfsampler.ProbeError) as info:
+        run_bounded(argv, 10.0)
+    assert info.value.returncode == 255
+    assert info.value.stderr == "muxserver_listen: x"
+    assert perfsampler.is_mux_failure(info.value)
 
 
 def test_a_guest_that_is_not_up_opens_no_master_and_is_retried_next_probe(tmp_path):
