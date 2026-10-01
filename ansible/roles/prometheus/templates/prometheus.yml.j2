@@ -18,3 +18,14 @@ scrape_configs:
   - job_name: ibmmq
     file_sd_configs:
       - files: ["/etc/prometheus/targets/ibmmq.json"]
+
+  # Data Prepper's own metrics (#1238): the OpenSearch sink's document counters
+  # (logs_pipeline_opensearch_documentErrors_total etc.), so a document OpenSearch
+  # rejects is a visible, alertable number instead of two WARN lines in obs's journal.
+  # Data Prepper runs on obs beside Prometheus (#1179), so this is a static localhost
+  # target, not a topology render. Path: Data Prepper 2.16.0's DataPrepperServer
+  # registers the Prometheus scrape handler on /metrics/prometheus (and /metrics/sys).
+  - job_name: data-prepper
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets: ["{{ prometheus_data_prepper_target }}"]

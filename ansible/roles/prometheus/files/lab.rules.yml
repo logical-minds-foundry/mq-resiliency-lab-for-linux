@@ -14,3 +14,57 @@ groups:
           (lab_network_state == bool 2)
           * (2 + ((min by (network) (lab_net_reach))
                   or (count by (network) (lab_network_state) * 0 + 1)))
+
+  # No silent OpenSearch rejections (#1238). When OpenSearch refuses a document (e.g. a
+  # mapping conflict, #1230), Data Prepper's OpenSearch sink logs a WARN and DROPS it; with
+  # no DLQ, nothing else records the loss. These rules make it loud. The lab runs no
+  # Alertmanager, so they surface on Prometheus's Alerts page (http://<obs>:9090/alerts)
+  # and, via the ALERTS series, on the Watcher board's ③ Log pipeline "alerts" tile.
+  #
+  # Metric names (verified against Data Prepper 2.16.0 source, not guessed):
+  #   - BulkRetryStrategy registers the counters `documentErrors` / `documentsSuccess` /
+  #     `bulkRequestFailed` through PluginMetrics, whose meter name is
+  #     <pipeline>.<plugin>.<metric>, i.e. logs-pipeline.opensearch.documentErrors.
+  #   - Micrometer's PrometheusMeterRegistry turns that into
+  #     logs_pipeline_opensearch_documentErrors_total (dots and '-' to '_', camelCase
+  #     kept, `_total` on counters). Upstream's S3MetricsIT asserts exactly this shape
+  #     (`test_pipeline_s3_source_s3ObjectsFailed_total`).
+  #   - documentErrors counts every NON-retryable per-document failure (status 400/404/409,
+  #     e.g. mapper_parsing_exception), plus every document of a bulk request that fails
+  #     outright. These are the documents the sink drops.
+  # If a live scrape shows a different name, fix it here AND in watcherboard.py's DP_*
+  # constants; tests/test_dp_reject_alert.py pins the two together.
+  - name: log_pipeline
+    rules:
+      # Fires on ANY rejected document: increase over 5m > 0, held 1m, so a single
+      # unmappable document fires it, and it clears once 5 minutes pass with no new
+      # rejection. Summed over the series so a Data Prepper restart (counter reset) is
+      # handled by increase() rather than tripping or masking the rule.
+      - alert: DataPrepperDocumentsRejected
+        expr: sum(increase(logs_pipeline_opensearch_documentErrors_total{job="data-prepper"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OpenSearch is rejecting log documents (Data Prepper is dropping them)"
+          description: >-
+            {{ $value | humanize }} document(s) rejected by OpenSearch in the last 5m. Data
+            Prepper drops these unless a DLQ captures them. For the reason (usually a
+            mapping conflict in today's logs-* index), read obs's journal:
+            journalctl -u data-prepper | grep 'Document failed to write to OpenSearch'
+      # Guard against the rejection rule going silently blind: if the counter is not being
+      # scraped at all (Data Prepper down, scrape target broken, or a renamed metric),
+      # DataPrepperDocumentsRejected can never fire. 10m covers Data Prepper's slow JVM
+      # start on a cold obs boot.
+      - alert: DataPrepperSinkMetricsAbsent
+        expr: absent(logs_pipeline_opensearch_documentErrors_total{job="data-prepper"})
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Data Prepper's OpenSearch-sink metrics are not being scraped"
+          description: >-
+            No logs_pipeline_opensearch_documentErrors_total series from job="data-prepper"
+            for 10m, so OpenSearch rejections cannot be detected. Check that the
+            data-prepper target is up (http://<obs>:9090/targets) and that the metric name
+            still matches a live scrape of http://localhost:4900/metrics/prometheus on obs.
