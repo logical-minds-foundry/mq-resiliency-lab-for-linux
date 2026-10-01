@@ -71,3 +71,32 @@ def test_provision_waits_out_in_flight_apt_update() -> None:
         f"the until must count 'activating' (oneshot) as busy, not only 'active' (#1173); "
         f"until={wait.get('until')!r}"
     )
+
+
+def test_quiesce_is_a_no_op_on_a_box_baked_with_units_masked() -> None:
+    """Since #1225 the Ubuntu boxes bake the apt auto-update units masked. Provision must
+    detect that (a read-only is-enabled query that never fails the run) and skip BOTH the
+    #1173 mask and wait, so the wait costs ~0s on a current box and only runs on a box
+    baked before #1225."""
+    check = _task("baked with apt auto-updates already masked")
+    argv = (check.get("ansible.builtin.command") or {}).get("argv") or []
+    assert argv[:2] == ["systemctl", "is-enabled"], f"must be an is-enabled query; got {argv!r}"
+    assert {"apt-daily.timer", "apt-daily-upgrade.timer"} <= set(argv)
+    assert check.get("failed_when") is False and check.get("changed_when") is False
+    decide = _task("apt auto-update quiesce can be skipped")
+    fact = str((decide.get("ansible.builtin.set_fact") or {}).get("_apt_autoupdate_already_off"))
+    assert "masked" in fact, f"skip must require every unit to read 'masked'; got {fact!r}"
+    for name in ("mask apt auto-update timers", "wait for the apt auto-update services to go idle"):
+        when = str(_task(name).get("when", ""))
+        assert "_apt_autoupdate_already_off" in when, (
+            f"{name!r} must be skipped on an already-masked box (#1225); when={when!r}"
+        )
+
+
+def test_provision_never_unmasks_or_enables_apt_units() -> None:
+    """The defensive #1173 path may only mask — never unmask/enable — the apt units."""
+    for t in _all_tasks():
+        systemd = (t or {}).get("ansible.builtin.systemd") or {}
+        if "apt" in str(t.get("loop", "")) + str(systemd.get("name", "")):
+            assert systemd.get("masked") is not False, f"must never unmask apt units: {t!r}"
+            assert systemd.get("enabled") is not True, f"must never enable apt units: {t!r}"
