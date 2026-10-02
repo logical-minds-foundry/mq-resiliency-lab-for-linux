@@ -954,9 +954,9 @@ def _obs_up_steps() -> list[CommandStep]:
         ),
         CommandStep(
             "provision host collector",
-            # the Vergil VM (libvirt host) — node_exporter + the relay-heal timer
-            # (#984) — via a connection=local play, which also retires the old
-            # lab-net-state probe (#1253). No host service runs mqlab (#1252).
+            # the Vergil VM (libvirt host) — node_exporter — via a connection=local
+            # play, which also retires the old checkout-bound lab-net-state (#1253) and
+            # lab-relay-heal (#1251) timers. No host service runs mqlab (#1252).
             Command(
                 ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
                 cwd=repo_root() / "ansible",
@@ -1002,16 +1002,14 @@ def obs_open() -> None:
     typer.echo("bridges that to the obs guest. Just browse localhost:3000 (anonymous —")
     typer.echo("no login, #258). If it drops after an 'obs up', the relay was wedged by a")
     typer.echo("grafana restart; 'mqlab obs up' now re-heals it as its last step (#264).")
-    typer.echo("A host-side timer (lab-relay-heal) also runs lab/scripts/relay-heal.sh to")
-    typer.echo("recover the sustained-use fd-leak wedge on its own (#984; upstream fix")
-    typer.echo("vergil-project/vergil-vm#298).")
 
 
-# The Grafana port-forward relay's self-heal moved OUT of mqlab (#984): the host-side
-# lab-relay-heal.timer now runs the standalone lab/scripts/relay-heal.sh (bash + curl +
-# systemctl, no mqlab/uv/venv), so a wrong host-runnable-mqlab path can never wedge the
-# healer with status=203/EXEC again. The `obs up` post-provision bounce below stays inline
-# (it already has a live mqlab process); only the periodic self-heal is standalone.
+# The periodic relay self-heal (lab-relay-heal.timer + lab/scripts/relay-heal.sh, #984)
+# is retired (#1251): the sustained-use fd leak it recovered is fixed upstream
+# (vergil-project/vergil-vm#298), and it ran from one checkout's path, so it failed every
+# tick once that checkout was deleted. The `obs up` post-provision bounce above stays: it
+# covers the separate grafana-restart wedge (#264), runs as the lab user, and is
+# checkout-independent.
 
 
 # ---------------------------------------------------------------------------

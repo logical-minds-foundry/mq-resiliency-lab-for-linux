@@ -2,9 +2,8 @@
 
 The lab's networks only change state when net-up.sh / net-down.sh change them, so
 those scripts publish the new state themselves (via net-state-publish.sh), the
-observe phase publishes once after creating the drop zone, and the old root
-`lab-net-state` probe (a 10s timer running `<checkout>/.venv/bin/mqlab` as root) is
-retired from host-obs.yml.
+observe phase publishes once after creating the drop zone. The old root
+`lab-net-state` polling probe is retired from host-obs.yml (see tests/test_host_obs.py).
 
 The scripts are exercised for real against stub `uv` / `sudo` / `virsh` / `id`
 binaries on PATH and a temp drop zone (MQLAB_TEXTFILE_DIR), so no libvirt or root is
@@ -19,12 +18,9 @@ import stat
 import subprocess
 from pathlib import Path
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "lab" / "scripts"
 PUBLISH = SCRIPTS / "net-state-publish.sh"
-ANSIBLE = REPO_ROOT / "ansible"
 
 PROM = (
     "# HELP lab_network_state libvirt network state (0=absent,1=inactive,2=active)\n"
@@ -32,7 +28,6 @@ PROM = (
     'lab_network_state{network="net-hb-a"} 0\n'
     'lab_network_state{network="net-wan"} 2\n'
 )
-RESET_FAILED_GUARD = "_reset_failed.rc != 0 and 'not loaded' not in _reset_failed.stderr"
 
 
 def _stub(bin_dir: Path, name: str, body: str) -> None:
@@ -68,11 +63,6 @@ def _run(script: Path, env: dict[str, str], *args: str) -> subprocess.CompletedP
     return subprocess.run(
         ["bash", str(script), *args], env=env, capture_output=True, text=True, check=False
     )
-
-
-def _host_obs_play() -> dict:
-    (play,) = yaml.safe_load((ANSIBLE / "host-obs.yml").read_text(encoding="utf-8"))
-    return play
 
 
 def test_publish_script_is_executable_strict_bash() -> None:
@@ -155,36 +145,3 @@ def test_net_up_publishes_after_changing_state(tmp_path: Path) -> None:
     render = next(i for i, c in enumerate(calls) if c.startswith("uv run"))
     assert autostart < render, "publish must follow the state change"
     assert (drop / "lab_network_state.prom").read_text() == PROM
-
-
-def test_host_obs_no_longer_installs_the_polling_probe() -> None:
-    assert not (ANSIBLE / "roles" / "host-net-state").exists()
-    assert "host-net-state" not in _host_obs_play()["roles"]
-    roles_text = "".join(
-        p.read_text(encoding="utf-8") for p in (ANSIBLE / "roles").rglob("*") if p.is_file()
-    )
-    assert "lab-net-state" not in roles_text
-
-
-def test_host_obs_retires_an_installed_probe_without_masking_errors() -> None:
-    play = _host_obs_play()
-    assert play["vars"]["retired_net_state_units"] == [
-        "lab-net-state.timer",
-        "lab-net-state.service",
-    ]
-    tasks = {t["name"]: t for t in play["tasks"]}
-    stop = tasks["stop + disable the retired lab-net-state timer"]["ansible.builtin.systemd"]
-    assert stop == {"name": "lab-net-state.timer", "state": "stopped", "enabled": False}
-    remove = tasks["remove the retired lab-net-state unit files"]
-    assert remove["ansible.builtin.file"]["state"] == "absent"
-    assert remove["when"] == "item.stat.exists", "a host that never had it is a no-op"
-    reload_name = "reload systemd after retiring lab-net-state"
-    reset_name = "clear the retired lab-net-state service's failed state"
-    assert remove["notify"] == [reload_name, reset_name]
-    handlers = [h["name"] for h in play["handlers"]]
-    # Handlers run in definition order: reload before reset-failed.
-    assert handlers.index(reload_name) < handlers.index(reset_name)
-    reset = next(h for h in play["handlers"] if h["name"] == reset_name)
-    # Only systemd's "not loaded" (never failed) is tolerated; anything else fails loud.
-    assert reset["failed_when"] == RESET_FAILED_GUARD
-    assert "ignore_errors" not in reset
