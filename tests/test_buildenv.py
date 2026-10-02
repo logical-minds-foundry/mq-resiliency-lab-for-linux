@@ -37,6 +37,60 @@ def test_real_git_runs_relative_to_repo_root(monkeypatch):
     assert captured["args"] == ["git", "rev-parse", "--git-dir"]
 
 
+_DUBIOUS = (
+    "fatal: detected dubious ownership in repository at '/repo'\n"
+    "To add an exception for this directory, call:\n"
+)
+
+
+def test_real_git_failure_surfaces_command_exit_cwd_and_stderr(monkeypatch):
+    # #1261: a git failure must say WHY — git's own stderr — not just "exit 128".
+    def fake_run(args, **kwargs):
+        raise b.subprocess.CalledProcessError(128, args, output="", stderr=_DUBIOUS)
+
+    monkeypatch.setattr(b, "repo_root", lambda: Path("/repo"))
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    with pytest.raises(b.BuildEnvError) as err:
+        b._git(["git", "rev-parse", "--git-dir"])
+    msg = str(err.value)
+    assert "git failed (exit 128): git rev-parse --git-dir" in msg
+    assert "cwd: /repo" in msg
+    assert "stderr: fatal: detected dubious ownership in repository at '/repo'" in msg
+    assert isinstance(err.value.__cause__, b.subprocess.CalledProcessError)
+
+
+def test_real_git_failure_with_empty_stderr_says_so(monkeypatch):
+    def fake_run(args, **kwargs):
+        raise b.subprocess.CalledProcessError(128, args, output="", stderr=None)
+
+    monkeypatch.setattr(b, "repo_root", lambda: Path("/repo"))
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    with pytest.raises(b.BuildEnvError, match=r"stderr: \(no stderr\)"):
+        b._git(["git", "rev-parse", "--git-common-dir"])
+
+
+def test_real_git_unrunnable_raises_build_env_error(monkeypatch):
+    def fake_run(args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "git")
+
+    monkeypatch.setattr(b, "repo_root", lambda: Path("/repo"))
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    with pytest.raises(b.BuildEnvError) as err:
+        b._git(["git", "rev-parse", "--git-dir"])
+    assert "git failed (could not run): git rev-parse --git-dir" in str(err.value)
+    assert "No such file or directory" in str(err.value)
+
+
+def test_ensure_propagates_git_failure_diagnosis(tmp_path):
+    def failing(args: list[str]) -> str:
+        raise b.BuildEnvError(
+            b.git_failure_message(args, tmp_path, exit_code=128, stderr="fatal: boom")
+        )
+
+    with pytest.raises(b.BuildEnvError, match="stderr: fatal: boom"):
+        b.ensure(tmp_path, run=failing)
+
+
 def test_is_worktree_true_when_dirs_differ():
     run = _git(
         {

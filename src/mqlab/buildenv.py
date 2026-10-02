@@ -44,9 +44,33 @@ def _git(args: list[str]) -> str:
     # first hit by the since-retired root lab-net-state service, cwd=/). repo_root() is
     # cwd-independent (MQLAB_REPO_ROOT / a walk from __file__), so git always resolves
     # the real checkout.
-    return subprocess.run(  # noqa: S603
-        args, capture_output=True, text=True, check=True, cwd=repo_root()
-    ).stdout.strip()
+    #
+    # A failure raises BuildEnvError carrying the command, exit code, cwd and git's own
+    # stderr (#1261): a bare CalledProcessError holds stderr but never prints it, so a
+    # transcript could only say "exit 128" — never *why* (e.g. "detected dubious
+    # ownership" vs "not a git repository").
+    cwd = repo_root()
+    try:
+        return subprocess.run(  # noqa: S603
+            args, capture_output=True, text=True, check=True, cwd=cwd
+        ).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        raise BuildEnvError(
+            git_failure_message(args, cwd, exit_code=exc.returncode, stderr=exc.stderr)
+        ) from exc
+    except OSError as exc:  # git missing / cwd unusable: no exit code, but say why
+        raise BuildEnvError(
+            git_failure_message(args, cwd, exit_code=None, stderr=str(exc))
+        ) from exc
+
+
+def git_failure_message(
+    args: list[str], cwd: Path, *, exit_code: int | None, stderr: str | None
+) -> str:
+    """One diagnosable line set for a failed git call: command, exit code, cwd, stderr."""
+    status = "could not run" if exit_code is None else f"exit {exit_code}"
+    detail = (stderr or "").strip() or "(no stderr)"
+    return f"git failed ({status}): {' '.join(args)}\n  cwd: {cwd}\n  stderr: {detail}"
 
 
 def is_worktree(*, run: Callable[[list[str]], str] = _git) -> bool:
