@@ -38,11 +38,12 @@ class BuildEnvError(RuntimeError):
 
 
 def _git(args: list[str]) -> str:
-    # Run relative to the repo root, NOT the process cwd. mqlab also runs as a root systemd
-    # service with cwd=/ (e.g. lab-net-state), where a cwd-relative `git rev-parse` exits 128
-    # ("not a git repository") and crashes the command (#989). repo_root() is cwd-independent
-    # (MQLAB_REPO_ROOT / a walk from __file__), so git always resolves the real checkout — the
-    # buildenv sibling of the #984 _host_mqlab fix.
+    # Run relative to the repo root, NOT the process cwd. mqlab can be invoked from any cwd
+    # (e.g. `uv run --project <repo> mqlab …` from a script, #1253), where a cwd-relative
+    # `git rev-parse` exits 128 ("not a git repository") and crashes the command (#989 —
+    # first hit by the since-retired root lab-net-state service, cwd=/). repo_root() is
+    # cwd-independent (MQLAB_REPO_ROOT / a walk from __file__), so git always resolves
+    # the real checkout.
     return subprocess.run(  # noqa: S603
         args, capture_output=True, text=True, check=True, cwd=repo_root()
     ).stdout.strip()

@@ -107,11 +107,12 @@ def test_commons_up_provisions_shared_host(monkeypatch, tmp_path):
     assert any("site-obs.yml" in " ".join(s.argv) for s in _recorded_steps(runner))
 
 
-def test_commons_up_host_collector_passes_mqlab_bin(monkeypatch, tmp_path):
-    """commons up still passes mqlab_bin to host-obs.yml (#950).
+def test_commons_up_host_collector_passes_no_mqlab_path(monkeypatch, tmp_path):
+    """commons up runs host-obs.yml as a plain connection=local play (#1252).
 
-    Its consumer, the host-net-state role, is retired (#1253) so host-obs.yml no
-    longer reads it; removing the argument (and this test) is #1252.
+    It used to pass `mqlab_bin=<checkout>/.venv/bin/mqlab` (#950) for the root
+    lab-net-state service; that service is retired (#1253) and mqlab is never invoked
+    by an absolute venv path, so no host play is handed one.
     """
     _seed(monkeypatch, tmp_path)
     runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(10)])
@@ -121,9 +122,14 @@ def test_commons_up_host_collector_passes_mqlab_bin(monkeypatch, tmp_path):
 
     assert result.exit_code == 0
     host_obs = next(s for s in _recorded_steps(runner) if "host-obs.yml" in s.argv)
-    assert any(a.startswith("mqlab_bin=") and len(a) > len("mqlab_bin=") for a in host_obs.argv), (
-        f"host-obs.yml invoked without a non-empty mqlab_bin: {host_obs.argv}"
-    )
+    assert host_obs.argv == [
+        "ansible-playbook",
+        "host-obs.yml",
+        "-c",
+        "local",
+        "-i",
+        "localhost,",
+    ]
 
 
 def test_commons_up_publishes_net_state_after_the_host_collector(monkeypatch, tmp_path):

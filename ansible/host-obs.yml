@@ -16,8 +16,8 @@
     - node-exporter
     - host-relay-heal
   tasks:
-    # #1253: the lab-net-state probe ran `<checkout>/.venv/bin/mqlab obs net-state`
-    # as root every 10s (root-owned __pycache__ in the checkout, #1251; status-127
+    # #1253: the lab-net-state probe ran the checkout's venv mqlab by absolute path
+    # (`obs net-state`) as root every 10s (root-owned __pycache__ in the checkout, #1251; status-127
     # failures once that checkout was deleted). Remove it from hosts that ran an
     # earlier observe. Stat first so a host that never had it is a clean no-op.
     - name: find the retired lab-net-state units

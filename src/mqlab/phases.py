@@ -27,7 +27,6 @@ The `states` dict shape (the contract Task 4's `_probe_all` fills):
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -576,33 +575,6 @@ def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa:
 # --------------------------------------------------------------------------- #
 # observe phase
 # --------------------------------------------------------------------------- #
-def _host_mqlab() -> str:
-    """Absolute path to a host-runnable mqlab console script for the host services.
-
-    No consumer remains: the lab-net-state probe that needed it is retired (#1253),
-    and removing this absolute `.venv/bin/mqlab` invocation is #1252.
-
-    The host-net-state systemd service ran as root with a minimal PATH (no `uv`,
-    no mqlab on PATH), so it must call mqlab by absolute path. Use the console
-    script beside the interpreter driving THIS bootstrap — host-runnable by
-    definition, and the same venv `uv sync` keeps current at bootstrap (#776).
-
-    (History: this originally dodged a corrupted `.venv/bin/mqlab` whose shebang
-    was rewritten to the container path `/workspace/.venv/bin/python`, so the
-    service died status=127 (#398). That corruption is fixed at the source —
-    vergil-project/vergil-tooling#2473/#2495 give the container its own isolated
-    venv so it never rewrites the host `.venv` — so the interpreter-sibling mqlab
-    is now simply the correct host venv's console script, not a workaround.)
-
-    Do NOT `.resolve()` `sys.executable`: `.venv/bin/python3` is a symlink to the
-    base interpreter, so resolving it follows the link back to `/usr/bin/python3`
-    and the sibling computes to a nonexistent `/usr/bin/mqlab` — the units then die
-    status=203/EXEC (#984). The unresolved parent is the venv's own `bin/`, where
-    the console script actually lives.
-    """
-    return str(Path(sys.executable).parent / "mqlab")
-
-
 def _observe_build_steps(
     stack: Stack,
     deps: Any,  # noqa: ARG001
@@ -672,22 +644,13 @@ def _observe_build_steps(
         ),
         # Instrument the libvirt HOST (the Vergil VM, connection=local): node-exporter
         # exposes the virbr-* bridge byte counters that feed the per-net throughput
-        # panels (#383) and owns the textfile drop zone. host-obs.yml no longer reads
-        # `mqlab_bin` — its only consumer, the lab-net-state probe, is retired (#1253);
-        # removing the argument is #1252.
+        # panels (#383) and owns the textfile drop zone. No host service runs mqlab:
+        # mqlab is only ever invoked via `uv run` / an activated env, never by an
+        # absolute `.venv/bin` path (#1252).
         CommandStep(
             f"{stack.name} instrument host",
             Command(
-                [
-                    "ansible-playbook",
-                    "host-obs.yml",
-                    "-c",
-                    "local",
-                    "-i",
-                    "localhost,",
-                    "-e",
-                    f"mqlab_bin={_host_mqlab()}",
-                ],
+                ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
                 cwd=ansible,
             ),
         ),

@@ -47,7 +47,6 @@ from mqlab.phases import (
     OBS_GROUP,
     PHASES,
     _commons_members,
-    _host_mqlab,
     _non_mq_commons_hosts,
     all_vms,
     build_states,
@@ -899,19 +898,9 @@ def _obs_up_steps() -> list[CommandStep]:
             "provision host collector",
             # the Vergil VM (libvirt host) — node_exporter + the relay-heal timer
             # (#984) — via a connection=local play, which also retires the old
-            # lab-net-state probe (#1253). host-obs.yml no longer reads `mqlab_bin`;
-            # removing the argument is #1252.
+            # lab-net-state probe (#1253). No host service runs mqlab (#1252).
             Command(
-                [
-                    "ansible-playbook",
-                    "host-obs.yml",
-                    "-c",
-                    "local",
-                    "-i",
-                    "localhost,",
-                    "-e",
-                    f"mqlab_bin={_host_mqlab()}",
-                ],  # noqa: S607
+                ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
                 cwd=repo_root() / "ansible",
             ),
         ),
