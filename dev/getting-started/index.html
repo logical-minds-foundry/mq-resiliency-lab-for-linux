@@ -793,6 +793,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#bootstrap-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#your-first-message" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1398,6 +1409,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#bootstrap-performance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bootstrap performance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#your-first-message" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1576,6 +1598,48 @@ the guest fleet, provision the cluster and queue manager, then wire up
 observability — and leaves you with a <strong>running queue manager</strong>. Guests boot
 pre-baked, per-role box images rather than installing MQ on every bring-up, which
 is why this takes minutes rather than the better part of an hour.</p>
+<p>Every bootstrap also prints two things worth a glance:</p>
+<ul>
+<li><strong>An <code>environment:</code> line.</strong> <code>mqlab</code> detects the platform it runs on and
+  applies a matching profile from <code>topology.yaml</code>: <code>macos</code> inside an Apple
+  Virtualization VM on an Apple-silicon Mac, and <code>cloud</code> on Google Compute
+  Engine. On any other host (a bare-metal x86 box, for example) it uses the base
+  topology unchanged and says so. You don't need to set anything. Setting
+  <code>MQLAB_ENV=macos|cloud</code> overrides detection; if you do, set it for <code>teardown</code>
+  too.</li>
+<li><strong>A perf summary.</strong> Each run, including a failed one, writes a
+  <code>perf-&lt;timestamp&gt;.json</code> report next to its transcript under
+  <code>build/state/runs/</code>, with per-phase and per-step timings, readiness
+  milestones, and host and guest CPU-contention samples. <code>mqlab perf diff a.json
+  b.json</code> compares two runs.</li>
+</ul>
+<h3 id="bootstrap-performance">Bootstrap performance<a class="headerlink" href="#bootstrap-performance" title="Permanent link">&para;</a></h3>
+<p><strong>macOS, Apple silicon (data).</strong> A cold <code>nativeha-ubuntu --no-dr</code> bootstrap
+took <strong>643 s</strong> and <strong>621 s</strong> in the two clean acceptance runs
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200">#1200</a>).
+Before the fix in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1241">#1241</a>,
+the same bring-up failed after about 23 minutes, or never finished its
+<code>observe</code> phase in more than 40 minutes.</p>
+<p><strong>Why macOS needs huge pages (data from spike
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1240">#1240</a>,
+reading is judgment).</strong> Under arm64 nested virtualization, a guest that
+churns memory (the obs node's Java services) made page faults in <em>every</em>
+guest up to hundreds of times slower. The likely cause is the macOS hypervisor
+handling the nested guests' 4 KiB memory mappings. Backing guest RAM with
+2 MiB huge pages removed the slowdown. So on macOS, <code>bootstrap</code> first
+reserves enough huge pages, in the VM that hosts the guests, for the guests it
+is about to boot: 11,392 pages,
+about <strong>22 GiB</strong>, for <code>nativeha-ubuntu --no-dr</code>. If it can't, it stops
+before booting anything rather than fall back to 4 KiB pages. The last
+stack's <code>teardown</code> gives the memory back. The x86 cloud host (Intel nested
+KVM) doesn't show the problem, so the <code>cloud</code> profile and the base topology keep
+4 KiB pages and reserve nothing.</p>
+<p><strong>x86 cloud.</strong> <em>Placeholder: the current cloud numbers come from validation
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1260">#1260</a>,
+which has not run yet.</em></p>
+<p>Method, raw numbers, and the comparison rules are in
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#52-measured-results">perf and staging</a>.</p>
 <h3 id="your-first-message">Your first message<a class="headerlink" href="#your-first-message" title="Permanent link">&para;</a></h3>
 <p>With the stack up, prove the whole point of the lab — that a live message path
 survives failover. Confirm the queue manager is up, then (via the
@@ -1766,10 +1830,13 @@ commons up</code>. A few renders and the front door are exposed directly:</p>
 </code></pre></div>
 <p><code>mqlab obs open</code> prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).</p>
-<p>An <strong>optional</strong> second telemetry tier — <strong><code>logsearch</code></strong> (single-node OpenSearch +
-Dashboards) — gives the same log corpus a full-text, aggregation search surface
-alongside Grafana/Loki. It is a sibling of <code>obs</code> (comes up with <code>mqlab commons up</code>),
-operated with <code>mqlab logsearch</code> (<code>status</code>/<code>open</code>/<code>snapshot</code>/<code>restore</code>); see
+<p>A second telemetry tier, <strong>log search</strong> (single-node OpenSearch + Dashboards,
+fed by Data Prepper), gives the same log corpus a full-text, aggregation search
+surface alongside Grafana/Loki. It runs on the same <code>obs</code> node, so it comes up
+with the rest of observability, and you operate it with <code>mqlab logsearch</code>
+(<code>status</code>/<code>open</code>/<code>snapshot</code>/<code>restore</code>). A log document that OpenSearch rejects
+is never dropped silently: it lands in a bounded dead-letter file, shows on the
+Watcher, and fires a Prometheus alert. See
 <a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>
 for the tier and <a href="../operate/#mqlab-logsearch-verbs">Operate &amp; Observe</a> for the verbs.</p>
 <p><strong>The Watcher</strong> (<code>lab-watcher</code>, #488) is the lab-state front door: a support-layer

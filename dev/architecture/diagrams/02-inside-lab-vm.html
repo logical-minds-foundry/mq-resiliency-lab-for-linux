@@ -74,9 +74,10 @@
     </div>
     <div class="group dr">
       <div class="glabel">Counterparty, app &amp; observability</div>
-      <!-- logsearch: the mgmt-plane log-search tier node (obs sibling). The Alloy->Data Prepper->OpenSearch
+      <!-- obs runs the whole observability platform, including the log-search tier (OpenSearch/Dashboards/
+           Data Prepper), which was consolidated onto it in #1179. The Alloy->Data Prepper->OpenSearch
            fan-out flow is intentionally NOT drawn here — that telemetry-flow-layer redesign is deferred to #971. -->
-      <div class="nodes"><div class="node">svc-sim <span class="tag">SVC · net-ext</span></div><div class="node">app-client</div><div class="node">obs <span class="tag">Watcher</span></div><div class="node">mon-probe</div><div class="node">logsearch <span class="tag">log-search · 10.50.0.4</span></div></div>
+      <div class="nodes"><div class="node">svc-sim <span class="tag">SVC · net-ext</span></div><div class="node">app-client</div><div class="node">obs <span class="tag">Watcher · log search</span></div><div class="node">mon-probe</div></div>
     </div>
   </div>
 

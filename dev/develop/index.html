@@ -1212,6 +1212,24 @@ maintain it (as distinct from <em>running</em> the lab as a consumer, which
 under epic
 <a href="https://github.com/logical-minds-foundry/.github/issues/161">logical-minds-foundry/.github#161</a>.</p>
 </div>
+<p>Until then, the in-repo developer notes are the reference:</p>
+<ul>
+<li><strong>Run <code>mqlab</code> with <code>uv run mqlab …</code> from a dev checkout.</strong> <code>uv run</code> syncs the
+  environment and puts the venv's <code>bin/</code> on <code>PATH</code>, so the tools <code>mqlab</code> calls by
+  bare name (<code>ansible-playbook</code> and the rest) resolve. Calling the venv's <code>mqlab</code>
+  by its path skips that and fails mid-run. A release install activates the venv
+  instead (<a href="../getting-started/#3-set-up-and-pre-flight-the-host">Getting Started</a>).
+  See
+  <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/operating-the-lab-from-a-dev-session.md">operating the lab from a dev session</a>.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md">Perf reports and bootstrap staging</a></strong>:
+  comparing a macOS run with an x86 cloud run of the same commit, tuning one
+  lever at a time, and the measured results.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md">Box model</a></strong>
+  and <strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-bake-manifest.md">box bake manifest</a></strong>:
+  how the per-role boxes are baked, kept registered, and rebuilt.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/build-layout.md"><code>build/</code> layout</a></strong>:
+  the <code>build/</code> buckets and the cloud VM's boot disk.</li>
+</ul>
 
 
 
