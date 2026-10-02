@@ -60,6 +60,18 @@ _OBSERVE = "observe"
 # time is reported as a phase of its own so it shows in the phase table.
 PREFLIGHT = "preflight"
 
+
+def prereq_phase(phase: str) -> str:
+    """The report phase for a bootstrap phase's prerequisite ensures (#1248).
+
+    Each selected phase ensures its declared prerequisites (boxes, MQ media, SAN debs,
+    galaxy collections, PKI) before its own steps run. That time used to fall outside
+    every report phase (about 240s of a cold run), so it is reported as
+    `prereq:<phase>` (e.g. `prereq:vms`, which holds the box ensure), right before the
+    phase it serves. Like `preflight`, it is a report phase only, never a resume point."""
+    return f"prereq:{phase}"
+
+
 # Readiness milestone -> the ansible task (role-prefixed, exactly as the TASK banner
 # prints it) whose duration IS that milestone. test_perfrun pins each name to the role's
 # tasks file, so renaming a task fails CI instead of silently dropping the milestone.
@@ -212,7 +224,18 @@ class BootstrapPerf:
     def preflight(
         self, label: str, fn: Callable[[], _T], *, now: Callable[[], float] = time.monotonic
     ) -> _T:
-        """Run one pre-flight call, timing it as a `preflight` step (#1215).
+        """Run one pre-flight call, timing it as a `preflight` step (#1215)."""
+        return self.timed(PREFLIGHT, label, fn, now=now)
+
+    def timed(
+        self,
+        phase: str,
+        label: str,
+        fn: Callable[[], _T],
+        *,
+        now: Callable[[], float] = time.monotonic,
+    ) -> _T:
+        """Run one in-process call, timing it as a step of `phase` (#1215, #1248).
 
         `fn`'s result and exceptions pass through untouched — timing never changes the
         run. A call that raises is still recorded (ok=False) with its elapsed time.
@@ -221,16 +244,16 @@ class BootstrapPerf:
         try:
             result = fn()
         except BaseException:
-            self._preflight_step(label, now() - started, ok=False)
+            self._timed_step(phase, label, now() - started, ok=False)
             raise
-        self._preflight_step(label, now() - started, ok=True)
+        self._timed_step(phase, label, now() - started, ok=True)
         return result
 
-    def _preflight_step(self, label: str, seconds: float, *, ok: bool) -> None:
+    def _timed_step(self, phase: str, label: str, seconds: float, *, ok: bool) -> None:
         try:
-            self.record.add_step(PREFLIGHT, label, seconds, 0, ok=ok)
+            self.record.add_step(phase, label, seconds, 0, ok=ok)
         except Exception as exc:  # noqa: BLE001 - perf is non-fatal; surfaced loudly
-            self._degraded(f"pre-flight step {label!r} not timed", exc)
+            self._degraded(f"{phase} step {label!r} not timed", exc)
 
     def nothing_to_do(self) -> None:
         """Every phase was already satisfied — the report holds just the pre-flight."""

@@ -286,6 +286,22 @@ def test_preflight_times_the_call_and_passes_its_result_through():
     )
 
 
+def test_timed_records_the_call_under_the_given_phase():
+    # #1248: the prereq ensures are timed as steps of their own `prereq:<phase>` phase.
+    perf = _perf()
+    clock = iter([5.0, 12.5])
+    phase = perfrun.prereq_phase("vms")
+    assert phase == "prereq:vms"
+    assert perf.timed(phase, "box ensure", lambda: 3, now=lambda: next(clock)) == 3
+    (step,) = perf.record.steps
+    assert (step.phase, step.label, step.seconds, step.ok) == (
+        "prereq:vms",
+        "box ensure",
+        7.5,
+        True,
+    )
+
+
 def test_preflight_records_a_raising_call_as_failed_and_reraises():
     perf = _perf()
     clock = iter([0.0, 3.0])
@@ -308,7 +324,7 @@ def test_preflight_timing_failure_is_a_warning_never_a_run_failure(monkeypatch):
 
     monkeypatch.setattr(perf.record, "add_step", broken)
     assert perf.preflight("render inventory", lambda: 7) == 7
-    assert any("pre-flight step 'render inventory' not timed" in n for n in perf.record.notes)
+    assert any("preflight step 'render inventory' not timed" in n for n in perf.record.notes)
     assert "perf: WARNING" in buf.getvalue()
 
 

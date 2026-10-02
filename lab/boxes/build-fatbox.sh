@@ -21,8 +21,14 @@
 #   * >=14d: REFUSE (exit non-zero) demanding --rebuild-box - a bake that old may
 #     miss base-OS security updates.
 # LAB_BOX_CACHE_DIR overrides the cache directory (tests point it at a tmp dir).
+#
+# Registration (#1248): REUSE keeps an already-current registration. The box is
+# re-added only when the registered copy did not come from this exact cache
+# artifact (see _box-register.sh). BUILD / FORCE-BUILD always re-add.
 set -euo pipefail
 cd "$(dirname "$0")"
+# shellcheck source=lab/boxes/_box-register.sh
+. ./_box-register.sh
 
 WARN_DAYS="${WARN_DAYS:-7}"
 REFUSE_DAYS="${REFUSE_DAYS:-14}"
@@ -148,7 +154,13 @@ if [ "$action" = REUSE ] && [ "$age_days" -ge "$WARN_DAYS" ]; then
   echo "NOTICE: cached box is ${age_days}d old (>= ${WARN_DAYS}d); pass --rebuild-box to refresh." >&2
 fi
 
+if [ "$action" = REUSE ]; then
+  IDENTITY="$(box_reg_identity "$CACHE" "$CURRENT_HASH")"
+fi
 if [ "$DRY_RUN" = 1 ]; then
+  if [ "$action" = REUSE ]; then
+    echo "registration: $(box_reg_state "$BOX" "$IDENTITY")"
+  fi
   echo "(dry-run; no action taken)"
   exit 0
 fi
@@ -159,9 +171,12 @@ if [ "$action" = STALE ]; then
   exit 1
 fi
 
-# --- Cheap path: register the cached box and we are done. ---
+# --- Cheap path: keep (or register) the cached box and we are done. A registration
+#     already added from this exact cache is left alone (#1248): re-adding it would
+#     re-unpack the box and change its box.img mtime, which makes vagrant-libvirt
+#     upload a fresh base volume on the next `vagrant up`. ---
 if [ "$action" = REUSE ]; then
-  vagrant box add --provider libvirt --force "$BOX" "$CACHE"
+  box_reuse_register "$BOX" "$CACHE" "$IDENTITY" --provider libvirt --force "$BOX" "$CACHE"
   echo "box ready (from cache): $BOX"
   exit 0
 fi
@@ -409,7 +424,9 @@ mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
 tar -C "$WORK" -czf "$CACHE" metadata.json box.img
 printf '%s\n' "$CURRENT_HASH" > "$HASH_FILE"   # stamp the manifest hash beside the box
-vagrant box add --provider libvirt --force "$BOX" "$CACHE"
+# Always re-add a fresh bake, stamped with the NEW cache identity (#1248).
+box_register "$BOX" "$(box_reg_identity "$CACHE" "$CURRENT_HASH")" \
+  --provider libvirt --force "$BOX" "$CACHE"
 
 # 8. Cleanup: tear down the transient build domain + scratch (cache + staged DVD are kept).
 virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true

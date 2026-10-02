@@ -107,6 +107,27 @@ def test_phase_only_on_b_is_listed_after_a_phases():
     assert [p.name for p in diff(a, b).phases] == ["vms", "net"]
 
 
+def test_prereq_phases_diff_against_a_report_that_predates_them():
+    # #1248 adds `prereq:<phase>` phases. A newer report (A) diffs against an older one
+    # (B) without them: they are listed with `—` for B, never dominant, never an error.
+    a = _record(
+        "nativeha-ubuntu",
+        {"preflight": 2.0, "prereq:vms": 9.0, "vms": 300.0, "prereq:provision": 50.0},
+        {},
+    )
+    b = _record("nativeha-ubuntu", {"preflight": 2.5, "vms": 310.0}, {})
+    report = diff(a, b)
+    names = [p.name for p in report.phases]
+    assert names == ["preflight", "prereq:vms", "vms", "prereq:provision"]
+    prereq = next(p for p in report.phases if p.name == "prereq:provision")
+    assert (prereq.a, prereq.b, prereq.delta) == (50.0, None, None)
+    assert report.dominant is not None
+    assert report.dominant.name == "vms"
+    rendered = report.render()
+    assert "prereq:provision" in rendered
+    assert "prereq:vms" in rendered
+
+
 def test_identical_reports_have_no_dominant_divergence():
     a = _record("s", {"vms": 10.0}, {})
     report = diff(a, a)
