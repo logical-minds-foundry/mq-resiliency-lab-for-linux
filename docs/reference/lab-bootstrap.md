@@ -95,6 +95,31 @@ The QM comes up **inside the `provision` phase** — there is no separate
 "create the QM" bring-up step anymore. Use `mqlab qm` (below) to drive its
 lifecycle afterward.
 
+### What else a bootstrap does and prints
+
+- **Environment profile.** Don't set `MQLAB_ENV`. `bootstrap` detects the
+  platform (Apple Virtualization means `macos`, Google Compute Engine means
+  `cloud`) and prints one `environment: …` line. An explicit `MQLAB_ENV`
+  overrides detection; if you set it, set it for `teardown` too. Rules:
+  [`perf-and-staging.md` §2](../development/perf-and-staging.md#how-mqlab_env-actually-applies).
+- **Huge pages (macOS only).** The `macos` profile backs guest RAM with 2 MiB
+  huge pages. Before it boots anything, `bootstrap` reserves them on the Vergil
+  VM: 11,392 pages (about 22 GiB) for `nativeha-ubuntu --no-dr`. If the kernel
+  can't free that many, it stops with `huge-page reservation SHORT` before
+  booting anything. The last stack's `teardown` releases them. Why this is
+  needed:
+  [`perf-and-staging.md` §5.1](../development/perf-and-staging.md#51-huge-page-backed-guest-ram-macos).
+- **Perf report.** Every run, including a failed one, writes
+  `perf-<timestamp>.json` next to its transcript in
+  `$(mqlab build path state)/runs/` and prints a timing and contention summary at
+  the end. Compare two runs with `mqlab perf diff a.json b.json`. See
+  [`perf-and-staging.md` §3](../development/perf-and-staging.md#3-where-the-perf-report-lands).
+- **Expected time.** A cold `nativeha-ubuntu --no-dr` bootstrap on the macOS dev
+  VM took 643 s and 621 s in the two clean #1200 acceptance runs. Measured
+  results, including
+  the pending cloud numbers:
+  [`perf-and-staging.md` §5.2](../development/perf-and-staging.md#52-measured-results).
+
 ---
 
 ## The four stacks
@@ -122,12 +147,15 @@ Both were once separate bring-up steps; they are now **phases of `bootstrap`**:
   hand). The groomed `lab/scripts/net-up.sh` / `net-down.sh` remain as a
   hand-run reference for the whole fabric in one shot.
 - The **`observe` phase** renders the scrape targets/dashboards and provisions
-  the obs pair + this stack's exporters + node instrumentation.
+  the obs pair + this stack's exporters + node instrumentation. obs runs the
+  whole observability platform, including the log-search tier (OpenSearch,
+  Dashboards and Data Prepper), so this phase waits for `opensearch_green`,
+  `data_prepper_ready` and `dashboards_ready`, and the perf report records them.
 
 To stand the shared observability VMs up **independently of any stack**:
 
 ```bash
-mqlab commons up          # boot obs + probe + svc + app + infra, provision Prometheus/Grafana/Loki
+mqlab commons up          # boot obs + probe + svc + app + infra, provision Prometheus/Grafana/Loki + OpenSearch/Data Prepper/Dashboards
 mqlab commons status      # commons health (topology × live virsh state)
 mqlab obs open            # print the Grafana URL + the (automatic) forward recipe
 ```

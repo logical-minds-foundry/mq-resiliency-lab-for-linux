@@ -68,11 +68,19 @@ planes are attached per role. The management plane is deliberately non-transit
 
 The guest fleet is the four 3+3 stacks (24 nodes), two SAN targets (`san-a`,
 `san-b`), and six shared commons (`obs`, `mon-probe`, `svc-sim`, `app-client`,
-`infra-client`, `infra-svc`). An **optional** seventh mgmt-plane node — `logsearch`
-(`net-mgmt` `10.50.0.4`), the single-node OpenSearch log-search tier (see
-[Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch))
-— joins the fleet when the topology carries it. See `lab/topology.yaml` for the
-authoritative per-node NIC and resource allocation.
+`infra-client`, `infra-svc`). The single-node OpenSearch log-search tier runs on
+`obs` (see
+[Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch));
+the former dedicated `logsearch` node (`10.50.0.4`) is retired. See
+`lab/topology.yaml` for the authoritative per-node NIC and resource allocation.
+
+Three resource levers can be overridden per environment through `env_profiles` in
+`topology.yaml`: top-level `boot_batch` (how many guests `vagrant up` boots at
+once), top-level `memory_backing` (`hugepages`), and per-node `cpus`. `mqlab`
+detects the environment (Apple Virtualization → `macos`, Google Compute Engine →
+`cloud`) unless `MQLAB_ENV` names one. Today only `macos` sets a lever:
+`memory_backing: hugepages`. The rules are in
+[perf and staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#how-mqlab_env-actually-applies).
 
 ## REST endpoints
 
@@ -113,7 +121,7 @@ commands:
 
 | Command | What it does |
 |---|---|
-| `mqlab bootstrap` | Bring up a whole stack in one command: net → vms → provision → observe (add `--no-dr` for a lighter HA-site-only bring-up) |
+| `mqlab bootstrap` | Bring up a whole stack in one command: net → vms → provision → observe (add `--no-dr` for a lighter HA-site-only bring-up); writes a perf report per run |
 | `mqlab teardown` | Destroy a stack's VMs; shared commons only when the last stack is down (or `--commons`) |
 | `mqlab status` | Show phase completion (net/vms/provision/observe) for a stack or all stacks |
 | `mqlab parity` | Print the cross-arm capability matrix (which verbs each arm supports) |
@@ -130,8 +138,10 @@ Command groups:
 | `mqlab rest` | `render` | Render the published mqweb REST endpoints (both sites) |
 | `mqlab dns` | `render` | Render BIND zone files + `named.conf` + host resolver facts |
 | `mqlab pki` | `ensure` · `issue` · `list` | Lab PKI / TLS certificate provider (org CAs, entity certs, keystores) |
-| `mqlab commons` | `up` · `status` · `down` | Shared commons VMs (obs + probe + svc + app) — and, when present, the `logsearch` tier — independently of any stack |
-| `mqlab logsearch` | `status` · `open` · `snapshot` · `restore` | Operate the optional log-search tier (single-node OpenSearch + Dashboards): cluster health, Dashboards URL, host-durable snapshot/restore |
+| `mqlab commons` | `up` · `status` · `down` | Shared commons VMs (obs, including its log-search tier, + probe + svc + app + infra) independently of any stack |
+| `mqlab logsearch` | `status` · `open` · `snapshot` · `restore` | Operate the log-search tier on obs (single-node OpenSearch + Dashboards): cluster health, Dashboards URL, host-durable snapshot/restore |
+| `mqlab netem` | `set` · `show` · `clear` | Inject delay-only WAN latency on the cross-region plane (`virbr-wan`) |
+| `mqlab perf` | `diff` | Compare two bootstrap perf reports (`perf-*.json`): per-phase and milestone deltas, contention means; no verdict |
 | `mqlab box` | `status` · `build` · `rebuild` · `clean` · `gc` | Baked-box fleet lifecycle |
 | `mqlab build` | `path` · `ensure` · `clean` · `status` · `migrate` | `build/` bucket lifecycle (cache/state/work/temp) |
 
@@ -167,3 +177,20 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
   — where the MQ connection surface uses raw IPs vs FQDNs.
 - **[Data Prepper DLQ](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/data-prepper-dlq.md)**
   — where OpenSearch-rejected log documents land on obs, and how to read or replay them.
+
+Lab-internals notes for whoever builds and tunes the lab live under
+`docs/development/`:
+
+- **[Perf reports and bootstrap staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md)**
+  — the perf report's fields, `mqlab perf diff`, the `MQLAB_ENV` profiles and
+  levers, why macOS backs guest RAM with huge pages, and measured bootstrap times.
+- **[Box model](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)**
+  and the
+  **[box bake manifest](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-bake-manifest.md)**
+  — what is baked into each box and why. Baked Ubuntu boxes have in-guest apt
+  auto-updates, the per-login dynamic MOTD and snapd turned off (snapd stays on
+  only on the aarch64 obs box, for the chromium snap), and cloud-init trimmed to
+  the two jobs a clone needs. Updates come from re-baking: a box older than 14 days
+  is refused until it is rebuilt.
+- **[`build/` layout](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/build-layout.md)**
+  — the four `build/` buckets, and why guest images stay on the VM's boot disk.

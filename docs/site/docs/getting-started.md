@@ -105,6 +105,53 @@ observability — and leaves you with a **running queue manager**. Guests boot
 pre-baked, per-role box images rather than installing MQ on every bring-up, which
 is why this takes minutes rather than the better part of an hour.
 
+Every bootstrap also prints two things worth a glance:
+
+- **An `environment:` line.** `mqlab` detects the platform it runs on and
+  applies a matching profile from `topology.yaml`: `macos` inside an Apple
+  Virtualization VM on an Apple-silicon Mac, and `cloud` on Google Compute
+  Engine. On any other host (a bare-metal x86 box, for example) it uses the base
+  topology unchanged and says so. You don't need to set anything. Setting
+  `MQLAB_ENV=macos|cloud` overrides detection; if you do, set it for `teardown`
+  too.
+- **A perf summary.** Each run, including a failed one, writes a
+  `perf-<timestamp>.json` report next to its transcript under
+  `build/state/runs/`, with per-phase and per-step timings, readiness
+  milestones, and host and guest CPU-contention samples. `mqlab perf diff a.json
+  b.json` compares two runs.
+
+### Bootstrap performance
+
+**macOS, Apple silicon (data).** A cold `nativeha-ubuntu --no-dr` bootstrap
+took **643 s** and **621 s** in the two clean acceptance runs
+([#1200](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200)).
+Before the fix in
+[#1241](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1241),
+the same bring-up failed after about 23 minutes, or never finished its
+`observe` phase in more than 40 minutes.
+
+**Why macOS needs huge pages (data from spike
+[#1240](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1240),
+reading is judgment).** Under arm64 nested virtualization, a guest that
+churns memory (the obs node's Java services) made page faults in *every*
+guest up to hundreds of times slower. The likely cause is the macOS hypervisor
+handling the nested guests' 4 KiB memory mappings. Backing guest RAM with
+2 MiB huge pages removed the slowdown. So on macOS, `bootstrap` first
+reserves enough huge pages, in the VM that hosts the guests, for the guests it
+is about to boot: 11,392 pages,
+about **22 GiB**, for `nativeha-ubuntu --no-dr`. If it can't, it stops
+before booting anything rather than fall back to 4 KiB pages. The last
+stack's `teardown` gives the memory back. The x86 cloud host (Intel nested
+KVM) doesn't show the problem, so the `cloud` profile and the base topology keep
+4 KiB pages and reserve nothing.
+
+**x86 cloud.** *Placeholder: the current cloud numbers come from validation
+[#1260](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1260),
+which has not run yet.*
+
+Method, raw numbers, and the comparison rules are in
+[perf and staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#52-measured-results).
+
 ### Your first message
 
 With the stack up, prove the whole point of the lab — that a live message path
@@ -292,10 +339,13 @@ http://localhost:3000/d/lab-watcher   (anonymous — no login)
 `mqlab obs open` prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).
 
-An **optional** second telemetry tier — **`logsearch`** (single-node OpenSearch +
-Dashboards) — gives the same log corpus a full-text, aggregation search surface
-alongside Grafana/Loki. It is a sibling of `obs` (comes up with `mqlab commons up`),
-operated with `mqlab logsearch` (`status`/`open`/`snapshot`/`restore`); see
+A second telemetry tier, **log search** (single-node OpenSearch + Dashboards,
+fed by Data Prepper), gives the same log corpus a full-text, aggregation search
+surface alongside Grafana/Loki. It runs on the same `obs` node, so it comes up
+with the rest of observability, and you operate it with `mqlab logsearch`
+(`status`/`open`/`snapshot`/`restore`). A log document that OpenSearch rejects
+is never dropped silently: it lands in a bounded dead-letter file, shows on the
+Watcher, and fires a Prometheus alert. See
 [Architecture](architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch)
 for the tier and [Operate &amp; Observe](operate/index.md#mqlab-logsearch-verbs) for the verbs.
 

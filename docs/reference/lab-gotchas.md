@@ -7,6 +7,7 @@
 
 - [Vagrant leaves orphaned extra-disk volumes](#vagrant-leaves-orphaned-extra-disk-volumes)
 - [Concurrent same-box boot trips a Vagrant machine lock](#concurrent-same-box-boot-trips-a-vagrant-machine-lock)
+- [macOS bootstrap stops before booting: "huge-page reservation SHORT"](#macos-bootstrap-stops-before-booting-huge-page-reservation-short)
 - [Can't live-attach a NIC ("No more available PCI slots")](#cant-live-attach-a-nic-no-more-available-pci-slots)
 - [Driving the lab from a worktree](#driving-the-lab-from-a-worktree)
 - [build/ artifacts missing in a worktree](#build-artifacts-missing-in-a-worktree)
@@ -54,6 +55,28 @@ the first boot stages the shared volume before the next clones it. Batches whose
 guests all boot **distinct** boxes keep the parallel default (distinct volumes
 don't contend), preserving the `boot_batch` speed dial (#638). If you ever drive
 `vagrant up` by hand across same-box nodes, add `--no-parallel` yourself.
+
+## macOS bootstrap stops before booting: "huge-page reservation SHORT"
+
+**Symptom.** On the macOS dev VM, `mqlab bootstrap` (or `mqlab commons up`)
+fails in its `reserve huge pages` step, before any `vagrant up`, with
+`huge-page reservation SHORT: needed <N> free 2 MiB pages … got <M> of <N>`.
+
+**Cause.** The `macos` profile backs every guest's RAM with 2 MiB huge pages
+(#1241), because 4 KiB backing made arm64 nested guests' page faults hundreds of
+times slower under a memory-churning load (#1240). A huge-page-backed guest
+can't boot without free huge pages, so `mqlab` reserves them first, about
+22 GiB for `nativeha-ubuntu --no-dr`. If the Vergil VM's RAM is too
+fragmented or in use, the kernel can't assemble that many even after the
+built-in `drop_caches` and `compact_memory` retry. `mqlab` never falls back to
+4 KiB backing.
+
+**Fix.** Free Vergil VM memory (stop other workloads, or tear down a stack you
+don't need) and re-run `bootstrap`. Check the pool with
+`grep HugePages_ /proc/meminfo`. If a failed run left pages reserved with no
+guests running, release them from `ansible/` with
+`ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true`.
+Details: [`perf-and-staging.md` §5.1](../development/perf-and-staging.md#51-huge-page-backed-guest-ram-macos).
 
 ## Can't live-attach a NIC ("No more available PCI slots")
 

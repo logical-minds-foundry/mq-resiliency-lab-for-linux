@@ -41,7 +41,14 @@ the guest fleet under native KVM wherever the guest arch matches the host: on
 the x86 Linux host every guest (including the x86_64 RHEL arms) is native KVM,
 and on an Apple-silicon Mac (Apple silicon → macOS Virtualization → Lima) the
 arm64 guests are native while only a foreign-arch guest — the x86_64 RHEL arms —
-is TCG-emulated. Those guests sit on a fabric of isolated libvirt networks: per-site
+is TCG-emulated. On the Mac, guest RAM is backed by 2 MiB huge pages: with the
+default 4 KiB pages, one memory-hungry guest made page faults in every nested
+guest up to hundreds of times slower, and huge pages remove that cost
+([#1240](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1240),
+[#1241](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1241)).
+`mqlab` picks this per platform from an environment profile it detects
+automatically; the x86 host keeps 4 KiB pages. Those guests sit on a fabric of
+isolated libvirt networks: per-site
 data and heartbeat networks, a WAN that links the two sites, the inter-business
 network to the counterparty (`net-ext`), the SAN networks, and a dedicated
 management plane. The networks are designed to be **severable** so failures can
@@ -135,31 +142,46 @@ lab default. See `docs/reports/2026-07-29-mq-event-monitor-file-sink-resilient.m
 
 ## The log-search tier — full-text over the log corpus (`logsearch`)
 
-Alongside the Watcher's metrics + Loki logs sits a second, **optional** telemetry
-tier: **`logsearch`**, a single-node **OpenSearch + OpenSearch Dashboards + Data
-Prepper** stack that gives the same log corpus a full-text, aggregation-capable
-search surface. It is a **stack-agnostic sibling of `obs`** — another management-plane
-service that observes the fleet without carrying transit traffic — running on its
-own dedicated mgmt-plane node (`logsearch`, `net-mgmt` `10.50.0.4`).
+Alongside the Watcher's metrics + Loki logs sits a second telemetry tier:
+**log search**, a single-node **OpenSearch + OpenSearch Dashboards + Data Prepper**
+stack that gives the same log corpus a full-text, aggregation-capable search
+surface. It runs **on the `obs` node** (`net-mgmt` `10.50.0.2`), next to
+Prometheus, Grafana and Loki. It used to have its own `logsearch` node; that node
+was folded into obs (#1179) so that one adequately sized instrumentation node,
+with localhost links between its services, replaces two undersized ones. The
+operator verbs are still `mqlab logsearch …`.
 
 **Ingest path.** The tier does not add a second collector: **Alloy fans out the
 *same* corpus Loki already receives.** Alloy has no native OpenSearch exporter (the
 connector spike proved this), so the fan-out runs Alloy → **OTLP/gRPC** → **Data
-Prepper** (on the logsearch node, port **`21892`**) → **OpenSearch**. The existing
+Prepper** (on obs, port **`21892`**) → **OpenSearch**. The existing
 **Loki path is untouched** — the fan-out is a *second* forward target, added for
 parity so the search tier sees exactly the source set Loki does. The fleet-wide
-fan-out is gated: `mqlab commons up` renders a gate file
+fan-out is gated: the `observe` phase (and `mqlab commons up`) renders a gate file
 (`build/work/logsearch/fanout.json`) that `group_vars/all/logsearch.yml` reads to
-flip `alloy_fanout_opensearch` on across every host; when logsearch is not brought
-up the gate file is absent and the fan-out is cleanly **inert**.
+flip `alloy_fanout_opensearch` on across every host; without the gate file the
+fan-out is cleanly **inert**.
 
 **Indices.** Logs land in daily **`logs-YYYY.MM.DD`** indices under an index
 template with **`number_of_replicas: 0`** — load-bearing on a single node, which can
 never place a replica shard (the default `replicas: 1` would read *yellow* forever).
+The template also turns off dynamic date detection (`date_detection: false`) and
+maps MQ's free-form `ibm_commentInsert*` fields as text. Otherwise, the first insert
+of the day that looked like a date fixed that field as `date`, and OpenSearch then
+rejected the rest of the day's MQ JSON logs that carried text there (#1230;
+[OpenSearch: date detection](https://docs.opensearch.org/3.8/mappings/#date-detection)).
+
+**Nothing is dropped silently.** Data Prepper parses a body as JSON only when it
+starts with `{` (`parse_when`, #1220), so plain journal lines are indexed unparsed
+instead of flooding its log with parse errors. Any document OpenSearch still rejects
+goes to a bounded dead-letter file on obs (#1239;
+[Data Prepper DLQ](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/data-prepper-dlq.md)),
+and Prometheus scrapes Data Prepper's sink counters so the Watcher's ③ Log pipeline
+row and the `DataPrepperDocumentsRejected` alert show every rejection (#1238).
 
 **Query surface.** Two ways in: **OpenSearch Dashboards** (`:5601`), and — for the
 same panels as the rest of the fleet — a pinned **Grafana OpenSearch datasource**
-(`uid: opensearch`, plaintext `http://10.50.0.4:9200`) that sits alongside Grafana's
+(`uid: opensearch`, plaintext `:9200` on the same node) that sits alongside Grafana's
 Prometheus and Loki datasources, so the log corpus is queryable from the obs Grafana too.
 
 **Security (v1).** OpenSearch runs the **min (core-only) distribution** — zero
@@ -167,17 +189,18 @@ plugins, so there is **no security plugin at all** — serving plain http on
 `:9200` (OpenSearch) / `:5601` (Dashboards), no auth. This is a deliberate v1 posture
 for a **management-plane-only** service (spec §10); authentication is a follow-on.
 
-**Persistence.** The logsearch node's guest disk is **ephemeral** (like every lab
+**Persistence.** The obs node's guest disk is **ephemeral** (like every lab
 guest), so durability is **host-side snapshot/restore only**: `mqlab logsearch
 snapshot` takes a native OpenSearch `_snapshot` and fetches it to the host-durable
 `build/state/logsearch/` bucket, and bring-up **auto-restores** the latest snapshot
 (a fresh build with no snapshot is a logged no-op). There is no in-guest durable
 store to protect.
 
-**Lifecycle.** logsearch is brought up as a sibling of `obs` by `mqlab commons up`
-(after `obs`, so the obs box and per-stack observe renders land first) and reclaimed
-with the shared tier by `mqlab commons down`. Because the tier is optional, a topology
-with no `logsearch` node skips it entirely.
+**Lifecycle.** The tier is part of obs's bring-up (`site-obs.yml`), which starts it
+**first**, before the metrics services: OpenSearch, then Data Prepper, then Dashboards,
+each waiting for the one before to be ready. Started the other way round, the metrics
+services' startup burst starved OpenSearch's cold start (#1194). It is reclaimed with
+the rest of obs by `mqlab commons down` or the last stack's `teardown`.
 
 ## Where to next
 

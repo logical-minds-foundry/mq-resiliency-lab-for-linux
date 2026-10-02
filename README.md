@@ -134,10 +134,16 @@ vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergi
 vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
 ```
 
+From a dev checkout, run the CLI as `uv run mqlab …` rather than calling the
+venv's `mqlab` by its path: `uv run` puts the venv's `bin/` on `PATH`, so the
+tools `mqlab` calls by bare name resolve (see
+[`docs/development/operating-the-lab-from-a-dev-session.md`](docs/development/operating-the-lab-from-a-dev-session.md)).
+
 See [`CLAUDE.md`](CLAUDE.md) for the workflow,
 [`docs/site/docs/develop.md`](docs/site/docs/develop.md) for the developer
 on-ramp, [`docs/development/release-runbook.md`](docs/development/release-runbook.md)
 for cutting a release, and
 [`docs/development/perf-and-staging.md`](docs/development/perf-and-staging.md)
 for comparing bootstrap perf reports across macOS and x86 cloud
-(`mqlab perf diff`, `MQLAB_ENV`).
+(`mqlab perf diff`, the auto-detected `MQLAB_ENV` profiles, macOS huge pages, and
+measured bootstrap times).
