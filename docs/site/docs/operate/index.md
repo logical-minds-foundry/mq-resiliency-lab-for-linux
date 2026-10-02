@@ -41,6 +41,28 @@ with `mqlab commons up` (it provisions the `obs` guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 `mqlab teardown <stack>` (shared commons are reclaimed when the last stack exits).
 
+`bootstrap`, `teardown` and `commons up` each print the **environment profile**
+they resolved, for example `environment: macos (detected: …)`. The profile is
+detected from the platform (Apple Virtualization → `macos`, Google Compute Engine
+→ `cloud`, anything else → the base topology), and an explicit `MQLAB_ENV`
+overrides it. On `macos` the guests' RAM is backed by 2 MiB huge pages, so
+`bootstrap` reserves them on the host before booting anything (about 22 GiB for
+`nativeha-ubuntu --no-dr`) and stops with `huge-page reservation SHORT` if the
+host can't supply them. The last stack's `teardown` releases them. If you
+override `MQLAB_ENV`, use the same value for `teardown` so the release still
+happens.
+
+Every bootstrap writes a **perf report**, `perf-<timestamp>.json`, beside its
+transcript in `$(mqlab build path state)/runs/`, and prints a summary at the end.
+To compare two runs (before and after a change, or macOS against cloud), use:
+
+```bash
+mqlab perf diff a.json b.json   # per-phase/milestone deltas + ratios, top steal contributors; no verdict
+```
+
+Reading the report and the one-lever-at-a-time tuning loop are covered in
+[perf and staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md).
+
 ## The end-to-end request/reply path
 
 The lab always has a live workload: a continuous request/reply stream between our
@@ -199,7 +221,7 @@ lab that observes every node but never carries transit traffic. It runs on the
 ```bash
 mqlab obs targets [--stack <stack>]   # render Prometheus file_sd targets + exporter list
 mqlab obs dashboard                   # render every Grafana board from topology
-mqlab obs net-state                   # render lab_network_state metrics from virsh (stdout)
+mqlab obs net-state                   # render lab_network_state metrics from virsh (stdout; render-only)
 mqlab obs reach-peers                 # render host→net→peer reachability
 mqlab obs open                        # print the Grafana URLs + a Loki live-tail query
 ```
@@ -210,11 +232,11 @@ bring-up leaves the boards current without a manual render.
 
 ### `mqlab logsearch` verbs
 
-The optional **`logsearch`** tier (single-node OpenSearch + Dashboards + Data
-Prepper — see [Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch))
-is a sibling of `obs`: it comes up with `mqlab commons up` (after `obs`) and is
-reclaimed by `mqlab commons down`, so there is no separate bring-up verb. Once it is
-up, `mqlab logsearch` is the operator surface over it:
+The **log-search** tier (single-node OpenSearch + Dashboards + Data Prepper; see
+[Architecture](../architecture/index.md#the-log-search-tier-full-text-over-the-log-corpus-logsearch))
+runs on the `obs` node. It comes up with obs (`mqlab commons up`, or a stack's
+`observe` phase) and is reclaimed by `mqlab commons down`, so there is no separate
+bring-up verb. Once it is up, `mqlab logsearch` is the operator surface over it:
 
 ```bash
 mqlab logsearch status            # cluster health + disk-used + read-only/full check
@@ -239,6 +261,30 @@ mqlab logsearch restore [--snapshot <name>]   # restore latest (or a named) host
 Because logsearch fans out the *same* corpus Loki receives, the search tier and the
 Grafana/Loki live-tail are two views of one log stream — use Dashboards for
 full-text and aggregation, Grafana Explore for live-tailing a drill.
+
+#### Rejected log documents are loud, not lost
+
+Data Prepper's OpenSearch sink can't index every line as-is, so the pipeline is
+built to fail visibly:
+
+- **Only JSON is parsed as JSON.** Data Prepper parses a log body only when it
+  starts with `{` (`parse_when`). Plain journal lines pass through unparsed and are
+  indexed as text, instead of each one logging a parse ERROR. A body that starts
+  with `{` but still fails to parse is tagged `_jsonparsefailure` and counted.
+- **No guessed date fields.** The `logs-*` index template sets
+  `date_detection: false` and maps MQ's free-form `ibm_commentInsert*` fields as
+  text, so an insert that happens to look like a date can no longer make the rest
+  of the day's MQ JSON logs fail to index.
+- **Rejected documents go to a dead-letter file.** Anything OpenSearch still
+  rejects is appended to a bounded, rotated dead-letter file on obs instead of
+  being dropped. Where it lives, how to read it, and how to replay it:
+  [Data Prepper DLQ](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/data-prepper-dlq.md).
+- **Rejections show on the Watcher and fire an alert.** Prometheus scrapes Data
+  Prepper's sink counters. The Watcher's **③ Log pipeline** row charts rejections,
+  and the `DataPrepperDocumentsRejected` alert fires on any new rejection
+  (`DataPrepperSinkMetricsAbsent` fires if the counters disappear). The lab runs
+  no Alertmanager, so alerts appear on Prometheus's Alerts page (`/alerts`) and the
+  Watcher's log-pipeline alerts tile. Nothing is sent anywhere.
 
 ### The boards
 

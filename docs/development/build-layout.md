@@ -55,8 +55,19 @@ mismatch is exactly what #376 did (`MQLAB_LIBVIRT_POOL` →
 the next `vagrant up` with `Volume for domain is already created`, unrecoverable
 by `teardown` or `bootstrap --from vms`. Reverted in #385/#386. The correct
 shape: images stay on the ephemeral boot disk, and the boot disk is sized to fit
-(cloud: `boot_disk = "100GiB"`, #388). **Persistent disks hold persistent data
-only — never VM overlays.**
+(cloud: `boot_disk = "200GiB"` in `vergil.toml`; first sized in #388, doubled in
+`.github#120`). **Persistent disks hold persistent data only — never VM overlays.**
+
+The same rule shaped the fix for slow cloud boots. Every nested guest's qcow2
+lives on the boot disk, and GCE's default boot disk type for the instance's
+machine series is standard (spinning) PD, so cold bring-ups were I/O-bound: host
+iowait peaked at 34 % and one boot batch took 499 s against about 180 s (#1247,
+#1249). The fix makes the boot disk faster instead of moving the pool:
+`boot_disk_type = "pd-ssd"` in `vergil.toml`. It needs vergil-vm v2.1.42 or later
+and vergil-tooling 2.1.223 or later, and it takes effect on a cloud VM rebuild,
+because changing the disk type replaces the boot disk. The project's regional
+SSD quota (`SSD_TOTAL_GB`) had to be raised to 1000 GB to hold both the SSD boot
+disk and the `/vergil` data disk.
 
 This persistent-vs-ephemeral split is exactly what makes the **baked-box rebuild
 tiers** cheap. The baked per-role box images live in `state/boxes/` on the

@@ -15,6 +15,7 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 - [4. Reading `mqlab perf diff`](#4-reading-mqlab-perf-diff)
 - [5. One lever at a time](#5-one-lever-at-a-time)
   - [5.1 Huge-page-backed guest RAM (macOS)](#51-huge-page-backed-guest-ram-macos)
+  - [5.2 Measured results](#52-measured-results)
 - [6. Grain of salt: directional, not apples-to-apples](#6-grain-of-salt)
 - [7. References](#7-references)
 
@@ -30,7 +31,9 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | merged |
 | `memory_backing: hugepages` lever + on-demand reservation (§5.1) | #1241 | merged |
 | `MQLAB_ENV` auto-detected from the platform; env recorded in the report | #1245 | merged |
-| Prereq ensures timed as `prereq:<phase>`; PKI ensured once per run; REUSE boxes kept registered | #1248 | this change |
+| Pre-flight probe skips SSH/HTTP probes of guests that are not running | #1212 | merged |
+| Prereq ensures timed as `prereq:<phase>`; PKI ensured once per run; REUSE boxes kept registered | #1248 | merged |
+| Cloud: SSD boot disk for the image pool (`boot_disk_type = "pd-ssd"`) | #1249 | merged |
 
 Every `mqlab bootstrap` writes a perf report (§3), including one that fails
 partway or finds nothing to do. `mqlab perf diff` works on any file in the
@@ -148,10 +151,14 @@ so older reports still diff.
   `failed` (how many of its steps failed, #1215) and `steps`. Each step has
   `label`, `seconds`, `retries` and `ok`. Phases appear in run order:
   - **`preflight`** (#1215) holds the pre-flight calls that run before any
-    phase is selected: `render inventory` and `probe lab state`. On a cold
-    lab the probe can take minutes (#1212), and before #1215 that time was not
-    in the report at all. It is a report phase only; you cannot resume
-    `--from preflight`.
+    phase is selected: `render inventory` and `probe lab state`. Before #1215
+    that time was not in the report at all. On a cold lab the probe used to
+    take about 4 minutes, because it tried to SSH to queue-manager nodes that
+    did not exist yet. Since #1212 it skips the qm-status and observe probes
+    when their target guests are not running, and logs the skip
+    (`domain(s) not running: ...`) in the transcript. On macOS this phase also
+    holds the huge-page reservation step (§5.1). It is a report phase only;
+    you cannot resume `--from preflight`.
   - **`net` / `vms` / `provision` / `observe`** are the bootstrap phases.
   - **`prereq:<phase>`** (#1248) holds the prerequisite ensures a phase runs
     before its own steps, and appears right before that phase. Before #1248
@@ -394,9 +401,47 @@ as `bootstrap`. Auto-detection (#1245) guarantees that on the dev VM with no
 `grep HugePages_ /proc/meminfo`, and release by hand (from `ansible/`) with
 `ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true`.
 
-Acceptance for the lever is the real gate (#1200): a cold macOS
+Acceptance for the lever was the real gate (#1200): a cold macOS
 (`env: macos`) `nativeha-ubuntu --no-dr` bootstrap with all guests huge-page-backed,
-compared with cloud run 3 (#1237: 987 s; `opensearch_green` 17.7 s).
+compared with cloud run 3 (#1237: 987 s; `opensearch_green` 17.7 s). The
+results are in §5.2.
+
+### 5.2 Measured results
+
+**macOS (data, #1200 and #1241).** Cold `nativeha-ubuntu --no-dr` bootstraps on
+the Apple-silicon dev VM, each started from
+`mqlab teardown nativeha-ubuntu --commons`:
+
+| Run | Commit | Guest RAM backing | Wall-clock | Result |
+| --- | --- | --- | ---: | --- |
+| Baseline (#1200) | before #1241 | 4 KiB | failed after about 23 min | exit 1 |
+| Run 4 (#1200) | before #1241 | 4 KiB | aborted after 80+ min; `observe` never finished in 40+ min | aborted |
+| Run 5 (#1241) | `2f7e97f0` | 2 MiB huge pages | **643 s** | exit 0 |
+| Streak 1, run 1 | `b9362aac` | 2 MiB huge pages, `macos (detected)` | **621 s** | exit 0 |
+| Streak 2, run 1 | `8bb53133` | 2 MiB huge pages, `macos (detected)` | **587 s** to the failing step | exit 1 at `publish net state` (fixed in #1261) |
+
+From run 4 to run 5, `opensearch_green` dropped from 755 s to 11.3 s and
+`observe` from more than 40 minutes to 127 s. Five minutes after run 5, obs
+was 98.7 % idle. The streak-2 failure was a git call in a render-only path,
+not a boot or performance problem. The maintainer accepted the macOS side of
+the gate on these three runs rather than a full streak of five; the reasoning
+is recorded in
+[#1200](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200).
+
+**Reading (judgment).** The arm64 nested-virt bottleneck from §5.1 is gone. On
+these runs macOS finished faster than the cloud runs measured before the SSD
+boot disk (#1247: 1000 s, 987 s and 1367 s). Read that cross-platform
+comparison with the grain of salt in §6.
+
+**x86 cloud.**
+
+> **PLACEHOLDER: cloud numbers pending #1260.** The cloud twin of the gate is
+> five consecutive cold runs on the SSD boot disk (#1249), at the same commit as
+> the macOS runs:
+> [#1260](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1260).
+> It has not run yet. When it has, record its wall-clock times against the
+> 900 s target, and its result, here. Don't quote the earlier cloud runs as the
+> current result.
 
 ## 6. Grain of salt
 
