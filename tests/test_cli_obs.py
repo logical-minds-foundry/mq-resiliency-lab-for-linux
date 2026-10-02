@@ -286,12 +286,34 @@ def test_obs_net_state_emits_textfile_metrics(monkeypatch, tmp_path):
             )
         ]
     )
-    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
 
     result = CliRunner().invoke(cli.app, ["obs", "net-state"])
 
     assert result.exit_code == 0
     assert 'lab_network_state{network="net-hb-a"} 2' in result.stdout
+    assert runner.recorded[0].argv == [*cli._VIRSH, "net-list", "--all"]
+    assert not (tmp_path / "build").exists()  # build-free: no transcript under build/ (#1261)
+
+
+def test_obs_net_state_fails_loud_when_virsh_fails(monkeypatch, tmp_path):
+    # A failed virsh must not masquerade as every net absent (0) (#1261).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    runner = RecordingRunner(
+        results=[ScriptedResult(["error: failed to connect to the hypervisor"], exit_code=1)]
+    )
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
+
+    result = CliRunner().invoke(cli.app, ["obs", "net-state"])
+
+    assert result.exit_code == 1
+    assert "virsh net-list failed (exit 1):" in result.stderr
+    assert "failed to connect to the hypervisor" in result.stderr
+    assert "lab_network_state" not in result.stdout
+
+
+def test_virsh_runner_seam_is_a_subprocess_runner():
+    assert isinstance(cli._virsh_runner(), cli.SubprocessRunner)
 
 
 # --- reach-peers: render the host -> net -> peers map under build/ from topology ---

@@ -443,7 +443,23 @@ def _build_bucket_path(bucket: str) -> Path:
 
 
 def _build_ensure() -> None:
-    buildenv.ensure(repo_root())
+    """Wire build/; on failure print buildenv's diagnosis (git's own stderr, #1261) and exit 1."""
+    try:
+        buildenv.ensure(repo_root())
+    except BuildEnvError as exc:
+        typer.echo(f"mqlab: cannot wire build/: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+# (group, command) leaves that skip the build/ check (#1261). Each entry must PROVABLY
+# write nothing under build/ (no transcript, no render file) and need no git — otherwise
+# a first run in a fresh worktree would create a real local build/state and poison the
+# shared-bucket symlinks (#304). Keep it explicit and small; justify every addition:
+# - obs net-state: renders `virsh net-list` + lab/networks/*.xml to stdout only; the
+#   host publish script (net-state-publish.sh) runs it at the end of observe, where a
+#   transient git failure must not fail an otherwise-green bootstrap.
+_BUILD_FREE: frozenset[tuple[str, str]] = frozenset({("obs", "net-state")})
+_BUILD_FREE_GROUPS = frozenset(group for group, _ in _BUILD_FREE)
 
 
 @app.callback()
@@ -453,8 +469,18 @@ def _root(ctx: typer.Context) -> None:
     Most verbs touch buckets only as a side effect (e.g. every command writes a transcript to
     build/state/runs/), so wiring must happen before the body — otherwise the first command in a
     fresh worktree creates a real local build/state and poisons the cache/state symlinks. Skip the
-    `build` group: it manages bucket lifecycle explicitly, and `build path` is a shell hot-path."""
-    if ctx.invoked_subcommand and ctx.invoked_subcommand != "build":
+    `build` group: it manages bucket lifecycle explicitly, and `build path` is a shell hot-path.
+    A group holding a `_BUILD_FREE` leaf defers the decision to its own callback
+    (`_group_build_check`), which alone can see the leaf command name."""
+    sub = ctx.invoked_subcommand
+    if sub and sub != "build" and sub not in _BUILD_FREE_GROUPS:
+        _build_ensure()
+
+
+def _group_build_check(ctx: typer.Context) -> None:
+    """Group-level half of `_root`: wire build/ unless the leaf is in `_BUILD_FREE`."""
+    leaf = ctx.invoked_subcommand
+    if leaf and (ctx.info_name, leaf) not in _BUILD_FREE:
         _build_ensure()
 
 
@@ -500,7 +526,12 @@ def build_status() -> None:
     """Show each bucket: path, real-or-symlink."""
     for bucket in buildenv.BUCKETS:
         kind = "symlink->main" if (repo_root() / "build" / bucket).is_symlink() else "local"
-        typer.echo(f"{bucket:6} {kind:14} {_build_bucket_path(bucket)}")
+        try:
+            path = _build_bucket_path(bucket)
+        except BuildEnvError as exc:  # a git failure: print its diagnosis, not a traceback
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=2) from exc
+        typer.echo(f"{bucket:6} {kind:14} {path}")
 
 
 @build_app.command("migrate")
@@ -566,6 +597,12 @@ app.add_typer(vm_app, name="vm")
 
 obs_app = typer.Typer(help="observability renders (targets/dashboard) + open", no_args_is_help=True)
 app.add_typer(obs_app, name="obs")
+
+
+@obs_app.callback()
+def _obs_root(ctx: typer.Context) -> None:
+    _group_build_check(ctx)  # `obs net-state` is build-free; every other obs verb wires build/
+
 
 # logsearch tier CLI (OpenSearch + Dashboards): status/open/snapshot/restore. Its
 # own module owns the Typer group + pure helpers (epic .github#149, Task 11), mirroring
@@ -681,18 +718,27 @@ def obs_dashboard(
 
 @obs_app.command("net-state")
 def obs_net_state() -> None:
-    """Emit lab_network_state textfile metrics from `virsh net-list --all` (run on the host)."""
+    """Emit lab_network_state textfile metrics from `virsh net-list --all` (run on the host).
+
+    Build-free (`_BUILD_FREE`, #1261): no transcript, nothing under build/, so it runs
+    without the git-based build/ check. A failed virsh fails loud rather than rendering
+    every net as an (indistinguishable) absent 0."""
     from mqlab.netsel import lab_net_names, parse_net_states
     from mqlab.netstate import render_net_state_prom
 
-    deps = build_deps("obs-net-state", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     captured: list[str] = []
-    try:
-        deps.runner.run(Command([*_VIRSH, "net-list", "--all"]), captured.append)  # noqa: S607
-        states = parse_net_states("\n".join(captured))
-        typer.echo(render_net_state_prom(lab_net_names(), states), nl=False)
-    finally:
-        deps.transcript.close()
+    rc = _virsh_runner().run(Command([*_VIRSH, "net-list", "--all"]), captured.append)  # noqa: S607
+    if rc != 0:
+        typer.echo(f"virsh net-list failed (exit {rc}):", err=True)
+        for line in captured:
+            typer.echo(line, err=True)
+        raise typer.Exit(code=1)
+    states = parse_net_states("\n".join(captured))
+    typer.echo(render_net_state_prom(lab_net_names(), states), nl=False)
+
+
+def _virsh_runner() -> CommandRunner:  # seam: tests swap in a RecordingRunner
+    return SubprocessRunner()
 
 
 dns_app = typer.Typer(help="DNS zone + BIND config renders (#476)", no_args_is_help=True)
