@@ -13,8 +13,14 @@
 #   --dry-run                           print the decision and exit, do nothing
 #   STALE_DAYS=N (default 30)           age past which a NON-blocking notice prints
 #   RHEL_ISO=/path                      override ISO location (else build/state/)
+#
+# Registration (#1248): REUSE keeps an already-current registration. The box is
+# re-added only when the registered copy did not come from this exact cache
+# artifact (see ../_box-register.sh). A BUILD / FORCE-BUILD always re-adds.
 set -euo pipefail
 cd "$(dirname "$0")"
+# shellcheck source=lab/boxes/_box-register.sh
+. ../_box-register.sh
 
 BOX_NAME="rhel/9.6-x86_64"
 STALE_DAYS="${STALE_DAYS:-30}"
@@ -84,14 +90,21 @@ fi
 
 echo "box cache: $CACHE"
 echo "decision:  $action"
+if [ "$action" = REUSE ]; then
+  # The base box carries no manifest hash, so its identity records "-" there.
+  IDENTITY="$(box_reg_identity "$CACHE" -)"
+fi
 if [ "$DRY_RUN" = 1 ]; then
+  if [ "$action" = REUSE ]; then
+    echo "registration: $(box_reg_state "$BOX_NAME" "$IDENTITY")"
+  fi
   echo "(dry-run; no action taken)"
   exit 0
 fi
 
-# --- Cheap path: register the cached box and we are done. ---
+# --- Cheap path: keep (or register) the cached box and we are done (#1248). ---
 if [ "$action" = REUSE ]; then
-  vagrant box add --force "$BOX_NAME" "$CACHE"
+  box_reuse_register "$BOX_NAME" "$CACHE" "$IDENTITY" --force "$BOX_NAME" "$CACHE"
   echo "box ready (from cache): $BOX_NAME"
   exit 0
 fi
@@ -160,7 +173,7 @@ sudo chown "$(id -u)" "$WORK/box.img.tmp"
 mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
 tar -C "$WORK" -czf "$CACHE" metadata.json box.img
-vagrant box add --force "$BOX_NAME" "$CACHE"
+box_register "$BOX_NAME" "$(box_reg_identity "$CACHE" -)" --force "$BOX_NAME" "$CACHE"
 
 # 5. Cleanup (keep the staged ISO for future rebuilds).
 virsh -c qemu:///system undefine rhel96-build

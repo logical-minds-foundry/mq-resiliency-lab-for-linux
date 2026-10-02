@@ -29,7 +29,8 @@ this page is the operator procedure for its §3 (parallel validation) and §4
 | `mqlab perf diff` (this page) | #1204 | merged |
 | Failed-step time, pre-flight, guest busy/iowait/load, Vergil-VM steal | #1215 | merged |
 | `memory_backing: hugepages` lever + on-demand reservation (§5.1) | #1241 | merged |
-| `MQLAB_ENV` auto-detected from the platform; env recorded in the report | #1245 | this change |
+| `MQLAB_ENV` auto-detected from the platform; env recorded in the report | #1245 | merged |
+| Prereq ensures timed as `prereq:<phase>`; PKI ensured once per run; REUSE boxes kept registered | #1248 | this change |
 
 Every `mqlab bootstrap` writes a perf report (§3), including one that fails
 partway or finds nothing to do. `mqlab perf diff` works on any file in the
@@ -152,6 +153,25 @@ so older reports still diff.
     in the report at all. It is a report phase only; you cannot resume
     `--from preflight`.
   - **`net` / `vms` / `provision` / `observe`** are the bootstrap phases.
+  - **`prereq:<phase>`** (#1248) holds the prerequisite ensures a phase runs
+    before its own steps, and appears right before that phase. Before #1248
+    this time, about 240 s of a cold run, was in no phase at all.
+    - `prereq:vms` has `reconcile box meta`, `box ensure` (the box builders,
+      including the DVD stage) and `mq artifacts`.
+    - `prereq:provision` has `mq artifacts`, `san debs`,
+      `ansible collections` and `pki ensure`.
+    - `prereq:observe` has `pki ensure` only when this run has not already
+      ensured the PKI. Provision and observe both declare it, but the second
+      play is redundant within a run. It is controller-local and idempotent,
+      its input is rendered from the topology, and no provision step writes
+      its outputs. So a full bootstrap runs it once and records
+      `observe prerequisites: pki already ensured earlier in this run —
+      skipped (#1248)` in `notes`. `--only observe` / `--from observe` still
+      run it.
+    - A failing ensure is recorded `ok: false` and the outcome note names
+      the phase, for example `bootstrap FAILED in phase prereq:vms (exit 5)`.
+    - Like `preflight`, these are report phases only; you cannot resume
+      `--from prereq:vms`.
 - **A failed step is kept** (#1215) with `"ok": false`. Its `seconds` are its
   *final* attempt's elapsed time and its `retries` are the attempts before
   that, which is the same final-attempt rule a successful step uses. It counts
@@ -237,8 +257,10 @@ steal/busy/iowait/load1. A phase with a failed step is flagged `N FAILED`.
 
 Sections:
 
-- **Phases.** Summed seconds per phase (`preflight` / `net` / `vms` /
-  `provision` / `observe`), with each side's retries. A phase that has a
+- **Phases.** Summed seconds per phase (`preflight` / `net` / `prereq:vms` /
+  `vms` / `prereq:provision` / `provision` / `prereq:observe` / `observe`),
+  with each side's retries. A report written before #1248 has no `prereq:`
+  phases, so against a newer one they show `—` on the older side. A phase that has a
   failed step on either side ends with `FAILED steps A/B <n>/<m>`. That
   step's time *is* in the phase seconds (§3). A report without the `failed`
   key counts as 0. Steps with no phase appear as `(unphased)`. A phase

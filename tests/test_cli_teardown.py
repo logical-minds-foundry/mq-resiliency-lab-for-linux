@@ -188,7 +188,7 @@ def test_teardown_reclaims_orphaned_box_images(monkeypatch, tmp_path):
     gc = cli.box.GcResult(
         deleted=["mq-rdqm-rhel9_vagrant_box_image_0_1_box.img"],
         freed_bytes=1024**3,
-        kept_newest=["mq-rdqm-rhel9_vagrant_box_image_0_2_box.img"],
+        kept=["mq-rdqm-rhel9_vagrant_box_image_0_2_box.img"],
         skipped_in_use=[],
         dry_run=False,
     )

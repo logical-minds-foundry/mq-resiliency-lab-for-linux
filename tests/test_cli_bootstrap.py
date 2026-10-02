@@ -286,7 +286,7 @@ def _record_ensures(monkeypatch):
     monkeypatch.setattr(
         cli,
         "_ensure_prereqs_for_stack",
-        lambda stack, phase, *, step: ensured.append(phase.name),
+        lambda stack, phase, *, step, **_: ensured.append(phase.name),
     )
     monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
     monkeypatch.setattr(cli, "_render_inventory", lambda deps: None)
@@ -329,8 +329,8 @@ def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
     # The net phase declares no prereqs, so dispatch must run no per-kind helper.
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
-    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: calls.append("galaxy"))  # type: ignore[arg-type]
-    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: calls.append("pki"))  # type: ignore[arg-type]
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda **_: calls.append("galaxy"))  # type: ignore[arg-type]
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: calls.append("pki"))  # type: ignore[arg-type]
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "net"])
     assert result.exit_code == 0
     assert calls == []  # net phase has no prerequisites
@@ -392,8 +392,8 @@ def test_provision_dispatch_runs_san_after_mq(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
     monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
-    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: "galaxy-step")
-    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: "pki-step")
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda **_: "galaxy-step")
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: "pki-step")
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: calls.append("execute"))
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify-galaxy"))
     provision = next(p for p in PHASES if p.name == "provision")
@@ -406,7 +406,7 @@ def test_observe_dispatch_does_not_run_san(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
-    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: "pki-step")
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: "pki-step")
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: None)
     observe = next(p for p in PHASES if p.name == "observe")
     cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], observe, step=False)
@@ -504,8 +504,8 @@ def test_ensure_for_stack_vms_pulls_boxes_and_mq(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
-    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: pytest.fail("galaxy not for vms"))
-    monkeypatch.setattr(cli, "_pki_ensure_step", lambda: pytest.fail("pki not for vms"))
+    monkeypatch.setattr(cli, "_galaxy_install_step", lambda **_: pytest.fail("galaxy not for vms"))
+    monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: pytest.fail("pki not for vms"))
     cli._ensure_prereqs_for_stack(stack, _phase("vms"), step=False)
     assert sorted(calls) == ["boxes", "mq"]
 
@@ -516,7 +516,7 @@ def _capture_execute(monkeypatch):
     monkeypatch.setattr(
         cli,
         "_execute",
-        lambda verb, steps, *, step_mode: labels.extend(s.label for s in steps),
+        lambda verb, steps, *, step_mode, **_: labels.extend(s.label for s in steps),
     )
     return labels
 
@@ -567,7 +567,9 @@ def test_ensure_for_stack_observe_pulls_only_pki(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli, "_ensure_mq_artifacts_for_stack", lambda s: pytest.fail("no mq for observe")
     )
-    monkeypatch.setattr(cli, "_galaxy_install_step", lambda: pytest.fail("no galaxy for observe"))
+    monkeypatch.setattr(
+        cli, "_galaxy_install_step", lambda **_: pytest.fail("no galaxy for observe")
+    )
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
     labels = _capture_execute(monkeypatch)
     cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False)
@@ -1365,3 +1367,136 @@ def test_a_failing_preflight_probe_is_timed_and_still_fails_the_bootstrap(monkey
         ("probe lab state", False),
     ]
     assert "bootstrap did not complete (stopped outside a step; see transcript)" in report["notes"]
+
+
+# --------------------------------------------------------------------------- #
+# #1248: prereq ensures are on the perf clock (`prereq:<phase>`), and the PKI play
+# runs once per bootstrap run even though provision and observe both declare it.
+# --------------------------------------------------------------------------- #
+def _stub_prereq_helpers(monkeypatch, tmp_path, calls):
+    """Stub the per-kind I/O under the REAL _ensure_prereqs_for_stack; galaxy + PKI
+    still go through the real _execute (and so the runner + perf sink)."""
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
+    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
+    monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify"))
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"secret-{name}")
+    monkeypatch.setattr(cli, "_render_inventory", lambda deps: None)
+
+
+def test_bootstrap_reports_prereq_phases_and_runs_pki_once(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=False, vms=False))
+    runner = _SiteObsRunner()
+    deps, _ = _perf_deps(runner)
+    # _execute closes its own transcript, so the prerequisites verb gets fresh deps.
+    monkeypatch.setattr(
+        cli, "build_deps", lambda v, t: deps if v == "bootstrap" else _perf_deps(runner)[0]
+    )
+    calls: list[str] = []
+    _stub_prereq_helpers(monkeypatch, tmp_path, calls)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    # Each prereq group is a report phase right before the phase it serves; observe's
+    # only prereq (pki) was already ensured, so it has no steps and no phase.
+    assert list(report["phases"]) == [
+        "preflight",
+        "net",
+        "prereq:vms",
+        "vms",
+        "prereq:provision",
+        "provision",
+        "observe",
+    ]
+    labels = {
+        name: [s["label"] for s in body["steps"]]
+        for name, body in report["phases"].items()
+        if name.startswith("prereq:")
+    }
+    assert labels == {
+        "prereq:vms": ["reconcile box meta", "box ensure", "mq artifacts"],
+        "prereq:provision": ["mq artifacts", "san debs", "ansible collections", "pki ensure"],
+    }
+    pki_runs = [c for c in runner.recorded if "site-pki.yml" in c.argv]
+    assert len(pki_runs) == 1  # the observe phase did not run the PKI play again
+    assert any("observe prerequisites: pki already ensured" in n for n in report["notes"])
+    assert calls.count("verify") == 1
+    assert "pki already ensured earlier in this run" in result.output
+
+
+def test_a_failing_prereq_is_timed_and_named_in_the_report(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states(net=True, vms=False))
+    deps, _ = _perf_deps(_SiteObsRunner())
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: deps)
+    _stub_prereq_helpers(monkeypatch, tmp_path, [])
+
+    def box_build_fails(guests):
+        raise typer.Exit(code=5)
+
+    monkeypatch.setattr(cli, "_ensure_local_boxes", box_build_fails)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 5
+    (path,) = _perf_reports(tmp_path)
+    report = json.loads(path.read_text())
+    steps = report["phases"]["prereq:vms"]["steps"]
+    assert [(s["label"], s["ok"]) for s in steps] == [
+        ("reconcile box meta", True),
+        ("box ensure", False),
+    ]
+    assert report["phases"]["prereq:vms"]["failed"] == 1
+    assert "bootstrap FAILED in phase prereq:vms (exit 5)" in report["notes"]
+
+
+def test_ensure_once_per_run_kinds_skip_when_already_ensured(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: None)
+    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: None)
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: None)
+    labels = _capture_execute(monkeypatch)
+    ensured: set[str] = set()
+    cli._ensure_prereqs_for_stack(stack, _phase("provision"), step=False, ensured=ensured)
+    assert ensured == {"galaxy", "pki"}
+    cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False, ensured=ensured)
+    assert labels == ["ansible collections", "pki ensure"]  # observe added nothing
+
+
+def test_ensure_records_a_kind_only_after_it_succeeded(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+
+    def failing_execute(verb, steps, **_):
+        raise typer.Exit(code=4)
+
+    monkeypatch.setattr(cli, "_execute", failing_execute)
+    ensured: set[str] = set()
+    with pytest.raises(typer.Exit):
+        cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False, ensured=ensured)
+    assert ensured == set()  # a failed PKI play is retried by the next phase/run
+
+
+def test_ensure_stamps_the_prereq_phase_on_runner_steps(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
+    monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
+    seen: list[tuple[str, str, object]] = []
+    monkeypatch.setattr(
+        cli,
+        "_execute",
+        lambda verb, steps, *, step_mode, perf=None: seen.extend(
+            (s.label, s.phase, perf) for s in steps
+        ),
+    )
+    perf = cli_perfrun.BootstrapPerf(cli_perfrun.PerfRecord("pcmk-ubuntu", 0.0), _renderer_only())
+    cli._ensure_prereqs_for_stack(stack, _phase("observe"), step=False, perf=perf)
+    assert seen == [("pki ensure", "prereq:observe", perf.record)]
+
+
+def _renderer_only() -> Renderer:
+    return Renderer(Console(file=io.StringIO(), force_terminal=False, width=200))

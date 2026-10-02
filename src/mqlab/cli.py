@@ -42,7 +42,7 @@ from mqlab.paths import (
 )
 from mqlab.pauser import NoTTYError, TTYPauser
 from mqlab.perf import NullSink
-from mqlab.perfrun import PREFLIGHT, BootstrapPerf, ansible_task_outcomes
+from mqlab.perfrun import PREFLIGHT, BootstrapPerf, ansible_task_outcomes, prereq_phase
 from mqlab.phases import (
     OBS_GROUP,
     PHASES,
@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from mqlab.orchestrator import Pauser
+    from mqlab.perf import PerfSink
     from mqlab.phases import Phase
     from mqlab.runner import CommandRunner
     from mqlab.stacks import Stack
@@ -111,10 +112,12 @@ def _execute(
     *,
     step_mode: bool,
     before: Callable[[Deps], None] | None = None,
+    perf: PerfSink | None = None,
 ) -> None:
     """Run `steps` under one transcript. `before` (optional) runs first with the same
     deps — e.g. the huge-page reservation `commons up` needs ahead of its `vagrant up`
-    (#1241) — and fails the verb the same loud way a step does."""
+    (#1241) — and fails the verb the same loud way a step does. `perf` (optional)
+    receives each step's timing, grouped by the step's own `phase` (#1248)."""
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps(verb, timestamp)
     try:
@@ -127,6 +130,7 @@ def _execute(
             transcript=deps.transcript,
             step_mode=step_mode,
             pauser=deps.pauser,
+            perf=perf if perf is not None else NullSink(),
         )
     except NoTTYError as exc:
         deps.renderer.error(str(exc))
@@ -156,7 +160,7 @@ def _fetch_mq_tarball(name: str, dest: Path) -> None:
     download_mq_tarball(name, dest)
 
 
-def _galaxy_install_step() -> CommandStep:
+def _galaxy_install_step(phase: str = "") -> CommandStep:
     # Install the lab's Ansible galaxy collections (community.crypto, needed by the PKI
     # play) into build/cache — ansible.cfg's collections_path. Idempotent: ansible-galaxy
     # skips a collection already present. (#343)
@@ -169,7 +173,7 @@ def _galaxy_install_step() -> CommandStep:
         "-p",
         "build/cache",
     ]
-    return CommandStep("ansible collections", Command(argv, cwd=repo_root()))  # noqa: S607
+    return CommandStep("ansible collections", Command(argv, cwd=repo_root()), phase=phase)  # noqa: S607
 
 
 def _verify_galaxy_collections() -> None:
@@ -189,9 +193,10 @@ def _verify_galaxy_collections() -> None:
         )
 
 
-def _pki_ensure_step() -> CommandStep:
+def _pki_ensure_step(phase: str = "") -> CommandStep:
     _render_pki_entities()
-    return CommandStep("pki ensure", Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible"))  # noqa: S607
+    cmd = Command([*_PKI_PLAYBOOK], cwd=repo_root() / "ansible")  # noqa: S607
+    return CommandStep("pki ensure", cmd, phase=phase)
 
 
 def _commons_mq_platforms() -> set[str]:
@@ -292,7 +297,21 @@ def _ensure_san_debs_for_stack(stack: Stack) -> None:
         typer.echo(f"  network fallback at install for: {', '.join(fallback)}")
 
 
-def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None:
+# Controller-local prereq kinds whose ensure is idempotent and whose output no phase
+# step mutates: once one succeeds in a bootstrap run, a later phase re-declaring it
+# would redo identical work, so the run ensures it once (#1248). See
+# _ensure_prereqs_for_stack for why the second `pki ensure` is provably redundant.
+_ONCE_PER_RUN_KINDS = ("galaxy", "pki")
+
+
+def _ensure_prereqs_for_stack(
+    stack: Stack,
+    phase: Phase,
+    *,
+    step: bool,
+    perf: BootstrapPerf | None = None,
+    ensured: set[str] | None = None,
+) -> None:
     """Ensure the fresh-volume prerequisites a phase declares (phases.Phase.ensure),
     for a stack, before that phase's steps run (#350 Task 5).
 
@@ -304,31 +323,70 @@ def _ensure_prereqs_for_stack(stack: Stack, phase: Phase, *, step: bool) -> None
       pki    -> the PKI CA + entity keystores (the exporters consume these too)
     The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
     runner (progress/transcript). Only kinds the phase declares run, so
-    `--only observe` ensures only the exporter PKI."""
+    `--only observe` ensures only the exporter PKI.
+
+    `perf` (#1248) times every ensure as a step of the `prereq:<phase>` report phase,
+    so the box ensure and the PKI play show in the phase table.
+
+    `ensured` (#1248) is the bootstrap run's record of the once-per-run kinds already
+    ensured. Provision and observe BOTH declare `pki`, so a full bootstrap used to run
+    the ~52s PKI play twice. The second run is provably redundant: the play is
+    controller-local and idempotent, its only input (build/work/pki/entities.json) is
+    rendered from the topology, which is the same within one run, and nothing between
+    the two runs writes its outputs — the provision playbooks only READ the
+    lab-pki keystores (pki-distribute, mq-nativeha tls), and the RDQM replication PKI
+    lives in its own `pki/rdqm-repl` tree. So a run that already ensured a kind skips
+    it. A fresh run (`--only observe`, `--from observe`, a resume) starts with an empty
+    record and still ensures PKI. A kind is recorded only after its ensure succeeded."""
     kinds = phase.ensure
+    report_phase = prereq_phase(phase.name)
+    done = ensured if ensured is not None else set()
+
+    def timed(label: str, fn: Callable[[], None]) -> None:
+        if perf is None:
+            fn()
+        else:
+            perf.timed(report_phase, label, fn)
+
     if "boxes" in kinds:
         # #858: BEFORE building/registering boxes and running `vagrant up`, forget any
         # guest whose cached box_meta names a box the topology has since repointed away
         # from — otherwise the stale box_meta wins over the Vagrantfile's node.vm.box and
         # `vagrant up` boots the OLD box. #636 handles this on teardown; this handles the
         # repoint-then-bootstrap-without-teardown path.
-        _reconcile_box_meta(all_vms(stack), step=step)
-        _ensure_local_boxes(all_vms(stack))
+        timed("reconcile box meta", lambda: _reconcile_box_meta(all_vms(stack), step=step))
+        timed("box ensure", lambda: _ensure_local_boxes(all_vms(stack)))
     if "mq" in kinds:
-        _ensure_mq_artifacts_for_stack(stack)
+        timed("mq artifacts", lambda: _ensure_mq_artifacts_for_stack(stack))
     if "san" in kinds:
-        _ensure_san_debs_for_stack(stack)
+        timed("san debs", lambda: _ensure_san_debs_for_stack(stack))
+    once = [k for k in _ONCE_PER_RUN_KINDS if k in kinds]
+    for kind in (k for k in once if k in done):
+        msg = (
+            f"{phase.name} prerequisites: {kind} already ensured earlier in this run "
+            "— skipped (#1248)"
+        )
+        typer.echo(msg)
+        if perf is not None:
+            perf.record.note(msg)
+    todo = [k for k in once if k not in done]
     steps: list[CommandStep] = []
-    if "galaxy" in kinds:
-        steps.append(_galaxy_install_step())
-    if "pki" in kinds:
-        steps.append(_pki_ensure_step())
+    if "galaxy" in todo:
+        steps.append(_galaxy_install_step(phase=report_phase))
+    if "pki" in todo:
+        steps.append(_pki_ensure_step(phase=report_phase))
     if steps:
-        _execute("prerequisites", steps, step_mode=step)
-    if "galaxy" in kinds:
+        _execute(
+            "prerequisites",
+            steps,
+            step_mode=step,
+            perf=perf.record if perf is not None else None,
+        )
+    if "galaxy" in todo:
         # Hard-fail if a required collection did not actually land (#596) — the install
         # above can be a no-op on an existing cache when requirements.yml gains a collection.
         _verify_galaxy_collections()
+    done.update(todo)
 
 
 # --- Host-arch gating (#276): render the host-resolved topology + enforce the native-
@@ -2280,11 +2338,19 @@ def _bootstrap_run(
         if any(phase.name == "provision" for phase in selected):
             for secret in stack.secrets:
                 os.environ[secret.upper()] = _source_secret(deps, secret)
+        # Once-per-run prereq kinds already ensured this run (#1248): provision and
+        # observe both declare `pki`, and the second play is redundant within a run.
+        ensured: set[str] = set()
         for phase in selected:  # one phase at a time so a failure names its phase
             try:
                 # Ensure this phase's fresh-volume prerequisites first (#350 Task 5),
-                # only for the phases actually selected this run.
-                _ensure_prereqs_for_stack(stack, phase, step=step)
+                # only for the phases actually selected this run, timed as the report's
+                # `prereq:<phase>` phase (#1248).
+                try:
+                    _ensure_prereqs_for_stack(stack, phase, step=step, perf=perf, ensured=ensured)
+                except typer.Exit as exc:
+                    perf.failed(prereq_phase(phase.name), exc.exit_code)
+                    raise
                 steps = phase.build_steps(stack, deps, no_dr=no_dr)
                 perf.register_phase(phase.name, steps)
                 if phase.name == "observe":

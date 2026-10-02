@@ -9,6 +9,7 @@ tests never touch real git/fs/virsh/vagrant.
 from __future__ import annotations
 
 import io
+import os
 
 import pytest
 import typer
@@ -676,7 +677,7 @@ def test_gc_keeps_newest_and_deletes_older(monkeypatch):
     _install_virsh(monkeypatch, fake)
     result = box.gc_orphaned_images()
     assert set(result.deleted) == {old, mid}
-    assert result.kept_newest == [new]  # highest timestamp survives
+    assert result.kept == [new]  # highest timestamp survives
     assert result.freed_bytes == 6_500_000_000
     assert set(fake.deleted) == {old, mid}
     assert result.skipped_in_use == []
@@ -699,7 +700,7 @@ def test_gc_skips_base_image_backing_a_live_overlay(monkeypatch):
     result = box.gc_orphaned_images()
     assert result.deleted == []  # old is protected — deleting it would corrupt the overlay
     assert result.skipped_in_use == [old]
-    assert result.kept_newest == [new]
+    assert result.kept == [new]
     assert fake.deleted == []
 
 
@@ -725,8 +726,111 @@ def test_gc_no_box_images_is_noop(monkeypatch):
     _install_virsh(monkeypatch, fake)
     result = box.gc_orphaned_images()
     assert result.deleted == []
-    assert result.kept_newest == []
+    assert result.kept == []
     assert result.skipped_in_use == []
+
+
+def _register_box(tmp_path, monkeypatch, name, mtime, *, version="0", arch="arm64"):
+    """Lay a registered box down under a fake VAGRANT_HOME with box.img at `mtime`."""
+    home = tmp_path / "vagrant-home"
+    monkeypatch.setenv("VAGRANT_HOME", str(home))
+    escaped = name.replace("/", "-VAGRANTSLASH-")
+    provider = home / "boxes" / escaped / version / arch / "libvirt"
+    provider.mkdir(parents=True, exist_ok=True)
+    img = provider / "box.img"
+    img.write_bytes(b"qcow2")
+    os.utime(img, (mtime, mtime))
+    return img
+
+
+def test_gc_keeps_the_registered_boxes_volume_not_the_newest(tmp_path, monkeypatch):
+    # The registered box resolves to the MIDDLE image: it is the one kept, and the
+    # newer one (not what the registered box would boot) is stale too (#1248).
+    stem = "obs-ubuntu2404"
+    old, cur, newer = (f"{stem}_vagrant_box_image_0_{ts}_box.img" for ts in (100, 200, 300))
+    _register_box(tmp_path, monkeypatch, stem, 200)
+    fake = _FakeVirsh([old, cur, newer], {n: _vol_xml(n, 1000) for n in (old, cur, newer)})
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.kept == [cur]
+    assert set(result.deleted) == {old, newer}
+    assert set(fake.deleted) == {old, newer}
+
+
+def test_gc_current_volume_survives_repeated_runs(tmp_path, monkeypatch):
+    # The stack loop: the registered box's volume is the only one, so teardown's GC is a
+    # no-op and the next `vagrant up` reuses it instead of uploading again (#1248).
+    stem = "mq-ubuntu2404"
+    cur = f"{stem}_vagrant_box_image_0_500_box.img"
+    _register_box(tmp_path, monkeypatch, stem, 500)
+    fake = _FakeVirsh([cur], {cur: _vol_xml(cur, 1000)})
+    _install_virsh(monkeypatch, fake)
+    for _ in range(2):
+        result = box.gc_orphaned_images()
+        assert result.deleted == []
+        assert result.kept == [cur]
+    assert fake.deleted == []
+
+
+def test_gc_rebaked_box_not_yet_uploaded_drops_the_stale_volume(tmp_path, monkeypatch):
+    # A rebake re-added the box (new box.img mtime 900) but nothing booted it yet: the
+    # old volume is stale and goes now, though it is the newest image in the pool.
+    stem = "infra-ubuntu2404"
+    stale = f"{stem}_vagrant_box_image_0_400_box.img"
+    _register_box(tmp_path, monkeypatch, stem, 900)
+    fake = _FakeVirsh([stale], {stale: _vol_xml(stale, 2048)})
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.deleted == [stale]
+    assert result.kept == []
+    assert result.freed_bytes == 2048
+
+
+def test_gc_stale_volume_backing_a_live_overlay_is_still_protected(tmp_path, monkeypatch):
+    stem = "obs-ubuntu2404"
+    stale = f"{stem}_vagrant_box_image_0_100_box.img"
+    cur = f"{stem}_vagrant_box_image_0_200_box.img"
+    overlay = "lab_obs.img"
+    _register_box(tmp_path, monkeypatch, stem, 200)
+    fake = _FakeVirsh(
+        [stale, cur, overlay],
+        {
+            stale: _vol_xml(stale, 1000),
+            cur: _vol_xml(cur, 1000),
+            overlay: _vol_xml(overlay, 10, backing=stale),
+        },
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.skipped_in_use == [stale]
+    assert result.kept == [cur]
+    assert fake.deleted == []
+
+
+def test_current_box_volumes_escapes_slash_and_skips_versioned(tmp_path, monkeypatch):
+    _register_box(tmp_path, monkeypatch, "rhel/9.6-x86_64", 42, arch="amd64")
+    _register_box(tmp_path, monkeypatch, "cloud-image/ubuntu-24.04", 7, version="20260705.0.0")
+    home = tmp_path / "vagrant-home" / "boxes"
+    (home / "stray-file").write_text("not a box dir")
+    # A box.img outside a libvirt provider dir is not a vagrant-libvirt image.
+    other = home / "odd-box" / "0" / "virtualbox"
+    other.mkdir(parents=True)
+    (other / "box.img").write_bytes(b"x")
+    assert box._current_box_volumes() == {
+        "rhel-VAGRANTSLASH-9.6-x86_64": {
+            "rhel-VAGRANTSLASH-9.6-x86_64_vagrant_box_image_0_42_box.img"
+        }
+    }
+
+
+def test_current_box_volumes_absent_store_is_empty(tmp_path):
+    assert box._current_box_volumes(tmp_path / "missing") == {}
+
+
+def test_vagrant_boxes_dir_defaults_to_home(monkeypatch, tmp_path):
+    monkeypatch.delenv("VAGRANT_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert box._vagrant_boxes_dir() == tmp_path / ".vagrant.d" / "boxes"
 
 
 def test_pool_volume_names_parses_table(monkeypatch):
@@ -790,9 +894,7 @@ def test_vol_delete_other_error_fails_loud(monkeypatch):
 
 
 def test_gc_best_effort_returns_result_on_success(monkeypatch):
-    sentinel = box.GcResult(
-        deleted=[], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=False
-    )
+    sentinel = box.GcResult(deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=False)
     monkeypatch.setattr(box, "gc_orphaned_images", lambda: sentinel)
     assert _real_gc_best_effort() is sentinel
 
@@ -813,9 +915,7 @@ def test_human_bytes_small_and_large():
 
 
 def test_gc_summary_empty():
-    result = box.GcResult(
-        deleted=[], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=False
-    )
+    result = box.GcResult(deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=False)
     assert "nothing to reclaim" in box.gc_summary(result)
 
 
@@ -823,7 +923,7 @@ def test_gc_summary_lists_deleted_and_skipped():
     result = box.GcResult(
         deleted=["a.img"],
         freed_bytes=1024**3,
-        kept_newest=["n.img"],
+        kept=["n.img"],
         skipped_in_use=["b.img"],
         dry_run=False,
     )
@@ -835,7 +935,7 @@ def test_gc_summary_lists_deleted_and_skipped():
 
 def test_gc_summary_dry_run_verb():
     result = box.GcResult(
-        deleted=["a.img"], freed_bytes=0, kept_newest=[], skipped_in_use=[], dry_run=True
+        deleted=["a.img"], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=True
     )
     assert "would delete" in box.gc_summary(result)
 
@@ -846,7 +946,7 @@ def test_build_boxes_gcs_orphaned_images_after_bake(monkeypatch, capsys):
     gc = box.GcResult(
         deleted=["old_box.img"],
         freed_bytes=3_000_000_000,
-        kept_newest=["new_box.img"],
+        kept=["new_box.img"],
         skipped_in_use=[],
         dry_run=False,
     )

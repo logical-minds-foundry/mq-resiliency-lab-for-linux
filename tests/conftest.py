@@ -101,6 +101,14 @@ def _neutralize_box_gc(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _empty_vagrant_home(monkeypatch, tmp_path_factory):
+    """Point VAGRANT_HOME at an empty dir in every test, so the box GC's "which base
+    volume is current" read (#1248, box._current_box_volumes) never sees the developer's
+    real registered boxes. Tests that need registered boxes populate their own dir."""
+    monkeypatch.setenv("VAGRANT_HOME", str(tmp_path_factory.mktemp("vagrant-home")))
+
+
+@pytest.fixture(autouse=True)
 def fake_perf_source(monkeypatch):
     """Replace the bootstrap perf sampler's lab source (#1205) in every test — the real
     one shells `virsh` + ssh into guests, which must not run in unit tests. Returns the
