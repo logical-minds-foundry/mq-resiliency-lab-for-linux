@@ -242,6 +242,63 @@ everything the bake installed. Every Ubuntu box needs a rebake to pick them up
 5. Power off, `qemu-img convert -c` the disk into the host-durable cache, and
    `vagrant box add` it.
 
+### Keeping a REUSE box registered (#1248)
+
+A REUSE run does **not** re-add a box that is already registered from the same
+cache artifact. Each `vagrant box add` the builders make is followed by a stamp
+file, `mqlab-registration`, written beside the registered `box.img`. It records
+the cache artifact's identity: its path, size, mtime and manifest hash (`-` for
+the base box, which has none). On REUSE the builder compares that stamp with the
+cache it would add now:
+
+- **current**: every registered copy carries this identity, so the add is
+  skipped (`registration: current … no vagrant box add needed`);
+- **stale**: the box is registered from another artifact, so it is re-added
+  and stamped;
+- **unstamped**: the box is registered with no stamp (it was added by hand, or
+  before #1248). The builder compares the registered `box.img` and
+  `metadata.json` byte for byte with the cache, a one-time full read. If they
+  are identical it **adopts** the registration: it writes the stamp and adds
+  nothing, so the box keeps its `box.img` mtime and its libvirt base volume.
+  Otherwise it re-adds the box;
+- **absent**: the box is not registered, so it is added and stamped.
+
+`build-fatbox.sh --dry-run` (and so `mqlab box status`'s builder call) prints the
+same `registration:` line for a REUSE box. The shared logic lives in
+[`lab/boxes/_box-register.sh`](../../lab/boxes/_box-register.sh), sourced by both
+builders.
+
+Skipping the add matters for two reasons. The add itself unpacks the whole box
+(65–72 s for obs alone). It also gives the registered `box.img` a new mtime, and
+for an unversioned box vagrant-libvirt names the base volume after that mtime
+(`<box>_vagrant_box_image_0_<mtime>_box.img`, from `get_volume_name` in
+vagrant-libvirt 0.12.2's `action/handle_box_image.rb`). So every re-add made the
+next `vagrant up` upload the full base image into the libvirt pool again, about
+10 GiB per macOS run.
+
+The rebuild paths still re-add:
+
+- A **rebake** (manifest-hash BUILD, or `mqlab box rebuild`) rewrites the cache
+  and always runs `vagrant box add --force`, stamped with the new identity. The
+  next `vagrant up` uploads a fresh base volume, and the old one is reclaimed
+  (below).
+- **`mqlab box clean`** deregisters the box (`vagrant box remove` deletes its
+  directory, stamp included), so the next `box build` bakes and adds it fresh.
+- A **VM rebuild** wipes `~/.vagrant.d` with the boot disk, so the first REUSE
+  afterwards finds the box absent and adds it from the cache.
+
+### Base-volume cleanup
+
+After a bake and after every teardown, `box gc` reclaims box base volumes from the
+libvirt `default` pool (#759). For a box that is registered, it keeps exactly the
+volume the registered `box.img` resolves to (the mtime rule above) and deletes
+every other volume of that box. A volume left over from before a rebake is
+removed even if the rebaked box has not been uploaded yet. For a box with no
+registration it keeps the newest volume. In both cases a volume that a live VM
+overlay still uses as its backing store is never deleted. Teardown never
+deregisters a box, so in the stack loop the same base volumes survive from run to
+run and `vagrant up` reuses them.
+
 ### The host-durable cache
 
 The baked `.box` artifacts live in **`build/state/boxes/`** on the persistent
@@ -298,7 +355,9 @@ because the baked boxes and the running VMs live on **different disks**:
   runs `vagrant box add` from cache — **no re-bake**.
 - **Stack loop** — the everyday inner loop: tear the lab down and bootstrap it
   again. The VM and its registered boxes stay; only the guest VMs are recreated,
-  and bootstrap runs just the per-run configure halves.
+  and bootstrap runs just the per-run configure halves. The box ensure finds each
+  REUSE box already registered from its cache and skips the add, and the libvirt
+  base volumes survive teardown, so nothing is unpacked or uploaded again (#1248).
 
 This split is deliberate and load-bearing: the image pool **must** stay on the
 ephemeral boot disk. Redirecting it onto the persistent disk (#376) left orphaned

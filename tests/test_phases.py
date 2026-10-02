@@ -8,9 +8,6 @@ registry with plain dicts and assert the emitted CommandStep argv/labels.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
 from mqlab.orchestrator import CommandStep
@@ -652,9 +649,18 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     playbooks = [s.command.argv for s in steps if s.command.argv[0] == "ansible-playbook"]
     names = {argv[1] for argv in playbooks}
     # site-obs.yml (obs box) + observability.yml (cluster nodes, #382) +
-    # host-obs.yml (libvirt host: node-exporter for virbr-* throughput +
-    # host-net-state for lab_network_health, #383).
+    # host-obs.yml (libvirt host: node-exporter for virbr-* throughput, #383).
     assert names == {"site-obs.yml", "observability.yml", "host-obs.yml"}
+    # lab_network_state is published once host-obs.yml has created the drop zone,
+    # then only on change by net-up.sh / net-down.sh — no polling probe (#1253).
+    labels_in_order = [s.label for s in steps]
+    host_idx = next(
+        i for i, s in enumerate(steps) if s.command.argv[:2] == ["ansible-playbook", "host-obs.yml"]
+    )
+    assert labels_in_order[host_idx + 1] == "publish net state"
+    publish = steps[host_idx + 1].command.argv
+    assert publish[0] == "bash"
+    assert publish[1].endswith("lab/scripts/net-state-publish.sh")
     # the QM-bearing playbooks carry the #351 QM extra-vars; host-obs.yml is
     # host-side/net-agnostic and runs connection=local instead.
     for argv in playbooks:
@@ -669,15 +675,9 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     assert exporters_ref in site_argv
     assert site_argv[site_argv.index(exporters_ref) - 1] == "-e"
     host_argv = next(a for a in playbooks if a[1] == "host-obs.yml")
-    assert host_argv[2:6] == ["-c", "local", "-i", "localhost,"]
-    # host-obs.yml is passed the host-runnable mqlab the net-state service calls
-    # by absolute path (the service runs with a minimal PATH): the console script
-    # beside the interpreter driving this bootstrap — the host venv's own mqlab.
-    mqlab_bin = next(a for a in host_argv if a.startswith("mqlab_bin="))
-    assert host_argv[host_argv.index(mqlab_bin) - 1] == "-e"
-    # NOT .resolve(): resolving the .venv/bin/python3 symlink lands on the base
-    # interpreter and the sibling becomes a nonexistent /usr/bin/mqlab (203/EXEC, #984).
-    assert mqlab_bin == f"mqlab_bin={Path(sys.executable).parent / 'mqlab'}"
+    # No host service runs mqlab any more, so nothing hands host-obs.yml an absolute
+    # `.venv/bin/mqlab` path (#1252): the call is exactly the connection=local play.
+    assert host_argv == ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"]
     obs_argv = next(a for a in playbooks if a[1] == "observability.yml")
     # observability.yml is `hosts: all`, so it must be --limited to THIS stack's
     # nodes (cluster + commons) — a cluster node + a commons node both appear.

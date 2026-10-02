@@ -272,7 +272,7 @@ unaffected.
 The whole configure surface: queue-manager and cluster creation
 (`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-ha`, `pcmk-cluster`,
 `pcmk-stonith`); RDQM/HA/DR state and reconcile (`rdqm-active-node`, `rdqm-state`,
-`cluster-state`, `nativeha-state`, `host-net-state`, `host-resolver`, `net-reach`);
+`cluster-state`, `nativeha-state`, `host-resolver`, `net-reach`);
 all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
 `rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-ubuntu2404` (#1227) — `mq-event-monitor`,
 `app-requester`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
