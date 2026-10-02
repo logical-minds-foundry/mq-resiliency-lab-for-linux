@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # lab/scripts/net-down.sh [net-name ...] — destroy + undefine the named lab
 # networks (or all net-*.xml if none given; guests first!). Self-echoes actions.
+# Publishes the resulting lab_network_state to the observability layer (#1253).
 set -euo pipefail
-cd "$(dirname "$0")/../networks"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE/../networks"
 run() { echo "+ $*"; "$@"; }
 nets=("$@")
 if [ "${#nets[@]}" -eq 0 ]; then
@@ -13,3 +15,4 @@ for net in "${nets[@]}"; do
   run virsh -c qemu:///system net-undefine "$net" 2>/dev/null || true
   echo "down: $net"
 done
+"$HERE/net-state-publish.sh"

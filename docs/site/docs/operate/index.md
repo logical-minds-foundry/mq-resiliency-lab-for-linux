@@ -103,6 +103,11 @@ fault scripts (run on the host, not through `mqlab`):
   (hard `virsh destroy` of the active node, then assert the end state).
 - `lab/scripts/net-down.sh <net…>` / `lab/scripts/net-up.sh <net…>` — sever and
   restore a lab network to inject a partition (the planes are designed severable).
+  Each publishes the resulting `lab_network_state` to the host node_exporter
+  (`lab/scripts/net-state-publish.sh`, `sudo` for the drop-zone write), so the
+  dashboard's network tiles follow the drill within one scrape. There is no
+  polling probe: the lab's virtual networks only change when these scripts (or
+  bring-up) change them (#1253).
 - `lab/scripts/drbd-degrade.sh` — degrade DRBD replication for a forced-DR drill.
 
 Watch any drill on the stack's **cockpit** board and the **lab-watcher** front
@@ -194,7 +199,7 @@ lab that observes every node but never carries transit traffic. It runs on the
 ```bash
 mqlab obs targets [--stack <stack>]   # render Prometheus file_sd targets + exporter list
 mqlab obs dashboard                   # render every Grafana board from topology
-mqlab obs net-state                   # emit lab_network_state metrics from virsh (host-side)
+mqlab obs net-state                   # render lab_network_state metrics from virsh (stdout)
 mqlab obs reach-peers                 # render host→net→peer reachability
 mqlab obs open                        # print the Grafana URLs + a Loki live-tail query
 ```

@@ -47,7 +47,6 @@ from mqlab.phases import (
     OBS_GROUP,
     PHASES,
     _commons_members,
-    _host_mqlab,
     _non_mq_commons_hosts,
     all_vms,
     build_states,
@@ -173,7 +172,8 @@ def _galaxy_install_step(phase: str = "") -> CommandStep:
         "-p",
         "build/cache",
     ]
-    return CommandStep("ansible collections", Command(argv, cwd=repo_root()), phase=phase)  # noqa: S607
+    cmd = Command(argv, cwd=repo_root())  # noqa: S607
+    return CommandStep("ansible collections", cmd, phase=phase)
 
 
 def _verify_galaxy_collections() -> None:
@@ -954,25 +954,19 @@ def _obs_up_steps() -> list[CommandStep]:
         ),
         CommandStep(
             "provision host collector",
-            # the Vergil VM (libvirt host) — node_exporter + the lab_network_state
-            # timer + the relay-heal timer (#984) — via a connection=local play.
-            # host-net-state calls mqlab by absolute path under a minimal root PATH,
-            # so mqlab_bin is REQUIRED — pass it exactly as the stack observe path
-            # does (phases.py "instrument host"); omitting it fails host-net-state's
-            # assert (#398/#950). relay-heal is now mqlab-free (#984).
+            # the Vergil VM (libvirt host) — node_exporter + the relay-heal timer
+            # (#984) — via a connection=local play, which also retires the old
+            # lab-net-state probe (#1253). No host service runs mqlab (#1252).
             Command(
-                [
-                    "ansible-playbook",
-                    "host-obs.yml",
-                    "-c",
-                    "local",
-                    "-i",
-                    "localhost,",
-                    "-e",
-                    f"mqlab_bin={_host_mqlab()}",
-                ],  # noqa: S607
+                ["ansible-playbook", "host-obs.yml", "-c", "local", "-i", "localhost,"],
                 cwd=repo_root() / "ansible",
             ),
+        ),
+        CommandStep(
+            # lab_network_state is published on change by net-up.sh / net-down.sh;
+            # publish once now that the drop zone exists (#1253).
+            "publish net state",
+            Command(["bash", str(lab_script("net-state-publish.sh"))]),  # noqa: S607
         ),
         CommandStep(
             # provisioning above bounced grafana; clear the relay's stale downstream
@@ -985,7 +979,9 @@ def _obs_up_steps() -> list[CommandStep]:
             # don't report success while the browser path is dead (#264). -f makes
             # curl exit non-zero on any non-2xx or a dropped connection.
             "verify grafana reachable (workstation forward)",
-            Command(["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]),  # noqa: S607
+            Command(
+                ["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]  # noqa: S607
+            ),
         ),
     ]
 
@@ -1334,7 +1330,8 @@ def _stage_rhel_dvd() -> None:
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("dvd-stage", timestamp)
     try:
-        stage = Command(["bash", str(lab_script("stage-rhel-iso.sh"))], cwd=repo_root())  # noqa: S607
+        stage_script = lab_script("stage-rhel-iso.sh")
+        stage = Command(["bash", str(stage_script)], cwd=repo_root())  # noqa: S607
         run_steps(
             [CommandStep("stage rhel dvd", stage)],
             runner=deps.runner,
@@ -1355,7 +1352,8 @@ def _forceoff_step(g: str) -> CommandStep:
 
 def _undefine_step(g: str) -> CommandStep:
     # Remove the domain + per-guest overlay disk + UEFI nvram (base box untouched).
-    cmd = Command([*_VIRSH, "undefine", f"lab_{g}", "--remove-all-storage", "--nvram"])  # noqa: S607
+    argv = [*_VIRSH, "undefine", f"lab_{g}", "--remove-all-storage", "--nvram"]
+    cmd = Command(argv)  # noqa: S607
     return CommandStep(f"{g} undefine", cmd)
 
 
@@ -1827,7 +1825,8 @@ def pki_ensure(step: _StepFlag = False) -> None:
 def pki_issue(entity: str, step: _StepFlag = False) -> None:
     """Issue (or re-issue) one entity's cert + keystore — runs the provider for just that CN."""
     _render_pki_entities()
-    cmd = Command([*_PKI_PLAYBOOK, "-e", f"pki_only={entity}"], cwd=repo_root() / "ansible")  # noqa: S607
+    ansible = repo_root() / "ansible"
+    cmd = Command([*_PKI_PLAYBOOK, "-e", f"pki_only={entity}"], cwd=ansible)  # noqa: S607
     _execute("pki-issue", [CommandStep(f"pki issue {entity}", cmd)], step_mode=step)
 
 
@@ -1933,7 +1932,8 @@ _NET_LATENCY_SCRIPT = "net-latency.sh"
 
 def _netem(action: str, *args: str) -> None:
     argv = ["bash", str(lab_script(_NET_LATENCY_SCRIPT)), action, *args]
-    _execute(f"netem-{action}", [CommandStep(f"netem {action}", Command(argv))], step_mode=False)  # noqa: S607
+    step = CommandStep(f"netem {action}", Command(argv))  # noqa: S607
+    _execute(f"netem-{action}", [step], step_mode=False)
 
 
 @netem_app.command("set")
