@@ -1,0 +1,36 @@
+---
+# Fail the bake if a directory the per-run configure halves rely on is missing from the
+# finished image (#1265, epic .github#275). Run in each Ubuntu bake's FINAL play, after
+# every role that could remove something (snapd-off's purge in particular), so it checks
+# what is actually packaged. See defaults/main.yml for the list contract.
+
+- name: refuse an empty guard list (a guard that checks nothing is a misconfiguration)
+  ansible.builtin.assert:
+    that: bake_dirs_guard_required | length > 0
+    fail_msg: >-
+      bake-dirs-guard ran with an empty bake_dirs_guard_required; list the directories this
+      box's per-run configure halves write into (#1265).
+
+- name: look for each directory the per-run configure halves rely on
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ bake_dirs_guard_required }}"
+  register: _bake_dirs_guard_stat
+
+- name: fail the bake if any of them is missing from the image
+  ansible.builtin.assert:
+    that: _bake_dirs_guard_missing | length == 0
+    fail_msg: >-
+      the baked image is missing directories its per-run configure halves write into
+      (#1265): {{ _bake_dirs_guard_missing }}. Something later in the bake removed them;
+      a bootstrap from this box would fail at configure time.
+  vars:
+    # Missing = absent, or present but not a directory. stat.isdir only exists when
+    # stat.exists is true, so the two cases are filtered separately.
+    _bake_dirs_guard_absent: >-
+      {{ _bake_dirs_guard_stat.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}
+    _bake_dirs_guard_not_dir: >-
+      {{ _bake_dirs_guard_stat.results | selectattr('stat.exists')
+         | rejectattr('stat.isdir') | map(attribute='item') | list }}
+    _bake_dirs_guard_missing: "{{ _bake_dirs_guard_absent + _bake_dirs_guard_not_dir }}"

@@ -10,6 +10,20 @@
 # state). Enable first; the dashboards + admin-password drop-in then restart the
 # running service to pick them up.
 
+# The drop-in dir is ensured HERE, per-run, before any drop-in below is written (#1265).
+# The install half also creates it, but at bake it is EMPTY (both drop-ins are per-run),
+# and an empty dir does not reliably survive the bake: purging any package with systemd
+# units (snapd-off's purge on x86_64 obs) runs `deb-systemd-helper purge`, which rmdirs
+# every empty directory under /etc/systemd/system. A per-run drop-in must never depend on
+# an empty directory outliving the bake.
+- name: systemd drop-in dir for grafana-server (per-run; never rely on the baked one)
+  ansible.builtin.file:
+    path: "{{ grafana_dropin_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 # Server-side rendering env drop-in (#877), rendered PER-RUN (#954) — NOT baked. It
 # carries GF_RENDERING_RENDERER_TOKEN, and Grafana >= 13 refuses to start on the
 # default token; baking it left boxes baked before the token landed (#935) with a
@@ -20,7 +34,7 @@
 # idempotent when rendering is disabled.
 - name: grafana env drop-in — server-side rendering (grafana-image-renderer)
   ansible.builtin.copy:
-    dest: /etc/systemd/system/grafana-server.service.d/rendering.conf
+    dest: "{{ grafana_dropin_dir }}/rendering.conf"
     mode: "0644"
     content: |
       [Service]
@@ -32,7 +46,7 @@
 
 - name: remove the rendering drop-in when rendering is disabled
   ansible.builtin.file:
-    path: /etc/systemd/system/grafana-server.service.d/rendering.conf
+    path: "{{ grafana_dropin_dir }}/rendering.conf"
     state: absent
   when: not (grafana_rendering | bool)
   notify: restart grafana
@@ -74,7 +88,7 @@
 
 - name: grafana env drop-in — admin password (+ anonymous access in the lab, #258)
   ansible.builtin.copy:
-    dest: /etc/systemd/system/grafana-server.service.d/admin.conf
+    dest: "{{ grafana_dropin_dir }}/admin.conf"
     mode: "0600"
     content: |
       [Service]

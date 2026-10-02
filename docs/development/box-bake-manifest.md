@@ -116,20 +116,40 @@ unaffected.
 ## Every Ubuntu box: cloud-init and snapd trimmed off the boot path (#1250)
 
 Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
-`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) ends with its own play that
-runs `cloud-init-trim` and then `snapd-off`. It runs last so the snapd guard sees
-every snap the bake installed. The RHEL bakes include neither: both roles are
+`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) has its own play near the end
+that runs `cloud-init-trim` and then `snapd-off`. Only the read-only #1265 guard play
+follows it, so the snapd guard sees every snap the bake installed. The RHEL bakes include neither: both roles are
 Ubuntu-specific and assert a Debian-family host.
 
 | Role | In bake | Notes |
 |------|---------|-------|
 | `cloud-init-trim` | ✅ full | Keeps `cloud-init-local` (re-renders the mgmt NIC's netplan for the clone's MAC) and `cloud-init` (trimmed to `growpart` + `resizefs`, which grow `/` to the 20G guest disk). Drops `/etc/cloud/cloud.cfg.d/99_lab_trim.cfg` (empty config/final module lists, `preserve_hostname: true`) and masks `cloud-config.service` and `cloud-final.service`. Fail-loud checks: cloud-init's own merged config carries the trimmed lists, the two services read `masked`, the two kept services read `enabled`, and no `cloud-init.disabled` marker exists. No per-run half. |
-| `snapd-off` | ✅ full | `snapd_off_mode: purge` (default): refuses if `snap list` shows any snap, purges `snapd`, pins it out (`/etc/apt/preferences.d/99lab-no-snapd`), and verifies it is gone with no install candidate. `keep` (obs on aarch64 only, for the chromium snap behind `grafana-image-renderer`): masks only `snapd.seeded.service` and verifies that `snapd.service`/`snapd.socket` stay enabled. No per-run half. |
+| `snapd-off` | ✅ full | `snapd_off_mode: purge` (default): refuses if `snap list` shows any snap, purges `snapd`, pins it out (`/etc/apt/preferences.d/99lab-no-snapd`), and verifies it is gone with no install candidate. The purge's `deb-systemd-helper purge` also rmdirs every empty directory under `/etc/systemd/{system,user}`, so the role records those first and restores and verifies them afterwards; snapd's own stay gone (#1265). `keep` (obs on aarch64 only, for the chromium snap behind `grafana-image-renderer`): masks only `snapd.seeded.service` and verifies that `snapd.service`/`snapd.socket` stay enabled. No per-run half. |
 
 Rationale and evidence: [`box-model.md` §2](box-model.md#cloud-init-and-snapd-trimmed-off-the-boot-path-1250).
 Both roles are in each Ubuntu bake's manifest-hash closure, so introducing them
 (and any later edit) flips all five Ubuntu boxes to BUILD. The RHEL boxes are
 unaffected.
+
+## Every Ubuntu box: the bake guard (#1265)
+
+Each Ubuntu bake playbook ends with one more play, after the #1250 trim play, that
+runs only the `bake-dirs-guard` role. It fails the bake if any directory that the box's
+per-run configure halves write into is missing from the finished image. It refuses an empty
+list. The per-box lists:
+
+| Box | Directories |
+|-----|-------------|
+| every Ubuntu box | `/etc/alloy` (alloy configure: `config.alloy`) |
+| `infra-ubuntu2404` | `/etc/bind/zones` (bind-dns configure: the zone files) |
+| `obs-ubuntu2404` | `/etc/systemd/system/grafana-server.service.d` (grafana's env drop-ins), `/etc/prometheus/targets` (prometheus targets), `/var/lib/opensearch/snapshots` (opensearch `path.repo`) |
+
+Why: #1265's x86_64 obs box lost its empty `grafana-server.service.d` to snapd-off's purge
+(snapd's postrm runs `deb-systemd-helper purge`, which rmdirs every empty directory under
+`/etc/systemd/system`), and the loss only surfaced in a later bootstrap's observe phase.
+`tests/test_bake_dirs_guard.py` derives the expected list from the install halves each bake
+runs, so adding such a role without listing its directory fails validation. The role is in
+each Ubuntu bake's manifest-hash closure; the RHEL boxes are unaffected.
 
 ## Per-box bake sets
 
@@ -158,7 +178,7 @@ per-run render stay in `site-obs.yml`.
 | `alloy` | ✅ install half | As above. On obs, alloy also carries the fleet-wide OpenSearch fan-out, gated per-run by `group_vars/all/logsearch.yml`. |
 | `loki` | ✅ full | All-install (loki binary + logcli + static config). |
 | `prometheus` | ✅ install half | Binary + **static** `prometheus.yml` + recording rules + unit baked; the topology-rendered `targets/{node,ibmmq}.json` (`mqlab obs targets` → `build/work/…`) stay per-run. |
-| `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. Its OpenSearch datasource now points at `localhost` (co-located, #1179). |
+| `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. Its OpenSearch datasource now points at `localhost` (co-located, #1179). The drop-in dir `grafana-server.service.d` is baked empty, and the configure half re-creates it before writing either drop-in, so it never depends on the baked one (#1265). |
 | `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install` for the runtime libs) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
 | `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |

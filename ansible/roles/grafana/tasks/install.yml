@@ -62,10 +62,16 @@
     mode: "0644"
   notify: restart grafana
 
+# Baked EMPTY (both drop-ins are per-run). An empty dir under /etc/systemd/system is
+# pruned by any later package purge in the bake (deb-systemd-helper, #1265): snapd-off
+# restores it and the bake-guard play asserts it survived; configure.yml re-ensures it
+# per-run regardless.
 - name: systemd drop-in dir for grafana-server
   ansible.builtin.file:
-    path: /etc/systemd/system/grafana-server.service.d
+    path: "{{ grafana_dropin_dir }}"
     state: directory
+    owner: root
+    group: root
     mode: "0755"
 
 # Server-side rendering env drop-in (#877) is written by the PER-RUN configure half,

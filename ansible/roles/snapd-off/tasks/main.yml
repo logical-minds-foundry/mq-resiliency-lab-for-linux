@@ -11,7 +11,9 @@
 # HOW (snapd_off_mode, see defaults/main.yml):
 #   purge — refuse if any snap is installed (fail-loud, so a role that starts using a snap
 #           cannot be silently broken), purge snapd, pin it out, then verify it is gone and
-#           has no install candidate.
+#           has no install candidate. The purge's deb-systemd-helper also rmdirs every
+#           empty dir under /etc/systemd/{system,user}, so those are recorded first and
+#           restored (and verified) after; snapd's own stay gone (#1265).
 #   keep  — the box needs its snaps (obs on aarch64: the chromium snap behind
 #           grafana-image-renderer), so snapd stays enabled and only the snapd.seeded boot
 #           gate is masked; the image is already seeded, so the gate only waited.
@@ -51,12 +53,61 @@
       snapd_off_mode=keep for this box in its bake playbook (#1250).
   when: snapd_off_mode == 'purge' and _snapd_off_cli.stat.exists
 
+# The purge has a side effect on OTHER roles' state (#1265): snapd's postrm runs
+# `deb-systemd-helper purge`, which (init-system-helpers' rmdir_if_empty) rmdirs EVERY
+# empty directory under /etc/systemd/system and /etc/systemd/user, not just snapd's. That
+# deleted obs's baked, still-empty grafana-server.service.d on x86_64, so observe's per-run
+# drop-in write failed. Record the empty dirs first, so the purge is undone for the rest.
+# noqa command-instead-of-module: a read-only listing; no module reports empty dirs.
+- name: record the empty dirs under /etc/systemd that the purge would prune  # noqa: command-instead-of-module
+  # One line per dir, "<octal mode> <owner> <group> <path>" (find's -printf expands the
+  # \n itself). A missing root makes find exit 1, which fails the task (fail-loud).
+  ansible.builtin.command:
+    argv: "{{ ['find'] + snapd_off_prune_roots + ['-mindepth', '1', '-type', 'd', '-empty', '-printf', snapd_off_dir_format] }}"
+  register: _snapd_off_empty_dirs
+  changed_when: false
+  when: snapd_off_mode == 'purge'
+
+# snapd's own dirs (a last path component containing "snap", e.g.
+# snapd.mounts.target.wants) stay gone: removing them is the point of the purge.
+- name: keep the non-snapd empty dirs to restore after the purge
+  ansible.builtin.set_fact:
+    _snapd_off_keep_dirs: "{{ _snapd_off_empty_dirs.stdout_lines | reject('search', snapd_off_own_dir_regex) | list }}"
+  when: snapd_off_mode == 'purge'
+
 - name: purge snapd (no snap is installed, nothing uses it)
   ansible.builtin.apt:
     name: snapd
     state: absent
     purge: true
     lock_timeout: "{{ apt_lock_timeout }}"
+  when: snapd_off_mode == 'purge'
+
+- name: restore the empty /etc/systemd dirs the purge pruned (snapd's own stay gone)
+  ansible.builtin.file:
+    path: "{{ item.split(' ', 3)[3] }}"
+    state: directory
+    mode: "0{{ item.split(' ', 3)[0] }}"
+    owner: "{{ item.split(' ', 3)[1] }}"
+    group: "{{ item.split(' ', 3)[2] }}"
+  loop: "{{ _snapd_off_keep_dirs | default([]) }}"
+  when: snapd_off_mode == 'purge'
+
+- name: look for every restored dir (verify the restore)
+  ansible.builtin.stat:
+    path: "{{ item.split(' ', 3)[3] }}"
+  loop: "{{ _snapd_off_keep_dirs | default([]) }}"
+  register: _snapd_off_restored
+  when: snapd_off_mode == 'purge'
+
+- name: verify no non-snapd dir under /etc/systemd was lost to the purge
+  ansible.builtin.assert:
+    that: item.stat.isdir | default(false)
+    fail_msg: "the snapd purge removed {{ item.item }} and it is still missing (#1265)"
+    quiet: true
+  loop: "{{ _snapd_off_restored.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
   when: snapd_off_mode == 'purge'
 
 - name: pin snapd out so apt never reinstalls it
