@@ -222,7 +222,12 @@ def _qm_extra_vars(stack: Stack) -> list[str]:
 # --------------------------------------------------------------------------- #
 # net phase
 # --------------------------------------------------------------------------- #
-def _net_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
+def _net_build_steps(
+    stack: Stack,  # noqa: ARG001
+    deps: Any,  # noqa: ARG001
+    *,
+    no_dr: bool = False,  # noqa: ARG001
+) -> list[CommandStep]:
     """Define, autostart, and start every lab network the stack needs — idempotently.
 
     Accepts `no_dr` for a uniform builder signature but IGNORES it: libvirt networks
@@ -358,7 +363,12 @@ def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
     return len(set(boxes)) != len(boxes)
 
 
-def _vms_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
+def _vms_build_steps(
+    stack: Stack,
+    deps: Any,  # noqa: ARG001
+    *,
+    no_dr: bool = False,
+) -> list[CommandStep]:
     """`vagrant up` the stack members plus the commons (obs/mon-probe) VMs, in
     contiguous batches of at most `boot_batch` (#638), serializing a batch whose guests
     share a box (#859).
@@ -500,7 +510,12 @@ def _nic_assure_steps(stack: Stack, *, no_dr: bool = False) -> list[CommandStep]
     return _rhel_nat_nic_steps(stack, "nic-assure.sh", "nic-assure", no_dr=no_dr)
 
 
-def _provision_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
+def _provision_build_steps(
+    stack: Stack,
+    deps: Any,  # noqa: ARG001
+    *,
+    no_dr: bool = False,
+) -> list[CommandStep]:
     """Configure + assure NICs, bring up DNS, then run the stack's provision playbook
     with the #351 QM extra-vars.
 
@@ -564,7 +579,10 @@ def _provision_satisfied(stack: Stack, states: dict[str, Any]) -> bool:  # noqa:
 def _host_mqlab() -> str:
     """Absolute path to a host-runnable mqlab console script for the host services.
 
-    The host-net-state systemd service runs as root with a minimal PATH (no `uv`,
+    No consumer remains: the lab-net-state probe that needed it is retired (#1253),
+    and removing this absolute `.venv/bin/mqlab` invocation is #1252.
+
+    The host-net-state systemd service ran as root with a minimal PATH (no `uv`,
     no mqlab on PATH), so it must call mqlab by absolute path. Use the console
     script beside the interpreter driving THIS bootstrap — host-runnable by
     definition, and the same venv `uv sync` keeps current at bootstrap (#776).
@@ -585,7 +603,12 @@ def _host_mqlab() -> str:
     return str(Path(sys.executable).parent / "mqlab")
 
 
-def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> list[CommandStep]:  # noqa: ARG001
+def _observe_build_steps(
+    stack: Stack,
+    deps: Any,  # noqa: ARG001
+    *,
+    no_dr: bool = False,
+) -> list[CommandStep]:
     """Render the targets + dashboard, then provision the obs stack for this QM.
 
     Under `no_dr` (#188) the `observability.yml --limit` names only the effective
@@ -649,9 +672,9 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
         ),
         # Instrument the libvirt HOST (the Vergil VM, connection=local): node-exporter
         # exposes the virbr-* bridge byte counters that feed the per-net throughput
-        # panels, and host-net-state emits lab_network_state/health. Without this the
-        # network rx/tx + state + health graphs have no data (#383). `mqlab_bin` is the
-        # host-runnable mqlab the net-state service must call by absolute path (#398).
+        # panels (#383) and owns the textfile drop zone. host-obs.yml no longer reads
+        # `mqlab_bin` — its only consumer, the lab-net-state probe, is retired (#1253);
+        # removing the argument is #1252.
         CommandStep(
             f"{stack.name} instrument host",
             Command(
@@ -667,6 +690,13 @@ def _observe_build_steps(stack: Stack, deps: Any, *, no_dr: bool = False) -> lis
                 ],
                 cwd=ansible,
             ),
+        ),
+        # Publish lab_network_state now that the drop zone exists (#1253). After this
+        # it changes only when net-up.sh / net-down.sh change a network, and they
+        # republish it themselves — no polling probe.
+        CommandStep(
+            "publish net state",
+            Command(["bash", str(lab_script("net-state-publish.sh"))]),  # noqa: S607
         ),
         # site-obs.yml bounced grafana, which wedges the held downstream of the
         # vergil port-forward relay (#264) — heal it so the workstation can browse

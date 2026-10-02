@@ -2,8 +2,10 @@
 # lab/scripts/net-up.sh [net-name ...] — define, start, autostart the named lab
 # networks (or all net-*.xml if none given). Self-echoes each virsh action so
 # mqlab's treatment-A transcript shows the literal commands; idempotent.
+# Publishes the resulting lab_network_state to the observability layer (#1253).
 set -euo pipefail
-cd "$(dirname "$0")/../networks"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cd "$HERE/../networks"
 run() { echo "+ $*"; "$@"; }   # echo verbatim, then run
 nets=("$@")
 if [ "${#nets[@]}" -eq 0 ]; then
@@ -19,3 +21,4 @@ for net in "${nets[@]}"; do
   run virsh -c qemu:///system net-autostart "$net"
   echo "up: $net"
 done
+"$HERE/net-state-publish.sh"

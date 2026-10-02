@@ -1,13 +1,61 @@
 # Host-side observability on the Vergil VM (the libvirt host). Run locally:
-#   ansible-playbook host-obs.yml -c local -i localhost, -e mqlab_bin=$(command -v mqlab)
-# mqlab_bin is the host-runnable mqlab the net-state service calls by absolute
-# path (#398); the observe phase passes it automatically (phases._host_mqlab).
+#   ansible-playbook host-obs.yml -c local -i localhost,
+# lab_network_state is NOT produced here: it is published on change by
+# lab/scripts/net-up.sh / net-down.sh (and once by the observe phase) via
+# lab/scripts/net-state-publish.sh (#1253). This play retires the old polling
+# probe (lab-net-state.service/.timer) on hosts that still carry it.
 - hosts: localhost
   connection: local
   become: true
   vars:
     repo_root: "{{ playbook_dir | dirname }}"  # normalized (no '..'); systemd rejects unnormalized paths
+    retired_net_state_units:
+      - lab-net-state.timer
+      - lab-net-state.service
   roles:
     - node-exporter
-    - host-net-state
     - host-relay-heal
+  tasks:
+    # #1253: the lab-net-state probe ran `<checkout>/.venv/bin/mqlab obs net-state`
+    # as root every 10s (root-owned __pycache__ in the checkout, #1251; status-127
+    # failures once that checkout was deleted). Remove it from hosts that ran an
+    # earlier observe. Stat first so a host that never had it is a clean no-op.
+    - name: find the retired lab-net-state units
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ item }}"
+      loop: "{{ retired_net_state_units }}"
+      register: _retired_units
+
+    - name: stop + disable the retired lab-net-state timer
+      ansible.builtin.systemd:
+        name: lab-net-state.timer
+        state: stopped
+        enabled: false
+      when: _retired_units.results[0].stat.exists
+
+    - name: remove the retired lab-net-state unit files
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ item.item }}"
+        state: absent
+      loop: "{{ _retired_units.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.stat.exists
+      notify:
+        - reload systemd after retiring lab-net-state
+        - clear the retired lab-net-state service's failed state
+
+  handlers:
+    - name: reload systemd after retiring lab-net-state
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    # A removed unit that last ran failed lingers in `systemctl --failed` until reset.
+    # reset-failed exits non-zero with "not loaded" when systemd holds nothing for the
+    # unit (it never failed) — that is the clean state; any other error fails loud.
+    # Handlers run in definition order, so this follows the daemon-reload above.
+    - name: clear the retired lab-net-state service's failed state
+      ansible.builtin.command: systemctl reset-failed lab-net-state.service
+      register: _reset_failed
+      changed_when: _reset_failed.rc == 0
+      failed_when: _reset_failed.rc != 0 and 'not loaded' not in _reset_failed.stderr

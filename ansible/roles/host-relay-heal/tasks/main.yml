@@ -4,9 +4,10 @@
 # into accept-then-reset after sustained use; the durable fix is upstream
 # (vergil-project/vergil-vm#298). Until it lands, a timer runs the standalone
 # lab/scripts/relay-heal.sh on a cadence to recover the wedge automatically. The
-# healer is deliberately mqlab-free (bash + curl + systemctl only), so unlike the
-# host-net-state role it needs no host-runnable mqlab path — the whole class of
-# 203/EXEC failure that a wrong mqlab path caused (#984) can't reach it.
+# healer is deliberately mqlab-free (bash + curl + systemctl only), so (unlike the
+# since-retired host-net-state role, #1253) it needs no host-runnable mqlab path —
+# the whole class of 203/EXEC failure that a wrong mqlab path caused (#984) can't
+# reach it.
 - name: install the relay-heal service + timer
   ansible.builtin.template:
     src: "{{ item }}"
