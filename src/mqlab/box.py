@@ -515,13 +515,19 @@ def clean_boxes(names: list[str]) -> list[str]:
 # Box base-image GC — reclaim orphaned libvirt base images (#759)             #
 # --------------------------------------------------------------------------- #
 # Every `vagrant box add --force` re-bake makes libvirt import a fresh base image
-# `<stem>_vagrant_box_image_0_<import-ts>_box.img` into the default pool and
-# orphans the previous one (~3-4 GiB each). Nothing GCs them, so they accumulate
-# until the (ephemeral) root disk fills and libvirt pauses VMs with I/O errors.
-# This GC keeps the NEWEST base image per box stem (the current template — the
-# next `vagrant up` reuses it) and deletes the older ones, with one hard safety
-# gate: an image still referenced as a <backingStore> by a live overlay volume is
-# never deleted (removing the file would corrupt that VM's disk).
+# `<stem>_vagrant_box_image_0_<ts>_box.img` into the default pool and orphans the
+# previous one (~3-4 GiB each). Nothing GCs them, so they accumulate until the
+# (ephemeral) root disk fills and libvirt pauses VMs with I/O errors.
+#
+# Which image is CURRENT (#1248): for an unversioned box, vagrant-libvirt names the
+# volume after the registered box.img's mtime — `0_<File.mtime(box.img).to_i>`
+# (vagrant-libvirt 0.12.2, action/handle_box_image.rb, get_volume_name). So for a
+# registered box this GC keeps exactly the volume(s) its registered box.img resolves
+# to, and deletes every other image of that stem: a stale one from before a rebake
+# goes even when the rebaked box has not been uploaded yet. A stem with no
+# registered box falls back to keeping the NEWEST image. One hard safety gate
+# applies to both: an image still referenced as a <backingStore> by a live overlay
+# volume is never deleted (removing the file would corrupt that VM's disk).
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 _DEFAULT_POOL = "default"
 # A vagrant-libvirt box base image: "<stem>_vagrant_box_image_0_<import-ts>_box.img".
@@ -536,9 +542,39 @@ class GcResult:
 
     deleted: list[str]  # base-image volume names removed
     freed_bytes: int  # sum of their libvirt allocations
-    kept_newest: list[str]  # the newest image per stem, always kept
-    skipped_in_use: list[str]  # older images protected — a live overlay backs onto them
+    kept: list[str]  # the current image(s) per stem (registered box's, else newest)
+    skipped_in_use: list[str]  # stale images protected — a live overlay backs onto them
     dry_run: bool
+
+
+def _vagrant_boxes_dir() -> Path:
+    """Vagrant's registered-box store: `$VAGRANT_HOME/boxes` (default ~/.vagrant.d)."""
+    home = os.environ.get("VAGRANT_HOME") or str(Path.home() / ".vagrant.d")
+    return Path(home) / "boxes"
+
+
+def _current_box_volumes(boxes_dir: Path | None = None) -> dict[str, set[str]]:
+    """Box stem -> the base-volume name(s) each registered unversioned box resolves to.
+
+    Vagrant stores a box under `<name>/<version>/[<arch>/]libvirt/box.img`, with a
+    '/' in the name escaped as -VAGRANTSLASH- — the same escaping vagrant-libvirt
+    uses for the volume stem. Only version `0` (an unversioned local `box add`) gets
+    an mtime-keyed volume name; a versioned box (the cloud base image) is skipped,
+    as `_BOX_IMAGE_RE` already leaves its volumes alone."""
+    root = boxes_dir if boxes_dir is not None else _vagrant_boxes_dir()
+    current: dict[str, set[str]] = {}
+    if not root.is_dir():
+        return current
+    for box_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        version_dir = box_dir / "0"
+        if not version_dir.is_dir():
+            continue
+        for img in sorted(version_dir.rglob("box.img")):
+            if img.parent.name != "libvirt":
+                continue
+            name = f"{box_dir.name}_vagrant_box_image_0_{int(img.stat().st_mtime)}_box.img"
+            current.setdefault(box_dir.name, set()).add(name)
+    return current
 
 
 def _virsh_out(args: list[str]) -> str:
@@ -593,11 +629,13 @@ def _vol_delete(name: str, pool: str = _DEFAULT_POOL) -> None:
 
 
 def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> GcResult:
-    """Reclaim orphaned vagrant box base images from the libvirt pool (#759).
+    """Reclaim orphaned vagrant box base images from the libvirt pool (#759, #1248).
 
-    Keeps the newest base image per box stem and deletes the older ones, EXCEPT
-    any still referenced as a backing store by a live overlay volume. Idempotent
-    and safe to run repeatedly; `dry_run` reports without deleting."""
+    Per box stem, keeps the image(s) the registered box resolves to (or, with no
+    registered box, the newest image) and deletes the rest, EXCEPT any still
+    referenced as a backing store by a live overlay volume. Idempotent and safe to
+    run repeatedly; `dry_run` reports without deleting."""
+    current = _current_box_volumes()
     names = _pool_volume_names(pool)
     alloc: dict[str, int] = {}
     in_use: set[str] = set()
@@ -616,10 +654,18 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     kept: list[str] = []
     skipped: list[str] = []
     freed = 0
-    for _stem, images in sorted(by_stem.items()):
-        images.sort()  # ascending by import timestamp
-        kept.append(images[-1][1])  # newest is the current template — always keep
-        for _ts, name in images[:-1]:
+    for stem, images in sorted(by_stem.items()):
+        images.sort()  # ascending by timestamp
+        if stem in current:
+            # Registered: keep exactly what the registered box.img resolves to. None of
+            # them may exist yet (a rebake not yet uploaded) — then every image is stale.
+            keep = {name for _ts, name in images if name in current[stem]}
+        else:
+            keep = {images[-1][1]}  # unregistered: the newest is the best guess — keep it
+        for _ts, name in images:
+            if name in keep:
+                kept.append(name)
+                continue
             if name in in_use:
                 skipped.append(name)
                 continue
@@ -630,7 +676,7 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     return GcResult(
         deleted=deleted,
         freed_bytes=freed,
-        kept_newest=kept,
+        kept=kept,
         skipped_in_use=skipped,
         dry_run=dry_run,
     )
