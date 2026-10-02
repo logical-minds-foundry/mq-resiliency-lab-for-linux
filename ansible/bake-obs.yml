@@ -139,3 +139,24 @@
     - name: comment out pam_motd in /etc/pam.d/{sshd,login} + mask motd-news.timer
       ansible.builtin.include_role:
         name: motd-off
+
+# cloud-init and snapd come off the boot path of every baked Ubuntu box (#1250): cloud-init
+# keeps only what a clone needs (mgmt-NIC netplan re-render + root growth), and snapd goes
+# when no snap is installed. Its own play, LAST, so the snapd guard sees every snap the
+# bake installed.
+- name: Trim cloud-init + snapd off the boot path (#1250)
+  hosts: bake
+  become: true
+  tasks:
+    - name: cloud-init = netplan re-render + growpart/resizefs only; mask config/final stages
+      ansible.builtin.include_role:
+        name: cloud-init-trim
+
+    # On aarch64 grafana-image-renderer's browser is the distro chromium-browser, a
+    # transitional deb that installs the chromium SNAP, so snapd must stay there (only the
+    # snapd.seeded boot gate is masked). x86_64 uses the Google Chrome .deb: no snaps, purge.
+    - name: snapd off the boot path (keep on aarch64 for the chromium snap; purge on x86_64)
+      ansible.builtin.include_role:
+        name: snapd-off
+      vars:
+        snapd_off_mode: "{{ 'keep' if ansible_architecture == 'aarch64' else 'purge' }}"

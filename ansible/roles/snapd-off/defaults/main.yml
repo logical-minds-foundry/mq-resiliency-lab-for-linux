@@ -1,0 +1,20 @@
+---
+# snapd in the baked Ubuntu boxes (#1250).
+#
+# purge (default): no snap is installed in the box, so snapd is purged and pinned out. The
+#   cloud-image base seeds none (state.json: seeded, no snaps), and no bake role installs
+#   one — EXCEPT obs on aarch64, below. The role refuses to purge (fails the bake) if any
+#   snap is installed, so a future role that pulls a snap cannot be silently broken.
+# keep: a bake installed snaps the box needs, so snapd stays; only snapd.seeded.service,
+#   a pure `snap wait system seed.loaded` boot gate on an already-seeded image, is masked.
+#   obs on aarch64 needs this: grafana-image-renderer's browser there is the distro
+#   `chromium-browser`, which on Ubuntu 24.04 is a transitional deb that installs the
+#   chromium snap (plus cups, core24, gnome-46-2404, mesa-2404, gtk-common-themes, bare).
+snapd_off_mode: purge
+
+# Pins snapd out so a later `apt install` cannot quietly pull it back as a Recommends
+# (ubuntu-server recommends it); a package that Depends on it then fails loudly instead.
+snapd_off_pin: /etc/apt/preferences.d/99lab-no-snapd
+
+# The boot gate masked in keep mode.
+snapd_off_seeded_unit: snapd.seeded.service

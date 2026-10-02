@@ -108,3 +108,19 @@
     - name: comment out pam_motd in /etc/pam.d/{sshd,login} + mask motd-news.timer
       ansible.builtin.include_role:
         name: motd-off
+
+# cloud-init and snapd come off the boot path of every baked Ubuntu box (#1250): cloud-init
+# keeps only what a clone needs (mgmt-NIC netplan re-render + root growth), and snapd goes
+# when no snap is installed. Its own play, LAST, so the snapd guard sees every snap the
+# bake installed.
+- name: Trim cloud-init + snapd off the boot path (#1250)
+  hosts: bake
+  become: true
+  tasks:
+    - name: cloud-init = netplan re-render + growpart/resizefs only; mask config/final stages
+      ansible.builtin.include_role:
+        name: cloud-init-trim
+
+    - name: purge snapd (no snaps in this box) and pin it out
+      ansible.builtin.include_role:
+        name: snapd-off

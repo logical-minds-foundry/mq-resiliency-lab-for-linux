@@ -1,0 +1,9 @@
+# Managed by mq-resiliency-lab-for-linux (ansible role snapd-off, #1250).
+#
+# snapd is purged from this baked box: nothing in it uses a snap, and snapd + snapd.seeded
+# cost boot time on every guest. The negative priority keeps apt from installing it again
+# (e.g. as a Recommends); a package that Depends on it fails to install instead.
+# See docs/development/box-model.md section 2.
+Package: snapd
+Pin: release a=*
+Pin-Priority: -1

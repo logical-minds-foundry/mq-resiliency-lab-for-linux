@@ -110,6 +110,12 @@ boot_disk = "200GiB"          # EPHEMERAL boot disk — holds libvirt's default 
                               # vagrant cache and hit 78% during the #114 rollout — a leaked image could wedge the
                               # host. Sized for the box cache + a couple concurrent stacks with margin. Cloud-only;
                               # local is the roomy Mac box.
+boot_disk_type = "pd-ssd"     # SSD, not GCE's series default (standard PD on N2). Every nested guest's qcow2 lives
+                              # in the default pool on this disk, so cold bring-ups were I/O-bound: host iowait
+                              # peaked at 34% and one boot batch took 499s vs ~180s (#1249, #1247). The fix stays
+                              # on the boot disk instead of relocating the pool to /vergil (#386 still holds). Needs
+                              # vergil-vm >= v2.1.42 (boot_disk_type) and vergil-tooling >= 2.1.223; changing it
+                              # replaces the ephemeral boot disk, so apply with `vrg-vm rebuild … --name cloud`.
 
 [vm.anonymous]
 # Credential-less identity for isolated lab bootstrap testing (no GitHub/Claude
