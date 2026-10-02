@@ -430,18 +430,83 @@ is recorded in
 
 **Reading (judgment).** The arm64 nested-virt bottleneck from §5.1 is gone. On
 these runs macOS finished faster than the cloud runs measured before the SSD
-boot disk (#1247: 1000 s, 987 s and 1367 s). Read that cross-platform
-comparison with the grain of salt in §6.
+boot disk (#1247: 1000 s, 987 s and 1367 s), and somewhat faster than the final
+cloud streak below (#1267: 673–721 s). Read that cross-platform comparison with
+the grain of salt in §6.
 
-**x86 cloud.**
+**x86 cloud (data, #1267 and #1200).** Five consecutive cold
+`nativeha-ubuntu --no-dr` bootstraps, each started from
+`mqlab teardown nativeha-ubuntu --commons`, at commit `21d688a1` with
+`MQLAB_ENV` unset (auto-detected `cloud`). The host was a GCE
+`n2-standard-16` (16 vCPUs) with a `pd-ssd` boot disk (#1249), which holds
+`/var/lib/libvirt/images`. All five runs exited 0 with obs healthy (7/7 units
+active, OpenSearch cluster `green`) and no huge-page reservation:
+[#1267](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1267).
 
-> **PLACEHOLDER: cloud numbers pending #1260.** The cloud twin of the gate is
-> five consecutive cold runs on the SSD boot disk (#1249), at the same commit as
-> the macOS runs:
-> [#1260](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1260).
-> It has not run yet. When it has, record its wall-clock times against the
-> 900 s target, and its result, here. Don't quote the earlier cloud runs as the
-> current result.
+| Run | Wall-clock | `prereq:vms` | `vms` | `prereq:provision` | `provision` | `observe` | Host iowait mean / peak |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | **721 s** | 6.7 s | 298.6 s | 57.5 s | 157.0 s | 200.2 s | 0.4 % / 10.3 % |
+| 2 | **673 s** | 6.7 s | 272.2 s | 57.0 s | 145.5 s | 190.2 s | 0.1 % / 0.5 % |
+| 3 | **684 s** | 6.7 s | 270.1 s | 57.1 s | 153.3 s | 195.2 s | 0.4 % / 10.7 % |
+| 4 | **687 s** | 6.8 s | 273.2 s | 57.0 s | 156.5 s | 191.5 s | 0.1 % / 0.5 % |
+| 5 | **689 s** | 6.8 s | 273.7 s | 57.3 s | 154.7 s | 194.6 s | 0.1 % / 1.0 % |
+
+Observe milestones per run:
+
+| Run | `opensearch_green` | `data_prepper_ready` | `dashboards_ready` |
+| --- | ---: | ---: | ---: |
+| 1 | 23.3 s | 8.6 s | 11.6 s |
+| 2 | 17.6 s | 7.5 s | 11.6 s |
+| 3 | 17.6 s | 7.6 s | 17.0 s |
+| 4 | 17.6 s | 7.6 s | 11.5 s |
+| 5 | 17.6 s | 8.6 s | 11.6 s |
+
+- **Wall-clock:** min 673 s, median 687 s, max 721 s, all under the 900 s
+  target. `preflight` was about 0.1 s in every run.
+- **Run 1** included the one-time uploads of the four freshly baked boxes
+  (`Uploading base box` 4, then 0 from run 2 on). No run re-added a box, and
+  each ran `pki ensure` once.
+- **Phase coverage:** with the `prereq:*` phases (#1248), the phases sum to
+  within about 1–2 s of each wall-clock (720.0 s against 721 s for run 1, for
+  example). There is no `net` phase, because the libvirt networks survive
+  `teardown --commons`.
+- **Box bakes** before run 1, after #1265 changed all four `nativeha-ubuntu`
+  boxes: `infra-ubuntu2404` 311 s, `mq-nativeha-ubuntu` 509 s,
+  `mq-ubuntu2404` 556 s and `obs-ubuntu2404` 1,236 s (2,611 s in total). They
+  are not part of the bootstrap wall-clock.
+- **Guest boot (#1250):** on obs and `nha-ubuntu-a1`, userspace boot took
+  8.3 s and 8.9 s, with snapd absent and `cloud-config` / `cloud-final`
+  masked. Five minutes after run 1, the host was 99.3 % idle.
+
+Compared with the previous cloud attempt,
+[#1247](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1247)
+(same host shape on a standard persistent boot disk, before #1248 and #1250):
+
+| | #1247 (3 runs) | #1267 (5 runs) |
+| --- | ---: | ---: |
+| Wall-clock | 1000 s, 987 s, 1367 s | 673–721 s |
+| `vms` | 370–760 s | 270–299 s |
+| `provision` | 148–167 s | 146–157 s |
+| `observe` | 212–217 s | 190–200 s |
+| `dashboards_ready` | 17.2–17.8 s | 11.5–17.0 s |
+| Host iowait mean / peak | 3.1–9.4 % / 14.7–34.2 % | 0.1–0.4 % / 0.5–10.7 % |
+| Box re-adds / `pki ensure` per run | 4 / 2 | 0 / 1 |
+
+**Reading (judgment).** Cloud wall-clock fell by about 300 s (30 %) against
+the healthy #1247 runs, and the spread tightened to 673–689 s once the boxes
+were warm. Each fix accounts for part of it. #1248 removed about 120 s of box
+re-adds and one ~52 s `pki ensure` from every run. The SSD boot disk (#1249)
+cut host iowait and removed the slow-boot outliers (`vms` took 760 s in
+#1247's run 3). #1250 trimmed guest boot. `provision` and `observe` did not
+regress. The epic's final outcome is recorded in
+[#1200](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200).
+An earlier attempt at this streak, #1260, failed on an unrelated box-bake
+defect (#1265) and was closed, so #1267 is the source of these numbers.
+
+**Both platforms (judgment).** macOS (587–643 s) and x86 cloud (673–721 s)
+now both finish well under the 900 s target. macOS is somewhat faster on these
+runs, but the two run on different hardware, so read that gap with the grain
+of salt in §6: it is directional, not apples-to-apples.
 
 ## 6. Grain of salt
 
