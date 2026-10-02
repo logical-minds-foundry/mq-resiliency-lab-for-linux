@@ -1605,7 +1605,12 @@ fault scripts (run on the host, not through <code>mqlab</code>):</p>
 <li><code>lab/scripts/nativeha-fault-suite.sh &lt;qm&gt;</code> — the Native HA fault suite
   (hard <code>virsh destroy</code> of the active node, then assert the end state).</li>
 <li><code>lab/scripts/net-down.sh &lt;net…&gt;</code> / <code>lab/scripts/net-up.sh &lt;net…&gt;</code> — sever and
-  restore a lab network to inject a partition (the planes are designed severable).</li>
+  restore a lab network to inject a partition (the planes are designed severable).
+  Each publishes the resulting <code>lab_network_state</code> to the host node_exporter
+  (<code>lab/scripts/net-state-publish.sh</code>, <code>sudo</code> for the drop-zone write), so the
+  dashboard's network tiles follow the drill within one scrape. There is no
+  polling probe: the lab's virtual networks only change when these scripts (or
+  bring-up) change them (#1253).</li>
 <li><code>lab/scripts/drbd-degrade.sh</code> — degrade DRBD replication for a forced-DR drill.</li>
 </ul>
 <p>Watch any drill on the stack's <strong>cockpit</strong> board and the <strong>lab-watcher</strong> front
@@ -1679,7 +1684,7 @@ lab that observes every node but never carries transit traffic. It runs on the
 <h3 id="mqlab-obs-verbs"><code>mqlab obs</code> verbs<a class="headerlink" href="#mqlab-obs-verbs" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># emit lab_network_state metrics from virsh (host-side)</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># render lab_network_state metrics from virsh (stdout)</span>
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
 </code></pre></div>
