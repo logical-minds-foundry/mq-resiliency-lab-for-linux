@@ -6,6 +6,8 @@
 # topology, then runs the cross-site DR playbook. Idempotent.
 #
 # Run once all 8 arm nodes are booted: san-a, san-b, pcmk-a1..3, pcmk-b1..3.
+# Calls bare `mqlab` (and ansible-playbook): run it from an activated project env
+# (`. .venv/bin/activate`) or under `uv run`, never with a venv mqlab by path (#1252).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 export PCMK_HACLUSTER_PASSWORD="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"
