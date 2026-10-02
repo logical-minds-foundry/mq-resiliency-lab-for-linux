@@ -1,0 +1,39 @@
+---
+# What the cloud-init-trim role keeps and drops in a baked Ubuntu box (#1250).
+#
+# Evidence (#1250, a clone of infra-ubuntu2404 booted alone under vagrant-libvirt): the
+# baked boxes carry cloud-init's state for instance `iid-datasource-none` (no NoCloud seed
+# is ever attached, so every clone of every box reports the same instance id). On a clone's
+# boot every once-per-instance module logs "previously ran"; the only cloud-init work that
+# does anything is:
+#   * cloud-init-local.service: no local datasource, so it re-renders the fallback netplan
+#     (/etc/netplan/50-cloud-init.yaml) for the clone's own mgmt NIC MAC + name (the baked
+#     file names the bake VM's MAC; the clone's NIC was enp5s0, not the bake's enp1s0).
+#     Without it the clone's mgmt NIC gets no DHCP and vagrant never reaches ssh.
+#   * cloud-init.service: growpart + resizefs (frequency always) grow / from the box's 18G
+#     partition to the guest's 20G disk on first boot (build-fatbox.sh's 18G/virtual_size:20
+#     headroom contract).
+# So both of those services stay. Everything else goes.
+
+# The cloud.cfg.d drop-in the role writes. cloud.cfg.d files are read in lexical order and
+# later files win; none of the base image's (05_logging, 90_dpkg, 99_vagrant) sets these keys.
+cloud_init_trim_conf: /etc/cloud/cloud.cfg.d/99_lab_trim.cfg
+
+# The init (network) stage runs ONLY these: the two `always` modules that grow the root fs.
+cloud_init_trim_init_modules:
+  - growpart
+  - resizefs
+
+# The config and final stages run nothing these guests need (all once-per-instance and
+# already ran at bake, or empty: scripts_per_boot has no scripts, final_message only logs),
+# so their services are masked. Their module lists are emptied too, belt-and-braces, so an
+# unmask still does nothing.
+cloud_init_trim_masked_services:
+  - cloud-config.service
+  - cloud-final.service
+
+# These MUST stay enabled (networking + root growth, above). The role fails the bake if
+# either is masked or disabled, or if cloud-init has been disabled outright.
+cloud_init_trim_required_services:
+  - cloud-init-local.service
+  - cloud-init.service

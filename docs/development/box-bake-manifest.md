@@ -100,8 +100,8 @@ pre-config state:
 ## Every Ubuntu box: per-login dynamic MOTD disabled at bake (#1229)
 
 Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
-`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) ends with its own play that
-runs the `motd-off` role. The RHEL bakes do not include it: the role is
+`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) has its own play near the end
+that runs the `motd-off` role (only the #1250 boot-trim play comes after it). The RHEL bakes do not include it: the role is
 Ubuntu-specific and asserts a Debian-family host.
 
 | Role | In bake | Notes |
@@ -111,6 +111,24 @@ Ubuntu-specific and asserts a Debian-family host.
 Rationale and evidence: [`box-model.md` §2](box-model.md#no-per-login-dynamic-motd-1229).
 The role is in each Ubuntu bake's manifest-hash closure, so introducing it (and
 any later edit to it) flips all five Ubuntu boxes to BUILD. The RHEL boxes are
+unaffected.
+
+## Every Ubuntu box: cloud-init and snapd trimmed off the boot path (#1250)
+
+Each Ubuntu bake playbook (`bake-obs.yml`, `bake-infra.yml`, `bake-mq-ubuntu.yml`,
+`bake-nativeha-ubuntu.yml`, `bake-pcmk-ubuntu.yml`) ends with its own play that
+runs `cloud-init-trim` and then `snapd-off`. It runs last so the snapd guard sees
+every snap the bake installed. The RHEL bakes include neither: both roles are
+Ubuntu-specific and assert a Debian-family host.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `cloud-init-trim` | ✅ full | Keeps `cloud-init-local` (re-renders the mgmt NIC's netplan for the clone's MAC) and `cloud-init` (trimmed to `growpart` + `resizefs`, which grow `/` to the 20G guest disk). Drops `/etc/cloud/cloud.cfg.d/99_lab_trim.cfg` (empty config/final module lists, `preserve_hostname: true`) and masks `cloud-config.service` and `cloud-final.service`. Fail-loud checks: cloud-init's own merged config carries the trimmed lists, the two services read `masked`, the two kept services read `enabled`, and no `cloud-init.disabled` marker exists. No per-run half. |
+| `snapd-off` | ✅ full | `snapd_off_mode: purge` (default): refuses if `snap list` shows any snap, purges `snapd`, pins it out (`/etc/apt/preferences.d/99lab-no-snapd`), and verifies it is gone with no install candidate. `keep` (obs on aarch64 only, for the chromium snap behind `grafana-image-renderer`): masks only `snapd.seeded.service` and verifies that `snapd.service`/`snapd.socket` stay enabled. No per-run half. |
+
+Rationale and evidence: [`box-model.md` §2](box-model.md#cloud-init-and-snapd-trimmed-off-the-boot-path-1250).
+Both roles are in each Ubuntu bake's manifest-hash closure, so introducing them
+(and any later edit) flips all five Ubuntu boxes to BUILD. The RHEL boxes are
 unaffected.
 
 ## Per-box bake sets
