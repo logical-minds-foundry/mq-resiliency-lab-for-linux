@@ -120,8 +120,8 @@ minutes. The sampler's logins, Ansible's own re-logins (ControlPersist expires
 between plays) and operator SSH all trigger it.
 
 So every baked Ubuntu box (`obs-ubuntu2404`, `infra-ubuntu2404`,
-`mq-ubuntu2404`, `mq-nativeha-ubuntu`, `pcmk-ubuntu`) ends its bake with a play
-that runs the `motd-off` role:
+`mq-ubuntu2404`, `mq-nativeha-ubuntu`, `pcmk-ubuntu`) runs the `motd-off` role in
+its own play near the end of its bake:
 
 - It comments out both `pam_motd.so` session lines in `/etc/pam.d/sshd` and
   `/etc/pam.d/login`. Ubuntu 24.04 ships the same pair in both files: openssh's
@@ -135,6 +135,93 @@ that runs the `motd-off` role:
 
 The static `/etc/motd` is no longer shown at login either. Nothing in the lab
 uses it on these throwaway guests.
+
+### cloud-init and snapd trimmed off the boot path (#1250)
+
+In #1247 run 3, `systemd-analyze blame` on the slow guests put two units at the
+top: `cloud-init.service` (obs +1min 6s, mon-probe +1min 25s) and
+`snapd.seeded.service` (obs +60s, mon-probe +1min 6s). That run was I/O-bound
+(#1249), which inflated both, but both run on every boot of every Ubuntu guest.
+`cloud-init-local` and `cloud-init` also sit on sshd's critical chain:
+`cloud-init.service` is `Before=sshd.service`, so vagrant waits for it.
+
+**What cloud-init actually does on a clone.** The `cloud-image/ubuntu-24.04`
+base is pristine (no `/var/lib/cloud`, no netplan, no `vagrant` user). Its
+`99_vagrant.cfg` sets `datasource_list: [ NoCloud, None ]` and defines the
+`vagrant` user with Vagrant's insecure key. Nothing ever attaches a NoCloud
+seed, so cloud-init falls back to `DataSourceNone`. On the bake VM's single
+boot it does the one-time work: it creates the `vagrant` user, generates the
+SSH host keys, grows `/` to the 18G build disk and writes a fallback netplan
+for the bake VM's NIC. The box image keeps that state under the instance id
+`iid-datasource-none`, which is the same for every clone. So, as booting a
+clone of `infra-ubuntu2404` alone showed (#1250), every once-per-instance
+module on a clone logs "previously ran". Only two jobs still do anything:
+
+- **`cloud-init-local` re-renders the mgmt NIC's netplan.** With no local
+  datasource it writes the fallback config on every boot, for the clone's own
+  NIC. The baked `/etc/netplan/50-cloud-init.yaml` matches the *bake VM's* MAC
+  (and its name was `enp1s0`; the clone's mgmt NIC came up as `enp5s0`).
+  Without the re-render the clone's mgmt NIC gets no DHCP lease, and vagrant
+  never reaches ssh.
+- **The init stage's `growpart` + `resizefs` grow `/`.** They run with frequency
+  `always`, and on first boot they grow the box's 18G root partition to the
+  guest's 20G disk (§3's 18G / `virtual_size: 20` headroom; observed
+  `18252545536 → 20400029184` bytes).
+
+The hostname is Vagrant's job (`config.vm.hostname`, set over ssh after boot).
+The private-network NICs are Vagrant's too (`/etc/netplan/50-vagrant.yaml`).
+
+So cloud-init is **trimmed, not disabled.** A plain `/etc/cloud/cloud-init.disabled`
+([cloud-init docs](https://cloudinit.readthedocs.io/en/latest/howto/disable_cloud_init.html))
+would break first-boot networking. Every Ubuntu bake ends with a play that runs
+the `cloud-init-trim` role:
+
+- It drops `/etc/cloud/cloud.cfg.d/99_lab_trim.cfg`. That sets
+  `cloud_init_modules: [growpart, resizefs]`, empties `cloud_config_modules`
+  and `cloud_final_modules`, and sets `preserve_hostname: true`. The fallback
+  netplan render is not a module, so the trim leaves it alone. The stages and
+  module frequencies are in the cloud-init
+  [boot stages](https://cloudinit.readthedocs.io/en/latest/explanation/boot.html)
+  and [module reference](https://cloudinit.readthedocs.io/en/latest/reference/modules.html).
+- It masks `cloud-config.service` and `cloud-final.service`. On a clone,
+  everything in those stages has already run, or has nothing to do
+  (`scripts_per_boot` has no scripts, `final_message` only logs).
+- It fails the bake loudly unless all of these hold: the merged config that
+  cloud-init itself loads (`cloudinit.stages.Init().cfg`) carries the trimmed
+  lists, the two services read `masked`, `cloud-init-local` and `cloud-init`
+  still read `enabled`, and no `cloud-init.disabled` marker exists.
+
+Fully removing cloud-init would need replacements for both jobs: a MAC-agnostic
+mgmt-NIC network config and an in-guest root grow. That is a bigger change,
+left for later.
+
+**snapd.** `snapd.seeded.service` is only `snap wait system seed.loaded`, and it
+is `Before=multi-user.target`, so it holds boot until snapd has started. Four of
+the five Ubuntu boxes have no snaps at all: the base seeds none (its
+`state.json` reads seeded with zero snaps), and no bake role installs one. The
+fifth is **obs on aarch64**. There `grafana-image-renderer`'s browser is the
+distro `chromium-browser`, which on 24.04 is a transitional deb that installs
+the chromium snap. The baked obs box carries `chromium`, `cups`, `core24`,
+`gnome-46-2404`, `mesa-2404`, `gtk-common-themes`, `bare` and `snapd` snaps (the
+cups snap is the one in obs's dmesg). So the same final play runs the
+`snapd-off` role in one of two modes:
+
+- **`purge`** (the default, and obs on x86_64, which uses the Google Chrome
+  `.deb`). It first refuses to go on if `snap list` shows any snap, so a role
+  that later starts using a snap fails the bake instead of being silently broken.
+  Then it purges `snapd` and pins it out with `/etc/apt/preferences.d/99lab-no-snapd`
+  (`Pin-Priority: -1`), so a later install cannot pull it back as a Recommends.
+  `ubuntu-server` only *recommends* snapd. It verifies that snapd is gone and has
+  no install candidate.
+- **`keep`** (obs on aarch64 only). snapd stays enabled so the chromium snap
+  keeps working. Only the `snapd.seeded.service` boot gate is masked. The image
+  is already seeded, so the gate only ever waited. The role verifies `masked`
+  for the gate and `enabled` for `snapd.service` and `snapd.socket`, and it
+  refuses `keep` on a box with no snaps.
+
+Both roles run in each Ubuntu bake's **last** play, so the snap guard sees
+everything the bake installed. Every Ubuntu box needs a rebake to pick them up
+(the manifest-hash closure forces it).
 
 ## 3. The build pipeline (`build-fatbox.sh`)
 

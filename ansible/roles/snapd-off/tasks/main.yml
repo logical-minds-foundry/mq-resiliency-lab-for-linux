@@ -1,0 +1,120 @@
+---
+# Take snapd off the boot path of a baked Ubuntu box (#1250, epic .github#275).
+#
+# WHY: #1247's slow-booting guests showed snapd.seeded.service at +60s (obs) and +1min 6s
+# (mon-probe); it is Before=multi-user.target and its ExecStart is only
+# `snap wait system seed.loaded`, i.e. it holds boot until snapd has started. On the boxes
+# with no snaps snapd does nothing at all: the cloud-image base seeds none and no bake
+# role installs one (verified #1250: infra-ubuntu2404's state.json is seeded with zero
+# snaps; `snap list` on a booted clone: "No snaps are installed yet").
+#
+# HOW (snapd_off_mode, see defaults/main.yml):
+#   purge — refuse if any snap is installed (fail-loud, so a role that starts using a snap
+#           cannot be silently broken), purge snapd, pin it out, then verify it is gone and
+#           has no install candidate.
+#   keep  — the box needs its snaps (obs on aarch64: the chromium snap behind
+#           grafana-image-renderer), so snapd stays enabled and only the snapd.seeded boot
+#           gate is masked; the image is already seeded, so the gate only waited.
+# Run LAST in each bake, so the purge-mode guard sees every snap the bake installed.
+# Debian/Ubuntu only — included by the Ubuntu bake playbooks.
+
+- name: assert this is a Debian/Ubuntu bake host with a known snapd_off_mode
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'Debian'
+      - snapd_off_mode in ['purge', 'keep']
+    fail_msg: >-
+      snapd-off is for the Ubuntu boxes only, with snapd_off_mode purge|keep
+      (got os_family={{ ansible_os_family }}, snapd_off_mode={{ snapd_off_mode }}).
+
+- name: look for the snap CLI (absent once a previous run purged snapd)
+  ansible.builtin.stat:
+    path: /usr/bin/snap
+  register: _snapd_off_cli
+
+# noqa command-instead-of-module: a read-only query; no module lists snaps.
+- name: list the installed snaps  # noqa: command-instead-of-module
+  # `snap list` prints nothing on stdout (a notice on stderr) when no snap is installed,
+  # else a header line plus one row per snap. A non-zero rc (snapd unreachable) fails.
+  ansible.builtin.command:
+    argv: ["snap", "list"]
+  register: _snapd_off_snaps
+  changed_when: false
+  when: _snapd_off_cli.stat.exists
+
+- name: refuse to purge snapd while a snap is installed
+  ansible.builtin.assert:
+    that: (_snapd_off_snaps.stdout_lines | default([])) | length == 0
+    fail_msg: >-
+      snapd_off_mode=purge but this box has snaps installed (a bake role pulled them in):
+      {{ _snapd_off_snaps.stdout_lines | default([]) }}. Purging would break them; set
+      snapd_off_mode=keep for this box in its bake playbook (#1250).
+  when: snapd_off_mode == 'purge' and _snapd_off_cli.stat.exists
+
+- name: purge snapd (no snap is installed, nothing uses it)
+  ansible.builtin.apt:
+    name: snapd
+    state: absent
+    purge: true
+    lock_timeout: "{{ apt_lock_timeout }}"
+  when: snapd_off_mode == 'purge'
+
+- name: pin snapd out so apt never reinstalls it
+  ansible.builtin.copy:
+    src: 99lab-no-snapd
+    dest: "{{ snapd_off_pin }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: snapd_off_mode == 'purge'
+
+- name: gather installed packages (verify the purge)
+  ansible.builtin.package_facts:
+    manager: apt
+  when: snapd_off_mode == 'purge'
+
+- name: verify snapd is gone
+  ansible.builtin.assert:
+    that: "'snapd' not in ansible_facts.packages"
+    fail_msg: "snapd is still installed after the purge (#1250)"
+  when: snapd_off_mode == 'purge'
+
+# noqa command-instead-of-module: a read-only query of the pin's effect.
+- name: read snapd's apt install candidate  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: ["apt-cache", "policy", "snapd"]
+  register: _snapd_off_policy
+  changed_when: false
+  when: snapd_off_mode == 'purge'
+
+- name: verify the pin leaves snapd no install candidate
+  ansible.builtin.assert:
+    that: "'Candidate: (none)' in _snapd_off_policy.stdout"
+    fail_msg: "apt could still install snapd; the pin is not in effect: {{ _snapd_off_policy.stdout }}"
+  when: snapd_off_mode == 'purge'
+
+- name: refuse keep mode on a box with no snaps (purge it instead)
+  ansible.builtin.assert:
+    that:
+      - _snapd_off_cli.stat.exists
+      - (_snapd_off_snaps.stdout_lines | default([])) | length > 0
+    fail_msg: >-
+      snapd_off_mode=keep but no snap is installed; this box should use the default
+      snapd_off_mode=purge (#1250).
+  when: snapd_off_mode == 'keep'
+
+- name: mask the snapd.seeded boot gate (the image is already seeded)
+  ansible.builtin.systemd:
+    name: "{{ snapd_off_seeded_unit }}"
+    masked: true
+  when: snapd_off_mode == 'keep'
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: verify snapd.seeded is masked while snapd itself stays enabled  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: ["systemctl", "is-enabled", "{{ snapd_off_seeded_unit }}", "snapd.service", "snapd.socket"]
+  register: _snapd_off_units
+  changed_when: false
+  # is-enabled exits non-zero when any unit is masked, so judge by the per-unit output.
+  failed_when: _snapd_off_units.stdout_lines != ['masked', 'enabled', 'enabled']
+  when: snapd_off_mode == 'keep'

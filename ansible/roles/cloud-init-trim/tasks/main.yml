@@ -1,0 +1,102 @@
+---
+# Trim cloud-init in a baked Ubuntu box to the per-boot work a clone needs (#1250, epic
+# .github#275).
+#
+# WHY: #1247's slow-booting guests showed cloud-init.service at +1min 6s (obs) and +1min 25s
+# (mon-probe), and cloud-init-local + cloud-init sit on sshd's critical chain (cloud-init.service
+# is Before=sshd.service). On a clone almost all of it is a no-op: the boxes keep the bake
+# VM's instance state (`iid-datasource-none`, identical for every clone), so every
+# once-per-instance module logs "previously ran".
+#
+# NOT disabled outright: two pieces are load-bearing (see defaults/main.yml for the
+# evidence). cloud-init-local re-renders the mgmt NIC's netplan for the clone's MAC, and
+# growpart + resizefs grow / to the guest's 20G disk. A plain /etc/cloud/cloud-init.disabled
+# would leave the clone with the bake VM's MAC-matched netplan (no mgmt DHCP, no ssh) and an
+# 18G root. So the role keeps those two services, trims the init stage to growpart +
+# resizefs, empties the config/final module lists and masks their services.
+#
+# HOW: a cloud.cfg.d drop-in plus /etc/systemd/system masks (both persist in the converted
+# box image), then fail-loud checks: the merged config cloud-init itself reads must carry
+# the trimmed lists, the two masked services must read `masked`, and the two required
+# services must still read `enabled` with no cloud-init.disabled marker.
+# Debian/Ubuntu only — included by the Ubuntu bake playbooks.
+
+- name: assert this is a Debian/Ubuntu bake host (the cloud-image cloud-init setup is Ubuntu's)
+  ansible.builtin.assert:
+    that: ansible_os_family == 'Debian'
+    fail_msg: >-
+      cloud-init-trim is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
+      do not include it from a RHEL bake.
+
+- name: write the cloud.cfg.d drop-in (init stage = growpart + resizefs; no config/final modules)
+  ansible.builtin.copy:
+    src: 99_lab_trim.cfg
+    dest: "{{ cloud_init_trim_conf }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: mask the cloud-init config + final stages (nothing in them runs on a clone)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    masked: true
+  loop: "{{ cloud_init_trim_masked_services }}"
+
+# noqa command-instead-of-module: reads the config cloud-init would load on the next boot.
+- name: read the merged cloud-init config (what the next boot will use)  # noqa: command-instead-of-module
+  # stages.Init().cfg is cloud-init's own loader: /etc/cloud/cloud.cfg + cloud.cfg.d merged.
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - >-
+        import json; from cloudinit.stages import Init; c = Init().cfg;
+        print(json.dumps({k: c.get(k) for k in
+        ('cloud_init_modules', 'cloud_config_modules', 'cloud_final_modules', 'preserve_hostname')}))
+  register: _cloud_init_trim_cfg
+  changed_when: false
+
+- name: verify the merged config carries the trimmed module lists
+  vars:
+    _cfg: "{{ _cloud_init_trim_cfg.stdout | from_json }}"
+  ansible.builtin.assert:
+    that:
+      - _cfg.cloud_init_modules == cloud_init_trim_init_modules
+      - _cfg.cloud_config_modules == []
+      - _cfg.cloud_final_modules == []
+      - _cfg.preserve_hostname | bool
+    fail_msg: "cloud-init's merged config is not the trimmed one (#1250): {{ _cfg }}"
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: verify the cloud-init config + final services are masked  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'is-enabled'] + cloud_init_trim_masked_services }}"
+  register: _cloud_init_trim_masked
+  changed_when: false
+  # is-enabled exits non-zero for a masked unit, so judge by its per-unit output instead.
+  failed_when: >-
+    (_cloud_init_trim_masked.stdout_lines | length) != (cloud_init_trim_masked_services | length)
+    or (_cloud_init_trim_masked.stdout_lines | unique) != ['masked']
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: verify cloud-init-local + cloud-init stay enabled (clone networking + root growth)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'is-enabled'] + cloud_init_trim_required_services }}"
+  register: _cloud_init_trim_required
+  changed_when: false
+  failed_when: >-
+    _cloud_init_trim_required.rc != 0
+    or (_cloud_init_trim_required.stdout_lines | length) != (cloud_init_trim_required_services | length)
+    or (_cloud_init_trim_required.stdout_lines | unique) != ['enabled']
+
+- name: look for a cloud-init.disabled marker
+  ansible.builtin.stat:
+    path: /etc/cloud/cloud-init.disabled
+  register: _cloud_init_trim_disabled
+
+- name: verify cloud-init is not disabled outright (that would break clone networking)
+  ansible.builtin.assert:
+    that: not _cloud_init_trim_disabled.stat.exists
+    fail_msg: >-
+      /etc/cloud/cloud-init.disabled exists: a clone would boot with the bake VM's
+      MAC-matched netplan (no mgmt DHCP, no ssh). See #1250.
