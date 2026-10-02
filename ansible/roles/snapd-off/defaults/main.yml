@@ -18,3 +18,19 @@ snapd_off_pin: /etc/apt/preferences.d/99lab-no-snapd
 
 # The boot gate masked in keep mode.
 snapd_off_seeded_unit: snapd.seeded.service
+
+# Purge side effect (#1265): snapd's postrm runs `deb-systemd-helper purge`, whose
+# rmdir_if_empty removes EVERY empty dir under these roots (init-system-helpers, noble), not
+# only snapd's. The role records the empty dirs here before the purge and restores them
+# after, so a dir another bake role left empty for its per-run half (obs's
+# grafana-server.service.d) survives.
+snapd_off_prune_roots:
+  - /etc/systemd/system
+  - /etc/systemd/user
+
+# find -printf format for the record: "<octal mode> <owner> <group> <path>", one per line.
+snapd_off_dir_format: '%m %u %g %p\n'
+
+# A recorded line whose LAST path component mentions snap is snapd's own (e.g.
+# snapd.mounts.target.wants) and stays gone after the purge.
+snapd_off_own_dir_regex: '/[^/]*snap[^/]*$'

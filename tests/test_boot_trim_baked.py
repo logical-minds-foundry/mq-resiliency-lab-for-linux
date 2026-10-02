@@ -93,12 +93,24 @@ def _split() -> tuple[dict[str, str], dict[str, str]]:
     return ubuntu, rhel
 
 
+def _trim_play(box: str, plays: list[dict]) -> dict:
+    """The #1250 trim play: the last play that does anything to the image. Only the
+    read-only #1265 bake-dirs-guard play may follow it (it must check the purged result)."""
+    assert len(plays) >= 2, f"{box}: expected the trim play and the #1265 guard play"
+    guard = plays[-1]
+    assert _role_includes(guard, "bake-dirs-guard"), f"{box}: the LAST play must be the guard"
+    assert len(guard["tasks"]) == 1, f"{box}: the #1265 guard play must run only the guard"
+    return plays[-2]
+
+
 @pytest.mark.parametrize("role", TRIM_ROLES)
 def test_every_ubuntu_bake_runs_the_role_in_its_last_play(role: str) -> None:
     ubuntu, rhel = _split()
     for box, stem in ubuntu.items():
         plays = _plays(stem)
-        assert _role_includes(plays[-1], role), f"{box}: {role} must run in the LAST play (#1250)"
+        assert _role_includes(_trim_play(box, plays), role), (
+            f"{box}: {role} must run in the last play before the #1265 guard (#1250)"
+        )
         assert sum(len(_role_includes(p, role)) for p in plays) == 1, f"{box}: {role} twice"
     wrong = [box for box, stem in rhel.items() if _role_includes(_plays(stem), role)]
     assert wrong == [], f"RHEL bakes must not include the Ubuntu-only {role} (#1250): {wrong}"
@@ -114,7 +126,7 @@ def test_apt_autoupdate_off_is_still_the_first_play() -> None:
 def test_snapd_mode_is_keep_only_for_obs_on_aarch64() -> None:
     ubuntu, _ = _split()
     for box, stem in ubuntu.items():
-        (task,) = _role_includes(_plays(stem)[-1], "snapd-off")
+        (task,) = _role_includes(_trim_play(box, _plays(stem)), "snapd-off")
         mode = (task.get("vars") or {}).get("snapd_off_mode")
         if box == "obs-ubuntu2404":
             assert mode == "{{ 'keep' if ansible_architecture == 'aarch64' else 'purge' }}"

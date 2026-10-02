@@ -95,8 +95,8 @@
 
 # cloud-init and snapd come off the boot path of every baked Ubuntu box (#1250): cloud-init
 # keeps only what a clone needs (mgmt-NIC netplan re-render + root growth), and snapd goes
-# when no snap is installed. Its own play, LAST, so the snapd guard sees every snap the
-# bake installed.
+# when no snap is installed. Its own play, after all the install work (only the #1265 guard
+# play follows; it installs nothing), so the snapd guard sees every snap the bake installed.
 - name: Trim cloud-init + snapd off the boot path (#1250)
   hosts: bake
   become: true
@@ -108,3 +108,18 @@
     - name: purge snapd (no snaps in this box) and pin it out
       ansible.builtin.include_role:
         name: snapd-off
+
+# Guard the finished image (#1265): every directory this box's per-run configure halves
+# write into must still exist after the whole bake. #1265 lost obs's empty
+# grafana-server.service.d to the snapd purge above and only found out in a later
+# bootstrap's observe phase. Its own play, LAST, so it checks what is actually packaged.
+- name: Guard the baked image (per-run configure dirs survived the bake, #1265)
+  hosts: bake
+  become: true
+  tasks:
+    - name: assert the per-run configure halves' directories are in the image
+      ansible.builtin.include_role:
+        name: bake-dirs-guard
+      vars:
+        bake_dirs_guard_required:
+          - /etc/alloy  # alloy configure: config.alloy

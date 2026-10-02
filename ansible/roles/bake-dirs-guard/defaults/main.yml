@@ -1,0 +1,10 @@
+---
+# The directories a box's PER-RUN configure halves write into but do not create, so the
+# baked image must still carry them (#1265). Set per box by its bake playbook's final play;
+# the role refuses an empty list (a guard that checks nothing is a misconfiguration).
+#
+# Why a guard: a directory a bake role creates can vanish before the box is packaged
+# without any role deleting it. #1265: obs's empty grafana-server.service.d was rmdir-ed by
+# snapd's purge (deb-systemd-helper), and the loss only surfaced in a later bootstrap's
+# observe phase. The guard moves that failure to the bake, where it is cheap and obvious.
+bake_dirs_guard_required: []

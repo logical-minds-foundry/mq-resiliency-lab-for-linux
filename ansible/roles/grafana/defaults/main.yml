@@ -4,6 +4,9 @@ grafana_admin_password: "{{ lookup('ansible.builtin.env', 'GF_SECURITY_ADMIN_PAS
 # the lab opts in via group_vars/all. When true, Grafana grants anonymous Admin and
 # hides the login form — human convenience only. LAB ONLY.
 grafana_anonymous: false
+# systemd drop-in dir for grafana-server: both env drop-ins (rendering.conf, admin.conf)
+# are written here PER-RUN by configure.yml, which ensures the dir itself first (#1265).
+grafana_dropin_dir: /etc/systemd/system/grafana-server.service.d
 # Server-side rendering via grafana-image-renderer (#877). Default off; the obs
 # deployment opts in (bake-obs.yml) so the grafana install half bakes the rendering
 # env drop-in. When on, Grafana talks to the standalone renderer service (provisioned

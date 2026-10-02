@@ -213,14 +213,25 @@ cups snap is the one in obs's dmesg). So the same final play runs the
   (`Pin-Priority: -1`), so a later install cannot pull it back as a Recommends.
   `ubuntu-server` only *recommends* snapd. It verifies that snapd is gone and has
   no install candidate.
+  The purge has a side effect on other roles (#1265). snapd's `postrm purge`
+  runs `deb-systemd-helper purge`, and its `rmdir_if_empty` (init-system-helpers
+  1.66ubuntu1, `/usr/bin/deb-systemd-helper`) removes **every** empty directory
+  under `/etc/systemd/system` and `/etc/systemd/user`, not only snapd's. That is
+  how x86_64 obs lost its baked, still-empty `grafana-server.service.d` (aarch64
+  obs keeps snapd, so its copy survived). So the role records the empty
+  directories before the purge and restores them, with the same mode and owner,
+  afterwards. snapd's own directories stay gone. The grafana configure half also
+  re-creates its drop-in directory per run, and the final bake-guard play fails
+  the bake if a directory a per-run configure half needs is missing
+  ([`box-bake-manifest.md`](box-bake-manifest.md#every-ubuntu-box-the-bake-guard-1265)).
 - **`keep`** (obs on aarch64 only). snapd stays enabled so the chromium snap
   keeps working. Only the `snapd.seeded.service` boot gate is masked. The image
   is already seeded, so the gate only ever waited. The role verifies `masked`
   for the gate and `enabled` for `snapd.service` and `snapd.socket`, and it
   refuses `keep` on a box with no snaps.
 
-Both roles run in each Ubuntu bake's **last** play, so the snap guard sees
-everything the bake installed. Every Ubuntu box needs a rebake to pick them up
+Both roles run in each Ubuntu bake's last image-changing play (only the read-only
+#1265 guard play follows), so the snap guard sees everything the bake installed. Every Ubuntu box needs a rebake to pick them up
 (the manifest-hash closure forces it).
 
 ## 3. The build pipeline (`build-fatbox.sh`)
