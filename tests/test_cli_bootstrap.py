@@ -15,18 +15,23 @@ import os
 
 import pytest
 import typer
+import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, instances, versions
 from mqlab import perfrun as cli_perfrun
 from mqlab.cli import _gate_stack_host_arch as _real_gate  # captured before the autouse stub
+from mqlab.cli import _host_facts as _real_host_facts  # captured before the autouse stub
 from mqlab.cli import _reconcile_box_meta as _real_reconcile_box_meta  # captured before stub
+from mqlab.cli import _stack_live as _real_stack_live  # captured before the autouse stub
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
+from mqlab.instances import InstanceRecord
 from mqlab.phases import PHASES, build_states
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
-from mqlab.versions import load_catalog
+from mqlab.versions import OsRef, load_catalog
+from tests.boxfleet import REAL_CATALOG
 from tests.fakes import RecordingRunner, ScriptedResult
 
 # Host-facts fixtures for the #847 RHEL-on-aarch64 preflight gate.
@@ -1532,3 +1537,238 @@ def test_ensure_stamps_the_prereq_phase_on_runner_steps(monkeypatch, tmp_path):
 
 def _renderer_only() -> Renderer:
     return Renderer(Console(file=io.StringIO(), force_terminal=False, width=200))
+
+
+# --------------------------------------------------------------------------- #
+# --config build files + per-stack instance records (epic .github#280, T3)
+# --------------------------------------------------------------------------- #
+U24 = OsRef("ubuntu", 24)
+U26 = OsRef("ubuntu", 26)
+
+
+def _catalog_24_26(monkeypatch, tmp_path, *, unsupported_26=False):
+    """Resolve the CLI's catalog against the committed one plus ubuntu:26, offered to
+    pcmk-ubuntu (default still ubuntu:24)."""
+    data = yaml.safe_load(REAL_CATALOG.read_text())
+    entry: dict[str, object] = {"base_box": "cloud-image/ubuntu-26.04"}
+    if unsupported_26:
+        entry["ibm_support"] = {"status": "unsupported", "source": "spcr-row-pending"}
+    data["os"]["ubuntu"][26] = entry
+    data["stacks"]["pcmk-ubuntu"] = {
+        "supported": ["ubuntu:24", "ubuntu:26"],
+        "default": "ubuntu:24",
+    }
+    path = tmp_path / "versions-24-26.yaml"
+    path.write_text(yaml.safe_dump(data))
+    monkeypatch.setattr(versions, "versions_catalog_path", lambda: path)
+
+
+def _recorded_os(stack):
+    rec = instances.read_record(stack)
+    assert rec is not None
+    return rec.os
+
+
+def _build_file(tmp_path, text, name="b.yaml"):
+    path = tmp_path / name
+    path.write_text(text)
+    return path
+
+
+def _resume_harness(monkeypatch, tmp_path, *, live=False):
+    """A seeded pcmk-ubuntu bootstrap whose only remaining phase is observe."""
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: live)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=True, observe=False),
+    )
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(24)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    _stub_ensure(monkeypatch)
+    return runner
+
+
+def test_bootstrap_config_refused_before_any_lab_io(monkeypatch, tmp_path, prepare_lab_calls):
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    probed: list[str] = []
+    monkeypatch.setattr(cli, "_stack_live", lambda name: probed.append(name) or False)
+    cfg = _build_file(tmp_path, "os: rhel:10\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "rdqm-rhel", "--config", str(cfg)])
+    assert result.exit_code == 2
+    assert "rdqm-rhel supports [rhel:9]; got rhel:10" in result.stderr
+    assert runner.recorded == [] and probed == [] and prepare_lab_calls == []
+    assert instances.read_record("rdqm-rhel") is None
+
+
+def test_bootstrap_bad_build_file_exits_2(monkeypatch, tmp_path, prepare_lab_calls):
+    cfg = _build_file(tmp_path, "os: ubuntu:24\nmq: 9\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    assert result.exit_code == 2
+    assert "unknown key 'mq'" in result.stderr
+    assert prepare_lab_calls == []
+
+
+def test_first_bootstrap_writes_the_record_before_the_render(monkeypatch, tmp_path):
+    _resume_harness(monkeypatch, tmp_path)
+    seen: list[InstanceRecord | None] = []
+
+    def prepare() -> None:
+        seen.append(instances.read_record("pcmk-ubuntu"))
+
+    monkeypatch.setattr(cli, "_prepare_lab", prepare)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    [rec] = seen  # the record existed when _prepare_lab rendered
+    assert rec is not None
+    assert (rec.stack, rec.os, rec.build_file) == ("pcmk-ubuntu", U24, None)
+    assert "pcmk-ubuntu: OS ubuntu:24 (instance record " in result.output
+
+
+def test_first_bootstrap_with_config_records_the_selected_os(monkeypatch, tmp_path):
+    _resume_harness(monkeypatch, tmp_path)
+    _catalog_24_26(monkeypatch, tmp_path)
+    cfg = _build_file(tmp_path, "os: ubuntu:26\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    rec = instances.read_record("pcmk-ubuntu")
+    assert rec is not None
+    assert (rec.os, rec.build_file) == (U26, str(cfg))
+
+
+def test_bootstrap_config_matching_record_accepted_on_resume(monkeypatch, tmp_path):
+    """Review Focus 2 through the CLI: `bootstrap s --from provision --config same.yaml`
+    on a live stack whose record matches is accepted."""
+    _resume_harness(monkeypatch, tmp_path, live=True)
+    _catalog_24_26(monkeypatch, tmp_path)
+    cfg = _build_file(tmp_path, "os: ubuntu:26\n", "same.yaml")
+    instances.write_record(InstanceRecord("pcmk-ubuntu", U26, str(cfg), "t"))
+    argv = ["bootstrap", "pcmk-ubuntu", "--from", "observe", "--config", str(cfg)]
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 0, result.output
+    assert instances.read_record("pcmk-ubuntu") == InstanceRecord("pcmk-ubuntu", U26, str(cfg), "t")
+
+
+def test_bootstrap_config_conflicting_record_refused(monkeypatch, tmp_path, prepare_lab_calls):
+    """Review Focus 2 through the CLI: a different build file is refused, naming
+    `mqlab teardown s`, before the render and without probing liveness."""
+    runner = _resume_harness(monkeypatch, tmp_path, live=True)
+    _catalog_24_26(monkeypatch, tmp_path)
+    probed: list[str] = []
+    monkeypatch.setattr(cli, "_stack_live", lambda name: probed.append(name) or True)
+    instances.write_record(InstanceRecord("pcmk-ubuntu", U24, None, "t"))
+    cfg = _build_file(tmp_path, "os: ubuntu:26\n")
+    argv = ["bootstrap", "pcmk-ubuntu", "--from", "provision", "--config", str(cfg)]
+    result = CliRunner().invoke(cli.app, argv)
+    assert result.exit_code == 2
+    assert (
+        "pcmk-ubuntu is running ubuntu:24; requested ubuntu:26; "
+        "run `mqlab teardown pcmk-ubuntu` first"
+    ) in result.stderr
+    assert runner.recorded == [] and probed == [] and prepare_lab_calls == []
+    assert _recorded_os("pcmk-ubuntu") == U24
+
+
+def test_bootstrap_resume_without_config_keeps_the_recorded_os(monkeypatch, tmp_path):
+    """On resume without --config the record's OS is used — never the stack default
+    (ubuntu:24 here), which would refuse as a conflict or mislabel the stack."""
+    _resume_harness(monkeypatch, tmp_path, live=True)
+    _catalog_24_26(monkeypatch, tmp_path)
+    instances.write_record(InstanceRecord("pcmk-ubuntu", U26, "b.yaml", "t"))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert instances.read_record("pcmk-ubuntu") == InstanceRecord("pcmk-ubuntu", U26, "b.yaml", "t")
+    assert "pcmk-ubuntu: OS ubuntu:26" in result.output
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [[], ["--from", "provision"], ["--only", "observe"]],
+    ids=["resume", "from", "only"],
+)
+def test_bootstrap_live_stack_without_record_refused(
+    monkeypatch, tmp_path, prepare_lab_calls, flags
+):
+    runner = _resume_harness(monkeypatch, tmp_path, live=True)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", *flags])
+    assert result.exit_code == 2
+    assert (
+        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
+        "and re-bootstrap"
+    ) in result.stderr
+    assert runner.recorded == [] and prepare_lab_calls == []
+    assert instances.read_record("pcmk-ubuntu") is None
+
+
+def test_bootstrap_warns_on_an_ibm_unsupported_os(monkeypatch, tmp_path):
+    _resume_harness(monkeypatch, tmp_path)
+    _catalog_24_26(monkeypatch, tmp_path, unsupported_26=True)
+    cfg = _build_file(tmp_path, "os: ubuntu:26\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert (
+        "WARNING: IBM does not support MQ on ubuntu:26 (spcr-row-pending); it is selectable "
+        "for lab use only"
+    ) in result.stderr
+
+
+def test_bootstrap_supported_os_prints_no_warning(monkeypatch, tmp_path):
+    _resume_harness(monkeypatch, tmp_path)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert "WARNING" not in result.stderr
+
+
+def test_bootstrap_host_gate_refuses_rhel_on_aarch64(monkeypatch, prepare_lab_calls):
+    monkeypatch.setattr(cli, "_host_facts", lambda: ARM)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "rdqm-rhel"])
+    assert result.exit_code == 2
+    assert "RHEL needs an x86_64 host; this host is aarch64" in result.stderr
+    assert prepare_lab_calls == []
+
+
+# --- the liveness probe + record gate helpers -------------------------------------------
+
+
+def _virsh_list(lines):
+    return RecordingRunner(results=[ScriptedResult([" Id   Name   State", "----", *lines])])
+
+
+def test_stack_live_true_when_a_member_domain_runs(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    runner = _virsh_list([" 3    lab_pcmk-a2    running", " -    lab_obs    running"])
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
+    assert _real_stack_live("pcmk-ubuntu") is True
+    assert runner.recorded[0].argv == ["virsh", "-c", "qemu:///system", "list", "--all"]
+
+
+def test_stack_live_false_when_only_commons_or_shut_off(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    runner = _virsh_list([" -    lab_pcmk-a1    shut off", " 4    lab_obs    running"])
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
+    assert _real_stack_live("pcmk-ubuntu") is False
+
+
+def test_stack_live_false_without_probing_for_a_memberless_stack(monkeypatch):
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
+    assert _real_stack_live("no-such-stack") is False
+    assert runner.recorded == []
+
+
+def test_stack_live_fails_loud_when_virsh_fails(monkeypatch, tmp_path, capsys):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["error: no connection"], exit_code=1)])
+    monkeypatch.setattr(cli, "_virsh_runner", lambda: runner)
+    with pytest.raises(typer.Exit) as exc:
+        _real_stack_live("pcmk-ubuntu")
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "virsh list failed (exit 1):" in err and "error: no connection" in err
+
+
+def test_host_facts_probes_the_host(monkeypatch):
+    monkeypatch.setattr(cli, "probe", lambda: X86)
+    assert _real_host_facts() is X86

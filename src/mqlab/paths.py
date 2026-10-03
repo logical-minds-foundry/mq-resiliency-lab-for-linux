@@ -83,6 +83,14 @@ def selection_state_path(setup: str) -> Path:
     return state("manifests", f"{setup}.yaml")
 
 
+def instances_dir() -> Path:
+    """Per-stack instance records (epic .github#280) — shared state/ (live-lab facts).
+
+    One ``<stack>.json`` per bootstrapped stack, pinning the OS it was built on; read
+    and written only through mqlab.instances."""
+    return state("instances")
+
+
 def resolved_topology_path() -> Path:
     """Host-resolved topology rendered for the Vagrantfile — local work/ (#276, #286)."""
     return work("lab", "topology.resolved.yaml")
