@@ -64,6 +64,7 @@ def test_fleet_has_the_catalog_boxes():
         "obs-ubuntu24",
         "infra-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
@@ -77,6 +78,7 @@ def test_fleet_derives_from_catalog():
     assert {
         "mq-nativeha-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "infra-ubuntu24",
         "obs-ubuntu24",
         "pcmk-ubuntu24",
@@ -96,6 +98,7 @@ def test_fleet_skips_rhel_on_an_arm_host():
         "obs-ubuntu24",
         "infra-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
     }
@@ -170,7 +173,7 @@ def test_manifest_hash_artifact_is_arch_suffixed():
 def test_topology_stack_roles_derive_from_node_box_roles():
     roles = box._topology_stack_roles(load_catalog())
     assert roles == {
-        "pcmk-ubuntu": {"pcmk"},  # the SAN targets are `box: base`: no stack role
+        "pcmk-ubuntu": {"pcmk"},  # the SAN targets are `box: san`, an infra role
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
@@ -188,9 +191,9 @@ def test_topology_stack_roles_refuse_an_unknown_role(monkeypatch):
         box._topology_stack_roles(load_catalog())
 
 
-def test_topology_stack_roles_drop_infra_and_base_roles(monkeypatch):
+def test_topology_stack_roles_drop_infra_roles(monkeypatch):
     topo = {
-        "nodes": {"x1": {"box": "obs"}, "x2": {"box": "pcmk"}, "x3": {"box": "base"}},
+        "nodes": {"x1": {"box": "obs"}, "x2": {"box": "pcmk"}, "x3": {"box": "san"}},
         "stacks": {"s": {"groups": ["g"]}},
         "groups": {"g": ["x1", "x2", "x3"]},
     }
@@ -204,6 +207,7 @@ def test_boxes_for_build_default_covers_every_stack():
         "infra-ubuntu24",
         "obs-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "pcmk-ubuntu24",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
@@ -217,6 +221,7 @@ def test_boxes_for_build_family_selects_its_stacks():
         "infra-ubuntu24",
         "obs-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
     ]
@@ -1216,6 +1221,7 @@ def test_box_build_config_builds_the_build_files_boxes(monkeypatch, tmp_path):
             "infra-ubuntu24",
             "obs-ubuntu24",
             "mq-client-ubuntu24",
+            "san-ubuntu24",
             "mq-rdqm-rhel9",
             "mq-nativeha-rhel9",
         ],

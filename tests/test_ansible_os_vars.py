@@ -37,11 +37,15 @@ DISTRIBUTION = {"rhel": "RedHat", "ubuntu": "Ubuntu"}
 # Ansible role -> the catalog stacks whose OSes run its os-vars include. Only the code
 # path that CONSUMES the per-version vars counts: mq-nativeha includes os-vars from
 # install-RedHat.yml alone, so it maps to the RHEL stack, never nativeha-ubuntu.
-# mq-nativeha-spike runs on the reused rdqm-* RHEL slots.
+# mq-nativeha-spike runs on the reused rdqm-* RHEL slots. drbd-san (#1278) routes its
+# kernel-modules package name through the include.
 ROLE_STACKS = {
     "rdqm-install": ("rdqm-rhel",),
     "mq-nativeha": ("nativeha-rhel-crr",),
     "mq-nativeha-spike": ("rdqm-rhel",),
+    # The SAN targets boot the infra-OS san box but belong to the pcmk-ubuntu stack's
+    # groups; until 26.04 support lands (T8) that stack supports Ubuntu 24 only.
+    "drbd-san": ("pcmk-ubuntu",),
 }
 
 # The RHEL install bodies whose hand-written version literals moved into vars.

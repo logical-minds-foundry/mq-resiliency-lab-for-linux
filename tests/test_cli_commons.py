@@ -31,8 +31,8 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # ---------------------------------------------------------------------------
 TOPO = (
     "nodes:\n"
-    "  san-a:      {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
-    "  san-b:      {box: base, nics: {net-mgmt: 10.50.0.6}}\n"
+    "  san-a:      {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
+    "  san-b:      {box: san, nics: {net-mgmt: 10.50.0.6}}\n"
     "  pcmk-a1:    {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
     "  pcmk-b1:    {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
     "  rdqm-a1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"
@@ -236,8 +236,8 @@ def test_commons_up_no_extra_step_when_only_obs_probe(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  san-a:      {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
-        "  san-b:      {box: base, nics: {net-mgmt: 10.50.0.6}}\n"
+        "  san-a:      {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
+        "  san-b:      {box: san, nics: {net-mgmt: 10.50.0.6}}\n"
         "  pcmk-a1:    {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
         "  pcmk-b1:    {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
         "  rdqm-a1:    {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"

@@ -2,8 +2,10 @@
 # one LUN, ACLs for the site's three initiators, portal on the SAN net.
 # This VM IS the "SAN array" of this arm - deliberately a single point
 # of failure (spec 2.5 Q4); we expose it, not engineer it away.
-- name: install targetcli (OS-adapter)
-  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+# Install half (tasks/install.yml): targetcli. Baked into the `san` box (bake-san.yml),
+# so on a baked box it is a package_facts no-op (#1278).
+- name: LIO target install half (skipped when baked into the san box)
+  ansible.builtin.include_tasks: install.yml
 
 # Idempotent per-object: probe each object (backstore / target / LUN / ACLs /
 # portal) and create-if-absent, so a re-provision over existing targetcli state

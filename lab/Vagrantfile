@@ -2,9 +2,9 @@
 #
 # Provider mechanics (driver/firmware/cpu_mode) are chosen by mqlab's resolver from
 # the host architecture and rendered to build/work/lab/topology.resolved.yaml. This file
-# is a dumb consumer: it applies fields verbatim — including each node's box and its
-# box_version pin, which mqlab's version layer resolves from lab/versions.yaml (epic
-# .github#280).
+# is a dumb consumer: it applies fields verbatim — including each node's box, which
+# mqlab's version layer resolves from lab/versions.yaml (epic .github#280). Every node
+# boots a locally-baked (unversioned) box, so no box_version pin is applied.
 require "yaml"
 
 resolved = File.join(__dir__, "..", "build", "work", "lab", "topology.resolved.yaml")
@@ -27,8 +27,6 @@ Vagrant.configure("2") do |config|
   nodes.each do |name, n|
     config.vm.define name do |node|
       node.vm.box      = n.fetch("box")
-      # Pinned only for an upstream base box; a locally-baked box carries no version.
-      node.vm.box_version = n["box_version"] if n["box_version"]
       node.vm.hostname = name
       node.vm.boot_timeout = n["boot_timeout"] if n["boot_timeout"]
       node.vm.provider :libvirt do |lv|

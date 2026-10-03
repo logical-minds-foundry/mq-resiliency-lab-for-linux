@@ -1,0 +1,5 @@
+---
+# drbd-san per-OS-version values for Ubuntu 24.04 (#1278, epic .github#280), loaded by
+# ansible/tasks/os-vars.yml from tasks/install.yml. On 24.04 the in-tree DRBD module ships
+# in linux-modules-extra for the running kernel (absent from the base cloud image).
+drbd_san_kernel_modules_pkg: "linux-modules-extra-{{ ansible_kernel }}"

@@ -14,7 +14,7 @@ path <bucket>` is the same authority for shell and other non-Python consumers.
 
 | Bucket   | Scope  | Lifecycle (when `clean` removes it)        | Holds |
 |----------|--------|---------------------------------------------|-------|
-| `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), the SAN install-half debs (`san-debs/`, [`san-deb-cache.md`](san-deb-cache.md)), doc refs (`refs/`), `ansible_collections/` |
+| `cache/` | shared | only `mqlab build clean --cache`            | re-fetchable downloads — MQ tarballs (`mq/`), doc refs (`refs/`), `ansible_collections/` |
 | `state/` | shared | only `mqlab build clean --state --yes-destroy-state` | irreplaceable, lifecycle-coupled facts — the RHEL DVD ISO, `snapshots/`, `boxes/` (arch-suffixed `<box>-<arch>.box` + `<box>-<arch>.manifest-hash` pairs), `secrets/`, `fence_key*`, `runs/`, `reports/`, `dr-runs/`, `logsearch/` (the host-durable OpenSearch snapshot store, written by `mqlab logsearch snapshot` and read by restore-on-bring-up), the `vagrant/` dotfile (domain↔vagrant mapping + keys), manifest selection pins, `instances/` (per-stack instance records: the OS each bootstrapped stack was built on, written by `mqlab bootstrap` and deleted by `mqlab teardown`) |
 | `work/`  | local  | **every** `mqlab build clean`               | deterministic renders — `inventory.ini`, `lab/topology.resolved.yaml`, `versions.json`, `grafana/`, `prometheus/`, `obs/`, `logsearch/` (the Alloy→OpenSearch fan-out gate `fanout.json`, written by `mqlab commons up`), `salt/`, manifest overlays |
 | `temp/`  | local  | **every** `mqlab build clean`               | scratch, junk, and the screenshot handoff dir |

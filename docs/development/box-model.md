@@ -19,8 +19,8 @@ live on disk, see [`build-layout.md`](build-layout.md).
 The fleet is **generated from the OS version catalog**,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic
 `logical-minds-foundry/.github#280`). Nothing else writes a box name or an OS
-version by hand. At today's versions the lab builds **eight boxes locally**: the
-bare `rhel/9-x86_64` base box plus **seven per-role fat boxes**. Each fat box is a
+version by hand. At today's versions the lab builds **nine boxes locally**: the
+bare `rhel/9-x86_64` base box plus **eight per-role fat boxes**. Each fat box is a
 **minimal per-role fat box**: it carries only the install surface that role needs,
 nothing more. The taxonomy is **role × OS major × host-arch**:
 
@@ -33,12 +33,13 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 | `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the svc responder pymqi venv (#1227) |
 | `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
 | `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
+| `san-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the SAN targets — `san-a`, `san-b` | the install halves of `drbd-san` (`drbd-utils` + the kernel-modules package with the in-tree DRBD module) and `iscsi-target` (`targetcli-fb`), **no** MQ, **no** DRBD resource or iSCSI target (both per-run; #1278, spec §4.7.1) + node-exporter + alloy |
 
 ### Box names: `<role>-<os><major>`
 
 A box that contains a fixed OS carries that OS's **short major** in its name:
 `<role>-<os><major>`. The roles are the catalog's `roles:` keys (`infra`, `obs`,
-`mq-client`, `mq-nativeha`, `pcmk`, `mq-rdqm`); the OS is a catalog `os:` entry. A
+`mq-client`, `san`, `mq-nativeha`, `pcmk`, `mq-rdqm`); the OS is a catalog `os:` entry. A
 RHEL base box is `rhel/<major>-x86_64`. Caches follow the box name (§3). The
 point release (RHEL 9.6, a cloud-image version) is a **pin** in the catalog, not
 part of the name, so moving 9.6 to 9.7 is a re-pin and a rebake, never a rename.
@@ -47,7 +48,7 @@ never carry a version. A playbook may carry the OS family
 (`bake-nativeha-rhel.yml`), because a family is not a version.
 
 `src/mqlab/box.py` builds the fleet from `Catalog.all_boxes`: the infra boxes
-(`infra`, `obs`, `mq-client`) on the catalog's `infra:` OS, then each stack's box
+(`infra`, `obs`, `mq-client`, `san`) on the catalog's `infra:` OS, then each stack's box
 roles on every OS major that stack supports and this host can run, plus one RHEL
 base box per catalog RHEL major. RHEL is `x86_64`-only, so on an `aarch64` host the
 fleet is the Ubuntu boxes alone. A stack's box roles are the `box:` roles its
@@ -60,18 +61,16 @@ nodes declare in `lab/topology.yaml` (`versions.stack_roles`).
 `versions.node_boxes` (in `src/mqlab/versions.py`) turns roles into boxes for every
 node at once:
 
-- a shared node (an infra role: `infra`, `obs`, `mq-client`) gets its role on the
-  catalog's `infra:` OS, with no instance-record lookup;
-- a node on the `base` pseudo-role (the SAN targets, until they get a baked box)
-  gets the infra OS's bare base box (`cloud-image/ubuntu-24.04`), pinned to the
-  catalog's `base_box_version`;
+- a shared node (an infra role: `infra`, `obs`, `mq-client`, or `san` for the SAN
+  targets) gets its role on the catalog's `infra:` OS, with no instance-record lookup;
 - every other node gets its role on its owning stack's OS: the stack's instance
   record when it has one, else the stack's catalog default.
 
 `platforms.resolve` takes that selection and keeps sole ownership of the provider
 mechanics. The rendered `build/work/lab/topology.resolved.yaml` carries each node's
-`os` (`ubuntu:24`), `box` and `box_version`; the Vagrantfile applies `box_version`
-verbatim, so there is no separate box-version file.
+`os` (`ubuntu:24`) and `box`. Every node boots a locally-baked box, so no node
+carries a Vagrant `box_version` pin; the catalog's `base_box_version` pins the
+upstream base box at bake time instead (folded into the manifest hash as the OS pin).
 
 ### The one-time rename (#1274)
 
@@ -102,14 +101,15 @@ migrate a host:
    cached Vagrant `box_meta` names a retired box (or any box other than the one the
    topology now assigns, #858), so a retired box is never booted.
 
-**Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
+**Host-resolved vs. arch-pinned.** The six Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
 Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
 The two RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`) are **`x86_64`-only**;
 building either on an ARM host is **refused**, not emulated (design D11) — their
 RHEL DVD and MQ's LinuxX64 tarball are x86_64 artifacts. The Pacemaker arm's SAN
-targets (`san-a`/`san-b`) carry no MQ payload, so they stay on the bare Ubuntu base
-and are not baked.
+targets (`san-a`/`san-b`) carry no MQ payload; they boot the host-resolved
+`san-ubuntu24` box, which bakes their DRBD + LIO install halves on the target OS
+itself (#1278, spec §4.7.1; it replaced the controller-side SAN deb cache).
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-client-ubuntu24` box: its server-set install carries the client and SDK too, so a
@@ -268,8 +268,8 @@ mgmt-NIC network config and an in-guest root grow. That is a bigger change,
 left for later.
 
 **snapd.** `snapd.seeded.service` is only `snap wait system seed.loaded`, and it
-is `Before=multi-user.target`, so it holds boot until snapd has started. Four of
-the five Ubuntu boxes have no snaps at all: the base seeds none (its
+is `Before=multi-user.target`, so it holds boot until snapd has started. Five of
+the six Ubuntu boxes have no snaps at all: the base seeds none (its
 `state.json` reads seeded with zero snaps), and no bake role installs one. The
 fifth is **obs on aarch64**. There `grafana-image-renderer`'s browser is the
 distro `chromium-browser`, which on 24.04 is a transitional deb that installs
@@ -451,7 +451,7 @@ because the baked boxes and the running VMs live on **different disks**:
 | **Stack loop** | teardown → bootstrap | only the guest VMs | **No** — reuses the already-registered baked images | lowest |
 
 - **Nuclear** — wiping the data disk drops the box cache, so the next build takes
-  the BUILD path and re-bakes all seven fat boxes (plus the base box, and
+  the BUILD path and re-bakes all eight fat boxes (plus the base box, and
   re-acquires the entitlement-gated state media). This is the only tier that pays
   the full bake cost.
 - **VM rebuild** — `vrg-vm rebuild` re-provisions the dev VM, wiping the boot disk;
@@ -528,8 +528,7 @@ which sets every `APT::Periodic::*` knob to `"0"`. Nothing fires on first boot.
   mask-and-wait as a defensive path. It first checks with a read-only
   `systemctl is-enabled` query. When the units are already masked, as they are on
   any box baked after #1225, both #1173 steps are skipped and the wait costs about
-  0 s. They only run on a box baked before this change, or on a host still on the
-  plain cloud image (the SAN targets). That play only ever masks; it never unmasks
+  0 s. They only run on a box baked before this change. That play only ever masks; it never unmasks
   or re-enables anything.
 
 ## 6. The RHEL DVD: one-time download, static archive, auto-stage

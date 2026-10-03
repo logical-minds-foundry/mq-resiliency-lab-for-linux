@@ -14,7 +14,6 @@ from mqlab.orchestrator import CommandStep
 from mqlab.paths import lab_script
 from mqlab.phases import (
     _DEFAULT_BOOT_BATCH,
-    _HOST_RESOLVED_BASE_BOX,
     PHASES,
     _batch_guests,
     _batch_shares_box,
@@ -35,7 +34,7 @@ from mqlab.versions import VersionError, load_catalog, node_boxes
 # in all_vms so the vms phase brings them up alongside the obs pair.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: base }\n"
+    "  san-a: { box: san }\n"
     "  pcmk-a1: { box: pcmk }\n"
     "  pcmk-a2: { box: pcmk }\n"
     "  pcmk-a3: { box: pcmk }\n"
@@ -406,7 +405,7 @@ def test_batch_guests_contiguous_chunks(items, size, expected):
 # --- #859: same-box boot serialization ------------------------------------- #
 
 # A topology slice exercising the box-contention key: two stack nodes on one role (one
-# box), a shared-node role on a distinct box, and `base`-role guests (the bare base box).
+# box), a shared-node role on a distinct box, and the SAN targets (both on the san box).
 # No file I/O — the helpers take the version layer's per-node selection directly.
 _BOX_TOPO = {
     "groups": {"nha_rhel_crr_a": ["nha-rhel-crr-a1", "nha-rhel-crr-a2"]},
@@ -415,8 +414,8 @@ _BOX_TOPO = {
         "nha-rhel-crr-a1": {"box": "mq-nativeha"},
         "nha-rhel-crr-a2": {"box": "mq-nativeha"},
         "svc-sim": {"box": "mq-client"},
-        "san-a": {"box": "base"},  # the bare base box
-        "san-b": {"box": "base"},  # the bare base box
+        "san-a": {"box": "san"},  # the baked SAN box
+        "san-b": {"box": "san"},  # the baked SAN box
     },
 }
 _BOXES = node_boxes(_BOX_TOPO, load_catalog())
@@ -432,13 +431,17 @@ def test_guest_box_resolves_role_to_generated_box():
     assert _guest_box("svc-sim", _BOXES) == cat.box("mq-client", cat.infra).name
 
 
-def test_guest_box_base_role_folds_to_host_resolved_base():
-    """`base`-role guests (and group hosts absent from nodes:) all clone the one bare
-    base box, so they share the sentinel key."""
-    assert _guest_box("san-a", _BOXES) == _HOST_RESOLVED_BASE_BOX
-    assert _guest_box("san-b", _BOXES) == _HOST_RESOLVED_BASE_BOX
-    # A group host not present in nodes: is treated as the base box, not an error.
-    assert _guest_box("not-a-node", _BOXES) == _HOST_RESOLVED_BASE_BOX
+def test_guest_box_san_targets_share_the_san_box():
+    """Both SAN targets clone the one baked san box on the infra OS, so they contend."""
+    cat = load_catalog()
+    assert _guest_box("san-a", _BOXES) == _guest_box("san-b", _BOXES)
+    assert _guest_box("san-a", _BOXES) == cat.box("san", cat.infra).name
+
+
+def test_guest_box_refuses_a_guest_that_is_not_a_node():
+    """A group host absent from nodes: has no box to clone: fail loud, never guess."""
+    with pytest.raises(ValueError, match="guest not-a-node is not a node in lab/topology.yaml"):
+        _guest_box("not-a-node", _BOXES)
 
 
 def test_vms_steps_fail_loud_on_an_unknown_box_role(monkeypatch, tmp_path):
@@ -458,7 +461,7 @@ def test_vms_steps_fail_loud_on_an_unknown_box_role(monkeypatch, tmp_path):
     [
         (["nha-rhel-crr-a1", "nha-rhel-crr-a2"], True),  # same fat box → contends
         (["nha-rhel-crr-a1", "svc-sim"], False),  # distinct boxes → no contention
-        (["san-a", "san-b"], True),  # both host-resolved base box → contends
+        (["san-a", "san-b"], True),  # both on the san box → contends
         (["nha-rhel-crr-a1", "svc-sim", "san-a"], False),  # all distinct
         (["nha-rhel-crr-a1", "svc-sim", "nha-rhel-crr-a2"], True),  # one repeat is enough
         (["nha-rhel-crr-a1"], False),  # a lone guest never contends with itself
@@ -838,7 +841,7 @@ def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
 # all_vms appends infra at the TAIL — the pre-#1164 order _boot_order corrects.
 TOPO_INFRA = (
     "nodes:\n"
-    "  san-a: { box: base }\n"
+    "  san-a: { box: san }\n"
     "  pcmk-a1: { box: pcmk }\n"
     "  obs: { box: obs }\n"
     "  mon-probe: { box: mq-client }\n"

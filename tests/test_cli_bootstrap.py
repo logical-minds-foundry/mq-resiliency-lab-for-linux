@@ -45,7 +45,7 @@ TOPO = (
     # nodes carry a net-mgmt IP so lab_inventory() renders ansible_host (the
     # bootstrap now refreshes the inventory — #377).
     "nodes:\n"
-    "  san-a: {box: base, nics: {net-mgmt: 10.50.0.10}}\n"
+    "  san-a: {box: san, nics: {net-mgmt: 10.50.0.10}}\n"
     "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
     "  pcmk-a2: {box: pcmk, nics: {net-mgmt: 10.50.0.52}}\n"
     "  pcmk-a3: {box: pcmk, nics: {net-mgmt: 10.50.0.53}}\n"
@@ -343,80 +343,25 @@ def test_bootstrap_only_net_ensures_nothing(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# SAN install-half deb pre-cache (#796): the provision phase pre-fetches the SAN
-# debs, but only for a stack that actually has SAN targets.
+# The SAN targets boot the baked san box (#1278, spec §4.7.1): no phase declares the
+# retired "san" deb pre-cache prereq kind, and the sequencer has no dispatch for it.
 # --------------------------------------------------------------------------- #
-def test_ensure_san_debs_noop_without_san_targets(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path)
-    monkeypatch.setattr(cli, "stack_san_targets", lambda name: [])
-    called: list[object] = []
-    monkeypatch.setattr(cli, "ensure_san_debs", lambda *a, **k: called.append(a))
-    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
-    assert called == []  # no SAN targets -> nothing pre-fetched
+def test_bootstrap_declares_no_san_prereq():
+    assert all("san" not in p.ensure for p in PHASES)
+    assert not hasattr(cli, "_ensure_san_debs_for_stack")
 
 
-def test_ensure_san_debs_populates_and_reports_fallback(monkeypatch, tmp_path, capsys):
-    from types import SimpleNamespace
-
-    _seed(monkeypatch, tmp_path)
-    monkeypatch.setattr(cli, "stack_san_targets", lambda name: ["san-a", "san-b"])
-    monkeypatch.setattr(cli.platform, "uname", lambda: SimpleNamespace(release="6.8.0-106-generic"))
-    seen: dict[str, object] = {}
-
-    def fake_ensure(cache_dir, kernel):
-        seen["cache_dir"] = cache_dir
-        seen["kernel"] = kernel
-        return {
-            "drbd-utils": "cached",
-            "targetcli-fb": "downloaded",
-            "linux-modules-extra-6.8.0-106-generic": "unavailable",
-        }
-
-    monkeypatch.setattr(cli, "ensure_san_debs", fake_ensure)
-    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
-    assert seen["kernel"] == "6.8.0-106-generic"  # keyed by the pre-cache host's kernel
-    out = capsys.readouterr().out
-    assert "drbd-utils" in out and "targetcli-fb" in out  # both staged
-    assert "network fallback at install for: linux-modules-extra-6.8.0-106-generic" in out
-
-
-def test_ensure_san_debs_all_staged_omits_fallback_line(monkeypatch, tmp_path, capsys):
-    from types import SimpleNamespace
-
-    _seed(monkeypatch, tmp_path)
-    monkeypatch.setattr(cli, "stack_san_targets", lambda name: ["san-a"])
-    monkeypatch.setattr(cli.platform, "uname", lambda: SimpleNamespace(release="k1"))
-    monkeypatch.setattr(cli, "ensure_san_debs", lambda c, k: {"drbd-utils": "cached"})
-    cli._ensure_san_debs_for_stack(cli.lab_stacks()["pcmk-ubuntu"])
-    out = capsys.readouterr().out
-    assert "staged for kernel k1" in out
-    assert "network fallback" not in out  # nothing unavailable -> no fallback line
-
-
-def test_provision_dispatch_runs_san_after_mq(monkeypatch, tmp_path):
+def test_provision_dispatch_runs_mq_galaxy_and_pki_only(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     calls: list[str] = []
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
-    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
     monkeypatch.setattr(cli, "_galaxy_install_step", lambda **_: "galaxy-step")
     monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: "pki-step")
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: calls.append("execute"))
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify-galaxy"))
     provision = next(p for p in PHASES if p.name == "provision")
     cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], provision, step=False)
-    assert "san" in calls  # provision declares the "san" prereq kind
-    assert calls.index("san") > calls.index("mq")  # dispatched after mq
-
-
-def test_observe_dispatch_does_not_run_san(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path)
-    calls: list[str] = []
-    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
-    monkeypatch.setattr(cli, "_pki_ensure_step", lambda **_: "pki-step")
-    monkeypatch.setattr(cli, "_execute", lambda *a, **k: None)
-    observe = next(p for p in PHASES if p.name == "observe")
-    cli._ensure_prereqs_for_stack(cli.lab_stacks()["pcmk-ubuntu"], observe, step=False)
-    assert "san" not in calls  # observe does not declare "san"
+    assert calls == ["mq", "execute", "verify-galaxy"]
 
 
 # --------------------------------------------------------------------------- #
@@ -1414,7 +1359,6 @@ def _stub_prereq_helpers(monkeypatch, tmp_path, calls):
     """Stub the per-kind I/O under the REAL _ensure_prereqs_for_stack; galaxy + PKI
     still go through the real _execute (and so the runner + perf sink)."""
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: calls.append("mq"))
-    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: calls.append("san"))
     monkeypatch.setattr(cli, "_ensure_local_boxes", lambda g: calls.append("boxes"))
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: calls.append("verify"))
@@ -1455,7 +1399,7 @@ def test_bootstrap_reports_prereq_phases_and_runs_pki_once(monkeypatch, tmp_path
     }
     assert labels == {
         "prereq:vms": ["reconcile box meta", "box ensure", "mq artifacts"],
-        "prereq:provision": ["mq artifacts", "san debs", "ansible collections", "pki ensure"],
+        "prereq:provision": ["mq artifacts", "ansible collections", "pki ensure"],
     }
     pki_runs = [c for c in runner.recorded if "site-pki.yml" in c.argv]
     assert len(pki_runs) == 1  # the observe phase did not run the PKI play again
@@ -1492,7 +1436,6 @@ def test_ensure_once_per_run_kinds_skip_when_already_ensured(monkeypatch, tmp_pa
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
     monkeypatch.setattr(cli, "_ensure_mq_artifacts_for_stack", lambda s: None)
-    monkeypatch.setattr(cli, "_ensure_san_debs_for_stack", lambda s: None)
     monkeypatch.setattr(cli, "_render_pki_entities", lambda: tmp_path / "pki.json")
     monkeypatch.setattr(cli, "_verify_galaxy_collections", lambda: None)
     labels = _capture_execute(monkeypatch)

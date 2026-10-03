@@ -1,0 +1,37 @@
+---
+# BAKE (#1278, epic .github#280 spec §4.7.1): the install half of the drbd-san role — the
+# DRBD userland (drbd-utils) and the kernel-modules package that carries the in-tree DRBD
+# module for the running kernel (no DKMS build). bake-san.yml bakes it into the `san` box
+# via `tasks_from: install`; the per-run path runs it as the first half of main.yml.
+#
+# Skip-if-baked: on a baked san box both packages are already installed, so the
+# package_facts guard skips the apt run (no per-run archive pull). An un-baked host still
+# gets a plain network apt install, which is also what the bake itself runs.
+#
+# The kernel-modules package NAME is per OS version (24.04: linux-modules-extra-<kver>;
+# 26.04 dropped linux-modules-extra and ships DRBD in the base linux-modules), so it comes
+# from roles/drbd-san/vars/<Distribution>-<major>.yml through the shared fail-loud
+# include: an OS this role ships no vars file for stops here, before any install.
+- name: per-OS-version vars (kernel-modules package)
+  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+  vars:
+    os_vars_role: drbd-san
+
+- name: read the installed packages (skip-if-baked guard)
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: install drbd userland + kernel modules (skipped when baked)
+  ansible.builtin.apt:
+    name:
+      - drbd-utils
+      - "{{ drbd_san_kernel_modules_pkg }}"
+    state: present
+    update_cache: true
+    # Wait out a fresh-boot unattended-upgrades holding the dpkg frontend lock instead of
+    # failing the run (#820, epic .github#104).
+    lock_timeout: "{{ apt_lock_timeout }}"
+  when: >-
+    'drbd-utils' not in ansible_facts.packages
+    or drbd_san_kernel_modules_pkg not in ansible_facts.packages
+  become: true

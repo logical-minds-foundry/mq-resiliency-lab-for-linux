@@ -48,4 +48,4 @@ def test_named_helpers_point_into_buckets(monkeypatch, tmp_path):
     assert paths.inventory_path() == build / "work" / "inventory.ini"
     assert paths.resolved_topology_path() == build / "work" / "lab" / "topology.resolved.yaml"
     assert paths.mq_cache_dir() == build / "cache" / "mq"
-    assert paths.san_deb_cache_dir() == build / "cache" / "san-debs"
+    assert not hasattr(paths, "san_deb_cache_dir")  # the SAN deb cache is retired (#1278)

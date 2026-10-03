@@ -12,10 +12,9 @@
 # Box ROLES, not boxes (epic .github#280): each node declares `box: <role>`, a role
 # under roles: in lab/versions.yaml. mqlab's version layer (src/mqlab/versions.py
 # node_boxes) picks the concrete `<role>-<os><major>` box per node: shared nodes
-# (infra roles: infra, obs, mq-client) run the catalog's infra OS; every other role
-# runs its owning stack's OS (instance record, else the stack default). `box: base`
-# is a pseudo-role booting the infra OS's bare base box (the SAN targets, until the
-# baked SAN box). No version token appears in this file; each stack declares only
+# (infra roles: infra, obs, mq-client, and san for the SAN targets) run the catalog's
+# infra OS; every other role runs its owning stack's OS (instance record, else the
+# stack default). No version token appears in this file; each stack declares only
 # its `os_family`. Every Ubuntu box tracks the host arch (native-preferred, #276);
 # RHEL boxes are x86_64-pinned by the catalog. What each fat box bakes in is
 # documented in docs/development/box-model.md.
@@ -161,14 +160,14 @@ nodes:
 
   # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
   san-a:
-    box: base  # the infra OS's bare base box: no MQ payload (design D8; baked SAN box is T6)
+    box: san  # the baked SAN target box on the infra OS: DRBD + LIO, no MQ payload (spec §4.7.1)
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.5, net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
   # The six Pacemaker CLUSTER nodes boot the baked pcmk-role fat box (#103 T7) so a
   # bootstrap skips the MQ product install; the per-run cluster/SAN/STONITH/QM formation
   # still runs. host-arch resolution is preserved AT THE BOX LAYER (the Ubuntu pcmk box
-  # carries no `arch:` pin). The SAN targets san-a/san-b are NOT repointed — no MQ payload,
-  # so they stay host-resolved on the base Ubuntu box (design D8).
+  # carries no `arch:` pin). The SAN targets san-a/san-b boot their own baked `san` box
+  # (no MQ payload; spec §4.7.1, which supersedes .github#108's deb cache).
   pcmk-a1:
     box: pcmk
     cpus: 2
@@ -190,7 +189,7 @@ nodes:
   # the peer cluster that receives the QM on cutover. hb IPs (172.16.2.61-63)
   # match ansible/site-pcmk-dr.yml; site-B VIP is 10.10.2.200, portal 10.40.2.6.
   san-b:
-    box: base  # the infra OS's bare base box: no MQ payload (design D8; baked SAN box is T6)
+    box: san  # the baked SAN target box on the infra OS: DRBD + LIO, no MQ payload (spec §4.7.1)
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.6, net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
   pcmk-b1:

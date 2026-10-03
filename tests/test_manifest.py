@@ -50,9 +50,9 @@ def test_tarball_name_maps_version_and_arch():
             m.tarball_name("9.4.5.0", _CAT.box(role, _RHEL), facts=X86)
             == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
         )
-    # A base box (the SAN targets' role) resolves by family too.
+    # An Ubuntu box resolves by family too.
     assert (
-        m.tarball_name("9.4.5.0", _CAT.base(_UBUNTU), facts=X86)
+        m.tarball_name("9.4.5.0", _CAT.box("mq-client", _UBUNTU), facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
     )
 

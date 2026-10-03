@@ -129,7 +129,7 @@ that as `unsupported` and not as `unknown`.
 
 The lab's Ubuntu cluster/SAN roles install these packages:
 `ansible/roles/pcmk-cluster/tasks/install-Debian.yml`,
-`ansible/roles/drbd-san/tasks/main.yml` and
+`ansible/roles/drbd-san/tasks/install.yml` and
 `ansible/roles/iscsi-target/tasks/install-Debian.yml`.
 
 - **[data]** Published binaries from the Launchpad primary archive, as of
@@ -161,10 +161,10 @@ The lab's Ubuntu cluster/SAN roles install these packages:
 - **[judgment] (consequence for T8)** Every package the lab names is available
   on 26.04 except one. The **`linux-modules-extra-*` package does not exist on
   26.04**, and the DRBD and LIO target modules it supplied on 24.04 are in the
-  base modules package instead. `drbd-san` caches and installs
-  `linux-modules-extra-{{ ansible_kernel }}`, so it needs a per-version fix-up in
-  T8: install nothing extra on 26, or install `linux-modules-<kver>` if the box
-  lacks it. `pacemaker` moves a major version (2.1 → 3.0) and `pcs` moves
+  base modules package instead. `drbd-san` installs the kernel-modules package
+  named in its per-version vars file (since #1278, `vars/Ubuntu-24.yml` names
+  `linux-modules-extra-{{ ansible_kernel }}`), so T8 adds a `vars/Ubuntu-26.yml`
+  that names `linux-modules-<kver>`, which the box already carries. `pacemaker` moves a major version (2.1 → 3.0) and `pcs` moves
   0.11 → 0.12. Expect role fix-ups there too. T8/V2 must prove this; it is not
   established here.
 - **[data] Live guest check (T0b, [#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272)).**

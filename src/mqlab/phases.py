@@ -40,7 +40,7 @@ from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import Stack, stack_members_effective
-from mqlab.versions import BASE_ROLE, load_catalog, node_boxes
+from mqlab.versions import load_catalog, node_boxes
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -59,7 +59,7 @@ class Phase:
                  first incomplete phase).
     ensure:      data-only tuple naming the fresh-volume prerequisites this phase
                  needs before its steps can run (#350 Task 5) — e.g. ("boxes",
-                 "mq") for vms, ("galaxy", "mq", "pki", "san") for provision. This
+                 "mq") for vms, ("galaxy", "mq", "pki") for provision. This
                  module stays PURE: the names are plain strings; the sequencer in
                  cli.py owns the real I/O (tarball fetch, galaxy/PKI plays) and
                  dispatches on these names. Keeping the declaration here means
@@ -321,13 +321,6 @@ def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
     return [guests[i : i + size] for i in range(0, len(guests), size)]
 
 
-# The boot-lock contention key for a guest on the `base` pseudo-role: it boots the
-# infra OS's one bare base box, so every such guest (the SAN targets) shares this
-# single base volume. A stable sentinel — never a real box name — folds them into one
-# contention group (#859).
-_HOST_RESOLVED_BASE_BOX = "\0host-resolved-base"
-
-
 def _guest_box(guest: str, boxes: dict[str, BoxEntry]) -> str:
     """The libvirt base volume this guest's `vagrant up` clones — the thing same-box
     boots contend on (#859).
@@ -336,13 +329,13 @@ def _guest_box(guest: str, boxes: dict[str, BoxEntry]) -> str:
     exactly the concurrency that trips vagrant-libvirt's per-machine lock when a batch
     boots them in parallel before that box's volume is staged. ``boxes`` is the version
     layer's per-node selection (versions.node_boxes, which fails loud on a missing or
-    unknown box role); a guest on the `base` pseudo-role (or not in the topology) boots
-    the bare base box and folds to `_HOST_RESOLVED_BASE_BOX`.
+    unknown box role). A guest absent from it is not a topology node, so there is no box
+    to boot: fail loud rather than guess its contention group.
     """
-    entry = boxes.get(guest)
-    if entry is None or entry.role == BASE_ROLE:
-        return _HOST_RESOLVED_BASE_BOX
-    return entry.name
+    if guest not in boxes:
+        msg = f"guest {guest} is not a node in lab/topology.yaml — add it under nodes:"
+        raise ValueError(msg)
+    return boxes[guest].name
 
 
 def _batch_shares_box(batch: list[str], boxes: dict[str, BoxEntry]) -> bool:
@@ -710,7 +703,7 @@ PHASES: list[Phase] = [
         PROVISION,
         _provision_build_steps,
         _provision_satisfied,
-        ensure=("galaxy", "mq", "pki", "san"),
+        ensure=("galaxy", "mq", "pki"),
     ),
     Phase(OBSERVE, _observe_build_steps, _observe_satisfied, ensure=("pki",)),
 ]

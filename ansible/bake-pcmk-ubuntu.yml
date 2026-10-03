@@ -7,9 +7,8 @@
 #
 # CLUSTER NODES ONLY (design D7/D8): this bakes the MQ product install the Pacemaker cluster
 # nodes run via roles/mq-install (the SAME role _pcmk-cluster-ha.yml drives on pcmk_a/pcmk_b).
-# It does NOT touch the SAN targets san-a/san-b — they carry no IBM-MQ payload, so they stay
-# host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic #108) and are not
-# baked here.
+# It does NOT touch the SAN targets san-a/san-b — they carry no IBM-MQ payload and boot their
+# own baked `san` box (bake-san.yml, #1278), not this one.
 #
 # ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue managers,
 # forms NO Pacemaker cluster, configures NO STONITH/fencing, logs into NO iSCSI target,

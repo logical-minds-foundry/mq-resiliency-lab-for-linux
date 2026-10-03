@@ -1,0 +1,110 @@
+---
+# Bake the san-<infra os> box image for the SAN targets san-a/san-b (#1278, epic
+# .github#280 spec §4.7.1; supersedes the .github#108 controller-side deb cache).
+#
+# INSTALL HALVES ONLY: the DRBD userland + the kernel-modules package carrying the in-tree
+# DRBD module (drbd-san), and the LIO admin tool targetcli (iscsi-target), plus the common
+# baked set every Ubuntu box carries. Baking on the target OS itself installs that OS's
+# packages against the box's own kernel — the controller-sourced cache this replaces
+# downloaded the CONTROLLER's release (noble) and missed on the kernel-modules package.
+#
+# It configures NO DRBD resource (no /etc/drbd.d/mqlun.res, no create-md, no `drbdadm up`)
+# and NO iSCSI target (no backstore, IQN, LUN, ACL or portal): those are per-run, keyed by
+# hostname and the extra disk, and stay in site-pcmk.yml -> drbd-san / iscsi-target main.yml.
+# Run against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-san.yml
+#
+# See docs/development/box-bake-manifest.md for the authoritative classification.
+
+# In-guest apt auto-updates are permanently OFF in every baked Ubuntu box (#1225): the
+# weekly cold rebuild + box staleness gate is the update path, so nothing may grab the dpkg
+# lock on first boot. Its own play, FIRST, so the bake's own apt work never races it either.
+- name: Disable apt auto-updates for good (weekly cold rebuild is the update path, #1225)
+  hosts: bake
+  become: true
+  tasks:
+    - name: mask apt-daily / apt-daily-upgrade / unattended-upgrades + zero APT::Periodic
+      ansible.builtin.include_role:
+        name: apt-autoupdate-off
+
+- name: Bake san (install halves only; no DRBD resource, no iSCSI target)
+  hosts: bake
+  become: true
+  tasks:
+    - name: DRBD install half only (drbd-utils + the kernel-modules package)
+      ansible.builtin.include_role:
+        name: drbd-san
+        tasks_from: install
+
+    - name: LIO target install half only (targetcli)
+      ansible.builtin.include_role:
+        name: iscsi-target
+        tasks_from: install
+
+    # Prove the baked image can load what the per-run halves modprobe, against the box's
+    # own kernel: modinfo resolves a module without loading it and fails if it is absent,
+    # so a missing DRBD or LIO module stops the bake instead of a later provision.
+    - name: assert the DRBD and LIO target modules are available for the baked kernel
+      ansible.builtin.command: "modinfo -F version {{ item }}"
+      loop:
+        - drbd
+        - target_core_mod
+      changed_when: false
+
+    # Fleet agents. node-exporter is baked WHOLE and left ENABLED (#642 benign
+    # exception): static host-metrics exporter, no per-run config, races nothing, cannot
+    # boot in a broken pre-config state. alloy is inert (install half only) — it needs a
+    # per-run config.alloy, so its enable+start is deferred to the observe phase.
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install
+
+# The per-login dynamic MOTD is OFF in every baked Ubuntu box (#1229): pam_motd ran
+# /etc/update-motd.d (50-landscape-sysinfo at ~90% CPU per login) on every SSH session.
+# Its own play, LAST, so it is independent of the install work above.
+- name: Disable the per-login dynamic MOTD (pam_motd / update-motd.d, #1229)
+  hosts: bake
+  become: true
+  tasks:
+    - name: comment out pam_motd in /etc/pam.d/{sshd,login} + mask motd-news.timer
+      ansible.builtin.include_role:
+        name: motd-off
+
+# cloud-init and snapd come off the boot path of every baked Ubuntu box (#1250): cloud-init
+# keeps only what a clone needs (mgmt-NIC netplan re-render + root growth), and snapd goes
+# when no snap is installed. Its own play, after all the install work (only the #1265 guard
+# play follows; it installs nothing), so the snapd guard sees every snap the bake installed.
+- name: Trim cloud-init + snapd off the boot path (#1250)
+  hosts: bake
+  become: true
+  tasks:
+    - name: cloud-init = netplan re-render + growpart/resizefs only; mask config/final stages
+      ansible.builtin.include_role:
+        name: cloud-init-trim
+
+    - name: purge snapd (no snaps in this box) and pin it out
+      ansible.builtin.include_role:
+        name: snapd-off
+
+# Guard the finished image (#1265): every directory this box's per-run configure halves
+# write into must still exist after the whole bake. Its own play, LAST, so it checks what
+# is actually packaged.
+- name: Guard the baked image (per-run configure dirs survived the bake, #1265)
+  hosts: bake
+  become: true
+  tasks:
+    - name: assert the per-run configure halves' directories are in the image
+      ansible.builtin.include_role:
+        name: bake-dirs-guard
+      vars:
+        bake_dirs_guard_required:
+          - /etc/alloy  # alloy configure: config.alloy
