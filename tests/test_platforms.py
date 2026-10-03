@@ -25,12 +25,11 @@ TOPO = {
             "extra_disk": 10,
             "nics": {"net-mgmt": "10.50.0.31"},
         },
-        "san-a": {"box": "base", "nics": {"net-mgmt": "10.50.0.5"}},
+        "san-a": {"box": "san", "nics": {"net-mgmt": "10.50.0.5"}},
     },
 }
 BOXES = node_boxes(TOPO, load_catalog())
 CATALOG = load_catalog()
-UBUNTU24 = CATALOG.oses[CATALOG.infra]
 RHEL9 = next(e for r, e in CATALOG.oses.items() if r.family == "rhel")
 
 
@@ -62,15 +61,13 @@ def test_resolve_x86_host_everything_native_kvm():
         assert n.boot_timeout is None
 
 
-def test_resolve_box_version_pins_only_the_bare_base_box():
+def test_resolve_san_targets_boot_the_baked_san_box():
+    """The SAN targets boot the locally-baked san box on the infra OS (#1278), not the
+    bare upstream base box, so no node carries a Vagrant box_version pin any more."""
     res = p.resolve(TOPO, X86_KVM, BOXES)
-    assert (res["san-a"].box, res["san-a"].box_version) == (
-        UBUNTU24.base_box,
-        UBUNTU24.base_box_version,
-    )
+    assert res["san-a"].box == f"san-{CATALOG.infra.token}"
     assert res["san-a"].dvd is None
-    assert res["obs"].box_version is None  # a locally-baked box carries no version
-    assert res["rdqm-a1"].box_version is None
+    assert all(not hasattr(n, "box_version") for n in res.values())
 
 
 def test_resolve_x86_nokvm_is_display_safe_not_raising():
@@ -148,7 +145,6 @@ def test_resolved_node_has_every_vagrantfile_field():
     required = {
         "os",
         "box",
-        "box_version",
         "driver",
         "cpu_mode",
         "machine_arch",

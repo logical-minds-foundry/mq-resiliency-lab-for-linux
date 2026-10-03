@@ -28,7 +28,7 @@ from tests.fakes import RecordingRunner, ScriptedResult
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: base }\n"
+    "  san-a: { box: san }\n"
     "  pcmk-a1: { box: pcmk }\n"
     "  pcmk-a2: { box: pcmk }\n"
     "  pcmk-a3: { box: pcmk }\n"

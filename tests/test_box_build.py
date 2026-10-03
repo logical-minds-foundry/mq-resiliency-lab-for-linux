@@ -61,6 +61,7 @@ def test_fleet_builders_cover_base_and_fat_boxes():
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
+        "san-ubuntu24",
     ):
         assert box.FLEET[fat].builder == "lab/boxes/build-fatbox.sh"
     # The standalone logsearch-ubuntu2404 box was retired (#1179) — folded into obs.
@@ -431,6 +432,18 @@ def test_manifest_hash_covers_ubuntu_ha_boxes():
         assert len(h) == 64
         assert h == _manifest_hash(name)  # deterministic
     assert _manifest_hash("mq-nativeha-ubuntu24") != _manifest_hash("pcmk-ubuntu24")
+
+
+def test_fleet_has_the_baked_san_box():
+    """#1278 (spec §4.7.1): the SAN targets' box is a host-resolved fat box on the infra
+    OS, baked by ansible/bake-san.yml, not MQ-bearing, with its own manifest hash."""
+    spec = box._build_fleet(_X86)["san-ubuntu24"]
+    assert (spec.role, spec.bake_stem, spec.mq_bearing) == ("san", "san", False)
+    assert spec.os.arch_pin is None and spec.has_manifest_hash
+    assert box._build_fleet(_ARM)["san-ubuntu24"].arch == AARCH64
+    h = _manifest_hash("san-ubuntu24")
+    assert len(h) == 64 and h == _manifest_hash("san-ubuntu24")
+    assert h != _manifest_hash("pcmk-ubuntu24")
 
 
 def _hash_with(*args: str) -> subprocess.CompletedProcess[str]:

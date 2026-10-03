@@ -1,0 +1,8 @@
+---
+# BAKE (#1278, epic .github#280 spec §4.7.1): the install half of the iscsi-target role —
+# the LIO admin tool, through the OS adapter. bake-san.yml bakes it into the `san` box via
+# `tasks_from: install`; the per-run path runs it as the first half of main.yml. The
+# target itself (backstore, IQN, LUN, ACLs, portal) is per-run configuration and stays in
+# main.yml.
+- name: install targetcli (OS-adapter)
+  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"

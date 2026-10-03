@@ -21,7 +21,7 @@ import yaml
 from mqlab import topology
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts, probe
 from mqlab.paths import resolved_topology_path
-from mqlab.versions import BASE_ROLE, load_catalog, node_boxes
+from mqlab.versions import load_catalog, node_boxes
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -47,9 +47,6 @@ class PlatformError(RuntimeError):
 class ResolvedNode:
     os: str  # the node's OS, e.g. "ubuntu:24" (from the version layer)
     box: str
-    # The Vagrant box_version pin: the catalog's base_box_version for a node booting the
-    # bare upstream base box (role base); None for a locally-baked box (unversioned).
-    box_version: str | None
     arch: str
     driver: str
     machine_arch: str | None
@@ -109,7 +106,6 @@ def _provider(
     return ResolvedNode(
         os=str(entry.os.ref),
         box=entry.name,
-        box_version=entry.os.base_box_version if entry.role == BASE_ROLE else None,
         arch=guest,
         driver="kvm" if kvm else "qemu",
         machine_arch=None if is_arm else X86_64,

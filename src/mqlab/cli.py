@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -37,7 +36,6 @@ from mqlab.paths import (
     mq_cache_dir,
     repo_root,
     resolved_topology_path,
-    san_deb_cache_dir,
     state,
     work,
 )
@@ -60,12 +58,10 @@ from mqlab.render import Renderer
 from mqlab.retired_boxes import RETIRED_BOX_NAMES
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
-from mqlab.sandeb import ensure_san_debs, observed_target_kernel
 from mqlab.stacks import (
     lab_stacks,
     rhel_stack_unsupported_reason,
     stack_members,
-    stack_san_targets,
 )
 from mqlab.transcript import Transcript, transcript_path
 from mqlab.versions import BuildFile, VersionError, load_build_file, load_catalog, node_boxes
@@ -275,30 +271,6 @@ def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
     )
 
 
-def _ensure_san_debs_for_stack(stack: Stack) -> None:
-    """Pre-cache the SAN install-half debs for a stack that has SAN targets (#796).
-
-    A no-op for a stack without SAN targets (rdqm / native-ha): like the MQ ensure,
-    this fires for every stack's provision phase but resolves to real work only where
-    it applies (the pacemaker-san stack). The kernel keyed for the one kernel-coupled
-    package (linux-modules-extra) is the SAN base box's *observed* kernel — recorded by
-    the drbd-san role on a prior rebuild — falling back to the controller's own kernel
-    only on the very first rebuild, before the box has ever booted (#816). This makes
-    the offline fast-path fire on every rebuild after the first, instead of missing
-    forever because the controller's kernel drifts from the cloud image's. Pre-caching
-    is best-effort: an unreachable package is reported, not fatal, because the roles
-    carry a network fallback."""
-    if not stack_san_targets(stack.name):
-        return
-    kernel = observed_target_kernel(san_deb_cache_dir()) or platform.uname().release
-    results = ensure_san_debs(san_deb_cache_dir(), kernel)
-    staged = sorted(pkg for pkg, status in results.items() if status != "unavailable")
-    fallback = sorted(pkg for pkg, status in results.items() if status == "unavailable")
-    typer.echo(f"SAN install-half debs staged for kernel {kernel}: {', '.join(staged) or 'none'}")
-    if fallback:
-        typer.echo(f"  network fallback at install for: {', '.join(fallback)}")
-
-
 # Controller-local prereq kinds whose ensure is idempotent and whose output no phase
 # step mutates: once one succeeds in a bootstrap run, a later phase re-declaring it
 # would redo identical work, so the run ensures it once (#1248). See
@@ -320,7 +292,6 @@ def _ensure_prereqs_for_stack(
     Dispatches each declared prereq kind in dependency order:
       boxes  -> build/register the local boxes for the stack's VMs (vms phase)
       mq     -> the MQ-for-Developers tarball(s) for the stack's boxes
-      san    -> the SAN install-half debs (only a stack with SAN targets; #796)
       galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
       pki    -> the PKI CA + entity keystores (the exporters consume these too)
     The Python fetches (boxes, mq) run inline; galaxy + PKI run through the step
@@ -360,8 +331,6 @@ def _ensure_prereqs_for_stack(
         timed("box ensure", lambda: _ensure_local_boxes(all_vms(stack)))
     if "mq" in kinds:
         timed("mq artifacts", lambda: _ensure_mq_artifacts_for_stack(stack))
-    if "san" in kinds:
-        timed("san debs", lambda: _ensure_san_debs_for_stack(stack))
     once = [k for k in _ONCE_PER_RUN_KINDS if k in kinds]
     for kind in (k for k in once if k in done):
         msg = (
@@ -1317,7 +1286,7 @@ def _resolved_nodes() -> dict[str, Any]:
 
 def _needed_local_boxes(guests: list[str]) -> list[str]:
     """The local-built boxes (box.FLEET) the given guests boot, sorted. A guest on a
-    cloud box (e.g. the host-resolved Ubuntu base) needs nothing built."""
+    box outside the fleet (an upstream cloud box) needs nothing built."""
     nodes = _resolved_nodes()
     boxes = {(nodes.get(g) or {}).get("box") for g in guests}
     return sorted(name for name in box.FLEET if name in boxes)

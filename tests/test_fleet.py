@@ -21,11 +21,11 @@ def test_parse_domain_states_skips_chrome_and_short_lines():
 
 def test_lab_guests_maps_each_guest_to_its_generated_box(monkeypatch, tmp_path):
     """guest -> box through the version layer: a stack node gets its role on its stack's
-    OS, a shared node its role on the infra OS, a `base` node the bare base box."""
+    OS, a shared node (and a SAN target) its role on the infra OS."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  rdqm-a1: { box: mq-rdqm }\n  obs: { box: obs }\n  san-a: { box: base }\n"
+        "nodes:\n  rdqm-a1: { box: mq-rdqm }\n  obs: { box: obs }\n  san-a: { box: san }\n"
         "groups:\n  rdqm_a: [rdqm-a1]\n"
         "stacks:\n  rdqm-rhel: { os_family: rhel, groups: [rdqm_a] }\n"
     )
@@ -33,7 +33,7 @@ def test_lab_guests_maps_each_guest_to_its_generated_box(monkeypatch, tmp_path):
     assert lab_guests() == {
         "rdqm-a1": cat.box("mq-rdqm", cat.default_os("rdqm-rhel")).name,
         "obs": cat.box("obs", cat.infra).name,
-        "san-a": cat.oses[cat.infra].base_box,
+        "san-a": cat.box("san", cat.infra).name,
     }
 
 

@@ -22,6 +22,8 @@ os:
 roles:
   infra: { bake: { ubuntu: infra } }
   obs: { bake: { ubuntu: obs } }
+  # The SAN targets (san-a/san-b): DRBD + LIO install half, no MQ payload (spec §4.7.1).
+  san: { bake: { ubuntu: san } }
   mq-client: { bake: { ubuntu: mq-ubuntu }, mq_bearing: true }
   mq-nativeha: { bake: { ubuntu: nativeha-ubuntu, rhel: nativeha-rhel }, mq_bearing: true }
   # pcmk is deliberately not MQ-bearing, matching lab/boxes/_manifest-hash.sh.

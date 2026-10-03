@@ -2,8 +2,8 @@
 
 The six Pacemaker cluster nodes (pcmk-a1..3, pcmk-b1..3) boot the baked,
 host-resolved pcmk-ubuntu fat box so a bootstrap skips the MQ product install; the
-SAN targets (san-a, san-b) carry no IBM-MQ payload (design D8) and stay on the
-host-resolved base Ubuntu box, untouched. Assertions are host-arch-independent —
+SAN targets (san-a, san-b) carry no IBM-MQ payload (design D8) and boot their own
+baked, host-resolved san box (#1278). Assertions are host-arch-independent —
 they name PLATFORMS, never an arch-suffixed cache value — because CI is x86 and the
 human validates on arm64.
 """
@@ -60,7 +60,7 @@ def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
         assert nodes[h]["box"] == "pcmk"
     cat = load_catalog()
     assert cat.oses[cat.default_os("pcmk-ubuntu")].arch_pin is None
-    # D8: san-a/san-b carry no IBM-MQ payload, so they are NOT baked — they boot the
-    # infra OS's bare base box (the `base` pseudo-role) until the baked SAN box (T6).
+    # D8: san-a/san-b carry no IBM-MQ payload, so they boot the baked `san` box on the
+    # infra OS (#1278, spec §4.7.1), not the pcmk box.
     for h in ("san-a", "san-b"):
-        assert nodes[h]["box"] == "base"
+        assert nodes[h]["box"] == "san"

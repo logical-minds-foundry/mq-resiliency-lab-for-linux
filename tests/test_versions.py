@@ -13,7 +13,6 @@ from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.instances import InstanceRecord
 from mqlab.paths import versions_catalog_path
 from mqlab.versions import (
-    BASE_ROLE,
     INFRA_ROLES,
     BuildFile,
     OsRef,
@@ -260,6 +259,7 @@ def test_all_boxes_on_x86():
         "infra-ubuntu24",
         "obs-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
         "mq-nativeha-rhel9",
@@ -273,6 +273,7 @@ def test_all_boxes_skips_rhel_on_aarch64():
         "infra-ubuntu24",
         "obs-ubuntu24",
         "mq-client-ubuntu24",
+        "san-ubuntu24",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
     }
@@ -479,15 +480,19 @@ def test_node_boxes_covers_every_topology_node(no_records):
     assert set(node_boxes(topo, load_catalog())) == set(topo["nodes"])
 
 
-def test_san_targets_boot_the_infra_base_box(no_records):
-    """`box: base` (the SAN targets until T6) is the infra OS's bare base box, carrying
-    the catalog's base_box_version pin — today's behaviour, now from the catalog."""
+def test_san_nodes_resolve_to_baked_san_box(no_records):
+    """The SAN targets boot the baked `san` box on the infra OS (#1278, spec §4.7.1):
+    bake stem `san`, not MQ-bearing, whatever stack lists them."""
     cat = load_catalog()
     nb = node_boxes(topology.load(), cat)
-    infra = cat.oses[cat.infra]
+    assert nb["san-a"].name == nb["san-b"].name == f"san-{cat.infra.token}"
     for san in ("san-a", "san-b"):
-        assert (nb[san].name, nb[san].role, nb[san].os) == (infra.base_box, BASE_ROLE, infra)
-        assert (nb[san].bake_stem, nb[san].mq_bearing) == ("", False)
+        assert (nb[san].role, nb[san].os) == ("san", cat.oses[cat.infra])
+        assert (nb[san].bake_stem, nb[san].mq_bearing) == ("san", False)
+
+
+def test_san_is_an_infra_role():
+    assert "san" in INFRA_ROLES
 
 
 def test_commons_render_uses_infra_without_records(no_records):  # Review Focus 5
@@ -602,9 +607,10 @@ def test_stack_roles_from_node_box_roles():
     }
 
 
-def test_catalog_refuses_a_role_named_base(tmp_path):
-    data = _mutated(("roles", BASE_ROLE), {"bake": {"ubuntu": "x"}})
-    with pytest.raises(VersionError, match=r"roles.base: 'base' is reserved"):
+def test_catalog_without_the_san_role_fails_loud(tmp_path):
+    """san is an infra role, so a catalog that drops it cannot bake the SAN targets."""
+    data = _mutated(("roles", "san"), _DELETE)
+    with pytest.raises(VersionError, match=r"unknown box role 'san'"):
         load_catalog(_write(tmp_path, data))
 
 

@@ -42,7 +42,7 @@ _PCMK_VERBS = (
 
 _TOPO = (
     "nodes:\n"
-    "  san-a:   {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
+    "  san-a:   {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
     "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
     "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
     "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
@@ -114,7 +114,7 @@ def test_qm_create_passes_svc_conn_from_the_shared_svc_block(monkeypatch, tmp_pa
     # the per-stack qm: block — it is threaded for every stack that has one.
     topo = (
         "nodes:\n"
-        "  san-a:   {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
+        "  san-a:   {box: san, nics: {net-mgmt: 10.50.0.5}}\n"
         "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
         "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"

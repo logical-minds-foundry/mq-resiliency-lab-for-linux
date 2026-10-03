@@ -18,7 +18,6 @@ from mqlab.stacks import (
     stack_dr_hosts,
     stack_members,
     stack_members_effective,
-    stack_san_targets,
 )
 
 # Host-facts fixtures for the arch-capability predicate (#847). Only `arch` is
@@ -66,8 +65,8 @@ def test_svc_identity_fail_loud_when_incomplete() -> None:
 # Minimal seeded topology covering all 4 stacks + the groups they reference.
 TOPO = (
     "nodes:\n"
-    "  san-a: { box: base }\n"
-    "  san-b: { box: base }\n"
+    "  san-a: { box: san }\n"
+    "  san-b: { box: san }\n"
     "  pcmk-a1: { box: pcmk }\n"
     "  pcmk-a2: { box: pcmk }\n"
     "  pcmk-a3: { box: pcmk }\n"
@@ -323,55 +322,6 @@ def test_stack_members_effective_unknown_stack_is_none(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed(tmp_path)
     assert stack_members_effective("no-such-stack", no_dr=True) is None
-
-
-def test_stack_san_targets_returns_san_hosts_for_pcmk(monkeypatch, tmp_path):
-    """The pacemaker-san stack's SAN targets are its san_* group hosts, in order."""
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed(tmp_path)
-    assert stack_san_targets("pcmk-ubuntu") == ["san-a", "san-b"]
-
-
-def test_stack_san_targets_empty_for_non_san_stacks(monkeypatch, tmp_path):
-    """A stack with no san_* groups (rdqm / native-ha) has no SAN targets to pre-cache."""
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed(tmp_path)
-    assert stack_san_targets("rdqm-rhel") == []
-    assert stack_san_targets("nativeha-rhel-crr") == []
-
-
-def test_stack_san_targets_unknown_stack_is_empty(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed(tmp_path)
-    assert stack_san_targets("no-such-stack") == []
-
-
-def test_stack_san_targets_dedupes_and_skips_phantom_groups(monkeypatch, tmp_path):
-    """A san_* group missing from groups: is skipped; a host in two san groups is listed once."""
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    topo = (
-        "nodes:\n"
-        "  san-x: { box: base }\n"
-        "groups:\n"
-        "  san_a: [san-x]\n"
-        "  san_b: [san-x]\n"
-        "stacks:\n"
-        "  my-stack:\n"
-        "    mechanism: pacemaker-san\n"
-        "    os_family: ubuntu\n"
-        "    short: TEST\n"
-        "    groups: [san_a, san_b, san_phantom, pcmk_a]\n"
-        "    provision: null\n"
-        "    secrets: []\n"
-        "    qm: {}\n"
-        "    alloc: {}\n"
-        "    verbs: {}\n"
-    )
-    (tmp_path / "lab").mkdir(parents=True)
-    (tmp_path / "lab" / "topology.yaml").write_text(topo)
-    # san-x is in both san_a and san_b (listed once); san_phantom is skipped; the
-    # non-san pcmk_a group is ignored even though it is in the stack's groups.
-    assert stack_san_targets("my-stack") == ["san-x"]
 
 
 def test_cluster_group_populated_for_real_stacks(monkeypatch, tmp_path):
