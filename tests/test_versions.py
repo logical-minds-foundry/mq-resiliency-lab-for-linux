@@ -222,10 +222,12 @@ def test_unsupported_default_via_new_entry_refused(tmp_path):
 def test_unsupported_entry_is_selectable_with_warning(tmp_path):
     cat = load_catalog(_write(tmp_path, _with_ubuntu26(unsupported=True)))
     ref = cat.stack_os("nativeha-ubuntu", BuildFile(os=OsRef("ubuntu", 26)), X86)
-    warning = cat.support_warning(ref)
-    assert warning is not None
-    assert "ubuntu:26" in warning
-    assert "https://example.invalid" in warning
+    # Exact match (not a URL substring check, which CodeQL flags as
+    # py/incomplete-url-substring-sanitization even in a test).
+    assert cat.support_warning(ref) == (
+        "WARNING: IBM does not support MQ on ubuntu:26 (https://example.invalid); "
+        "it is selectable for lab use only"
+    )
     assert cat.support_warning(OsRef("ubuntu", 24)) is None
 
 
