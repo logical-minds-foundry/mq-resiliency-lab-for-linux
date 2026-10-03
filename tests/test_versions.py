@@ -456,7 +456,7 @@ _SHARED = ("obs", "svc-sim", "app-client", "mon-probe", "infra-client", "infra-s
 
 @pytest.fixture
 def no_records(monkeypatch):
-    """No stack has an instance record (T3 adds them): every stack is at its default."""
+    """No stack has an instance record: every stack resolves to its catalog default."""
     monkeypatch.setattr(instances, "read_record", lambda stack: None)
 
 

@@ -15,7 +15,7 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, coldboot, hugepages, parity, perfdiff, topology, venvsync
+from mqlab import buildenv, coldboot, hugepages, instances, parity, perfdiff, topology, venvsync
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_boxes,
@@ -68,12 +68,14 @@ from mqlab.stacks import (
     stack_san_targets,
 )
 from mqlab.transcript import Transcript, transcript_path
-from mqlab.versions import load_catalog, node_boxes
+from mqlab.versions import BuildFile, VersionError, load_build_file, load_catalog, node_boxes
 from mqlab.vmstatus import vm_status_core
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from mqlab.hostfacts import HostFacts
+    from mqlab.instances import InstanceRecord
     from mqlab.orchestrator import Pauser
     from mqlab.perf import PerfSink
     from mqlab.phases import Phase
@@ -408,7 +410,7 @@ def _prepare_lab() -> None:
             raise typer.Exit(code=1)
     try:
         ensure_resolved(facts=facts)
-    except PlatformError as exc:
+    except (PlatformError, VersionError) as exc:
         typer.echo(str(exc))
         raise typer.Exit(code=1) from exc
 
@@ -1166,7 +1168,6 @@ def parse_box_list(text: str) -> dict[str, str]:
 # other helpers box.py calls back into — to keep the cli<->box import cycle well-ordered.
 # box.FLEET derives from the OS version catalog (lab/versions.yaml, epic .github#280).
 from mqlab import box  # noqa: E402
-from mqlab.versions import VersionError, load_build_file  # noqa: E402
 
 box_app = typer.Typer(
     help="baked-box fleet: status/build/rebuild/clean/gc the local-built boxes",
@@ -1813,6 +1814,7 @@ def _qm_dispatch(stack_name: str, verb: str) -> None:
     if not impl:
         typer.echo(f"stack {stack_name} does not implement verb {verb!r}", err=True)
         raise typer.Exit(code=2)
+    _require_record_if_live(stack.name)  # a live stack with no OS record is refused (#280)
     [(kind, value)] = impl.items()
     if kind == "playbook":
         _qm_playbook(stack, value, verb)
@@ -1931,6 +1933,7 @@ def _dr_run(stack_name: str, direction: str, verb: str, *, rpo0_drill: bool) -> 
             err=True,
         )
         raise typer.Exit(code=2)
+    _require_record_if_live(stack.name)  # a live stack with no OS record is refused (#280)
     argv = ["bash", str(lab_script(_RDQM_DR_CUTOVER_SCRIPT)), direction, stack.qm.qm_app]
     env = {"RPO0_DRILL": "1"} if rpo0_drill else None
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
@@ -2062,6 +2065,82 @@ def _gate_stack_host_arch(stack: Stack) -> None:
     if reason is not None:
         typer.echo(reason, err=True)
         raise typer.Exit(code=2)
+
+
+# --- Instance records (epic .github#280, spec §4.4): a stack's OS is pinned for its
+#     whole life by build/state/instances/<stack>.json. Bootstrap resolves + records it
+#     before the render; every other stack-scoped verb except teardown refuses a live
+#     stack that has no record (the lab never falls back to the default for one). ------
+def _host_facts() -> HostFacts:  # seam: tests pin an x86_64 host
+    return probe()
+
+
+def _stack_live(stack_name: str) -> bool:
+    """True iff any of the stack's member domains holds a live qemu process, per one
+    read-only `virsh list --all`. A failed virsh fails loud: liveness decides whether a
+    missing record is refused, so it is never guessed."""
+    members = stack_members(stack_name) or []
+    if not members:
+        return False
+    captured: list[str] = []
+    rc = _virsh_runner().run(Command([*_VIRSH, "list", "--all"]), captured.append)  # noqa: S607
+    if rc != 0:
+        typer.echo(f"virsh list failed (exit {rc}):", err=True)
+        for line in captured:
+            typer.echo(line, err=True)
+        raise typer.Exit(code=1)
+    states = parse_domain_states("\n".join(captured))
+    return any(is_live(states, member) for member in members)
+
+
+def _require_record_if_live(stack_name: str) -> InstanceRecord | None:
+    """The record gate of every stack-scoped verb except teardown: a live stack with no
+    instance record exits 2, naming `mqlab teardown <stack>`. Returns the record (None
+    for a stack that is not live and has none)."""
+    try:
+        return instances.require_record_if_live(stack_name, live=_stack_live(stack_name))
+    except VersionError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+
+def _reconcile_instance(stack_name: str, config: Path | None) -> InstanceRecord:
+    """Resolve the OS `bootstrap` builds `stack_name` on and pin it in the stack's
+    instance record — BEFORE the render, so Vagrant sees the selected boxes from the
+    first `vagrant up` (spec §4.4).
+
+    The request is the --config build file when given, else the existing record's OS
+    (a resume keeps what is running), else the stack default. It is resolved through
+    Catalog.stack_os (family, supported list, host gates) and then reconciled with the
+    record. Any VersionError exits 2 with the version layer's message. Liveness (one
+    read-only `virsh list`) is probed only when no record exists — the one case it
+    decides — so a bad request or a record conflict is refused before any virsh call.
+    An IBM-unsupported (lab-only) OS is allowed with the catalog's warning on stderr."""
+    try:
+        catalog = load_catalog()
+        existing = instances.read_record(stack_name)
+        build: BuildFile | None = None
+        if config is not None:
+            build = load_build_file(config)
+        elif existing is not None:
+            build = BuildFile(os=existing.os)
+        requested = catalog.stack_os(stack_name, build, _host_facts())
+        warning = catalog.support_warning(requested)
+        if warning is not None:
+            typer.echo(warning, err=True)
+        live = existing is None and _stack_live(stack_name)
+        record = instances.reconcile(
+            stack_name,
+            requested,
+            live=live,
+            build_file=str(config) if config is not None else None,
+        )
+    except VersionError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    where = instances.record_path(stack_name)
+    typer.echo(f"{stack_name}: OS {record.os} (instance record {where})")
+    return record
 
 
 # Prometheus on the obs guest (net-mgmt IP : Prometheus port). The observe probe
@@ -2308,6 +2387,7 @@ def _bootstrap_run(
     from_phase: str | None = None,
     step: bool,
     no_dr: bool = False,
+    config: Path | None = None,
 ) -> None:
     """Bring a stack up by running its bring-up phases (net → vms → provision →
     observe) from the first unsatisfied one, so a re-run resumes. --only/--from
@@ -2316,7 +2396,12 @@ def _bootstrap_run(
 
     --no-dr (#188) brings up the HA site only: it shapes the phases it runs (site-A
     guests, `dr_enabled=false` to the provision) and never tears down a site-B some
-    earlier full bootstrap left running. Stateless — nothing is persisted."""
+    earlier full bootstrap left running. Stateless — nothing is persisted.
+
+    --config (epic .github#280) selects an off-default OS through a build file. The
+    stack's OS is resolved and pinned in its instance record before the render
+    (_reconcile_instance); a conflicting request or a live stack without a record
+    exits 2 before any vagrant call."""
     venvsync.ensure_venv_current()  # sync dev venv to uv.lock before subprocesses spawn (#776)
     stack = _lookup_stack_or_exit(stack_name)
     # Fail loud before any lab I/O: --no-dr on a stack that declares no DR site to skip
@@ -2326,6 +2411,7 @@ def _bootstrap_run(
         typer.echo(f"{stack.name} declares no DR site to skip (no dr_groups)", err=True)
         raise typer.Exit(code=2)
     _gate_stack_host_arch(stack)  # #847: abort a RHEL stack on aarch64 pre-bake
+    _reconcile_instance(stack.name, config)  # pin the OS BEFORE the render (.github#280)
     _prepare_lab()  # host gate up front — fail loud before any phase touches the lab
     _emit_cold_boot_nudge()  # advisory staleness NOTICE in the preflight, before phases (T6)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -2475,16 +2561,30 @@ def bootstrap(  # pragma: no cover - thin delegator; logic covered via _bootstra
         bool,
         typer.Option("--no-dr", help="skip the DR site — bring up the HA site only"),
     ] = False,
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            help=(
+                "a build file selecting the OS (e.g. 'os: ubuntu:26'); omit to use the "
+                "stack's recorded OS, else its default (lab/versions.yaml)"
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Bring up a whole stack in one command: net → vms → provision → observe.
 
     Runs from the first unsatisfied phase, so a re-run resumes. Use --from PHASE
     to force a starting phase or --only PHASE to run a single phase. --no-dr brings
     up only the HA site (skips the DR guests + DR provisioning) for a lighter
-    footprint. Run `mqlab doctor` first to pre-flight the host."""
+    footprint. --config FILE builds on an off-default OS; the OS is recorded for the
+    stack's life, and a different one is refused until `mqlab teardown <stack>`.
+    Run `mqlab doctor` first to pre-flight the host."""
     _validate_phase_name(from_phase, "--from")
     _validate_phase_name(only, "--only")
-    _bootstrap_run(stack_name, only=only, from_phase=from_phase, step=step, no_dr=no_dr)
+    _bootstrap_run(
+        stack_name, only=only, from_phase=from_phase, step=step, no_dr=no_dr, config=config
+    )
 
 
 def _other_stacks_up(deps: Deps, exclude: str) -> bool:
@@ -2582,6 +2682,10 @@ def _teardown_run(stack_name: str, *, commons: bool, step: bool) -> None:
             step_mode=step,
             pauser=deps.pauser,
         )
+        # Every member destroy succeeded (a failure raised above, keeping the record so
+        # the stack's OS stays pinned until a teardown actually completes): forget the
+        # stack's OS. A stack that never had a record is fine (.github#280).
+        instances.delete_record(stack.name)
         # Every lab guest is gone now (last stack + its commons destroyed above, and a
         # failed destroy raised before reaching here), so no running guest holds a page.
         if hugepage_lever and last_stack_down:
@@ -2621,9 +2725,18 @@ def _status_one(stack: Stack, deps: Deps) -> None:
     Probes the live world once via _probe_all, then maps each Phase to ✓/✗ from
     phase.satisfied(stack, states). Renders a Rich table: Phase | Status.
     Fail-loud: real probe results surface; nothing is swallowed.
+
+    Leads with the stack's OS from its instance record (.github#280). A live stack
+    with no record is refused (exit 2, naming `mqlab teardown <stack>`) before any
+    probe: the OS of a running stack is never inferred from the catalog default.
     """
     from rich.table import Table
 
+    record = _require_record_if_live(stack.name)
+    if record is None:
+        deps.renderer.note(f"{stack.name}: OS — not bootstrapped (no instance record)")
+    else:
+        deps.renderer.note(f"{stack.name}: OS {record.os.label} ({record.os}, instance record)")
     states = _probe_all(deps, stack)
     table = Table(title=f"stack: {stack.name}")
     table.add_column("Phase")

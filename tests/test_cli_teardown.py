@@ -15,9 +15,11 @@ import io
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, instances
+from mqlab.instances import InstanceRecord
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import OsRef
 from tests.fakes import RecordingRunner, ScriptedResult
 
 # Seeded topology: same structure as test_cli_bootstrap.py PLUS an rdqm-rhel stack
@@ -511,3 +513,58 @@ def test_plan_destroy_no_forget_step_when_no_metadata(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     steps, _ = cli._plan_destroy(["rdqm-a1"], {"lab_rdqm-a1": "running"})
     assert [s.label for s in steps] == ["rdqm-a1 force-off", "rdqm-a1 undefine"]
+
+
+# --------------------------------------------------------------------------- #
+# Instance records (epic .github#280, T3): teardown deletes the stack's record
+# only after every destroy succeeded, and never needs one.
+# --------------------------------------------------------------------------- #
+_RDQM_RECORD = InstanceRecord("rdqm-rhel", OsRef("rhel", 9), None, "2026-10-03T00:00:00Z")
+
+
+def _teardown_harness(monkeypatch, tmp_path, runner):
+    _seed(monkeypatch, tmp_path)
+    _stub_probe_states(monkeypatch)
+    monkeypatch.setattr(cli, "_other_stacks_up", lambda deps, exclude: True)
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps_with_runner(runner))
+
+
+def test_teardown_deletes_record(monkeypatch, tmp_path):
+    _teardown_harness(monkeypatch, tmp_path, RecordingRunner(results=[]))
+    _capture_steps(monkeypatch)
+    instances.write_record(_RDQM_RECORD)
+    result = CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"])
+    assert result.exit_code == 0, result.output
+    assert instances.read_record("rdqm-rhel") is None
+
+
+def test_teardown_deletes_only_its_own_record(monkeypatch, tmp_path):
+    _teardown_harness(monkeypatch, tmp_path, RecordingRunner(results=[]))
+    _capture_steps(monkeypatch)
+    other = InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t")
+    instances.write_record(_RDQM_RECORD)
+    instances.write_record(other)
+    assert CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"]).exit_code == 0
+    assert instances.read_record("pcmk-ubuntu") == other
+
+
+def test_teardown_works_without_record(monkeypatch, tmp_path):
+    """A live stack with no record (e.g. one running when Phase 1 landed) is torn down
+    by name: teardown never consults the record gate, and needs no version."""
+    _teardown_harness(monkeypatch, tmp_path, RecordingRunner(results=[]))
+    captured = _capture_steps(monkeypatch)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)  # live, unrecorded
+    result = CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"])
+    assert result.exit_code == 0, result.output
+    assert any(s.label == "rdqm-a1 undefine" for s in captured)
+    assert instances.read_record("rdqm-rhel") is None
+
+
+def test_teardown_keeps_record_when_a_destroy_fails(monkeypatch, tmp_path):
+    """The OS stays pinned until a teardown actually completes: a failed destroy leaves
+    the record, so a re-run still knows what the surviving domains run."""
+    _teardown_harness(monkeypatch, tmp_path, _FailRunner())
+    instances.write_record(_RDQM_RECORD)
+    result = CliRunner().invoke(cli.app, ["teardown", "rdqm-rhel"])
+    assert result.exit_code == 1
+    assert instances.read_record("rdqm-rhel") == _RDQM_RECORD

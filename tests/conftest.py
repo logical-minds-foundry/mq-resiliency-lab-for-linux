@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab import cli, perfrun, topology, versions
-from tests.boxfleet import REAL_CATALOG, x86_fleet
+from mqlab import cli, instances, perfrun, topology, versions
+from tests.boxfleet import REAL_CATALOG, X86_FACTS, x86_fleet
 from tests.fakes import FakeSampleSource
 
 # The catalog-derived fleet as an x86_64 host sees it, built once per session.
@@ -130,6 +130,33 @@ def fake_perf_source(monkeypatch):
     source = FakeSampleSource()
     monkeypatch.setattr(perfrun, "default_source", lambda topo: source)
     return source
+
+
+@pytest.fixture(autouse=True)
+def tmp_state(monkeypatch, tmp_path_factory):
+    """Point the per-stack instance records (epic .github#280) at an empty per-test dir,
+    so no test reads or writes the developer's real build/state/instances. Returns the
+    dir. paths.instances_dir itself is tested directly in tests/test_paths.py."""
+    root = tmp_path_factory.mktemp("instances")
+    monkeypatch.setattr(instances, "instances_dir", lambda: root)
+    return root
+
+
+@pytest.fixture(autouse=True)
+def _stack_not_live(monkeypatch):
+    """Neutralise cli._stack_live in every test — it shells `virsh list --all` to decide
+    whether a stack has live domains (the instance-record gate, epic .github#280). Every
+    stack reads as not live, so the record gate passes; tests of the gate override this,
+    and the real probe is tested via the import captured before this stub."""
+    monkeypatch.setattr(cli, "_stack_live", lambda stack_name: False)
+
+
+@pytest.fixture(autouse=True)
+def _x86_host_facts(monkeypatch):
+    """Neutralise cli._host_facts in every test — it probes the live host (arch, KVM,
+    os-release). The version resolver at bootstrap sees an x86_64 host, so RHEL stacks
+    resolve the same on the arm64 dev VM and x86 CI; aarch64 tests override this."""
+    monkeypatch.setattr(cli, "_host_facts", lambda: X86_FACTS)
 
 
 @pytest.fixture(autouse=True)

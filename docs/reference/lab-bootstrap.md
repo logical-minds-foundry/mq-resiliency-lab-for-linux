@@ -97,6 +97,18 @@ lifecycle afterward.
 
 ### What else a bootstrap does and prints
 
+- **The stack's OS, recorded for its life.** Each stack builds on its default
+  OS from `lab/versions.yaml`. To pick a different supported version, pass a
+  build file: `mqlab bootstrap <stack> --config f.yaml`, where `f.yaml` holds
+  e.g. `os: ubuntu:26`. Before anything renders, `bootstrap` resolves the OS,
+  prints `<stack>: OS <os> (instance record …)`, and writes it to
+  `$(mqlab build path state)/instances/<stack>.json`. A resume without
+  `--config` reuses the recorded OS. A `--config` asking for a different OS is
+  refused until you run `mqlab teardown <stack>`, which deletes the record. A
+  stack whose VMs are running without a record (for example, one brought up
+  before records existed) is refused by every stack command except `teardown`.
+  Run `mqlab teardown <stack>`, then bootstrap it again. An OS that IBM does not
+  support is allowed for lab use, with a `WARNING` on stderr.
 - **Environment profile.** Don't set `MQLAB_ENV`. `bootstrap` detects the
   platform (Apple Virtualization means `macos`, Google Compute Engine means
   `cloud`) and prints one `environment: …` line. An explicit `MQLAB_ENV`
@@ -222,7 +234,7 @@ percentiles.
 ## Status & lifecycle
 
 ```bash
-mqlab status [<stack>]               # phase completion (net/vms/provision/observe, ✓/✗) — one stack or all
+mqlab status [<stack>]               # the stack's recorded OS + phase completion (net/vms/provision/observe, ✓/✗) — one stack or all
 mqlab qm up      <stack>             # start the QM (pcs enable / strmqm / systemctl start, per mechanism)
 mqlab qm down    <stack>             # stop the QM cleanly (HA intact)
 mqlab qm status  <stack>             # the QM's HA resource / instance state

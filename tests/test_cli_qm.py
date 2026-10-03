@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, instances
+from mqlab.instances import InstanceRecord
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import OsRef
 from tests.fakes import RecordingRunner, ScriptedResult
 
 _VIRSH = ["virsh", "-c", "qemu:///system"]
@@ -291,3 +294,34 @@ def test_qm_create_rdqm_script_failure_propagates(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
     result = CliRunner().invoke(cli.app, ["qm", "create", "rdqm-rhel"])
     assert result.exit_code == 4
+
+
+# --- the instance-record gate (epic .github#280, T3) -----------------------------------
+_QM_VERBS = ["create", "destroy", "up", "down", "status"]
+
+
+@pytest.mark.parametrize("verb", _QM_VERBS)
+def test_qm_verb_refuses_a_live_stack_without_record(monkeypatch, tmp_path, verb):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    result = CliRunner().invoke(cli.app, ["qm", verb, "pcmk-ubuntu"])
+    assert result.exit_code == 2
+    assert (
+        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
+        "and re-bootstrap"
+    ) in result.stderr
+    assert runner.recorded == []  # refused before any ansible/virsh step
+
+
+@pytest.mark.parametrize("verb", ["up", "status"])
+def test_qm_verb_runs_on_a_live_recorded_stack(monkeypatch, tmp_path, verb):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    instances.write_record(InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t"))
+    result = CliRunner().invoke(cli.app, ["qm", verb, "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert runner.recorded[-1].argv[0] == "ansible"

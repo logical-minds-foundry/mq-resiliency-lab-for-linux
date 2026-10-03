@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, instances
+from mqlab.instances import InstanceRecord
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import OsRef
 from tests.fakes import RecordingRunner, ScriptedResult
 
 
@@ -144,3 +147,32 @@ def test_dr_no_subcommand_is_help(monkeypatch, tmp_path):
     # no_args_is_help -> usage, non-zero, never a no-op success.
     assert result.exit_code != 0
     assert "cutover" in result.output and "failback" in result.output
+
+
+# --- the instance-record gate (epic .github#280, T3) -----------------------------------
+
+
+@pytest.mark.parametrize("verb", ["cutover", "failback"])
+def test_dr_verb_refuses_a_live_stack_without_record(monkeypatch, tmp_path, verb):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    result = CliRunner().invoke(cli.app, ["dr", verb, "rdqm-rhel"])
+    assert result.exit_code == 2
+    assert (
+        "rdqm-rhel is running without a version record; run `mqlab teardown rdqm-rhel` "
+        "and re-bootstrap"
+    ) in result.stderr
+    assert runner.recorded == []  # the cutover script never ran
+
+
+def test_dr_verb_runs_on_a_live_recorded_stack(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    instances.write_record(InstanceRecord("rdqm-rhel", OsRef("rhel", 9), None, "t"))
+    result = CliRunner().invoke(cli.app, ["dr", "cutover", "rdqm-rhel"])
+    assert result.exit_code == 0, result.output
+    assert runner.recorded[-1].argv[2:] == ["a2b", "RDQMAPP"]

@@ -121,7 +121,7 @@ commands:
 
 | Command | What it does |
 |---|---|
-| `mqlab bootstrap` | Bring up a whole stack in one command: net → vms → provision → observe (add `--no-dr` for a lighter HA-site-only bring-up); writes a perf report per run |
+| `mqlab bootstrap` | Bring up a whole stack in one command: net → vms → provision → observe (add `--no-dr` for a lighter HA-site-only bring-up, `--config <file>` to pick a non-default OS, which is then recorded for the stack); writes a perf report per run |
 | `mqlab teardown` | Destroy a stack's VMs; shared commons only when the last stack is down (or `--commons`) |
 | `mqlab status` | Show phase completion (net/vms/provision/observe) for a stack or all stacks |
 | `mqlab parity` | Print the cross-arm capability matrix (which verbs each arm supports) |

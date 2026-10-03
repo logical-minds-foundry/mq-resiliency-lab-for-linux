@@ -9,6 +9,7 @@ from mqlab.cli import _prepare_lab as _real_prepare_lab  # captured before the a
 from mqlab.doctor import Check
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.platforms import PlatformError
+from mqlab.versions import VersionError
 
 runner = CliRunner()
 
@@ -96,3 +97,18 @@ def test_prepare_lab_missing_kvm_exits_one(monkeypatch):
     with pytest.raises(typer.Exit) as exc:
         _real_prepare_lab()
     assert exc.value.exit_code == 1
+
+
+def test_prepare_lab_unreadable_instance_record_exits_one(monkeypatch, capsys):
+    """The render reads every stack's instance record (.github#280); an unreadable one is
+    a VersionError naming `mqlab teardown`, printed — never a traceback."""
+    monkeypatch.setattr(cli, "probe", lambda: VERGIL)
+
+    def boom(*, facts):
+        raise VersionError("instance record x for s is unreadable (y) — run `mqlab teardown s`")
+
+    monkeypatch.setattr(cli, "ensure_resolved", boom)
+    with pytest.raises(typer.Exit) as exc:
+        _real_prepare_lab()
+    assert exc.value.exit_code == 1
+    assert "run `mqlab teardown s`" in capsys.readouterr().out

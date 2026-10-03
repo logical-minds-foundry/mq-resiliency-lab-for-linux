@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, instances
+from mqlab.instances import InstanceRecord
 from mqlab.phases import build_states
+from mqlab.versions import OsRef
 
 # Topology mirroring test_cli_bootstrap.py: two stacks, one reserved.
 # commons includes svc+app so all_vms covers the shared distributed-path VMs.
@@ -262,3 +264,59 @@ def test_status_reserved_stack_named_explicitly_does_not_crash(monkeypatch, tmp_
     assert "reserved" in result.output.lower()
     # Should NOT probe a reserved stack
     assert "nativeha-ubuntu" not in probe_calls
+
+
+# --------------------------------------------------------------------------- #
+# the stack's OS from its instance record (epic .github#280, T3)
+# --------------------------------------------------------------------------- #
+
+
+def _probe_counting(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(
+        cli, "_probe_all", lambda deps, stack: calls.append(stack.name) or _states()
+    )
+    return calls
+
+
+def test_status_shows_the_recorded_os(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    _probe_counting(monkeypatch)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    instances.write_record(InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 24), None, "t"))
+    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert "pcmk-ubuntu: OS Ubuntu 24 (ubuntu:24, instance record)" in result.output
+
+
+def test_status_unrecorded_stopped_stack_says_not_bootstrapped(monkeypatch, tmp_path):
+    """No record and not live: say so — never print the catalog default as its OS."""
+    _seed(monkeypatch, tmp_path)
+    _probe_counting(monkeypatch)
+    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert "pcmk-ubuntu: OS — not bootstrapped (no instance record)" in result.output
+    assert "ubuntu:24" not in result.output
+
+
+def test_status_live_stack_without_record_refused(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    calls = _probe_counting(monkeypatch)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    result = CliRunner().invoke(cli.app, ["status", "pcmk-ubuntu"])
+    assert result.exit_code == 2
+    assert (
+        "pcmk-ubuntu is running without a version record; run `mqlab teardown pcmk-ubuntu` "
+        "and re-bootstrap"
+    ) in result.stderr
+    assert calls == []  # refused before any phase probe
+
+
+def test_status_all_stacks_view_is_gated_too(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    calls = _probe_counting(monkeypatch)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    result = CliRunner().invoke(cli.app, ["status"])
+    assert result.exit_code == 2
+    assert "run `mqlab teardown pcmk-ubuntu`" in result.stderr
+    assert calls == []
