@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab import cli, perfrun, topology
-from tests.boxfleet import x86_fleet
+from mqlab import cli, perfrun, topology, versions
+from tests.boxfleet import REAL_CATALOG, x86_fleet
 from tests.fakes import FakeSampleSource
 
 # The catalog-derived fleet as an x86_64 host sees it, built once per session.
@@ -130,3 +130,12 @@ def fake_perf_source(monkeypatch):
     source = FakeSampleSource()
     monkeypatch.setattr(perfrun, "default_source", lambda topo: source)
     return source
+
+
+@pytest.fixture(autouse=True)
+def _committed_versions_catalog(monkeypatch):
+    """Resolve the version layer against the COMMITTED lab/versions.yaml in every test
+    (epic .github#280), even when a test re-roots the repo (MQLAB_REPO_ROOT) to seed its
+    own topology: a seeded topology fakes the lab shape, never the OS catalog. A test
+    exercising a different catalog passes its path to load_catalog explicitly."""
+    monkeypatch.setattr(versions, "versions_catalog_path", lambda: REAL_CATALOG)

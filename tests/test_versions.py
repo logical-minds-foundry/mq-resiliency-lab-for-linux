@@ -8,14 +8,20 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import yaml
 
+from mqlab import instances, topology, versions
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
+from mqlab.instances import InstanceRecord
 from mqlab.paths import versions_catalog_path
 from mqlab.versions import (
+    BASE_ROLE,
+    INFRA_ROLES,
     BuildFile,
     OsRef,
     VersionError,
     load_build_file,
     load_catalog,
+    node_boxes,
+    stack_roles,
 )
 
 if TYPE_CHECKING:
@@ -441,3 +447,166 @@ def test_build_file_missing(tmp_path):
 def test_build_file_invalid_yaml(tmp_path):
     with pytest.raises(VersionError, match="build file .* is not valid YAML"):
         load_build_file(_build(tmp_path, "os: [unclosed\n"))
+
+
+# --- Topology roles -> boxes: the version layer in front of the render (T2) ----------
+
+_SHARED = ("obs", "svc-sim", "app-client", "mon-probe", "infra-client", "infra-svc")
+
+
+@pytest.fixture
+def no_records(monkeypatch):
+    """No stack has an instance record (T3 adds them): every stack is at its default."""
+    monkeypatch.setattr(instances, "read_record", lambda stack: None)
+
+
+def test_osref_label():
+    assert (OsRef("ubuntu", 24).label, OsRef("rhel", 9).label) == ("Ubuntu 24", "RHEL 9")
+
+
+def test_node_boxes_defaults(no_records):
+    nb = node_boxes(topology.load(), load_catalog())
+    assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu24"
+    assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel9"
+    assert nb["rdqm-a1"].name == "mq-rdqm-rhel9"
+    assert nb["pcmk-a1"].name == "pcmk-ubuntu24"
+    assert nb["infra-svc"].name == "infra-ubuntu24"
+    assert nb["svc-sim"].name == "mq-client-ubuntu24"
+
+
+def test_node_boxes_covers_every_topology_node(no_records):
+    topo = topology.load()
+    assert set(node_boxes(topo, load_catalog())) == set(topo["nodes"])
+
+
+def test_san_targets_boot_the_infra_base_box(no_records):
+    """`box: base` (the SAN targets until T6) is the infra OS's bare base box, carrying
+    the catalog's base_box_version pin — today's behaviour, now from the catalog."""
+    cat = load_catalog()
+    nb = node_boxes(topology.load(), cat)
+    infra = cat.oses[cat.infra]
+    for san in ("san-a", "san-b"):
+        assert (nb[san].name, nb[san].role, nb[san].os) == (infra.base_box, BASE_ROLE, infra)
+        assert (nb[san].bake_stem, nb[san].mq_bearing) == ("", False)
+
+
+def test_commons_render_uses_infra_without_records(no_records):  # Review Focus 5
+    cat = load_catalog()
+    nb = node_boxes(topology.load(), cat)
+    assert {nb[n].os.ref for n in _SHARED} == {cat.infra}
+
+
+def test_shared_nodes_resolve_without_any_record_lookup(monkeypatch):  # Review Focus 5
+    """`commons up` with no stack: a commons-only topology never consults a record."""
+
+    def refuse(stack):
+        raise AssertionError(f"record lookup for {stack}")
+
+    monkeypatch.setattr(instances, "read_record", refuse)
+    topo = topology.load()
+    commons_only = {"nodes": {n: topo["nodes"][n] for n in _SHARED}}
+    nb = node_boxes(commons_only, load_catalog())
+    assert {e.role for e in nb.values()} <= set(INFRA_ROLES)
+
+
+def test_node_boxes_reads_each_stack_record(monkeypatch, tmp_path):
+    """A stack's nodes follow its instance record, not the default; records of different
+    stacks combine in one render (two stacks at different majors)."""
+    data = _with_ubuntu26(unsupported=False)
+    data["stacks"]["pcmk-ubuntu"] = {
+        "supported": ["ubuntu:24", "ubuntu:26"],
+        "default": "ubuntu:24",
+    }
+    cat = load_catalog(_write(tmp_path, data))
+    records = {"pcmk-ubuntu": InstanceRecord("pcmk-ubuntu", OsRef("ubuntu", 26), None, "t")}
+    monkeypatch.setattr(instances, "read_record", records.get)
+    nb = node_boxes(topology.load(), cat)
+    assert (nb["nha-ubuntu-a1"].name, nb["pcmk-a1"].name) == (
+        "mq-nativeha-ubuntu24",
+        "pcmk-ubuntu26",
+    )
+    assert nb["obs"].os.ref == cat.infra  # shared nodes stay on the infra OS
+
+
+def test_node_boxes_renders_rhel_nodes_on_any_host(no_records):
+    """No host gate in the render: every node is described on every host (a RHEL node on
+    an aarch64 host renders under TCG); the host gate is Catalog.stack_os at bring-up."""
+    nb = node_boxes(topology.load(), load_catalog())
+    assert nb["rdqm-a1"].os.arch_pin == "x86_64"
+
+
+def _topo(nodes: dict[str, Any], stacks: dict[str, Any] | None = None) -> dict[str, Any]:
+    groups = {f"g_{name}": hosts for name, (_, hosts) in (stacks or {}).items()}
+    return {
+        "nodes": nodes,
+        "groups": groups,
+        "stacks": {
+            name: {"os_family": family, "groups": [f"g_{name}"]}
+            for name, (family, _) in (stacks or {}).items()
+        },
+    }
+
+
+@pytest.mark.parametrize("spec", [None, {}, {"box": ""}, {"box": 7}, "mq-rdqm"])
+def test_node_without_a_box_role_fails_loud(no_records, spec):
+    with pytest.raises(VersionError, match=r"node n1: declares no box role — give it `box: "):
+        node_boxes({"nodes": {"n1": spec}}, load_catalog())
+
+
+def test_node_with_an_unknown_role_fails_loud(no_records):
+    with pytest.raises(VersionError, match=r"node n1: box role 'mystery' is not in "):
+        node_boxes({"nodes": {"n1": {"box": "mystery"}}}, load_catalog())
+
+
+def test_stack_role_node_outside_every_stack_fails_loud(no_records):
+    with pytest.raises(VersionError, match=r"node n1: box role 'pcmk' .* \(it is in: none\)"):
+        node_boxes({"nodes": {"n1": {"box": "pcmk"}}}, load_catalog())
+
+
+def test_stack_role_node_in_two_stacks_fails_loud(no_records):
+    topo = _topo(
+        {"n1": {"box": "mq-nativeha"}},
+        {"nativeha-ubuntu": ("ubuntu", ["n1"]), "nativeha-rhel-crr": ("rhel", ["n1"])},
+    )
+    with pytest.raises(VersionError, match=r"\(it is in: nativeha-ubuntu, nativeha-rhel-crr\)"):
+        node_boxes(topo, load_catalog())
+
+
+def test_node_listed_twice_in_one_stack_is_owned_once(no_records):
+    topo = _topo({"n1": {"box": "pcmk"}}, {"pcmk-ubuntu": ("ubuntu", ["n1", "n1"])})
+    topo["stacks"]["pcmk-ubuntu"]["groups"].append("g_pcmk-ubuntu")
+    assert node_boxes(topo, load_catalog())["n1"].name == "pcmk-ubuntu24"
+
+
+def test_stack_os_family_must_match_the_catalog(no_records):
+    topo = _topo({"n1": {"box": "mq-rdqm"}}, {"rdqm-rhel": ("ubuntu", ["n1"])})
+    with pytest.raises(
+        VersionError, match=r"stack rdqm-rhel: os_family 'ubuntu' disagrees with lab/versions"
+    ):
+        node_boxes(topo, load_catalog())
+
+
+def test_topology_stack_missing_from_the_catalog_fails_loud(no_records):
+    topo = _topo({"n1": {"box": "pcmk"}}, {"ghost": ("ubuntu", ["n1"])})
+    with pytest.raises(VersionError, match="unknown stack 'ghost'"):
+        node_boxes(topo, load_catalog())
+
+
+def test_stack_roles_from_node_box_roles():
+    roles = stack_roles(topology.load(), load_catalog())
+    assert roles == {
+        "pcmk-ubuntu": {"pcmk"},
+        "rdqm-rhel": {"mq-rdqm"},
+        "nativeha-rhel-crr": {"mq-nativeha"},
+        "nativeha-ubuntu": {"mq-nativeha"},
+    }
+
+
+def test_catalog_refuses_a_role_named_base(tmp_path):
+    data = _mutated(("roles", BASE_ROLE), {"bake": {"ubuntu": "x"}})
+    with pytest.raises(VersionError, match=r"roles.base: 'base' is reserved"):
+        load_catalog(_write(tmp_path, data))
+
+
+def test_stack_ref_is_the_default_without_a_record(no_records):
+    assert versions.stack_ref("rdqm-rhel", load_catalog()) == OsRef("rhel", 9)

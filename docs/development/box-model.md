@@ -50,9 +50,28 @@ never carry a version. A playbook may carry the OS family
 (`infra`, `obs`, `mq-client`) on the catalog's `infra:` OS, then each stack's box
 roles on every OS major that stack supports and this host can run, plus one RHEL
 base box per catalog RHEL major. RHEL is `x86_64`-only, so on an `aarch64` host the
-fleet is the Ubuntu boxes alone. Until the topology names box roles directly
-(Task T2 of the epic), a stack's roles are read back off its nodes' `platform:`
-values, which already carry the generated names.
+fleet is the Ubuntu boxes alone. A stack's box roles are the `box:` roles its
+nodes declare in `lab/topology.yaml` (`versions.stack_roles`).
+
+### Topology names roles; the version layer picks the box
+
+`lab/topology.yaml` never names a concrete box. Each node declares a **box role**
+(`box: mq-nativeha`, `box: obs`, …) and each stack declares only its `os_family`.
+`versions.node_boxes` (in `src/mqlab/versions.py`) turns roles into boxes for every
+node at once:
+
+- a shared node (an infra role: `infra`, `obs`, `mq-client`) gets its role on the
+  catalog's `infra:` OS, with no instance-record lookup;
+- a node on the `base` pseudo-role (the SAN targets, until they get a baked box)
+  gets the infra OS's bare base box (`cloud-image/ubuntu-24.04`), pinned to the
+  catalog's `base_box_version`;
+- every other node gets its role on its owning stack's OS: the stack's instance
+  record when it has one, else the stack's catalog default.
+
+`platforms.resolve` takes that selection and keeps sole ownership of the provider
+mechanics. The rendered `build/work/lab/topology.resolved.yaml` carries each node's
+`os` (`ubuntu:24`), `box` and `box_version`; the Vagrantfile applies `box_version`
+verbatim, so there is no separate box-version file.
 
 ### The one-time rename (#1274)
 
@@ -69,8 +88,7 @@ place, [`src/mqlab/retired_boxes.py`](../../src/mqlab/retired_boxes.py):
 | `rhel/9.6-x86_64` | `rhel/9-x86_64` |
 
 `mq-rdqm-rhel9` and `mq-nativeha-rhel9` already fit the rule and keep their names.
-The topology's platform keys follow too: `ubuntu24-arm64`, `ubuntu24-x86_64` and
-`rhel9-x86_64`. The first build after the rename re-bakes every fat box, once. To
+The first build after the rename re-bakes every fat box, once. To
 migrate a host:
 
 1. `mqlab build migrate` renames the RHEL base box's cache

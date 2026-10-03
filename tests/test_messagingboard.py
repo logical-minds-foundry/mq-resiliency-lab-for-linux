@@ -112,7 +112,7 @@ def test_dashboard_path_is_per_stack():
 def _stack_cfg(short, provision):
     return {
         "mechanism": "pacemaker-san",
-        "os": "ubuntu",
+        "os_family": "ubuntu",
         "short": short,
         "provision": provision,
         "groups": [],

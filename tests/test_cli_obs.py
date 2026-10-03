@@ -35,16 +35,16 @@ def _seed_monitoring(tmp_path):
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  san-a: {nics: {net-mgmt: 10.50.0.5}}\n"
-        "  san-b: {nics: {net-mgmt: 10.50.0.6}}\n"
-        "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
-        "  pcmk-b1: {nics: {net-mgmt: 10.50.0.61}}\n"
-        "  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
-        "  rdqm-b1: {nics: {net-mgmt: 10.50.0.41}}\n"
-        "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
-        "  app-client: {nics: {net-mgmt: 10.50.0.60}}\n"
-        "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
-        "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
+        "  san-a: {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
+        "  san-b: {box: base, nics: {net-mgmt: 10.50.0.6}}\n"
+        "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
+        "  pcmk-b1: {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
+        "  rdqm-a1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31}}\n"
+        "  rdqm-b1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.41}}\n"
+        "  svc-sim: {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
+        "  app-client: {box: mq-client, nics: {net-mgmt: 10.50.0.60}}\n"
+        "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
+        "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
         "groups:\n"
         "  san_a: [san-a]\n  san_b: [san-b]\n"
         "  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
@@ -159,7 +159,7 @@ def test_obs_dashboard_also_renders_the_rdqm_board(monkeypatch, tmp_path):
         topo.read_text() + "stacks:\n"
         "  rdqm-rhel:\n"
         "    mechanism: rdqm\n"
-        "    os: rhel\n"
+        "    os_family: rhel\n"
         "    short: RDQM\n"
         "    qm: {vip: 10.10.1.100}\n"
         "    provision: ansible/site-rdqm.yml\n"
@@ -183,7 +183,7 @@ def test_obs_dashboard_also_renders_the_per_qm_boards(monkeypatch, tmp_path):
         topo.read_text() + "stacks:\n"
         "  pcmk-ubuntu:\n"
         "    mechanism: pacemaker-san\n"
-        "    os: ubuntu\n"
+        "    os_family: ubuntu\n"
         "    short: PCMK\n"
         "    qm: {vip: 10.10.1.200}\n"
         "    provision: ansible/pcmk.yml\n"
@@ -324,8 +324,8 @@ def test_obs_reach_peers_writes_build_json(monkeypatch, tmp_path):
     (tmp_path / "lab").mkdir()
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  pcmk-a1: {nics: {net-hb-a: 172.16.1.51}}\n"
-        "  pcmk-a2: {nics: {net-hb-a: 172.16.1.52}}\n"
+        "  pcmk-a1: {box: pcmk, nics: {net-hb-a: 172.16.1.51}}\n"
+        "  pcmk-a2: {box: pcmk, nics: {net-hb-a: 172.16.1.52}}\n"
     )
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(RecordingRunner()))
 

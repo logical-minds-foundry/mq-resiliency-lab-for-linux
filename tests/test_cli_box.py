@@ -167,10 +167,10 @@ def test_manifest_hash_artifact_is_arch_suffixed():
 # --------------------------------------------------------------------------- #
 # Interim stack roles (until T2) + boxes_for_build (`box build --config`)      #
 # --------------------------------------------------------------------------- #
-def test_topology_stack_roles_read_back_off_node_platforms():
+def test_topology_stack_roles_derive_from_node_box_roles():
     roles = box._topology_stack_roles(load_catalog())
     assert roles == {
-        "pcmk-ubuntu": {"pcmk"},  # the SAN targets boot the base box: no role
+        "pcmk-ubuntu": {"pcmk"},  # the SAN targets are `box: base`: no stack role
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
@@ -179,24 +179,22 @@ def test_topology_stack_roles_read_back_off_node_platforms():
 
 def test_topology_stack_roles_refuse_an_unknown_role(monkeypatch):
     topo = {
-        "nodes": {"x1": {"platform": "mystery-ubuntu24"}},
+        "nodes": {"x1": {"box": "mystery"}},
         "stacks": {"s": {"groups": ["g"]}},
         "groups": {"g": ["x1"]},
     }
     monkeypatch.setattr(box, "_load_topology", lambda: topo)
-    monkeypatch.setattr(box.stacks, "_topology", lambda: topo)
     with pytest.raises(VersionError, match="box role 'mystery'"):
         box._topology_stack_roles(load_catalog())
 
 
-def test_topology_stack_roles_drop_infra_roles(monkeypatch):
+def test_topology_stack_roles_drop_infra_and_base_roles(monkeypatch):
     topo = {
-        "nodes": {"x1": {"platform": "obs-ubuntu24"}, "x2": {"platform": "pcmk-ubuntu24"}},
+        "nodes": {"x1": {"box": "obs"}, "x2": {"box": "pcmk"}, "x3": {"box": "base"}},
         "stacks": {"s": {"groups": ["g"]}},
-        "groups": {"g": ["x1", "x2"]},
+        "groups": {"g": ["x1", "x2", "x3"]},
     }
     monkeypatch.setattr(box, "_load_topology", lambda: topo)
-    monkeypatch.setattr(box.stacks, "_topology", lambda: topo)
     assert box._topology_stack_roles(load_catalog()) == {"s": {"pcmk"}}
 
 

@@ -40,9 +40,12 @@ from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import Stack, stack_members_effective
+from mqlab.versions import BASE_ROLE, load_catalog, node_boxes
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from mqlab.versions import BoxEntry
 
 
 @dataclass(frozen=True)
@@ -118,7 +121,7 @@ def _commons_members() -> list[str]:
 # Commons groups that run no MQ — infrastructure-only nodes (DNS + core services,
 # #606). They still boot in the vms phase (via _commons_members / all_vms) but carry
 # no MQ SDK, so the MQ-media (tarball) enumeration in cli must exclude their hosts:
-# their platform (infra-ubuntu24) has no MQ tarball arch mapping by design (#634).
+# their infra box carries no MQ payload by design (#634).
 _NON_MQ_COMMONS_GROUPS = frozenset({"infra"})
 
 
@@ -318,38 +321,31 @@ def _batch_guests(guests: list[str], size: int) -> list[list[str]]:
     return [guests[i : i + size] for i in range(0, len(guests), size)]
 
 
-# The boot-lock contention key for a guest that declares no platform: it boots the
-# one host-resolved base OS box (default_platform), so every platform-less guest
-# (e.g. the SAN targets) shares this single base volume. A stable sentinel — never a
-# real box name — folds them into one contention group (#859).
+# The boot-lock contention key for a guest on the `base` pseudo-role: it boots the
+# infra OS's one bare base box, so every such guest (the SAN targets) shares this
+# single base volume. A stable sentinel — never a real box name — folds them into one
+# contention group (#859).
 _HOST_RESOLVED_BASE_BOX = "\0host-resolved-base"
 
 
-def _guest_box(guest: str, topo: dict[str, Any]) -> str:
+def _guest_box(guest: str, boxes: dict[str, BoxEntry]) -> str:
     """The libvirt base volume this guest's `vagrant up` clones — the thing same-box
     boots contend on (#859).
 
     Two guests share this key iff they clone the SAME baked box volume, which is
     exactly the concurrency that trips vagrant-libvirt's per-machine lock when a batch
-    boots them in parallel before that box's volume is staged. Resolved node ->
-    `platform` -> `boxes[platform].box`; a guest with no platform boots the one
-    host-resolved base box and folds to `_HOST_RESOLVED_BASE_BOX`. Fails loud on a
-    platform absent from the `boxes:` registry — a garbled platform would otherwise
-    silently mis-group the boot (the same fail-loud stance as `resolve()`).
+    boots them in parallel before that box's volume is staged. ``boxes`` is the version
+    layer's per-node selection (versions.node_boxes, which fails loud on a missing or
+    unknown box role); a guest on the `base` pseudo-role (or not in the topology) boots
+    the bare base box and folds to `_HOST_RESOLVED_BASE_BOX`.
     """
-    spec = (topo.get("nodes") or {}).get(guest) or {}
-    platform = spec.get("platform")
-    if platform is None:
+    entry = boxes.get(guest)
+    if entry is None or entry.role == BASE_ROLE:
         return _HOST_RESOLVED_BASE_BOX
-    boxes = topo.get("boxes") or {}
-    entry = boxes.get(platform)
-    if entry is None:
-        msg = f"guest {guest!r}: unknown platform {platform!r} (not in boxes: registry)"
-        raise ValueError(msg)
-    return str(entry.get("box", platform))
+    return entry.name
 
 
-def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
+def _batch_shares_box(batch: list[str], boxes: dict[str, BoxEntry]) -> bool:
     """True iff two+ guests in this batch clone the same box volume (#859).
 
     A parallel `vagrant up` of same-box guests races on staging that box's base volume
@@ -358,8 +354,8 @@ def _batch_shares_box(batch: list[str], topo: dict[str, Any]) -> bool:
     whose guests all clone distinct boxes has no such contention, so it keeps the
     bounded parallelism the `boot_batch` dial buys (#638).
     """
-    boxes = [_guest_box(g, topo) for g in batch]
-    return len(set(boxes)) != len(boxes)
+    keys = [_guest_box(g, boxes) for g in batch]
+    return len(set(keys)) != len(keys)
 
 
 def _vms_build_steps(
@@ -391,12 +387,12 @@ def _vms_build_steps(
     (with backoff, in the orchestrator) instead of aborting the whole bootstrap, then
     fails loud once the bounded cap is spent (spec §4.4/§8).
     """
-    topo = _topology()
+    boxes = node_boxes(_topology(), load_catalog())
     vms = _boot_order(stack, no_dr=no_dr)
     batches = _batch_guests(vms, _boot_batch())
     steps: list[CommandStep] = []
     for index, batch in enumerate(batches, start=1):
-        serial = ["--no-parallel"] if _batch_shares_box(batch, topo) else []
+        serial = ["--no-parallel"] if _batch_shares_box(batch, boxes) else []
         cmd = Command(["vagrant", "up", *serial, *batch], cwd=repo_root() / "lab")
         label = (
             f"{stack.name} vms up"
@@ -432,12 +428,14 @@ def _rhel_nat_nic_steps(
     are not subject to the ifup/ifdown race and are skipped, as are RHEL nodes with no
     declared NICs.
     """
-    nodes = _topology().get("nodes") or {}
+    topo = _topology()
+    nodes = topo.get("nodes") or {}
+    boxes = node_boxes(topo, load_catalog())
     lab = repo_root() / "lab"
     steps: list[CommandStep] = []
     for name in all_vms(stack, no_dr=no_dr):
         spec = nodes.get(name) or {}
-        if "rhel" not in str(spec.get("platform", "")).lower():
+        if name not in boxes or boxes[name].os.ref.family != "rhel":
             continue  # netplan (Ubuntu) arm — not subject to the ifup/ifdown race
         ips = [str(ip) for ip in (spec.get("nics") or {}).values() if ip]
         if not ips:

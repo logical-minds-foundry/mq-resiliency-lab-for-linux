@@ -26,6 +26,7 @@ from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.phases import PHASES, build_states
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import load_catalog
 from tests.fakes import RecordingRunner, ScriptedResult
 
 # Host-facts fixtures for the #847 RHEL-on-aarch64 preflight gate.
@@ -39,15 +40,15 @@ TOPO = (
     # nodes carry a net-mgmt IP so lab_inventory() renders ansible_host (the
     # bootstrap now refreshes the inventory — #377).
     "nodes:\n"
-    "  san-a: {nics: {net-mgmt: 10.50.0.10}}\n"
-    "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
-    "  pcmk-a2: {nics: {net-mgmt: 10.50.0.52}}\n"
-    "  pcmk-a3: {nics: {net-mgmt: 10.50.0.53}}\n"
-    "  pcmk-b1: {nics: {net-mgmt: 10.50.0.61}}\n"
-    "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
-    "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
-    "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
-    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
+    "  san-a: {box: base, nics: {net-mgmt: 10.50.0.10}}\n"
+    "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
+    "  pcmk-a2: {box: pcmk, nics: {net-mgmt: 10.50.0.52}}\n"
+    "  pcmk-a3: {box: pcmk, nics: {net-mgmt: 10.50.0.53}}\n"
+    "  pcmk-b1: {box: pcmk, nics: {net-mgmt: 10.50.0.61}}\n"
+    "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
+    "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
+    "  svc-sim: {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
+    "  app-client: {box: mq-client, nics: {net-mgmt: 10.50.0.40}}\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
@@ -59,7 +60,7 @@ TOPO = (
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
-    "    os: ubuntu\n"
+    "    os_family: ubuntu\n"
     "    short: PCMK\n"
     "    cluster_group: pcmk_a\n"
     "    groups: [san_a, pcmk_a, pcmk_b]\n"
@@ -744,43 +745,47 @@ def test_reconcile_forgets_a_retired_box_even_without_a_resolved_box(monkeypatch
     assert cli._stale_box_meta_guests(["pcmk-a1", "pcmk-a2", "pcmk-a3"]) == ["pcmk-a1"]
 
 
-def test_stack_mq_platforms_resolves_cluster_node_platforms(monkeypatch, tmp_path):
+def test_stack_mq_boxes_resolves_cluster_node_boxes(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
-    # All pcmk-ubuntu cluster nodes resolve to the host-default ubuntu platform.
-    plats = cli._stack_mq_platforms(stack)
-    assert plats  # non-empty: the QM hosts need an MQ tarball
-    assert all(p.startswith("ubuntu") for p in plats)
+    # The pcmk-ubuntu cluster nodes resolve to the stack's pcmk box (catalog default).
+    cat = load_catalog()
+    names = {b.name for b in cli._stack_mq_boxes(stack)}
+    assert cat.box("pcmk", cat.default_os("pcmk-ubuntu")).name in names
+    assert all(b.os.ref.family == "ubuntu" for b in cli._stack_mq_boxes(stack))
 
 
-def test_stack_mq_platforms_includes_commons_svc_app(monkeypatch, tmp_path):
+def test_stack_mq_boxes_includes_commons_svc_app(monkeypatch, tmp_path):
     """The stack's provision installs MQ on the commons svc/app too (every provision
     playbook imports site-distributed-shared.yml → mq-install on svc/app), so their
-    platform's tarball must be ensured even when no cluster node shares it. Regression
+    box's tarball must be ensured even when no cluster node shares it. Regression
     for the cold-cache miss on svc-sim's UbuntuLinuxX64 tarball (#407)."""
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
-    # A platform no cluster node uses — only the commons set contributes it.
-    monkeypatch.setattr(cli, "_commons_mq_platforms", lambda: {"commons-only-platform"})
-    plats = cli._stack_mq_platforms(stack)
-    assert "commons-only-platform" in plats
+    # A box no cluster node uses — only the commons set contributes it.
+    cat = load_catalog()
+    commons_only = cat.box("obs", cat.infra)
+    monkeypatch.setattr(cli, "_commons_mq_boxes", lambda: {commons_only})
+    assert commons_only in cli._stack_mq_boxes(stack)
 
 
 def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
     captured: dict[str, object] = {}
-    monkeypatch.setattr(cli, "_stack_mq_platforms", lambda s: {"ubuntu24-arm64"})
+    cat = load_catalog()
+    boxes = {cat.box("pcmk", cat.infra)}
+    monkeypatch.setattr(cli, "_stack_mq_boxes", lambda s: boxes)
     monkeypatch.setattr(cli, "mq_cache_dir", lambda: tmp_path / "mqcache")
     monkeypatch.setattr(
         cli,
-        "ensure_mq_tarballs_for_platforms",
-        lambda platforms, version, build_dir, *, fetch: captured.update(
-            platforms=platforms, version=version, build_dir=build_dir, fetch=fetch
+        "ensure_mq_tarballs_for_boxes",
+        lambda got, version, build_dir, *, fetch: captured.update(
+            boxes=got, version=version, build_dir=build_dir, fetch=fetch
         ),
     )
     cli._ensure_mq_artifacts_for_stack(stack)
-    assert captured["platforms"] == {"ubuntu24-arm64"}
+    assert captured["boxes"] == boxes
     assert captured["version"] == cli.DEFAULT_MQ_VERSION
     assert captured["build_dir"] == tmp_path / "mqcache"
     assert captured["fetch"] is cli._fetch_mq_tarball
@@ -788,22 +793,21 @@ def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
 
 # --------------------------------------------------------------------------- #
 # #634: the infra commons group runs no MQ and must be excluded from the MQ-media
-# (tarball) enumeration. Its nodes carry the infra-ubuntu24 platform (#606), which
-# has no MQ tarball arch mapping by design — enumerating it hard-fails the prereq.
+# (tarball) enumeration: its nodes boot the infra box (#606), which carries no MQ.
 # --------------------------------------------------------------------------- #
-# A topology where the infra commons group's hosts are repointed to infra-ubuntu24
-# (post-#606), alongside a stack whose provision installs MQ on obs/svc/app/probe.
+# A topology where the infra commons group's hosts boot the infra role (post-#606),
+# alongside a stack whose provision installs MQ on obs/svc/app/probe.
 INFRA_TOPO = (
     "nodes:\n"
-    "  rdqm-a1: {nics: {net-mgmt: 10.50.0.71}}\n"
-    "  rdqm-a2: {nics: {net-mgmt: 10.50.0.72}}\n"
-    "  rdqm-a3: {nics: {net-mgmt: 10.50.0.73}}\n"
-    "  obs: {nics: {net-mgmt: 10.50.0.2}}\n"
-    "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
-    "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
-    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
-    "  infra-client: {platform: infra-ubuntu24, nics: {net-mgmt: 10.50.0.4}}\n"
-    "  infra-svc: {platform: infra-ubuntu24, nics: {net-mgmt: 10.50.0.5}}\n"
+    "  rdqm-a1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.71}}\n"
+    "  rdqm-a2: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.72}}\n"
+    "  rdqm-a3: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.73}}\n"
+    "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
+    "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
+    "  svc-sim: {box: mq-client, nics: {net-mgmt: 10.50.0.50}}\n"
+    "  app-client: {box: mq-client, nics: {net-mgmt: 10.50.0.40}}\n"
+    "  infra-client: {box: infra, nics: {net-mgmt: 10.50.0.4}}\n"
+    "  infra-svc: {box: infra, nics: {net-mgmt: 10.50.0.5}}\n"
     "groups:\n"
     "  rdqm_a:  [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  obs_box: [obs]\n"
@@ -814,7 +818,7 @@ INFRA_TOPO = (
     "stacks:\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n"
-    "    os: rhel\n"
+    "    os_family: rhel\n"
     "    short: RDQM\n"
     "    cluster_group: rdqm_a\n"
     "    groups: [rdqm_a]\n"
@@ -838,24 +842,24 @@ def _seed_infra(monkeypatch, tmp_path):
     (tmp_path / "lab" / "topology.yaml").write_text(INFRA_TOPO)
 
 
-def test_commons_mq_platforms_excludes_infra(monkeypatch, tmp_path):
-    """The infra commons group is infrastructure-only (DNS/core services): its
-    infra-ubuntu24 platform is excluded from the MQ-media enumeration, while the
-    MQ-bearing commons (obs/svc/app/probe) platform is still included."""
+def test_commons_mq_boxes_excludes_infra(monkeypatch, tmp_path):
+    """The infra commons group is infrastructure-only (DNS/core services): its infra
+    box is excluded from the MQ-media enumeration, while the MQ-bearing commons
+    (obs/svc/app/probe) boxes are still included."""
     _seed_infra(monkeypatch, tmp_path)
-    plats = cli._commons_mq_platforms()
-    assert "infra-ubuntu24" not in plats
-    assert any(p.startswith("ubuntu24") for p in plats)
+    roles = {b.role for b in cli._commons_mq_boxes()}
+    assert "infra" not in roles
+    assert {"obs", "mq-client"} <= roles
 
 
-def test_stack_mq_platforms_excludes_infra(monkeypatch, tmp_path):
-    """_stack_mq_platforms unions the commons enumeration, so excluding infra there
-    fixes the stack enumeration too (rdqm-rhel's media prereq no longer hard-fails)."""
+def test_stack_mq_boxes_excludes_infra(monkeypatch, tmp_path):
+    """_stack_mq_boxes unions the commons enumeration, so excluding infra there fixes
+    the stack enumeration too (rdqm-rhel's media prereq never sees the infra box)."""
     _seed_infra(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("rdqm-rhel")
-    plats = cli._stack_mq_platforms(stack)
-    assert "infra-ubuntu24" not in plats
-    assert any(p.startswith("ubuntu24") for p in plats)
+    roles = {b.role for b in cli._stack_mq_boxes(stack)}
+    assert "infra" not in roles
+    assert {"mq-rdqm", "mq-client"} <= roles
 
 
 # --------------------------------------------------------------------------- #
@@ -951,7 +955,7 @@ def test_bootstrap_no_tty_under_step_exits_2(monkeypatch, tmp_path):
 # real gate (captured at import) to prove it fires.
 # --------------------------------------------------------------------------- #
 def test_bootstrap_aborts_rhel_stack_on_aarch64(monkeypatch, tmp_path):
-    _seed_infra(monkeypatch, tmp_path)  # INFRA_TOPO carries an rdqm-rhel (os: rhel) stack
+    _seed_infra(monkeypatch, tmp_path)  # INFRA_TOPO carries an rdqm-rhel (os_family: rhel) stack
     monkeypatch.setattr(cli, "_gate_stack_host_arch", _real_gate)  # un-neutralise the real gate
     monkeypatch.setattr(cli, "probe", lambda: ARM)
     # Must abort before any phase runs: build_deps/_probe_all would blow up if reached.
@@ -969,7 +973,7 @@ def test_gate_allows_rhel_stack_on_x86(monkeypatch, tmp_path):
 
 
 def test_gate_allows_ubuntu_stack_on_aarch64(monkeypatch, tmp_path):
-    _seed(monkeypatch, tmp_path)  # this seed's stack is pcmk-ubuntu (os: ubuntu)
+    _seed(monkeypatch, tmp_path)  # this seed's stack is pcmk-ubuntu (os_family: ubuntu)
     monkeypatch.setattr(cli, "probe", lambda: ARM)
     _real_gate(cli._lookup_stack_or_exit("pcmk-ubuntu"))  # Ubuntu runs on aarch64 — no raise
 
@@ -1175,7 +1179,7 @@ def test_probe_all_qm_down_when_no_status_verb(monkeypatch, tmp_path):
         "stacks:\n"
         "  nativeha-ubuntu:\n"
         "    mechanism: native-ha\n"
-        "    os: ubuntu\n"
+        "    os_family: ubuntu\n"
         "    short: NHAU\n"
         "    groups: []\n"
         "    provision: null\n"
@@ -1208,7 +1212,7 @@ def test_probe_all_qm_down_when_status_verb_but_no_cluster_group(monkeypatch, tm
         "stacks:\n"
         "  edge-stack:\n"
         "    mechanism: pacemaker-san\n"
-        "    os: ubuntu\n"
+        "    os_family: ubuntu\n"
         "    short: EDGE\n"
         "    groups: []\n"
         "    provision: null\n"

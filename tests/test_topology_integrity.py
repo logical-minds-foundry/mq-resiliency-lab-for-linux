@@ -166,7 +166,7 @@ def test_logsearch_node_and_box_group_retired():
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     assert "logsearch" not in topo["nodes"]
     assert "logsearch_box" not in topo["groups"]
-    assert "logsearch-ubuntu2404" not in topo["boxes"]
+    assert "boxes" not in topo  # topology names box roles only (epic .github#280)
     # the rendered inventory (a pure function of topology) no longer carries the host/group
     inv = lab_inventory()
     assert "[logsearch_box]" not in inv
@@ -185,7 +185,7 @@ def test_obs_absorbed_the_logsearch_tier():
 
     topo = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
     obs = topo["nodes"]["obs"]
-    assert obs["platform"] == "obs-ubuntu24"
+    assert obs["box"] == "obs"
     assert obs["cpus"] >= 12, (
         "obs must have >= 12 vCPU for the consolidated observability stack (#1194: the "
         "metrics + log tiers cold-start on one node; serialized startup + this over-allocation)"

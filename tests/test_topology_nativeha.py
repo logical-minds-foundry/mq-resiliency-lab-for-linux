@@ -12,6 +12,7 @@ import pathlib
 import yaml
 
 from mqlab.stacks import lab_stacks, stack_dr_hosts, stack_members, stack_members_effective
+from mqlab.versions import load_catalog
 
 
 def _topology() -> dict:
@@ -87,7 +88,7 @@ def test_nativeha_rhel_nodes_boot_the_baked_fat_box():
         "nha-rhel-crr-b2",
         "nha-rhel-crr-b3",
     ):
-        assert nodes[h]["platform"] == "mq-nativeha-rhel9"
+        assert nodes[h]["box"] == "mq-nativeha"
         assert "extra_disk" not in nodes[h]
 
 
@@ -108,7 +109,7 @@ def test_stack_parses_without_a_vip():
 def test_nativeha_ubuntu_stack_uses_mqmonitor_verbs():
     stack = lab_stacks()["nativeha-ubuntu"]
     assert stack.mechanism == "native-ha"
-    assert stack.os == "ubuntu"
+    assert stack.os_family == "ubuntu"
     # same lifecycle as the RHEL arm: the mqmonitor@ systemd unit
     assert "mqmonitor@" in stack.verbs["qm-up"]["cmd"]
     assert "mqmonitor@" in stack.verbs["qm-down"]["cmd"]
@@ -154,11 +155,12 @@ def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
     g = topo["groups"]
     assert set(g["nha_ubuntu_a"]) == {"nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"}
     assert set(g["nha_ubuntu_b"]) == {"nha-ubuntu-b1", "nha-ubuntu-b2", "nha-ubuntu-b3"}
-    # The nodes now boot the baked mq-nativeha-ubuntu24 fat box (#103 T6), but host-arch
-    # resolution is PRESERVED — it just moved to the box layer: unlike the x86-pinned
-    # mq-nativeha-rhel9 box, the mq-nativeha-ubuntu24 box carries NO `arch:` pin, so it
-    # tracks the host arch (native arm64 on the Mac) and can coexist with pcmk-ubuntu.
-    assert "arch" not in topo["boxes"]["mq-nativeha-ubuntu24"]
+    # The nodes boot the baked Ubuntu mq-nativeha box (#103 T6), but host-arch resolution
+    # is PRESERVED — it lives at the box layer: unlike the x86-pinned RHEL entry, the
+    # Ubuntu catalog entry carries NO arch pin, so the box tracks the host arch (native
+    # arm64 on the Mac) and can coexist with pcmk-ubuntu.
+    cat = load_catalog()
+    assert cat.oses[cat.default_os("nativeha-ubuntu")].arch_pin is None
 
 
 def test_nativeha_ubuntu_nodes_boot_the_baked_fat_box():
@@ -174,7 +176,7 @@ def test_nativeha_ubuntu_nodes_boot_the_baked_fat_box():
         "nha-ubuntu-b2",
         "nha-ubuntu-b3",
     ):
-        assert nodes[h]["platform"] == "mq-nativeha-ubuntu24"
+        assert nodes[h]["box"] == "mq-nativeha"
         assert "extra_disk" not in nodes[h]
 
 

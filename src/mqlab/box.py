@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 import typer
 import yaml
 
-from mqlab import cli, mqexporter, stacks, venvsync
+from mqlab import cli, mqexporter, venvsync
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import cache, repo_root, state
@@ -35,13 +35,13 @@ from mqlab.platforms import box_build_arch, box_build_domain_virt, ensure_resolv
 from mqlab.retired_boxes import RETIRED_BASE_ARTIFACTS, RETIRED_BOX_NAMES
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.versions import (
-    FAMILIES,
     HOST_ARCHES,
     INFRA_ROLES,
     BoxEntry,
     Catalog,
     VersionError,
     load_catalog,
+    stack_roles,
 )
 
 if TYPE_CHECKING:
@@ -97,14 +97,6 @@ def base_cache_artifact(base_box: str) -> str:
 # --------------------------------------------------------------------------- #
 # Fleet derivation                                                            #
 # --------------------------------------------------------------------------- #
-# INTERIM UNTIL T2 (epic .github#280): topology nodes still name a concrete box in
-# `platform:` (now the generated `<role>-<os><major>` name). T2 replaces that with a
-# `box:` ROLE per node; until then a stack's box roles are read back off its nodes'
-# platform values with this one pattern. A platform that does not match (the
-# host-resolved base-box platforms, e.g. the SAN targets) bakes nothing and is skipped.
-_INTERIM_PLATFORM_ROLE = re.compile(rf"^(?P<role>[a-z][a-z-]*)-(?:{'|'.join(FAMILIES)})\d+$")
-
-
 def _load_topology() -> dict[str, Any]:
     """The source topology (lab/topology.yaml)."""
     data: dict[str, Any] = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
@@ -112,31 +104,10 @@ def _load_topology() -> dict[str, Any]:
 
 
 def _topology_stack_roles(catalog: Catalog) -> dict[str, set[str]]:
-    """stack -> the (non-infra) box roles its nodes use. INTERIM UNTIL T2: derived from
-    the nodes' current `platform:` values (see _INTERIM_PLATFORM_ROLE).
-
-    Fails loudly when a platform names a role the catalog does not know, so a topology
-    typo can never silently drop a box from the fleet."""
-    topo = _load_topology()
-    nodes = topo.get("nodes") or {}
-    out: dict[str, set[str]] = {}
-    for stack in topo.get("stacks") or {}:
-        roles: set[str] = set()
-        for host in stacks.stack_members(stack) or []:
-            match = _INTERIM_PLATFORM_ROLE.fullmatch((nodes.get(host) or {}).get("platform", ""))
-            if match is None:
-                continue
-            role = match["role"]
-            if role not in catalog.roles:
-                raise VersionError(
-                    f"node {host}: platform names box role {role!r}, which is not in "
-                    f"lab/versions.yaml roles (known: {', '.join(sorted(catalog.roles))}) — "
-                    "fix lab/topology.yaml or add the role to lab/versions.yaml"
-                )
-            if role not in INFRA_ROLES:
-                roles.add(role)
-        out[stack] = roles
-    return out
+    """stack -> the stack-OS box roles its nodes declare (`box: <role>`, epic
+    .github#280), via versions.stack_roles — which fails loudly on an unknown role, so a
+    topology typo can never silently drop a box from the fleet."""
+    return stack_roles(_load_topology(), catalog)
 
 
 def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:

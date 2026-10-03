@@ -1,115 +1,24 @@
 # lab/topology.yaml — single source of truth for the lab shape: the guest VMs
 # (nodes), the networks/boxes, the atomic `groups` (role × site), and the named
 # `setups` that compose those groups into runnable configurations. The RDQM arm
-# uses a RHEL x86_64 platform per-node; arch-specific provider mechanics (UEFI,
+# boots x86_64-pinned RHEL boxes; arch-specific provider mechanics (UEFI,
 # input, CPU mode) live in the Vagrantfile keyed on `arch` — see the provider
 # spike report (docs/reports/2026-06-06-phase-a-provider-spike.md).
 #
 # Every node carries a net-mgmt NIC (10.50.0.0/24): the dedicated, host-only
 # management plane Ansible connects over, kept off the modeled data/hb/san
 # planes. The inventory is rendered from this file (mqlab vm inventory, #101).
-boxes:
-  # cloud-image/ubuntu-24.04 ships libvirt boxes for both arches; the Ubuntu
-  # platform a node uses is host-resolved (default_platform, #276), so guests
-  # track the host arch (native-preferred).
-  ubuntu24-arm64:  { box: cloud-image/ubuntu-24.04, arch: aarch64 }
-  ubuntu24-x86_64: { box: cloud-image/ubuntu-24.04, arch: x86_64 }
-  alma9-x86_64:      { box: almalinux/9,               arch: x86_64 }
-  # dvd: attached as a cdrom; the install DVD doubles as a complete
-  # offline BaseOS+AppStream dnf repo for the unregistered guests.
-  rhel9-x86_64:
-    box: rhel/9-x86_64
-    arch: x86_64
-    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
-  # The fat RDQM box (#604, epic .github#70): the rhel/9-x86_64 base with MQ + RDQM
-  # (DRBD/Pacemaker, kernel-matched kmod-drbd) + node-exporter + alloy + the #569 journald
-  # diagnostic default BAKED IN (lab/boxes/build-fatbox.sh --box mq-rdqm-rhel9). The RDQM
-  # nodes boot this instead of rhel9-x86_64 so a bootstrap skips the ~hour of heavy
-  # installs. Instances still attach the DVD: the per-run configure half (re)mounts it as
-  # the offline BaseOS+AppStream repo for dep resolution. The instance-build base-OS dnf
-  # update was removed (#639/#641) — OS currency comes from rebuilding the box, not
-  # updating at boot; this also keeps the kernel from drifting off the baked kmod-drbd.
-  # The box kernel matches its baked kmod-drbd by construction (baked from this exact
-  # base) — no separate kernel pin.
-  mq-rdqm-rhel9:
-    box: mq-rdqm-rhel9
-    arch: x86_64
-    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
-  # The fat native-HA RHEL box (#667, epic .github#88): the rhel/9-x86_64 base with base IBM MQ
-  # (server + client + SDK + samples) + node-exporter + alloy + the mqmonitor@ sample unit
-  # BAKED IN (lab/boxes/build-fatbox.sh --box mq-nativeha-rhel9). The six nha-rhel-* nodes
-  # boot this instead of bare rhel9-x86_64 so a bootstrap skips the MQ install; the per-run
-  # configure half (crtmqm, the NativeHAInstance peer set, the mqmonitor@ lifecycle, TLS/CRR)
-  # still runs. Instances still attach the DVD: the configure half (re)mounts it as the
-  # offline BaseOS+AppStream repo for dep resolution. UNLIKE mq-rdqm-rhel9 there is NO kernel
-  # pin and NO extra_disk — Native HA replicates in MQ's raft log (no DRBD kmod, no drbdpool).
-  # OS currency comes from rebuilding the box (#639), not updating at boot.
-  mq-nativeha-rhel9:
-    box: mq-nativeha-rhel9
-    arch: x86_64
-    dvd: /var/lib/libvirt/images/rhel-9.6-x86_64-dvd.iso
-  # The fat obs box (#605, epic .github#70; log-search tier folded in #1178/#1179, epic
-  # .github#267): the cloud-image/ubuntu-24.04 base with the observability stack
-  # (prometheus/grafana/loki binaries + node-exporter + alloy), the slow cgo mq_prometheus
-  # exporter build + MQ SDK, AND the log-search stack (OpenSearch + OpenSearch Dashboards +
-  # Data Prepper) BAKED IN (lab/boxes/build-fatbox.sh --box obs-ubuntu24). The obs node
-  # boots this instead of the host-resolved Ubuntu platform so a bootstrap skips the stack
-  # install; the per-run path renders the topology targets/dashboards and runs the metrics +
-  # log-search configure halves (site-obs.yml). host-resolved (#103) —
-  # arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
-  # x86_64 on the cloud), so the guest arch is not pinned (no DVD — Ubuntu registers online).
-  obs-ubuntu24:
-    box: obs-ubuntu24
-  # The fat infra box (#606, epic .github#70): the cloud-image/ubuntu-24.04 base with
-  # BIND9 (package + /etc/bind/zones scaffolding) + node-exporter + alloy BAKED IN
-  # (lab/boxes/build-fatbox.sh --box infra-ubuntu24). The infra nodes boot this
-  # instead of the bare Ubuntu image so a bootstrap skips those installs; the per-run
-  # configure half (zone data + per-host named.conf, base-OS apt refresh) still runs.
-  # host-resolved (#103) — arch tracks the host: the baked binaries are arch-specific but
-  # the box is baked natively per host (arm64 on Apple Silicon, x86_64 on the cloud), so
-  # the guest arch is not pinned. No DVD (Ubuntu uses the online archive).
-  infra-ubuntu24:
-    box: infra-ubuntu24
-  # The fat MQ-commons box (#659, epic .github#70): the cloud-image/ubuntu-24.04 base with
-  # the Ubuntu MQ product (server + client + SDK + samples debs) + node-exporter + alloy +
-  # the slow cgo mq_prometheus exporter build + acl BAKED IN (lab/boxes/build-fatbox.sh
-  # --box mq-client-ubuntu24). The three shared Ubuntu MQ commons (svc-sim, app-client,
-  # mon-probe) boot this instead of the host-resolved Ubuntu platform so a bootstrap skips
-  # ~15-20 min of per-run installs (MQ debs, alloy, mq_prometheus, the acl stall); the
-  # per-run configure half (QMs/channels on svc, the app-requester, the exporter instances)
-  # still runs. host-resolved (#103) — arch tracks the host: the baked binaries (incl. the
-  # arch-specific MQ debs) are baked natively per host (arm64 on Apple Silicon, x86_64 on
-  # the cloud), so the guest arch is not pinned. No DVD (Ubuntu online archive).
-  mq-client-ubuntu24:
-    box: mq-client-ubuntu24
-  # The fat native-HA Ubuntu box (#103 T6, epic .github#103): the cloud-image/ubuntu-24.04
-  # base with base IBM MQ (server + client + SDK + samples debs) + node-exporter + alloy
-  # BAKED IN (lab/boxes/build-fatbox.sh --box mq-nativeha-ubuntu24) — the OS-as-only-variable
-  # peer of mq-nativeha-rhel9. The six nha-ubuntu-* nodes boot this instead of the bare
-  # host-resolved Ubuntu platform so a bootstrap skips the MQ install; the per-run configure
-  # half (crtmqm, the NativeHAInstance peer set, the mqmonitor@ lifecycle, TLS/CRR) still
-  # runs. host-resolved (#103) — arch tracks the host: the box is baked natively per host
-  # (arm64 on Apple Silicon, x86_64 on the cloud), so the guest arch is NOT pinned. UNLIKE
-  # mq-nativeha-rhel9 there is NO DVD (Ubuntu registers online) and — like both Native HA
-  # arms — NO extra_disk (raft-log replication, not DRBD).
-  mq-nativeha-ubuntu24:
-    box: mq-nativeha-ubuntu24
-  # The fat pcmk-ubuntu24 box (#103 T7, epic .github#103): the cloud-image/ubuntu-24.04
-  # base with base IBM MQ (server + client + SDK + samples debs) + node-exporter + alloy
-  # BAKED IN (lab/boxes/build-fatbox.sh --box pcmk-ubuntu24). The six Pacemaker CLUSTER nodes
-  # (pcmk-a1..3, pcmk-b1..3) boot this instead of the bare host-resolved Ubuntu platform so
-  # a bootstrap skips the MQ product install; the per-run configure half (iSCSI initiators,
-  # Pacemaker cluster formation, STONITH, the mq-pcmk-qmgr resource group, TLS/CRR) still
-  # runs. Only the static PRODUCT install is baked — no QM, no cluster, no SAN. host-resolved
-  # (#103) — arch tracks the host: the box is baked natively per host (arm64 on Apple Silicon,
-  # x86_64 on the cloud), so the guest arch is NOT pinned. No DVD (Ubuntu registers online).
-  # The SAN targets (san-a/san-b) carry NO MQ payload, so they are NOT repointed here — they
-  # stay host-resolved on the base box (design D8, deferred to the SAN-hosts epic #108).
-  pcmk-ubuntu24:
-    box: pcmk-ubuntu24
-
-# No defaults.platform: the default Ubuntu platform is host-resolved by mqlab
-# (default_platform(facts)) so guests track the host arch (native-preferred, #276).
+#
+# Box ROLES, not boxes (epic .github#280): each node declares `box: <role>`, a role
+# under roles: in lab/versions.yaml. mqlab's version layer (src/mqlab/versions.py
+# node_boxes) picks the concrete `<role>-<os><major>` box per node: shared nodes
+# (infra roles: infra, obs, mq-client) run the catalog's infra OS; every other role
+# runs its owning stack's OS (instance record, else the stack default). `box: base`
+# is a pseudo-role booting the infra OS's bare base box (the SAN targets, until the
+# baked SAN box). No version token appears in this file; each stack declares only
+# its `os_family`. Every Ubuntu box tracks the host arch (native-preferred, #276);
+# RHEL boxes are x86_64-pinned by the catalog. What each fat box bakes in is
+# documented in docs/development/box-model.md.
 defaults: { cpus: 1, memory: 1024 }
 
 # boot_batch — the vms phase boots the stack's VMs in contiguous batches of at most N
@@ -151,14 +60,14 @@ env_profiles:
 nodes:
   # --- SVC service VM + app client (the distributed message path) ---
   svc-sim:
-    platform: mq-client-ubuntu24  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
+    box: mq-client  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
     cpus: 2
     memory: 2048
     org: service  # the mocked counterparty — the service.com side of net-ext
     # net-ext (10.60.0.50) is the inter-business WAN to our HA QM's partner VIP (#147).
     nics: { net-mgmt: 10.50.0.50, net-ext: 10.60.0.50 }
   app-client:
-    platform: mq-client-ubuntu24  # boot the baked MQ-commons box (#659) — MQ client+SDK/node-exporter/alloy/acl pre-installed
+    box: mq-client  # boot the baked MQ-commons box (#659) — MQ client+SDK/node-exporter/alloy/acl pre-installed
     # net-data-a reaches site-A VIPs (10.10.1.x), net-data-b reaches site-B VIPs
     # (10.10.2.x) -- so the app, a reconnectable client given both VIPs, rides a
     # cross-site DR cutover and keeps producing on the survivor.
@@ -174,7 +83,7 @@ nodes:
   # NICs for the (Plan B) client-mode MQ exporters, plus net-ext to reach the SVC
   # counterparty QM across the inter-business WAN (#182). ---
   obs:
-    platform: obs-ubuntu24  # boot the baked obs stack (metrics + logs, #605/#1178); mgmt-plane only
+    box: obs  # boot the baked obs stack (metrics + logs, #605/#1178); mgmt-plane only
     # 12 vCPU (#1194): the consolidated obs node runs the metrics stack (Prometheus/Grafana/
     # Loki/Alloy) AND the log stack (OpenSearch/Dashboards/Data Prepper). VAL #1177 measured
     # CPU saturation during observe (load ~27 on 8 cores; memory fine at ~1G/10G): the metrics
@@ -187,7 +96,7 @@ nodes:
     memory: 10240
     nics: { net-mgmt: 10.50.0.2 }
   mon-probe:
-    platform: mq-client-ubuntu24  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
+    box: mq-client  # boot the baked MQ-commons box (#659) — MQ/node-exporter/alloy/mq_prometheus/acl pre-installed
     cpus: 1
     memory: 1024
     nics: { net-mgmt: 10.50.0.3, net-data-a: 10.10.1.7, net-data-b: 10.10.2.7, net-ext: 10.60.0.7 }
@@ -203,10 +112,10 @@ nodes:
   # guests on the mgmt + both site data planes; infra-svc is the mock service.com
   # nameserver on the inter-business WAN. Default (small) footprint — BIND is light. ---
   infra-client:
-    platform: infra-ubuntu24  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
+    box: infra  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
     nics: { net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-data-b: 10.10.2.8, net-ext: 10.60.0.8 }
   infra-svc:
-    platform: infra-ubuntu24  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
+    box: infra  # boot the baked infra box (#606) — bind9/node-exporter/alloy pre-installed
     org: service  # the mock service.com nameserver
     nics: { net-mgmt: 10.50.0.9, net-ext: 10.60.0.9 }
 
@@ -214,37 +123,37 @@ nodes:
   # on an x86 host; TCG (emulated) only when the host is arm64/macOS (resolved per host by
   # src/mqlab/platforms.py _provider). ---
   rdqm-a1:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.31, net-data-a: 10.10.1.31, net-hb-a: 172.16.1.31, net-wan: 10.99.0.31, net-ext: 10.60.0.31 }
   rdqm-a2:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.32, net-data-a: 10.10.1.32, net-hb-a: 172.16.1.32, net-wan: 10.99.0.32, net-ext: 10.60.0.32 }
   rdqm-a3:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.33, net-data-a: 10.10.1.33, net-hb-a: 172.16.1.33, net-wan: 10.99.0.33, net-ext: 10.60.0.33 }
   rdqm-b1:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.41, net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
   rdqm-b2:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
     nics: { net-mgmt: 10.50.0.42, net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
   rdqm-b3:
-    platform: mq-rdqm-rhel9
+    box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
@@ -252,25 +161,26 @@ nodes:
 
   # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
   san-a:
+    box: base  # the infra OS's bare base box: no MQ payload (design D8; baked SAN box is T6)
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.5, net-san-a: 10.40.1.5, net-wan: 10.99.0.5 }
-  # The six Pacemaker CLUSTER nodes boot the baked pcmk-ubuntu24 fat box (#103 T7) so a
+  # The six Pacemaker CLUSTER nodes boot the baked pcmk-role fat box (#103 T7) so a
   # bootstrap skips the MQ product install; the per-run cluster/SAN/STONITH/QM formation
-  # still runs. host-arch resolution is preserved AT THE BOX LAYER (the pcmk-ubuntu24 box
+  # still runs. host-arch resolution is preserved AT THE BOX LAYER (the Ubuntu pcmk box
   # carries no `arch:` pin). The SAN targets san-a/san-b are NOT repointed — no MQ payload,
   # so they stay host-resolved on the base Ubuntu box (design D8).
   pcmk-a1:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.51, net-data-a: 10.10.1.51, net-hb-a: 172.16.1.51, net-san-a: 10.40.1.51, net-wan: 10.99.0.51, net-ext: 10.60.0.51 }
   pcmk-a2:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.52, net-data-a: 10.10.1.52, net-hb-a: 172.16.1.52, net-san-a: 10.40.1.52, net-wan: 10.99.0.52, net-ext: 10.60.0.52 }
   pcmk-a3:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.53, net-data-a: 10.10.1.53, net-hb-a: 172.16.1.53, net-san-a: 10.40.1.53, net-wan: 10.99.0.53, net-ext: 10.60.0.53 }
@@ -280,20 +190,21 @@ nodes:
   # the peer cluster that receives the QM on cutover. hb IPs (172.16.2.61-63)
   # match ansible/site-pcmk-dr.yml; site-B VIP is 10.10.2.200, portal 10.40.2.6.
   san-b:
+    box: base  # the infra OS's bare base box: no MQ payload (design D8; baked SAN box is T6)
     extra_disk: 8
     nics: { net-mgmt: 10.50.0.6, net-san-b: 10.40.2.6, net-wan: 10.99.0.6 }
   pcmk-b1:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.61, net-data-b: 10.10.2.51, net-hb-b: 172.16.2.61, net-san-b: 10.40.2.51, net-wan: 10.99.0.61, net-ext: 10.60.0.61 }
   pcmk-b2:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.62, net-data-b: 10.10.2.52, net-hb-b: 172.16.2.62, net-san-b: 10.40.2.52, net-wan: 10.99.0.62, net-ext: 10.60.0.62 }
   pcmk-b3:
-    platform: pcmk-ubuntu24
+    box: pcmk
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.63, net-data-b: 10.10.2.53, net-hb-b: 172.16.2.63, net-san-b: 10.40.2.53, net-wan: 10.99.0.63, net-ext: 10.60.0.63 }
@@ -306,32 +217,32 @@ nodes:
   # Host octets .9x — clear of every other arm's block (both RHEL arms). The nodes carry
   # an explicit -crr- infix (#227 Task 2) so this CRR arm coexists with the IRR sibling.
   nha-rhel-crr-a1:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.91, net-data-a: 10.10.1.91, net-hb-a: 172.16.1.91, net-wan: 10.99.0.91, net-ext: 10.60.0.91 }
   nha-rhel-crr-a2:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.92, net-data-a: 10.10.1.92, net-hb-a: 172.16.1.92, net-wan: 10.99.0.92, net-ext: 10.60.0.92 }
   nha-rhel-crr-a3:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.93, net-data-a: 10.10.1.93, net-hb-a: 172.16.1.93, net-wan: 10.99.0.93, net-ext: 10.60.0.93 }
   nha-rhel-crr-b1:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.94, net-data-b: 10.10.2.91, net-hb-b: 172.16.2.91, net-wan: 10.99.0.94 }
   nha-rhel-crr-b2:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.95, net-data-b: 10.10.2.92, net-hb-b: 172.16.2.92, net-wan: 10.99.0.95 }
   nha-rhel-crr-b3:
-    platform: mq-nativeha-rhel9
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.96, net-data-b: 10.10.2.93, net-hb-b: 172.16.2.93, net-wan: 10.99.0.96 }
@@ -343,39 +254,39 @@ nodes:
   # arm (rdqm .3x/.4x, pcmk .5x/.6x, nha-rhel .9x) so this arm can
   # COEXIST with the running pcmk-ubuntu arm on one host (#417 goal).
   #
-  # They boot the baked mq-nativeha-ubuntu24 fat box (#103 T6) so a bootstrap skips the MQ
+  # They boot the baked mq-nativeha-role Ubuntu fat box (#103 T6) so a bootstrap skips the MQ
   # install — the OS-as-only-variable peer of the x86-pinned nha-rhel arm. Host-arch
-  # resolution is preserved AT THE BOX LAYER (the mq-nativeha-ubuntu24 box carries no `arch:`
+  # resolution is preserved AT THE BOX LAYER (the Ubuntu mq-nativeha box carries no `arch:`
   # pin): on the Apple-Silicon dev host these run native arm64 (so the two Ubuntu stacks
   # are usable side-by-side); on an x86 host they track x86_64. All three instances share
   # one arch either way, which is all Native HA requires.
   nha-ubuntu-a1:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.11, net-data-a: 10.10.1.11, net-hb-a: 172.16.1.11, net-wan: 10.99.0.11, net-ext: 10.60.0.11 }
   nha-ubuntu-a2:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.12, net-data-a: 10.10.1.12, net-hb-a: 172.16.1.12, net-wan: 10.99.0.12, net-ext: 10.60.0.12 }
   nha-ubuntu-a3:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.13, net-data-a: 10.10.1.13, net-hb-a: 172.16.1.13, net-wan: 10.99.0.13, net-ext: 10.60.0.13 }
   nha-ubuntu-b1:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.14, net-data-b: 10.10.2.11, net-hb-b: 172.16.2.11, net-wan: 10.99.0.14 }
   nha-ubuntu-b2:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.15, net-data-b: 10.10.2.12, net-hb-b: 172.16.2.12, net-wan: 10.99.0.15 }
   nha-ubuntu-b3:
-    platform: mq-nativeha-ubuntu24
+    box: mq-nativeha
     cpus: 2
     memory: 2048
     nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }
@@ -422,7 +333,7 @@ groups:
 stacks:
   pcmk-ubuntu:
     mechanism: pacemaker-san
-    os: ubuntu
+    os_family: ubuntu
     short: PCMK
     cluster_group: pcmk_a
     groups: [san_a, pcmk_a, san_b, pcmk_b]
@@ -445,7 +356,7 @@ stacks:
       qm-status:  { pcs: "status resources" }
   rdqm-rhel:
     mechanism: rdqm
-    os: rhel
+    os_family: rhel
     short: RDQM
     cluster_group: rdqm_a
     groups: [rdqm_a, rdqm_b]
@@ -461,7 +372,7 @@ stacks:
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
   nativeha-rhel-crr:
     mechanism: native-ha
-    os: rhel
+    os_family: rhel
     short: NHARC
     cluster_group: nha_rhel_crr_a
     groups: [nha_rhel_crr_a, nha_rhel_crr_b]
@@ -485,7 +396,7 @@ stacks:
   # with pcmk-ubuntu on one host (collision-free IPs/ports).
   nativeha-ubuntu:
     mechanism: native-ha
-    os: ubuntu
+    os_family: ubuntu
     short: NHAU
     cluster_group: nha_ubuntu_a
     groups: [nha_ubuntu_a, nha_ubuntu_b]

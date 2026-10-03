@@ -32,13 +32,13 @@ _PKI_TOPO = (
     "groups: {}\n"
     "stacks:\n"
     "  pcmk-ubuntu:\n"
-    "    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
+    "    mechanism: pacemaker-san\n    os_family: ubuntu\n    short: PCMK\n"
     "    groups: []\n    qm: {}\n"
     "  rdqm-rhel:\n"
-    "    mechanism: rdqm\n    os: rhel\n    short: RDQM\n"
+    "    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n"
     "    groups: []\n    qm: {}\n"
     "  nativeha-rhel-crr:\n"
-    "    mechanism: native-ha\n    os: rhel\n    short: NHARC\n"
+    "    mechanism: native-ha\n    os_family: rhel\n    short: NHARC\n"
     "    groups: []\n    qm: {}\n"
     "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
 )
@@ -171,8 +171,8 @@ def test_render_pki_entities_dedupes_repeated_svc_cn(monkeypatch, tmp_path):
     topo = (
         "nodes: {}\ngroups: {}\n"
         "stacks:\n"
-        "  a:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
-        "  b:\n    mechanism: m\n    os: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
+        "  a:\n    mechanism: m\n    os_family: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
+        "  b:\n    mechanism: m\n    os_family: o\n    short: PCMK\n    groups: []\n    qm: {}\n"
         "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)
@@ -211,7 +211,8 @@ def test_render_pki_entities_stack_without_short_is_skipped(monkeypatch, tmp_pat
     topo = (
         "nodes: {}\ngroups: {}\n"
         "stacks:\n"
-        "  reserved:\n    mechanism: m\n    os: o\n    short: ''\n    groups: []\n    qm: {}\n"
+        "  reserved:\n    mechanism: m\n    os_family: o\n"
+        "    short: ''\n    groups: []\n    qm: {}\n"
         "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
     )
     _seed(monkeypatch, tmp_path, topo)

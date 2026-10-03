@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from mqlab.clusterboard import (
+    _title_banner,
     active_side,
     fold_side,
     hero_tiles,
@@ -175,6 +178,26 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
     banner = next(p for p in d["panels"] if p["type"] == "text")
     assert banner["gridPos"]["y"] == 0 and "Ubuntu" in banner["options"]["content"]
     assert any(p["type"] == "row" and p["title"].startswith("①") for p in d["panels"])
+
+
+@pytest.mark.parametrize(
+    ("arm", "label"),
+    [
+        ("pcmk-ubuntu", "Ubuntu 24"),
+        ("nativeha-ubuntu", "Ubuntu 24"),
+        ("nativeha-rhel-crr", "RHEL 9"),
+        ("rdqm-rhel", "RHEL 9"),
+    ],
+)
+def test_title_banner_os_label_comes_from_the_version_layer(arm, label):
+    """The banner names the OS the stack runs, from the version layer (its record, else
+    its catalog default) — never a version literal in the board code (epic .github#280)."""
+    content = _title_banner(arm, y=0)["options"]["content"]
+    assert content.endswith(f" · {label}")
+
+
+def test_title_banner_unknown_arm_carries_no_os_label():
+    assert _title_banner("mystery", y=0)["options"]["content"] == "## Cluster · mystery"
 
 
 # ── Native HA arm (#279) ──────────────────────────────────────────────────────

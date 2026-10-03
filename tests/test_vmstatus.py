@@ -21,11 +21,11 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "defaults: { platform: ubuntu24-arm64 }\nnodes:\n"
-        "  rdqm-a1: { platform: rhel9-x86_64 }\n  pcmk-a1: {}\n  pcmk-b1: {}\n"
+        "nodes:\n"
+        "  rdqm-a1: { box: mq-rdqm }\n  pcmk-a1: { box: pcmk }\n  pcmk-b1: { box: pcmk }\n"
         "groups:\n  rdqm_a: [rdqm-a1]\n  pcmk_a: [pcmk-a1]\n  pcmk_b: [pcmk-b1]\n"
-        "stacks:\n  rdqm-rhel:\n    groups: [rdqm_a]\n"
-        "  pcmk-ubuntu:\n    groups: [pcmk_a, pcmk_b]\n"
+        "stacks:\n  rdqm-rhel:\n    os_family: rhel\n    groups: [rdqm_a]\n"
+        "  pcmk-ubuntu:\n    os_family: ubuntu\n    groups: [pcmk_a, pcmk_b]\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))
@@ -40,7 +40,7 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert "topology.yaml" in out  # the other source named on the table (#88)
     assert "rdqm-a1" in out  # full fleet — incl the defined-but-not-instantiated RHEL node
     assert "not created" in out
-    assert "rhel9-x86_64" in out
+    assert "mq-rdqm-rhel9" in out  # the Box column: the generated box name
     assert "rdqm-rhel" in out  # config-driven Stack(s) column, from topology.yaml stacks (#90)
     body = transcript.path.read_text(encoding="utf-8")
     assert "lab_pcmk-b1      running" in body  # raw rows teed to the transcript
@@ -50,7 +50,7 @@ def test_vm_status_core_filters_to_given_guests(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "nodes:\n  rdqm-a1: {}\n  pcmk-a1: {}\n  pcmk-b1: {}\n"
+        "nodes:\n  rdqm-a1: { box: infra }\n  pcmk-a1: { box: infra }\n  pcmk-b1: { box: infra }\n"
     )
     buffer = io.StringIO()
     renderer = Renderer(Console(file=buffer, force_terminal=False, width=120))

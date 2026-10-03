@@ -18,11 +18,11 @@ from rich.console import Console
 from mqlab import buildenv, coldboot, hugepages, parity, perfdiff, topology, venvsync
 from mqlab.artifact import (
     download_mq_tarball,
-    ensure_mq_tarballs_for_platforms,
+    ensure_mq_tarballs_for_boxes,
 )
 from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
-from mqlab.fleet import lab_guests, parse_domain_states
+from mqlab.fleet import parse_domain_states
 from mqlab.hostfacts import probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, RUNNING, classify, is_live
@@ -68,6 +68,7 @@ from mqlab.stacks import (
     stack_san_targets,
 )
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import load_catalog, node_boxes
 from mqlab.vmstatus import vm_status_core
 
 if TYPE_CHECKING:
@@ -78,6 +79,7 @@ if TYPE_CHECKING:
     from mqlab.phases import Phase
     from mqlab.runner import CommandRunner
     from mqlab.stacks import Stack
+    from mqlab.versions import BoxEntry
 
 
 @dataclass
@@ -193,32 +195,37 @@ def _pki_ensure_step(phase: str = "") -> CommandStep:
     return CommandStep("pki ensure", cmd, phase=phase)
 
 
-def _commons_mq_platforms() -> set[str]:
-    """Distinct MQ guest platforms among the commons VMs (svc/app run MQ; the probe
-    runs the MQ exporters). Host-resolved via lab_guests (native-preferred, #276).
+def _lab_node_boxes() -> dict[str, BoxEntry]:
+    """Every topology node's box, from the version layer (versions.node_boxes)."""
+    return node_boxes(topology.load(), load_catalog())
+
+
+def _commons_mq_boxes() -> set[BoxEntry]:
+    """Distinct MQ guest boxes among the commons VMs (svc/app run MQ; the probe runs the
+    MQ exporters). Resolved through the version layer (the infra OS, host-arch tracking).
 
     Excludes the infrastructure-only commons groups (_non_mq_commons_hosts, #634):
-    infra is a DNS/core-services box that runs no MQ, so its platform carries no MQ
-    tarball arch mapping — enumerating it would hard-fail the media prereq. The vms
-    phase still boots those VMs (via _commons_members); only the media enum skips them.
+    infra is a DNS/core-services box that runs no MQ, so it needs no MQ tarball. The
+    vms phase still boots those VMs (via _commons_members); only the media enum skips
+    them.
     """
-    platforms = lab_guests()
+    boxes = _lab_node_boxes()
     excluded = _non_mq_commons_hosts()
-    mq_hosts = [h for h in _commons_members() if h in platforms and h not in excluded]
-    return {platforms[h] for h in mq_hosts}
+    mq_hosts = [h for h in _commons_members() if h in boxes and h not in excluded]
+    return {boxes[h] for h in mq_hosts}
 
 
 def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
     """Ensure every fresh-volume prerequisite the commons (obs/site-obs.yml) provision
     needs (#343/#350). All live under build/ on the persistent volume, which a recreate
     wipes, so commons up regenerates them — idempotently, in dependency order:
-      1. the MQ-for-Developers tarball(s) for the commons guest platforms
+      1. the MQ-for-Developers tarball(s) for the commons guest boxes
       2. Ansible galaxy collections (community.crypto — required by the PKI play)
       3. the PKI CA + entity keystores (the exporters consume these)
     MQ is a Python fetch; galaxy + PKI run through the step runner (progress/transcript).
     """
-    ensure_mq_tarballs_for_platforms(
-        _commons_mq_platforms(),
+    ensure_mq_tarballs_for_boxes(
+        _commons_mq_boxes(),
         DEFAULT_MQ_VERSION,
         mq_cache_dir(),
         fetch=_fetch_mq_tarball,
@@ -231,36 +238,35 @@ def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
 #     it). Bootstrap resolves prerequisites from the STACK and only for the phases
 #     actually selected this run — each phase declares its prereq kinds as data in
 #     phases.py (Phase.ensure); the dispatch below maps each name to its real I/O.
-def _stack_mq_platforms(stack: Stack) -> set[str]:
-    """Distinct MQ guest platforms a stack's provision installs MQ on.
+def _stack_mq_boxes(stack: Stack) -> set[BoxEntry]:
+    """Distinct MQ guest boxes a stack's provision installs MQ on.
 
-    The MQ-for-Developers tarball is arch-specific, so we ensure one per distinct
-    platform, host-resolved via lab_guests (native-preferred, #276) — the same
-    source the setup path uses. Two cohorts run MQ and both need their tarball:
+    The MQ-for-Developers tarball is per OS family + arch, so we ensure one per distinct
+    box family/arch, resolved through the version layer (versions.node_boxes). Two
+    cohorts run MQ and both need their tarball:
       - the stack's cluster (QM) member VMs (its groups' hosts), and
       - the commons SVC/app endpoints: every stack's provision playbook imports
         site-distributed-shared.yml, which runs mq-install on the svc/app hosts
-        (the per-stack SVC counterparty QM + the requester app). These are Ubuntu
-        (host-resolved), so on a cold cache — no prior `commons up` to leave the
-        tarball behind in the shared build/cache — it is absent unless we fetch it
-        here too (#407).
-    obs/probe also land in _commons_mq_platforms, but they resolve to that same
-    Ubuntu platform, so the union adds exactly the one Ubuntu tarball svc/app need.
+        (the per-stack SVC counterparty QM + the requester app). These run the infra
+        Ubuntu, so on a cold cache — no prior `commons up` to leave the tarball behind
+        in the shared build/cache — it is absent unless we fetch it here too (#407).
+    obs/probe also land in _commons_mq_boxes; they resolve to the same Ubuntu tarball,
+    so the union adds exactly the one Ubuntu tarball svc/app need.
     """
     members = stack_members(stack.name) or []
-    platforms = lab_guests()
-    member_platforms = {platforms[host] for host in members if host in platforms}
-    return member_platforms | _commons_mq_platforms()
+    boxes = _lab_node_boxes()
+    member_boxes = {boxes[host] for host in members if host in boxes}
+    return member_boxes | _commons_mq_boxes()
 
 
 def _ensure_mq_artifacts_for_stack(stack: Stack) -> None:
-    """Ensure the arch-correct MQ tarball(s) for a stack's cluster-node platforms.
+    """Ensure the arch-correct MQ tarball(s) for a stack's cluster-node boxes.
 
     The stack counterpart of _ensure_mq_artifacts (which is setup-resolved). Version
     is the repo default — stacks carry no per-setup manifest pin in the #350 model.
     """
-    ensure_mq_tarballs_for_platforms(
-        _stack_mq_platforms(stack),
+    ensure_mq_tarballs_for_boxes(
+        _stack_mq_boxes(stack),
         DEFAULT_MQ_VERSION,
         mq_cache_dir(),
         fetch=_fetch_mq_tarball,
@@ -311,7 +317,7 @@ def _ensure_prereqs_for_stack(
 
     Dispatches each declared prereq kind in dependency order:
       boxes  -> build/register the local boxes for the stack's VMs (vms phase)
-      mq     -> the MQ-for-Developers tarball(s) for the stack's platforms
+      mq     -> the MQ-for-Developers tarball(s) for the stack's boxes
       san    -> the SAN install-half debs (only a stack with SAN targets; #796)
       galaxy -> Ansible galaxy collections (community.crypto, needed by the PKI play)
       pki    -> the PKI CA + entity keystores (the exporters consume these too)

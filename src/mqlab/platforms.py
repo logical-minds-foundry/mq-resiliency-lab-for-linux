@@ -4,7 +4,11 @@ The single authority for the host-arch-gated virtualization matrix (design §4.2
 Pure and display-safe: callers pass HostFacts, resolve() never raises on missing KVM
 (so status works); the hard native-KVM gate is require_native_kvm(), called by the
 bring-up path. resolve() raises only on the structurally-impossible arm64-on-x86 (D4)
-or an undefined platform.
+or a node with no box selection.
+
+Which box each node boots is NOT decided here: the version layer (mqlab.versions
+node_boxes, epic .github#280) hands resolve() a per-node BoxEntry selection, and this
+module keeps sole ownership of the provider mechanics.
 """
 
 from __future__ import annotations
@@ -17,9 +21,12 @@ import yaml
 from mqlab import topology
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts, probe
 from mqlab.paths import resolved_topology_path
+from mqlab.versions import BASE_ROLE, load_catalog, node_boxes
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from mqlab.versions import BoxEntry
 
 # Provider literals — one source of truth for the matrix (design §4.2).
 AAVMF_LOADER = "/usr/share/AAVMF/AAVMF_CODE.fd"
@@ -27,6 +34,9 @@ MACHINE_TYPE_X86 = "q35"
 CPU_KVM = "host-passthrough"
 CPU_TCG = "maximum"
 TCG_BOOT_TIMEOUT = 1800
+# libvirt's default image pool: a RHEL node attaches its install DVD (the catalog's
+# os.<family>.<major>.iso) from here, where lab/scripts/stage-rhel-iso.sh stages it.
+LIBVIRT_POOL = "/var/lib/libvirt/images"
 
 
 class PlatformError(RuntimeError):
@@ -35,8 +45,11 @@ class PlatformError(RuntimeError):
 
 @dataclass(frozen=True)
 class ResolvedNode:
-    platform: str
+    os: str  # the node's OS, e.g. "ubuntu:24" (from the version layer)
     box: str
+    # The Vagrant box_version pin: the catalog's base_box_version for a node booting the
+    # bare upstream base box (role base); None for a locally-baked box (unversioned).
+    box_version: str | None
     arch: str
     driver: str
     machine_arch: str | None
@@ -57,12 +70,6 @@ class ResolvedNode:
     memory_backing: str | None = None
 
 
-def default_platform(facts: HostFacts) -> str:
-    """Native-preferred Ubuntu platform for this host (D1/D6). The `ubuntu24-*` platform
-    keys are interim until T2 (epic .github#280) replaces platforms with box roles."""
-    return "ubuntu24-x86_64" if facts.arch == X86_64 else "ubuntu24-arm64"
-
-
 def require_native_kvm(facts: HostFacts) -> None:
     """Hard native-KVM requirement (D3). The native arch always equals the host arch."""
     if not facts.kvm:
@@ -72,17 +79,17 @@ def require_native_kvm(facts: HostFacts) -> None:
         )
 
 
-def resolve(topo: dict[str, Any], facts: HostFacts) -> dict[str, ResolvedNode]:
-    boxes = topo["boxes"]
+def resolve(
+    topo: dict[str, Any], facts: HostFacts, boxes: dict[str, BoxEntry]
+) -> dict[str, ResolvedNode]:
+    """Each topology node -> its provider config, booting the box ``boxes`` selects."""
     defaults = topo.get("defaults", {})
     backing = topology.memory_backing(topo)  # validated; never read from MQLAB_ENV here
     out: dict[str, ResolvedNode] = {}
     for name, raw in topo.get("nodes", {}).items():
-        spec = raw or {}
-        platform = spec.get("platform", default_platform(facts))
-        if platform not in boxes:
-            raise PlatformError(f"node {name}: unknown platform {platform!r}")
-        node = _provider(name, spec, defaults, platform, boxes[platform], facts)
+        if name not in boxes:
+            raise PlatformError(f"node {name}: no box selected by the version layer")
+        node = _provider(name, raw or {}, defaults, boxes[name], facts)
         out[name] = replace(node, memory_backing=backing)
     return out
 
@@ -91,18 +98,18 @@ def _provider(
     name: str,
     spec: dict[str, Any],
     defaults: dict[str, Any],
-    platform: str,
-    box: dict[str, Any],
+    entry: BoxEntry,
     facts: HostFacts,
 ) -> ResolvedNode:
-    guest = box_build_arch(box, facts)
+    guest = box_build_arch({"arch": entry.os.arch_pin}, facts)
     if guest == AARCH64 and facts.arch == X86_64:
         raise PlatformError(f"node {name}: emulating ARM on x86 is unsupported")
     kvm = guest == facts.arch and facts.kvm
     is_arm = guest == AARCH64
     return ResolvedNode(
-        platform=platform,
-        box=box["box"],
+        os=str(entry.os.ref),
+        box=entry.name,
+        box_version=entry.os.base_box_version if entry.role == BASE_ROLE else None,
         arch=guest,
         driver="kvm" if kvm else "qemu",
         machine_arch=None if is_arm else X86_64,
@@ -115,7 +122,7 @@ def _provider(
         cpus=spec.get("cpus", defaults.get("cpus", 1)),
         memory=spec.get("memory", defaults.get("memory", 1024)),
         extra_disk=spec.get("extra_disk"),
-        dvd=box.get("dvd"),
+        dvd=f"{LIBVIRT_POOL}/{entry.os.iso}" if entry.os.iso else None,
         nics=spec.get("nics", {}),
     )
 
@@ -164,18 +171,22 @@ def is_foreign_box_build(entry: dict[str, Any], facts: HostFacts) -> bool:
     return bool(pinned) and pinned != facts.arch
 
 
-def render_resolved(topo: dict[str, Any], facts: HostFacts) -> str:
-    nodes = {name: asdict(node) for name, node in resolve(topo, facts).items()}
+def render_resolved(topo: dict[str, Any], facts: HostFacts, boxes: dict[str, BoxEntry]) -> str:
+    nodes = {name: asdict(node) for name, node in resolve(topo, facts, boxes).items()}
     return yaml.safe_dump({"nodes": nodes}, sort_keys=True)
 
 
 def ensure_resolved(*, facts: HostFacts | None = None, topo: dict[str, Any] | None = None) -> Path:
-    """Render build/work/lab/topology.resolved.yaml. Enforces the native-KVM gate (D3)."""
+    """Render build/work/lab/topology.resolved.yaml. Enforces the native-KVM gate (D3).
+
+    The per-node box selection comes from the version layer (versions.node_boxes over
+    lab/versions.yaml and the per-stack instance records)."""
     facts = facts if facts is not None else probe()
     require_native_kvm(facts)
     if topo is None:
         topo = topology.load()  # effective topology: base + MQLAB_ENV profile (#1202)
+    boxes = node_boxes(topo, load_catalog())
     path = resolved_topology_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_resolved(topo, facts))
+    path.write_text(render_resolved(topo, facts, boxes))
     return path

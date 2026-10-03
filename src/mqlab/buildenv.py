@@ -207,7 +207,6 @@ MIGRATION = {
     "dr-runs": "state",
     "inventory.ini": "work",
     "lab": "work",
-    "box-versions.json": "work",
     "versions.json": "work",
     "grafana": "work",
     "prometheus": "work",

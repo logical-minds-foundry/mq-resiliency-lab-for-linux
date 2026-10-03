@@ -13,6 +13,7 @@ import pathlib
 import yaml
 
 from mqlab.stacks import lab_stacks, stack_dr_hosts, stack_members, stack_members_effective
+from mqlab.versions import load_catalog
 
 
 def _topology() -> dict:
@@ -48,18 +49,18 @@ def test_pcmk_ubuntu_effective_members_drop_pcmk_b_but_keep_san_b_under_no_dr():
 
 
 def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
-    # #103 T7: the six Pacemaker cluster nodes are repointed to the baked pcmk-ubuntu24
-    # fat box (not the bare host-resolved Ubuntu base), so a bootstrap skips the MQ
-    # install; the per-run cluster/SAN/STONITH/QM formation still runs. The box carries
-    # NO `arch:` pin, so host-arch resolution is preserved at the box layer (native
-    # arm64 on the Mac, x86_64 on the cloud) — it can coexist with the Ubuntu arms.
+    # #103 T7: the six Pacemaker cluster nodes boot the baked pcmk-role fat box (not the
+    # bare Ubuntu base), so a bootstrap skips the MQ install; the per-run
+    # cluster/SAN/STONITH/QM formation still runs. The Ubuntu catalog entry carries NO
+    # arch pin, so host-arch resolution is preserved at the box layer (native arm64 on
+    # the Mac, x86_64 on the cloud) — it can coexist with the Ubuntu arms.
     topo = _topology()
     nodes = topo["nodes"]
     for h in ("pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "pcmk-b2", "pcmk-b3"):
-        assert nodes[h]["platform"] == "pcmk-ubuntu24"
-    assert "arch" not in topo["boxes"]["pcmk-ubuntu24"]
-    # D8: san-a/san-b carry no IBM-MQ payload, so they are NOT baked and NOT repointed
-    # — they keep booting the host-resolved base Ubuntu box (no `platform:` key means
-    # default_platform(facts)). SAN treatment is deferred to the SAN-hosts epic (#108).
+        assert nodes[h]["box"] == "pcmk"
+    cat = load_catalog()
+    assert cat.oses[cat.default_os("pcmk-ubuntu")].arch_pin is None
+    # D8: san-a/san-b carry no IBM-MQ payload, so they are NOT baked — they boot the
+    # infra OS's bare base box (the `base` pseudo-role) until the baked SAN box (T6).
     for h in ("san-a", "san-b"):
-        assert "platform" not in nodes[h]
+        assert nodes[h]["box"] == "base"

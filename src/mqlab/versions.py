@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from mqlab import instances
 from mqlab.paths import versions_catalog_path
 
 if TYPE_CHECKING:
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
 FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 # Roles whose box always runs the infra OS (the shared/commons nodes). T6 adds "san".
 INFRA_ROLES = ("infra", "obs", "mq-client")
+# The pseudo-role a topology node names to boot the infra OS's BARE base box (no bake):
+# the SAN targets until T6 gives them a baked `san` role. Never a catalog role.
+BASE_ROLE = "base"
 # Host requirements the resolver knows how to gate. Empty in Phase 1; T10 adds
 # "x86-64-v3". An entry naming any other requirement is refused at load.
 KNOWN_REQUIREMENTS: frozenset[str] = frozenset()
@@ -75,6 +79,11 @@ class OsRef:
 
     def __str__(self) -> str:
         return f"{self.family}:{self.major}"
+
+    @property
+    def label(self) -> str:
+        """The human display label, e.g. ``"Ubuntu 24"`` / ``"RHEL 9"``."""
+        return f"{FAMILIES[self.family]} {self.major}"
 
 
 @dataclass(frozen=True)
@@ -142,6 +151,19 @@ class Catalog:
             mq_bearing=spec["mq_bearing"],
         )
 
+    def base(self, ref: OsRef) -> BoxEntry:
+        """The bare base box of ``ref`` as a BoxEntry under the BASE_ROLE pseudo-role.
+
+        Nothing bakes it (``bake_stem`` is empty); a node naming ``box: base`` boots the
+        OS's upstream base box (e.g. ``cloud-image/ubuntu-24.04``) as-is."""
+        return BoxEntry(
+            name=self._entry(ref).base_box,
+            role=BASE_ROLE,
+            os=self._entry(ref),
+            bake_stem="",
+            mq_bearing=False,
+        )
+
     def _stack(self, stack: str) -> dict[str, Any]:
         if stack not in self.stacks:
             raise VersionError(
@@ -149,6 +171,11 @@ class Catalog:
                 "add it under stacks: in lab/versions.yaml"
             )
         return self.stacks[stack]
+
+    def default_os(self, stack: str) -> OsRef:
+        """The stack's catalog default OS (unknown stack -> VersionError)."""
+        default: OsRef = self._stack(stack)["default"]
+        return default
 
     def stack_os(self, stack: str, build: BuildFile | None, facts: HostFacts) -> OsRef:
         """The OS major ``stack`` builds on: the build file's ``os`` or the stack default.
@@ -210,6 +237,115 @@ class Catalog:
 
 def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
     return entry.arch_pin is None or entry.arch_pin == facts.arch
+
+
+# --- Topology: nodes name box ROLES; the version layer picks the concrete box --------
+
+_TOPOLOGY_FIX = "fix lab/topology.yaml"
+
+
+def node_role(node: str, spec: Any) -> str:
+    """The box role a topology node declares (``box: <role>``); fail loud when absent."""
+    role = spec.get("box") if isinstance(spec, dict) else None
+    if not isinstance(role, str) or not role:
+        raise VersionError(
+            f"node {node}: declares no box role — give it `box: <role>` (a role under "
+            f"roles: in lab/versions.yaml, or `{BASE_ROLE}`) — {_TOPOLOGY_FIX}"
+        )
+    return role
+
+
+def node_stacks(topo: dict[str, Any]) -> dict[str, list[str]]:
+    """node -> the stacks whose groups list it (declared order); shared nodes map to []."""
+    groups: dict[str, Any] = topo.get("groups") or {}
+    out: dict[str, list[str]] = {node: [] for node in topo.get("nodes") or {}}
+    for stack, cfg in (topo.get("stacks") or {}).items():
+        for group in (cfg or {}).get("groups") or []:
+            for host in groups.get(group) or []:
+                owners = out.setdefault(host, [])
+                if stack not in owners:
+                    owners.append(stack)
+    return out
+
+
+def stack_roles(topo: dict[str, Any], catalog: Catalog) -> dict[str, set[str]]:
+    """stack -> the stack-OS box roles its member nodes declare (every topology stack).
+
+    Infra roles and the BASE_ROLE pseudo-role run the infra OS whatever stack lists the
+    node, so they are not a stack's roles. Fails loudly on a role the catalog does not
+    know, so a topology typo can never silently drop a box from the fleet."""
+    nodes: dict[str, Any] = topo.get("nodes") or {}
+    owners = node_stacks(topo)
+    out: dict[str, set[str]] = {stack: set() for stack in topo.get("stacks") or {}}
+    for node, spec in nodes.items():
+        role = _known_role(node, node_role(node, spec), catalog)
+        if role == BASE_ROLE or role in INFRA_ROLES:
+            continue
+        for stack in owners[node]:
+            out[stack].add(role)
+    return out
+
+
+def _known_role(node: str, role: str, catalog: Catalog) -> str:
+    if role != BASE_ROLE and role not in catalog.roles:
+        raise VersionError(
+            f"node {node}: box role {role!r} is not in lab/versions.yaml roles (known: "
+            f"{', '.join(sorted(catalog.roles))}, or {BASE_ROLE}) — {_TOPOLOGY_FIX} or add "
+            "the role to lab/versions.yaml"
+        )
+    return role
+
+
+def stack_ref(stack: str, catalog: Catalog) -> OsRef:
+    """The OS a stack runs: its instance record's OS when it has one, else its default."""
+    record = instances.read_record(stack)
+    if record is not None:
+        return record.os
+    return catalog.default_os(stack)
+
+
+def node_boxes(topo: dict[str, Any], catalog: Catalog) -> dict[str, BoxEntry]:
+    """node -> BoxEntry for every topology node (the render covers all stacks at once).
+
+    - Infra-role nodes (the shared/commons nodes) get their role on ``catalog.infra``;
+      no record is consulted, so this works with no stack running.
+    - ``box: base`` nodes (the SAN targets until T6) get the infra OS's bare base box.
+    - Every other node gets its role on its owning stack's OS: the stack's instance
+      record when one exists, else the stack default (combining every stack's record).
+
+    No host gate here: the render must describe every node on every host (a RHEL node
+    on an aarch64 host still renders, under TCG); the host gates live in
+    Catalog.stack_os, applied when a stack is brought up. Fails loudly on a missing or
+    unknown role, a stack node owned by zero or several stacks, a stack missing from the
+    catalog, or a topology ``os_family`` that disagrees with the catalog."""
+    owners = node_stacks(topo)
+    stacks_cfg: dict[str, Any] = topo.get("stacks") or {}
+    refs: dict[str, OsRef] = {}
+    for stack in stacks_cfg:
+        ref = stack_ref(stack, catalog)
+        declared = (stacks_cfg[stack] or {}).get("os_family")
+        if declared != ref.family:
+            raise VersionError(
+                f"stack {stack}: os_family {declared!r} disagrees with lab/versions.yaml "
+                f"(which resolves it to {ref}) — {_TOPOLOGY_FIX}"
+            )
+        refs[stack] = ref
+    out: dict[str, BoxEntry] = {}
+    for node, spec in (topo.get("nodes") or {}).items():
+        role = _known_role(node, node_role(node, spec), catalog)
+        if role == BASE_ROLE:
+            out[node] = catalog.base(catalog.infra)
+        elif role in INFRA_ROLES:
+            out[node] = catalog.box(role, catalog.infra)
+        elif len(owners[node]) != 1:
+            listed = ", ".join(owners[node]) or "none"
+            raise VersionError(
+                f"node {node}: box role {role!r} runs its stack's OS, so the node must "
+                f"belong to exactly one stack's groups (it is in: {listed}) — {_TOPOLOGY_FIX}"
+            )
+        else:
+            out[node] = catalog.box(role, refs[owners[node][0]])
+    return out
 
 
 # --- Loading and eager validation ------------------------------------------------------
@@ -337,6 +473,11 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for role, raw_spec in _mapping(raw, "roles").items():
         where = f"roles.{role}"
+        if role == BASE_ROLE:
+            raise VersionError(
+                f"{where}: {BASE_ROLE!r} is reserved for the bare-base-box pseudo-role — "
+                f"rename the role ({_CATALOG_FIX})"
+            )
         spec = _mapping(raw_spec, where)
         _check_keys(spec, _ROLE_KEYS, where, _CATALOG_FIX)
         bake = spec.get("bake")

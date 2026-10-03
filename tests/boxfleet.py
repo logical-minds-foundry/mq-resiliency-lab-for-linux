@@ -8,10 +8,16 @@ the catalog inputs tests used to scrape from the shell builders' old `case` tabl
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from mqlab import box
 from mqlab.hostfacts import X86_64, HostFacts
 
 X86_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True)
+
+# The committed catalog, located from this file (not paths.repo_root, which a test may
+# have pointed at a tmp dir via MQLAB_REPO_ROOT).
+REAL_CATALOG = Path(__file__).resolve().parents[1] / "lab" / "versions.yaml"
 
 
 def x86_fleet() -> dict[str, box.BoxSpec]:

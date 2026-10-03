@@ -11,6 +11,7 @@ from rich.console import Console
 from mqlab import cli
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
+from mqlab.versions import load_catalog
 from tests.fakes import RecordingRunner, ScriptedResult
 
 
@@ -32,8 +33,8 @@ def _seed(tmp_path) -> None:
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  obs: {nics: {net-mgmt: 10.50.0.2}, platform: ubuntu24-arm64}\n"
-        "  mon-probe: {nics: {net-mgmt: 10.50.0.3}, platform: ubuntu24-arm64}\n"
+        "  obs: {box: obs, nics: {net-mgmt: 10.50.0.2}}\n"
+        "  mon-probe: {box: mq-client, nics: {net-mgmt: 10.50.0.3}}\n"
         "groups:\n  obs_box: [obs]\n  probe: [mon-probe]\n"
         "commons:\n  groups: [obs_box, probe]\n  provision: ansible/site-obs.yml\n"
     )
@@ -45,16 +46,18 @@ def test_ensure_prereqs_for_commons_runs_mq_then_galaxy_then_pki(monkeypatch, tm
     ensured: list[tuple[set[str], str]] = []
     monkeypatch.setattr(
         cli,
-        "ensure_mq_tarballs_for_platforms",
-        lambda platforms, version, *a, **k: ensured.append((platforms, version)),
+        "ensure_mq_tarballs_for_boxes",
+        lambda boxes, version, *a, **k: ensured.append(({b.name for b in boxes}, version)),
     )
     runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([])])  # galaxy, pki
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
 
     cli._ensure_prereqs_for_commons()
 
-    # MQ tarball ensured for the commons platforms at the repo-default version
-    assert ensured == [({"ubuntu24-arm64"}, cli.DEFAULT_MQ_VERSION)]
+    # MQ tarball ensured for the commons boxes (infra OS) at the repo-default version
+    cat = load_catalog()
+    commons = {cat.box("obs", cat.infra).name, cat.box("mq-client", cat.infra).name}
+    assert ensured == [(commons, cli.DEFAULT_MQ_VERSION)]
     argvs = [c.argv for c in runner.recorded]
     # galaxy collections installed before the PKI play (which needs community.crypto)
     assert argvs[0][:3] == ["ansible-galaxy", "collection", "install"]

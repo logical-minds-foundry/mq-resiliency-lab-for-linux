@@ -39,10 +39,11 @@ _PCMK_VERBS = (
 
 _TOPO = (
     "nodes:\n"
-    "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"
-    "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+    "  san-a:   {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
+    "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
     "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
+    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
+    "    os_family: ubuntu\n    short: PCMK\n"
     "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"
     "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
@@ -110,10 +111,11 @@ def test_qm_create_passes_svc_conn_from_the_shared_svc_block(monkeypatch, tmp_pa
     # the per-stack qm: block — it is threaded for every stack that has one.
     topo = (
         "nodes:\n"
-        "  san-a:   {nics: {net-mgmt: 10.50.0.5}}\n"
-        "  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
+        "  san-a:   {box: base, nics: {net-mgmt: 10.50.0.5}}\n"
+        "  pcmk-a1: {box: pcmk, nics: {net-mgmt: 10.50.0.51}}\n"
         "groups:\n  san_a: [san-a]\n  pcmk_a: [pcmk-a1]\n"
-        "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
+        "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
+        "    os_family: ubuntu\n    short: PCMK\n"
         "    cluster_group: pcmk_a\n    groups: [san_a, pcmk_a]\n"
         "    provision: ansible/site-pcmk.yml\n"
         "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
@@ -219,7 +221,7 @@ def test_qm_stack_without_qm_config_exits_2(monkeypatch, tmp_path):
         tmp_path,
         topo=(
             "groups:\n  g: [h]\n"
-            "stacks:\n  bare:\n    mechanism: m\n    os: o\n    short: ''\n    groups: [g]\n"
+            "stacks:\n  bare:\n    mechanism: m\n    os_family: o\n    short: ''\n    groups: [g]\n"
             "    qm: {}\n    verbs: {}\n"
             "svc: { short: SVC, conn: 10.60.0.50, exporter_port: 9158 }\n"
         ),
@@ -240,7 +242,7 @@ def test_qm_stack_missing_verb_exits_2(monkeypatch, tmp_path):
 _RDQM_TOPO = (
     "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
     "groups:\n  rdqm_a: [rdqm-a1]\n"
-    "stacks:\n  rdqm-rhel:\n    mechanism: rdqm\n    os: rhel\n    short: RDQM\n"
+    "stacks:\n  rdqm-rhel:\n    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n"
     "    cluster_group: rdqm_a\n    groups: [rdqm_a]\n"
     # no vip_ext: RDQM has one floating IP per QM (#216), spent on the data VIP
     "    qm: { vip: 10.10.1.100 }\n"

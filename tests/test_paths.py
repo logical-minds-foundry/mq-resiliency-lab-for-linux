@@ -46,6 +46,5 @@ def test_named_helpers_point_into_buckets(monkeypatch, tmp_path):
     assert paths.selection_state_path("s") == build / "state" / "manifests" / "s.yaml"
     assert paths.inventory_path() == build / "work" / "inventory.ini"
     assert paths.resolved_topology_path() == build / "work" / "lab" / "topology.resolved.yaml"
-    assert paths.box_versions_path() == build / "work" / "box-versions.json"
     assert paths.mq_cache_dir() == build / "cache" / "mq"
     assert paths.san_deb_cache_dir() == build / "cache" / "san-debs"

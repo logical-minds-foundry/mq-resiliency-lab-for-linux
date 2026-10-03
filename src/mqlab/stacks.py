@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from mqlab.hostfacts import HostFacts
 
 # Display labels for a stack's Grafana dashboard folder (#59). Derived from
-# mechanism+os so a new stack needs no separate folder literal — the folder title
+# mechanism+os_family so a new stack needs no separate folder literal — the folder title
 # is "<mechanism label> (<OS label>)", e.g. "Native HA (RHEL)".
 _MECH_LABEL = {
     "pacemaker-san": "PCMK",
@@ -34,18 +34,20 @@ _MECH_LABEL = {
 _OS_LABEL = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 
 
-def dashboard_folder_for(mechanism: str, os: str) -> str:
-    """The Grafana dashboard folder label for a HA mechanism + OS (#59): "<Mechanism>
-    (<OS>)", e.g. "Native HA (RHEL)". Fail loud on an unlabelled mechanism/os rather than
-    silently mis-foldering a board."""
+def dashboard_folder_for(mechanism: str, os_family: str) -> str:
+    """The Grafana dashboard folder label for a HA mechanism + OS family (#59):
+    "<Mechanism> (<OS>)", e.g. "Native HA (RHEL)". Fail loud on an unlabelled
+    mechanism/family rather than silently mis-foldering a board. The folder carries the
+    family only — never a version — so a stack's boards keep their folder across OS
+    majors (epic .github#280)."""
     try:
         mech = _MECH_LABEL[mechanism]
     except KeyError as exc:
         raise ValueError(f"no dashboard-folder label for mechanism {mechanism!r}") from exc
     try:
-        os_label = _OS_LABEL[os]
+        os_label = _OS_LABEL[os_family]
     except KeyError as exc:
-        raise ValueError(f"no dashboard-folder label for os {os!r}") from exc
+        raise ValueError(f"no dashboard-folder label for os_family {os_family!r}") from exc
     return f"{mech} ({os_label})"
 
 
@@ -100,7 +102,8 @@ class Stack:
     Fields:
         name:          stack key as it appears in topology.yaml's stacks: block.
         mechanism:     HA/DR mechanism string (e.g. "pacemaker-san", "rdqm", "native-ha").
-        os:            base OS ("ubuntu" or "rhel").
+        os_family:     base OS family ("ubuntu" or "rhel"); the major comes from the
+                       version layer (lab/versions.yaml, epic .github#280).
         short:         4-char uppercase token; QM names derive from this (#351).
         verbs:         per-verb dispatch dict (raw from YAML; commands/playbooks).
         cluster_group: Ansible group name for the cluster nodes (e.g. "pcmk_a", "rdqm_a").
@@ -118,7 +121,7 @@ class Stack:
 
     name: str
     mechanism: str
-    os: str
+    os_family: str
     short: str
     verbs: dict[str, Any]
     cluster_group: str | None
@@ -132,14 +135,14 @@ class Stack:
     @property
     def dashboard_folder(self) -> str:
         """The Grafana folder this stack's dashboards live under (#59), e.g.
-        "Native HA (RHEL)" — derived from mechanism+os (see dashboard_folder_for)."""
-        return dashboard_folder_for(self.mechanism, self.os)
+        "Native HA (RHEL)" — derived from mechanism+os_family (see dashboard_folder_for)."""
+        return dashboard_folder_for(self.mechanism, self.os_family)
 
 
 def rhel_stack_unsupported_reason(stack: Stack, facts: HostFacts) -> str | None:
     """Why this stack cannot run on this host, or None when it can (#847).
 
-    The RHEL stacks (``os == "rhel"``: rdqm-rhel, nativeha-rhel-crr) require an
+    The RHEL stacks (``os_family == "rhel"``: rdqm-rhel, nativeha-rhel-crr) require an
     x86_64 host. RHEL is not — and is not expected to become — available for
     Apple Silicon, and emulated cross-arch box builds are disabled by design
     (#103 D11), so on an aarch64 host only the Ubuntu stacks are supported
@@ -147,10 +150,10 @@ def rhel_stack_unsupported_reason(stack: Stack, facts: HostFacts) -> str | None:
 
     Pure and display-safe — never raises, reads only the stack's declared OS and
     the host arch — so both the bring-up preflight gate and `mqlab doctor` can
-    consult it. Follows the #350 stack registry's ``os`` field as the authority on
+    consult it. Follows the #350 stack registry's ``os_family`` field as the authority on
     which stacks are RHEL-based, rather than re-deriving arch from the box layer.
     """
-    if stack.os == "rhel" and facts.arch == AARCH64:
+    if stack.os_family == "rhel" and facts.arch == AARCH64:
         return (
             f"the {stack.name!r} stack requires an x86_64 host: the RHEL arms are "
             f"unsupported on aarch64 (this host). RHEL is not available for Apple "
@@ -207,7 +210,7 @@ def lab_stacks() -> dict[str, Stack]:
         result[name] = Stack(
             name=name,
             mechanism=cfg["mechanism"],
-            os=cfg["os"],
+            os_family=cfg["os_family"],
             short=short,
             verbs=dict(cfg.get("verbs") or {}),
             cluster_group=cfg.get("cluster_group") or None,
