@@ -14,10 +14,10 @@ from pathlib import Path
 
 from mqlab import box
 
-_LEGACY_BOX = "mq-ubuntu2404.box"
-_LEGACY_HASH = "mq-ubuntu2404.manifest-hash"
-_NEW_BOX = "mq-ubuntu2404-x86_64.box"
-_NEW_HASH = "mq-ubuntu2404-x86_64.manifest-hash"
+_LEGACY_BOX = "mq-client-ubuntu24.box"
+_LEGACY_HASH = "mq-client-ubuntu24.manifest-hash"
+_NEW_BOX = "mq-client-ubuntu24-x86_64.box"
+_NEW_HASH = "mq-client-ubuntu24-x86_64.manifest-hash"
 
 
 def test_migrate_renames_legacy_box_and_hash(tmp_path):
@@ -60,12 +60,33 @@ def test_migrate_skips_when_target_already_present(tmp_path):
 
 
 def test_migrate_ignores_base_box_and_empty_dir(tmp_path):
-    # Only the base box artifact (already arch-tagged, no manifest-hash) is present:
+    # Only the current base box artifact (no manifest-hash, nothing legacy) is present:
     # migrate leaves it alone and reports nothing. Covers the base-box skip and the
     # no-legacy-file branches.
-    (tmp_path / "rhel-9.6-x86_64-libvirt.box").write_text("x")
+    (tmp_path / "rhel-9-x86_64.box").write_text("x")
     assert box.migrate_box_cache(tmp_path) == []
-    assert (tmp_path / "rhel-9.6-x86_64-libvirt.box").exists()
+    assert (tmp_path / "rhel-9-x86_64.box").exists()
+
+
+def test_migrate_renames_the_retired_rhel_base_box_cache(tmp_path):
+    # The <role>-<os><major> rename (#1274) retired the base box's old name. Its cache is a
+    # good image (no manifest hash), so migrate RENAMES it to the new base-box artifact
+    # instead of leaving it orphaned and forcing a rebuild from the DVD.
+    (tmp_path / "rhel-9.6-x86_64-libvirt.box").write_text("base")
+    renamed = box.migrate_box_cache(tmp_path)
+    assert renamed == [
+        (str(tmp_path / "rhel-9.6-x86_64-libvirt.box"), str(tmp_path / "rhel-9-x86_64.box"))
+    ]
+    assert (tmp_path / "rhel-9-x86_64.box").read_text() == "base"
+    assert not (tmp_path / "rhel-9.6-x86_64-libvirt.box").exists()
+    assert box.migrate_box_cache(tmp_path) == []  # idempotent
+
+
+def test_migrate_never_clobbers_a_new_base_box_cache(tmp_path):
+    (tmp_path / "rhel-9.6-x86_64-libvirt.box").write_text("old")
+    (tmp_path / "rhel-9-x86_64.box").write_text("new")
+    assert box.migrate_box_cache(tmp_path) == []
+    assert (tmp_path / "rhel-9-x86_64.box").read_text() == "new"
 
 
 def test_migrate_defaults_to_the_boxes_cache_dir(monkeypatch, tmp_path):

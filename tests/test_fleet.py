@@ -26,10 +26,10 @@ def test_lab_guests_default_tracks_host(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "defaults: { cpus: 1 }\nnodes:\n  rdqm-a1: { platform: rhel96-x86_64 }\n  pcmk-a1: {}\n"
+        "defaults: { cpus: 1 }\nnodes:\n  rdqm-a1: { platform: rhel9-x86_64 }\n  pcmk-a1: {}\n"
     )
-    assert lab_guests(ARM) == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-arm64"}
-    assert lab_guests(X86) == {"rdqm-a1": "rhel96-x86_64", "pcmk-a1": "ubuntu2404-x86_64"}
+    assert lab_guests(ARM) == {"rdqm-a1": "rhel9-x86_64", "pcmk-a1": "ubuntu24-arm64"}
+    assert lab_guests(X86) == {"rdqm-a1": "rhel9-x86_64", "pcmk-a1": "ubuntu24-x86_64"}
 
 
 def test_fleet_rows_joins_state_and_stacks_and_sorts_by_columns(monkeypatch, tmp_path):
@@ -41,9 +41,9 @@ def test_fleet_rows_joins_state_and_stacks_and_sorts_by_columns(monkeypatch, tmp
         "  rdqm-rhel:\n    groups: [rdqm_a]\n"
     )
     platforms = {
-        "rdqm-a1": "rhel96-x86_64",
-        "pcmk-a1": "ubuntu2404-arm64",
-        "san-a": "ubuntu2404-arm64",
+        "rdqm-a1": "rhel9-x86_64",
+        "pcmk-a1": "ubuntu24-arm64",
+        "san-a": "ubuntu24-arm64",
     }
     states = {"lab_pcmk-a1": "running"}
     rows = fleet_rows(platforms, states)

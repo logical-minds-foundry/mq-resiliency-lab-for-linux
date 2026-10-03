@@ -1,5 +1,5 @@
 ---
-# Bake the mq-nativeha-ubuntu box image (#103 T6, epic .github#103). The Ubuntu
+# Bake the mq-nativeha-ubuntu24 box image (#103 T6, epic .github#103). The Ubuntu
 # OS-as-only-variable peer of bake-nativeha-rhel.yml: it bakes the per-run-invariant
 # install work the six nha-ubuntu-* nodes otherwise pay EVERY bootstrap on the bare
 # cloud-image/ubuntu-24.04 base — base IBM MQ (NO RDQM/DRBD, NO kernel pin: Native HA
@@ -13,7 +13,7 @@
 #   ansible-playbook -i inventory/bake-host.ini bake-nativeha-ubuntu.yml
 #
 # The Ubuntu MQ media for the deb install rides the actual box build
-# (build-fatbox.sh --box mq-nativeha-ubuntu), which stages the host-arch developer
+# (build-fatbox.sh --box mq-nativeha-ubuntu24), which stages the host-arch developer
 # tarball into the shared cache the install role reads. See
 # docs/development/box-bake-manifest.md for the authoritative per-role
 # bake-vs-configure classification.
@@ -29,7 +29,7 @@
       ansible.builtin.include_role:
         name: apt-autoupdate-off
 
-- name: Bake mq-nativeha-ubuntu (install adapter only; no QMs, no formation, no secrets)
+- name: Bake mq-nativeha-ubuntu24 (install adapter only; no QMs, no formation, no secrets)
   hosts: bake
   become: true
   vars:

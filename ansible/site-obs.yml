@@ -1,7 +1,7 @@
 # Observability pair (#103). Run via `mqlab obs up`, or directly:
 #   ansible-playbook site-obs.yml
 #
-# The obs node boots the baked obs-ubuntu2404 box (#605, epic .github#70); mon-probe does
+# The obs node boots the baked obs-ubuntu24 box (#605, epic .github#70); mon-probe does
 # NOT (host-resolved Ubuntu platform). So the two are split: probe runs the FULL install,
 # obs runs only the per-run configure halves of the baked roles.
 
@@ -48,7 +48,7 @@
       loop_control:
         label: "{{ item.instance }} :{{ item.port }} -> {{ item.qm }}"
 
-# obs is baked (obs-ubuntu2404, #605): every service is baked INERT (install half only,
+# obs is baked (obs-ubuntu24, #605): every service is baked INERT (install half only,
 # #642) — the binaries/package + static config are baked, but nothing auto-starts on
 # boot in a pre-config state. So per-run we run the configure halves that enable + start
 # them: loki (static config, just enable+start), alloy (rendered config.alloy + start),

@@ -16,18 +16,22 @@ persists until that volume is destroyed — a true one-off per volume.
 From the host (macOS), in this repo:
 
 ```bash
-./scripts/push-rhel-iso.sh
+./scripts/push-rhel-iso.sh --iso <file>
 ```
 
-It copies `build/state/rhel-9.6-x86_64-dvd.iso` straight to the VM's
-`build/state/` over the private VM's IAP tunnel
+`<file>` is the DVD filename the lab expects: the `iso:` value of the
+`os.rhel.<major>` entry in [`lab/versions.yaml`](../../lab/versions.yaml) (#1274). Push
+once per RHEL major the VM will build. The script copies `build/state/<file>` (or the
+`MQLAB_RHEL_ISO` override) straight to the VM's `build/state/<file>` over the private
+VM's IAP tunnel
 (`gcloud compute scp --tunnel-through-iap`). The ISO source resolves the same way
 `lab/scripts/stage-rhel-iso.sh` does (git-common-dir, with `MQLAB_RHEL_ISO` as an
 override), so both scripts agree on where the ISO lives. The script is idempotent:
 a re-run no-ops if the VM already holds a same-size copy.
 
-Once it lands, `lab/scripts/stage-rhel-iso.sh` (run inside the VM) takes it from
-`build/state/` into the libvirt pool as usual.
+Once it lands, `lab/scripts/stage-rhel-iso.sh --iso <file>` (run inside the VM by
+bootstrap, which passes the filename) takes it from `build/state/` into the libvirt pool
+as usual.
 
 ## Why not a GCS bucket
 

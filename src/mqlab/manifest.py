@@ -30,11 +30,11 @@ if TYPE_CHECKING:
 # (x86-pinned) stays LinuxX64 on every host. Membership here is also the known-platform
 # gate: an absent platform is an error, not a silent default.
 _OS_PREFIX = {
-    "ubuntu2404-arm64": "UbuntuLinux",
-    "ubuntu2404-x86_64": "UbuntuLinux",
-    "rhel96-x86_64": "Linux",
+    "ubuntu24-arm64": "UbuntuLinux",
+    "ubuntu24-x86_64": "UbuntuLinux",
+    "rhel9-x86_64": "Linux",
     # The fat RDQM box platform (#604) is RHEL x86_64 — same LinuxX64 tarball as
-    # rhel96-x86_64; the bake consumes it, the stack-prereq ensure keeps it cached for
+    # rhel9-x86_64; the bake consumes it, the stack-prereq ensure keeps it cached for
     # the repointed rdqm_a/rdqm_b nodes.
     "mq-rdqm-rhel9": "Linux",
     # The fat native-HA RHEL box platform (#667, epic .github#88) is RHEL x86_64 — same
@@ -44,22 +44,22 @@ _OS_PREFIX = {
     # The fat obs box platform (#605) is Ubuntu, now host-resolved (#103 D3): it takes
     # the same Ubuntu tarball svc/app/probe already need for this host's arch. The obs
     # node is a commons member, so _commons_mq_platforms feeds this into tarball_name.
-    "obs-ubuntu2404": "UbuntuLinux",
+    "obs-ubuntu24": "UbuntuLinux",
     # The fat MQ-commons box platform (#659) is Ubuntu, now host-resolved (#103 D3):
     # svc/app/probe repoint to it and are MQ commons, so _commons_mq_platforms feeds this
     # into tarball_name; the bake consumed the host-arch Ubuntu tarball + the MQ SDK.
-    "mq-ubuntu2404": "UbuntuLinux",
+    "mq-client-ubuntu24": "UbuntuLinux",
     # The fat native-HA Ubuntu box platform (#103 T6) is Ubuntu, host-resolved (no `arch:`
     # pin — the OS-as-only-variable peer of mq-nativeha-rhel9). The six nha-ubuntu-* nodes
     # are repointed to it and run MQ, so _stack_mq_platforms feeds it into tarball_name;
     # the arch resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud).
-    "mq-nativeha-ubuntu": "UbuntuLinux",
-    # The fat pcmk-ubuntu box platform (#103 T7) is Ubuntu, host-resolved (no `arch:` pin).
+    "mq-nativeha-ubuntu24": "UbuntuLinux",
+    # The fat pcmk-ubuntu24 box platform (#103 T7) is Ubuntu, host-resolved (no `arch:` pin).
     # The six Pacemaker cluster nodes (pcmk-a1..3, pcmk-b1..3) are repointed to it and run
     # MQ via roles/mq-install, so _stack_mq_platforms feeds it into tarball_name; the arch
     # resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud). The SAN
     # targets carry no MQ payload and are NOT here (host-resolved base box, D8).
-    "pcmk-ubuntu": "UbuntuLinux",
+    "pcmk-ubuntu24": "UbuntuLinux",
     "alma9-x86_64": "Linux",
 }
 

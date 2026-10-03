@@ -9,7 +9,6 @@ from typer.testing import CliRunner
 
 from mqlab import cli
 from mqlab.cli import _ensure_local_boxes as _real_ensure_local_boxes  # captured before the stub
-from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
@@ -102,9 +101,9 @@ def test_fetch_mq_tarball_delegates_to_download(monkeypatch, tmp_path):
 
 # --- local box auto-build (#276/#291): build/register the RHEL box on a fresh box ---
 def test_parse_box_list():
-    txt = "rhel/9.6-x86_64          (libvirt, 0, (arm64))\ncloud-image/ubuntu-24.04 (libvirt, 1)\n"
+    txt = "rhel/9-x86_64          (libvirt, 0, (arm64))\ncloud-image/ubuntu-24.04 (libvirt, 1)\n"
     assert cli.parse_box_list(txt) == {
-        "rhel/9.6-x86_64": "(libvirt, 0, (arm64))",
+        "rhel/9-x86_64": "(libvirt, 0, (arm64))",
         "cloud-image/ubuntu-24.04": "(libvirt, 1)",
     }
 
@@ -118,102 +117,21 @@ def _seed_resolved(tmp_path, body):
     (tmp_path / "build" / "work" / "lab" / "topology.resolved.yaml").write_text(body)
 
 
-def test_box_build_steps_passes_kvm_args(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    monkeypatch.setattr(cli, "_box_registry", dict)
-    facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
-    steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
-    assert [s.command.argv for s in steps] == [
-        [
-            "bash",
-            str(tmp_path / "lab/boxes/rhel96/build-box.sh"),
-            "--domain-type",
-            "kvm",
-            "--cpu-mode",
-            "host-passthrough",
-        ],
-    ]
-
-
-def test_box_build_steps_passes_tcg_args_on_arm(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    monkeypatch.setattr(cli, "_box_registry", dict)
-    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-    steps = cli._box_build_steps({"rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh"}, {}, facts)
-    assert steps[0].command.argv[-4:] == ["--domain-type", "qemu", "--cpu-mode", "maximum"]
-
-
-def test_box_build_steps_skips_present(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    monkeypatch.setattr(cli, "_box_registry", dict)
-    facts = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
-    steps = cli._box_build_steps(
-        {
-            "mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh",
-            "obs-ubuntu2404": "lab/boxes/build-fatbox.sh",
-        },
-        {"mq-rdqm-rhel9": "(libvirt, 0)"},  # already registered -> skipped
-        facts,
-    )
-    assert [s.label for s in steps] == ["box obs-ubuntu2404"]
-
-
-def test_box_build_steps_passes_arch_for_ubuntu_fat_box(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        cli, "_box_registry", lambda: {"mq-ubuntu2404": {"box": "cloud-image/ubuntu-24.04"}}
-    )
-    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-    steps = cli._box_build_steps({"mq-ubuntu2404": "lab/boxes/build-fatbox.sh"}, {}, facts)
-    argv = steps[0].command.argv
-    assert "--box" in argv and "mq-ubuntu2404" in argv
-    assert argv[argv.index("--arch") + 1] == "aarch64"
-
-
-def test_box_registry_reads_source_topology(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    (tmp_path / "lab").mkdir(parents=True)
-    (tmp_path / "lab" / "topology.yaml").write_text(
-        "boxes:\n"
-        "  mq-ubuntu2404: {box: cloud-image/ubuntu-24.04}\n"
-        "  mq-rdqm-rhel9: {box: rhel/9.6-x86_64, arch: x86_64}\n"
-        "nodes: {}\n"
-    )
-    registry = cli._box_registry()
-    assert registry["mq-ubuntu2404"] == {"box": "cloud-image/ubuntu-24.04"}
-    assert registry["mq-rdqm-rhel9"]["arch"] == "x86_64"
-
-
-def test_box_registry_defaults_empty_without_boxes_key(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    (tmp_path / "lab").mkdir(parents=True)
-    (tmp_path / "lab" / "topology.yaml").write_text("nodes: {}\n")
-    assert cli._box_registry() == {}
-
-
-def test_box_build_steps_refuses_rhel_on_arm(monkeypatch, tmp_path):
-    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        cli,
-        "_box_registry",
-        lambda: {"mq-rdqm-rhel9": {"box": "rhel/9.6-x86_64", "arch": "x86_64"}},
-    )
-    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-    with pytest.raises(cli.StepFailedError, match="x86"):
-        cli._box_build_steps({"mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh"}, {}, facts)
+# The builder argv (box._build_steps / builder_args) is covered in tests/test_box_build.py:
+# every input comes from the catalog (epic .github#280, #1274).
 
 
 # --- ensure_local_boxes now delegates box building to box.build_boxes (#91, T2),
 #     keeping the DVD staging step inline. Bootstrap + `mqlab box build` share one core.
 def test_ensure_local_boxes_delegates_to_build_core(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64}\n")
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9-x86_64}\n")
     calls: dict = {}
     monkeypatch.setattr(
         cli.box, "build_boxes", lambda names, *, force: calls.update(names=names, force=force)
     )
     _real_ensure_local_boxes(["rdqm-a1"])
-    assert calls == {"names": ["rhel/9.6-x86_64"], "force": False}
+    assert calls == {"names": ["rhel/9-x86_64"], "force": False}
 
 
 def test_ensure_local_boxes_noop_when_no_local_box(monkeypatch, tmp_path):
@@ -225,27 +143,27 @@ def test_ensure_local_boxes_noop_when_no_local_box(monkeypatch, tmp_path):
     assert built == []
 
 
-def test_guests_need_dvd(monkeypatch, tmp_path):
+def test_guests_dvds(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     _seed_resolved(
         tmp_path,
-        "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n"
+        "nodes:\n  rdqm-a1: {box: rhel/9-x86_64, dvd: /pool/rhel.iso}\n"
         "  obs: {box: cloud-image/ubuntu-24.04}\n",
     )
-    assert cli._guests_need_dvd(["rdqm-a1"]) is True
-    assert cli._guests_need_dvd(["obs"]) is False
+    assert cli._guests_dvds(["rdqm-a1", "obs"]) == ["rhel.iso"]
+    assert cli._guests_dvds(["obs"]) == []
 
 
 def test_ensure_local_boxes_stages_dvd(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9-x86_64, dvd: /pool/rhel.iso}\n")
     # box building is delegated away; only the DVD staging remains inline here
     monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: None)
     runner = RecordingRunner(results=[ScriptedResult([])])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))
     _real_ensure_local_boxes(["rdqm-a1"])
     assert [c.argv for c in runner.recorded] == [
-        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh"), "--iso", "rhel.iso"]
     ]
 
 
@@ -260,13 +178,13 @@ def test_ensure_local_boxes_dvd_only_skips_build(monkeypatch, tmp_path):
     _real_ensure_local_boxes(["n1"])
     assert built == []
     assert [c.argv for c in runner.recorded] == [
-        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh")]
+        ["bash", str(tmp_path / "lab/scripts/stage-rhel-iso.sh"), "--iso", "x.iso"]
     ]
 
 
 def test_ensure_local_boxes_dvd_stage_failure_exits(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9.6-x86_64, dvd: /pool/rhel.iso}\n")
+    _seed_resolved(tmp_path, "nodes:\n  rdqm-a1: {box: rhel/9-x86_64, dvd: /pool/rhel.iso}\n")
     monkeypatch.setattr(cli.box, "build_boxes", lambda names, *, force: None)
     runner = RecordingRunner(results=[ScriptedResult([], exit_code=1)])
     monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner, _NoPause()))

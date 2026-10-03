@@ -11,7 +11,7 @@
 # depsolve conflict. OS currency now comes from rebuilding the box, not updating at boot.
 #
 # Ensure the DVD dnf repo is mounted first: on a baked box the fstab entry + repo file are
-# baked, but the mount may not be up yet this boot; on a fresh rhel/9.6 box install.yml
+# baked, but the mount may not be up yet this boot; on a fresh rhel/9-x86_64 box install.yml
 # already mounted it. Idempotent either way.
 - name: ensure the install DVD is mounted (offline dnf source)
   ansible.builtin.shell: |

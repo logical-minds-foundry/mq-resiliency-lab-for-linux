@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/push-rhel-iso.sh - push the operator-supplied RHEL 9.6 DVD ISO from the
+# scripts/push-rhel-iso.sh - push an operator-supplied RHEL DVD ISO from the
 # host build/state/ to an off-platform (GCP) lab VM's build/state/, over the VM's
 # private IAP tunnel. The off-platform VM's build/ is a persistent volume (NOT the
 # host mount), so the ~12.7G ISO must be pushed once after the volume is created;
@@ -11,9 +11,27 @@
 # dependency on either side. Idempotent: a re-run no-ops when the VM already holds
 # a same-size copy.
 #
-# Usage:   ./scripts/push-rhel-iso.sh
-#          MQLAB_RHEL_ISO=/path/to/rhel-9.6-x86_64-dvd.iso ./scripts/push-rhel-iso.sh
+# Usage:   ./scripts/push-rhel-iso.sh --iso <file>
+#          MQLAB_RHEL_ISO=/path/to/<downloaded>.iso ./scripts/push-rhel-iso.sh --iso <file>
+#
+# --iso <file> is REQUIRED: the DVD ISO filename the lab expects, i.e. the catalog's
+# os.rhel.<major>.iso in lab/versions.yaml. It names the source under build/state/
+# (unless MQLAB_RHEL_ISO overrides the source path) and the file written on the VM.
 set -euo pipefail
+
+usage() { echo "usage: push-rhel-iso.sh --iso <file>   (the os.rhel.<major>.iso value in lab/versions.yaml)" >&2; }
+ISO_NAME=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --iso) ISO_NAME="${2:-}"; shift ;;
+    *) echo "ERROR: unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+  shift
+done
+case "$ISO_NAME" in
+  "") echo "ERROR: --iso is required" >&2; usage; exit 2 ;;
+  */*) echo "ERROR: --iso is a filename, not a path (got '${ISO_NAME}')" >&2; usage; exit 2 ;;
+esac
 
 # Off-platform target (GCP). Project is stable. The box is resolved by its Vergil
 # LABELS below, not by name: off-platform cloud resources are named with an opaque
@@ -32,17 +50,16 @@ VM_REPO_DIR="/vergil/projects/logical-minds-foundry/mq-resiliency-lab-for-linux"
 SRC="${MQLAB_RHEL_ISO:-${RHEL_ISO:-}}"
 if [ -z "$SRC" ]; then
   main_root="$(cd "$(dirname "$(git rev-parse --git-common-dir)")" && pwd)"
-  SRC="$main_root/build/state/rhel-9.6-x86_64-dvd.iso"
+  SRC="$main_root/build/state/${ISO_NAME}"
 fi
 test -f "$SRC" || {
   echo "ERROR: RHEL DVD ISO not found at $SRC" >&2
-  echo "       set MQLAB_RHEL_ISO=/path/to/rhel-9.6-x86_64-dvd.iso, or drop it in build/state/." >&2
+  echo "       set MQLAB_RHEL_ISO=/path/to/<downloaded>.iso, or drop ${ISO_NAME} in build/state/." >&2
   exit 1
 }
 
 command -v gcloud >/dev/null || { echo "ERROR: gcloud not on PATH (run this on the macOS host)" >&2; exit 1; }
 
-ISO_NAME="$(basename "$SRC")"
 DEST_DIR="$VM_REPO_DIR/build/state"
 
 # Resolve instance + zone by Vergil labels. Capture the query into a variable FIRST,
@@ -80,7 +97,7 @@ echo "==> ensuring $DEST_DIR exists on the VM"
 gcloud compute ssh "$target" "${gc[@]}" --command "mkdir -p '$DEST_DIR'"
 
 echo "==> copying $ISO_NAME ($(du -h "$SRC" | cut -f1)) -> $DEST_DIR/  (this takes a while at ~12.7G)"
-gcloud compute scp "$SRC" "$target:$DEST_DIR/" "${gc[@]}"
+gcloud compute scp "$SRC" "$target:$DEST_DIR/$ISO_NAME" "${gc[@]}"
 
 echo "==> verifying on the VM"
 gcloud compute ssh "$target" "${gc[@]}" --command "ls -lh '$DEST_DIR/$ISO_NAME'"

@@ -4,11 +4,23 @@
 # A "fat" box bakes the slow, deterministic provisioning (packages, MQ, OSS
 # agents) INTO the box image once, so `vagrant up` + the runtime playbook are
 # fast on every lab bring-up (#603, epic .github#70). It generalizes the
-# RHEL-only rhel96/build-box.sh: boot a base box -> run the box's bake playbook
+# RHEL-only rhel/build-box.sh: boot a base box -> run the box's bake playbook
 # -> qemu-img convert -c -> host-durable build/state/boxes/<box>.box cache ->
 # `vagrant box add`. The running lab stays ephemeral; only the cache is durable.
 #
-#   --box <name>                        REQUIRED; one of the known fat boxes below
+# Dumb builder (epic .github#280): mqlab passes every box input as a flag, taken from
+# the catalog (lab/versions.yaml) via src/mqlab/box.py. There is no box table here.
+#
+#   --box <name>                        REQUIRED; the generated box name (<role>-<os><major>)
+#   --arch <aarch64|x86_64>             REQUIRED; the build/guest arch
+#   --base-kind <ubuntu|rhel>           REQUIRED; the OS family of the base box
+#   --base-box <name>                   REQUIRED; the base box the bake boots
+#   --base-box-version <v|none>         REQUIRED; the base box version pin (none = float)
+#   --bake <stem>                       REQUIRED; runs ansible/bake-<stem>.yml
+#   --dvd <iso|none>                    REQUIRED; install DVD filename under build/state/
+#                                       (rhel bakes attach it; none for ubuntu)
+#   --os-pin <base@pin>                 REQUIRED; the OS pin folded into the manifest hash
+#   --mq-bearing <0|1>                  REQUIRED; whether the lab/mq-version pin is hashed
 #   --domain-type <kvm|qemu>            REQUIRED; mqlab supplies it from host facts
 #   --cpu-mode <host-passthrough|maximum> REQUIRED; pairs with --domain-type
 #   --rebuild-box / LAB_REBUILD_BOX=1   force a fresh build (overwrite the cache)
@@ -36,24 +48,31 @@ FORCE="${LAB_REBUILD_BOX:-0}"
 DRY_RUN=0
 BOX=""
 ARCH=""
+BASE_KIND=""
+BASE_BOX=""
+BASE_BOX_VERSION=""
+BAKE=""
+DVD=""
+OS_PIN=""
+MQ_BEARING=""
 DOMAIN_TYPE=""
 CPU_MODE=""
 
 usage() {
   cat >&2 <<'USAGE'
-usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --domain-type <kvm|qemu> \
-                       --cpu-mode <host-passthrough|maximum> [--rebuild-box] [--dry-run]
+usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --base-kind <ubuntu|rhel> \
+                       --base-box <name> --base-box-version <v|none> --bake <stem> \
+                       --dvd <iso|none> --os-pin <base@pin> --mq-bearing <0|1> \
+                       --domain-type <kvm|qemu> --cpu-mode <host-passthrough|maximum> \
+                       [--rebuild-box] [--dry-run]
 
-  --box is one of: mq-rdqm-rhel9, obs-ubuntu2404, infra-ubuntu2404,
-                   mq-ubuntu2404, mq-nativeha-rhel9, mq-nativeha-ubuntu,
-                   pcmk-ubuntu.
-  --arch is REQUIRED and one of aarch64/x86_64 (the canonical hostfacts arch): it
-  selects the guest build-domain arch/machine + emulator and the base-box add
-  architecture, and keys the per-host cache <box>-<arch>.box (#103 D1/D4). RHEL is
-  x86_64 always; an un-pinned Ubuntu box tracks the host.
-  --domain-type / --cpu-mode are REQUIRED. mqlab normally supplies all three
-  (it computes them from host facts via platforms.box_build_arch/build_domain_virt,
-  #327/#103).
+  Every flag but --rebuild-box/--dry-run is REQUIRED. mqlab supplies them all from the
+  catalog (lab/versions.yaml) and host facts: run `mqlab box build <box>` rather than
+  this script by hand (`mqlab box status` lists the boxes).
+  --arch is one of aarch64/x86_64 (the canonical hostfacts arch): it selects the guest
+  build-domain arch/machine + emulator and the base-box add architecture, and keys the
+  per-host cache <box>-<arch>.box (#103 D1/D4). RHEL is x86_64 always; an un-pinned
+  Ubuntu box tracks the host.
 USAGE
 }
 
@@ -61,6 +80,13 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --box) BOX="${2:-}"; shift ;;
     --arch) ARCH="${2:-}"; shift ;;
+    --base-kind) BASE_KIND="${2:-}"; shift ;;
+    --base-box) BASE_BOX="${2:-}"; shift ;;
+    --base-box-version) BASE_BOX_VERSION="${2:-}"; shift ;;
+    --bake) BAKE="${2:-}"; shift ;;
+    --dvd) DVD="${2:-}"; shift ;;
+    --os-pin) OS_PIN="${2:-}"; shift ;;
+    --mq-bearing) MQ_BEARING="${2:-}"; shift ;;
     --rebuild-box) FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
     --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
@@ -70,19 +96,39 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# --box selects the base box + arch + the box's bake playbook (ansible/bake-<BAKE>.yml).
-# The playbook stem (#602: bake-mq-rdqm / bake-obs / bake-infra) is shorter than the box
-# name, so it is mapped explicitly rather than derived from $BOX.
-case "$BOX" in
-  mq-rdqm-rhel9)    BASE_KIND=rhel;   BASE_BOX="rhel/9.6-x86_64";        BAKE=mq-rdqm ;;
-  obs-ubuntu2404)   BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=obs ;;
-  infra-ubuntu2404) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=infra ;;
-  mq-ubuntu2404)    BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=mq-ubuntu ;;
-  mq-nativeha-rhel9) BASE_KIND=rhel;  BASE_BOX="rhel/9.6-x86_64";        BAKE=nativeha-rhel ;;
-  mq-nativeha-ubuntu) BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=nativeha-ubuntu ;;
-  pcmk-ubuntu)      BASE_KIND=ubuntu; BASE_BOX="cloud-image/ubuntu-24.04"; BAKE=pcmk-ubuntu ;;
-  "") echo "ERROR: --box is required" >&2; usage; exit 2 ;;
-  *)  echo "ERROR: unknown --box: '${BOX}'" >&2; usage; exit 2 ;;
+# Every box input is a required flag (epic .github#280): a missing one is a usage error,
+# never a silent default. --base-box-version and --dvd take the literal `none`.
+require() {
+  if [ -z "$2" ]; then
+    echo "ERROR: --$1 is required" >&2
+    usage
+    exit 2
+  fi
+}
+require box "$BOX"
+require bake "$BAKE"
+require base-kind "$BASE_KIND"
+require base-box "$BASE_BOX"
+require base-box-version "$BASE_BOX_VERSION"
+require dvd "$DVD"
+require os-pin "$OS_PIN"
+require mq-bearing "$MQ_BEARING"
+case "$BASE_KIND" in
+  ubuntu|rhel) ;;
+  *) echo "ERROR: --base-kind must be 'ubuntu' or 'rhel' (got '${BASE_KIND}')" >&2; usage; exit 2 ;;
+esac
+case "$MQ_BEARING" in
+  0|1) ;;
+  *) echo "ERROR: --mq-bearing must be 0 or 1 (got '${MQ_BEARING}')" >&2; usage; exit 2 ;;
+esac
+# A RHEL bake builds its offline dnf repo from the install DVD, so it must name one.
+if [ "$BASE_KIND" = rhel ] && [ "$DVD" = none ]; then
+  echo "ERROR: --dvd is required for a rhel bake (got 'none')" >&2
+  usage
+  exit 2
+fi
+case "$DVD" in
+  */*) echo "ERROR: --dvd is a filename under build/state/, not a path (got '${DVD}')" >&2; usage; exit 2 ;;
 esac
 case "$DOMAIN_TYPE" in
   kvm|qemu) ;;
@@ -129,7 +175,7 @@ mkdir -p "$CACHE_DIR"
 CACHE="$CACHE_DIR/${BOX}-${ARCH}.box"
 HASH_FILE="$CACHE_DIR/${BOX}-${ARCH}.manifest-hash"
 
-CURRENT_HASH="$(./_manifest-hash.sh "$BOX")"
+CURRENT_HASH="$(./_manifest-hash.sh "$BOX" --bake-stem "$BAKE" --mq-bearing "$MQ_BEARING" --os-pin "$OS_PIN")"
 
 # Decide the action up front (the testable surface, exercised via --dry-run).
 age_days=0
@@ -193,28 +239,37 @@ IMG="${POOL_IMG}/${BUILD_DOM}.qcow2"
 CONSOLE="${POOL_IMG}/${BUILD_DOM}-console.log"
 VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
 
-# 1. Ensure the base box is present: the RHEL base is itself locally built
-#    (rhel96/build-box.sh); the Ubuntu base comes from Vagrant Cloud (idempotent
-#    add — an already-present box is left as-is). --provider libvirt is REQUIRED: the
-#    cloud-image base ships multiple providers, so a bare `vagrant box add` drops into an
-#    interactive provider menu that BLOCKS ON INPUT — deadlocking any non-interactive/CI
-#    bootstrap on a multi-provider host (e.g. macOS with libvirt+qemu+virtualbox), which the
-#    fat-box dependency makes every `mqlab bootstrap` hit on a host with no cached boxes.
-#    build-fatbox is a libvirt tool (base box.img read from */libvirt/*, transient VM via
-#    virsh), so libvirt is always correct; a no-op on the Linux/KVM path (libvirt is the only
-#    provider there).
+# 1. Ensure the base box is present. The RHEL base is itself locally built
+#    (rhel/build-box.sh); mqlab builds it FIRST (box.build_boxes orders a local base box
+#    before the fat boxes baked on it), so here it must already be registered — fail loud
+#    if not, naming the mqlab command that builds it. The Ubuntu base comes from Vagrant
+#    Cloud (idempotent add — an already-present box is left as-is), at the catalog's
+#    --base-box-version pin when one is given (none = float, the newest present).
+#    --provider libvirt is REQUIRED: the cloud-image base ships multiple providers, so a
+#    bare `vagrant box add` drops into an interactive provider menu that BLOCKS ON INPUT —
+#    deadlocking any non-interactive/CI bootstrap on a multi-provider host (e.g. macOS with
+#    libvirt+qemu+virtualbox), which the fat-box dependency makes every `mqlab bootstrap`
+#    hit on a host with no cached boxes. build-fatbox is a libvirt tool (base box.img read
+#    from */libvirt/*, transient VM via virsh), so libvirt is always correct; a no-op on the
+#    Linux/KVM path (libvirt is the only provider there).
+BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
 if [ "$BASE_KIND" = rhel ]; then
-  ./rhel96/build-box.sh --domain-type "$DOMAIN_TYPE" --cpu-mode "$CPU_MODE"
-else
+  vagrant box list | grep -q "^${BASE_BOX} " \
+    || { echo "ERROR: base box ${BASE_BOX} is not registered — run: mqlab box build ${BASE_BOX}" >&2; exit 1; }
+elif [ "$BASE_BOX_VERSION" = none ]; then
   vagrant box list | grep -q "^${BASE_BOX} " \
     || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" "$BASE_BOX"
+else
+  vagrant box list | grep -qF "${BASE_BOX} (libvirt, ${BASE_BOX_VERSION}" \
+    || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" \
+         --box-version "$BASE_BOX_VERSION" "$BASE_BOX"
+  BASE_DIR="$BASE_DIR/$BASE_BOX_VERSION"  # bake exactly the pinned version
 fi
 
 # 2. Resolve the base box's disk image and COPY it into the pool as the transient build
 #    disk. A full copy (not a backing-file overlay) keeps qemu off the home-dir base image
 #    — libvirt's dynamic ownership + per-domain AppArmor only cover pool paths — and is
 #    itself scratch: the bake mutates the copy, the shared base box is untouched.
-BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
 # An architecture-aware `box add` lays the image down under an arch-partitioned path
 # (…/<version>/<VAGRANT_ARCH>/libvirt/box.img), so scope the find to this arch first —
 # that is what keeps the arm64 and x86_64 base images from being confused on a host that
@@ -246,15 +301,15 @@ sudo qemu-img resize "$IMG" 18G
 # 3. RHEL bakes need the install DVD attached as a cdrom: rdqm-install builds its offline
 #    dnf repo from it (BaseOS+AppStream) to resolve the MQ rpms' base-OS deps. Stage it into
 #    the pool (symlink/copy per source fs) and attach on the sata bus (q35 has no IDE),
-#    mirroring the lab Vagrantfile + rhel96 build-domain. The bake runs the WORKTREE's
+#    mirroring the lab Vagrantfile + rhel build-domain. The bake runs the WORKTREE's
 #    playbook (whose build/ is empty), so point the MQ media at the host-durable
 #    main-worktree cache (mq_media_dir role default, #604). Ubuntu fat boxes attach no DVD.
 CDROM_XML=""
 BAKE_EXTRA_VARS=()
 if [ "$BASE_KIND" = rhel ]; then
-  DVD_SRC="$MAIN_ROOT/build/state/rhel-9.6-x86_64-dvd.iso"
+  DVD_SRC="$MAIN_ROOT/build/state/${DVD}"
   test -f "$DVD_SRC" || { echo "ERROR: install DVD not found: $DVD_SRC" >&2; exit 1; }
-  DVD_POOL="${POOL_IMG}/rhel-9.6-x86_64-dvd.iso"
+  DVD_POOL="${POOL_IMG}/${DVD}"
   ../scripts/stage-iso-into-pool.sh "$DVD_SRC" "$DVD_POOL"
   CDROM_XML="<disk type='file' device='cdrom'>
       <driver name='qemu' type='raw'/>
@@ -398,7 +453,7 @@ INV
 #     machine-id on first boot (#654). A baked, fixed /etc/machine-id makes systemd
 #     derive an identical DHCP DUID/client-id on every clone of the box; libvirt's
 #     dnsmasq keys leases on client-id, so two clones of the SAME Ubuntu fat box
-#     (infra-client + infra-svc, both infra-ubuntu2404) are handed one IP despite
+#     (infra-client + infra-svc, both infra-ubuntu24) are handed one IP despite
 #     distinct MACs — the collision corrupts vagrant's private-net netplan render and
 #     `netplan apply` fails, killing the vms phase before provision. Emptying (not
 #     removing) /etc/machine-id plus dropping the dbus copy is the documented systemd

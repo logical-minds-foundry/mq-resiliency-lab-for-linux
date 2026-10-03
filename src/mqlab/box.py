@@ -1,13 +1,17 @@
 """The baked-box fleet model + read-only decision surface (epic .github#91, T1).
 
-`mqlab` owns the baked-image layer as a first-class fleet. This module carries
-the fleet definition (DERIVED from `cli._LOCAL_BOX_BUILDERS`, never a second
-literal list) and the read-only `box status` decision surface: for each box it
-shells the existing shell builder's `--dry-run` — the single source of truth for
-the bake/staleness decision — parses the emitted decision line, and renders a
-table. It never re-derives the manifest-hash or age logic; it reads the
-builder's own decision and reports it. All subprocess seams are monkeypatchable
-so tests never touch real git/fs/virsh/vagrant.
+`mqlab` owns the baked-image layer as a first-class fleet. The fleet is DERIVED
+from the OS version catalog (lab/versions.yaml, via mqlab.versions): every box the
+catalog can generate for this host (``<role>-<os><major>``), plus one RHEL base box
+(``rhel/<major>-x86_64``) per catalog RHEL major (epic .github#280). Nothing here
+writes a box name or OS version by hand.
+
+The shell builders are dumb: this module passes them every input as a flag
+(builder_args). The read-only `box status` decision surface shells each builder's
+`--dry-run` — the single source of truth for the bake/staleness decision — parses
+the emitted decision line, and renders a table. It never re-derives the
+manifest-hash or age logic. All subprocess seams are monkeypatchable so tests never
+touch real git/fs/virsh/vagrant.
 """
 
 from __future__ import annotations
@@ -18,34 +22,53 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
+import yaml
 
-from mqlab import cli, mqexporter, venvsync
+from mqlab import cli, mqexporter, stacks, venvsync
 from mqlab.hostfacts import HostFacts, probe
-from mqlab.orchestrator import StepFailedError, run_steps
+from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import cache, repo_root, state
-from mqlab.platforms import (
-    box_build_arch,
-    box_build_domain_virt,
-    build_domain_virt,
-    ensure_resolved,
-)
+from mqlab.platforms import box_build_arch, box_build_domain_virt, ensure_resolved
+from mqlab.retired_boxes import RETIRED_BASE_ARTIFACTS, RETIRED_BOX_NAMES
 from mqlab.runner import Command, SubprocessRunner
+from mqlab.versions import (
+    FAMILIES,
+    HOST_ARCHES,
+    INFRA_ROLES,
+    BoxEntry,
+    Catalog,
+    VersionError,
+    load_catalog,
+)
+
+if TYPE_CHECKING:
+    from mqlab.versions import BuildFile, OsEntry
+
+# The two dumb builders (repo-relative). A base OS box is built from install media;
+# a fat box is a provision-then-snapshot bake on top of a base box.
+_FATBOX_BUILDER = "lab/boxes/build-fatbox.sh"
+_RHEL_BASE_BUILDER = "lab/boxes/rhel/build-box.sh"
 
 
 @dataclass(frozen=True)
 class BoxSpec:
     """One local-built box: its builder script, build/guest arch, durable cache
-    artifact, and whether it carries a manifest-hash (False only for the base OS
-    box, which is built once from the DVD and has no bake-recipe hash to compare)."""
+    artifact, whether it carries a manifest-hash (False only for a base OS box, which
+    is built once from the DVD and has no bake-recipe hash to compare), and the catalog
+    inputs its builder is invoked with."""
 
     name: str
     builder: str  # builder script path, relative to repo root
     arch: str  # build/guest arch (#103 D1): RHEL x86_64; Ubuntu tracks the host
     cache_artifact: str  # durable filename under build/state/boxes/
     has_manifest_hash: bool
+    os: OsEntry  # the catalog OS entry the box is built on
+    role: str | None = None  # the box role; None for a base OS box
+    bake_stem: str | None = None  # ansible/bake-<stem>.yml; None for a base OS box
+    mq_bearing: bool = False
 
     @property
     def manifest_hash_artifact(self) -> str:
@@ -55,84 +78,262 @@ class BoxSpec:
         return f"{self.name}-{self.arch}.manifest-hash"
 
 
-# The base OS box is built once from the credentialed RHEL DVD (build-box.sh);
-# the fat boxes are provision-then-snapshot bakes (build-fatbox.sh) whose cache
-# is keyed `<box>-<arch>.box` beside a `<box>-<arch>.manifest-hash` (#103 D4). The
-# base box's cache filename mirrors build-box.sh's `rhel-9.6-x86_64-libvirt.box`.
-_BASE_BOX = "rhel/9.6-x86_64"
-_BASE_ARTIFACT = "rhel-9.6-x86_64-libvirt.box"
-# The base box is RHEL — x86_64 always; its arch is the trailing token of _BASE_BOX
-# ("rhel/9.6-x86_64"), kept in lockstep with the arch-tagged base artifact.
-_BASE_ARCH = _BASE_BOX.rsplit("-", 1)[1]
-# The RHEL version the base box bakes from ("9.6"), parsed from _BASE_BOX so the
-# DVD-verify locus and the fleet name stay in lockstep.
-_RHEL_VERSION = _BASE_BOX.split("/", 1)[1].split("-", 1)[0]
+def os_pin(entry: OsEntry) -> str:
+    """The OS pin folded into a fat box's manifest hash: ``<base_box>@<pin>``.
 
-# Actions the builders' --dry-run may report. Ordered so the longer FORCE-BUILD
-# is matched before its BUILD substring.
-_ACTIONS = ("FORCE-BUILD", "STALE", "BUILD", "REUSE")
+    The pin is the RHEL point release or the Ubuntu cloud-image box version, so a
+    re-pin (9.x -> 9.y, a new cloud image) flips the hash and forces a rebake
+    (spec §4.7). An entry with neither floats, and says so (``@none``)."""
+    return f"{entry.base_box}@{entry.point or entry.base_box_version or 'none'}"
 
 
-def _load_box_registry() -> dict[str, dict[str, Any]]:
-    """The `boxes:` registry from lab/topology.yaml (box name -> entry). The entry
-    carries the optional `arch:` pin that box_build_arch reads (#103)."""
-    import yaml
+def base_cache_artifact(base_box: str) -> str:
+    """The durable cache filename of a base OS box: its name with '/' -> '-' plus
+    '.box' (``rhel/<N>-x86_64`` -> ``rhel-<N>-x86_64.box``). MUST match the cache path
+    lab/boxes/rhel/build-box.sh writes."""
+    return base_box.replace("/", "-") + ".box"
 
-    data = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    registry: dict[str, dict[str, Any]] = data.get("boxes", {})
-    return registry
+
+# --------------------------------------------------------------------------- #
+# Fleet derivation                                                            #
+# --------------------------------------------------------------------------- #
+# INTERIM UNTIL T2 (epic .github#280): topology nodes still name a concrete box in
+# `platform:` (now the generated `<role>-<os><major>` name). T2 replaces that with a
+# `box:` ROLE per node; until then a stack's box roles are read back off its nodes'
+# platform values with this one pattern. A platform that does not match (the
+# host-resolved base-box platforms, e.g. the SAN targets) bakes nothing and is skipped.
+_INTERIM_PLATFORM_ROLE = re.compile(rf"^(?P<role>[a-z][a-z-]*)-(?:{'|'.join(FAMILIES)})\d+$")
+
+
+def _load_topology() -> dict[str, Any]:
+    """The source topology (lab/topology.yaml)."""
+    data: dict[str, Any] = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
+    return data
+
+
+def _topology_stack_roles(catalog: Catalog) -> dict[str, set[str]]:
+    """stack -> the (non-infra) box roles its nodes use. INTERIM UNTIL T2: derived from
+    the nodes' current `platform:` values (see _INTERIM_PLATFORM_ROLE).
+
+    Fails loudly when a platform names a role the catalog does not know, so a topology
+    typo can never silently drop a box from the fleet."""
+    topo = _load_topology()
+    nodes = topo.get("nodes") or {}
+    out: dict[str, set[str]] = {}
+    for stack in topo.get("stacks") or {}:
+        roles: set[str] = set()
+        for host in stacks.stack_members(stack) or []:
+            match = _INTERIM_PLATFORM_ROLE.fullmatch((nodes.get(host) or {}).get("platform", ""))
+            if match is None:
+                continue
+            role = match["role"]
+            if role not in catalog.roles:
+                raise VersionError(
+                    f"node {host}: platform names box role {role!r}, which is not in "
+                    f"lab/versions.yaml roles (known: {', '.join(sorted(catalog.roles))}) — "
+                    "fix lab/topology.yaml or add the role to lab/versions.yaml"
+                )
+            if role not in INFRA_ROLES:
+                roles.add(role)
+        out[stack] = roles
+    return out
+
+
+def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
+    """Whether this host can build/run an OS entry (its arch pin, if any, is the host's)."""
+    return entry.arch_pin is None or entry.arch_pin == facts.arch
+
+
+def _fat_spec(entry: BoxEntry, facts: HostFacts) -> BoxSpec:
+    arch = box_build_arch({"arch": entry.os.arch_pin}, facts)
+    return BoxSpec(
+        name=entry.name,
+        builder=_FATBOX_BUILDER,
+        arch=arch,
+        cache_artifact=f"{entry.name}-{arch}.box",
+        has_manifest_hash=True,
+        os=entry.os,
+        role=entry.role,
+        bake_stem=entry.bake_stem,
+        mq_bearing=entry.mq_bearing,
+    )
+
+
+def _base_spec(entry: OsEntry, facts: HostFacts) -> BoxSpec:
+    return BoxSpec(
+        name=entry.base_box,
+        builder=_RHEL_BASE_BUILDER,
+        arch=box_build_arch({"arch": entry.arch_pin}, facts),
+        cache_artifact=base_cache_artifact(entry.base_box),
+        has_manifest_hash=False,
+        os=entry,
+    )
 
 
 def _build_fleet(
     facts: HostFacts | None = None,
-    registry: dict[str, dict[str, Any]] | None = None,
+    catalog: Catalog | None = None,
+    stack_roles: dict[str, set[str]] | None = None,
 ) -> dict[str, BoxSpec]:
-    """The fleet, DERIVED from cli._LOCAL_BOX_BUILDERS (one source).
+    """The fleet, DERIVED from the catalog (epic .github#280).
 
-    Each fat box's build/guest arch comes from the single authority
-    platforms.box_build_arch(<its topology `boxes:` entry>, facts) (#103 D1) — RHEL
-    is x86_64-pinned, an un-pinned Ubuntu box tracks the host — and its cache
-    artifact is arch-suffixed `<box>-<arch>.box` (D4). The base box keeps its literal
-    already-arch-tagged artifact. facts/registry are injected for testing; they
-    default to the live host facts and the shipped topology registry."""
+    Every box Catalog.all_boxes generates for this host (the infra boxes on the infra
+    OS, then each stack's roles on each supported OS the host can run), plus one RHEL
+    base box per catalog RHEL major the host can run. Each fat box's build/guest arch
+    comes from the single authority platforms.box_build_arch (#103 D1) — RHEL is
+    x86_64-pinned, an un-pinned Ubuntu box tracks the host — and its cache artifact is
+    arch-suffixed `<box>-<arch>.box` (D4). facts/catalog/stack_roles are injected for
+    testing; they default to the live host, lab/versions.yaml and the topology."""
     facts = facts or probe()
-    registry = registry if registry is not None else _load_box_registry()
+    catalog = catalog if catalog is not None else load_catalog()
+    roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
     fleet: dict[str, BoxSpec] = {}
-    for name, builder in cli._LOCAL_BOX_BUILDERS.items():
-        if name == _BASE_BOX:
-            fleet[name] = BoxSpec(
-                name=name,
-                builder=builder,
-                arch=_BASE_ARCH,
-                cache_artifact=_BASE_ARTIFACT,
-                has_manifest_hash=False,
-            )
-        else:
-            arch = box_build_arch(registry.get(name, {}), facts)
-            fleet[name] = BoxSpec(
-                name=name,
-                builder=builder,
-                arch=arch,
-                cache_artifact=f"{name}-{arch}.box",
-                has_manifest_hash=True,
-            )
+    for ref, entry in sorted(catalog.oses.items()):
+        if ref.family == "rhel" and _host_can_run(entry, facts):
+            fleet[entry.base_box] = _base_spec(entry, facts)
+    for box_entry in catalog.all_boxes(facts, roles):
+        fleet[box_entry.name] = _fat_spec(box_entry, facts)
     return fleet
 
 
 FLEET: dict[str, BoxSpec] = _build_fleet()
 
 
-@dataclass(frozen=True)
-class BoxDecision:
-    """The rendered per-box status: cache/age/hash/registration + the builder's
-    REUSE/BUILD/STALE/FORCE-BUILD decision."""
+def boxes_for_build(
+    build: BuildFile,
+    *,
+    facts: HostFacts,
+    catalog: Catalog | None = None,
+    stack_roles: dict[str, set[str]] | None = None,
+) -> list[str]:
+    """The boxes a build file needs, for every stack (`mqlab box build --config`).
 
-    name: str
-    cached: bool
-    age_days: int | None
-    hash_match: bool | None  # None for the base box, or when not evaluated
-    registered: bool
-    action: str
+    The infra boxes, then, for every stack whose OS family the build file covers (a
+    build file naming ``os: rhel:9`` covers the RHEL stacks; one with no ``os`` covers
+    every stack at its default), that stack's roles on the OS Catalog.stack_os resolves
+    — so an unsupported or host-incompatible request fails loudly there. A stack left
+    at its default is skipped only when this host cannot run that default (RHEL on
+    aarch64), since nothing asked for it."""
+    catalog = catalog if catalog is not None else load_catalog()
+    roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
+    names = [catalog.box(role, catalog.infra).name for role in INFRA_ROLES]
+    for stack, stack_box_roles in roles.items():
+        if stack not in catalog.stacks:
+            raise VersionError(
+                f"unknown stack {stack!r} (known: {', '.join(sorted(catalog.stacks))}) — "
+                "add it under stacks: in lab/versions.yaml"
+            )
+        default = catalog.stacks[stack]["default"]
+        if build.os is None:
+            if not _host_can_run(catalog.oses[default], facts):
+                continue
+        elif build.os.family != default.family:
+            continue
+        ref = catalog.stack_os(stack, build, facts)  # raises (named fix) on a bad request
+        names += [catalog.box(role, ref).name for role in sorted(stack_box_roles)]
+    return list(dict.fromkeys(names))
+
+
+# --------------------------------------------------------------------------- #
+# Builder invocation (the builders are dumb: every input is a flag)           #
+# --------------------------------------------------------------------------- #
+def builder_args(spec: BoxSpec, facts: HostFacts) -> list[str]:
+    """The builder flags for one box, from its catalog inputs (epic .github#280).
+
+    The domain virt is guest-arch-aware — box_build_domain_virt(spec.arch): native KVM
+    when the box's build arch is the host's, TCG otherwise (#731/#732)."""
+    domain_type, cpu_mode = box_build_domain_virt(spec.arch, facts)
+    virt = ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
+    entry = spec.os
+    if spec.role is None:  # a RHEL base OS box, built from the DVD
+        if entry.point is None or entry.iso is None:  # load_catalog requires both for rhel
+            raise VersionError(
+                f"base box {spec.name}: os.{entry.ref.family}.{entry.ref.major} needs point "
+                "and iso — fix lab/versions.yaml"
+            )
+        return [
+            "--major",
+            str(entry.ref.major),
+            "--point",
+            entry.point,
+            "--iso",
+            entry.iso,
+            *virt,
+        ]
+    return [
+        "--box",
+        spec.name,
+        "--arch",
+        spec.arch,
+        "--base-kind",
+        entry.ref.family,
+        "--base-box",
+        entry.base_box,
+        "--base-box-version",
+        entry.base_box_version or "none",
+        "--bake",
+        str(spec.bake_stem),
+        "--dvd",
+        entry.iso or "none",
+        "--os-pin",
+        os_pin(entry),
+        "--mq-bearing",
+        "1" if spec.mq_bearing else "0",
+        *virt,
+    ]
+
+
+def _builder_argv(spec: BoxSpec, facts: HostFacts) -> list[str]:
+    return ["bash", str(repo_root() / spec.builder), *builder_args(spec, facts)]
+
+
+def _build_steps(plan: list[tuple[str, bool]], facts: HostFacts) -> list[CommandStep]:
+    """One builder CommandStep per (box, force) in plan order; force appends
+    `--rebuild-box` so the builder overwrites its cache (`box rebuild`, #91).
+
+    DEPRECATED, not removed (#103 D11): an emulated cross-arch box build (a box that
+    pins an arch other than the host's, e.g. RHEL on Apple Silicon) is refused. The
+    catalog fleet already omits such boxes on that host (Catalog.all_boxes skips them);
+    this guard keeps the refusal explicit should one be named anyway."""
+    steps: list[CommandStep] = []
+    for name, force in plan:
+        spec = FLEET[name]
+        if spec.os.arch_pin is not None and spec.os.arch_pin != facts.arch:
+            raise StepFailedError(
+                f"box {name} pins arch {spec.os.arch_pin} but this host is {facts.arch}: "
+                f"emulated cross-arch box builds are disabled (#103 D11). "
+                f"Build it on the x86 host.",
+                2,
+            )
+        argv = _builder_argv(spec, facts)
+        if force:
+            argv.append("--rebuild-box")
+        steps.append(CommandStep(f"box {name}", Command(argv)))  # noqa: S607
+    return steps
+
+
+def _build_plan(names: list[str], *, force: bool) -> list[tuple[str, bool]]:
+    """(box, force) in build order: the locally-built base box of each named fat box
+    that is about to BAKE comes FIRST (build-fatbox.sh requires it registered), then
+    the named boxes.
+
+    The base is pulled in only when its fat box will actually bake — a forced rebuild,
+    or a builder decision other than REUSE — exactly when build-fatbox.sh used to build
+    it itself. A fat box REUSEd from cache never needs its base, so a bootstrap after a
+    VM rebuild does not re-register a base box it will not use. A base box pulled in as
+    a dependency is ensured, never forced: `box rebuild` of a fat box must not trigger a
+    45-90 minute base rebuild; name the base box to force it."""
+
+    def bakes(name: str) -> bool:
+        return force or box_decision(name).action != "REUSE"
+
+    deps = [
+        FLEET[n].os.base_box
+        for n in dict.fromkeys(names)
+        if FLEET[n].role is not None and FLEET[n].os.base_box in FLEET and bakes(n)
+    ]
+    plan = [(base, False) for base in dict.fromkeys(deps) if base not in names]
+    return plan + [(name, force) for name in dict.fromkeys(names)]
 
 
 # --------------------------------------------------------------------------- #
@@ -146,27 +347,9 @@ def _capture(cmd: Command) -> str:
 
 
 def _run_builder_dry_run(name: str) -> str:
-    """Shell the box's builder with --dry-run and return its decision output.
-
-    Mirrors cli._box_build_steps: fat boxes are box-parameterized (`--box`) and
-    carry a required `--arch` (post-#701); the base-OS builder is neither. The
-    domain virt is guest-arch-aware — box_build_domain_virt(spec.arch) for fat
-    boxes (native KVM for an arm64 Ubuntu box), build_domain_virt for the x86
-    base box (#731/#732)."""
-    spec = FLEET[name]
-    facts = probe()
-    argv = ["bash", str(repo_root() / spec.builder)]
-    if spec.builder.endswith("build-fatbox.sh"):
-        # Fat boxes are box-parameterized and arch-native: pass the box's build
-        # arch (--arch, required by build-fatbox.sh post-#701) and derive the
-        # domain virt from that arch, so an arm64 Ubuntu box builds under native
-        # KVM rather than TCG (#731/#732). Mirrors cli._box_build_steps.
-        domain_type, cpu_mode = box_build_domain_virt(spec.arch, facts)
-        argv += ["--box", name, "--arch", spec.arch]
-    else:
-        # Base-OS box (build-box.sh): always an x86_64 guest.
-        domain_type, cpu_mode = build_domain_virt(facts)
-    argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode, "--dry-run"]
+    """Shell the box's builder with --dry-run and return its decision output, invoked
+    with exactly the flags a real build uses (builder_args)."""
+    argv = [*_builder_argv(FLEET[name], probe()), "--dry-run"]
     cmd = Command(argv, cwd=repo_root() / "lab", env=cli._vagrant_env())
     return _capture(cmd)
 
@@ -185,6 +368,24 @@ def _registered_boxes() -> dict[str, str]:
     """`vagrant box list` parsed to {box_name: info} (via cli.parse_box_list)."""
     cmd = Command(["vagrant", "box", "list"], cwd=repo_root() / "lab", env=cli._vagrant_env())
     return cli.parse_box_list(_capture(cmd))
+
+
+@dataclass(frozen=True)
+class BoxDecision:
+    """The rendered per-box status: cache/age/hash/registration + the builder's
+    REUSE/BUILD/STALE/FORCE-BUILD decision."""
+
+    name: str
+    cached: bool
+    age_days: int | None
+    hash_match: bool | None  # None for the base box, or when not evaluated
+    registered: bool
+    action: str
+
+
+# Actions the builders' --dry-run may report. Ordered so the longer FORCE-BUILD
+# is matched before its BUILD substring.
+_ACTIONS = ("FORCE-BUILD", "STALE", "BUILD", "REUSE")
 
 
 # --------------------------------------------------------------------------- #
@@ -250,7 +451,7 @@ def _fmt_hash(spec: BoxSpec, hash_match: bool | None) -> str:
 
 def _fmt_row(d: BoxDecision) -> str:
     return (
-        f"{d.name:<18} "
+        f"{d.name:<22} "
         f"{FLEET[d.name].arch:<8} "
         f"{('yes' if d.cached else 'no'):<7} "
         f"{(f'{d.age_days}d' if d.age_days is not None else '-'):<6} "
@@ -263,63 +464,73 @@ def _fmt_row(d: BoxDecision) -> str:
 def render_status(names: list[str]) -> str:
     """Render the fleet status table for the given box names."""
     header = (
-        f"{'BOX':<18} {'ARCH':<8} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
+        f"{'BOX':<22} {'ARCH':<8} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
     )
     rows = [_fmt_row(box_decision(name)) for name in names]
     return "\n".join([header, *rows])
 
 
 # --------------------------------------------------------------------------- #
-# Per-host cache migration to the arch-suffixed scheme (#103 D5, T4)           #
+# Per-host cache migration (#103 D5, T4; the box rename, epic .github#280)     #
 # --------------------------------------------------------------------------- #
 def migrate_box_cache(
     boxes_dir: Path | None = None, *, dry_run: bool = False
 ) -> list[tuple[str, str]]:
-    """Rename each legacy fat-box cache entry to the arch-suffixed scheme, in place.
+    """Rename legacy box cache entries to their current names, in place.
 
-    Pre-#103 the cache keyed boxes purely by name (`<box>.box` + `<box>.manifest-hash`);
-    the arch-native scheme keys them `<box>-<arch>.box` (#103 D4). The cache is per-host
-    single-arch (D5) and every legacy fat box was x86_64-pinned, so each legacy name maps
-    to its `-x86_64` form. Idempotent: a no-op once renamed, and it never clobbers an
-    existing target (a mixed old/new cache is left for the operator to resolve). Returns
-    the (src, dst) pairs it renamed (or, under dry_run, would rename). Defaults to the
-    durable box cache dir; boxes_dir is injected for testing."""
+    Two one-time migrations:
+
+    - Pre-#103 the cache keyed fat boxes purely by name (`<box>.box` +
+      `<box>.manifest-hash`); the arch-native scheme keys them `<box>-<arch>.box`
+      (#103 D4). Every legacy fat box was x86_64-pinned, so each maps to its `-x86_64`
+      form.
+    - The `<role>-<os><major>` rename (epic .github#280) retired the RHEL base box's
+      old name. A base box carries no manifest hash, so its cached image is still good:
+      rename it to the new base box's artifact rather than rebuild it from the DVD
+      (RETIRED_BASE_ARTIFACTS). The retired fat boxes' caches are dead and are deleted
+      by `mqlab box gc` instead (clean_retired_cache).
+
+    Idempotent: a no-op once renamed, and it never clobbers an existing target (a mixed
+    old/new cache is left for the operator to resolve). Returns the (src, dst) pairs it
+    renamed (or, under dry_run, would rename). Defaults to the durable box cache dir;
+    boxes_dir is injected for testing."""
     cache_dir = boxes_dir if boxes_dir is not None else _boxes_cache_dir()
-    renamed: list[tuple[str, str]] = []
+    moves: list[tuple[str, str]] = []
     for spec in FLEET.values():
-        if not spec.has_manifest_hash:
-            continue  # the base box artifact is already arch-tagged
-        moves = (
-            (f"{spec.name}.box", f"{spec.name}-x86_64.box"),
-            (f"{spec.name}.manifest-hash", f"{spec.name}-x86_64.manifest-hash"),
-        )
-        for legacy, new in moves:
-            src = cache_dir / legacy
-            dst = cache_dir / new
-            if src.is_file() and not dst.exists():
-                renamed.append((str(src), str(dst)))
-                if not dry_run:
-                    src.rename(dst)
+        if spec.has_manifest_hash:
+            moves += [
+                (f"{spec.name}.box", f"{spec.name}-x86_64.box"),
+                (f"{spec.name}.manifest-hash", f"{spec.name}-x86_64.manifest-hash"),
+            ]
+    for legacy_artifact, new_box in RETIRED_BASE_ARTIFACTS.values():
+        moves.append((legacy_artifact, base_cache_artifact(new_box)))
+    renamed: list[tuple[str, str]] = []
+    for legacy, new in moves:
+        src = cache_dir / legacy
+        dst = cache_dir / new
+        if src.is_file() and not dst.exists():
+            renamed.append((str(src), str(dst)))
+            if not dry_run:
+                src.rename(dst)
     return renamed
 
 
 # --------------------------------------------------------------------------- #
 # RHEL DVD verify-and-guide (epic .github#91, T4)                              #
 # --------------------------------------------------------------------------- #
-# Pinned RHEL DVD SHA-256 checksums, keyed by RHEL version. Each value is the
-# checksum Red Hat publishes beside the DVD on the Customer Portal download page
-# (Downloads -> Red Hat Enterprise Linux -> the "x86_64 DVD ISO" row's SHA-256).
-# Pinning a version turns on integrity verification of the operator-supplied ISO
-# before the expensive base-box BUILD.
+# Pinned RHEL DVD SHA-256 checksums, keyed by RHEL point release (the catalog's
+# os.rhel.<major>.point). Each value is the checksum Red Hat publishes beside the DVD
+# on the Customer Portal download page (Downloads -> Red Hat Enterprise Linux -> the
+# "x86_64 DVD ISO" row's SHA-256). Pinning a release turns on integrity verification
+# of the operator-supplied ISO before the expensive base-box BUILD.
 #
-# 9.6 is DELIBERATELY LEFT UNPINNED: the real Red Hat checksum is NOT fabricated
-# here. The operator pastes it in from Red Hat's published value. Until a version
-# is pinned, verify_rhel_dvd emits a loud NOTICE and PROCEEDS (integrity
-# unverified) — the lab built the RHEL box with no SHA check before this
-# preflight existed, and hard-blocking on unpinned would regress that working
-# cold rebuild.
+# Every release is DELIBERATELY LEFT UNPINNED: the real Red Hat checksum is NOT
+# fabricated here. The operator pastes it in from Red Hat's published value. Until a
+# release is pinned, verify_rhel_dvd emits a loud NOTICE and PROCEEDS (integrity
+# unverified) — the lab built the RHEL box with no SHA check before this preflight
+# existed, and hard-blocking on unpinned would regress that working cold rebuild.
 RHEL_DVD_SHA256: dict[str, str] = {
-    # "9.6": "<paste Red Hat's published rhel-9.6-x86_64-dvd.iso SHA-256 here>",
+    # "<point>": "<paste Red Hat's published SHA-256 of that release's x86_64 DVD here>",
 }
 
 # Red Hat's authenticated RHEL download page (operator-supplied; no credential
@@ -327,16 +538,16 @@ RHEL_DVD_SHA256: dict[str, str] = {
 _RHEL_DVD_URL = "https://access.redhat.com/downloads/content/rhel"
 
 
-def _rhel_dvd_path() -> Path:
-    """Canonical path to the operator-supplied RHEL DVD ISO.
+def _rhel_dvd_path(iso: str) -> Path:
+    """Canonical path to the operator-supplied RHEL DVD ISO named ``iso`` (the catalog's
+    os.rhel.<major>.iso).
 
     Honors MQLAB_RHEL_ISO then RHEL_ISO exactly like lab/scripts/stage-rhel-iso.sh;
-    otherwise defaults to the shared state/ bucket at
-    state("rhel-9.6-x86_64-dvd.iso")."""
+    otherwise defaults to the shared state/ bucket at state(iso)."""
     override = os.environ.get("MQLAB_RHEL_ISO") or os.environ.get("RHEL_ISO")
     if override:
         return Path(override)
-    return state("rhel-9.6-x86_64-dvd.iso")
+    return state(iso)
 
 
 def _sha256_file(path: Path) -> str:
@@ -348,8 +559,9 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def verify_rhel_dvd(version: str) -> None:
-    """Preflight the RHEL DVD before the base-box BUILD (fail-loud).
+def verify_rhel_dvd(entry: OsEntry) -> None:
+    """Preflight the RHEL DVD for catalog entry ``entry`` before the base-box BUILD
+    (fail-loud). The release is the entry's point; the file is its iso.
 
     - MISSING file          -> typer.Exit(2) with actionable guidance (version,
                                Red Hat download URL, destination path).
@@ -357,7 +569,13 @@ def verify_rhel_dvd(version: str) -> None:
     - UNPINNED version      -> loud NOTICE, then return (integrity unverified).
     - pinned and MATCHED    -> return.
     """
-    path = _rhel_dvd_path()
+    if entry.point is None or entry.iso is None:  # load_catalog requires both for rhel
+        raise VersionError(
+            f"os.{entry.ref.family}.{entry.ref.major} needs point and iso to verify its "
+            "DVD — fix lab/versions.yaml"
+        )
+    version = entry.point
+    path = _rhel_dvd_path(entry.iso)
     if not path.is_file():
         typer.echo(
             f"mqlab box: RHEL {version} DVD ISO not found at {path}.\n"
@@ -393,11 +611,11 @@ def verify_rhel_dvd(version: str) -> None:
 def _rhel_base_needs_dvd(name: str, *, force: bool) -> bool:
     """Whether building `name` will consume the RHEL DVD.
 
-    Only the RHEL base box (build-box.sh) attaches the ISO — the fat boxes bake
-    from the already-built base box. And only a real build needs it: a REUSE of a
-    cached base box attaches no ISO. A forced rebuild always rebuilds, so it
+    Only a RHEL base box (build-box.sh) attaches the ISO for its install — the fat
+    boxes bake from the already-built base box. And only a real build needs it: a
+    REUSE of a cached base box attaches no ISO. A forced rebuild always rebuilds, so it
     always needs the DVD (and short-circuits the extra dry-run)."""
-    if name != _BASE_BOX:
+    if FLEET[name].role is not None:
         return False
     if force:
         return True
@@ -410,13 +628,13 @@ def _rhel_base_needs_dvd(name: str, *, force: bool) -> bool:
 def build_boxes(names: list[str], *, force: bool) -> None:
     """Ensure (or force-rebake) each named box, fail-loud.
 
-    For every name, issue that box's builder as one CommandStep — reusing
-    cli._box_build_steps (the single source of truth for the builder argv),
-    which appends `--rebuild-box` when force. A non-force build is cheap over a
-    valid cache: the builder itself makes the REUSE-vs-BUILD decision, so this
-    never re-derives that logic. Shared by `box build`/`box rebuild` and by
-    bootstrap's `_ensure_local_boxes`, so both drive one path. Raises typer.Exit
-    with the failing step's exit code on any builder non-zero (StepFailedError).
+    Issues each box's builder as one CommandStep (_build_steps, with the flags
+    builder_args derives from the catalog), local base boxes first (_build_plan);
+    force appends `--rebuild-box` for the named boxes. A non-force build is cheap over
+    a valid cache: the builder itself makes the REUSE-vs-BUILD decision, so this never
+    re-derives that logic. Shared by `box build`/`box rebuild` and by bootstrap's
+    `_ensure_local_boxes`, so both drive one path. Raises typer.Exit with the failing
+    step's exit code on any builder non-zero (StepFailedError).
     """
     # Sync the dev venv to uv.lock before the bake spawns venv-dependent tools
     # (build-fatbox.sh -> ansible-playbook); a stale venv otherwise dies deep in
@@ -427,16 +645,16 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     # standalone `box build` doesn't die at box registration on a fresh checkout
     # (#737); idempotent when bootstrap already rendered it.
     ensure_resolved()
+    plan = _build_plan(names, force=force)
     # Build (once) + cache the prebuilt mq_prometheus binary before any box that bakes
     # it in (#1065): the Go-container build replaces the in-guest cgo build that
     # overflowed the fatbox guest. Cache-hit is a no-op; the bake copies the artifact.
-    if mqexporter.needs_exporter_binary(names):
+    if mqexporter.needs_exporter_binary(FLEET[name].role for name, _ in plan):
         mqexporter.ensure_mq_exporter_binary(cache())
-    for name in names:
-        if _rhel_base_needs_dvd(name, force=force):
-            verify_rhel_dvd(_RHEL_VERSION)
-    needed = {name: FLEET[name].builder for name in names}
-    steps = cli._box_build_steps(needed, {}, probe(), force=force)
+    for name, box_force in plan:
+        if _rhel_base_needs_dvd(name, force=box_force):
+            verify_rhel_dvd(FLEET[name].os)
+    steps = _build_steps(plan, probe())
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = cli.build_deps("box-build", timestamp)
     try:
@@ -509,6 +727,51 @@ def clean_boxes(names: list[str]) -> list[str]:
         _vagrant_box_remove(name)
         removed.append(f"vagrant box '{name}'")
     return removed
+
+
+# --------------------------------------------------------------------------- #
+# Retired box names — the one-time rename migration (epic .github#280)          #
+# --------------------------------------------------------------------------- #
+def clean_retired(*, dry_run: bool = False) -> list[str]:
+    """Deregister every still-registered retired box name from Vagrant; return the
+    names removed (or, under dry_run, that would be).
+
+    A retired name can never be built or booted again (bootstrap's box_meta reconcile
+    forgets any guest still pinned to one), so its registration is pure dead weight."""
+    registered = _registered_boxes()
+    retired = [name for name in RETIRED_BOX_NAMES if name in registered]
+    if not dry_run:
+        for name in retired:
+            _vagrant_box_remove(name)
+    return retired
+
+
+def clean_retired_cache(boxes_dir: Path | None = None, *, dry_run: bool = False) -> list[str]:
+    """Delete the retired fat boxes' dead cache artifacts; return the paths removed.
+
+    Their manifest hash names the box, so they can never be REUSEd under a new name.
+    The retired RHEL base box's cache is NOT touched here: it is still a good image,
+    and `mqlab build migrate` renames it (migrate_box_cache)."""
+    cache_dir = boxes_dir if boxes_dir is not None else _boxes_cache_dir()
+    removed: list[str] = []
+    for name in RETIRED_BOX_NAMES:
+        if name in RETIRED_BASE_ARTIFACTS:
+            continue
+        # Both cache schemes: pre-#103 <name>.box and the arch-suffixed <name>-<arch>.box.
+        for stem in (name, *(f"{name}-{arch}" for arch in HOST_ARCHES)):
+            for suffix in (".box", ".manifest-hash"):
+                artifact = cache_dir / f"{stem}{suffix}"
+                if artifact.is_file():
+                    removed.append(str(artifact))
+                    if not dry_run:
+                        artifact.unlink()
+    return removed
+
+
+def _retired_volume_stems() -> frozenset[str]:
+    """The libvirt base-volume stems of the retired names — vagrant-libvirt escapes a
+    '/' in the box name as -VAGRANTSLASH- (see _current_box_volumes)."""
+    return frozenset(name.replace("/", "-VAGRANTSLASH-") for name in RETIRED_BOX_NAMES)
 
 
 # --------------------------------------------------------------------------- #
@@ -632,10 +895,12 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     """Reclaim orphaned vagrant box base images from the libvirt pool (#759, #1248).
 
     Per box stem, keeps the image(s) the registered box resolves to (or, with no
-    registered box, the newest image) and deletes the rest, EXCEPT any still
+    registered box, the newest image; or, for a retired box name, none) and deletes the
+    rest, EXCEPT any still
     referenced as a backing store by a live overlay volume. Idempotent and safe to
     run repeatedly; `dry_run` reports without deleting."""
     current = _current_box_volumes()
+    retired = _retired_volume_stems()
     names = _pool_volume_names(pool)
     alloc: dict[str, int] = {}
     in_use: set[str] = set()
@@ -656,7 +921,11 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     freed = 0
     for stem, images in sorted(by_stem.items()):
         images.sort()  # ascending by timestamp
-        if stem in current:
+        if stem in retired:
+            # A retired box name (epic .github#280) is never booted or rebuilt again, so
+            # every one of its images is dead — none is kept (the in-use guard still holds).
+            keep: set[str] = set()
+        elif stem in current:
             # Registered: keep exactly what the registered box.img resolves to. None of
             # them may exist yet (a rebake not yet uploaded) — then every image is stale.
             keep = {name for _ts, name in images if name in current[stem]}

@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from mqlab import cli, perfrun, topology
+from tests.boxfleet import x86_fleet
 from tests.fakes import FakeSampleSource
+
+# The catalog-derived fleet as an x86_64 host sees it, built once per session.
+_X86_FLEET = x86_fleet()
 
 
 @pytest.fixture(autouse=True)
@@ -89,6 +93,16 @@ def _neutralize_venv_sync(monkeypatch):
     every call site (cli + box reference the same module object). The helper's own
     behaviour is tested directly in tests/test_venvsync.py."""
     monkeypatch.setattr(cli.venvsync, "ensure_venv_current", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _host_independent_fleet(monkeypatch):
+    """Pin box.FLEET to the x86_64 fleet in every test. The live FLEET is derived from
+    the catalog for the host running the suite, and Catalog.all_boxes skips RHEL on an
+    aarch64 host (epic .github#280), so without this the fleet would differ between the
+    arm64 dev VM and x86 CI. Tests of the derivation itself call box._build_fleet with
+    injected facts."""
+    monkeypatch.setattr(cli.box, "FLEET", dict(_X86_FLEET))
 
 
 @pytest.fixture(autouse=True)

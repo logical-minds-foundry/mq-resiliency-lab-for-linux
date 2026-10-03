@@ -7,7 +7,7 @@
   become: true
   tasks:
     - name: acl package for unprivileged become (become_user mqm)
-      # acl is baked into mq-nativeha-ubuntu (bake-nativeha-ubuntu.yml), so this is an
+      # acl is baked into mq-nativeha-ubuntu24 (bake-nativeha-ubuntu.yml), so this is an
       # idempotent `present` no-op kept for older boxes. No `update_cache`: the per-run
       # apt-get update it forced cost ~77s across the nodes for a package already
       # installed (#1226).

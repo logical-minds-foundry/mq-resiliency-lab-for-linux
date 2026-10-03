@@ -52,7 +52,7 @@ shopt -u nullglob
 if [ "${#isos[@]}" -eq 0 ]; then
   echo "ERROR: no *.iso files found in RHEL DVD archive: $SRC" >&2
   echo "       Drop the RHEL DVD ISO(s) there, named to match the lab's canonical" >&2
-  echo "       filename (e.g. rhel-9.6-x86_64-dvd.iso)." >&2
+  echo "       filename (the os.rhel.<major>.iso value in lab/versions.yaml)." >&2
   exit 1
 fi
 

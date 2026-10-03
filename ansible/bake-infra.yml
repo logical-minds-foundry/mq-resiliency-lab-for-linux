@@ -1,5 +1,5 @@
 ---
-# Bake the infra-ubuntu2404 box image (#602, epic .github#70 Task 1).
+# Bake the infra-ubuntu24 box image (#602, epic .github#70 Task 1).
 #
 # ADDITIVE FOUNDATION: installs only the image-bakeable software for the infra box —
 # BIND9 (package + zone-dir scaffolding) and the fleet agents' binaries. It drops NO
@@ -21,7 +21,7 @@
       ansible.builtin.include_role:
         name: apt-autoupdate-off
 
-- name: Bake infra-ubuntu2404 (install-only; no zones, no per-host named.conf)
+- name: Bake infra-ubuntu24 (install-only; no zones, no per-host named.conf)
   hosts: bake
   become: true
   tasks:

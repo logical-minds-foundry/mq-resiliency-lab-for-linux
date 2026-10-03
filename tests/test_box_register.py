@@ -72,7 +72,7 @@ def _adds(tmp_path: Path) -> list[str]:
 
 def _cache(tmp_path: Path, image: bytes = b"box-v1", mtime: int = 1_000) -> Path:
     """A `.box` the way the builders write it: tar.gz of metadata.json + box.img."""
-    cache = tmp_path / "obs-ubuntu2404-aarch64.box"
+    cache = tmp_path / "obs-ubuntu24-aarch64.box"
     with tarfile.open(cache, "w:gz") as tar:
         for name, data in (("metadata.json", _META), ("box.img", image)):
             info = tarfile.TarInfo(name)
@@ -82,15 +82,15 @@ def _cache(tmp_path: Path, image: bytes = b"box-v1", mtime: int = 1_000) -> Path
     return cache
 
 
-def _provider(tmp_path: Path, box: str = "obs-ubuntu2404") -> Path:
+def _provider(tmp_path: Path, box: str = "obs-ubuntu24") -> Path:
     return tmp_path / "vagrant-home" / "boxes" / box / "0" / "arm64" / "libvirt"
 
 
 def _reuse(cache: Path, manifest: str = "h1") -> str:
     return (
         f'id="$(box_reg_identity "{cache}" {manifest})"; '
-        f'box_reuse_register obs-ubuntu2404 "{cache}" "$id" --provider libvirt --force '
-        f'obs-ubuntu2404 "{cache}"'
+        f'box_reuse_register obs-ubuntu24 "{cache}" "$id" --provider libvirt --force '
+        f'obs-ubuntu24 "{cache}"'
     )
 
 
@@ -113,7 +113,7 @@ def test_first_reuse_adds_then_second_reuse_skips(tmp_path):
     second = _bash(_reuse(cache), env)
     assert second.returncode == 0, second.stderr
     assert "registration: current" in second.stdout
-    assert _adds(tmp_path) == [f"box add --provider libvirt --force obs-ubuntu2404 {cache}"]
+    assert _adds(tmp_path) == [f"box add --provider libvirt --force obs-ubuntu24 {cache}"]
 
 
 def test_rebaked_cache_is_readded(tmp_path):
@@ -175,13 +175,13 @@ def test_unstamped_registration_with_other_metadata_is_readded(tmp_path):
 def test_state_is_cheap_and_names_each_case(tmp_path):
     env = _env(tmp_path)
     cache = _cache(tmp_path)
-    state = f'box_reg_state obs-ubuntu2404 "$(box_reg_identity "{cache}" h1)"'
+    state = f'box_reg_state obs-ubuntu24 "$(box_reg_identity "{cache}" h1)"'
     assert _bash(state, env).stdout.strip() == "absent"
     _hand_register(tmp_path, b"box-v1")
     assert _bash(state, env).stdout.strip() == "unstamped"
     assert _bash(_reuse(cache), env).returncode == 0
     assert _bash(state, env).stdout.strip() == "current"
-    other = f'box_reg_state obs-ubuntu2404 "$(box_reg_identity "{cache}" h2)"'
+    other = f'box_reg_state obs-ubuntu24 "$(box_reg_identity "{cache}" h2)"'
     assert _bash(other, env).stdout.strip() == "stale"
 
 
@@ -191,7 +191,7 @@ def test_removed_box_is_readded(tmp_path):
     cache = _cache(tmp_path)
     assert _bash(_reuse(cache), env).returncode == 0
     subprocess.run(  # noqa: S603
-        ["rm", "-rf", str(tmp_path / "vagrant-home" / "boxes" / "obs-ubuntu2404")],  # noqa: S607
+        ["rm", "-rf", str(tmp_path / "vagrant-home" / "boxes" / "obs-ubuntu24")],  # noqa: S607
         check=True,
     )
     assert "registration: absent" in _bash(_reuse(cache), env).stdout
@@ -203,8 +203,8 @@ def test_box_register_always_adds_and_stamps(tmp_path):
     env = _env(tmp_path)
     cache = _cache(tmp_path)
     script = (
-        f'box_register obs-ubuntu2404 "$(box_reg_identity "{cache}" h1)" '
-        f'--provider libvirt --force obs-ubuntu2404 "{cache}"'
+        f'box_register obs-ubuntu24 "$(box_reg_identity "{cache}" h1)" '
+        f'--provider libvirt --force obs-ubuntu24 "{cache}"'
     )
     assert _bash(script, env).returncode == 0
     assert _bash(script, env).returncode == 0
@@ -222,7 +222,7 @@ def test_box_register_fails_loud_when_nothing_registered(tmp_path):
 
 def test_same_as_cache_is_false_when_unregistered(tmp_path):
     cache = _cache(tmp_path)
-    result = _bash(f'box_reg_same_as_cache obs-ubuntu2404 "{cache}"', _env(tmp_path))
+    result = _bash(f'box_reg_same_as_cache obs-ubuntu24 "{cache}"', _env(tmp_path))
     assert result.returncode == 1
 
 
@@ -231,13 +231,13 @@ def test_slashed_name_is_escaped(tmp_path):
     cache = _cache(tmp_path)
     script = (
         f'id="$(box_reg_identity "{cache}" -)"; '
-        f'box_reuse_register rhel/9.6-x86_64 "{cache}" "$id" --force rhel/9.6-x86_64 "{cache}"; '
-        f'box_reg_state rhel/9.6-x86_64 "$id"'
+        f'box_reuse_register rhel/9-x86_64 "{cache}" "$id" --force rhel/9-x86_64 "{cache}"; '
+        f'box_reg_state rhel/9-x86_64 "$id"'
     )
     result = _bash(script, env)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().endswith("current")
-    assert (tmp_path / "vagrant-home" / "boxes" / "rhel-VAGRANTSLASH-9.6-x86_64").is_dir()
+    assert (tmp_path / "vagrant-home" / "boxes" / "rhel-VAGRANTSLASH-9-x86_64").is_dir()
 
 
 def test_identity_names_path_size_mtime_and_manifest(tmp_path):

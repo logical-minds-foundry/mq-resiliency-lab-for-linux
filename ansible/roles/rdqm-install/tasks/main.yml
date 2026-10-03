@@ -4,7 +4,7 @@
 #   * configure.yml — per-instance work (drbd module load, drbdpool VG on the fresh
 #                     extra disk) that runs at bootstrap on every instance.
 #
-# main.yml runs both in order so any caller of the whole role (a fresh, un-baked rhel/9.6
+# main.yml runs both in order so any caller of the whole role (a fresh, un-baked rhel/9-x86_64
 # box) reaches the same end state as before the split. The per-run RDQM plays
 # (_rdqm-cluster-ha.yml / _rdqm-dr-replication.yml) invoke ONLY tasks_from: configure,
 # because the baked box already carries the install half; the bake playbook

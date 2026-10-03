@@ -2,7 +2,7 @@
 
 The provision play used to build the responder's pymqi venv on svc-sim every bootstrap
 (~9s venv create + ~39s PyPI fetch and C build). pymqi changes rarely, so the venv is
-now baked into the mq-ubuntu2404 box via mq-inter-qm's install half, and the per-run
+now baked into the mq-client-ubuntu24 box via mq-inter-qm's install half, and the per-run
 role re-imports that half as a near no-op. These guards fail loudly if the bake stops
 building the venv, builds it before MQ is installed (pymqi compiles against the MQ SDK),
 or if the per-run half stops being idempotent against a baked venv.
@@ -73,7 +73,7 @@ def _module_index(tasks: list[dict[str, Any]], module: str) -> int:
 
 
 def test_bake_builds_the_responder_venv_after_mq_install() -> None:
-    """mq-ubuntu2404 bakes the venv, and only AFTER mq-install lands the MQ SDK."""
+    """mq-client-ubuntu24 bakes the venv, and only AFTER mq-install lands the MQ SDK."""
     tasks = _bake_tasks()
     mq_install = _role_include_index(tasks, "mq-install", None)
     venv = _role_include_index(tasks, "mq-inter-qm", "install")

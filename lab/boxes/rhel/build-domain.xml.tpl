@@ -1,11 +1,11 @@
-<!-- Transient RHEL 9.6 build domain - host-resolved recipe (#327): @DOMAIN_TYPE@/@CPU_MODE@
+<!-- Transient RHEL base-box build domain - host-resolved recipe (#327): @DOMAIN_TYPE@/@CPU_MODE@
      are substituted by build-box.sh from the args mqlab passes (KVM on a native-x86
      host; TCG — the #24-proven x86 recipe — on the arm64 Mac).
-     @ISO@ is substituted by build-box.sh. Boots DVD + OEMDRV kickstart,
+     @ISO@/@DOMAIN@/@DISK@/@CONSOLE@ are substituted by build-box.sh (per RHEL major). Boots DVD + OEMDRV kickstart,
      installs unattended, powers off (ks 'poweroff'), on_reboot=destroy
      keeps anaconda's mid-install reboot from looping the installer. -->
 <domain type='@DOMAIN_TYPE@'>
-  <name>rhel96-build</name>
+  <name>@DOMAIN@</name>
   <memory unit='MiB'>4096</memory>
   <vcpu>4</vcpu>
   <os>
@@ -21,7 +21,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='/var/lib/libvirt/images/rhel96-build.qcow2'/>
+      <source file='@DISK@'/>
       <target dev='vda' bus='virtio'/>
     </disk>
     <disk type='file' device='cdrom'>
@@ -41,7 +41,7 @@
       <model type='virtio'/>
     </interface>
     <serial type='file'>
-      <source path='/var/lib/libvirt/images/rhel96-build-console.log'/>
+      <source path='@CONSOLE@'/>
       <target port='0'/>
     </serial>
   </devices>

@@ -76,7 +76,7 @@ def test_platform_qualified_node_groups():
 
 def test_nativeha_rhel_nodes_boot_the_baked_fat_box():
     # #88/#668: the six nha-rhel-* nodes boot the baked mq-nativeha-rhel9 fat box
-    # (not the bare rhel96-x86_64), so a bootstrap skips the MQ install. No kernel pin
+    # (not the bare rhel9-x86_64), so a bootstrap skips the MQ install. No kernel pin
     # and no extra_disk — Native HA replicates in MQ's raft log, not DRBD.
     nodes = _topology()["nodes"]
     for h in (
@@ -154,15 +154,15 @@ def test_nativeha_ubuntu_node_groups_and_host_resolved_platform():
     g = topo["groups"]
     assert set(g["nha_ubuntu_a"]) == {"nha-ubuntu-a1", "nha-ubuntu-a2", "nha-ubuntu-a3"}
     assert set(g["nha_ubuntu_b"]) == {"nha-ubuntu-b1", "nha-ubuntu-b2", "nha-ubuntu-b3"}
-    # The nodes now boot the baked mq-nativeha-ubuntu fat box (#103 T6), but host-arch
+    # The nodes now boot the baked mq-nativeha-ubuntu24 fat box (#103 T6), but host-arch
     # resolution is PRESERVED — it just moved to the box layer: unlike the x86-pinned
-    # mq-nativeha-rhel9 box, the mq-nativeha-ubuntu box carries NO `arch:` pin, so it
+    # mq-nativeha-rhel9 box, the mq-nativeha-ubuntu24 box carries NO `arch:` pin, so it
     # tracks the host arch (native arm64 on the Mac) and can coexist with pcmk-ubuntu.
-    assert "arch" not in topo["boxes"]["mq-nativeha-ubuntu"]
+    assert "arch" not in topo["boxes"]["mq-nativeha-ubuntu24"]
 
 
 def test_nativeha_ubuntu_nodes_boot_the_baked_fat_box():
-    # #103 T6: the six nha-ubuntu-* nodes boot the baked, host-resolved mq-nativeha-ubuntu
+    # #103 T6: the six nha-ubuntu-* nodes boot the baked, host-resolved mq-nativeha-ubuntu24
     # fat box (not the bare host-resolved Ubuntu base), so a bootstrap skips the MQ install.
     # No extra_disk — Native HA replicates in MQ's raft log, not DRBD (mirrors the RHEL arm).
     nodes = _topology()["nodes"]
@@ -174,7 +174,7 @@ def test_nativeha_ubuntu_nodes_boot_the_baked_fat_box():
         "nha-ubuntu-b2",
         "nha-ubuntu-b3",
     ):
-        assert nodes[h]["platform"] == "mq-nativeha-ubuntu"
+        assert nodes[h]["platform"] == "mq-nativeha-ubuntu24"
         assert "extra_disk" not in nodes[h]
 
 

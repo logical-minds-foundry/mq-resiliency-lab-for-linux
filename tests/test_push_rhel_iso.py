@@ -36,7 +36,11 @@ exit 0
 
 
 def _run(
-    tmp_path: Path, *, instances_out: str, remote_size: str
+    tmp_path: Path,
+    *,
+    instances_out: str,
+    remote_size: str,
+    args: tuple[str, ...] = ("--iso", "dvd.iso"),
 ) -> tuple[subprocess.CompletedProcess[str], str]:
     bindir = tmp_path / "bin"
     bindir.mkdir()
@@ -44,7 +48,7 @@ def _run(
     stub.write_text(_GCLOUD_STUB)
     stub.chmod(0o755)
 
-    iso = tmp_path / "rhel-9.6-x86_64-dvd.iso"
+    iso = tmp_path / "downloaded.iso"
     iso.write_bytes(b"x" * 4096)  # local_size = 4096
     log = tmp_path / "gcloud.log"
 
@@ -57,7 +61,7 @@ def _run(
         "GCLOUD_REMOTE_SIZE": remote_size,
     }
     proc = subprocess.run(
-        ["bash", str(SCRIPT)],
+        ["bash", str(SCRIPT), *args],
         env=env,
         capture_output=True,
         text=True,
@@ -83,3 +87,32 @@ def test_resolves_instance_by_label_not_name(tmp_path: Path) -> None:
     assert "labels.vergil-repo=mq-resiliency-lab-for-linux" in log
     assert "labels.vergil-org=logical-minds-foundry" in log
     assert "name~mq-resiliency-lab" not in log
+
+
+def test_iso_flag_is_required(tmp_path: Path) -> None:
+    # #1274: the ISO filename comes from the catalog (os.rhel.<major>.iso); the script
+    # names no RHEL version itself, so --iso is required.
+    proc, log = _run(tmp_path, instances_out="vrg-test us-central1-f", remote_size="0", args=())
+    assert proc.returncode == 2
+    assert "--iso is required" in proc.stderr
+    assert log == ""  # refused before any cloud call
+
+
+def test_iso_flag_rejects_a_path(tmp_path: Path) -> None:
+    proc, _log = _run(tmp_path, instances_out="", remote_size="0", args=("--iso", "/abs/dvd.iso"))
+    assert proc.returncode == 2
+    assert "filename, not a path" in proc.stderr
+
+
+def test_unknown_arg_dies(tmp_path: Path) -> None:
+    proc, _log = _run(tmp_path, instances_out="", remote_size="0", args=("--bogus",))
+    assert proc.returncode == 2
+    assert "unknown arg: --bogus" in proc.stderr
+
+
+def test_copies_to_the_catalog_iso_name(tmp_path: Path) -> None:
+    # The source may be any file (MQLAB_RHEL_ISO); it lands on the VM under the --iso name
+    # so the VM's build finds it at build/state/<iso>.
+    proc, log = _run(tmp_path, instances_out="vrg-test us-central1-f", remote_size="0")
+    assert proc.returncode == 0, proc.stderr
+    assert "build/state/dvd.iso" in log

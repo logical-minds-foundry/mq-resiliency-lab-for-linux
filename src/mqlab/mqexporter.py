@@ -40,15 +40,17 @@ BINARY_STEM = "mq_prometheus"
 # Apple Silicon, x86_64 in the cloud — never a fixed amd64 (#1100; the #1065 x86-only
 # build broke arm64 bakes with `exec format error`).
 _DOCKER_PLATFORM = {"x64": "linux/amd64", "arm64": "linux/arm64"}
-# The fat boxes whose bake installs mq_prometheus: obs (the observability probe) and
-# the mq-ubuntu commons (mon-probe). Only these need the prebuilt binary present.
-EXPORTER_BOXES = frozenset({"obs-ubuntu2404", "mq-ubuntu2404"})
+# The box ROLES whose bake installs mq_prometheus: obs (the observability probe) and
+# the mq-client commons (mon-probe). Only these need the prebuilt binary present. Keyed by
+# role, not box name, so it holds on every OS major (epic .github#280).
+EXPORTER_ROLES = frozenset({"obs", "mq-client"})
 _BUILD_SCRIPT = "lab/scripts/build-mq-exporter-binary.sh"
 
 
-def needs_exporter_binary(box_names: Iterable[str]) -> bool:
-    """True iff any box being built bakes in the mq_prometheus exporter."""
-    return bool(EXPORTER_BOXES.intersection(box_names))
+def needs_exporter_binary(box_roles: Iterable[str | None]) -> bool:
+    """True iff any box being built (given by role; None for a base OS box) bakes in
+    the mq_prometheus exporter."""
+    return bool(EXPORTER_ROLES.intersection(box_roles))
 
 
 def _target_arch() -> str:

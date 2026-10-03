@@ -32,25 +32,25 @@ def manifests(tmp_path, monkeypatch):
 def test_tarball_name_maps_version_and_arch():
     # Arch-explicit / x86-pinned platforms are facts-independent — the pin decides.
     assert (
-        m.tarball_name("9.4.5.0", "ubuntu2404-arm64", facts=X86)
+        m.tarball_name("9.4.5.0", "ubuntu24-arm64", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
     )
     assert (
-        m.tarball_name("9.4.5.0", "ubuntu2404-x86_64", facts=ARM)
+        m.tarball_name("9.4.5.0", "ubuntu24-x86_64", facts=ARM)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxX64.tar.gz"
     )
     assert (
-        m.tarball_name("9.4.5.0", "rhel96-x86_64", facts=X86)
+        m.tarball_name("9.4.5.0", "rhel9-x86_64", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
-    # The fat RDQM box platform (#604) takes the same LinuxX64 tarball as rhel96-x86_64,
+    # The fat RDQM box platform (#604) takes the same LinuxX64 tarball as rhel9-x86_64,
     # so the rdqm_a/rdqm_b nodes repointed at it still resolve their MQ media.
     assert (
         m.tarball_name("9.4.5.0", "mq-rdqm-rhel9", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     )
     # The fat native-HA RHEL box platform (#667/#668) takes the same LinuxX64 tarball as
-    # rhel96-x86_64, so the nha-rhel-* nodes repointed at it resolve their MQ media.
+    # rhel9-x86_64, so the nha-rhel-* nodes repointed at it resolve their MQ media.
     assert (
         m.tarball_name("9.4.5.0", "mq-nativeha-rhel9", facts=X86)
         == "9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
@@ -58,12 +58,12 @@ def test_tarball_name_maps_version_and_arch():
 
 
 def test_tarball_name_ubuntu_fat_box_tracks_host_arch():
-    # #103 D10 (the arm64 crux): the un-pinned Ubuntu fat boxes (obs/mq-ubuntu2404) have
+    # #103 D10 (the arm64 crux): the un-pinned Ubuntu fat boxes (obs/mq-client-ubuntu24) have
     # ONE platform name but TWO arch-variant tarballs. Acquisition resolves the arch
     # through the same box_build_arch authority the box builder consumes, so it stages
     # UbuntuLinuxARM64 on Apple Silicon and UbuntuLinuxX64 on the cloud — bake + acquire
     # agree by construction, never the baked-in x86 literal of the old box-name mapping.
-    for platform in ("mq-ubuntu2404", "obs-ubuntu2404", "mq-nativeha-ubuntu"):
+    for platform in ("mq-client-ubuntu24", "obs-ubuntu24", "mq-nativeha-ubuntu24"):
         assert (
             m.tarball_name("9.4.5.0", platform, facts=ARM)
             == "9.4.5.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz"
@@ -101,7 +101,7 @@ def test_every_topology_mq_platform_resolves_to_a_tarball():
     for stack in lab_stacks().values():
         platforms |= cli._stack_mq_platforms(stack)
     assert "mq-nativeha-rhel9" in platforms  # the #668 repoint is represented
-    assert "mq-nativeha-ubuntu" in platforms  # the #103 T6 repoint is represented
+    assert "mq-nativeha-ubuntu24" in platforms  # the #103 T6 repoint is represented
     for platform in sorted(platforms):
         m.tarball_name(m.DEFAULT_MQ_VERSION, platform)  # must not raise ValueError
 

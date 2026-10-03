@@ -58,8 +58,9 @@ class ResolvedNode:
 
 
 def default_platform(facts: HostFacts) -> str:
-    """Native-preferred Ubuntu platform for this host (D1/D6)."""
-    return "ubuntu2404-x86_64" if facts.arch == X86_64 else "ubuntu2404-arm64"
+    """Native-preferred Ubuntu platform for this host (D1/D6). The `ubuntu24-*` platform
+    keys are interim until T2 (epic .github#280) replaces platforms with box roles."""
+    return "ubuntu24-x86_64" if facts.arch == X86_64 else "ubuntu24-arm64"
 
 
 def require_native_kvm(facts: HostFacts) -> None:

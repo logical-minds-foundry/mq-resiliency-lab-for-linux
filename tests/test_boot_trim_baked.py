@@ -17,7 +17,6 @@ stage's growpart + resizefs grow / to the 20G disk), and that only obs on aarch6
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,22 +25,20 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.boxfleet import box_bakes, manifest_hash_args
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO_ROOT / "ansible"
 ROLES = ANSIBLE / "roles"
 CI_ROLE = ROLES / "cloud-init-trim"
 SNAP_ROLE = ROLES / "snapd-off"
-FATBOX = REPO_ROOT / "lab" / "boxes" / "build-fatbox.sh"
 MANIFEST_HASH = REPO_ROOT / "lab" / "boxes" / "_manifest-hash.sh"
 TRIM_ROLES = ("cloud-init-trim", "snapd-off")
 
 
 def _box_bakes() -> dict[str, tuple[str, str]]:
-    """box -> (base kind, bake stem), parsed from build-fatbox.sh's --box case."""
-    text = FATBOX.read_text(encoding="utf-8")
-    rows = re.findall(r"^\s*([a-z0-9-]+)\)\s+BASE_KIND=(\w+);.*BAKE=([a-z0-9-]+)", text, re.M)
-    assert rows, f"could not parse the --box table from {FATBOX}"
-    return {box: (kind, stem) for box, kind, stem in rows}
+    """box -> (base OS family, bake stem), from the catalog-derived fleet (#1274)."""
+    return box_bakes()
 
 
 def _iter_tasks(node: Any) -> Any:
@@ -89,7 +86,7 @@ def _split() -> tuple[dict[str, str], dict[str, str]]:
     bakes = _box_bakes()
     ubuntu = {box: stem for box, (kind, stem) in bakes.items() if kind == "ubuntu"}
     rhel = {box: stem for box, (kind, stem) in bakes.items() if kind == "rhel"}
-    assert ubuntu and rhel, f"expected both Ubuntu and RHEL boxes in {FATBOX}; got {bakes}"
+    assert ubuntu and rhel, f"expected both Ubuntu and RHEL boxes in the fleet; got {bakes}"
     return ubuntu, rhel
 
 
@@ -128,7 +125,7 @@ def test_snapd_mode_is_keep_only_for_obs_on_aarch64() -> None:
     for box, stem in ubuntu.items():
         (task,) = _role_includes(_trim_play(box, _plays(stem)), "snapd-off")
         mode = (task.get("vars") or {}).get("snapd_off_mode")
-        if box == "obs-ubuntu2404":
+        if box == "obs-ubuntu24":
             assert mode == "{{ 'keep' if ansible_architecture == 'aarch64' else 'purge' }}"
         else:
             assert mode is None, f"{box}: must take the default snapd_off_mode (purge)"
@@ -242,7 +239,7 @@ def test_roles_refuse_a_non_debian_host(role: Path) -> None:
 def _hash(root: Path, box: str) -> str:
     script = root / "lab" / "boxes" / "_manifest-hash.sh"
     return subprocess.run(
-        [str(script), box], check=True, capture_output=True, text=True
+        [str(script), box, *manifest_hash_args(box)], check=True, capture_output=True, text=True
     ).stdout.strip()
 
 

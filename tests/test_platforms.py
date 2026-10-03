@@ -12,15 +12,15 @@ X86_NOKVM = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=Fal
 
 TOPO = {
     "boxes": {
-        "ubuntu2404-arm64": {"box": "cloud-image/ubuntu-24.04", "arch": "aarch64"},
-        "ubuntu2404-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"},
-        "rhel96-x86_64": {"box": "rhel/9.6-x86_64", "arch": "x86_64", "dvd": "/iso/rhel.iso"},
+        "ubuntu24-arm64": {"box": "cloud-image/ubuntu-24.04", "arch": "aarch64"},
+        "ubuntu24-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"},
+        "rhel9-x86_64": {"box": "rhel/9-x86_64", "arch": "x86_64", "dvd": "/iso/rhel.iso"},
     },
     "defaults": {"cpus": 1, "memory": 1024},
     "nodes": {
         "obs": {"cpus": 2, "memory": 4096, "nics": {"net-mgmt": "10.50.0.2"}},
         "rdqm-a1": {
-            "platform": "rhel96-x86_64",
+            "platform": "rhel9-x86_64",
             "extra_disk": 10,
             "nics": {"net-mgmt": "10.50.0.31"},
         },
@@ -29,14 +29,14 @@ TOPO = {
 
 
 def test_default_platform_tracks_host():
-    assert p.default_platform(ARM_KVM) == "ubuntu2404-arm64"
-    assert p.default_platform(X86_KVM) == "ubuntu2404-x86_64"
+    assert p.default_platform(ARM_KVM) == "ubuntu24-arm64"
+    assert p.default_platform(X86_KVM) == "ubuntu24-x86_64"
 
 
 def test_resolve_arm_host_ubuntu_is_native_kvm():
     obs = p.resolve(TOPO, ARM_KVM)["obs"]
     assert (obs.platform, obs.arch, obs.driver, obs.cpu_mode) == (
-        "ubuntu2404-arm64",
+        "ubuntu24-arm64",
         AARCH64,
         "kvm",
         "host-passthrough",
@@ -54,7 +54,7 @@ def test_resolve_arm_host_rhel_is_foreign_tcg():
 
 def test_resolve_x86_host_everything_native_kvm():
     res = p.resolve(TOPO, X86_KVM)
-    assert res["obs"].platform == "ubuntu2404-x86_64"
+    assert res["obs"].platform == "ubuntu24-x86_64"
     for n in res.values():
         assert n.arch == X86_64 and n.driver == "kvm" and n.cpu_mode == "host-passthrough"
         assert n.boot_timeout is None
@@ -71,7 +71,7 @@ def test_require_native_kvm_raises_without_kvm():
 
 
 def test_resolve_guards_arm64_on_x86():
-    topo = {**TOPO, "nodes": {"weird": {"platform": "ubuntu2404-arm64"}}}
+    topo = {**TOPO, "nodes": {"weird": {"platform": "ubuntu24-arm64"}}}
     with pytest.raises(p.PlatformError, match="ARM on x86"):
         p.resolve(topo, X86_KVM)
 
@@ -102,7 +102,7 @@ def test_ensure_resolved_reads_real_topology_when_topo_none(monkeypatch, tmp_pat
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
-        "boxes:\n  ubuntu2404-x86_64: { box: cloud-image/ubuntu-24.04, arch: x86_64 }\n"
+        "boxes:\n  ubuntu24-x86_64: { box: cloud-image/ubuntu-24.04, arch: x86_64 }\n"
         "defaults: { cpus: 1, memory: 1024 }\nnodes:\n  n1: {}\n"
     )
     out = p.ensure_resolved(facts=X86_KVM)  # topo=None -> reads the file
@@ -175,7 +175,7 @@ def test_box_build_domain_virt_native_arch_without_kvm_is_tcg():
 
 
 def test_box_build_arch_rhel_is_x86_on_any_host():
-    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    rhel = {"box": "rhel/9-x86_64", "arch": "x86_64"}
     assert p.box_build_arch(rhel, X86_KVM) == "x86_64"
     assert p.box_build_arch(rhel, ARM_KVM) == "x86_64"  # still x86 on the Mac
 
@@ -187,7 +187,7 @@ def test_box_build_arch_unpinned_ubuntu_tracks_host():
 
 
 def test_is_foreign_box_build_true_for_rhel_on_arm():
-    rhel = {"box": "rhel/9.6-x86_64", "arch": "x86_64"}
+    rhel = {"box": "rhel/9-x86_64", "arch": "x86_64"}
     assert p.is_foreign_box_build(rhel, ARM_KVM) is True
     assert p.is_foreign_box_build(rhel, X86_KVM) is False
 
@@ -204,9 +204,9 @@ def test_resolve_unpinned_ubuntu_fat_box_tracks_host():
     # on the cloud — via the box_build_arch authority, so resolve()/ResolvedNode work
     # without a pin. RHEL fat boxes keep their explicit pin (tested above).
     topo = {
-        "boxes": {"mq-ubuntu2404": {"box": "mq-ubuntu2404"}},  # host-resolved, no pin
+        "boxes": {"mq-client-ubuntu24": {"box": "mq-client-ubuntu24"}},  # host-resolved, no pin
         "defaults": {"cpus": 1, "memory": 1024},
-        "nodes": {"svc": {"platform": "mq-ubuntu2404", "nics": {"net-mgmt": "10.50.0.50"}}},
+        "nodes": {"svc": {"platform": "mq-client-ubuntu24", "nics": {"net-mgmt": "10.50.0.50"}}},
     }
     arm = p.resolve(topo, ARM_KVM)["svc"]
     assert (arm.arch, arm.driver) == (AARCH64, "kvm")  # native arm64 on the Mac
