@@ -163,6 +163,8 @@ This is the crux of "can MQ 10 take advantage of RHEL 10's features?"
 ## 8. Open items to verify
 
 - Confirm the **base-QM RHEL 10 "tested" status** in the MQ 10.0 SPCR (JS-rendered;
-  open in a browser). See §2.
+  open in a browser). See §2. *Answered 2026-10-03 (#1271): the SPCR lists RHEL 10
+  (Base, 10.1, 10.2) as supported for the MQ queue manager and Native HA, and RDQM
+  as unsupported. See [`os-version-support-matrix.md`](os-version-support-matrix.md).*
 - Confirm whether IBM later publishes a **RHEL 10 RDQM kernel module** — re-check
   the kernel-modules list periodically. See §3.
