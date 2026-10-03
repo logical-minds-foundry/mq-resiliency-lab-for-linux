@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1279",
+  "branch": "feature/1279-version-token-guardrail",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-03T20:32:56Z",
+  "updated_at": "2026-10-03T20:32:56Z",
+  "git": {
+    "base_sha": "c259de4e12cae189cb0eb00bef8175b5cbd66d1c",
+    "head_sha": "c7dadb2a7a10b922d58973f31cfe4f2769b4a0fc"
+  },
+  "pr_metadata": {
+    "title": "test(guardrail): version-token guardrail (scoped, spec \u00a76)",
+    "summary": "Adds a pytest guardrail that fails on any OS version token (ubuntu24, noble, rhel9, el9, and the 26/10 forms) in src/, lab/, ansible/ or scripts/ outside the catalog and the per-version exempt files, and fixes every existing hit at its source so it passes on develop (epic .github#280 T7).",
+    "notes": "Hits fixed: 40 comment/play-name mentions of generated box names (e.g. infra-ubuntu24, mq-rdqm-rhel9, rhel/9-x86_64) and one 'noble' reworded version-neutrally across 26 ansible/lab/src files; buildenv.MIGRATION's hand-written rhel-9.6 ISO name replaced by a '*-dvd.iso' pattern (MIGRATION_GLOBS) with a new test. Bake playbook/role comment edits change the box manifest hashes, so boxes rebake; D1 (bake Phase-1 boxes) follows T7 by design. The two guest-rendered .j2 headers ('RHEL 9', 'Ubuntu 24.04') do not match the case-sensitive regex and are untouched. The vars exemption is matched explicitly (ansible/.../vars/<Distro>-<major>.yml) because Path.match does not recurse on '**'. The scanner is a function, with a negative test on a tmp tree.",
+    "linkage": "Closes"
+  },
+  "submitted": null
+}
