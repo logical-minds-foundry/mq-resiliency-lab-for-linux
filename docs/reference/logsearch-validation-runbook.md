@@ -43,8 +43,8 @@ uv run mqlab commons up
 Box bake is a **separate step before** the bring-up — `commons up` does **not**
 bake boxes; it renders topology (via `_prepare_lab`, which also writes
 `build/work/lab/topology.resolved.yaml` the Vagrantfile needs) and `vagrant up`s
-the registered boxes. Bake every box the commons needs (`obs`, `mq-ubuntu2404`
-for svc/app/probe, `infra-ubuntu2404` for the DNS pair, `logsearch`) or the
+the registered boxes. Bake every box the commons needs (`obs`, `mq-client-ubuntu24`
+for svc/app/probe, `infra-ubuntu24` for the DNS pair, `logsearch`) or the
 bring-up fails `Couldn't open file lab/<box>` when vagrant can't find one.
 
 ## Step 2 — baseline (L3, L4, L5)

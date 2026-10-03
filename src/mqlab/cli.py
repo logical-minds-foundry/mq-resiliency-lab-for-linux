@@ -8,6 +8,7 @@ import platform
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
@@ -22,7 +23,7 @@ from mqlab.artifact import (
 from mqlab.buildenv import BuildEnvError
 from mqlab.doctor import Check, run_checks, summarise
 from mqlab.fleet import lab_guests, parse_domain_states
-from mqlab.hostfacts import HostFacts, probe
+from mqlab.hostfacts import probe
 from mqlab.inventory import inventory_path, lab_inventory
 from mqlab.lifecycle import ABSENT, RUNNING, classify, is_live
 from mqlab.manifest import (
@@ -53,16 +54,10 @@ from mqlab.phases import (
     first_unsatisfied,
     group_hosts,
 )
-from mqlab.platforms import (
-    PlatformError,
-    box_build_arch,
-    box_build_domain_virt,
-    build_domain_virt,
-    ensure_resolved,
-    is_foreign_box_build,
-)
+from mqlab.platforms import PlatformError, ensure_resolved
 from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.render import Renderer
+from mqlab.retired_boxes import RETIRED_BOX_NAMES
 from mqlab.roster import lab_roster, roster_path
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.sandeb import ensure_san_debs, observed_target_kernel
@@ -77,7 +72,6 @@ from mqlab.vmstatus import vm_status_core
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from mqlab.orchestrator import Pauser
     from mqlab.perf import PerfSink
@@ -1150,27 +1144,6 @@ def commons_down(step: _StepFlag = False) -> None:
 _VIRSH = ["virsh", "-c", "qemu:///system"]
 
 
-# Boxes built locally (not on Vagrant Cloud) -> their build script. Each builder
-# REUSEs the host-durable build/state/boxes cache when present (a quick `vagrant box
-# add`) and only does the expensive work on a truly first-ever (or stale) run.
-#   * rhel/9.6-x86_64 -> build-box.sh: the base-OS builder (DVD+kickstart -> box);
-#     ~45-90 min under TCG (arm64 Mac), minutes under KVM (native x86) (#276/#291/#327).
-#   * the fat boxes -> build-fatbox.sh: provision-then-snapshot builder that bakes
-#     provisioning into the box on top of a base (the RHEL fat box's base is
-#     rhel/9.6-x86_64 above; the Ubuntu fat boxes' base is the cloud image). It is
-#     box-parameterized — mqlab invokes it with `--box <name>` (#603, epic .github#70).
-_LOCAL_BOX_BUILDERS = {
-    "rhel/9.6-x86_64": "lab/boxes/rhel96/build-box.sh",
-    "mq-rdqm-rhel9": "lab/boxes/build-fatbox.sh",
-    "obs-ubuntu2404": "lab/boxes/build-fatbox.sh",
-    "infra-ubuntu2404": "lab/boxes/build-fatbox.sh",
-    "mq-ubuntu2404": "lab/boxes/build-fatbox.sh",
-    "mq-nativeha-rhel9": "lab/boxes/build-fatbox.sh",
-    "mq-nativeha-ubuntu": "lab/boxes/build-fatbox.sh",
-    "pcmk-ubuntu": "lab/boxes/build-fatbox.sh",
-}
-
-
 def parse_box_list(text: str) -> dict[str, str]:
     """Parse `vagrant box list` -> {box_name: trailing info}; 'no boxes' -> {}."""
     out: dict[str, str] = {}
@@ -1183,12 +1156,14 @@ def parse_box_list(text: str) -> dict[str, str]:
     return out
 
 
-# The box sub-app (epic .github#91). Imported here — AFTER _LOCAL_BOX_BUILDERS,
-# which box.FLEET derives from — to keep the cli<->box import cycle well-ordered.
+# The box sub-app (epic .github#91). Imported here — AFTER parse_box_list and the
+# other helpers box.py calls back into — to keep the cli<->box import cycle well-ordered.
+# box.FLEET derives from the OS version catalog (lab/versions.yaml, epic .github#280).
 from mqlab import box  # noqa: E402
+from mqlab.versions import VersionError, load_build_file  # noqa: E402
 
 box_app = typer.Typer(
-    help="baked-box fleet: status/build/rebuild/clean the nine local-built boxes",
+    help="baked-box fleet: status/build/rebuild/clean/gc the local-built boxes",
     no_args_is_help=True,
 )
 app.add_typer(box_app, name="box")
@@ -1230,9 +1205,39 @@ def _select_boxes(names: list[str] | None, all_: bool) -> list[str]:
     return names
 
 
+_BuildConfig = Annotated[
+    Path | None,
+    typer.Option(
+        "--config",
+        help="a build file (e.g. 'os: rhel:9'): build every box it needs, for every stack",
+    ),
+]
+
+
+def _config_boxes(config: Path) -> list[str]:
+    """The boxes a `--config` build file needs (box.boxes_for_build), fail-loud: a bad
+    build file or an unsupported OS request exits 2 with the version layer's message,
+    which names the fix."""
+    try:
+        return box.boxes_for_build(load_build_file(config), facts=probe())
+    except VersionError as exc:
+        typer.echo(f"mqlab box: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+
 @box_app.command("build")
-def box_build(boxes: _BoxNames = None, all_: _AllBoxes = False) -> None:
+def box_build(
+    boxes: _BoxNames = None, all_: _AllBoxes = False, config: _BuildConfig = None
+) -> None:
     """Ensure each box is present: REUSE a valid cache, else bake."""
+    if config is not None:
+        if boxes or all_:
+            typer.echo(
+                "mqlab box build: --config cannot be combined with box names or --all", err=True
+            )
+            raise typer.Exit(code=2)
+        box.build_boxes(_config_boxes(config), force=False)
+        return
     box.build_boxes(_select_boxes(boxes, all_), force=False)
 
 
@@ -1270,11 +1275,27 @@ _GcDryRun = Annotated[
 ]
 
 
+def _retired_summary(boxes: list[str], artifacts: list[str], *, dry_run: bool) -> str:
+    """Render what `box gc` did (or would do) with the retired box names (#1274)."""
+    if not boxes and not artifacts:
+        return "box gc: no retired box names registered or cached"
+    verb = "would remove" if dry_run else "removed"
+    lines = [
+        f"box gc: {verb} {len(boxes)} retired box registration(s) and "
+        f"{len(artifacts)} retired cache file(s) (box rename, epic .github#280)"
+    ]
+    lines += [f"  - vagrant box '{name}'" for name in boxes]
+    lines += [f"  - {path}" for path in artifacts]
+    return "\n".join(lines)
+
+
 @box_app.command("gc")
-def box_gc(  # pragma: no cover - thin delegator; logic covered via box.gc_orphaned_images
-    dry_run: _GcDryRun = False,
-) -> None:
-    """Reclaim orphaned box base images from re-bakes: keep newest per box, drop older (#759)."""
+def box_gc(dry_run: _GcDryRun = False) -> None:
+    """Reclaim box leftovers: deregister retired box names and delete their dead caches
+    (the <role>-<os><major> rename), then drop orphaned base images from re-bakes (#759)."""
+    retired = box.clean_retired(dry_run=dry_run)
+    artifacts = box.clean_retired_cache(dry_run=dry_run)
+    typer.echo(_retired_summary(retired, artifacts, dry_run=dry_run))
     typer.echo(box.gc_summary(box.gc_orphaned_images(dry_run=dry_run)))
 
 
@@ -1287,69 +1308,21 @@ def _resolved_nodes() -> dict[str, Any]:
     return nodes
 
 
-def _box_registry() -> dict[str, dict[str, Any]]:
-    """The `boxes:` registry from lab/topology.yaml (box name -> entry).
-
-    The resolved topology (#276) carries only `nodes:`; the box registry with each
-    box's optional `arch:` pin lives in the source topology, so read it there."""
-    import yaml as _yaml
-
-    data = _yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    boxes: dict[str, dict[str, Any]] = data.get("boxes", {})
-    return boxes
-
-
-def _needed_local_boxes(guests: list[str]) -> dict[str, str]:
-    """Local-built boxes the given guests need -> build script."""
+def _needed_local_boxes(guests: list[str]) -> list[str]:
+    """The local-built boxes (box.FLEET) the given guests boot, sorted. A guest on a
+    cloud box (e.g. the host-resolved Ubuntu base) needs nothing built."""
     nodes = _resolved_nodes()
     boxes = {(nodes.get(g) or {}).get("box") for g in guests}
-    return {name: script for name, script in _LOCAL_BOX_BUILDERS.items() if name in boxes}
+    return sorted(name for name in box.FLEET if name in boxes)
 
 
-def _guests_need_dvd(guests: list[str]) -> bool:
-    """Whether any guest attaches a DVD ISO cdrom (the RHEL offline dnf repo)."""
+def _guests_dvds(guests: list[str]) -> list[str]:
+    """The DVD ISO filenames the guests attach as a cdrom (the RHEL offline dnf repo),
+    sorted and de-duplicated; empty when none does. Read from each resolved node's `dvd`
+    pool path, so the staged name always matches what the guest attaches."""
     nodes = _resolved_nodes()
-    return any((nodes.get(g) or {}).get("dvd") for g in guests)
-
-
-def _box_build_steps(
-    needed: dict[str, str], present: dict[str, str], facts: HostFacts, *, force: bool = False
-) -> list[CommandStep]:
-    # The domain virt (KVM vs TCG) is guest-arch-aware, per box: a fat box builds
-    # under native KVM when its build arch is the host's, else TCG (#732). The base-OS
-    # builder (build-box.sh) takes only the virt flags (always an x86_64 guest); the
-    # box-parameterized fat-box builder (build-fatbox.sh) also takes `--box <name>` +
-    # the required `--arch` so one script serves every fat box on either host (#603/#103).
-    # force appends --rebuild-box so the builder overwrites its cache (`box rebuild`, #91).
-    registry = _box_registry()
-    steps: list[CommandStep] = []
-    for name, script in sorted(needed.items()):
-        if name in present:
-            continue
-        entry = registry.get(name, {})
-        # DEPRECATED, not removed (#103 D11): emulated cross-arch box builds (e.g. the
-        # RHEL box on Apple Silicon) are refused here. The emulated build path in
-        # build-fatbox.sh + box_build_domain_virt's TCG branch is retained for a future
-        # standalone non-HA/DR RHEL lab; re-enable by lifting this guard.
-        if is_foreign_box_build(entry, facts):
-            raise StepFailedError(
-                f"box {name} pins arch {entry['arch']} but this host is {facts.arch}: "
-                f"emulated cross-arch box builds are disabled (#103 D11). "
-                f"Build it on the x86 host.",
-                2,
-            )
-        argv = ["bash", str(repo_root() / script)]
-        if script.endswith("build-fatbox.sh"):
-            box_arch = box_build_arch(entry, facts)
-            domain_type, cpu_mode = box_build_domain_virt(box_arch, facts)
-            argv += ["--box", name, "--arch", box_arch]
-        else:
-            domain_type, cpu_mode = build_domain_virt(facts)  # x86_64 base-OS box
-        argv += ["--domain-type", domain_type, "--cpu-mode", cpu_mode]
-        if force:
-            argv.append("--rebuild-box")
-        steps.append(CommandStep(f"box {name}", Command(argv)))  # noqa: S607
-    return steps
+    dvds = {(nodes.get(g) or {}).get("dvd") for g in guests}
+    return sorted(Path(dvd).name for dvd in dvds if dvd)
 
 
 def _ensure_local_boxes(guests: list[str]) -> None:
@@ -1364,20 +1337,27 @@ def _ensure_local_boxes(guests: list[str]) -> None:
     cache stays cheap. The DVD staging step is preserved here."""
     needed = _needed_local_boxes(guests)
     if needed:
-        box.build_boxes(sorted(needed), force=False)
-    if _guests_need_dvd(guests):
-        _stage_rhel_dvd()
+        box.build_boxes(needed, force=False)
+    dvds = _guests_dvds(guests)
+    if dvds:
+        _stage_rhel_dvd(dvds)
 
 
-def _stage_rhel_dvd() -> None:
-    """Stage the RHEL DVD ISO into the libvirt pool (idempotent), fail-loud."""
+def _stage_rhel_dvd(isos: list[str]) -> None:
+    """Stage each named RHEL DVD ISO into the libvirt pool (idempotent), fail-loud."""
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = build_deps("dvd-stage", timestamp)
     try:
         stage_script = lab_script("stage-rhel-iso.sh")
-        stage = Command(["bash", str(stage_script)], cwd=repo_root())  # noqa: S607
+        steps = [
+            CommandStep(
+                f"stage rhel dvd {iso}",
+                Command(["bash", str(stage_script), "--iso", iso], cwd=repo_root()),  # noqa: S607
+            )
+            for iso in isos
+        ]
         run_steps(
-            [CommandStep("stage rhel dvd", stage)],
+            steps,
             runner=deps.runner,
             renderer=deps.renderer,
             transcript=deps.transcript,
@@ -1439,33 +1419,57 @@ def _cached_box_name(g: str) -> str | None:
     return name if isinstance(name, str) else None
 
 
+def _stale_box_meta_note(g: str, nodes: dict[str, Any]) -> str | None:
+    """Why guest `g`'s cached box_meta is stale, or None when it is not (#858, #1274).
+
+    Stale when the cached box is a RETIRED name (the <role>-<os><major> rename, epic
+    .github#280): a retired box is never booted again, whatever the guest resolves to
+    now. Otherwise stale when it names a DIFFERENT box than the resolved topology now
+    assigns. A guest with no cached metadata (never created) or whose cache already
+    matches is not stale — this acts only on a positively-confirmed repoint."""
+    cached = _cached_box_name(g)
+    if cached is None:
+        return None
+    if cached in RETIRED_BOX_NAMES:
+        return (
+            f"{g}: cached box {cached} is a retired box name (renamed, #1274); "
+            "forgetting stale vagrant metadata"
+        )
+    resolved = (nodes.get(g) or {}).get("box")
+    if resolved is not None and cached != resolved:
+        return (
+            f"{g}: box repointed {cached} -> {resolved}; forgetting stale vagrant metadata (#858)"
+        )
+    return None
+
+
+def _stale_box_meta_guests(guests: list[str]) -> list[str]:
+    """The guests whose cached Vagrant box_meta is stale (see _stale_box_meta_note)."""
+    nodes = _resolved_nodes()
+    return [g for g in guests if _stale_box_meta_note(g, nodes) is not None]
+
+
 def _plan_reconcile_box_meta(guests: list[str]) -> tuple[list[CommandStep], list[str]]:
-    """Forget the per-machine metadata of any guest whose cached box_meta names a
-    DIFFERENT box than the resolved topology now assigns (#858, the #636 class).
+    """Forget the per-machine metadata of any guest whose cached box_meta is stale:
+    it names a retired box, or a DIFFERENT box than the resolved topology now assigns
+    (#858, the #636 class; #1274).
 
     #636 clears box_meta on TEARDOWN, but a box REPOINT (a node's box changing in
-    the topology) followed by a bootstrap WITHOUT a teardown of that stack leaves
-    the stale box_meta in place — and Vagrant honors box_meta over the
+    the topology, or a box rename) followed by a bootstrap WITHOUT a teardown of that
+    stack leaves the stale box_meta in place — and Vagrant honors box_meta over the
     Vagrantfile's node.vm.box, so `vagrant up` boots the OLD box (often the bare
     base box) and the repoint silently does nothing (MQ gets re-installed instead
     of skipped, defeating the bake). This closes the gap on the bring-up side:
-    before `vagrant up`, compare each guest's cached box to its resolved box and
-    forget the machine dir on a mismatch, making the guest brand-new so Vagrant
-    reads the repointed box from the Vagrantfile. A guest with no cached metadata
-    (never created) or whose cache already matches is left untouched — this acts
-    only on a positively-confirmed repoint.
+    before `vagrant up`, forget the machine dir of each stale guest, making it
+    brand-new so Vagrant reads the repointed box from the Vagrantfile.
     """
     nodes = _resolved_nodes()
     steps: list[CommandStep] = []
     notes: list[str] = []
     for g in guests:
-        cached = _cached_box_name(g)
-        resolved = (nodes.get(g) or {}).get("box")
-        if cached is not None and resolved is not None and cached != resolved:
-            notes.append(
-                f"{g}: box repointed {cached} -> {resolved}; "
-                "forgetting stale vagrant metadata (#858)"
-            )
+        note = _stale_box_meta_note(g, nodes)
+        if note is not None:
+            notes.append(note)
             steps.append(_forget_machine_step(g))
     return steps, notes
 

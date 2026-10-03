@@ -118,7 +118,7 @@ def _commons_members() -> list[str]:
 # Commons groups that run no MQ — infrastructure-only nodes (DNS + core services,
 # #606). They still boot in the vms phase (via _commons_members / all_vms) but carry
 # no MQ SDK, so the MQ-media (tarball) enumeration in cli must exclude their hosts:
-# their platform (infra-ubuntu2404) has no MQ tarball arch mapping by design (#634).
+# their platform (infra-ubuntu24) has no MQ tarball arch mapping by design (#634).
 _NON_MQ_COMMONS_GROUPS = frozenset({"infra"})
 
 
@@ -377,7 +377,7 @@ def _vms_build_steps(
     the speed<->reliability tradeoff and `_batch_guests` for the ordering guarantee.
 
     When a batch contains two+ guests that clone the SAME box (e.g. the six nha-rhel-*
-    on mq-nativeha-rhel9, or the three mq-ubuntu2404 commons), the parallel default
+    on mq-nativeha-rhel9, or the three mq-client-ubuntu24 commons), the parallel default
     races on staging that box's base volume and trips vagrant-libvirt's per-machine
     lock, so that batch is issued `--no-parallel` (serial within the batch — each boot
     stages the shared volume before the next clones it). A batch whose guests all clone

@@ -1,7 +1,7 @@
 ---
 # Bake the mq-nativeha-rhel9 box image (#667, epic .github#88). The RHEL native-HA peer
 # of bake-mq-rdqm.yml: it bakes the per-run-invariant install work the six nha-rhel-*
-# nodes pay EVERY bootstrap on the bare rhel/9.6 base — base IBM MQ (NO RDQM/DRBD, NO
+# nodes pay EVERY bootstrap on the bare rhel/9-x86_64 base — base IBM MQ (NO RDQM/DRBD, NO
 # kernel pin: Native HA replicates in the raft log) + acl + node-exporter + alloy.
 #
 # ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue

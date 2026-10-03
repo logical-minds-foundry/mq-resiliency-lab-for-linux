@@ -17,7 +17,7 @@ def _sha(p):
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-_PLATFORMS = {"ubuntu2404-arm64"}
+_PLATFORMS = {"ubuntu24-arm64"}
 
 
 @pytest.fixture

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# lab/boxes/_manifest-hash.sh <box> - the bake-manifest hash for a fat box.
+# lab/boxes/_manifest-hash.sh <box> --bake-stem S --mq-bearing 0|1 --os-pin P
+#   - the bake-manifest hash for a fat box.
 #
 # A fat box is only worth REUSEing from cache while the inputs that shaped it are
 # unchanged. This digests those inputs into a stable sha256 the builder stores
@@ -32,14 +33,17 @@
 #     commons boxes (obs/infra, pcmk) DELIBERATELY exclude it, so a
 #     version bump never spuriously rebakes them.
 #
-# The <box> argument is the full box name (mq-rdqm-rhel9, infra-ubuntu2404, ...),
-# but the bake playbook is named by the shorter STEM (bake-mq-rdqm.yml,
-# bake-infra.yml, ...). That box->stem map is the same one build-fatbox.sh uses;
-# it MUST be applied here too. Pre-#649 this script built the path straight from
-# the box name (ansible/bake-<box>.yml), which matched NO existing file for any of
-# the four boxes - so `[ -f "$BAKE" ]` never fired and the digest silently omitted
-# the bake playbook (and every role) entirely. #649 fixes the mapping and adds the
-# transitive role closure, so the digest now actually covers the bake work.
+#   * the OS PIN (epic .github#280) - the base box plus its point release or box-version
+#     pin (e.g. <base_box>@<pin>), passed as --os-pin. A re-pin (a new point release, a
+#     new cloud-image version) flips the digest and forces a rebake.
+#
+# Dumb hasher (epic .github#280): every input that used to come from a hand-written
+# box table is now a REQUIRED flag, supplied by mqlab from the catalog
+# (lab/versions.yaml) through build-fatbox.sh. The bake playbook is named by its STEM
+# (--bake-stem; ansible/bake-<stem>.yml), which is shorter than the box name.
+# Pre-#649 the path was built straight from the box name (ansible/bake-<box>.yml),
+# which matched NO existing file - so the digest silently omitted the bake playbook
+# and every role. A missing flag is a usage error (exit 2), never an empty digest.
 #
 # Role-set precision vs. safety: we resolve the roles the box actually bakes
 # (transitive closure from the playbook) rather than hashing the whole
@@ -56,24 +60,41 @@
 # bake recipe, or a baked role gets a distinct hash and forces a rebuild.
 set -euo pipefail
 
-BOX="${1:?usage: _manifest-hash.sh <box>}"
-cd "$(dirname "$0")"
-
-# Map the full box name to its bake-playbook STEM (must match build-fatbox.sh) and
-# whether it BAKES AN MQ INSTALL. MQ-bearing boxes fold the lab/mq-version pin into
-# the digest so a version bump invalidates their cache (#1087); commons boxes must
-# not, so a bump never spuriously rebakes them.
-MQ_BEARING=0
+USAGE="usage: _manifest-hash.sh <box> --bake-stem <stem> --mq-bearing <0|1> --os-pin <base@pin>"
+BOX="${1:-}"
 case "$BOX" in
-  mq-rdqm-rhel9)    BAKE_STEM=mq-rdqm; MQ_BEARING=1 ;;
-  obs-ubuntu2404)   BAKE_STEM=obs ;;
-  infra-ubuntu2404) BAKE_STEM=infra ;;
-  mq-ubuntu2404)    BAKE_STEM=mq-ubuntu; MQ_BEARING=1 ;;
-  mq-nativeha-rhel9) BAKE_STEM=nativeha-rhel; MQ_BEARING=1 ;;
-  mq-nativeha-ubuntu) BAKE_STEM=nativeha-ubuntu; MQ_BEARING=1 ;;
-  pcmk-ubuntu)      BAKE_STEM=pcmk-ubuntu ;;
-  *) echo "ERROR: unknown box: '${BOX}'" >&2; exit 2 ;;
+  "" | --*) echo "ERROR: <box> is required" >&2; echo "$USAGE" >&2; exit 2 ;;
 esac
+shift
+BAKE_STEM=""
+MQ_BEARING=""
+OS_PIN=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --bake-stem) BAKE_STEM="${2:-}"; shift ;;
+    --mq-bearing) MQ_BEARING="${2:-}"; shift ;;
+    --os-pin) OS_PIN="${2:-}"; shift ;;
+    *) echo "ERROR: unknown arg: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+  esac
+  shift
+done
+for flag in bake-stem mq-bearing os-pin; do
+  case "$flag" in
+    bake-stem) value="$BAKE_STEM" ;;
+    mq-bearing) value="$MQ_BEARING" ;;
+    os-pin) value="$OS_PIN" ;;
+  esac
+  if [ -z "$value" ]; then
+    echo "ERROR: --${flag} is required" >&2
+    echo "$USAGE" >&2
+    exit 2
+  fi
+done
+case "$MQ_BEARING" in
+  0|1) ;;
+  *) echo "ERROR: --mq-bearing must be 0 or 1 (got '${MQ_BEARING}')" >&2; exit 2 ;;
+esac
+cd "$(dirname "$0")"
 
 PINS="../../ansible/group_vars/all/versions.yml"
 # The single authoritative MQ-version pin (mqlab.paths.mq_version_pin_path), read
@@ -82,6 +103,12 @@ MQ_VERSION_PIN="../../lab/mq-version"
 BAKE_REL="ansible/bake-${BAKE_STEM}.yml"
 BAKE="../../${BAKE_REL}"
 ROLES_DIR="../../ansible/roles"
+# A stem with no bake playbook is a hard error, never a silently empty digest (#649): the
+# stem comes from the catalog (roles.<role>.bake), so a typo there must fail loudly.
+if [ ! -f "$BAKE" ]; then
+  echo "ERROR: no bake playbook for --bake-stem '${BAKE_STEM}': ${BAKE_REL} not found" >&2
+  exit 2
+fi
 
 # Emit, one per line, the role names referenced on stdin: values of a `name:` or
 # `role:` key that name an actual ansible/roles/<x> directory. Task/play names use
@@ -115,10 +142,20 @@ if [ -f "$BAKE" ]; then
   worklist="$(emit_role_refs < "$BAKE")" || true
 fi
 while [ -n "$worklist" ]; do
-  role="$(printf '%s\n' "$worklist" | head -n1)"
-  worklist="$(printf '%s\n' "$worklist" | tail -n +2)"
+  # Pop the first line with parameter expansion, not `printf | head -n1`: under
+  # pipefail, head exiting early can SIGPIPE a printf still writing a long worklist
+  # (exit 141), which set -e turned into an intermittent hash failure (#1274).
+  role="${worklist%%$'\n'*}"
+  case "$worklist" in
+    *$'\n'*) worklist="${worklist#*$'\n'}" ;;
+    *) worklist="" ;;
+  esac
   if [ -z "$role" ]; then continue; fi
-  if printf '%s\n' "$seen" | grep -qxF "$role"; then continue; fi
+  # Membership by pattern match, not `printf | grep -q` (grep -q exits on the first
+  # match and can SIGPIPE the printf, misreporting a seen role as unseen).
+  case "$seen"$'\n' in
+    *$'\n'"$role"$'\n'*) continue ;;
+  esac
   seen="$(printf '%s\n%s' "$seen" "$role")"
   resolved="$(printf '%s\n%s' "$resolved" "$role")"
   refs="$(find "${ROLES_DIR}/${role}" -type f \( -name '*.yml' -o -name '*.yaml' \) \
@@ -129,6 +166,7 @@ done
 {
   printf 'box=%s\n' "$BOX"
   printf 'bake=%s\n' "$BAKE_REL"
+  printf 'os_pin=%s\n' "$OS_PIN"
   if [ -f "$PINS" ]; then cat "$PINS"; fi
   # MQ-bearing boxes only: the resolved MQ version lives in lab/mq-version (a
   # lookup() in versions.yml), so fold its content in — a pin bump must flip the

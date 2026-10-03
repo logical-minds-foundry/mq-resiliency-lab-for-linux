@@ -10,17 +10,39 @@ Task 1 / #602).
 
 ## The bake/configure line
 
-The lab bakes **seven fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu2404`,
-`infra-ubuntu2404`, and `mq-ubuntu2404` (#659) from the bootstrap-performance
+The lab bakes **seven fat box images** — `mq-rdqm-rhel9`, `obs-ubuntu24`,
+`infra-ubuntu24`, and `mq-client-ubuntu24` (#659) from the bootstrap-performance
 epic; `mq-nativeha-rhel9` (#667) from the follow-on native-HA-RHEL baking epic
-(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu` (#103 T6) and
-`pcmk-ubuntu` (#103 T7) from the arch-native box-building epic
+(`logical-minds-foundry/.github#88`); and `mq-nativeha-ubuntu24` (#103 T6) and
+`pcmk-ubuntu24` (#103 T7) from the arch-native box-building epic
 (`logical-minds-foundry/.github#103`). The log-search stack (OpenSearch + Dashboards
 + Data Prepper, `logical-minds-foundry/.github#149`) was originally its own
 `logsearch-ubuntu2404` box, but the observability-consolidation epic
-(`logical-minds-foundry/.github#267`) folded it into `obs-ubuntu2404` (#1178) and
+(`logical-minds-foundry/.github#267`) folded it into `obs-ubuntu24` (#1178) and
 retired the standalone box (#1179). Each box carries, as a **baked golden image**,
 the slow install work that never varies per run, so a per-run bootstrap can skip it.
+
+Box names are **generated** as `<role>-<os><major>` from the OS version catalog,
+[`lab/versions.yaml`](../../lab/versions.yaml) (epic `logical-minds-foundry/.github#280`,
+#1274); the names above are today's (Ubuntu 24, RHEL 9). The catalog's `roles:` block
+maps each box role to its bake playbook stem per OS family, and to whether it is
+MQ-bearing. That is the only box-to-bake mapping: `mqlab` passes it to
+`build-fatbox.sh` as `--bake <stem>` and `--mq-bearing 0|1`, and the builder digests
+`ansible/bake-<stem>.yml` plus the `--os-pin` into the manifest hash. A stem with no
+bake playbook fails the hash loudly.
+
+| Box role | Bake stem (Ubuntu / RHEL) | MQ-bearing |
+|----------|---------------------------|------------|
+| `infra` | `infra` / — | no |
+| `obs` | `obs` / — | no |
+| `mq-client` | `mq-ubuntu` / — | yes |
+| `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes |
+| `pcmk` | `pcmk-ubuntu` / — | no |
+| `mq-rdqm` | — / `mq-rdqm` | yes |
+
+The pre-rename names (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`,
+`mq-nativeha-ubuntu`, `pcmk-ubuntu`, base `rhel/9.6-x86_64`) are retired; see
+[`box-model.md`](box-model.md#the-one-time-rename-1274) for the migration.
 
 - **Bake** = image-bakeable install: packages, downloaded/compiled binaries, users,
   directory scaffolding, and *static* config that is identical for every lab. Runs
@@ -141,8 +163,8 @@ list. The per-box lists:
 | Box | Directories |
 |-----|-------------|
 | every Ubuntu box | `/etc/alloy` (alloy configure: `config.alloy`) |
-| `infra-ubuntu2404` | `/etc/bind/zones` (bind-dns configure: the zone files) |
-| `obs-ubuntu2404` | `/etc/systemd/system/grafana-server.service.d` (grafana's env drop-ins), `/etc/prometheus/targets` (prometheus targets), `/var/lib/opensearch/snapshots` (opensearch `path.repo`) |
+| `infra-ubuntu24` | `/etc/bind/zones` (bind-dns configure: the zone files) |
+| `obs-ubuntu24` | `/etc/systemd/system/grafana-server.service.d` (grafana's env drop-ins), `/etc/prometheus/targets` (prometheus targets), `/var/lib/opensearch/snapshots` (opensearch `path.repo`) |
 
 Why: #1265's x86_64 obs box lost its empty `grafana-server.service.d` to snapd-off's purge
 (snapd's postrm runs `deb-systemd-helper purge`, which rmdirs every empty directory under
@@ -162,7 +184,7 @@ each Ubuntu bake's manifest-hash closure; the RHEL boxes are unaffected.
 | `node-exporter` | ✅ full | All-install (static config); no split needed. |
 | `alloy` | ✅ install half | Binary + unit baked; `config.alloy` (per-QM-node mqweb-tail, loki endpoint) + start stay per-run. |
 
-### `obs-ubuntu2404` → `ansible/bake-obs.yml`
+### `obs-ubuntu24` → `ansible/bake-obs.yml`
 
 Since the observability-consolidation epic (`logical-minds-foundry/.github#267`), this
 box bakes the **whole** observability platform: the metrics stack
@@ -184,7 +206,7 @@ per-run render stay in `site-obs.yml`.
 | `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
 | `data-prepper` | ✅ install half | JDK-bundled binary + data dir + OpenSearch-sink DLQ dir + static config + pipeline templates + inert unit baked, plus the DLQ logrotate rule and its inert hourly rotate timer (#1239; see [`data-prepper-dlq.md`](../reference/data-prepper-dlq.md)); the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait, and the DLQ rotate timer enable, stay per-run (#939, #1239). Its OpenSearch sink is `localhost:9200` (co-located). |
 
-### `infra-ubuntu2404` → `ansible/bake-infra.yml`
+### `infra-ubuntu24` → `ansible/bake-infra.yml`
 
 | Role | In bake | Notes |
 |------|---------|-------|
@@ -192,7 +214,7 @@ per-run render stay in `site-obs.yml`.
 | `node-exporter` | ✅ full | All-install. |
 | `alloy` | ✅ install half | As above. |
 
-### `mq-ubuntu2404` → `ansible/bake-mq-ubuntu.yml` (#659)
+### `mq-client-ubuntu24` → `ansible/bake-mq-ubuntu.yml` (#659)
 
 The Ubuntu peer of `bake-mq-rdqm.yml`, for the three shared Ubuntu MQ commons
 (`svc-sim`, `app-client`, `mon-probe`), repointed to this box so a bootstrap skips
@@ -230,7 +252,7 @@ repointed commons run only
 per-run config + service start (QMs/channels, the app-requester, exporter
 instances, `config.alloy`), never the baked installs.
 
-### `mq-nativeha-ubuntu` → `ansible/bake-nativeha-ubuntu.yml` (#103 T6, epic .github#103)
+### `mq-nativeha-ubuntu24` → `ansible/bake-nativeha-ubuntu.yml` (#103 T6, epic .github#103)
 
 The Ubuntu OS-as-only-variable peer of `bake-nativeha-rhel.yml`, for the six
 `nha-ubuntu-*` nodes (`nha-ubuntu-a1..3`, `nha-ubuntu-b1..3`) repointed to this box
@@ -246,7 +268,7 @@ arch is not pinned.
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a native-HA box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 
-### `pcmk-ubuntu` → `ansible/bake-pcmk-ubuntu.yml` (#103 T7, epic .github#103)
+### `pcmk-ubuntu24` → `ansible/bake-pcmk-ubuntu.yml` (#103 T7, epic .github#103)
 
 The Pacemaker/SAN peer, for the six Pacemaker **cluster** nodes (`pcmk-a1..3`,
 `pcmk-b1..3`) repointed to this box so a bootstrap skips their per-run base-MQ
@@ -266,8 +288,8 @@ stay host-resolved on the base Ubuntu box (D8, deferred to the SAN-hosts epic
 > The log-search stack (`opensearch`, `opensearch-dashboards`, `data-prepper`)
 > formerly baked into a standalone `logsearch-ubuntu2404` box (`ansible/bake-logsearch.yml`,
 > #830). The observability-consolidation epic (`logical-minds-foundry/.github#267`)
-> folded those roles into `obs-ubuntu2404` (#1178) and retired the standalone box and its
-> bake playbook (#1179) — see the `obs-ubuntu2404` table above.
+> folded those roles into `obs-ubuntu24` (#1178) and retired the standalone box and its
+> bake playbook (#1179) — see the `obs-ubuntu24` table above.
 
 ## Every Ubuntu box: apt auto-updates disabled at bake (#1225)
 
@@ -294,7 +316,7 @@ The whole configure surface: queue-manager and cluster creation
 `pcmk-stonith`); RDQM/HA/DR state and reconcile (`rdqm-active-node`, `rdqm-state`,
 `cluster-state`, `nativeha-state`, `host-resolver`, `net-reach`);
 all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
-`rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-ubuntu2404` (#1227) — `mq-event-monitor`,
+`rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-client-ubuntu24` (#1227) — `mq-event-monitor`,
 `app-requester`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
 (`drbd-san`, `iscsi-target`, `iscsi-initiator`); and `mqweb` (per-QM REST config +
 injected `mqweb_admin_password`, so it is configure even though the mqweb *server*
@@ -304,7 +326,7 @@ binary is installed by `rdqm-install`).
 > `mqmonitor@` linking, in `main.yml`) is per-run. Its `install-RedHat` product
 > install is **baked** into `mq-nativeha-rhel9` (bake-set above), exactly as
 > `rdqm-install`'s product install is baked into `mq-rdqm-rhel9`. The role's
-> `install-Debian` half is now **baked** into `mq-nativeha-ubuntu` too (#103 T6,
+> `install-Debian` half is now **baked** into `mq-nativeha-ubuntu24` too (#103 T6,
 > bake-set above), so on both native-HA arms only the per-run formation remains.
 
 ## Deviations from the epic plan's classification head-start
@@ -334,8 +356,8 @@ The real smell this surfaces is duplication, not misnaming: the MQ-product insta
 `rdqm-install`, `mq-nativeha` (RedHat + Debian), `mq-install`, and `mq-client`,
 with no shared building block. Baking makes it visible — the product install is now
 baked into **five** boxes: `mq-rdqm-rhel9` (via `rdqm-install`), `mq-nativeha-rhel9`
-and `mq-nativeha-ubuntu` (via `mq-nativeha` `install-RedHat`/`install-Debian`), and
-`mq-ubuntu2404` and `pcmk-ubuntu` (via `mq-install`). Now that the arch-native
+and `mq-nativeha-ubuntu24` (via `mq-nativeha` `install-RedHat`/`install-Debian`), and
+`mq-client-ubuntu24` and `pcmk-ubuntu24` (via `mq-install`). Now that the arch-native
 box-building epic (`logical-minds-foundry/.github#103`) has baked the remaining
 Ubuntu arms, that duplication is fully in the open across every box — so extracting
 a shared `mq-product-install` `tasks_from` is the live cleanup this surfaces, no

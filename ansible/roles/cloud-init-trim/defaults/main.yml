@@ -1,7 +1,7 @@
 ---
 # What the cloud-init-trim role keeps and drops in a baked Ubuntu box (#1250).
 #
-# Evidence (#1250, a clone of infra-ubuntu2404 booted alone under vagrant-libvirt): the
+# Evidence (#1250, a clone of infra-ubuntu24 booted alone under vagrant-libvirt): the
 # baked boxes carry cloud-init's state for instance `iid-datasource-none` (no NoCloud seed
 # is ever attached, so every clone of every box reports the same instance id). On a clone's
 # boot every once-per-instance module logs "previously ran"; the only cloud-init work that

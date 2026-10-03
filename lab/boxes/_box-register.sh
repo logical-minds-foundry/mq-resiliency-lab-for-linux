@@ -3,7 +3,7 @@
 #
 # Keep a REUSE box registered instead of re-adding it on every run (#1248).
 #
-# Before #1248 the REUSE path of build-fatbox.sh / rhel96/build-box.sh ran
+# Before #1248 the REUSE path of build-fatbox.sh / rhel/build-box.sh ran
 # `vagrant box add --force` from the cache on EVERY run, even when the same cache
 # was already registered. That cost the unpack (obs alone took 65-72s) and, worse,
 # gave the registered box.img a new mtime each time. vagrant-libvirt names a box's

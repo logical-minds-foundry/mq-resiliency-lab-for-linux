@@ -32,8 +32,8 @@ def _seed(tmp_path) -> None:
     (tmp_path / "lab").mkdir(parents=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  obs: {nics: {net-mgmt: 10.50.0.2}, platform: ubuntu2404-arm64}\n"
-        "  mon-probe: {nics: {net-mgmt: 10.50.0.3}, platform: ubuntu2404-arm64}\n"
+        "  obs: {nics: {net-mgmt: 10.50.0.2}, platform: ubuntu24-arm64}\n"
+        "  mon-probe: {nics: {net-mgmt: 10.50.0.3}, platform: ubuntu24-arm64}\n"
         "groups:\n  obs_box: [obs]\n  probe: [mon-probe]\n"
         "commons:\n  groups: [obs_box, probe]\n  provision: ansible/site-obs.yml\n"
     )
@@ -54,7 +54,7 @@ def test_ensure_prereqs_for_commons_runs_mq_then_galaxy_then_pki(monkeypatch, tm
     cli._ensure_prereqs_for_commons()
 
     # MQ tarball ensured for the commons platforms at the repo-default version
-    assert ensured == [({"ubuntu2404-arm64"}, cli.DEFAULT_MQ_VERSION)]
+    assert ensured == [({"ubuntu24-arm64"}, cli.DEFAULT_MQ_VERSION)]
     argvs = [c.argv for c in runner.recorded]
     # galaxy collections installed before the PKI play (which needs community.crypto)
     assert argvs[0][:3] == ["ansible-galaxy", "collection", "install"]

@@ -1,7 +1,7 @@
 ---
 # The bakeable half of mq-inter-qm (#1227): the svc responder's pymqi venv. It is
 # per-run-invariant (no QM, no channel, no secret, no host-specific data), so the
-# mq-ubuntu2404 bake runs it (bake-mq-ubuntu.yml, `tasks_from: install`) and main.yml
+# mq-client-ubuntu24 bake runs it (bake-mq-ubuntu.yml, `tasks_from: install`) and main.yml
 # imports it per-run, where every task is a near no-op against the baked venv:
 #   * venv create is guarded by `creates:` on the venv's python;
 #   * the pip module (state present, no version) checks the venv's installed packages

@@ -1,7 +1,7 @@
 """Guard the per-run configure halves' directories against the bake losing them (#1265).
 
 #1265: a cold nativeha-ubuntu bootstrap failed in observe because the baked x86_64
-obs-ubuntu2404 box had no /etc/systemd/system/grafana-server.service.d. The grafana install
+obs-ubuntu24 box had no /etc/systemd/system/grafana-server.service.d. The grafana install
 half created it (empty: both drop-ins are per-run), then snapd-off's purge removed it:
 snapd's postrm runs `deb-systemd-helper purge`, whose rmdir_if_empty deletes EVERY empty
 directory under /etc/systemd/system and /etc/systemd/user. obs on aarch64 keeps snapd
@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.boxfleet import manifest_hash_args
 from tests.test_boot_trim_baked import _box_bakes, _plays, _role_includes, _split
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -194,7 +195,7 @@ def test_guard_lists_every_configure_dir_of_the_install_halves_each_box_bakes() 
         assert expected, f"{box}: every Ubuntu box bakes at least alloy's install half"
         assert expected <= set(listed), f"{box}: guard misses {sorted(expected - set(listed))}"
         assert set(listed) <= expected, f"{box}: guard lists dirs no baked role relies on"
-    assert DROPIN_DIR in _guard_list("obs-ubuntu2404", "obs"), "the #1265 dir itself"
+    assert DROPIN_DIR in _guard_list("obs-ubuntu24", "obs"), "the #1265 dir itself"
 
 
 @pytest.mark.parametrize("role", sorted(CONFIGURE_DIRS))
@@ -225,7 +226,7 @@ def test_guard_role_fails_loud() -> None:
 def _hash(root: Path, box: str) -> str:
     script = root / "lab" / "boxes" / "_manifest-hash.sh"
     return subprocess.run(
-        [str(script), box], check=True, capture_output=True, text=True
+        [str(script), box, *manifest_hash_args(box)], check=True, capture_output=True, text=True
     ).stdout.strip()
 
 
@@ -255,5 +256,5 @@ def test_fix_roles_flip_the_right_manifest_hashes(tmp_path: Path, role: str, fli
     after = {box: _hash(tmp_path, box) for box in boxes}
 
     for box, (kind, _stem) in boxes.items():
-        expect = kind == "ubuntu" if flips == "ubuntu" else box == "obs-ubuntu2404"
+        expect = kind == "ubuntu" if flips == "ubuntu" else box == "obs-ubuntu24"
         assert (before[box] != after[box]) is expect, f"{box}: {role} edit, flip={expect}"

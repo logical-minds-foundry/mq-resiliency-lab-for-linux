@@ -14,22 +14,75 @@ For the exhaustive per-role bake-vs-configure classification, see
 [`box-bake-manifest.md`](box-bake-manifest.md); for where the baked artifacts
 live on disk, see [`build-layout.md`](build-layout.md).
 
-## 1. The nine local-built boxes
+## 1. The local-built boxes
 
-The lab builds **eight boxes locally**: the bare `rhel/9.6-x86_64` base box plus
-**seven per-role fat boxes**. Each fat box is a **minimal per-role fat box** — it
-carries only the install surface that role needs, nothing more. The taxonomy is
-**role × platform × host-arch**:
+The fleet is **generated from the OS version catalog**,
+[`lab/versions.yaml`](../../lab/versions.yaml) (epic
+`logical-minds-foundry/.github#280`). Nothing else writes a box name or an OS
+version by hand. At today's versions the lab builds **eight boxes locally**: the
+bare `rhel/9-x86_64` base box plus **seven per-role fat boxes**. Each fat box is a
+**minimal per-role fat box**: it carries only the install surface that role needs,
+nothing more. The taxonomy is **role × OS major × host-arch**:
 
 | Box | Base | Arch | Role(s) that boot it | Bakes |
 |-----|------|------|----------------------|-------|
-| `mq-rdqm-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
-| `mq-nativeha-rhel9` | `rhel/9.6-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
-| `obs-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
-| `infra-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-ubuntu2404` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the svc responder pymqi venv (#1227) |
-| `mq-nativeha-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
-| `pcmk-ubuntu` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
+| `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
+| `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `obs-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
+| `infra-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
+| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the svc responder pymqi venv (#1227) |
+| `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
+
+### Box names: `<role>-<os><major>`
+
+A box that contains a fixed OS carries that OS's **short major** in its name:
+`<role>-<os><major>`. The roles are the catalog's `roles:` keys (`infra`, `obs`,
+`mq-client`, `mq-nativeha`, `pcmk`, `mq-rdqm`); the OS is a catalog `os:` entry. A
+RHEL base box is `rhel/<major>-x86_64`. Caches follow the box name (§3). The
+point release (RHEL 9.6, a cloud-image version) is a **pin** in the catalog, not
+part of the name, so moving 9.6 to 9.7 is a re-pin and a rebake, never a rename.
+Logical names (stacks, nodes, inventory groups, QM names, playbooks, dashboards)
+never carry a version. A playbook may carry the OS family
+(`bake-nativeha-rhel.yml`), because a family is not a version.
+
+`src/mqlab/box.py` builds the fleet from `Catalog.all_boxes`: the infra boxes
+(`infra`, `obs`, `mq-client`) on the catalog's `infra:` OS, then each stack's box
+roles on every OS major that stack supports and this host can run, plus one RHEL
+base box per catalog RHEL major. RHEL is `x86_64`-only, so on an `aarch64` host the
+fleet is the Ubuntu boxes alone. Until the topology names box roles directly
+(Task T2 of the epic), a stack's roles are read back off its nodes' `platform:`
+values, which already carry the generated names.
+
+### The one-time rename (#1274)
+
+Every box name changed when names became generated. The retired names live in one
+place, [`src/mqlab/retired_boxes.py`](../../src/mqlab/retired_boxes.py):
+
+| Retired name | Now |
+|--------------|-----|
+| `obs-ubuntu2404` | `obs-ubuntu24` |
+| `infra-ubuntu2404` | `infra-ubuntu24` |
+| `mq-ubuntu2404` | `mq-client-ubuntu24` |
+| `mq-nativeha-ubuntu` | `mq-nativeha-ubuntu24` |
+| `pcmk-ubuntu` | `pcmk-ubuntu24` |
+| `rhel/9.6-x86_64` | `rhel/9-x86_64` |
+
+`mq-rdqm-rhel9` and `mq-nativeha-rhel9` already fit the rule and keep their names.
+The topology's platform keys follow too: `ubuntu24-arm64`, `ubuntu24-x86_64` and
+`rhel9-x86_64`. The first build after the rename re-bakes every fat box, once. To
+migrate a host:
+
+1. `mqlab build migrate` renames the RHEL base box's cache
+   (`rhel-9.6-x86_64-libvirt.box` to `rhel-9-x86_64.box`). A base box has no
+   manifest hash, so the image is still good and skips a 45–90 minute DVD rebuild.
+2. `mqlab box gc` deregisters every retired name from Vagrant, deletes the retired
+   fat boxes' dead caches (their manifest hash names the box, so they can never be
+   reused), and reclaims all of their libvirt base volumes. A volume that a live VM
+   still backs onto is kept, as always. `--dry-run` reports without removing.
+3. Bootstrap needs nothing extra. Before `vagrant up` it forgets any guest whose
+   cached Vagrant `box_meta` names a retired box (or any box other than the one the
+   topology now assigns, #858), so a retired box is never booted.
 
 **Host-resolved vs. arch-pinned.** The five Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
@@ -41,14 +94,14 @@ targets (`san-a`/`san-b`) carry no MQ payload, so they stay on the bare Ubuntu b
 and are not baked.
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
-`mq-ubuntu2404` box: its server-set install carries the client and SDK too, so a
+`mq-client-ubuntu24` box: its server-set install carries the client and SDK too, so a
 single baked image serves the simulated upstream (server + QM), the application
 client (client + SDK for pymqi), and the probe's exporter (MQ runtime libs; the
 `mq_prometheus` binary itself is prebuilt in the Go container, #1065).
 
 ### The RHEL9 flavors (the kernel-pin dilemma)
 
-There are **two *fat* RHEL 9.6 boxes plus the bare base**, and the split is the
+There are **two *fat* RHEL 9 boxes plus the bare base**, and the split is the
 answer to a kernel-pin problem:
 
 - **`mq-rdqm-rhel9`** — the fat RDQM box. RDQM's DRBD kernel module
@@ -59,10 +112,11 @@ answer to a kernel-pin problem:
   under the module (see §5).
 - **`mq-nativeha-rhel9`** — the fat Native-HA box. Native HA replicates in MQ's
   own raft log, not DRBD, so there is **no kernel module and no pin** — it bakes
-  the base MQ product on the stock `rhel/9.6` base (no RDQM/Pacemaker stack, no
+  the base MQ product on the stock `rhel/9-x86_64` base (no RDQM/Pacemaker stack, no
   `extra_disk`). The two fat RHEL boxes are distinct not by kernel flavor but
   because native HA omits the entire RDQM/DRBD stack.
-- **`rhel96-x86_64`** — the *bare* RHEL 9.6 base box. No RHEL arm boots it un-baked
+- **`rhel/9-x86_64`** — the *bare* RHEL 9 base box (topology platform
+  `rhel9-x86_64`), installed at the catalog's pinned point release. No RHEL arm boots it un-baked
   any more; its sole role now is to be the base image the two fat RHEL boxes are
   baked **from** (§3). (The Native-HA RHEL arm was baked in
   `logical-minds-foundry/.github#88`; the RDQM box bakes from this same base, above.)
@@ -119,8 +173,8 @@ roughly 4.5 of its 12 vCPUs, and OpenSearch was still not listening at 16
 minutes. The sampler's logins, Ansible's own re-logins (ControlPersist expires
 between plays) and operator SSH all trigger it.
 
-So every baked Ubuntu box (`obs-ubuntu2404`, `infra-ubuntu2404`,
-`mq-ubuntu2404`, `mq-nativeha-ubuntu`, `pcmk-ubuntu`) runs the `motd-off` role in
+So every baked Ubuntu box (`obs-ubuntu24`, `infra-ubuntu24`,
+`mq-client-ubuntu24`, `mq-nativeha-ubuntu24`, `pcmk-ubuntu24`) runs the `motd-off` role in
 its own play near the end of its bake:
 
 - It comments out both `pam_motd.so` session lines in `/etc/pam.d/sshd` and
@@ -154,7 +208,7 @@ boot it does the one-time work: it creates the `vagrant` user, generates the
 SSH host keys, grows `/` to the 18G build disk and writes a fallback netplan
 for the bake VM's NIC. The box image keeps that state under the instance id
 `iid-datasource-none`, which is the same for every clone. So, as booting a
-clone of `infra-ubuntu2404` alone showed (#1250), every once-per-instance
+clone of `infra-ubuntu24` alone showed (#1250), every once-per-instance
 module on a clone logs "previously ran". Only two jobs still do anything:
 
 - **`cloud-init-local` re-renders the mgmt NIC's netplan.** With no local
@@ -236,13 +290,31 @@ Both roles run in each Ubuntu bake's last image-changing play (only the read-onl
 
 ## 3. The build pipeline (`build-fatbox.sh`)
 
+The builders are **dumb** (#1274): they carry no box table. `mqlab` passes every
+input as a flag, taken from the box's catalog entry (`box.builder_args`):
+
+| Builder | Flags mqlab passes |
+|---------|--------------------|
+| `lab/boxes/build-fatbox.sh` | `--box <role>-<os><major>`, `--arch`, `--base-kind ubuntu\|rhel`, `--base-box`, `--base-box-version <v\|none>`, `--bake <stem>` (runs `ansible/bake-<stem>.yml`), `--dvd <iso\|none>`, `--os-pin <base_box>@<pin>`, `--mq-bearing 0\|1`, `--domain-type`, `--cpu-mode` |
+| `lab/boxes/rhel/build-box.sh` | `--major <N>`, `--point <N.M>`, `--iso <file>`, `--domain-type`, `--cpu-mode` |
+
+Every flag is required; a missing one exits 2 with `ERROR: --<flag> is required`.
+`--base-box-version` and `--dvd` take the literal `none` (an Ubuntu box attaches no
+DVD; a RHEL bake must name one). Run `mqlab box build <box>` rather than a builder
+by hand. `lab/scripts/stage-rhel-iso.sh` and `scripts/push-rhel-iso.sh` take
+`--iso <file>` the same way.
+
 `lab/boxes/build-fatbox.sh` builds a box by **provision-then-snapshot**:
 
-1. Ensure the base box is present (the RHEL base is itself locally built by
-   `rhel96/build-box.sh`; the Ubuntu base comes from Vagrant Cloud).
+1. Ensure the base box is present. The RHEL base is itself locally built by
+   `rhel/build-box.sh`, and `mqlab` builds it **first**: `box build` of a RHEL fat
+   box ensures its base box (REUSE when cached, never forced by `box rebuild` of
+   the fat box), and the fat-box builder fails loudly if the base is not
+   registered. The Ubuntu base comes from Vagrant Cloud at the catalog's
+   `base_box_version` pin.
 2. Full-copy the base disk into the libvirt pool as a transient build disk, boot
    a throwaway `fatbox-<box>-build` domain, and wait for its DHCP lease + sshd.
-3. Run the box's bake playbook (`ansible/bake-<role>.yml`) against it **over SSH**
+3. Run the box's bake playbook (`ansible/bake-<stem>.yml`) against it **over SSH**
    — the same per-node access the lab uses, but to this one build VM.
 4. **Reset `/etc/machine-id`** (empty the file, drop the dbus copy) so every clone
    regenerates a unique machine-id on first boot. A fixed baked machine-id makes
@@ -314,9 +386,10 @@ run and `vagrant up` reuses them.
 
 The baked `.box` artifacts live in **`build/state/boxes/`** on the persistent
 `/vergil` data disk (resolved via the *main* worktree, so every git worktree
-shares one cache). Each box is keyed by arch — `<box>-<arch>.box` (e.g.
-`mq-nativeha-ubuntu-aarch64.box`, `mq-rdqm-rhel9-x86_64.box`) beside a sibling
-`<box>-<arch>.manifest-hash` stamp. Because
+shares one cache). Each fat box is keyed by arch — `<box>-<arch>.box` (e.g.
+`mq-nativeha-ubuntu24-aarch64.box`, `mq-rdqm-rhel9-x86_64.box`) beside a sibling
+`<box>-<arch>.manifest-hash` stamp. A RHEL base box's cache is its name with `/`
+replaced by `-` (`rhel-9-x86_64.box`); the name already carries the arch. Because
 `state/` outlives the VM, a baked box survives a VM rebuild without a re-bake —
 this is the pivot the rebuild tiers in §4 turn on.
 
@@ -325,14 +398,16 @@ this is the pivot the rebuild tiers in §4 turn on.
 The builder REUSEs a cached box only while it is still valid on two axes:
 
 - **Manifest hash** — a sha256 over the version-pin set and the bake inputs. If it
-  differs from the stamped hash, the cache is void and the box is rebuilt. For the
-  **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-ubuntu2404`, `mq-nativeha-rhel9`,
-  `mq-nativeha-ubuntu` — the boxes flagged `MQ_BEARING=1` in
-  [`lab/boxes/_manifest-hash.sh`](../../lab/boxes/_manifest-hash.sh)) the
+  differs from the stamped hash, the cache is void and the box is rebuilt. The
+  inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
+  or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
+  For the **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-client-ubuntu24`,
+  `mq-nativeha-rhel9`, `mq-nativeha-ubuntu24` — the roles flagged `mq_bearing: true`
+  in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
-  BUILD on the next bootstrap while the commons boxes (`obs-ubuntu2404`,
-  `infra-ubuntu2404`, and `pcmk-ubuntu`) stay REUSE — a
+  BUILD on the next bootstrap while the commons boxes (`obs-ubuntu24`,
+  `infra-ubuntu24`, and `pcmk-ubuntu24`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
 - **Graduated age** — under 7 days: REUSE silently; 7–14 days: REUSE but emit a
   NOTICE to refresh; **14 days or older: REFUSE** (non-zero exit) demanding
@@ -389,9 +464,10 @@ decision, it renders and drives the shell builder's own:
 | Verb | What it does |
 |------|--------------|
 | `mqlab box status [BOXES…]` | read-only fleet table: per-box `ARCH` / `CACHED` / `AGE` / `HASH` (match\|mismatch) / `REGISTERED` / `DECISION` (REUSE\|BUILD\|STALE\|FORCE). The `ARCH` column shows each box's resolved build arch (host-resolved for the Ubuntu boxes, `x86_64` for the RHEL boxes). No side effects. |
-| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet. Shares the ensure-box core with `bootstrap`. |
+| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet; `--config <file>` for every box a build file needs (e.g. `os: rhel:9` builds the infra boxes plus the RHEL stacks' boxes on RHEL 9; an unsupported request exits 2 naming the fix). A RHEL fat box pulls in its base box first. Shares the ensure-box core with `bootstrap`. |
 | `mqlab box rebuild [BOXES…]` | **force a fresh bake in place** (`--rebuild-box`), overwriting the cache — the targeted "rebake one box" operation, no disk wipe. |
 | `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
+| `mqlab box gc [--dry-run]` | deregister the retired box names and delete their dead caches (§1, the one-time rename), then reclaim orphaned base volumes from re-bakes (§3). |
 
 A **cold-boot staleness nudge** rides these surfaces: a write-once stamp records
 the last full cold boot, and `box status` / `doctor` / `bootstrap` emit a banded
@@ -414,8 +490,8 @@ still bounding how stale a box's base OS can get.
 ### No in-guest apt auto-updates (#1225)
 
 The same reasoning rules out Ubuntu's in-guest auto-updater. Every baked Ubuntu
-box (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`, `mq-nativeha-ubuntu`,
-`pcmk-ubuntu`) runs the `apt-autoupdate-off` role as the **first play** of its
+box (`obs-ubuntu24`, `infra-ubuntu24`, `mq-client-ubuntu24`, `mq-nativeha-ubuntu24`,
+`pcmk-ubuntu24`) runs the `apt-autoupdate-off` role as the **first play** of its
 bake. The role masks `apt-daily.timer`, `apt-daily-upgrade.timer`,
 `apt-daily.service`, `apt-daily-upgrade.service` and
 `unattended-upgrades.service`, and drops `/etc/apt/apt.conf.d/99lab-no-auto-upgrades`,
@@ -440,7 +516,7 @@ which sets every `APT::Periodic::*` knob to `"0"`. Nothing fires on first boot.
 ## 6. The RHEL DVD: one-time download, static archive, auto-stage
 
 Every artifact the boxes bake is anonymously fetchable — IBM MQ and all the
-Ubuntu/OSS pieces — with **one exception**: the RHEL 9.6 DVD ISO (~12.7 GB) that
+Ubuntu/OSS pieces — with **one exception**: the RHEL DVD ISO (~12.7 GB) that
 both RHEL box flavors attach as their offline BaseOS+AppStream dnf repo (§1). Red
 Hat gates it behind authentication, and no automated credential-free fetch was ever
 found. It is **operator-supplied**, and it is needed only on a **nuclear** rebuild
@@ -454,8 +530,9 @@ The operator downloads the DVD **once per RHEL version** from Red Hat and keeps 
 in a **stable local archive directory** — not an ad-hoc `build/` copy that a wipe
 would take with it. The default archive is `~/dev/software/rhel-dvds/`; override it
 with the `MQLAB_RHEL_DVD_ARCHIVE` environment variable. The archived ISO must carry
-the lab's canonical filename (`rhel-9.6-x86_64-dvd.iso`) so it lands where the rest
-of the tooling looks. New RHEL versions are just new ISOs dropped into the same
+the lab's canonical filename, the `iso:` value of its `os.rhel.<major>` entry in
+[`lab/versions.yaml`](../../lab/versions.yaml), so it lands where the rest of the
+tooling looks. New RHEL versions are just new ISOs dropped into the same
 directory.
 
 ### Auto-stage on VM build (host-side rsync)
@@ -495,11 +572,13 @@ for the RHEL version. On a missing or mismatched ISO it emits fail-loud guidance
 the version, the Red Hat download URL, and the destination path — and stops before a
 doomed build. No credential handling ever enters the tool; it only checks and guides.
 
-Concretely, `box.verify_rhel_dvd(version)` runs from the build core (`build_boxes`)
-whenever the RHEL base box is about to be **built or force-built** — never on a
+Concretely, `box.verify_rhel_dvd(entry)` (the catalog's `os.rhel.<major>` entry:
+its `point` names the release, its `iso` the file) runs from the build core
+(`build_boxes`) whenever a RHEL base box is about to be **built or force-built** —
+including when a RHEL fat box pulls in an uncached base — never on a
 REUSE, since a cached box attaches no ISO. It resolves the ISO exactly as
 `stage-rhel-iso.sh` does (`MQLAB_RHEL_ISO` → `RHEL_ISO` → the `build/state/`
-default) and compares its SHA-256 against `box.RHEL_DVD_SHA256`, a version→checksum
+default) and compares its SHA-256 against `box.RHEL_DVD_SHA256`, a point-release→checksum
 map the **operator** fills in from Red Hat's published value (the checksum is never
 fabricated in-tree). The verdict is three-way: a **missing** ISO blocks the build,
 a **pinned-but-mismatched** ISO blocks it, and an **unpinned** version emits a loud

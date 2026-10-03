@@ -2,7 +2,7 @@
 # Ubuntu tar suffix tracks the guest arch (host-resolved, #276): ARM64 on the Mac
 # dev path, X64 on an x86 host. (The host-side fetch/manifest map mirrors this.)
 
-# Skip-if-baked (#648/#659): app-client boots the mq-ubuntu2404 fat box, whose baked MQ
+# Skip-if-baked (#648/#659): app-client boots the mq-client-ubuntu24 fat box, whose baked MQ
 # product (server set = client + SDK) leaves /opt/mqm/inc/cmqc.h present. Gate the ~700MB
 # tar copy + unpack on that INSTALLED marker so the baked box skips it every run; keying
 # only on /tmp/MQServer (wiped on boot) re-copied + re-unpacked the tarball each run. The

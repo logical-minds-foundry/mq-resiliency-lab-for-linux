@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# lab/boxes/rhel96/await-install.sh — wait for the transient RHEL build domain to
+# lab/boxes/rhel/await-install.sh — wait for the transient RHEL build domain to
 # finish its unattended kickstart install (the ks ends with `poweroff`, so the domain
 # reaches `shut off`), emitting a heartbeat — elapsed time + the latest console line —
 # each poll instead of a silent sleep loop. The build domain logs its serial console

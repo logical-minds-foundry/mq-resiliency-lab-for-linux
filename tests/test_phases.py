@@ -410,7 +410,7 @@ def test_batch_guests_contiguous_chunks(items, size, expected):
 _BOX_TOPO = {
     "boxes": {
         "fat-rhel": {"box": "mq-nativeha-rhel9"},
-        "fat-ubuntu": {"box": "mq-ubuntu2404"},
+        "fat-ubuntu": {"box": "mq-client-ubuntu24"},
     },
     "nodes": {
         "nha-rhel-crr-a1": {"platform": "fat-rhel"},
@@ -425,7 +425,7 @@ _BOX_TOPO = {
 def test_guest_box_resolves_platform_to_box():
     """A guest's contention key is the box its platform clones (via the registry)."""
     assert _guest_box("nha-rhel-crr-a1", _BOX_TOPO) == "mq-nativeha-rhel9"
-    assert _guest_box("svc-sim", _BOX_TOPO) == "mq-ubuntu2404"
+    assert _guest_box("svc-sim", _BOX_TOPO) == "mq-client-ubuntu24"
 
 
 def test_guest_box_platformless_folds_to_host_resolved_base():
@@ -519,7 +519,7 @@ RHEL_TOPO = (
     "nodes:\n"
     "  rdqm-a1: { platform: mq-rdqm-rhel9, nics: {net-mgmt: 10.50.0.31, net-hb-a: 172.16.1.31} }\n"
     "  rdqm-a2: { platform: mq-rdqm-rhel9, nics: {} }\n"
-    "  ubu-1:   { platform: mq-ubuntu2404, nics: { net-mgmt: 10.50.0.99 } }\n"
+    "  ubu-1:   { platform: mq-client-ubuntu24, nics: { net-mgmt: 10.50.0.99 } }\n"
     "  obs: {}\n"
     "  mon-probe: {}\n"
     "  svc-sim: {}\n"

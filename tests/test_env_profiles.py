@@ -21,7 +21,7 @@ from mqlab.paths import repo_root
 X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
 
 BASE: dict[str, Any] = {
-    "boxes": {"ubuntu2404-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"}},
+    "boxes": {"ubuntu24-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"}},
     "defaults": {"cpus": 1, "memory": 1024},
     "boot_batch": 4,
     "nodes": {

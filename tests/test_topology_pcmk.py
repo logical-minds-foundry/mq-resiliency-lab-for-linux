@@ -48,7 +48,7 @@ def test_pcmk_ubuntu_effective_members_drop_pcmk_b_but_keep_san_b_under_no_dr():
 
 
 def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
-    # #103 T7: the six Pacemaker cluster nodes are repointed to the baked pcmk-ubuntu
+    # #103 T7: the six Pacemaker cluster nodes are repointed to the baked pcmk-ubuntu24
     # fat box (not the bare host-resolved Ubuntu base), so a bootstrap skips the MQ
     # install; the per-run cluster/SAN/STONITH/QM formation still runs. The box carries
     # NO `arch:` pin, so host-arch resolution is preserved at the box layer (native
@@ -56,8 +56,8 @@ def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
     topo = _topology()
     nodes = topo["nodes"]
     for h in ("pcmk-a1", "pcmk-a2", "pcmk-a3", "pcmk-b1", "pcmk-b2", "pcmk-b3"):
-        assert nodes[h]["platform"] == "pcmk-ubuntu"
-    assert "arch" not in topo["boxes"]["pcmk-ubuntu"]
+        assert nodes[h]["platform"] == "pcmk-ubuntu24"
+    assert "arch" not in topo["boxes"]["pcmk-ubuntu24"]
     # D8: san-a/san-b carry no IBM-MQ payload, so they are NOT baked and NOT repointed
     # — they keep booting the host-resolved base Ubuntu box (no `platform:` key means
     # default_platform(facts)). SAN treatment is deferred to the SAN-hosts epic (#108).

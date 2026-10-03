@@ -24,8 +24,8 @@ ARM_KVM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
 
 BASE: dict[str, Any] = {
     "boxes": {
-        "ubuntu2404-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"},
-        "ubuntu2404-arm64": {"box": "cloud-image/ubuntu-24.04", "arch": "aarch64"},
+        "ubuntu24-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"},
+        "ubuntu24-arm64": {"box": "cloud-image/ubuntu-24.04", "arch": "aarch64"},
     },
     "defaults": {"cpus": 1, "memory": 1024},
     "boot_batch": 4,

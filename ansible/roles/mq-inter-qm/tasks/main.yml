@@ -42,7 +42,7 @@
   failed_when: mqsc_apply.rc not in [0, 10]
 
 # pymqi for the responder, built against /opt/mqm (mq-install provides the SDK +
-# build deps). The bakeable half (#1227), split into install.yml so the mq-ubuntu2404
+# build deps). The bakeable half (#1227), split into install.yml so the mq-client-ubuntu24
 # bake (bake-mq-ubuntu.yml, `tasks_from: install`) builds the venv once. Per-run it is
 # a near no-op against the baked venv (`creates:` guard + pip's satisfied check), and
 # still builds it in full on an un-baked box.

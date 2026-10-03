@@ -1,5 +1,5 @@
 ---
-# Bake the obs-ubuntu2404 box image (#602, epic .github#70 Task 1; log-search tier
+# Bake the obs-ubuntu24 box image (#602, epic .github#70 Task 1; log-search tier
 # folded in by the consolidation, epic .github#267).
 #
 # ADDITIVE FOUNDATION: installs only the image-bakeable software for the unified
@@ -26,7 +26,7 @@
       ansible.builtin.include_role:
         name: apt-autoupdate-off
 
-- name: Bake obs-ubuntu2404 (install-only; no rendered targets/dashboards, no secrets)
+- name: Bake obs-ubuntu24 (install-only; no rendered targets/dashboards, no secrets)
   hosts: bake
   become: true
   vars:

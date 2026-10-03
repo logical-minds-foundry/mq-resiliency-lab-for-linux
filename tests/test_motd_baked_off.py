@@ -21,10 +21,11 @@ from typing import Any
 
 import yaml
 
+from tests.boxfleet import box_bakes, manifest_hash_args
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO_ROOT / "ansible"
 ROLE = ANSIBLE / "roles" / "motd-off"
-FATBOX = REPO_ROOT / "lab" / "boxes" / "build-fatbox.sh"
 MANIFEST_HASH = REPO_ROOT / "lab" / "boxes" / "_manifest-hash.sh"
 
 # The motd stanza Ubuntu 24.04 (noble) ships in /etc/pam.d/sshd (openssh
@@ -48,11 +49,8 @@ session    optional   pam_mail.so standard
 
 
 def _box_bakes() -> dict[str, tuple[str, str]]:
-    """box -> (base kind, bake stem), parsed from build-fatbox.sh's --box case."""
-    text = FATBOX.read_text(encoding="utf-8")
-    rows = re.findall(r"^\s*([a-z0-9-]+)\)\s+BASE_KIND=(\w+);.*BAKE=([a-z0-9-]+)", text, re.M)
-    assert rows, f"could not parse the --box table from {FATBOX}"
-    return {box: (kind, stem) for box, kind, stem in rows}
+    """box -> (base OS family, bake stem), from the catalog-derived fleet (#1274)."""
+    return box_bakes()
 
 
 def _iter_tasks(node: Any) -> Any:
@@ -105,7 +103,7 @@ def test_every_ubuntu_bake_includes_the_role_and_no_rhel_bake_does() -> None:
     bakes = _box_bakes()
     ubuntu = {box: stem for box, (kind, stem) in bakes.items() if kind == "ubuntu"}
     rhel = {box: stem for box, (kind, stem) in bakes.items() if kind == "rhel"}
-    assert ubuntu and rhel, f"expected both Ubuntu and RHEL boxes in {FATBOX}; got {bakes}"
+    assert ubuntu and rhel, f"expected both Ubuntu and RHEL boxes in the fleet; got {bakes}"
     missing = [
         box
         for box, stem in ubuntu.items()
@@ -169,7 +167,7 @@ def test_role_verifies_fail_loud() -> None:
 def _hash(root: Path, box: str) -> str:
     script = root / "lab" / "boxes" / "_manifest-hash.sh"
     return subprocess.run(
-        [str(script), box], check=True, capture_output=True, text=True
+        [str(script), box, *manifest_hash_args(box)], check=True, capture_output=True, text=True
     ).stdout.strip()
 
 

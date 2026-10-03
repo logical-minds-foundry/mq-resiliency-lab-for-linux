@@ -1,4 +1,4 @@
-"""Behavioral tests for lab/boxes/rhel96/await-install.sh.
+"""Behavioral tests for lab/boxes/rhel/await-install.sh.
 
 The helper waits for the transient RHEL build domain to power off at the end of
 its kickstart install, emitting an elapsed + latest-console-line heartbeat each
@@ -12,7 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "lab" / "boxes" / "rhel96" / "await-install.sh"
+SCRIPT = Path(__file__).resolve().parents[1] / "lab" / "boxes" / "rhel" / "await-install.sh"
 
 # domstate stub: "running" on the first call, "shut off" after — so the loop runs
 # exactly one heartbeat then exits. Call count persists in $VIRSH_COUNTER.
@@ -42,7 +42,7 @@ def _run(tmp_path: Path, *, console_text: str) -> subprocess.CompletedProcess[st
     }
     # poll_secs=0 so the test does not actually wait between heartbeats.
     return subprocess.run(
-        ["bash", str(SCRIPT), "rhel96-build", str(log), "0"],
+        ["bash", str(SCRIPT), "rhel9-build", str(log), "0"],
         env=env,
         capture_output=True,
         text=True,

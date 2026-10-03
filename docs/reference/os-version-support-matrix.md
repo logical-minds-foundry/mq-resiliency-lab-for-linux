@@ -216,7 +216,7 @@ and the resolver warns when it is selected.
 - **[judgment] (flag for the epic)** §4.1 gates *stack* defaults only.
   `infra: ubuntu:26` (spec goal 2) moves the shared Ubuntu MQ commons
   (`svc-sim`, `app-client`, `mon-probe`) to 26.04. Those nodes run the MQ server
-  and client (the `mq-ubuntu2404` box bakes them in, per `lab/topology.yaml`), so
+  and client (the `mq-client-ubuntu24` box bakes them in, per `lab/topology.yaml`), so
   MQ would run on an OS IBM does not list. §4.1 neither covers nor forbids this.
   The epic should decide it explicitly before T8 moves infra to 26.
 - **[data] (side observation, outside this epic's scope)** The MQ 10.0 SPCR lists

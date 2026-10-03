@@ -604,8 +604,8 @@ def _make_box_meta(tmp_path, guest: str, box_name: str):
 def test_cached_box_name_reads_the_box_meta_name(monkeypatch, tmp_path):
     """_cached_box_name returns the `name` Vagrant cached in the guest's box_meta."""
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9.6-x86_64")
-    assert cli._cached_box_name("nha-rhel-crr-a1") == "rhel/9.6-x86_64"
+    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9-x86_64")
+    assert cli._cached_box_name("nha-rhel-crr-a1") == "rhel/9-x86_64"
 
 
 def test_cached_box_name_none_when_never_created(monkeypatch, tmp_path):
@@ -640,11 +640,11 @@ def test_plan_reconcile_forgets_repointed_guest(monkeypatch, tmp_path):
     monkeypatch.setattr(
         cli, "_resolved_nodes", lambda: {"nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"}}
     )
-    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9.6-x86_64")  # pre-repoint base box
+    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9-x86_64")  # pre-repoint base box
     steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-crr-a1"])
     assert [s.label for s in steps] == ["nha-rhel-crr-a1 forget vagrant machine"]
     assert notes == [
-        "nha-rhel-crr-a1: box repointed rhel/9.6-x86_64 -> mq-nativeha-rhel9; "
+        "nha-rhel-crr-a1: box repointed rhel/9-x86_64 -> mq-nativeha-rhel9; "
         "forgetting stale vagrant metadata (#858)"
     ]
 
@@ -681,10 +681,10 @@ def test_plan_reconcile_forgets_only_the_repointed_guests(monkeypatch, tmp_path)
         lambda: {
             "nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"},  # repointed
             "nha-rhel-crr-a2": {"box": "mq-nativeha-rhel9"},  # already matches
-            "obs": {"box": "obs-ubuntu2404"},  # never created
+            "obs": {"box": "obs-ubuntu24"},  # never created
         },
     )
-    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9.6-x86_64")  # stale
+    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9-x86_64")  # stale
     _make_box_meta(tmp_path, "nha-rhel-crr-a2", "mq-nativeha-rhel9")  # current
     steps, notes = cli._plan_reconcile_box_meta(["nha-rhel-crr-a1", "nha-rhel-crr-a2", "obs"])
     assert [s.label for s in steps] == ["nha-rhel-crr-a1 forget vagrant machine"]
@@ -698,11 +698,11 @@ def test_reconcile_box_meta_runs_forget_and_notes(monkeypatch, tmp_path, capsys)
     monkeypatch.setattr(
         cli, "_resolved_nodes", lambda: {"nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"}}
     )
-    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9.6-x86_64")
+    _make_box_meta(tmp_path, "nha-rhel-crr-a1", "rhel/9-x86_64")
     labels = _capture_execute(monkeypatch)
     _real_reconcile_box_meta(["nha-rhel-crr-a1"], step=False)
     assert labels == ["nha-rhel-crr-a1 forget vagrant machine"]
-    assert "box repointed rhel/9.6-x86_64 -> mq-nativeha-rhel9" in capsys.readouterr().out
+    assert "box repointed rhel/9-x86_64 -> mq-nativeha-rhel9" in capsys.readouterr().out
 
 
 def test_reconcile_box_meta_noop_when_nothing_repointed(monkeypatch, tmp_path):
@@ -714,6 +714,34 @@ def test_reconcile_box_meta_noop_when_nothing_repointed(monkeypatch, tmp_path):
     _make_box_meta(tmp_path, "nha-rhel-crr-a1", "mq-nativeha-rhel9")  # already current
     monkeypatch.setattr(cli, "_execute", lambda *a, **k: pytest.fail("no forget on a match"))
     _real_reconcile_box_meta(["nha-rhel-crr-a1"], step=False)  # no-op, no failure
+
+
+def test_reconcile_forgets_retired_box_names(monkeypatch, tmp_path):
+    """Review Focus 4 (#1274): a guest whose cached box_meta names a RETIRED box
+    (mq-nativeha-ubuntu, renamed mq-nativeha-ubuntu24) is reconciled before `vagrant up`,
+    so the old box never boots."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        cli, "_resolved_nodes", lambda: {"nha-ubuntu-a1": {"box": "mq-nativeha-ubuntu24"}}
+    )
+    _make_box_meta(tmp_path, "nha-ubuntu-a1", "mq-nativeha-ubuntu")
+    assert cli._stale_box_meta_guests(["nha-ubuntu-a1"]) == ["nha-ubuntu-a1"]
+    steps, notes = cli._plan_reconcile_box_meta(["nha-ubuntu-a1"])
+    assert [s.label for s in steps] == ["nha-ubuntu-a1 forget vagrant machine"]
+    assert notes == [
+        "nha-ubuntu-a1: cached box mq-nativeha-ubuntu is a retired box name (renamed, #1274); "
+        "forgetting stale vagrant metadata"
+    ]
+
+
+def test_reconcile_forgets_a_retired_box_even_without_a_resolved_box(monkeypatch, tmp_path):
+    """A retired name is stale whatever the guest resolves to — even when the resolved
+    topology has no box for it (the plain repoint check needs one to compare against)."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli, "_resolved_nodes", dict)
+    _make_box_meta(tmp_path, "pcmk-a1", "pcmk-ubuntu")
+    _make_box_meta(tmp_path, "pcmk-a2", "pcmk-ubuntu24")  # a current name, nothing to compare
+    assert cli._stale_box_meta_guests(["pcmk-a1", "pcmk-a2", "pcmk-a3"]) == ["pcmk-a1"]
 
 
 def test_stack_mq_platforms_resolves_cluster_node_platforms(monkeypatch, tmp_path):
@@ -742,7 +770,7 @@ def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
     _seed(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("pcmk-ubuntu")
     captured: dict[str, object] = {}
-    monkeypatch.setattr(cli, "_stack_mq_platforms", lambda s: {"ubuntu2404-arm64"})
+    monkeypatch.setattr(cli, "_stack_mq_platforms", lambda s: {"ubuntu24-arm64"})
     monkeypatch.setattr(cli, "mq_cache_dir", lambda: tmp_path / "mqcache")
     monkeypatch.setattr(
         cli,
@@ -752,7 +780,7 @@ def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
         ),
     )
     cli._ensure_mq_artifacts_for_stack(stack)
-    assert captured["platforms"] == {"ubuntu2404-arm64"}
+    assert captured["platforms"] == {"ubuntu24-arm64"}
     assert captured["version"] == cli.DEFAULT_MQ_VERSION
     assert captured["build_dir"] == tmp_path / "mqcache"
     assert captured["fetch"] is cli._fetch_mq_tarball
@@ -760,10 +788,10 @@ def test_ensure_mq_artifacts_for_stack_delegates(monkeypatch, tmp_path):
 
 # --------------------------------------------------------------------------- #
 # #634: the infra commons group runs no MQ and must be excluded from the MQ-media
-# (tarball) enumeration. Its nodes carry the infra-ubuntu2404 platform (#606), which
+# (tarball) enumeration. Its nodes carry the infra-ubuntu24 platform (#606), which
 # has no MQ tarball arch mapping by design — enumerating it hard-fails the prereq.
 # --------------------------------------------------------------------------- #
-# A topology where the infra commons group's hosts are repointed to infra-ubuntu2404
+# A topology where the infra commons group's hosts are repointed to infra-ubuntu24
 # (post-#606), alongside a stack whose provision installs MQ on obs/svc/app/probe.
 INFRA_TOPO = (
     "nodes:\n"
@@ -774,8 +802,8 @@ INFRA_TOPO = (
     "  mon-probe: {nics: {net-mgmt: 10.50.0.3}}\n"
     "  svc-sim: {nics: {net-mgmt: 10.50.0.50}}\n"
     "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
-    "  infra-client: {platform: infra-ubuntu2404, nics: {net-mgmt: 10.50.0.4}}\n"
-    "  infra-svc: {platform: infra-ubuntu2404, nics: {net-mgmt: 10.50.0.5}}\n"
+    "  infra-client: {platform: infra-ubuntu24, nics: {net-mgmt: 10.50.0.4}}\n"
+    "  infra-svc: {platform: infra-ubuntu24, nics: {net-mgmt: 10.50.0.5}}\n"
     "groups:\n"
     "  rdqm_a:  [rdqm-a1, rdqm-a2, rdqm-a3]\n"
     "  obs_box: [obs]\n"
@@ -812,12 +840,12 @@ def _seed_infra(monkeypatch, tmp_path):
 
 def test_commons_mq_platforms_excludes_infra(monkeypatch, tmp_path):
     """The infra commons group is infrastructure-only (DNS/core services): its
-    infra-ubuntu2404 platform is excluded from the MQ-media enumeration, while the
+    infra-ubuntu24 platform is excluded from the MQ-media enumeration, while the
     MQ-bearing commons (obs/svc/app/probe) platform is still included."""
     _seed_infra(monkeypatch, tmp_path)
     plats = cli._commons_mq_platforms()
-    assert "infra-ubuntu2404" not in plats
-    assert any(p.startswith("ubuntu2404") for p in plats)
+    assert "infra-ubuntu24" not in plats
+    assert any(p.startswith("ubuntu24") for p in plats)
 
 
 def test_stack_mq_platforms_excludes_infra(monkeypatch, tmp_path):
@@ -826,8 +854,8 @@ def test_stack_mq_platforms_excludes_infra(monkeypatch, tmp_path):
     _seed_infra(monkeypatch, tmp_path)
     stack = cli._lookup_stack_or_exit("rdqm-rhel")
     plats = cli._stack_mq_platforms(stack)
-    assert "infra-ubuntu2404" not in plats
-    assert any(p.startswith("ubuntu2404") for p in plats)
+    assert "infra-ubuntu24" not in plats
+    assert any(p.startswith("ubuntu24") for p in plats)
 
 
 # --------------------------------------------------------------------------- #
