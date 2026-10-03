@@ -21,6 +21,14 @@
 #     guards), so build-fatbox.sh decided REUSE and the box silently drifted from
 #     the code. Now a role-level bake change flips the hash and forces a rebuild.
 #
+#   * the SHARED files outside ansible/roles/ that the closure includes (#1324) -
+#     PATH and CONTENT of every existing file under ansible/ (not ansible/roles/)
+#     that a reached role, the bake playbook, or another such shared file names in
+#     a path literal: today the per-OS-version vars loader ansible/tasks/os-vars.yml,
+#     which roles pull in as `include_tasks: ../../../tasks/os-vars.yml` (#1277).
+#     The role closure alone missed it, so editing the loader left every box's hash
+#     unchanged and the builder REUSEd a stale box - #649's bug, one level out.
+#
 #   * for the MQ-BEARING boxes only, the lab/mq-version pin CONTENT (#1087) - the
 #     single authoritative MQ-version pin (mqlab.paths.mq_version_pin_path). The
 #     baked MQ version is sourced from that pin via an Ansible
@@ -130,37 +138,120 @@ emit_role_refs() {
       done
 }
 
-# Transitive closure of bake roles, seeded from the bake playbook and expanded by
-# scanning each reached role's YAML for further role references (nested
-# include_role, meta dependencies). BFS over a worklist; `seen` (a newline-
-# delimited string, for bash-3.2 portability - no associative arrays) de-dupes and
-# guarantees termination on cyclic references.
+# Emit, one per line, the SHARED task/vars files outside ansible/roles/ that the
+# YAML file $1 references (#1324) - e.g. the per-OS-version loader that roles pull
+# in as `include_tasks: ../../../tasks/os-vars.yml` (#1277). Every `.yml`/`.yaml`
+# path literal on a non-comment line is a candidate, which covers include_tasks /
+# import_tasks / include_vars / vars_files / import_playbook and their `file:`
+# forms alike. Each candidate is resolved against the directories Ansible searches:
+# the referencing file's own directory and the playbook dir (ansible/), plus, for a
+# role file, that role's tasks/ dir (how a role's relative include resolves). A
+# candidate is kept only if it is an existing regular file INSIDE ansible/ but
+# OUTSIDE ansible/roles/: role files are already covered by the role closure, and a
+# literal naming no real file (a task name mentioning prometheus.yml, a templated
+# `{{ ... }}` path) drops out. Over-inclusive at the margin, like the role scan: a
+# stray literal that happens to name a real shared file costs at most one spurious
+# rebake, while a missed include is silent drift. Output is the path relative to the
+# repo root (e.g. ansible/tasks/os-vars.yml).
+#
+# Same `|| true` contract as emit_role_refs at the call sites: grep exits non-zero
+# on a file with no candidate literals (or only comments), which under `set -e` +
+# `pipefail` would abort the capturing assignment. Every stage reads its input to
+# EOF (no head / grep -q), so there is no SIGPIPE path (#1274).
+emit_shared_refs() {
+  local src="$1" src_dir role_tasks="" tok dir cand cdir canon
+  src_dir="$(dirname "$src")"
+  case "$src" in
+    "${ROLES_DIR}"/*)
+      role_tasks="${src#"${ROLES_DIR}"/}"
+      role_tasks="${ROLES_DIR}/${role_tasks%%/*}/tasks"
+      ;;
+  esac
+  grep -vE '^[[:space:]]*#' "$src" \
+    | sed -E 's/[[:space:]]#.*$//' \
+    | grep -oE '[A-Za-z0-9._/-]+\.ya?ml' \
+    | while IFS= read -r tok; do
+        for dir in "$src_dir" "$role_tasks" "$ANSIBLE_DIR"; do
+          if [ -z "$dir" ] || [ ! -f "${dir}/${tok}" ]; then continue; fi
+          cand="${dir}/${tok}"
+          cdir="$(CDPATH="" cd "$(dirname "$cand")" && pwd -P)"
+          canon="${cdir}/$(basename "$cand")"
+          case "$canon" in
+            "${ROLES_ABS}"/*) ;;
+            "${ANSIBLE_ABS}"/*) printf '%s\n' "${canon#"${REPO_ABS}"/}" ;;
+          esac
+        done
+      done
+}
+
+# Tag every non-empty line of $1 with prefix $2 ("r " / "f "), for the worklist.
+# sed reads all its input, so the pipe cannot SIGPIPE the printf.
+tag_lines() {
+  printf '%s\n' "$1" | sed -e '/^$/d' -e "s|^|$2|"
+}
+
+# Transitive closure of bake roles AND the shared files they include, seeded from
+# the bake playbook. BFS over one worklist of tagged items: `r <role>` scans every
+# YAML file under ansible/roles/<role>; `f <path>` scans one shared file under
+# ansible/ (path relative to the repo root). Either scan can enqueue further roles
+# (nested include_role, meta dependencies) and further shared files (#1324), so a
+# shared include that itself includes or include_role's is followed too. `seen` (a
+# newline-delimited string, for bash-3.2 portability - no associative arrays)
+# de-dupes and guarantees termination on cyclic references.
+REPO_ABS="$(CDPATH="" cd ../.. && pwd -P)"
+ANSIBLE_DIR="../../ansible"
+ANSIBLE_ABS="${REPO_ABS}/ansible"
+ROLES_ABS="${ANSIBLE_ABS}/roles"
 seen=""
 resolved=""
-worklist=""
-if [ -f "$BAKE" ]; then
-  worklist="$(emit_role_refs < "$BAKE")" || true
-fi
+shared=""
+refs="$(emit_role_refs < "$BAKE")" || true
+worklist="$(tag_lines "$refs" "r ")"
+refs="$(emit_shared_refs "$BAKE")" || true
+worklist="$(printf '%s\n%s' "$worklist" "$(tag_lines "$refs" "f ")")"
 while [ -n "$worklist" ]; do
   # Pop the first line with parameter expansion, not `printf | head -n1`: under
   # pipefail, head exiting early can SIGPIPE a printf still writing a long worklist
   # (exit 141), which set -e turned into an intermittent hash failure (#1274).
-  role="${worklist%%$'\n'*}"
+  item="${worklist%%$'\n'*}"
   case "$worklist" in
     *$'\n'*) worklist="${worklist#*$'\n'}" ;;
     *) worklist="" ;;
   esac
-  if [ -z "$role" ]; then continue; fi
+  if [ -z "$item" ]; then continue; fi
   # Membership by pattern match, not `printf | grep -q` (grep -q exits on the first
-  # match and can SIGPIPE the printf, misreporting a seen role as unseen).
+  # match and can SIGPIPE the printf, misreporting a seen item as unseen).
   case "$seen"$'\n' in
-    *$'\n'"$role"$'\n'*) continue ;;
+    *$'\n'"$item"$'\n'*) continue ;;
   esac
-  seen="$(printf '%s\n%s' "$seen" "$role")"
-  resolved="$(printf '%s\n%s' "$resolved" "$role")"
-  refs="$(find "${ROLES_DIR}/${role}" -type f \( -name '*.yml' -o -name '*.yaml' \) \
-            -exec cat {} + 2>/dev/null | emit_role_refs)" || true
-  if [ -n "$refs" ]; then worklist="$(printf '%s\n%s' "$worklist" "$refs")"; fi
+  seen="$(printf '%s\n%s' "$seen" "$item")"
+  case "$item" in
+    "r "*)
+      role="${item#r }"
+      resolved="$(printf '%s\n%s' "$resolved" "$role")"
+      files="$(find "${ROLES_DIR}/${role}" -type f \( -name '*.yml' -o -name '*.yaml' \) | sort)"
+      ;;
+    *)
+      # Only `r ` and `f ` items are ever enqueued (tag_lines above).
+      shared="$(printf '%s\n%s' "$shared" "${item#f }")"
+      files="../../${item#f }"
+      ;;
+  esac
+  # Scan each file of the item for role and shared-file references. Iterate the
+  # newline list by parameter expansion (same as the worklist pop) so the loop runs
+  # in this shell and its worklist appends survive - a `printf | while` would run in
+  # a subshell and drop them.
+  while [ -n "$files" ]; do
+    file="${files%%$'\n'*}"
+    case "$files" in
+      *$'\n'*) files="${files#*$'\n'}" ;;
+      *) files="" ;;
+    esac
+    refs="$(emit_role_refs < "$file")" || true
+    worklist="$(printf '%s\n%s' "$worklist" "$(tag_lines "$refs" "r ")")"
+    refs="$(emit_shared_refs "$file")" || true
+    worklist="$(printf '%s\n%s' "$worklist" "$(tag_lines "$refs" "f ")")"
+  done
 done
 
 {
@@ -185,5 +276,13 @@ done
       printf 'file=%s\n' "${file#../../}"
       cat "$file"
     done
+  done
+  # Every shared file outside ansible/roles/ the closure includes (#1324), path then
+  # content, path-sorted. Without this an edit to ansible/tasks/os-vars.yml alone
+  # left every box's hash unchanged and the builder REUSEd a stale box.
+  printf '%s\n' "$shared" | sort -u | while IFS= read -r file; do
+    [ -z "$file" ] && continue
+    printf 'shared=%s\n' "$file"
+    cat "../../${file}"
   done
 } | sha256sum | cut -d' ' -f1
