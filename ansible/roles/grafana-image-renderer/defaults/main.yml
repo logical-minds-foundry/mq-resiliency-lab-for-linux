@@ -11,7 +11,7 @@
 # bakes natively as aarch64 on an Apple-silicon host and x86_64 on an x86 host
 # (docs/development/box-model.md). The standalone binary ships both linux-amd64 and
 # linux-arm64, and its default --browser.sandbox=false already launches the browser
-# with --no-sandbox (required under Ubuntu 24.04's restricted unprivileged userns).
+# with --no-sandbox (required under Ubuntu LTS's restricted unprivileged userns).
 grafana_image_renderer_version: "5.10.3"
 grafana_image_renderer_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
 grafana_image_renderer_pkg: "grafana-image-renderer-linux-{{ grafana_image_renderer_arch }}"

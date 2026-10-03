@@ -1,7 +1,7 @@
 ---
 # The PAM service files whose pam_motd session lines this role comments out at bake (#1229).
-# On Ubuntu 24.04 both ship the same pair (openssh debian/openssh-server.sshd.pam.in and
-# shadow debian/login.pam, noble):
+# On Ubuntu LTS both ship the same pair (openssh debian/openssh-server.sshd.pam.in and
+# shadow debian/login.pam):
 #   session    optional     pam_motd.so  motd=/run/motd.dynamic   <- runs /etc/update-motd.d
 #   session    optional     pam_motd.so noupdate                  <- static /etc/motd only
 # The first line is the expensive one (run-parts /etc/update-motd.d, incl.

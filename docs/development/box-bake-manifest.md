@@ -96,6 +96,29 @@ Roles split this way: **`prometheus`, `grafana`, `alloy`, `bind-dns`**, plus the
 three log-search-tier roles the log-search epic added the same way —
 **`opensearch`, `opensearch-dashboards`, `data-prepper`** (`logical-minds-foundry/.github#149`).
 
+## Per-OS-version vars (#1277, epic `.github#280`)
+
+OS-family dispatch stays `install-{{ ansible_os_family }}.yml`. Values that differ
+between **versions** of one family live in `roles/<role>/vars/<Distribution>-<major>.yml`
+(e.g. `RedHat-9.yml`). They load through one shared include,
+`ansible/tasks/os-vars.yml`, which **fails when no file matches**. It has no fallback to
+a family default, so an OS the role was never taught stops before installing anything:
+
+```yaml
+- ansible.builtin.include_tasks: ../../../tasks/os-vars.yml   # from roles/<role>/tasks/
+  vars:
+    os_vars_role: rdqm-install   # the calling role's own name
+```
+
+Include it only on the code path that consumes the values. `mq-nativeha` includes it from
+`install-RedHat.yml`, so the Debian adapter never needs a `RedHat-*` file. The include
+path is relative to the role's `tasks/` dir, which both Ansible and ansible-lint resolve.
+The vars lookup uses `playbook_dir`, which is `ansible/` for bake and site plays alike
+because every playbook lives there. `tests/test_ansible_os_vars.py` derives the required files from
+`lab/versions.yaml`: each role must ship a file for every OS its stacks support.
+Roles using it today: `rdqm-install` (EL tag, RDQM PreReqs dirs, DVD repo name),
+`mq-nativeha` and `mq-nativeha-spike` (DVD repo name).
+
 ## Phased startup — baked inert, started per-run
 
 Baking a service's *software* does not mean baking it *running*. A service that

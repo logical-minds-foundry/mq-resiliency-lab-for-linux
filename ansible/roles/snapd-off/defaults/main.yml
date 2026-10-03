@@ -8,8 +8,8 @@
 # keep: a bake installed snaps the box needs, so snapd stays; only snapd.seeded.service,
 #   a pure `snap wait system seed.loaded` boot gate on an already-seeded image, is masked.
 #   obs on aarch64 needs this: grafana-image-renderer's browser there is the distro
-#   `chromium-browser`, which on Ubuntu 24.04 is a transitional deb that installs the
-#   chromium snap (plus cups, core24, gnome-46-2404, mesa-2404, gtk-common-themes, bare).
+#   `chromium-browser`, which on Ubuntu LTS is a transitional deb that installs the
+#   chromium snap (plus cups, its core/gnome/mesa base snaps, gtk-common-themes, bare).
 snapd_off_mode: purge
 
 # Pins snapd out so a later `apt install` cannot quietly pull it back as a Recommends
@@ -20,7 +20,7 @@ snapd_off_pin: /etc/apt/preferences.d/99lab-no-snapd
 snapd_off_seeded_unit: snapd.seeded.service
 
 # Purge side effect (#1265): snapd's postrm runs `deb-systemd-helper purge`, whose
-# rmdir_if_empty removes EVERY empty dir under these roots (init-system-helpers, noble), not
+# rmdir_if_empty removes EVERY empty dir under these roots (init-system-helpers), not
 # only snapd's. The role records the empty dirs here before the purge and restores them
 # after, so a dir another bake role left empty for its per-run half (obs's
 # grafana-server.service.d) survives.

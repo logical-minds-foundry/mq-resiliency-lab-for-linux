@@ -6,7 +6,7 @@
 # FQDN to /etc/hosts. Per-host facts come from `mqlab dns render`.
 #
 # The mechanism is OS-specific: Ubuntu has systemd-resolved (a resolved.conf.d
-# drop-in); RHEL 9 does NOT ship it, so it uses NetworkManager's global-dns. nsswitch
+# drop-in); RHEL does NOT run it, so it uses NetworkManager's global-dns. nsswitch
 # stays `files dns` -- /etc/hosts wins, DNS is the fallthrough. HA/replication fabric
 # names are seeded by the HA roles, not here.
 - name: load this host's DNS facts (rendered by `mqlab dns render`)

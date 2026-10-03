@@ -11,6 +11,14 @@
 # the Developers tar, license, the MQSeries base rpms, setmqinst, ulimits.
 # Dropped vs rdqm-install: pacemaker/drbd-utils/kmod-drbd, MQSeriesRDQM,
 # drbdpool VG, modprobe drbd, haclient membership.
+#
+# Version-specific values (the DVD repo name) come from vars/<Distribution>-<major>.yml
+# through the shared fail-loud loader (#1277, epic .github#280).
+
+- name: per-OS-version vars (DVD repo name)
+  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+  vars:
+    os_vars_role: mq-nativeha-spike
 
 - name: mount the install DVD (BaseOS+AppStream; keeps the guest offline)
   ansible.builtin.shell: |
@@ -27,12 +35,12 @@
     mode: "0644"
     content: |
       [dvd-baseos]
-      name=RHEL 9.6 DVD BaseOS
+      name={{ nha_spike_dvd_repo_name }} BaseOS
       baseurl=file:///media/rhel/BaseOS
       enabled=1
       gpgcheck=0
       [dvd-appstream]
-      name=RHEL 9.6 DVD AppStream
+      name={{ nha_spike_dvd_repo_name }} AppStream
       baseurl=file:///media/rhel/AppStream
       enabled=1
       gpgcheck=0
