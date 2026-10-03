@@ -1,0 +1,35 @@
+# lab/versions.yaml — the ONLY place OS version tokens are written by hand (epic .github#280).
+#
+# Read by src/mqlab/versions.py, which validates the whole file eagerly and fails
+# loudly on anything malformed. Box names are GENERATED as <role>-<os><major>
+# (e.g. mq-nativeha-ubuntu24); never write one by hand elsewhere.
+#
+#   os:     per-family, per-major facts the bake/provision steps need. Keys:
+#             base_box (required), base_box_version, point, iso (point+iso required
+#             for rhel), arch (host-arch pin; absent = tracks the host), requires,
+#             ibm_support: { status: supported|unsupported, source: <citation url> }.
+#   roles:  box role -> { bake: { <family>: <ansible/bake-<stem>.yml stem> }, mq_bearing }.
+#   infra:  the OS of the shared/commons nodes. Not selectable.
+#   stacks: per-stack supported majors and default. A default must never point at an
+#           entry with ibm_support.status: unsupported (the support gate).
+#
+# Phase 1 is a no-behavior-change refactor, so every entry is at today's version.
+os:
+  ubuntu:
+    24: { base_box: cloud-image/ubuntu-24.04, base_box_version: "20260926.0.0" }
+  rhel:
+    9: { base_box: rhel/9-x86_64, point: "9.6", iso: rhel-9.6-x86_64-dvd.iso, arch: x86_64 }
+roles:
+  infra: { bake: { ubuntu: infra } }
+  obs: { bake: { ubuntu: obs } }
+  mq-client: { bake: { ubuntu: mq-ubuntu }, mq_bearing: true }
+  mq-nativeha: { bake: { ubuntu: nativeha-ubuntu, rhel: nativeha-rhel }, mq_bearing: true }
+  # pcmk is deliberately not MQ-bearing, matching lab/boxes/_manifest-hash.sh.
+  pcmk: { bake: { ubuntu: pcmk-ubuntu } }
+  mq-rdqm: { bake: { rhel: mq-rdqm }, mq_bearing: true }
+infra: ubuntu:24
+stacks:
+  nativeha-ubuntu: { supported: [ubuntu:24], default: ubuntu:24 }
+  pcmk-ubuntu: { supported: [ubuntu:24], default: ubuntu:24 }
+  nativeha-rhel-crr: { supported: [rhel:9], default: rhel:9 }
+  rdqm-rhel: { supported: [rhel:9], default: rhel:9 }
