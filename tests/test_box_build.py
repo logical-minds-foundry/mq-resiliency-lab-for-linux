@@ -23,7 +23,7 @@ import pytest
 from mqlab import box, cli
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.orchestrator import StepFailedError
-from tests.boxfleet import fatbox_args, manifest_hash_args
+from tests.boxfleet import box_bakes, fatbox_args, manifest_hash_args
 
 _REPO = Path(__file__).resolve().parents[1]
 _FATBOX = _REPO / "lab" / "boxes" / "build-fatbox.sh"
@@ -673,3 +673,174 @@ def test_manifest_hash_pin_is_box_scoped_not_global(tmp_path):
     # MQ-bearing digest is deterministic at a fixed pin (no spurious churn).
     root = _fake_bake_repo_with_pin(tmp_path)
     assert _hash_in(root, "mq-client-ubuntu24") == _hash_in(root, "mq-client-ubuntu24")
+
+
+# --------------------------------------------------------------------------- #
+# _manifest-hash.sh — shared files outside ansible/roles/ (#1324)              #
+#                                                                             #
+# Roles pull in the per-OS-version loader as `include_tasks:                   #
+# ../../../tasks/os-vars.yml` (#1277): a file OUTSIDE ansible/roles/, so the   #
+# role closure (#649) never digested it and an edit to it alone left every     #
+# box at REUSE. The closure now follows path literals that resolve to existing #
+# files under ansible/ but outside ansible/roles/, from roles, the bake        #
+# playbook and the shared files themselves.                                    #
+# --------------------------------------------------------------------------- #
+_OS_VARS_INCLUDE = (
+    "- name: load per-OS vars\n"
+    "  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml\n"
+    "  vars:\n"
+    "    os_vars_role: baked-role\n"
+)
+
+
+def _fake_repo_with_shared(tmp_path: Path) -> Path:
+    """The minimal bake repo plus ansible/tasks/os-vars.yml, included by
+    `baked-role` from a non-main task file the way the real roles do, and an
+    unreferenced ansible/tasks/unrelated.yml no bake reaches."""
+    root = _fake_bake_repo(tmp_path)
+    tasks = root / "ansible" / "tasks"
+    tasks.mkdir()
+    (tasks / "os-vars.yml").write_text("- name: load vars\n  ansible.builtin.debug: {}\n")
+    (tasks / "unrelated.yml").write_text("- name: unrelated\n  ansible.builtin.debug: {}\n")
+    (root / "ansible" / "roles" / "baked-role" / "tasks" / "install.yml").write_text(
+        _OS_VARS_INCLUDE
+    )
+    return root
+
+
+def _shared(root: Path, name: str) -> Path:
+    return root / "ansible" / "tasks" / name
+
+
+def test_manifest_hash_flips_on_shared_include_change(tmp_path):
+    # The headline acceptance: editing the shared loader a baked role includes flips it.
+    root = _fake_repo_with_shared(tmp_path)
+    before = _hash_in(root)
+    _append(_shared(root, "os-vars.yml"), "# loader change\n")
+    assert _hash_in(root) != before
+
+
+def test_manifest_hash_flips_on_shared_include_move(tmp_path):
+    # Repointing the include at an identical copy under another name flips the hash,
+    # and restoring the tree restores it (the digest is a pure function of the tree).
+    root = _fake_repo_with_shared(tmp_path)
+    before = _hash_in(root)
+    shutil.copy(_shared(root, "os-vars.yml"), _shared(root, "os-vars-v2.yml"))
+    _shared(root, "os-vars.yml").unlink()
+    include = root / "ansible" / "roles" / "baked-role" / "tasks" / "install.yml"
+    include.write_text(include.read_text().replace("os-vars.yml", "os-vars-v2.yml"))
+    after = _hash_in(root)
+    include.write_text(include.read_text().replace("os-vars-v2.yml", "os-vars.yml"))
+    _shared(root, "os-vars-v2.yml").rename(_shared(root, "os-vars.yml"))
+    assert after != before
+    assert _hash_in(root) == before  # restoring the tree restores the digest
+
+
+def test_manifest_hash_stable_on_unreferenced_or_commented_shared_file(tmp_path):
+    # A shared file nothing in the closure names stays out, and a path literal only
+    # in a COMMENT does not pull a file in (the real vars files mention
+    # ansible/tasks/os-vars.yml in their header comments). A literal that names no
+    # real file (a templated path, a task name) is dropped rather than erroring.
+    root = _fake_repo_with_shared(tmp_path)
+    _append(
+        _role_task(root, "baked-role"),
+        "# see ../../../tasks/unrelated.yml\n"
+        "- name: render prometheus.yml\n"
+        "  ansible.builtin.include_vars: '{{ playbook_dir }}/vars/missing.yml'\n",
+    )
+    before = _hash_in(root)
+    _append(_shared(root, "unrelated.yml"), "# unrelated change\n")
+    assert _hash_in(root) == before
+
+
+def test_manifest_hash_stable_on_shared_file_only_unbaked_roles_include(tmp_path):
+    # Precision: a shared file reached only from a role NO bake playbook pulls in
+    # (a per-run configure role) does not enter the box's digest.
+    root = _fake_repo_with_shared(tmp_path)
+    _append(_role_task(root, "unbaked-role"), _OS_VARS_INCLUDE.replace("os-vars", "unrelated"))
+    before = _hash_in(root)
+    _append(_shared(root, "unrelated.yml"), "# unrelated change\n")
+    assert _hash_in(root) == before
+
+
+def test_manifest_hash_follows_shared_file_transitively(tmp_path):
+    # A shared file that itself includes another shared file, and include_role's a
+    # role nothing else reaches: both are folded in (closure follows the shared edge).
+    root = _fake_repo_with_shared(tmp_path)
+    _append(
+        _shared(root, "os-vars.yml"),
+        "- name: more\n"
+        "  ansible.builtin.import_tasks: unrelated.yml\n"
+        "- name: pull a role\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: unbaked-role\n",
+    )
+    before = _hash_in(root)
+    _append(_shared(root, "unrelated.yml"), "# nested shared change\n")
+    middle = _hash_in(root)
+    assert middle != before
+    _append(_role_task(root, "unbaked-role"), "\n# reached via the shared file\n")
+    assert _hash_in(root) != middle
+
+
+def test_manifest_hash_flips_on_shared_file_the_bake_playbook_includes(tmp_path):
+    # A bake playbook's own playbook-relative include (tasks/<x>.yml) is digested too.
+    root = _fake_repo_with_shared(tmp_path)
+    _append(
+        root / "ansible" / "bake-infra.yml",
+        "    - name: shared bake step\n      ansible.builtin.include_tasks: tasks/unrelated.yml\n",
+    )
+    before = _hash_in(root)
+    _append(_shared(root, "unrelated.yml"), "# bake-level shared change\n")
+    assert _hash_in(root) != before
+
+
+def _real_repo_copy(tmp_path: Path) -> Path:
+    """A copy of the real inputs _manifest-hash.sh reads: ansible/, the script, and the
+    MQ-version pin - so the real tree can be edited without touching the worktree."""
+    root = tmp_path / "real"
+    shutil.copytree(_REPO / "ansible", root / "ansible", symlinks=True)
+    (root / "lab").mkdir(parents=True)
+    shutil.copytree(_REPO / "lab" / "boxes", root / "lab" / "boxes")
+    shutil.copy(_REPO / "lab" / "mq-version", root / "lab" / "mq-version")
+    return root
+
+
+def _real_hashes(root: Path) -> dict[str, str]:
+    return {name: _hash_in(root, name) for name in sorted(box_bakes())}
+
+
+def _os_vars_includers(root: Path) -> list[Path]:
+    """Every role task file that includes ansible/tasks/os-vars.yml on a code line
+    (comments in the vars files also name the loader; they don't include it)."""
+    found = []
+    for path in sorted((root / "ansible" / "roles").glob("*/tasks/**/*.yml")):
+        code = [ln for ln in path.read_text().splitlines() if not ln.lstrip().startswith("#")]
+        if any("tasks/os-vars.yml" in ln for ln in code):
+            found.append(path)
+    return found
+
+
+def test_manifest_hash_real_os_vars_edit_flips_exactly_the_reaching_boxes(tmp_path):
+    # The acceptance on the REAL tree. The expected set is DERIVED, not hard-coded:
+    # the boxes whose digest flips when the roles that include os-vars.yml are edited
+    # (the role closure, #649) are exactly the boxes that reach the loader, so they
+    # must be exactly the ones an os-vars.yml edit flips - and no others.
+    root = _real_repo_copy(tmp_path)
+    includers = _os_vars_includers(root)
+    assert includers, "no role includes ansible/tasks/os-vars.yml - update this test"
+    base = _real_hashes(root)
+
+    shared = root / "ansible" / "tasks" / "os-vars.yml"
+    original = shared.read_text()
+    _append(shared, "# loader change\n")
+    flipped_by_loader = {n for n, h in _real_hashes(root).items() if h != base[n]}
+    shared.write_text(original)
+
+    for path in includers:
+        _append(path, "\n# includer change\n")
+    flipped_by_includers = {n for n, h in _real_hashes(root).items() if h != base[n]}
+
+    assert flipped_by_loader == flipped_by_includers
+    assert flipped_by_loader  # the loader reaches at least one box
+    assert "obs-ubuntu24" not in flipped_by_loader  # a box that never includes it

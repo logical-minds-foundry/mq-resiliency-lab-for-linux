@@ -32,6 +32,33 @@ MQ-bearing. That is the only box-to-bake mapping: `mqlab` passes it to
 `ansible/bake-<stem>.yml` plus the `--os-pin` into the manifest hash. A stem with no
 bake playbook fails the hash loudly.
 
+The manifest hash (`lab/boxes/_manifest-hash.sh`) digests these inputs:
+
+- the box name, the bake playbook path and content, and the `--os-pin`;
+- the version-pin set (`ansible/group_vars/all/versions.yml`) and, for MQ-bearing
+  boxes only, the `lab/mq-version` pin (#1087);
+- the **role closure** (#649): every file under each `ansible/roles/<x>` the bake
+  playbook reaches, directly or through nested `include_role` / `import_role` / meta
+  dependencies;
+- the **shared files** the closure includes from outside `ansible/roles/` (#1324),
+  path and content. Today that is the per-OS-version vars loader
+  `ansible/tasks/os-vars.yml`, which roles include as
+  `include_tasks: ../../../tasks/os-vars.yml` (#1277). The scan takes every
+  `.yml`/`.yaml` path literal on a non-comment line of a reached role file, the bake
+  playbook, or a shared file already found. It resolves each literal against the
+  referencing file's directory, the role's `tasks/` directory and `ansible/`, and
+  keeps it only if it names an existing file under `ansible/` but outside
+  `ansible/roles/`. That covers `include_tasks`, `import_tasks`, `include_vars` and
+  `vars_files` without parsing YAML. Shared files are scanned in turn, so an include
+  inside one is followed too, and so is a role it pulls in.
+
+Both closures are deliberately **over-inclusive** at the margins. A role reached only
+behind a `when:` still counts, and so does a stray path literal that names a real
+shared file; the cost is at most one spurious rebake. Under-inclusion is the bug:
+the builder REUSEs a box that no longer matches the code. So editing a baked role
+or a shared file it includes forces a rebake of exactly the boxes that reach it,
+while editing a per-run configure role leaves every fat box at REUSE.
+
 | Box role | Bake stem (Ubuntu / RHEL) | MQ-bearing |
 |----------|---------------------------|------------|
 | `infra` | `infra` / — | no |

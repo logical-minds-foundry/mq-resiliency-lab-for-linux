@@ -417,7 +417,10 @@ this is the pivot the rebuild tiers in §4 turn on.
 The builder REUSEs a cached box only while it is still valid on two axes:
 
 - **Manifest hash** — a sha256 over the version-pin set and the bake inputs. If it
-  differs from the stamped hash, the cache is void and the box is rebuilt. The
+  differs from the stamped hash, the cache is void and the box is rebuilt. The bake
+  inputs are the bake playbook, the roles it reaches (#649) and the shared files
+  under `ansible/` those roles include, such as `ansible/tasks/os-vars.yml` (#1324);
+  see [`box-bake-manifest.md`](box-bake-manifest.md#the-bakeconfigure-line). The
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
   For the **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-client-ubuntu24`,
