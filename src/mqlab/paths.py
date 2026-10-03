@@ -69,6 +69,15 @@ def mq_version_pin_path() -> Path:
     return repo_root() / "lab" / "mq-version"
 
 
+def versions_catalog_path() -> Path:
+    """The committed OS version catalog (epic .github#280).
+
+    Committed at ``lab/versions.yaml`` — the only place OS version tokens are written
+    by hand; mqlab.versions loads and validates it.
+    """
+    return repo_root() / "lab" / "versions.yaml"
+
+
 def selection_state_path(setup: str) -> Path:
     """Manifest selection pin for a live setup — shared state/ (#266, #286)."""
     return state("manifests", f"{setup}.yaml")

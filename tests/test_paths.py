@@ -42,6 +42,7 @@ def test_named_helpers_point_into_buckets(monkeypatch, tmp_path):
     build = tmp_path / "build"
     assert paths.runs_dir() == build / "state" / "runs"
     assert paths.reports_dir() == build / "state" / "reports"
+    assert paths.versions_catalog_path() == tmp_path / "lab" / "versions.yaml"
     assert paths.selection_state_path("s") == build / "state" / "manifests" / "s.yaml"
     assert paths.inventory_path() == build / "work" / "inventory.ini"
     assert paths.resolved_topology_path() == build / "work" / "lab" / "topology.resolved.yaml"
