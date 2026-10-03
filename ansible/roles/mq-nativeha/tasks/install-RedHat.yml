@@ -4,13 +4,22 @@
 # spike. Phase 2 adds install-Debian.yml; the formation logic (main.yml) is shared.
 #
 # Skip-if-baked (#648/#659, applied to the native-HA RHEL adapter for #88): the
-# mq-nativeha-rhel9 fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is already
+# mq-nativeha RHEL fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is already
 # present. Gate the ~2 GiB developer-tar copy + unpack on that marker — WITHOUT it a
 # baked node re-copies the tarball EVERY bootstrap (the #659 offender, since /tmp is
 # wiped on boot). The dnf install / setmqinst steps keep their own `creates:` guards
 # (idempotent no-ops when baked). The DVD mount + repo drop stay UNGUARDED so the offline
 # BaseOS+AppStream repo remains available to the per-run configure half (spec §4.4). An
 # un-baked base-box node (Phase-0) still installs from scratch.
+#
+# Version-specific values (the DVD repo name) come from vars/<Distribution>-<major>.yml
+# through the shared fail-loud loader (#1277, epic .github#280). Loaded HERE, in the RHEL
+# adapter only, so the Debian path carries no RedHat vars file and vice versa.
+- name: per-OS-version vars (DVD repo name)
+  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+  vars:
+    os_vars_role: mq-nativeha
+
 - name: check for an already-installed MQ (skip the baked tar copy/unpack)
   ansible.builtin.stat:
     path: /opt/mqm/inc/cmqc.h
@@ -30,12 +39,12 @@
     mode: "0644"
     content: |
       [dvd-baseos]
-      name=RHEL 9.6 DVD BaseOS
+      name={{ nha_dvd_repo_name }} BaseOS
       baseurl=file:///media/rhel/BaseOS
       enabled=1
       gpgcheck=0
       [dvd-appstream]
-      name=RHEL 9.6 DVD AppStream
+      name={{ nha_dvd_repo_name }} AppStream
       baseurl=file:///media/rhel/AppStream
       enabled=1
       gpgcheck=0

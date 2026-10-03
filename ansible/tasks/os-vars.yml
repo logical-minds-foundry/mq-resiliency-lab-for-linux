@@ -1,0 +1,26 @@
+---
+# Shared per-OS-version vars loader (#1277, epic .github#280 spec §4.8).
+#
+# Loads roles/<os_vars_role>/vars/<Distribution>-<major>.yml (e.g. RedHat-9.yml) and
+# FAILS when no file matches: first_found raises on a miss, and that is the point — an OS
+# the role was never taught must stop here rather than half-provision on a silent family
+# default. Never soften the miss (no fallback file, no error suppression).
+#
+# Callers include it from a task file in roles/<role>/tasks/, naming their own role:
+#   - ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+#     vars:
+#       os_vars_role: <this role>
+# The include path is relative to the calling role's tasks/ dir, which is how Ansible
+# resolves a role's include_tasks AND how ansible-lint follows it (a templated
+# "{{ playbook_dir }}/..." path is not followable by the linter). The vars path below
+# uses playbook_dir: every playbook lives in ansible/, so it is <repo>/ansible for bake
+# and site plays alike (imported _*.yml plays and include_role/tasks_from entries too).
+# A role must ship a vars file for each catalog OS (lab/versions.yaml) that runs it;
+# tests/test_ansible_os_vars.py derives the required set from the catalog.
+- name: "load per-OS-version vars for {{ os_vars_role }}"
+  ansible.builtin.include_vars:
+    file: "{{ lookup('ansible.builtin.first_found', params) }}"
+  vars:
+    params:
+      files: ["{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yml"]
+      paths: ["{{ playbook_dir }}/roles/{{ os_vars_role }}/vars"]

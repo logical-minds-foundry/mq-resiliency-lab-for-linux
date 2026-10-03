@@ -2,7 +2,7 @@
 # Bake the pcmk-ubuntu24 box image (#103 T7, epic .github#103). The Pacemaker/SAN peer of
 # bake-nativeha-ubuntu.yml: it bakes the per-run-invariant install work the six Pacemaker
 # CLUSTER nodes (pcmk-a1..3, pcmk-b1..3) otherwise pay EVERY bootstrap on the bare
-# cloud-image/ubuntu-24.04 base — base IBM MQ (server + client + SDK + samples debs, NO
+# Ubuntu cloud-image base (lab/versions.yaml) — base IBM MQ (server + client + SDK + samples debs, NO
 # RDQM/DRBD) + acl + node-exporter + alloy.
 #
 # CLUSTER NODES ONLY (design D7/D8): this bakes the MQ product install the Pacemaker cluster

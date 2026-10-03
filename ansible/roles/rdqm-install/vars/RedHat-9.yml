@@ -1,0 +1,11 @@
+---
+# rdqm-install per-OS-version values for RHEL 9 (#1277, epic .github#280), loaded by
+# ansible/tasks/os-vars.yml. The MQ Advanced tar ships RDQM's prereq rpms under per-EL-major
+# dirs (Advanced/RDQM/PreReqs/el9/...), and the running kernel's release carries the same
+# EL tag, which the kmod pick strips to find the matching kmod-drbd rpm.
+rhel_el_tag: el9
+drbd_kmod_dir: el9/kmod-drbd-9
+pacemaker_dir: el9/pacemaker-2
+drbd_utils_dir: el9/drbd-utils-9
+# The offline DVD dnf repo's display name; the point release comes from the guest's facts.
+rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"

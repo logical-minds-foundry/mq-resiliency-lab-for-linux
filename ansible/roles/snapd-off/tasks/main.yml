@@ -5,7 +5,7 @@
 # (mon-probe); it is Before=multi-user.target and its ExecStart is only
 # `snap wait system seed.loaded`, i.e. it holds boot until snapd has started. On the boxes
 # with no snaps snapd does nothing at all: the cloud-image base seeds none and no bake
-# role installs one (verified #1250: infra-ubuntu24's state.json is seeded with zero
+# role installs one (verified #1250: the infra box's state.json is seeded with zero
 # snaps; `snap list` on a booted clone: "No snaps are installed yet").
 #
 # HOW (snapd_off_mode, see defaults/main.yml):

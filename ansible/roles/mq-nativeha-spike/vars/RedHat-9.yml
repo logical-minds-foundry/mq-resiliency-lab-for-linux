@@ -1,0 +1,5 @@
+---
+# mq-nativeha-spike per-OS-version values for RHEL 9 (#1277, epic .github#280), loaded by
+# ansible/tasks/os-vars.yml. The offline DVD dnf repo's display name; the point release
+# comes from the guest's facts.
+nha_spike_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"

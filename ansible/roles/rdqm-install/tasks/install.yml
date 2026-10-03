@@ -1,7 +1,7 @@
 # RDQM install — BAKEABLE half (#604, epic .github#70). The slow, per-run-invariant
 # install: MQ + the bundled LINBIT/DRBD stack from the no-charge Developers LinuxX64
 # tar, in ONE pre-QM pass (Phase B lesson: MQ's preinst refuses changes once QM shared
-# memory is live). Baked into the mq-rdqm-rhel9 fat box (ansible/bake-mq-rdqm.yml).
+# memory is live). Baked into the mq-rdqm fat box (ansible/bake-mq-rdqm.yml).
 # Holds NO per-instance state: the drbdpool VG (keyed to the instance's fresh extra
 # disk), the runtime `modprobe drbd`, and the base-OS `dnf update` are per-run and live
 # in configure.yml — NOT here, so the bake needs no extra disk and stays coupling-free.
@@ -13,6 +13,15 @@
 # emergency mode with a locked root — un-debuggable, no network, no SSH. Lab instances
 # always attach the DVD (topology), so the mount still succeeds there; a genuinely-needed
 # but absent repo instead fails loudly at the next dnf step (#604).
+#
+# Version-specific values (the EL tag, the RDQM PreReqs dirs, the DVD repo name) come from
+# vars/<Distribution>-<major>.yml through the shared fail-loud loader (#1277, epic
+# .github#280): an OS this role ships no vars file for stops here, before any install.
+- name: per-OS-version vars (EL tag, RDQM PreReqs dirs, DVD repo name)
+  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+  vars:
+    os_vars_role: rdqm-install
+
 - name: mount the install DVD (fstab + mount; ansible-core has no mount module)
   ansible.builtin.shell: |
     set -e
@@ -28,12 +37,12 @@
     mode: "0644"
     content: |
       [dvd-baseos]
-      name=RHEL 9.6 DVD BaseOS
+      name={{ rdqm_dvd_repo_name }} BaseOS
       baseurl=file:///media/rhel/BaseOS
       enabled=1
       gpgcheck=0
       [dvd-appstream]
-      name=RHEL 9.6 DVD AppStream
+      name={{ rdqm_dvd_repo_name }} AppStream
       baseurl=file:///media/rhel/AppStream
       enabled=1
       gpgcheck=0
@@ -62,12 +71,12 @@
   ansible.builtin.shell: |
     set -e
     KREL=$(uname -r)
-    BASE=${KREL%%.el9*}
-    GLOB="/tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/kmod-drbd-*${BASE//-/_}-*.rpm"
+    BASE=${KREL%%.{{ rhel_el_tag }}*}
+    GLOB="/tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/kmod-drbd-*${BASE//-/_}-*.rpm"
     KMOD=$(ls $GLOB 2>/dev/null || true)
     if [ -z "$KMOD" ]; then
       echo "ERROR: no kmod-drbd for kernel $KREL; shipped kmods:" >&2
-      ls /tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/ >&2
+      ls /tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/ >&2
       exit 1
     fi
     echo "$KMOD"
@@ -85,8 +94,8 @@
       MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
       MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
       MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm \
-      Advanced/RDQM/PreReqs/el9/pacemaker-2/*.rpm \
-      Advanced/RDQM/PreReqs/el9/drbd-utils-9/*.rpm \
+      Advanced/RDQM/PreReqs/{{ pacemaker_dir }}/*.rpm \
+      Advanced/RDQM/PreReqs/{{ drbd_utils_dir }}/*.rpm \
       {{ kmod_pick.stdout | trim }}
   args:
     creates: /opt/mqm/bin/crtmqm

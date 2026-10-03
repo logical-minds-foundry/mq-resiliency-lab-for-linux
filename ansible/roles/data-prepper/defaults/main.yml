@@ -91,7 +91,7 @@ data_prepper_dlq_file: "{{ data_prepper_dlq_dir }}/opensearch-sink.dlq"
 data_prepper_dlq_rotate_size: 100M
 data_prepper_dlq_rotate_count: 4
 # A DEDICATED logrotate config driven by its own hourly timer, deliberately NOT under
-# /etc/logrotate.d: Ubuntu 24.04's stock logrotate.timer fires only daily
+# /etc/logrotate.d: Ubuntu LTS's stock logrotate.timer fires only daily
 # (OnCalendar=daily), which cannot bound a burst, and keeping the rule out of
 # /etc/logrotate.d means exactly ONE runner ever rotates the file (the daily run and this
 # one, with separate state files, could otherwise race on the same copytruncate).

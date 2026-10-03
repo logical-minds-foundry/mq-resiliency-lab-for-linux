@@ -2,7 +2,7 @@
 # Bake the mq-nativeha-ubuntu24 box image (#103 T6, epic .github#103). The Ubuntu
 # OS-as-only-variable peer of bake-nativeha-rhel.yml: it bakes the per-run-invariant
 # install work the six nha-ubuntu-* nodes otherwise pay EVERY bootstrap on the bare
-# cloud-image/ubuntu-24.04 base — base IBM MQ (NO RDQM/DRBD, NO kernel pin: Native HA
+# Ubuntu cloud-image base (lab/versions.yaml) — base IBM MQ (NO RDQM/DRBD, NO kernel pin: Native HA
 # replicates in the raft log) + acl + node-exporter + alloy.
 #
 # ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue
