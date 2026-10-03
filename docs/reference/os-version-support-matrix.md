@@ -7,7 +7,9 @@
 > spike **S2** (spec §5) and plan task **T0a** of epic
 > [logical-minds-foundry/.github#280](https://github.com/logical-minds-foundry/.github/issues/280)
 > (issue [#1271](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1271)).
-> Tasks T8, T9, T10 and T11 consume it.
+> Tasks T8, T9, T10 and T11 consume it. T0b ([#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272))
+> added the live 26.04 package data (§3.3), ARM64 support (§5) and the
+> Ubuntu support-lag rule (§6).
 >
 > Builds on [`mq10-rhel9-vs-rhel10-and-rdqm-support.md`](mq10-rhel9-vs-rhel10-and-rdqm-support.md)
 > (#1095/#1096). That note's open item in §2 and §8 (the RHEL 10 "tested" status in
@@ -28,7 +30,7 @@
 | **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **unsupported** [data, S-1 footnote (7); S-3] |
 | **Ubuntu 26.04 LTS** | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** [data, S-1 footnotes (1)/(3)] |
 
-Source key (full URLs in §6):
+Source key (full URLs in §8):
 
 - **S-1**: IBM Software Product Compatibility Report (SPCR) for IBM MQ 10.0,
   operating-system data (deliverable `FA94B1F6888342969E7F9B505149F032`).
@@ -71,7 +73,7 @@ that as `unsupported` and not as `unknown`.
   validated DRBD kernel module for RHEL 10. That note inferred it from the
   kernel-modules list. SPCR footnote (7) is now an explicit IBM statement. The word
   "currently" leaves room for a future kmod. Re-check the kernel-modules list
-  ([ibm.biz/mqrdqmkernelmods](https://ibm.biz/mqrdqmkernelmods); human-fetch, §5).
+  ([ibm.biz/mqrdqmkernelmods](https://ibm.biz/mqrdqmkernelmods); human-fetch, §7).
 
 ### 2.3 The RHEL 10 point release to pin: **10.2**
 
@@ -91,6 +93,10 @@ that as `unsupported` and not as `unknown`.
   [Red Hat solution 7066628](https://access.redhat.com/solutions/7066628) for this.
   Exposure under the lab host's KVM is spike S3 (T0b,
   [#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272)).
+- **[data]** T0b found all eight x86-64-v3 marker flags (`abm avx2 bmi1 bmi2
+  f16c fma movbe xsave`) in a KVM `host-passthrough` guest on the cloud x86_64
+  host. TCG was not measured. See
+  [`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md) §1.
 
 ## 3. Ubuntu 26.04 LTS
 
@@ -161,10 +167,32 @@ The lab's Ubuntu cluster/SAN roles install these packages:
   lacks it. `pacemaker` moves a major version (2.1 → 3.0) and `pcs` moves
   0.11 → 0.12. Expect role fix-ups there too. T8/V2 must prove this; it is not
   established here.
-- **Pending T0b ([#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272)):**
-  live `apt-cache policy <pkg>` output from a 26.04 guest (plan T0a step 2).
-  T0b pastes it into its report and into this section. Until then the table above
-  rests on archive metadata, not on a booted guest's apt sources.
+- **[data] Live guest check (T0b, [#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272)).**
+  In a booted `cloud-image/ubuntu-26.04` `20260927.0.0` guest (Ubuntu
+  26.04.1 LTS, kernel `7.0.0-34-generic`), after `apt-get update`,
+  `apt-cache policy` gave the same candidates on arm64
+  ([#1290](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1290))
+  and amd64
+  ([#1291](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1291)).
+  They agree with the archive metadata above:
+
+  | Package | Installed | Candidate (arm64 and amd64) |
+  |---|---|---|
+  | `pacemaker` | (none) | `3.0.1-1ubuntu2` |
+  | `pcs` | (none) | `0.12.1-2ubuntu3` |
+  | `fence-agents-virsh` | (none) | `4.17.0-1ubuntu1` |
+  | `drbd-utils` | (none) | `9.22.0-1.2build1` |
+  | `targetcli-fb` | (none) | `1:3.0.1-0.1build1` |
+  | `linux-modules-extra-7.0.0-34-generic` | no output (unknown to apt) | no output (unknown to apt) |
+
+  The absence of `linux-modules-extra` is deliberate on Canonical's side: the
+  kernel team deprecated it from the 6.15 development kernel (25.10 cycle), and
+  all modules now ship in `linux-modules`
+  ([Ubuntu Community Hub, 2025-07-28](https://discourse.ubuntu.com/t/kernel-development-release-cadence-and-deprecation-of-linux-modules-extra/65176)).
+  An offline `modinfo` of the amd64 `linux-modules-7.0.0-34-generic` package
+  shows in-tree DRBD **8.4.11** and the LIO target modules. A load check inside a
+  booted guest, on both architectures, is left to T6/T8. Full detail:
+  [`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md) §2.
 
 ## 4. Defaults decision (spec §4.1)
 
@@ -184,7 +212,7 @@ and the resolver warns when it is selected.
   **not met** today. T9 should re-check S-1 when it runs. If IBM has added an
   Ubuntu 26.04 row that lists the MQ Queue Manager (and Native HA, for
   `nativeha-ubuntu`), the flip becomes permitted. Cite the new row when that
-  happens.
+  happens. §6.1 gives the rule and the method for checking.
 - **[judgment] (flag for the epic)** §4.1 gates *stack* defaults only.
   `infra: ubuntu:26` (spec goal 2) moves the shared Ubuntu MQ commons
   (`svc-sim`, `app-client`, `mon-probe`) to 26.04. Those nodes run the MQ server
@@ -195,9 +223,141 @@ and the resolver warns when it is selected.
   only `x86-64`, `IBM Z and IBM LinuxONE` and `POWER System - Little Endian`
   hardware for its Linux rows. There is no ARM64 row. The lab's arm64 (Apple
   Silicon) Ubuntu builds therefore run MQ on a hardware platform the SPCR does not
-  list, on 24.04 as well as on 26.04. (S-1)
+  list, on 24.04 as well as on 26.04. (S-1) §5 covers what IBM does offer on
+  ARM64.
 
-## 5. Human-fetch items
+## 5. ARM64 (aarch64) support
+
+> Added by T0b
+> ([#1272](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1272))
+> as follow-up research. Retrieved 2026-10-03. The IBM Support pages below were
+> fetched with a browser user-agent, outside `tools/ibm_doc_cache.py`; re-check
+> them in a browser.
+
+**Summary.** IBM MQ on Linux ARM64 (aarch64) is available only as IBM MQ
+Advanced for Developers: the `UbuntuLinuxARM64` deb tarball since 9.4.1, and a
+non-install ARM64 image for building your own development container since
+9.4.0. Both server and client are included. IBM licenses it as Non-Production
+and Non-Warranted, and describes it as "not suitable for production use …
+experimental … with no formal IBM support". MQTT and AMQP are unavailable.
+There is no production ARM64 eImage, no ARM64 redistributable client and no
+prebuilt ARM64 container, so ARM64 does not appear in the SPCR. Supported
+production Linux architectures for MQ 10.0 are x86-64, POWER LE and IBM Z. The
+lab's ARM64 (Apple Silicon) stacks run natively under the Developer licence:
+representative, but unsupported. Production-support-dependent results, such as
+RDQM ("only supported on RHEL x86-64"), must be confirmed on x86-64.
+
+The summary combines the claims below. Each is tagged on its own.
+
+- **[data]** The IBM Docs MQ 10.0 downloads page lists "Linux ARM64 (deb)" under
+  Development only, and the ARM64 non-install image "For development
+  environments".
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=information-mq-downloads>
+- **[data]** The "Downloading IBM MQ 10.0 LTS" production eImages are Windows,
+  Linux LE Power/Z/x86-64 and Ubuntu LE Power/Z/x86-64. None is ARM64.
+  <https://www.ibm.com/support/pages/downloading-ibm-mq-100-lts>
+- **[data]** IBM Developer tutorial "IBM MQ on ARM64" (2026-09-10): "not
+  suitable for production use … an experimental offering that is provided as is
+  with no formal IBM support".
+  <https://developer.ibm.com/tutorials/mq-connect-app-queue-manager-arm64/>
+- **[data]** IBM Community blog (R. Coppen, 2024-11-21): new in 9.4.1, ARM64
+  Ubuntu `.deb` packages ship as part of MQ Advanced for Developers; MQTT and
+  AMQP are not available.
+  <https://community.ibm.com/community/user/blogs/richard-coppen/2024/11/21/ibm-mq-developer-edition-now-available-for-arm64-u>
+- **[data]** Redistributable clients are "provided for Linux® x86-64 and Windows
+  64-bit platforms" only.
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=overview-redistributable-mq-clients>
+- **[data]** The prebuilt Developer container image is published for
+  amd64/s390x/ppc64le and is "not supported"
+  (<https://www.ibm.com/docs/SSYHRD_10.0.0/container/ctr_support_dev.html>). The
+  mq-container build docs say the devserver image builds on amd64 and arm64
+  (Apple Silicon)
+  (<https://github.com/ibm-messaging/mq-container/blob/master/docs/building.md>).
+- **[data]** The MQ 10.0 SPCR's Linux rows list only x86-64, IBM Z and POWER LE
+  hardware. (S-1; see §4)
+- **[data] (local)** The lab's cached
+  `10.0.0.0-IBM-MQ-Advanced-for-Developers-UbuntuLinuxARM64.tar.gz` contains
+  `ibmmq-server_10.0.0.0_arm64.deb` plus the runtime, client, SDK, AMS, web,
+  Java, JRE, GSKit and FT packages. It has no `ibmmq-xr` or `ibmmq-amqp` deb. Its
+  `MQServer/licenses/LI_en.txt` reads "IBM MQ Advanced for Developers
+  (Non-Warranted) 10.0 … Non-Production", and `MQServer/READMES/RPi_README.txt`
+  says "development purposes only … 'as is' and no support".
+- **[data] (local)** The lab runs the ARM64 build natively: boxes are baked per
+  host architecture (`*-aarch64.box`), and `platforms.py` selects
+  `driver: kvm` whenever the guest architecture equals the host's, so there is no
+  emulation.
+- **[judgment]** The SPCR omits ARM64 because it lists only supported production
+  platforms, and ARM64 is Developer-only.
+
+## 6. When a new Ubuntu LTS becomes IBM-supported
+
+### 6.1 The rule for our gate
+
+- **[judgment] Rule.** For the spec §4.1 defaults gate, a new Ubuntu version
+  counts as IBM-`supported` only when a **"Ubuntu \<ver\> LTS" row appears in
+  the SPCR for an IBM MQ 10.0.x deliverable** and that row lists the components
+  the stack needs (`MQ Queue Manager`, plus `Native HA` for `nativeha-ubuntu`).
+  Announcements, Ansible fixes or roadmap talk do not count. Cite the
+  deliverable ID and its `lastModified` when the row appears.
+- **Method (checkable).** Two public SPCR JSON endpoints, fetched with a browser
+  user-agent as in S-1 (§8):
+  1. `getDeliverableChain?deliverableId=<id>` names the deliverable and lists its
+     fix-pack children. Start from the MQ 10.0 deliverable
+     `FA94B1F6888342969E7F9B505149F032`:
+     <https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getDeliverableChain?deliverableId=FA94B1F6888342969E7F9B505149F032>
+  2. `getTSROsSupportSummary?deliverableId=<id>` returns the OS rows for one
+     deliverable. Check `osSupportDetails[].os` for the new Ubuntu row, and
+     `.serverSupportedComps` for the components. Run it for 10.0 and for each
+     newer 10.0.x child the chain lists.
+- **[data] Status on 2026-10-03.** The MQ 10.0 SPCR
+  (`FA94B1F6888342969E7F9B505149F032`, `lastModified` 2026-09-28) lists only
+  "Ubuntu 24.04 LTS" for Ubuntu, on x86-64, POWER LE and Z
+  (<https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getTSROsSupportSummary?deliverableId=FA94B1F6888342969E7F9B505149F032>).
+  The MQ 10.0.0.5 SPCR (`9CA6A0D6BAD147BEBB45A74CAF2CC1B5`, `lastModified`
+  2026-10-01) adds SLES 16 at product minimum 10.0.0.5, and Ubuntu is still
+  24.04 only
+  (<https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getTSROsSupportSummary?deliverableId=9CA6A0D6BAD147BEBB45A74CAF2CC1B5>).
+- **[data]** The "System Requirements for IBM MQ 10.0" page (modified
+  2026-06-16) says nothing about Ubuntu 26.04 or planned support
+  (<https://www.ibm.com/support/pages/system-requirements-ibm-mq-100>).
+  `ibm-messaging/mq-ansible` PR #145 ("…fix Ubuntu 26.04 compatibility",
+  2026-09-09) was closed unmerged; it is an Ansible fix, not a support statement
+  (<https://github.com/ibm-messaging/mq-ansible/pull/145>). No IBM announcement,
+  roadmap, Ideas entry, blog or release note about MQ on 26.04 was found.
+
+### 6.2 Historical lag from Ubuntu LTS GA to MQ support
+
+- **[data]** First MQ release whose SPCR lists each Ubuntu LTS, from the SPCR
+  `productMinimum` chain (`getDeliverableChain`) and IBM fix-list dates. Ubuntu
+  GA dates are from <https://changelogs.ubuntu.com/meta-release>.
+
+  | Ubuntu LTS (GA) | First MQ release supporting it (date) | Lag |
+  |---|---|---|
+  | 20.04 (2020-04-23) | 9.2.0.2 LTS (2021-03-31) | 342 days |
+  | 22.04 (2022-04-21) | 9.3.1 CD (2022-10-20); 9.2.0.7 LTS (2022-12-01); 9.3.0.2 LTS (2022-12-21) | 182 / 224 / 244 days |
+  | 24.04 (2024-04-25) | 9.3.0.25 LTS (2024-10-29); 9.4.2 CD and 9.4.0.10 LTS (2025-02-27) | 187 / 308 days |
+  | 26.04 (2026-04-23) | none yet (as of 2026-10-03) | over 163 days |
+
+  Supporting detail:
+  - The MQ 9.3 "What's new in LTS" page says 9.3.0 Fix Pack 2 adds support for
+    Ubuntu 22.04:
+    <https://www.ibm.com/docs/SSFKSJ_9.3.0/overview/mq_newchgd_lts.html>
+  - Ubuntu 24.04 was absent from MQ 9.4.0 (2024-06-18) and 9.4.1 CD
+    (2024-10-24). SPCR deliverable IDs: 9.4 `367442DE910A46B0A02768947525804E`,
+    9.4.1 `46C32ED25B164C8D8487D9E2044859F7`, 9.3.1
+    `30EEDDE07E1011EC93C02AA4DE91E682`, 9.3.0.25
+    `D1FF007C04994AF08D4C94AC178E64B9`, 9.2.0.7
+    `BF12FB907EB711EC93C02AA4DE91E682`.
+  - Fix lists:
+    <https://www.ibm.com/support/pages/fix-list-ibm-mq-version-92-lts> (and the
+    `-93-lts`, `-94-lts`, `-93x-continuous-delivery` and
+    `-94x-continuous-delivery` pages).
+- **[judgment] Estimate, not a date.** IBM has historically added a new Ubuntu
+  LTS 6 to 11 months after GA. For 26.04 that points to late October 2026
+  through March 2027, most likely in the next 10.0.x CD release or fix pack after
+  10.0.0.5. IBM has published no date. Apply §6.1 rather than this estimate.
+
+## 7. Human-fetch items
 
 Neither `WebFetch` nor `tools/ibm_doc_cache.py` can retrieve these. Open each in
 a browser to confirm or extend the data above. Nothing here paraphrases them.
@@ -213,7 +373,7 @@ a browser to confirm or extend the data above. Nothing here paraphrases them.
 4. **IBM MQ support for SELinux** (linked from every SPCR Linux footnote):
    <https://www.ibm.com/support/pages/node/261161>
 
-## 6. Sources
+## 8. Sources
 
 - **S-1: IBM SPCR, MQ 10.0, operating systems.** The SPCR page is a JavaScript
   app. Its data comes from a public JSON endpoint behind the page, and we fetched
