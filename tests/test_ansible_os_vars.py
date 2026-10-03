@@ -131,8 +131,16 @@ def _named(path: Path, name: str) -> dict[str, Any]:
 
 
 def _render(template: str, context: dict[str, Any]) -> str:
-    env = jinja2.Environment(  # noqa: S701 — renders shell/ini text, never HTML
-        undefined=jinja2.StrictUndefined, keep_trailing_newline=True
+    # Renders shell/ini text, never HTML, so string templates must NOT be HTML-escaped
+    # (escaping quotes and && would break the byte-for-byte comparison). An explicit
+    # select_autoescape policy (no escaping for string templates) states that intent
+    # instead of autoescape=False, which CodeQL flags as py/jinja2/autoescape-false.
+    env = jinja2.Environment(
+        undefined=jinja2.StrictUndefined,
+        keep_trailing_newline=True,
+        autoescape=jinja2.select_autoescape(
+            enabled_extensions=(), default_for_string=False, default=False
+        ),
     )
     return env.from_string(template).render(context)
 
