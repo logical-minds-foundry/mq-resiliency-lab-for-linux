@@ -145,9 +145,18 @@ stack's `teardown` gives the memory back. The x86 cloud host (Intel nested
 KVM) doesn't show the problem, so the `cloud` profile and the base topology keep
 4 KiB pages and reserve nothing.
 
-**x86 cloud.** *Placeholder: the current cloud numbers come from validation
-[#1260](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1260),
-which has not run yet.*
+**x86 cloud (data).** On a Google Compute Engine `n2-standard-16` host with an
+SSD (`pd-ssd`) boot disk, five consecutive cold `nativeha-ubuntu --no-dr`
+bootstraps took **721 s, 673 s, 684 s, 687 s and 689 s** (median 687 s), all
+clean
+([#1267](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1267),
+[#1200](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1200)).
+Run 1 includes the one-time upload of freshly baked boxes. Before the SSD boot
+disk and the per-run fixes, the same bring-up took 1000 s, 987 s and 1367 s
+([#1247](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1247)).
+
+Both platforms now finish well under the 900 s target. macOS and cloud run on
+different hardware, so compare the two directionally, not second for second.
 
 Method, raw numbers, and the comparison rules are in
 [perf and staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#52-measured-results).
