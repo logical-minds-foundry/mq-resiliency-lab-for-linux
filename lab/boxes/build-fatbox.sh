@@ -453,7 +453,7 @@ INV
 #     machine-id on first boot (#654). A baked, fixed /etc/machine-id makes systemd
 #     derive an identical DHCP DUID/client-id on every clone of the box; libvirt's
 #     dnsmasq keys leases on client-id, so two clones of the SAME Ubuntu fat box
-#     (infra-client + infra-svc, both infra-ubuntu24) are handed one IP despite
+#     (infra-client + infra-svc, both the infra box) are handed one IP despite
 #     distinct MACs — the collision corrupts vagrant's private-net netplan render and
 #     `netplan apply` fails, killing the vms phase before provision. Emptying (not
 #     removing) /etc/machine-id plus dropping the dbus copy is the documented systemd

@@ -10,7 +10,7 @@
 # ARM64 on the Apple-Silicon dev host, X64 on an x86 host — mirroring mq-install.
 #
 # Skip-if-baked (#103 T6, mirroring install-RedHat.yml #648/#659): the
-# mq-nativeha-ubuntu24 fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is
+# Ubuntu mq-nativeha fat box bakes this whole install, so /opt/mqm/inc/cmqc.h is
 # already present. Gate the ~2 GiB developer-tar copy + unpack on that marker —
 # WITHOUT it a baked node re-copies the tarball EVERY bootstrap (the #659 offender,
 # since /tmp is wiped on boot). The apt install / setmqinst / ulimits steps keep

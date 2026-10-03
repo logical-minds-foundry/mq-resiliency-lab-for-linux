@@ -195,7 +195,6 @@ MIGRATION = {
     "mq": "cache",
     "refs": "cache",
     "ansible_collections": "cache",
-    "rhel-9.6-x86_64-dvd.iso": "state",
     "snapshots": "state",
     "boxes": "state",
     "rhel96-box": "state",
@@ -214,6 +213,13 @@ MIGRATION = {
     "salt": "work",
 }
 
+# old build/ top-level name PATTERN -> destination bucket. The RHEL install DVD lived
+# at the build/ root under its versioned name; a pattern (not a hand-written ISO name)
+# keeps OS version tokens in lab/versions.yaml only (epic .github#280, #1279).
+MIGRATION_GLOBS = {
+    "*-dvd.iso": "state",
+}
+
 
 def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
     """Move existing top-level build/ entries into their bucket (rename = instant, even
@@ -221,7 +227,12 @@ def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
     main checkout; renames within repo/build/, so it never shells git."""
     build = repo / "build"
     planned: list[tuple[str, str]] = []
-    for name, bucket in MIGRATION.items():
+    entries = list(MIGRATION.items()) + [
+        (path.name, bucket)
+        for pattern, bucket in MIGRATION_GLOBS.items()
+        for path in sorted(build.glob(pattern))
+    ]
+    for name, bucket in entries:
         src = build / name
         if not src.exists():
             continue

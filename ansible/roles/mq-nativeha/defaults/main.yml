@@ -1,6 +1,6 @@
 ---
 # mq_media_dir: where the MQ-for-Developers LinuxX64 tarball lives. Defaults to the
-# per-run path (the playbook's sibling build/cache/mq). The mq-nativeha-rhel9 fat-box
+# per-run path (the playbook's sibling build/cache/mq). The RHEL mq-nativeha fat-box
 # bake (#88, epic .github#88) overrides it (-e mq_media_dir=<main-worktree>/build/cache/mq)
 # because a bake runs the feature-worktree playbook whose build/ is empty — the media must
 # come from the host-durable main-worktree cache. Mirrors rdqm-install / mq-install (#604).

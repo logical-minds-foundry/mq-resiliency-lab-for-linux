@@ -6,7 +6,7 @@
 # DRBD module (drbd-san), and the LIO admin tool targetcli (iscsi-target), plus the common
 # baked set every Ubuntu box carries. Baking on the target OS itself installs that OS's
 # packages against the box's own kernel — the controller-sourced cache this replaces
-# downloaded the CONTROLLER's release (noble) and missed on the kernel-modules package.
+# downloaded the CONTROLLER's release codename and missed on the kernel-modules package.
 #
 # It configures NO DRBD resource (no /etc/drbd.d/mqlun.res, no create-md, no `drbdadm up`)
 # and NO iSCSI target (no backstore, IQN, LUN, ACL or portal): those are per-run, keyed by

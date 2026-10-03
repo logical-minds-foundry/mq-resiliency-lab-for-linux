@@ -1,5 +1,5 @@
 ---
-# Bake the pcmk-ubuntu24 box image (#103 T7, epic .github#103). The Pacemaker/SAN peer of
+# Bake the pcmk box image (#103 T7, epic .github#103). The Pacemaker/SAN peer of
 # bake-nativeha-ubuntu.yml: it bakes the per-run-invariant install work the six Pacemaker
 # CLUSTER nodes (pcmk-a1..3, pcmk-b1..3) otherwise pay EVERY bootstrap on the bare
 # Ubuntu cloud-image base (lab/versions.yaml) — base IBM MQ (server + client + SDK + samples debs, NO
@@ -18,7 +18,7 @@
 #   ansible-playbook -i inventory/bake-host.ini bake-pcmk-ubuntu.yml
 #
 # The Ubuntu MQ media for the deb install rides the actual box build
-# (build-fatbox.sh --box pcmk-ubuntu24), which stages the host-arch developer tarball into the
+# (build-fatbox.sh --box <the pcmk box>), which stages the host-arch developer tarball into the
 # shared cache the install role reads. See docs/development/box-bake-manifest.md for the
 # authoritative per-role bake-vs-configure classification.
 

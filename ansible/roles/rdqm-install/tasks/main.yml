@@ -1,10 +1,10 @@
 # RDQM install (RHEL 9): MQ + the bundled LINBIT/DRBD stack, split along the
 # bake/configure line (#604, epic .github#70) using the repo's tasks_from idiom:
-#   * install.yml   — the slow, per-run-invariant install baked into mq-rdqm-rhel9.
+#   * install.yml   — the slow, per-run-invariant install baked into the mq-rdqm box.
 #   * configure.yml — per-instance work (drbd module load, drbdpool VG on the fresh
 #                     extra disk) that runs at bootstrap on every instance.
 #
-# main.yml runs both in order so any caller of the whole role (a fresh, un-baked rhel/9-x86_64
+# main.yml runs both in order so any caller of the whole role (a fresh, un-baked RHEL base
 # box) reaches the same end state as before the split. The per-run RDQM plays
 # (_rdqm-cluster-ha.yml / _rdqm-dr-replication.yml) invoke ONLY tasks_from: configure,
 # because the baked box already carries the install half; the bake playbook

@@ -1,5 +1,5 @@
 ---
-# Bake the mq-client-ubuntu24 box image (#659, epic .github#70 — the last install-elimination
+# Bake the mq-client box image (#659, epic .github#70 — the last install-elimination
 # lever). This is the Ubuntu peer of bake-mq-rdqm.yml: it bakes the slow, per-run-invariant
 # install work the three un-baked Ubuntu MQ commons (svc-sim, app-client, mon-probe) were
 # still paying EVERY bootstrap on the plain cloud-image base — MQ + node-exporter + alloy +
@@ -14,7 +14,7 @@
 #   ansible-playbook -i inventory/bake-host.ini bake-mq-ubuntu.yml
 #
 # Full proof (the Ubuntu MQ media for the deb install + the cgo SDK) rides the actual box
-# build (build-fatbox.sh --box mq-client-ubuntu24), which overrides mq_media_dir to the
+# build (build-fatbox.sh --box <the mq-client box>), which overrides mq_media_dir to the
 # host-durable main-worktree cache. See docs/development/box-bake-manifest.md for the
 # authoritative per-role bake-vs-configure classification.
 
@@ -29,7 +29,7 @@
       ansible.builtin.include_role:
         name: apt-autoupdate-off
 
-- name: Bake mq-client-ubuntu24 (install-only; no QMs, no channels, no renders, no secrets)
+- name: Bake the mq-client box (install-only; no QMs, no channels, no renders, no secrets)
   hosts: bake
   become: true
   vars:
