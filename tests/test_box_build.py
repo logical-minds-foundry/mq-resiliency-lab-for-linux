@@ -177,6 +177,28 @@ def test_build_plan_puts_a_local_base_box_first_and_never_forces_it():
     ]
 
 
+def _decide(action: str):
+    return lambda name: box.BoxDecision(
+        name=name, cached=True, age_days=None, hash_match=True, registered=True, action=action
+    )
+
+
+def test_build_plan_skips_the_base_box_when_the_fat_box_is_reused(monkeypatch):
+    # A REUSEd fat box never needs its base (build-fatbox.sh only used it on BUILD), so a
+    # bootstrap after a VM rebuild does not re-register a base box it will not use.
+    monkeypatch.setattr(box, "box_decision", _decide("REUSE"))
+    assert box._build_plan(["mq-rdqm-rhel9"], force=False) == [("mq-rdqm-rhel9", False)]
+
+
+def test_build_plan_pulls_the_base_box_when_the_fat_box_will_bake(monkeypatch):
+    monkeypatch.setattr(box, "box_decision", _decide("BUILD"))
+    assert box._build_plan(["mq-rdqm-rhel9", "mq-nativeha-rhel9"], force=False) == [
+        ("rhel/9-x86_64", False),
+        ("mq-rdqm-rhel9", False),
+        ("mq-nativeha-rhel9", False),
+    ]
+
+
 def test_build_plan_named_base_box_keeps_its_force():
     plan = box._build_plan(["mq-rdqm-rhel9", "rhel/9-x86_64"], force=True)
     assert plan == [("mq-rdqm-rhel9", True), ("rhel/9-x86_64", True)]

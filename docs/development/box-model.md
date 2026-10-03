@@ -307,10 +307,11 @@ by hand. `lab/scripts/stage-rhel-iso.sh` and `scripts/push-rhel-iso.sh` take
 `lab/boxes/build-fatbox.sh` builds a box by **provision-then-snapshot**:
 
 1. Ensure the base box is present. The RHEL base is itself locally built by
-   `rhel/build-box.sh`, and `mqlab` builds it **first**: `box build` of a RHEL fat
-   box ensures its base box (REUSE when cached, never forced by `box rebuild` of
-   the fat box), and the fat-box builder fails loudly if the base is not
-   registered. The Ubuntu base comes from Vagrant Cloud at the catalog's
+   `rhel/build-box.sh`, and `mqlab` builds it **first** whenever a RHEL fat box is
+   about to bake (a forced rebuild, or a builder decision other than REUSE). It
+   ensures the base (REUSE when cached; `box rebuild` of the fat box never forces
+   the base), and the fat-box builder fails loudly if the base is not registered.
+   A fat box REUSEd from cache never touches its base. The Ubuntu base comes from Vagrant Cloud at the catalog's
    `base_box_version` pin.
 2. Full-copy the base disk into the libvirt pool as a transient build disk, boot
    a throwaway `fatbox-<box>-build` domain, and wait for its DHCP lease + sshd.
@@ -464,7 +465,7 @@ decision, it renders and drives the shell builder's own:
 | Verb | What it does |
 |------|--------------|
 | `mqlab box status [BOXES…]` | read-only fleet table: per-box `ARCH` / `CACHED` / `AGE` / `HASH` (match\|mismatch) / `REGISTERED` / `DECISION` (REUSE\|BUILD\|STALE\|FORCE). The `ARCH` column shows each box's resolved build arch (host-resolved for the Ubuntu boxes, `x86_64` for the RHEL boxes). No side effects. |
-| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet; `--config <file>` for every box a build file needs (e.g. `os: rhel:9` builds the infra boxes plus the RHEL stacks' boxes on RHEL 9; an unsupported request exits 2 naming the fix). A RHEL fat box pulls in its base box first. Shares the ensure-box core with `bootstrap`. |
+| `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet; `--config <file>` for every box a build file needs (e.g. `os: rhel:9` builds the infra boxes plus the RHEL stacks' boxes on RHEL 9; an unsupported request exits 2 naming the fix). A RHEL fat box about to bake pulls in its base box first. Shares the ensure-box core with `bootstrap`. |
 | `mqlab box rebuild [BOXES…]` | **force a fresh bake in place** (`--rebuild-box`), overwriting the cache — the targeted "rebake one box" operation, no disk wipe. |
 | `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
 | `mqlab box gc [--dry-run]` | deregister the retired box names and delete their dead caches (§1, the one-time rename), then reclaim orphaned base volumes from re-bakes (§3). |

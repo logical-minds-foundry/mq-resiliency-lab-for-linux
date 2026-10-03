@@ -313,16 +313,24 @@ def _build_steps(plan: list[tuple[str, bool]], facts: HostFacts) -> list[Command
 
 
 def _build_plan(names: list[str], *, force: bool) -> list[tuple[str, bool]]:
-    """(box, force) in build order: each locally-built base box the named fat boxes bake
-    on comes FIRST (build-fatbox.sh requires it registered), then the named boxes.
+    """(box, force) in build order: the locally-built base box of each named fat box
+    that is about to BAKE comes FIRST (build-fatbox.sh requires it registered), then
+    the named boxes.
 
-    A base box pulled in only as a dependency is ensured, never forced — `box rebuild`
-    of a fat box must not trigger a 45-90 minute base rebuild; name the base box to
-    force it."""
+    The base is pulled in only when its fat box will actually bake — a forced rebuild,
+    or a builder decision other than REUSE — exactly when build-fatbox.sh used to build
+    it itself. A fat box REUSEd from cache never needs its base, so a bootstrap after a
+    VM rebuild does not re-register a base box it will not use. A base box pulled in as
+    a dependency is ensured, never forced: `box rebuild` of a fat box must not trigger a
+    45-90 minute base rebuild; name the base box to force it."""
+
+    def bakes(name: str) -> bool:
+        return force or box_decision(name).action != "REUSE"
+
     deps = [
         FLEET[n].os.base_box
-        for n in names
-        if FLEET[n].role is not None and FLEET[n].os.base_box in FLEET
+        for n in dict.fromkeys(names)
+        if FLEET[n].role is not None and FLEET[n].os.base_box in FLEET and bakes(n)
     ]
     plan = [(base, False) for base in dict.fromkeys(deps) if base not in names]
     return plan + [(name, force) for name in dict.fromkeys(names)]
