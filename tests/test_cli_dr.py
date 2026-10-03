@@ -40,7 +40,7 @@ def _deps(runner):
 _RDQM_TOPO = (
     "nodes:\n  rdqm-a1: {nics: {net-mgmt: 10.50.0.31}}\n"
     "groups:\n  rdqm_a: [rdqm-a1]\n"
-    "stacks:\n  rdqm-rhel:\n    mechanism: rdqm\n    os: rhel\n    short: RDQM\n"
+    "stacks:\n  rdqm-rhel:\n    mechanism: rdqm\n    os_family: rhel\n    short: RDQM\n"
     "    cluster_group: rdqm_a\n    groups: [rdqm_a]\n"
     "    qm: { vip: 10.10.1.100, vip_b: 10.10.2.100 }\n"
     "    verbs:\n"
@@ -52,7 +52,8 @@ _RDQM_TOPO = (
 _PCMK_TOPO = (
     "nodes:\n  pcmk-a1: {nics: {net-mgmt: 10.50.0.51}}\n"
     "groups:\n  pcmk_a: [pcmk-a1]\n"
-    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n    os: ubuntu\n    short: PCMK\n"
+    "stacks:\n  pcmk-ubuntu:\n    mechanism: pacemaker-san\n"
+    "    os_family: ubuntu\n    short: PCMK\n"
     "    cluster_group: pcmk_a\n    groups: [pcmk_a]\n"
     "    qm: { vip: 10.10.1.200, vip_ext: 10.60.0.10 }\n"
     "    verbs: { qm-status: { pcs: status resources } }\n"

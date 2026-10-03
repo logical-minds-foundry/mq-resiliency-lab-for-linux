@@ -27,6 +27,7 @@ from mqlab.phases import (
 )
 from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import lab_stacks
+from mqlab.versions import VersionError, load_catalog, node_boxes
 
 # Mirror tests/test_stacks.py's seeded topology, plus the lab networks the net
 # phase enumerates and the commons (obs_box/probe/svc/app) groups the vms phase
@@ -34,15 +35,15 @@ from mqlab.stacks import lab_stacks
 # in all_vms so the vms phase brings them up alongside the obs pair.
 TOPO = (
     "nodes:\n"
-    "  san-a: {}\n"
-    "  pcmk-a1: {}\n"
-    "  pcmk-a2: {}\n"
-    "  pcmk-a3: {}\n"
-    "  pcmk-b1: {}\n"
-    "  obs: {}\n"
-    "  mon-probe: {}\n"
-    "  svc-sim: {}\n"
-    "  app-client: {}\n"
+    "  san-a: { box: base }\n"
+    "  pcmk-a1: { box: pcmk }\n"
+    "  pcmk-a2: { box: pcmk }\n"
+    "  pcmk-a3: { box: pcmk }\n"
+    "  pcmk-b1: { box: pcmk }\n"
+    "  obs: { box: obs }\n"
+    "  mon-probe: { box: mq-client }\n"
+    "  svc-sim: { box: mq-client }\n"
+    "  app-client: { box: mq-client }\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1, pcmk-a2, pcmk-a3]\n"
@@ -54,7 +55,7 @@ TOPO = (
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
-    "    os: ubuntu\n"
+    "    os_family: ubuntu\n"
     "    short: PCMK\n"
     "    groups: [san_a, pcmk_a, pcmk_b]\n"
     "    dr_groups: [pcmk_b]\n"
@@ -316,9 +317,9 @@ def test_vms_build_steps_batches_default_n_preserving_order(monkeypatch, tmp_pat
     ]
     # Concatenation preserves the authoritative HADR order exactly.
     assert _batched_targets(steps) == _EXPECTED_VMS
-    # These fixture nodes declare no platform, so they all boot the one host-resolved
-    # base box: the two multi-guest batches share a box and serialize (#859); the lone
-    # trailing guest has no in-batch contention, so it keeps the parallel default.
+    # Each multi-guest batch repeats a box (the pcmk nodes share the pcmk box; the
+    # mq-client commons share theirs), so both serialize (#859); the lone trailing guest
+    # has no in-batch contention, so it keeps the parallel default.
     assert [_is_serial(s) for s in steps] == [True, True, False]
     # Multi-batch runs carry a [i/n] progress label for a readable transcript.
     assert [s.label for s in steps] == [
@@ -404,45 +405,52 @@ def test_batch_guests_contiguous_chunks(items, size, expected):
 
 # --- #859: same-box boot serialization ------------------------------------- #
 
-# A topology slice exercising the box-contention key: two fat-box platforms mapping
-# to distinct boxes, a shared platform (two guests, one box), and platform-less guests
-# (the host-resolved base box). No file I/O — the helpers take a topo dict directly.
+# A topology slice exercising the box-contention key: two stack nodes on one role (one
+# box), a shared-node role on a distinct box, and `base`-role guests (the bare base box).
+# No file I/O — the helpers take the version layer's per-node selection directly.
 _BOX_TOPO = {
-    "boxes": {
-        "fat-rhel": {"box": "mq-nativeha-rhel9"},
-        "fat-ubuntu": {"box": "mq-client-ubuntu24"},
-    },
+    "groups": {"nha_rhel_crr_a": ["nha-rhel-crr-a1", "nha-rhel-crr-a2"]},
+    "stacks": {"nativeha-rhel-crr": {"os_family": "rhel", "groups": ["nha_rhel_crr_a"]}},
     "nodes": {
-        "nha-rhel-crr-a1": {"platform": "fat-rhel"},
-        "nha-rhel-crr-a2": {"platform": "fat-rhel"},
-        "svc-sim": {"platform": "fat-ubuntu"},
-        "san-a": {},  # no platform → host-resolved base box
-        "san-b": {},  # no platform → host-resolved base box
+        "nha-rhel-crr-a1": {"box": "mq-nativeha"},
+        "nha-rhel-crr-a2": {"box": "mq-nativeha"},
+        "svc-sim": {"box": "mq-client"},
+        "san-a": {"box": "base"},  # the bare base box
+        "san-b": {"box": "base"},  # the bare base box
     },
 }
+_BOXES = node_boxes(_BOX_TOPO, load_catalog())
 
 
-def test_guest_box_resolves_platform_to_box():
-    """A guest's contention key is the box its platform clones (via the registry)."""
-    assert _guest_box("nha-rhel-crr-a1", _BOX_TOPO) == "mq-nativeha-rhel9"
-    assert _guest_box("svc-sim", _BOX_TOPO) == "mq-client-ubuntu24"
+def test_guest_box_resolves_role_to_generated_box():
+    """A guest's contention key is the generated box its role resolves to."""
+    cat = load_catalog()
+    assert (
+        _guest_box("nha-rhel-crr-a1", _BOXES)
+        == cat.box("mq-nativeha", cat.default_os("nativeha-rhel-crr")).name
+    )
+    assert _guest_box("svc-sim", _BOXES) == cat.box("mq-client", cat.infra).name
 
 
-def test_guest_box_platformless_folds_to_host_resolved_base():
-    """Guests with no platform (and group hosts absent from nodes:) all clone the one
-    host-resolved base box, so they share the sentinel key."""
-    assert _guest_box("san-a", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
-    assert _guest_box("san-b", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
-    # A group host not present in nodes: is treated as platform-less, not an error.
-    assert _guest_box("not-a-node", _BOX_TOPO) == _HOST_RESOLVED_BASE_BOX
+def test_guest_box_base_role_folds_to_host_resolved_base():
+    """`base`-role guests (and group hosts absent from nodes:) all clone the one bare
+    base box, so they share the sentinel key."""
+    assert _guest_box("san-a", _BOXES) == _HOST_RESOLVED_BASE_BOX
+    assert _guest_box("san-b", _BOXES) == _HOST_RESOLVED_BASE_BOX
+    # A group host not present in nodes: is treated as the base box, not an error.
+    assert _guest_box("not-a-node", _BOXES) == _HOST_RESOLVED_BASE_BOX
 
 
-def test_guest_box_unknown_platform_fails_loud():
-    """A platform absent from the boxes: registry is a garbled dial — fail loud rather
-    than silently mis-group the boot."""
-    topo = {"boxes": {}, "nodes": {"x": {"platform": "ghost"}}}
-    with pytest.raises(ValueError, match="unknown platform 'ghost'"):
-        _guest_box("x", topo)
+def test_vms_steps_fail_loud_on_an_unknown_box_role(monkeypatch, tmp_path):
+    """A garbled role is refused by the version layer before any boot is grouped."""
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    _seed(tmp_path)
+    (tmp_path / "lab" / "topology.yaml").write_text(
+        TOPO.replace("  pcmk-b1: { box: pcmk }\n", "  pcmk-b1: { box: ghost }\n")
+    )
+    stack = lab_stacks()["pcmk-ubuntu"]
+    with pytest.raises(VersionError, match="box role 'ghost'"):
+        PHASES[1].build_steps(stack, None)
 
 
 @pytest.mark.parametrize(
@@ -459,7 +467,7 @@ def test_guest_box_unknown_platform_fails_loud():
 )
 def test_batch_shares_box(batch, expected):
     """A batch needs --no-parallel iff two+ of its guests clone the same box (#859)."""
-    assert _batch_shares_box(batch, _BOX_TOPO) is expected
+    assert _batch_shares_box(batch, _BOXES) is expected
 
 
 def test_provision_build_steps_playbook_and_qm_vars(monkeypatch, tmp_path):
@@ -494,7 +502,7 @@ def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
         "stacks:\n"
         "  nativeha-ubuntu:\n"
         "    mechanism: native-ha\n"
-        "    os: ubuntu\n"
+        "    os_family: ubuntu\n"
         "    short: NHAU\n"
         "    groups: []\n"
         "    provision: null\n"
@@ -517,13 +525,13 @@ def test_provision_build_steps_raises_when_no_playbook(monkeypatch, tmp_path):
 # #860 NIC-assurance guard. Commons are Ubuntu and always skipped.
 RHEL_TOPO = (
     "nodes:\n"
-    "  rdqm-a1: { platform: mq-rdqm-rhel9, nics: {net-mgmt: 10.50.0.31, net-hb-a: 172.16.1.31} }\n"
-    "  rdqm-a2: { platform: mq-rdqm-rhel9, nics: {} }\n"
-    "  ubu-1:   { platform: mq-client-ubuntu24, nics: { net-mgmt: 10.50.0.99 } }\n"
-    "  obs: {}\n"
-    "  mon-probe: {}\n"
-    "  svc-sim: {}\n"
-    "  app-client: {}\n"
+    "  rdqm-a1: {box: mq-rdqm, nics: {net-mgmt: 10.50.0.31, net-hb-a: 172.16.1.31} }\n"
+    "  rdqm-a2: {box: mq-rdqm, nics: {} }\n"
+    "  ubu-1:   { box: mq-client, nics: { net-mgmt: 10.50.0.99 } }\n"
+    "  obs: { box: obs }\n"
+    "  mon-probe: { box: mq-client }\n"
+    "  svc-sim: { box: mq-client }\n"
+    "  app-client: { box: mq-client }\n"
     "groups:\n"
     "  rdqm_a:  [rdqm-a1, rdqm-a2, ubu-1]\n"
     "  obs_box: [obs]\n"
@@ -533,7 +541,7 @@ RHEL_TOPO = (
     "stacks:\n"
     "  rdqm-rhel:\n"
     "    mechanism: rdqm\n"
-    "    os: rhel\n"
+    "    os_family: rhel\n"
     "    short: RDQM\n"
     "    groups: [rdqm_a]\n"
     "    provision: ansible/site-rdqm.yml\n"
@@ -720,16 +728,16 @@ def test_all_vms_dedupes_overlap(monkeypatch, tmp_path):
     """
     topo = (
         "nodes:\n"
-        "  h1: {}\n"
-        "  obs: {}\n"
+        "  h1: { box: mq-rdqm }\n"
+        "  obs: { box: obs }\n"
         "groups:\n"
         "  stack_grp: [h1, obs]\n"  # obs is both a stack member and commons
         "  obs_box:   [obs]\n"
         "  probe:     [obs]\n"  # obs again -> commons-group overlap
         "stacks:\n"
-        "  my-stack:\n"
+        "  rdqm-rhel:\n"
         "    mechanism: rdqm\n"
-        "    os: rhel\n"
+        "    os_family: rhel\n"
         "    short: TEST\n"
         "    groups: [stack_grp]\n"
         "    provision: ansible/site-x.yml\n"
@@ -746,7 +754,7 @@ def test_all_vms_dedupes_overlap(monkeypatch, tmp_path):
     (lab / "networks").mkdir(parents=True)
     (lab / "topology.yaml").write_text(topo)
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    stack = lab_stacks()["my-stack"]
+    stack = lab_stacks()["rdqm-rhel"]
     steps = PHASES[1].build_steps(stack, None)
     targets = _batch_payload(steps[0])
     assert targets.count("obs") == 1  # listed once despite three appearances
@@ -830,14 +838,14 @@ def test_observe_no_dr_limits_to_site_a(monkeypatch, tmp_path):
 # all_vms appends infra at the TAIL — the pre-#1164 order _boot_order corrects.
 TOPO_INFRA = (
     "nodes:\n"
-    "  san-a: {}\n"
-    "  pcmk-a1: {}\n"
-    "  obs: {}\n"
-    "  mon-probe: {}\n"
-    "  svc-sim: {}\n"
-    "  app-client: {}\n"
-    "  infra-client: {}\n"
-    "  infra-svc: {}\n"
+    "  san-a: { box: base }\n"
+    "  pcmk-a1: { box: pcmk }\n"
+    "  obs: { box: obs }\n"
+    "  mon-probe: { box: mq-client }\n"
+    "  svc-sim: { box: mq-client }\n"
+    "  app-client: { box: mq-client }\n"
+    "  infra-client: { box: infra }\n"
+    "  infra-svc: { box: infra }\n"
     "groups:\n"
     "  san_a:   [san-a]\n"
     "  pcmk_a:  [pcmk-a1]\n"
@@ -849,7 +857,7 @@ TOPO_INFRA = (
     "stacks:\n"
     "  pcmk-ubuntu:\n"
     "    mechanism: pacemaker-san\n"
-    "    os: ubuntu\n"
+    "    os_family: ubuntu\n"
     "    short: PCMK\n"
     "    groups: [san_a, pcmk_a]\n"
     "    provision: ansible/site-pcmk.yml\n"

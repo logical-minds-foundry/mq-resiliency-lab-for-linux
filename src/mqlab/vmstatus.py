@@ -3,7 +3,7 @@
 Echoes the virsh command AND streams its raw output (the live-State source), tees
 it to the transcript, then renders the *full* topology fleet joined with that state
 — guests that exist and guests that are merely defined (`not created`), with stack and
-platform. Both inputs are exposed and the table caption attributes every column to
+box. Both inputs are exposed and the table caption attributes every column to
 its source (#88): a transparency tool must show where its synthesis comes from. The
 rendered table earns its keep because it composes two sources (vs the pass-through
 net table removed in #70).
@@ -28,17 +28,18 @@ _VM_LIST = Command(["virsh", "-c", "qemu:///system", "list", "--all"])  # noqa: 
 
 
 _CAPTION = (
-    "Guest / Platform / Stack(s) from lab/topology.yaml  ·  State from the virsh output above  "
+    "Guest / Box / Stack(s) from lab/topology.yaml + lab/versions.yaml  ·  State from the virsh "
+    "output above  "
     "( 'not created' = defined in topology, absent from virsh )"
 )
 
 
 def _table(rows: list[FleetRow]) -> Table:
     table = Table(title="lab fleet", caption=_CAPTION)
-    for column in ("Guest", "Platform", "State", "Stack(s)"):
+    for column in ("Guest", "Box", "State", "Stack(s)"):
         table.add_column(column)
     for row in rows:
-        table.add_row(row.guest, row.platform, row.state, row.stacks)
+        table.add_row(row.guest, row.box, row.state, row.stacks)
     return table
 
 
@@ -61,9 +62,9 @@ def vm_status_core(
         captured.append(line)
 
     exit_code = runner.run(_VM_LIST, sink)
-    platforms = lab_guests()
+    boxes = lab_guests()
     if guests is not None:
-        platforms = {g: p for g, p in platforms.items() if g in guests}
-    rows = fleet_rows(platforms, parse_domain_states("\n".join(captured)))
+        boxes = {g: b for g, b in boxes.items() if g in guests}
+    rows = fleet_rows(boxes, parse_domain_states("\n".join(captured)))
     renderer.table(_table(rows))
     return exit_code

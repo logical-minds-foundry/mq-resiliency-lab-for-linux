@@ -18,25 +18,27 @@ from mqlab import hugepages, platforms
 from mqlab import topology as t
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.paths import repo_root
+from mqlab.versions import load_catalog, node_boxes
 
 X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
 ARM_KVM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
 
 BASE: dict[str, Any] = {
-    "boxes": {
-        "ubuntu24-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"},
-        "ubuntu24-arm64": {"box": "cloud-image/ubuntu-24.04", "arch": "aarch64"},
-    },
     "defaults": {"cpus": 1, "memory": 1024},
     "boot_batch": 4,
     "nodes": {
-        "obs": {"cpus": 12, "memory": 10240},
-        "nha-a1": {"memory": 2048},
-        "mon-probe": {},
-        "odd": {"memory": 1025},
+        "obs": {"box": "obs", "cpus": 12, "memory": 10240},
+        "nha-a1": {"box": "infra", "memory": 2048},
+        "mon-probe": {"box": "mq-client"},
+        "odd": {"box": "infra", "memory": 1025},
     },
     "env_profiles": {"macos": {"memory_backing": "hugepages"}, "cloud": {}},
 }
+
+
+def _boxes(topo: dict[str, Any]) -> dict[str, Any]:
+    """The version layer's per-node box selection (what ensure_resolved passes in)."""
+    return node_boxes(topo, load_catalog())
 
 
 def _real_topology() -> dict[str, Any]:
@@ -100,7 +102,7 @@ def test_guest_memory_mirrors_the_provider_resolution():
     assert hugepages.guest_memory_mib(topo, "mon-probe") == 1024  # defaults.memory
     no_defaults = {"nodes": {"bare": None}}
     assert hugepages.guest_memory_mib(no_defaults, "bare") == 1024  # platforms' fallback
-    resolved = platforms.resolve(topo, X86_KVM)
+    resolved = platforms.resolve(topo, X86_KVM, _boxes(topo))
     for guest in ("obs", "nha-a1", "mon-probe", "odd"):
         assert hugepages.guest_memory_mib(topo, guest) == resolved[guest].memory
 
@@ -199,16 +201,14 @@ def test_read_meminfo_fails_loud_without_hugetlb(tmp_path):
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("facts", [X86_KVM, ARM_KVM])
 def test_resolved_render_carries_backing_for_every_guest(facts):
-    rendered = yaml.safe_load(
-        platforms.render_resolved(t.effective(copy.deepcopy(BASE), env="macos"), facts)
-    )
+    topo = t.effective(copy.deepcopy(BASE), env="macos")
+    rendered = yaml.safe_load(platforms.render_resolved(topo, facts, _boxes(topo)))
     assert {n["memory_backing"] for n in rendered["nodes"].values()} == {"hugepages"}
 
 
 def test_resolved_render_without_lever_carries_none():
-    rendered = yaml.safe_load(
-        platforms.render_resolved(t.effective(copy.deepcopy(BASE), env="cloud"), X86_KVM)
-    )
+    topo = t.effective(copy.deepcopy(BASE), env="cloud")
+    rendered = yaml.safe_load(platforms.render_resolved(topo, X86_KVM, _boxes(topo)))
     assert {n["memory_backing"] for n in rendered["nodes"].values()} == {None}
 
 

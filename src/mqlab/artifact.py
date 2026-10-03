@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from mqlab.versions import BoxEntry
+
 # IBM MQ Advanced for Developers is a no-charge, NO-AUTH public download — so a
 # credential-less box (e.g. the anonymous bootstrap identity, #291) can fetch it.
 MQ_CDN_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv"
@@ -59,22 +61,23 @@ def _verify_sha256(path: Path) -> None:
         raise ValueError(f"sha256 mismatch for {path.name}: {actual} != {expected}")
 
 
-def ensure_mq_tarballs_for_platforms(
-    platforms: set[str],
+def ensure_mq_tarballs_for_boxes(
+    boxes: set[BoxEntry],
     mq_version: str,
     build_mq_dir: Path,
     *,
     fetch: Callable[[str, Path], None],
 ) -> list[Path]:
-    """Ensure the MQ tarball for each given platform is present + valid in the cache.
+    """Ensure the MQ tarball for each given box is present + valid in the cache.
 
-    The stack/commons bootstrap path (#350) resolves the platform set (host-resolved,
-    #276) and passes it here; this only acquires it (fetch on a miss, verify the
-    sha256 sidecar). One place to fetch + verify, no silent fallback.
+    The stack/commons bootstrap path (#350) resolves the box set through the version
+    layer (versions.node_boxes) and passes it here; this only acquires it (fetch on a
+    miss, verify the sha256 sidecar). One place to fetch + verify, no silent fallback.
+    Boxes that share a tarball (same family + arch) resolve to one cached file.
     """
     paths: list[Path] = []
-    for platform in sorted(platforms):
-        name = tarball_name(mq_version, platform)
+    names = sorted({tarball_name(mq_version, entry) for entry in boxes})
+    for name in names:
         dest = build_mq_dir / name
         if not dest.exists():
             fetch(name, dest)  # raises on failure (no silent fallback)

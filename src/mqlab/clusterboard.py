@@ -10,6 +10,7 @@ import yaml
 
 from mqlab.paths import repo_root, work
 from mqlab.stacks import lab_stacks
+from mqlab.versions import load_catalog, stack_ref
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -1443,11 +1444,15 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
     }
 
 
+# The mechanism description per arm. The OS label is NOT written here: it is appended
+# from the version layer (the stack's instance record, else its catalog default), so a
+# board names the OS the stack actually runs ("Ubuntu 24", "RHEL 9") with no version
+# literal (epic .github#280).
 _ARM_NAMES = {
-    "pcmk-ubuntu": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN · Ubuntu 24.04 (arm64)",
-    "nativeha-rhel-crr": "MQ raft Native HA + CRR cross-region · RHEL 9.6 (x86_64)",
-    "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region · Ubuntu 24.04 LTS",
-    "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr) · RHEL 9 (x86_64)",
+    "pcmk-ubuntu": "Pacemaker HA + cross-site DR · DRBD/iSCSI SAN",
+    "nativeha-rhel-crr": "MQ raft Native HA + CRR cross-region",
+    "nativeha-ubuntu": "MQ raft Native HA + CRR cross-region",
+    "rdqm-rhel": "DRBD + Pacemaker HA (rdqmadm) + cross-site DR (rdqmdr)",
 }
 _ARM_KIND = {
     "pcmk-ubuntu": "PCMK Cluster",
@@ -1458,8 +1463,11 @@ _ARM_KIND = {
 
 
 def _title_banner(arm: str, y: int) -> dict[str, Any]:
-    """A spelled-out title across the top naming this cluster (#219 feedback)."""
+    """A spelled-out title across the top naming this cluster (#219 feedback) and the OS
+    it runs, from the version layer."""
     name = _ARM_NAMES.get(arm, arm)
+    if arm in _ARM_NAMES:
+        name = f"{name} · {stack_ref(arm, load_catalog()).label}"
     kind = _ARM_KIND.get(arm, "Cluster")
     return {
         "type": "text",

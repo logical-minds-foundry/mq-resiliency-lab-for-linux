@@ -1,7 +1,7 @@
 """MQ tarball naming + the shared observability version overlay (#266/#350).
 
 The per-setup SUT version manifest was dropped in the #350 cutover (bootstrap uses
-the repo-default MQ version, host-resolved per platform). What survives here is the
+the repo-default MQ version, host-resolved per box). What survives here is the
 arch→tarball-name mapping every fetch path needs, plus the shared observability
 manifest overlay the obs provision consumes.
 """
@@ -14,54 +14,23 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from mqlab.hostfacts import AARCH64, X86_64, probe
-from mqlab.paths import manifests_root, mq_version_pin_path, repo_root
+from mqlab.paths import manifests_root, mq_version_pin_path
 from mqlab.platforms import box_build_arch
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from mqlab.hostfacts import HostFacts
+    from mqlab.versions import BoxEntry
 
-# The OS-family segment of the MQ-for-Developers tarball name, per VM platform. RHEL
-# and AlmaLinux take the generic "Linux" build; Ubuntu takes "UbuntuLinux". The ARCH
-# segment is resolved SEPARATELY (below), through the same box_build_arch authority the
-# box builder consumes (#103 D10) — so a host-resolved Ubuntu fat box (no `arch:` pin)
-# picks up the build host's arch instead of the old baked-in x86 literal, and RHEL
-# (x86-pinned) stays LinuxX64 on every host. Membership here is also the known-platform
-# gate: an absent platform is an error, not a silent default.
-_OS_PREFIX = {
-    "ubuntu24-arm64": "UbuntuLinux",
-    "ubuntu24-x86_64": "UbuntuLinux",
-    "rhel9-x86_64": "Linux",
-    # The fat RDQM box platform (#604) is RHEL x86_64 — same LinuxX64 tarball as
-    # rhel9-x86_64; the bake consumes it, the stack-prereq ensure keeps it cached for
-    # the repointed rdqm_a/rdqm_b nodes.
-    "mq-rdqm-rhel9": "Linux",
-    # The fat native-HA RHEL box platform (#667, epic .github#88) is RHEL x86_64 — same
-    # LinuxX64 tarball. The six nha-rhel-* nodes are repointed to it (#668) and run MQ,
-    # so _stack_mq_platforms feeds it into tarball_name.
-    "mq-nativeha-rhel9": "Linux",
-    # The fat obs box platform (#605) is Ubuntu, now host-resolved (#103 D3): it takes
-    # the same Ubuntu tarball svc/app/probe already need for this host's arch. The obs
-    # node is a commons member, so _commons_mq_platforms feeds this into tarball_name.
-    "obs-ubuntu24": "UbuntuLinux",
-    # The fat MQ-commons box platform (#659) is Ubuntu, now host-resolved (#103 D3):
-    # svc/app/probe repoint to it and are MQ commons, so _commons_mq_platforms feeds this
-    # into tarball_name; the bake consumed the host-arch Ubuntu tarball + the MQ SDK.
-    "mq-client-ubuntu24": "UbuntuLinux",
-    # The fat native-HA Ubuntu box platform (#103 T6) is Ubuntu, host-resolved (no `arch:`
-    # pin — the OS-as-only-variable peer of mq-nativeha-rhel9). The six nha-ubuntu-* nodes
-    # are repointed to it and run MQ, so _stack_mq_platforms feeds it into tarball_name;
-    # the arch resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud).
-    "mq-nativeha-ubuntu24": "UbuntuLinux",
-    # The fat pcmk-ubuntu24 box platform (#103 T7) is Ubuntu, host-resolved (no `arch:` pin).
-    # The six Pacemaker cluster nodes (pcmk-a1..3, pcmk-b1..3) are repointed to it and run
-    # MQ via roles/mq-install, so _stack_mq_platforms feeds it into tarball_name; the arch
-    # resolves to the build host (UbuntuLinuxARM64 on the Mac, X64 on the cloud). The SAN
-    # targets carry no MQ payload and are NOT here (host-resolved base box, D8).
-    "pcmk-ubuntu24": "UbuntuLinux",
-    "alma9-x86_64": "Linux",
-}
+# The OS-family segment of the MQ-for-Developers tarball name, per OS family (epic
+# .github#280). RHEL takes the generic "Linux" build; Ubuntu takes "UbuntuLinux". The
+# ARCH segment is resolved SEPARATELY (below), through the same box_build_arch authority
+# the box builder consumes (#103 D10) — so a host-resolved Ubuntu box (no arch pin)
+# picks up the build host's arch, and RHEL (x86-pinned by the catalog) stays LinuxX64 on
+# every host. Membership here is also the known-family gate: an absent family is an
+# error, not a silent default.
+_FAMILY_PREFIX = {"ubuntu": "UbuntuLinux", "rhel": "Linux"}
 
 # Canonical arch (hostfacts) -> the arch token in the MQ-for-Developers tarball name.
 _MQ_ARCH_TOKEN = {AARCH64: "ARM64", X86_64: "X64"}
@@ -99,27 +68,21 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def _box_registry() -> dict[str, dict[str, Any]]:
-    """The `boxes:` registry from lab/topology.yaml (box/platform name -> entry)."""
-    data = yaml.safe_load((repo_root() / "lab" / "topology.yaml").read_text())
-    boxes: dict[str, dict[str, Any]] = data.get("boxes", {})
-    return boxes
+def tarball_name(mq_version: str, entry: BoxEntry, facts: HostFacts | None = None) -> str:
+    """The MQ-for-Developers tarball filename for a box on this host (#103 D10).
 
-
-def tarball_name(mq_version: str, platform: str, facts: HostFacts | None = None) -> str:
-    """The MQ-for-Developers tarball filename for a platform on this host (#103 D10).
-
-    The OS family is a static per-platform property; the ARCH is resolved through the
-    box_build_arch authority against the platform's box-registry entry — so a pinned box
-    (RHEL x86_64) keeps its arch and an un-pinned Ubuntu fat box tracks the build host.
+    The OS family comes from the box's catalog OS entry; the ARCH is resolved through
+    the box_build_arch authority against that entry's arch pin — so a pinned box (RHEL
+    x86_64) keeps its arch and an un-pinned Ubuntu box tracks the build host.
     Acquisition and the bake therefore agree by construction. Facts default to probe().
     """
+    family = entry.os.ref.family
     try:
-        prefix = _OS_PREFIX[platform]
+        prefix = _FAMILY_PREFIX[family]
     except KeyError as exc:
-        raise ValueError(f"no MQ tarball arch mapping for platform {platform!r}") from exc
+        raise ValueError(f"no MQ tarball mapping for OS family {family!r}") from exc
     facts = facts if facts is not None else probe()
-    arch = box_build_arch(_box_registry().get(platform, {}), facts)
+    arch = box_build_arch({"arch": entry.os.arch_pin}, facts)
     return f"{mq_version}-IBM-MQ-Advanced-for-Developers-{prefix}{_MQ_ARCH_TOKEN[arch]}.tar.gz"
 
 

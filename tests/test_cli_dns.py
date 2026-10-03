@@ -11,8 +11,9 @@ def _seed_topo(tmp_path):
     (tmp_path / "lab").mkdir(parents=True, exist_ok=True)
     (tmp_path / "lab" / "topology.yaml").write_text(
         "nodes:\n"
-        "  infra-client: {nics: {net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-ext: 10.60.0.8}}\n"
-        "  infra-svc: {org: service, nics: {net-mgmt: 10.50.0.9, net-ext: 10.60.0.9}}\n"
+        "  infra-client:\n"
+        "    {box: infra, nics: {net-mgmt: 10.50.0.8, net-data-a: 10.10.1.8, net-ext: 10.60.0.8}}\n"
+        "  infra-svc: {box: infra, org: service, nics: {net-mgmt: 10.50.0.9, net-ext: 10.60.0.9}}\n"
         "groups:\n"
         "  infra: [infra-client, infra-svc]\n"
     )

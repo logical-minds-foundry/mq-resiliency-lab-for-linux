@@ -611,7 +611,7 @@ def qm_dashboard_paths_and_texts() -> list[tuple[Path, str]]:
             continue
         board = render_qm_board(topo, name, cfg)
         text = json.dumps(board, indent=2) + "\n"
-        folder = dashboard_folder_for(cfg["mechanism"], cfg["os"])
+        folder = dashboard_folder_for(cfg["mechanism"], cfg["os_family"])
         out.append((qm_dashboard_path(cfg["short"], folder), text))
     return out
 

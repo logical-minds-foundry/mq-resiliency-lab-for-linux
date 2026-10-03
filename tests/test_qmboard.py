@@ -20,9 +20,24 @@ from mqlab.qmboard import (
 FIXTURE = {
     "svc": {"short": "SVC", "conn": "10.60.0.50"},
     "stacks": {
-        "nha-x": {"short": "NHAX", "mechanism": "native-ha", "os": "ubuntu", "provision": "x.yml"},
-        "other": {"short": "OTHR", "mechanism": "native-ha", "os": "ubuntu", "provision": "o.yml"},
-        "reserved": {"short": "RSVD", "mechanism": "native-ha", "os": "ubuntu", "provision": None},
+        "nha-x": {
+            "short": "NHAX",
+            "mechanism": "native-ha",
+            "os_family": "ubuntu",
+            "provision": "x.yml",
+        },
+        "other": {
+            "short": "OTHR",
+            "mechanism": "native-ha",
+            "os_family": "ubuntu",
+            "provision": "o.yml",
+        },
+        "reserved": {
+            "short": "RSVD",
+            "mechanism": "native-ha",
+            "os_family": "ubuntu",
+            "provision": None,
+        },
     },
 }
 

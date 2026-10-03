@@ -93,11 +93,6 @@ def inventory_path() -> Path:
     return work("inventory.ini")
 
 
-def box_versions_path() -> Path:
-    """Manifest box-version pins read by the Vagrantfile — local work/ (#266, #286)."""
-    return work("box-versions.json")
-
-
 def mq_cache_dir() -> Path:
     """MQ tarball cache — shared cache/ (re-fetchable downloads, #286)."""
     return cache("mq")
