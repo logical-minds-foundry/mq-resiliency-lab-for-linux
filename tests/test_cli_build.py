@@ -91,7 +91,13 @@ def test_build_status_git_failure_prints_diagnosis_and_exits_two(monkeypatch, tm
 def test_build_migrate_dry_run_and_real(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     monkeypatch.setattr(
-        cli.buildenv, "migrate", lambda repo, *, dry_run: [("/a/mq", "/a/cache/mq")]
+        cli.buildenv,
+        "migrate",
+        lambda repo, *, dry_run: cli.buildenv.MigrationPlan(
+            moves=[("/a/mq", "/a/cache/mq")],
+            duplicates=[("/a/refs/x", "/a/cache/refs/x")],
+            stale=["/a/lab/.vagrant is a stale legacy vagrant dotfile"],
+        ),
     )
     # migrate also renames the per-host box cache to the arch-suffixed scheme (#103 T4).
     monkeypatch.setattr(
@@ -103,6 +109,29 @@ def test_build_migrate_dry_run_and_real(monkeypatch, tmp_path):
     real = runner.invoke(cli.app, ["build", "migrate"])
     assert "MOVED /a/mq -> /a/cache/mq" in real.stdout
     assert "MOVED /b/x.box -> /b/x-x86_64.box" in real.stdout
+    assert "PLAN DROP /a/refs/x (byte-identical duplicate of /a/cache/refs/x)" in dry.stdout
+    assert "DROPPED /a/refs/x (byte-identical duplicate of /a/cache/refs/x)" in real.stdout
+    assert "STALE /a/lab/.vagrant is a stale legacy vagrant dotfile" in real.stdout
+    assert real.exit_code == 0
+
+
+def test_build_migrate_collision_is_a_clean_error_not_a_traceback(monkeypatch, tmp_path):
+    # #1295: a migrate collision used to escape as a Python traceback. It must print the
+    # diagnosis (naming the fully-qualified fix) and exit non-zero, before any box rename.
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+
+    def collide(repo, *, dry_run):
+        raise BuildEnvError("migrate collision; re-run `mqlab build migrate`.")
+
+    monkeypatch.setattr(cli.buildenv, "migrate", collide)
+    boxes = []
+    monkeypatch.setattr(cli.box, "migrate_box_cache", lambda *, dry_run: boxes.append(1) or [])
+    result = runner.invoke(cli.app, ["build", "migrate"])
+    assert result.exit_code == 1
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "mqlab build migrate: migrate collision" in result.stderr
+    assert "Traceback" not in result.output
+    assert boxes == []
 
 
 # --- the real seams delegate to buildenv with repo_root() ---

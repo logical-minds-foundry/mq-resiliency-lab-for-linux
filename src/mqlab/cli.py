@@ -508,9 +508,23 @@ def build_status() -> None:
 @build_app.command("migrate")
 def build_migrate(dry_run: Annotated[bool, typer.Option("--dry-run")] = False) -> None:
     """Move existing top-level build/ contents into buckets + rename the per-host box
-    cache to the arch-suffixed `<box>-<arch>.box` scheme (idempotent, #103 D5)."""
-    for src, dst in buildenv.migrate(repo_root(), dry_run=dry_run):
+    cache to the arch-suffixed `<box>-<arch>.box` scheme (idempotent, #103 D5).
+
+    A legacy build/refs merges into build/cache/refs without loss; a differing conflict
+    refuses (moving nothing) with the conflicting paths. A stale legacy lab/.vagrant is
+    reported and left in place (#1295)."""
+    try:
+        plan = buildenv.migrate(repo_root(), dry_run=dry_run)
+    except BuildEnvError as exc:  # a collision: print the diagnosis, not a traceback
+        typer.echo(f"mqlab build migrate: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    for src, dst in plan.moves:
         typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
+    for legacy, kept in plan.duplicates:
+        verb = "PLAN DROP" if dry_run else "DROPPED"
+        typer.echo(f"{verb} {legacy} (byte-identical duplicate of {kept})")
+    for notice in plan.stale:
+        typer.echo(f"STALE {notice}")
     for src, dst in box.migrate_box_cache(dry_run=dry_run):
         typer.echo(f"{'PLAN' if dry_run else 'MOVED'} {src} -> {dst}")
 
