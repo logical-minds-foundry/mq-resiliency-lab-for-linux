@@ -7,7 +7,7 @@ facts and confirm the developer media, so Task 3 (runbook, #1073) and Task 5 (10
 version bump, #1075) build on verified behaviour, not assumptions.
 
 **Status:** DECIDED — all facts below are cited to IBM Docs pages actually cached
-under `build/refs/ibm-docs/ibm-mq/10.0.x/` on 2026-09-14 (product code
+under `build/cache/refs/ibm-docs/ibm-mq/10.0.x/` on 2026-09-14 (product code
 `SSYHRD_10.0.0`). No fact in this note is asserted from memory or from a search
 snippet. Facts are applied forward.
 
@@ -85,7 +85,7 @@ have been completed at all, so the change is in-scope for the spike.
 
 ## 3. Cached authoritative sources
 
-All cached under `build/refs/ibm-docs/ibm-mq/10.0.x/<slug>/` (gitignored — IBM
+All cached under `build/cache/refs/ibm-docs/ibm-mq/10.0.x/<slug>/` (gitignored — IBM
 content is not redistributed). Cite `content.txt`; `source_url` is in `meta.json`.
 
 | Slug | Topic |

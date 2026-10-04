@@ -8,8 +8,10 @@ subprocess work is isolated here and injected in tests.
 
 from __future__ import annotations
 
+import filecmp
 import shutil
 import subprocess
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -221,12 +223,76 @@ MIGRATION_GLOBS = {
 }
 
 
-def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
+# Legacy top-level entries whose collision with an existing bucket copy is MERGED rather
+# than refused. Only re-fetchable doc refs qualify: the pre-bucket tools/ibm_doc_cache.py
+# kept writing build/refs/ after build/cache/refs existed, so long-lived checkouts carry
+# both (#1295). A merge never overwrites: it moves what the bucket lacks, drops
+# byte-identical duplicates, and refuses (moving nothing) on any differing file.
+MERGEABLE = frozenset({"refs"})
+
+
+@dataclass
+class MigrationPlan:
+    """What `migrate` moved (or, under dry_run, would move).
+
+    moves: (src, dst) renames. duplicates: (legacy, kept) pairs where the legacy copy is
+    byte-identical to the bucket copy and is dropped. stale: human notices about legacy
+    paths left in place on purpose (never deleted). prune: legacy dirs a merge empties,
+    removed children-first once their contents have moved."""
+
+    moves: list[tuple[str, str]] = field(default_factory=list)
+    duplicates: list[tuple[str, str]] = field(default_factory=list)
+    stale: list[str] = field(default_factory=list)
+    prune: list[str] = field(default_factory=list)
+
+
+def _is_real_dir(path: Path) -> bool:
+    return path.is_dir() and not path.is_symlink()
+
+
+def _identical(a: Path, b: Path) -> bool:
+    """True when a and b hold the same bytes (or are symlinks to the same target)."""
+    if a.is_symlink() or b.is_symlink():
+        return a.is_symlink() and b.is_symlink() and a.readlink() == b.readlink()
+    return a.is_file() and b.is_file() and filecmp.cmp(a, b, shallow=False)
+
+
+def _plan_merge(src: Path, dst: Path, plan: MigrationPlan, conflicts: list[str]) -> None:
+    """Plan a lossless merge of the src tree into the existing dst tree."""
+    for child in sorted(src.iterdir()):
+        target = dst / child.name
+        if not target.exists() and not target.is_symlink():
+            plan.moves.append((str(child), str(target)))
+        elif _is_real_dir(child) and _is_real_dir(target):
+            _plan_merge(child, target, plan, conflicts)
+        elif _identical(child, target):
+            plan.duplicates.append((str(child), str(target)))
+        else:
+            conflicts.append(f"{child} differs from {target}")
+    plan.prune.append(str(src))  # post-order: every child dir is listed before its parent
+
+
+def _legacy_vagrant(repo: Path) -> tuple[Path, Path] | None:
+    """(lab/.vagrant, build/state/vagrant) when a real pre-#355 dotfile dir exists."""
+    src = repo / "lab" / ".vagrant"
+    if not _is_real_dir(src):
+        return None
+    return src, repo / "build" / "state" / "vagrant"
+
+
+def migrate(repo: Path, *, dry_run: bool = False) -> MigrationPlan:
     """Move existing top-level build/ entries into their bucket (rename = instant, even
-    for the 22G snapshots). Idempotent; raises on a destination collision. Run from the
-    main checkout; renames within repo/build/, so it never shells git."""
+    for the 22G snapshots). Idempotent. Run from the main checkout; renames within
+    repo/build/, so it never shells git.
+
+    Plans everything before touching anything, so a collision moves nothing: an existing
+    destination raises BuildEnvError listing every conflict, except for MERGEABLE
+    entries, which merge losslessly and refuse only on a differing file. A legacy
+    lab/.vagrant beside the canonical build/state/vagrant is reported as stale and left
+    in place (never deleted) instead of aborting (#1295)."""
     build = repo / "build"
-    planned: list[tuple[str, str]] = []
+    plan = MigrationPlan()
+    conflicts: list[str] = []
     entries = list(MIGRATION.items()) + [
         (path.name, bucket)
         for pattern, bucket in MIGRATION_GLOBS.items()
@@ -237,38 +303,59 @@ def migrate(repo: Path, *, dry_run: bool = False) -> list[tuple[str, str]]:
         if not src.exists():
             continue
         dst = build / bucket / name
-        if dst.exists():
-            raise BuildEnvError(f"migrate collision: {dst} already exists; resolve by hand")
-        planned.append((str(src), str(dst)))
-        if not dry_run:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            src.rename(dst)
-    v = migrate_vagrant_dotfile(repo, dry_run=dry_run, strict=True)
-    if v is not None:
-        planned.append(v)
-    return planned
+        if not dst.exists():
+            plan.moves.append((str(src), str(dst)))
+        elif name in MERGEABLE and _is_real_dir(src) and _is_real_dir(dst):
+            _plan_merge(src, dst, plan, conflicts)
+        else:
+            conflicts.append(f"{dst} already exists (legacy {src} not moved)")
+    if conflicts:
+        raise BuildEnvError(
+            "migrate collision; nothing was moved:\n  "
+            + "\n  ".join(conflicts)
+            + "\nReconcile each by hand (keep the copy you want, remove the other), "
+            "then re-run `mqlab build migrate`."
+        )
+    vagrant = _legacy_vagrant(repo)
+    if vagrant is not None:
+        vsrc, vdst = vagrant
+        if vdst.exists():
+            plan.stale.append(
+                f"{vsrc} is a stale legacy vagrant dotfile, ignored (the lab uses {vdst}). "
+                f"Once you have confirmed nothing needs it, remove it by hand: rm -rf {vsrc}"
+            )
+        else:
+            plan.moves.append((str(vsrc), str(vdst)))
+    if not dry_run:
+        _apply(plan)
+    return plan
 
 
-def migrate_vagrant_dotfile(
-    repo: Path, *, dry_run: bool = False, strict: bool = False
-) -> tuple[str, str] | None:
+def _apply(plan: MigrationPlan) -> None:
+    for src, dst in plan.moves:
+        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+        Path(src).rename(dst)
+    for legacy, _kept in plan.duplicates:
+        Path(legacy).unlink()
+    for emptied in plan.prune:
+        Path(emptied).rmdir()  # fails loud if anything unexpected is still inside
+
+
+def migrate_vagrant_dotfile(repo: Path) -> tuple[str, str] | None:
     """Move a pre-#355 lab/.vagrant into the shared state bucket (build/state/vagrant).
     Vagrant now reads VAGRANT_DOTFILE_PATH=build/state/vagrant, so a lab created before
     that change has its domain<->vagrant mapping in the old lab/.vagrant — leaving the
     running lab orphaned (`vagrant up` -> 'domain already taken'). This relocates it.
 
-    Safe no-op when there is nothing to move. A pre-existing destination is left
-    untouched with strict=False (the auto-heal path in ensure); strict=True raises (the
-    explicit `mqlab build migrate`). Returns the (src, dst) it moved, or None."""
-    src = repo / "lab" / ".vagrant"
-    if not src.is_dir() or src.is_symlink():
+    The auto-heal path in ensure. Safe no-op when there is nothing to move; an existing
+    destination is left untouched (`mqlab build migrate` reports the legacy copy as
+    stale). Returns the (src, dst) it moved, or None."""
+    vagrant = _legacy_vagrant(repo)
+    if vagrant is None:
         return None
-    dst = repo / "build" / "state" / "vagrant"
+    src, dst = vagrant
     if dst.exists():
-        if strict:
-            raise BuildEnvError(f"migrate collision: {dst} already exists; resolve by hand")
         return None
-    if not dry_run:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        src.rename(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    src.rename(dst)
     return (str(src), str(dst))

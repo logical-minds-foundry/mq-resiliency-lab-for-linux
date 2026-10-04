@@ -21,7 +21,7 @@ where a point is inference rather than documented behavior, it says so.
 **Provenance.** All **[data]** claims are quoted from IBM MQ 9.4.x
 documentation fetched with `tools/ibm_doc_cache.py` (the plain WebFetch is
 HTTP-403'd by IBM Docs) and cached under
-`build/refs/ibm-docs/ibm-mq/9.4.x/<slug>/content.txt`; each is cited by slug and
+`build/cache/refs/ibm-docs/ibm-mq/9.4.x/<slug>/content.txt`; each is cited by slug and
 `source_url`. Retrieval date: **2026-07-13**. Full source list in §8. No MQ
 behavior below is asserted from memory — where a primary 9.4 page could not be
 cached, the claim is flagged.
@@ -289,7 +289,7 @@ for an **isolated / cold-rebuild** arm only.
 ## 8. Sources
 
 All IBM pages are **IBM MQ 9.4.x**, fetched + cached 2026-07-13 via
-`tools/ibm_doc_cache.py` under `build/refs/ibm-docs/ibm-mq/9.4.x/<slug>/`
+`tools/ibm_doc_cache.py` under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/<slug>/`
 (gitignored; cite `content.txt` + `source_url`). The tool is committed; the
 cached IBM content is not redistributed.
 

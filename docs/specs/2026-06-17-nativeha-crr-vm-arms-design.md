@@ -409,7 +409,7 @@ because IBM Docs 403 the default fetch bot. Pin to 9.4.
   `NativeHAInstance`/`NativeHALocalInstance`/`NativeHARecoveryGroup` stanzas, the
   TLS keystore steps, `mqmonitor@` systemd lifecycle, and the qm.ini-edit role
   switchover — <https://www.ibm.com/support/pages/node/7261515>
-  (cached: `build/refs/ibm-docs/mq/9.4.x/crr-linux/configuring-crr-on-linux.pdf`)
+  (cached: `build/cache/refs/ibm-docs/mq/9.4.x/crr-linux/configuring-crr-on-linux.pdf`)
 
 ### Internal prior art (this repo)
 

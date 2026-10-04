@@ -59,9 +59,12 @@ login — are runtime-injected, never committed.
 
 IBM Docs return **HTTP 403** to the built-in `WebFetch` (a bot user-agent block,
 not auth), so it cannot read `ibm.com/docs/...` pages. Use the repo tool instead —
-it fetches with a browser UA and caches the canonical text under
-`build/refs/ibm-docs/<product>/<version>/<slug>/` (cite `content.txt`, with the
-`source_url` from `meta.json`):
+it fetches with a browser UA and caches the canonical text in the main checkout's
+shared cache bucket, under `refs/ibm-docs/<product>/<version>/<slug>/` (that is,
+`$(mqlab build path cache)/refs/ibm-docs/...` = `build/cache/refs/ibm-docs/...`; cite
+`content.txt`, with the `source_url` from `meta.json`). Old-style
+`/docs/<SScode>_<version>/...` URLs are keyed `<SScode>/<version>/` the same way, so
+versions never overwrite each other:
 
 ```bash
 python3 tools/ibm_doc_cache.py "https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=..."

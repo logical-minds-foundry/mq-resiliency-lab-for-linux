@@ -17,7 +17,7 @@ replication is plaintext (default); the cross-region CRR link uses TLS sourced
 from the now-built `lab-pki` provider. Replication and role-switch are driven
 entirely by `crtmqm -lr` + `qm.ini` stanzas + `mqmonitor@` systemd units, per
 IBM's CRR-on-Linux walkthrough (cached at
-`build/refs/ibm-docs/mq/9.4.x/crr-linux/configuring-crr-on-linux.pdf`).
+`build/cache/refs/ibm-docs/mq/9.4.x/crr-linux/configuring-crr-on-linux.pdf`).
 
 **Tech stack:** RHEL 9.6 x86-64 (existing box, TCG), IBM MQ Advanced for
 Developers 9.4.5.0 LinuxX64, Native HA (raft), CRR, `lab-pki` (TLS), Ansible.

@@ -8,7 +8,7 @@
 >
 > Sources: issue #559 (root-cause triage), `docs/reports/2026-06-19-rdqm-hadr-automation-findings.md`,
 > `lab/scripts/rdqm-qm-create.sh`, `ansible/roles/rdqm-ssh-access`, and the cached
-> IBM 9.4 docs under `build/refs/ibm-docs/ibm-mq/9.4.x/` (RDQM DR/HA worked example).
+> IBM 9.4 docs under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/` (RDQM DR/HA worked example).
 > Harvested from the closed epic .github#45 ("Restore RDQM build functionality").
 
 ## TL;DR
