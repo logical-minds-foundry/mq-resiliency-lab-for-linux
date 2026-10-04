@@ -480,7 +480,7 @@ sudo qemu-img convert -O qcow2 -c "$IMG" "$WORK/box.img.tmp"
 sudo chown "$(id -u)" "$WORK/box.img.tmp"
 mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
-tar -C "$WORK" -czf "$CACHE" metadata.json box.img
+tar -C "$WORK" -cf "$CACHE" metadata.json box.img
 printf '%s\n' "$CURRENT_HASH" > "$HASH_FILE"   # stamp the manifest hash beside the box
 # Always re-add a fresh bake, stamped with the NEW cache identity (#1248).
 box_register "$BOX" "$(box_reg_identity "$CACHE" "$CURRENT_HASH")" \
