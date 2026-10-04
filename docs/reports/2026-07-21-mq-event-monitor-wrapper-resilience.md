@@ -125,7 +125,7 @@ stale handle after a stop is normal and self-heals.
 ## A3 — stale-handle reap timing
 
 **Literature first.** IBM's `MQRC_OBJECT_IN_USE` (2042) doc
-(`build/refs/ibm-docs/ibm-mq/9.4.x/codes-2042-07fa-rc2042-mqrc-object-in-use`;
+(`build/cache/refs/ibm-docs/ibm-mq/9.4.x/codes-2042-07fa-rc2042-mqrc-object-in-use`;
 source: <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=codes-2042-07fa-rc2042-mqrc-object-in-use>)
 explains 2042 as an open-options conflict (a request for exclusive input when the
 object is already open for input), confirms the `AS_Q_DEF`/`DEFSOPT` rule, and — key

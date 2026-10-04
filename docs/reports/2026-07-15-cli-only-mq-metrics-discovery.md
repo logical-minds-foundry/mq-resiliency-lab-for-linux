@@ -21,7 +21,7 @@ sources, so the separation is deliberate.
 
 **Provenance.** All **[data]** claims are quoted from IBM MQ 9.4.x documentation
 fetched with `tools/ibm_doc_cache.py` (plain `WebFetch` is HTTP-403'd by IBM
-Docs) and cached under `build/refs/ibm-docs/ibm-mq/9.4.x/<slug>/content.txt`
+Docs) and cached under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/<slug>/content.txt`
 (gitignored; not redistributed). Each is cited by slug + `source_url`. Retrieval
 date: **2026-07-15**. Full source list in §7. Lab-internal facts cite in-repo
 paths.
@@ -339,7 +339,7 @@ error-log rate (§4.5) held until the event-handler seam is resolved in #81.
 ## 7. Sources
 
 All IBM pages are **IBM MQ 9.4.x**, fetched + cached 2026-07-15 via
-`tools/ibm_doc_cache.py` under `build/refs/ibm-docs/ibm-mq/9.4.x/<slug>/`
+`tools/ibm_doc_cache.py` under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/<slug>/`
 (gitignored; cite `content.txt` + `source_url`). The tool is committed; the
 cached IBM content is not redistributed.
 

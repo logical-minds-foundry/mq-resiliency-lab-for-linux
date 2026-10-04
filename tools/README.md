@@ -20,25 +20,41 @@ python3 tools/ibm_doc_cache.py \
 python3 tools/ibm_doc_cache.py --list
 ```
 
-Cache layout (gitignored — under `build/`, host-durable, **not committed**; do not
-redistribute IBM content):
+Cache layout (gitignored — in the shared `cache/` bucket of `build/`, host-durable,
+**not committed**; do not redistribute IBM content):
 
 ```
-build/refs/ibm-docs/<product>/<version>/<slug>/
+build/cache/refs/ibm-docs/<product>/<version>/<slug>/
   content.html   # raw canonical topic body
   content.txt    # tag-stripped text (quote primary IBM wording from here)
   meta.json      # source_url, content_url, retrieved_at, sha256, title
 ```
 
-The cache always resolves to the **main worktree root** (the tool strips any
-`/.worktrees/<name>` segment), so it accumulates in one place and **survives worktree
-removal**. `build/` is host-durable but scratch-by-convention, so set **`$IBM_DOC_CACHE`**
-to relocate the cache to a permanent home without any code change — the permanent-home
-decision is backlogged in **#226**.
+Both IBM Docs URL shapes are keyed by product **and** version, so versions of one page
+coexist instead of overwriting each other (#1295):
+
+| URL shape | Cache dir |
+|-----------|-----------|
+| `/docs/en/<product>/<version>?topic=<slug>` | `<product>/<version>/<slug>/` |
+| `/docs/[en/]<SScode>_<version>/<dir>/<page>.html` | `<SScode>/<version>/<dir>-<page>/` |
+
+Any other URL shape is refused (no guessed location).
+
+The cache root comes from the build-layout authority (`mqlab.buildenv`, the same code
+behind `mqlab build path cache`), imported from this checkout's `src/` (it is
+stdlib-only, so plain `python3` works without the project venv). It resolves the
+**main checkout's** cache bucket through git's common dir, so from any worktree the
+cache accumulates in one place and **survives worktree removal**. Set
+**`$IBM_DOC_CACHE`** to relocate the cache to a permanent home without any code change;
+the permanent-home decision is backlogged in **#226**.
 
 ```bash
 export IBM_DOC_CACHE=~/.cache/ibm-docs   # example permanent home
 ```
+
+A long-lived checkout may still carry a legacy top-level `build/refs/` written by the
+pre-bucket version of this tool. `mqlab build migrate` merges it into
+`build/cache/refs/` without loss (it refuses, moving nothing, if a file differs).
 
 Cite the cached text as the primary source (it *is* the IBM page body), with the
 `source_url` from `meta.json`. Be polite: public docs, low volume, rate-limit.

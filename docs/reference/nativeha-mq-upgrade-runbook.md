@@ -452,7 +452,7 @@ the lab's developer-media variant.
 ### 5.1 Product path (primary) — entitled IBM MQ on RHEL with dnf
 
 Grounded in the RHEL dnf-upgrade doc (IBM Docs, 10.0.x — see Sources;
-`build/refs/ibm-docs/ibm-mq/10.0.x/umil-upgrading-mq-installation-linux-red-hat-using-dnf/content.txt`).
+`build/cache/refs/ibm-docs/ibm-mq/10.0.x/umil-upgrading-mq-installation-linux-red-hat-using-dnf/content.txt`).
 The doc's pre-upgrade steps — stop applications, `endmqweb`, stop listeners, stop
 the queue managers, and back up — are exactly what §3 and §4 accomplish (with the
 Native HA adaptation that instances are stopped via systemd, §4.1).

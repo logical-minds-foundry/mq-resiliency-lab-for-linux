@@ -53,7 +53,7 @@ This task is investigation + lab measurement, not TDD. It must complete before T
 
 - [ ] **Step 1: Verify RESET-CHANNEL semantics against IBM 9.4 docs**
 
-Use the IBM-docs canonical fetch path (browser UA → `oldUrl` → `/docs/api/v1/content/<oldUrl>`; pin to 9.4; cache under `build/refs/ibm-docs/`). Confirm: (a) sender/receiver sequence-number persistence and resync on `START CHANNEL`; (b) the `AMQ9526` mismatch condition; (c) that `RESET CHANNEL` on the sender (we cannot reset the vendor's receiver) is sufficient to recover, and under what conditions vendor-side coordination is still required. Record exact doc URLs.
+Use the IBM-docs canonical fetch path (browser UA → `oldUrl` → `/docs/api/v1/content/<oldUrl>`; pin to 9.4; cache under `build/cache/refs/ibm-docs/`). Confirm: (a) sender/receiver sequence-number persistence and resync on `START CHANNEL`; (b) the `AMQ9526` mismatch condition; (c) that `RESET CHANNEL` on the sender (we cannot reset the vendor's receiver) is sufficient to recover, and under what conditions vendor-side coordination is still required. Record exact doc URLs.
 
 - [ ] **Step 2: Reproduce empirically on a scratch lab**
 
