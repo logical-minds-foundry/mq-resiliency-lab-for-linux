@@ -22,10 +22,65 @@
 # exist — it is a syntax error, AMQ8405I; the log type lives only in qm.ini's Log: stanza.)
 #
 # The live QM's qm.ini is the authority; the declaration is checked against it, never trusted over
-# it. This slurp runs on the active instance (Native HA replicates qm.ini to every node).
+# it. WHERE qm.ini lives is resolved from MQ itself, never assumed (#1344): the default
+# /var/mqm/qmgrs/<QM> is wrong for a `crtmqm -md` QM — the Pacemaker arm creates PCMKAPP with
+# `-md /mqshared/qmgrs`, so its qm.ini is /mqshared/qmgrs/PCMKAPP/qm.ini on the node with the LUN
+# mounted. The QM's QueueManager stanza (`dspmqinf -o stanza`, its mqs.ini entry) is the authority:
+# DataPath is "the complete path, including the name of the queue manager data directory" and, if
+# specified, "takes precedence over any value in the Prefix attribute"; without it, MQ builds the
+# data directory under <Prefix>/qmgrs, named by Directory (the transformed QM name). IBM MQ 10.0:
+#   https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-dspmqinf-display-configuration-information
+#   https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=multiplatforms-sharing-mq-files
+# Every caller runs this file on the ONE node where the QM is live and its data directory is
+# reachable: Native HA's active instance (each instance keeps its own raft-replicated copy at the
+# default path), RDQM's active node (DataPath on the DRBD volume), the pcmk creation node (LUN
+# mounted, QM started for this step), and SVCQM's single host. A default-path QM resolves to
+# exactly the old /var/mqm/qmgrs/<QM>.
+- name: read the queue manager's QueueManager stanza (its data directory) (#1344)
+  ansible.builtin.command:
+    argv: [/opt/mqm/bin/dspmqinf, -o, stanza, "{{ qmgr_name }}"]
+  become: true
+  become_user: mqm
+  register: qm_stanza
+  changed_when: false
+  failed_when: qm_stanza.rc != 0
+
+# Pull the three stanza fields ('' when absent). Each regex lives inside a {{ }} expression on
+# purpose: Ansible protects backslashes in string constants only inside {{ }}, not in {% set %}
+# statements, where Jinja would turn the '\1' backreference into a \x01 control character.
+- name: extract DataPath, Prefix and Directory from the QueueManager stanza (#1344)
+  ansible.builtin.set_fact:
+    _qm_stanza_datapath: >-
+      {{ qm_stanza.stdout | regex_search('(?m)^[ \t]*DataPath[ \t]*=[ \t]*(\S.*?)[ \t\r]*$', '\1')
+         | default([''], true) | first }}
+    _qm_stanza_prefix: >-
+      {{ qm_stanza.stdout | regex_search('(?m)^[ \t]*Prefix[ \t]*=[ \t]*(\S.*?)[ \t\r]*$', '\1')
+         | default([''], true) | first }}
+    _qm_stanza_directory: >-
+      {{ qm_stanza.stdout | regex_search('(?m)^[ \t]*Directory[ \t]*=[ \t]*(\S.*?)[ \t\r]*$', '\1')
+         | default([''], true) | first }}
+
+# DataPath when present (a `-md` QM, RDQM); else <Prefix>/qmgrs/<Directory> (a default-path QM);
+# else '' — which the assert below turns into a loud failure. No silent default path.
+- name: resolve the queue manager's data directory from its QueueManager stanza (#1344)
+  ansible.builtin.set_fact:
+    _qm_datapath: >-
+      {{ _qm_stanza_datapath if _qm_stanza_datapath
+         else ((_qm_stanza_prefix ~ '/qmgrs/' ~ _qm_stanza_directory)
+               if (_qm_stanza_prefix and _qm_stanza_directory) else '') }}
+
+- name: assert the queue manager's data directory resolved — fail loud if not (#1344)
+  ansible.builtin.assert:
+    that: _qm_datapath | length > 0
+    fail_msg: >-
+      Could not resolve the data directory of queue manager {{ qmgr_name }}: its QueueManager
+      stanza carries neither DataPath nor Prefix + Directory. dspmqinf -o stanza printed:
+      {{ qm_stanza.stdout }}
+    quiet: true
+
 - name: read the live queue manager's actual log type from qm.ini (#809)
   ansible.builtin.slurp:
-    src: "/var/mqm/qmgrs/{{ qmgr_name }}/qm.ini"
+    src: "{{ _qm_datapath }}/qm.ini"
   become: true
   become_user: mqm
   register: qm_ini
