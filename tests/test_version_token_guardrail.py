@@ -24,8 +24,11 @@ Python artifacts: a stale ``__pycache__/*.pyc`` must never false-trip the scan (
 from __future__ import annotations
 
 import re
+import subprocess
 from fnmatch import fnmatchcase
 from pathlib import Path
+
+import pytest
 
 from mqlab.paths import repo_root
 
@@ -62,17 +65,36 @@ def _is_exempt(rel: Path) -> bool:
     )
 
 
+def _tracked(repo: Path) -> list[Path]:
+    """Git-tracked files under the scanned roots (#1329).
+
+    Only tracked files are code. A filesystem walk also reads untracked and gitignored
+    runtime state, e.g. Vagrant's ``lab/.vagrant/machines/*/libvirt/box_meta``, which
+    legitimately names the boxes a running lab booted, and so false-trips the guardrail
+    on any checkout that has run the lab (CI's fresh checkout never sees it). If git
+    cannot list the files, fail loudly; never fall back to a walk.
+    """
+    result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        ["git", "-C", str(repo), "ls-files", "-z", "--", *SCAN],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        msg = f"git ls-files failed in {repo} (exit {result.returncode}): {result.stderr.strip()}"
+        raise RuntimeError(msg)
+    return [repo / rel for rel in sorted(filter(None, result.stdout.split("\0")))]
+
+
 def _scanned_files(repo: Path) -> list[Path]:
-    """Every source/config file under the scanned roots, minus compiled artifacts."""
-    files: list[Path] = []
-    for root in SCAN:
-        for path in sorted((repo / root).rglob("*")):
-            if not path.is_file():
-                continue
-            if "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
-                continue
-            files.append(path)
-    return files
+    """Every tracked source/config file under the scanned roots, minus compiled artifacts."""
+    return [
+        path
+        for path in _tracked(repo)
+        if path.is_file()  # tracked but deleted in the working tree: nothing to read
+        and "__pycache__" not in path.parts
+        and path.suffix not in {".pyc", ".pyo"}
+    ]
 
 
 def scan(repo: Path) -> list[str]:
@@ -131,12 +153,21 @@ def test_token_matcher_catches_os_tokens_only():
         assert not TOKENS.search(benign), f"{benign!r} must not trip the guardrail"
 
 
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)  # noqa: S603,S607
+
+
+def _write(repo: Path, rel: str, text: str) -> None:
+    path = repo / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
 def test_scan_catches_a_token_and_honours_the_scope(tmp_path):
-    # Negative control: a planted token in a scanned root is caught; the same token in
-    # an exempt file, an out-of-scope root, or a compiled artifact is not.
-    planted = tmp_path / "ansible" / "roles" / "demo" / "tasks" / "main.yml"
-    planted.parent.mkdir(parents=True)
-    planted.write_text("---\n# boots the mq-rdqm-rhel9 box\n")
+    # Negative control: a planted token in a tracked file under a scanned root is caught;
+    # the same token in an exempt file, an out-of-scope root, or a compiled artifact is not.
+    _git(tmp_path, "init", "-q")
+    _write(tmp_path, "ansible/roles/demo/tasks/main.yml", "---\n# boots the mq-rdqm-rhel9 box\n")
     for exempt in (
         "lab/versions.yaml",
         "src/mqlab/retired_boxes.py",
@@ -147,12 +178,30 @@ def test_scan_catches_a_token_and_honours_the_scope(tmp_path):
         "docs/notes.md",
         "tests/test_x.py",
     ):
-        path = tmp_path / exempt
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("rhel9 noble ubuntu24\n")
-    (tmp_path / "lab" / "boxes" / "rhel" / "await.sh").write_text("# fine\n")
+        _write(tmp_path, exempt, "rhel9 noble ubuntu24\n")
+    _write(tmp_path, "lab/boxes/rhel/await.sh", "# fine\n")
+    _git(tmp_path, "add", "-A", "-f")  # -f: track even the compiled artifacts, to test the skip
     hits = scan(tmp_path)
     assert hits == ["ansible/roles/demo/tasks/main.yml:2: # boots the mq-rdqm-rhel9 box"]
+
+
+def test_scan_ignores_untracked_runtime_state(tmp_path):
+    # #1329: Vagrant's gitignored lab/.vagrant/.../box_meta names the booted boxes; an
+    # untracked file under a scanned root is runtime state, not code, and is never a hit.
+    _git(tmp_path, "init", "-q")
+    _write(tmp_path, "lab/tracked.sh", "# boots mq-rdqm-rhel9\n")
+    _write(
+        tmp_path,
+        "lab/.vagrant/machines/rdqm-a1/libvirt/box_meta",
+        '{"name":"rhel/9.6-x86_64"}\n',
+    )
+    _git(tmp_path, "add", "lab/tracked.sh")
+    assert scan(tmp_path) == ["lab/tracked.sh:1: # boots mq-rdqm-rhel9"]
+
+
+def test_scan_fails_loudly_outside_a_git_repo(tmp_path):
+    with pytest.raises(RuntimeError, match="git ls-files failed"):
+        scan(tmp_path)
 
 
 def test_vars_exemption_is_per_version_files_only():
