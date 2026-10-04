@@ -11,7 +11,7 @@ MQ version, and Developer-edition availability — so Tasks 3 (role `replication
 assumptions. Gates Tasks 3/4/5.
 
 **Status:** DECIDED — every fact below is cited to an IBM Docs 10.0.x page actually
-cached under `build/refs/ibm-docs/ibm-mq/10.0.x/` on 2026-09-15 (product code
+cached under `build/cache/refs/ibm-docs/ibm-mq/10.0.x/` on 2026-09-15 (product code
 `SSYHRD_10.0.0`). No fact is asserted from memory or a search snippet. Where IBM's
 docs are silent, this note says so plainly rather than guessing.
 
@@ -27,7 +27,7 @@ line the plan's best-known form assumed. See §7 (Findings) and §8 (Implication
 
 ## 1. Cached authoritative sources
 
-All cached under `build/refs/ibm-docs/ibm-mq/10.0.x/<slug>/` (gitignored — IBM
+All cached under `build/cache/refs/ibm-docs/ibm-mq/10.0.x/<slug>/` (gitignored — IBM
 content is not redistributed). Cite `content.txt`; the `source_url` is in
 `meta.json`. Newly cached by this spike unless marked *(pre-existing, from the CRR
 upgrade spike #1070)*.

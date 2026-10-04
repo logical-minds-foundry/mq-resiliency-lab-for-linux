@@ -106,3 +106,22 @@ run that made it, so nothing there needs keeping. See
 > **Stray entries are disposable.** `mqlab build clean` removes anything at the
 > `build/` root that is not one of the four buckets. Any artifact worth keeping
 > must live inside a bucket, not at the `build/` root.
+
+### How `mqlab build migrate` handles collisions
+
+`migrate` plans every move before it touches anything, so a collision moves
+nothing. `--dry-run` prints the same plan (`PLAN` lines) without acting on it.
+
+- **A destination already exists.** `migrate` refuses and exits non-zero. It
+  lists each conflicting path and tells you to reconcile it by hand, then re-run
+  `mqlab build migrate`. It never overwrites.
+- **A legacy `build/refs/` beside `build/cache/refs/`.** The pre-bucket IBM Docs
+  tool kept writing `build/refs/`, so a long-lived checkout can hold both (#1295).
+  `migrate` merges them without loss. Paths missing from the bucket move in
+  (`MOVED`). Byte-identical duplicates are dropped from the legacy tree
+  (`DROPPED`). Any file that differs makes `migrate` refuse with the conflicting
+  paths, and nothing moves.
+- **A legacy `lab/.vagrant` beside `build/state/vagrant`.** The legacy copy is
+  stale: vagrant reads `state/vagrant`. `migrate` reports it as a `STALE` line,
+  with its path and the command to remove it by hand. It never deletes the
+  legacy copy.

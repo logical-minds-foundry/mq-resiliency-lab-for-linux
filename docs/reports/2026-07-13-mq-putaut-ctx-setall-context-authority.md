@@ -28,7 +28,7 @@ is to establish whether it is true and *why*.
 
 **Provenance.** All primary citations are IBM MQ **9.4** documentation, fetched
 with `tools/ibm_doc_cache.py` (IBM Docs 403 the plain WebFetch) and cached under
-the gitignored `build/refs/ibm-docs/ibm-mq/9.4.x/`. Each cited page's
+the gitignored `build/cache/refs/ibm-docs/ibm-mq/9.4.x/`. Each cited page's
 `source_url` is listed in §7. Secondary corroboration (an IBM Redbook, two IBM
 support/APAR notes) is named inline and used only to support, never to establish,
 a claim.
@@ -272,7 +272,7 @@ PUTAUT page — the lab is distributed, so this is noted, not pursued).
 
 ## 7. Sources (IBM MQ 9.4, cached via `tools/ibm_doc_cache.py`)
 
-Primary (cited [data] above; cached under `build/refs/ibm-docs/ibm-mq/9.4.x/`):
+Primary (cited [data] above; cached under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/`):
 
 - Channel attributes for MQSC keywords (N–R) — the **PUTAUT (PUT authority)** entry
   (the crown citation: `DEF` and `CTX` both open with `MQOO_SET_ALL_CONTEXT`):

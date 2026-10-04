@@ -33,7 +33,7 @@ repeatable operation.
    command. Fixed: a2/a3 (`-sxs -rr p`) then a1 (`-sx -rr p`); b2/b3 (`-sxs -rr s`) then b1; DR
    flags (`-rl <local wan> -ri <remote wan> -rp 7001`) on every `crtmqm`. (Committed.)
 2. **The exact `crtmqm` DR flags** came from the cached IBM docs
-   (`build/refs/ibm-docs/.../availability-creating-drha-rdqms` + worked example), not guesswork:
+   (`build/cache/refs/ibm-docs/.../availability-creating-drha-rdqms` + worked example), not guesswork:
    `-rl DRLocalIPs -ri DRRemoteIPs -rp Port` (the `-rp/-ra` from an earlier reconstruction were wrong).
 
 ## Cutover drill — capability confirmed, automation needs hardening (#294)

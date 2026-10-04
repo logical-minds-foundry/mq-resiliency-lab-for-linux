@@ -186,7 +186,7 @@ A production C++ wrapper (~one class, request/reply over an MQ **client** connec
 
 ## 9. Sources
 
-All IBM sources are IBM MQ **9.4.x** documentation, accessed **2026-08-19**. Canonical text was retrieved with the repo's `tools/ibm_doc_cache.py` (IBM Docs return HTTP 403 to a bot user-agent) and cached under `build/refs/ibm-docs/ibm-mq/9.4.x/`.
+All IBM sources are IBM MQ **9.4.x** documentation, accessed **2026-08-19**. Canonical text was retrieved with the repo's `tools/ibm_doc_cache.py` (IBM Docs return HTTP 403 to a bot user-agent) and cached under `build/cache/refs/ibm-docs/ibm-mq/9.4.x/`.
 
 - `[DEP]` — *Deprecated, stabilized, and removed features in IBM MQ 9.4.0* — https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=940-deprecated-stabilized-removed-features-in-mq
 - `[RECON]` — *Automatic client reconnection* (IBM MQ 9.4) — https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=restart-automatic-client-reconnection

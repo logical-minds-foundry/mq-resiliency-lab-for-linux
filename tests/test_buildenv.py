@@ -326,7 +326,7 @@ def test_migrate_moves_a_root_install_dvd_into_state(tmp_path):
     (build / "rhel-9.6-x86_64-dvd.iso").write_text("iso")
     (build / "notes.iso").write_text("x")  # not an install DVD: not migrated
     b.ensure(main, run=run)
-    planned = b.migrate(main)
+    planned = b.migrate(main).moves
     assert (build / "state" / "rhel-9.6-x86_64-dvd.iso").read_text() == "iso"
     assert not (build / "rhel-9.6-x86_64-dvd.iso").exists()
     assert (build / "notes.iso").exists()
@@ -339,7 +339,7 @@ def test_migrate_dry_run_moves_nothing(tmp_path):
     run = _real_git(main, main)
     (main / "build" / "mq").mkdir(parents=True)
     b.ensure(main, run=run)
-    planned = b.migrate(main, dry_run=True)
+    planned = b.migrate(main, dry_run=True).moves
     assert any(src.endswith("/mq") for src, _ in planned)
     assert (main / "build" / "mq").exists()  # untouched
 
@@ -351,7 +351,7 @@ def test_migrate_is_idempotent(tmp_path):
     (main / "build" / "mq").mkdir(parents=True)
     b.ensure(main, run=run)
     b.migrate(main)
-    assert b.migrate(main) == []  # nothing left to move
+    assert b.migrate(main) == b.MigrationPlan()  # nothing left to move
 
 
 def test_migrate_collision_raises(tmp_path):
@@ -362,8 +362,17 @@ def test_migrate_collision_raises(tmp_path):
     (build / "mq").mkdir(parents=True)
     b.ensure(main, run=run)
     (build / "cache" / "mq").mkdir(parents=True)  # destination already exists
-    with pytest.raises(b.BuildEnvError, match="collision"):
+    (build / "snapshots").mkdir()  # a clean move, blocked by the collision (all-or-nothing)
+    with pytest.raises(b.BuildEnvError) as exc:
         b.migrate(main)
+    assert str(exc.value) == (
+        "migrate collision; nothing was moved:\n"
+        f"  {build / 'cache' / 'mq'} already exists (legacy {build / 'mq'} not moved)\n"
+        "Reconcile each by hand (keep the copy you want, remove the other), "
+        "then re-run `mqlab build migrate`."
+    )
+    assert (build / "snapshots").is_dir()
+    assert not (build / "state" / "snapshots").exists()
 
 
 # --- vagrant dotfile relocation (#355) ---
@@ -372,7 +381,7 @@ def test_migrate_relocates_vagrant_dotfile(tmp_path):
     (main / ".git").mkdir(parents=True)
     (main / "lab" / ".vagrant" / "machines").mkdir(parents=True)
     (main / "lab" / ".vagrant" / "machines" / "id").write_text("dom")
-    planned = b.migrate(main)
+    planned = b.migrate(main).moves
     assert (main / "build" / "state" / "vagrant" / "machines" / "id").read_text() == "dom"
     assert not (main / "lab" / ".vagrant").exists()
     assert any(dst.endswith("/build/state/vagrant") for _, dst in planned)
@@ -382,18 +391,154 @@ def test_migrate_vagrant_dry_run_moves_nothing(tmp_path):
     main = tmp_path / "main"
     (main / ".git").mkdir(parents=True)
     (main / "lab" / ".vagrant").mkdir(parents=True)
-    planned = b.migrate(main, dry_run=True)
+    planned = b.migrate(main, dry_run=True).moves
     assert any(dst.endswith("/build/state/vagrant") for _, dst in planned)
     assert (main / "lab" / ".vagrant").exists()  # untouched
 
 
-def test_migrate_vagrant_collision_raises(tmp_path):
+def test_migrate_reports_a_stale_legacy_vagrant_dotfile_and_keeps_it(tmp_path):
+    # #1295: a stale lab/.vagrant beside the canonical build/state/vagrant used to abort
+    # migrate. It is now reported (path + how to remove it by hand), never deleted, and
+    # the rest of the migration still runs.
     main = tmp_path / "main"
     (main / ".git").mkdir(parents=True)
-    (main / "lab" / ".vagrant").mkdir(parents=True)
-    (main / "build" / "state" / "vagrant").mkdir(parents=True)  # destination already present
-    with pytest.raises(b.BuildEnvError, match="migrate collision"):
+    (main / "lab" / ".vagrant" / "machines").mkdir(parents=True)
+    (main / "lab" / ".vagrant" / "machines" / "id").write_text("old")
+    (main / "build" / "state" / "vagrant").mkdir(parents=True)
+    (main / "build" / "state" / "vagrant" / "id").write_text("live")
+    (main / "build" / "mq").mkdir()
+    plan = b.migrate(main)
+    legacy = main / "lab" / ".vagrant"
+    assert plan.stale == [
+        f"{legacy} is a stale legacy vagrant dotfile, ignored (the lab uses "
+        f"{main / 'build' / 'state' / 'vagrant'}). Once you have confirmed nothing needs "
+        f"it, remove it by hand: rm -rf {legacy}"
+    ]
+    assert (legacy / "machines" / "id").read_text() == "old"  # never deleted
+    assert (main / "build" / "state" / "vagrant" / "id").read_text() == "live"
+    assert plan.moves == [(str(main / "build" / "mq"), str(main / "build" / "cache" / "mq"))]
+    assert (main / "build" / "cache" / "mq").is_dir()
+
+
+# --- refs merge: legacy build/refs beside build/cache/refs (#1295) ---
+def _refs_pair(tmp_path: Path) -> tuple[Path, Path, Path]:
+    main = tmp_path / "main"
+    legacy = main / "build" / "refs" / "ibm-docs"
+    bucket = main / "build" / "cache" / "refs" / "ibm-docs"
+    legacy.mkdir(parents=True)
+    bucket.mkdir(parents=True)
+    return main, legacy, bucket
+
+
+def test_migrate_merges_legacy_refs_without_loss(tmp_path):
+    main, legacy, bucket = _refs_pair(tmp_path)
+    (legacy / "ibm-mq" / "9.4.x" / "only-legacy").mkdir(parents=True)
+    (legacy / "ibm-mq" / "9.4.x" / "only-legacy" / "content.txt").write_text("L")
+    (legacy / "ibm-mq" / "9.4.x" / "shared").mkdir(parents=True)
+    (legacy / "ibm-mq" / "9.4.x" / "shared" / "content.txt").write_text("same")
+    (legacy / "ibm-mq" / "9.4.x" / "shared" / "extra.txt").write_text("E")
+    (bucket / "ibm-mq" / "9.4.x" / "shared").mkdir(parents=True)
+    (bucket / "ibm-mq" / "9.4.x" / "shared" / "content.txt").write_text("same")
+    (bucket / "ibm-mq" / "9.4.x" / "only-bucket").mkdir()
+    plan = b.migrate(main)
+    shared_legacy = legacy / "ibm-mq" / "9.4.x" / "shared"
+    shared_bucket = bucket / "ibm-mq" / "9.4.x" / "shared"
+    assert plan.duplicates == [
+        (str(shared_legacy / "content.txt"), str(shared_bucket / "content.txt"))
+    ]
+    assert (
+        str(legacy / "ibm-mq" / "9.4.x" / "only-legacy"),
+        str(bucket / "ibm-mq" / "9.4.x" / "only-legacy"),
+    ) in plan.moves
+    assert (str(shared_legacy / "extra.txt"), str(shared_bucket / "extra.txt")) in plan.moves
+    assert (bucket / "ibm-mq" / "9.4.x" / "only-legacy" / "content.txt").read_text() == "L"
+    assert (shared_bucket / "extra.txt").read_text() == "E"
+    assert (shared_bucket / "content.txt").read_text() == "same"
+    assert (bucket / "ibm-mq" / "9.4.x" / "only-bucket").is_dir()
+    assert not (main / "build" / "refs").exists()  # legacy tree fully retired
+    assert b.migrate(main) == b.MigrationPlan()  # idempotent
+
+
+def test_migrate_refs_merge_dry_run_changes_nothing(tmp_path):
+    main, legacy, bucket = _refs_pair(tmp_path)
+    (legacy / "a.txt").write_text("same")
+    (bucket / "a.txt").write_text("same")
+    (legacy / "b.txt").write_text("new")
+    plan = b.migrate(main, dry_run=True)
+    assert plan.duplicates == [(str(legacy / "a.txt"), str(bucket / "a.txt"))]
+    assert plan.moves == [(str(legacy / "b.txt"), str(bucket / "b.txt"))]
+    assert (legacy / "a.txt").exists()
+    assert (legacy / "b.txt").exists()
+    assert not (bucket / "b.txt").exists()
+
+
+def test_migrate_refs_differing_conflict_refuses_and_moves_nothing(tmp_path):
+    main, legacy, bucket = _refs_pair(tmp_path)
+    (legacy / "page").mkdir()
+    (legacy / "page" / "content.txt").write_text("9.4 copy")
+    (bucket / "page").mkdir()
+    (bucket / "page" / "content.txt").write_text("10.0 copy")
+    (legacy / "dir-vs-file").mkdir()
+    (bucket / "dir-vs-file").write_text("f")
+    (legacy / "missing.txt").write_text("m")  # would move, but a conflict blocks everything
+    (main / "build" / "mq").mkdir()  # an unrelated move is blocked too
+    with pytest.raises(b.BuildEnvError) as exc:
         b.migrate(main)
+    msg = str(exc.value)
+    assert msg.startswith("migrate collision; nothing was moved:\n")
+    assert f"{legacy / 'dir-vs-file'} differs from {bucket / 'dir-vs-file'}" in msg
+    assert (
+        f"{legacy / 'page' / 'content.txt'} differs from {bucket / 'page' / 'content.txt'}" in msg
+    )
+    assert msg.endswith("then re-run `mqlab build migrate`.")
+    assert (legacy / "page" / "content.txt").read_text() == "9.4 copy"  # never overwritten
+    assert (bucket / "page" / "content.txt").read_text() == "10.0 copy"
+    assert (legacy / "missing.txt").exists()
+    assert (main / "build" / "mq").is_dir()
+
+
+def test_migrate_refs_symlinks_compare_by_target(tmp_path):
+    main, legacy, bucket = _refs_pair(tmp_path)
+    (legacy / "same-link").symlink_to("target-a")
+    (bucket / "same-link").symlink_to("target-a")
+    (legacy / "diff-link").symlink_to("target-a")
+    (bucket / "diff-link").symlink_to("target-b")
+    (legacy / "link-vs-file").symlink_to("target-a")
+    (bucket / "link-vs-file").write_text("f")
+    (legacy / "dangling").symlink_to("nowhere")  # absent in the bucket: moved as a link
+    with pytest.raises(b.BuildEnvError) as exc:
+        b.migrate(main)
+    msg = str(exc.value)
+    assert f"{legacy / 'diff-link'} differs from {bucket / 'diff-link'}" in msg
+    assert f"{legacy / 'link-vs-file'} differs from {bucket / 'link-vs-file'}" in msg
+    assert "same-link differs" not in msg
+    (bucket / "diff-link").unlink()
+    (bucket / "link-vs-file").unlink()
+    plan = b.migrate(main)
+    assert plan.duplicates == [(str(legacy / "same-link"), str(bucket / "same-link"))]
+    assert (bucket / "dangling").readlink() == Path("nowhere")
+    assert (bucket / "diff-link").readlink() == Path("target-a")
+
+
+def test_migrate_refs_into_a_dangling_bucket_symlink_is_a_conflict(tmp_path):
+    # A destination that is a (dangling) symlink exists for merge purposes: never
+    # clobber it with a rename.
+    main, legacy, bucket = _refs_pair(tmp_path)
+    (legacy / "x").write_text("x")
+    (bucket / "x").symlink_to("nowhere")
+    with pytest.raises(b.BuildEnvError, match="differs from"):
+        b.migrate(main)
+    assert (bucket / "x").is_symlink()
+
+
+def test_migrate_refs_not_merged_when_legacy_is_a_file(tmp_path):
+    # MERGEABLE only applies dir-into-dir; any other shape is a plain collision.
+    main = tmp_path / "main"
+    (main / "build" / "cache" / "refs").mkdir(parents=True)
+    (main / "build" / "refs").write_text("odd")
+    with pytest.raises(b.BuildEnvError, match="already exists"):
+        b.migrate(main)
+    assert (main / "build" / "refs").read_text() == "odd"
 
 
 def test_migrate_vagrant_skips_a_symlink(tmp_path):
