@@ -19,8 +19,12 @@ import os
 import subprocess
 import tarfile
 from pathlib import Path
+from typing import Literal
 
-HELPER = Path(__file__).resolve().parents[1] / "lab" / "boxes" / "_box-register.sh"
+import pytest
+
+BOXES = Path(__file__).resolve().parents[1] / "lab" / "boxes"
+HELPER = BOXES / "_box-register.sh"
 _META = b'{"provider":"libvirt","format":"qcow2","virtual_size":20}\n'
 
 # A fake `vagrant box add ... <name> <cache>`: log the argv, then replace the box dir
@@ -36,7 +40,7 @@ cache="${args[${#args[@]}-1]}"
 dir="$VAGRANT_HOME/boxes/${name//\\//-VAGRANTSLASH-}"
 rm -rf "$dir"
 mkdir -p "$dir/0/arm64/libvirt"
-tar -xzf "$cache" -C "$dir/0/arm64/libvirt"
+tar -xf "$cache" -C "$dir/0/arm64/libvirt"
 """
 
 
@@ -70,10 +74,19 @@ def _adds(tmp_path: Path) -> list[str]:
     return log.read_text().splitlines() if log.exists() else []
 
 
-def _cache(tmp_path: Path, image: bytes = b"box-v1", mtime: int = 1_000) -> Path:
-    """A `.box` the way the builders write it: tar.gz of metadata.json + box.img."""
+def _cache(
+    tmp_path: Path,
+    image: bytes = b"box-v1",
+    mtime: int = 1_000,
+    mode: Literal["w", "w:gz"] = "w",
+) -> Path:
+    """A `.box` the way the builders write it: a plain tar of metadata.json + box.img.
+
+    ``mode="w:gz"`` writes the gzipped form the builders produced before #1346, which
+    caches baked earlier still carry.
+    """
     cache = tmp_path / "obs-ubuntu24-aarch64.box"
-    with tarfile.open(cache, "w:gz") as tar:
+    with tarfile.open(cache, mode) as tar:
         for name, data in (("metadata.json", _META), ("box.img", image)):
             info = tarfile.TarInfo(name)
             info.size = len(data)
@@ -137,11 +150,13 @@ def test_manifest_change_alone_is_readded(tmp_path):
     assert len(_adds(tmp_path)) == 2
 
 
-def test_unstamped_registration_identical_to_the_cache_is_adopted(tmp_path):
+@pytest.mark.parametrize("mode", ["w", "w:gz"], ids=["plain-tar", "legacy-gzip"])
+def test_unstamped_registration_identical_to_the_cache_is_adopted(tmp_path, mode):
     # Registered before #1248 from this very cache: stamp it, keep its box.img (and so
-    # its mtime, which the libvirt base volume is named after), add nothing.
+    # its mtime, which the libvirt base volume is named after), add nothing. The cache
+    # may be a plain tar (#1346) or a gzipped one baked earlier; both must compare.
     env = _env(tmp_path)
-    cache = _cache(tmp_path)
+    cache = _cache(tmp_path, mode=mode)
     provider = _hand_register(tmp_path, b"box-v1")
     result = _bash(_reuse(cache), env)
     assert result.returncode == 0, result.stderr
@@ -246,3 +261,15 @@ def test_identity_names_path_size_mtime_and_manifest(tmp_path):
     os.utime(cache, (1_234, 1_234))
     result = _bash(f'box_reg_identity "{cache}" abc', _env(tmp_path))
     assert result.stdout.strip() == f"cache={cache} size=5 mtime=1234 manifest=abc"
+
+
+@pytest.mark.parametrize("builder", ["build-fatbox.sh", "rhel/build-box.sh"])
+def test_builders_package_an_uncompressed_tar(builder):
+    # box.img is already a compressed qcow2 (qemu-img convert -c); gzipping the .box
+    # on top bought ~1-2% for minutes of single-threaded CPU per bake (#1346).
+    lines = (BOXES / builder).read_text().splitlines()
+    code = [ln for ln in lines if not ln.lstrip().startswith("#")]
+    packs = [ln for ln in code if "tar " in ln and "metadata.json box.img" in ln]
+    assert packs, f"{builder}: no .box packaging line found"
+    for ln in packs:
+        assert " -cf " in ln, f"{builder}: package the .box uncompressed (tar -cf): {ln.strip()}"

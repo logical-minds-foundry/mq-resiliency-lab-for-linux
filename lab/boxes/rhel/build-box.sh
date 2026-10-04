@@ -222,7 +222,7 @@ sudo qemu-img convert -O qcow2 -c "$DISK" "$WORK/box.img.tmp"
 sudo chown "$(id -u)" "$WORK/box.img.tmp"
 mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
-tar -C "$WORK" -czf "$CACHE" metadata.json box.img
+tar -C "$WORK" -cf "$CACHE" metadata.json box.img
 box_register "$BOX_NAME" "$(box_reg_identity "$CACHE" -)" --force "$BOX_NAME" "$CACHE"
 
 # 5. Cleanup (keep the staged ISO for future rebuilds).

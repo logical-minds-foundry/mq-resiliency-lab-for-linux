@@ -91,8 +91,8 @@ box_reg_same_as_cache() {
   dirs="$(box_reg_provider_dirs "$1")"
   [ -n "$dirs" ] || return 1
   while IFS= read -r d; do
-    cmp -s <(tar -xzOf "$2" metadata.json) "$d/metadata.json" || return 1
-    cmp -s <(tar -xzOf "$2" box.img) "$d/box.img" || return 1
+    cmp -s <(tar -xOf "$2" metadata.json) "$d/metadata.json" || return 1
+    cmp -s <(tar -xOf "$2" box.img) "$d/box.img" || return 1
   done <<<"$dirs"
 }
 
