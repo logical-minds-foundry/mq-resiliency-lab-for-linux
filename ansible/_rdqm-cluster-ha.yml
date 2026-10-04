@@ -10,7 +10,7 @@
       ansible.builtin.dnf:
         name: acl
 
-# The heavy MQ + RDQM (DRBD/Pacemaker) install is BAKED into the mq-rdqm-rhel9 box
+# The heavy MQ + RDQM (DRBD/Pacemaker) install is BAKED into the mq-rdqm box
 # (ansible/bake-mq-rdqm.yml), so per-run we run ONLY rdqm-install's configure half:
 # drbd module load and the drbdpool VG on this instance's fresh extra disk. This is
 # the #604 strip — the bake roles do not re-run at bootstrap.

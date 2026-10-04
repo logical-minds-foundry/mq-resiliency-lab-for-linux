@@ -1,7 +1,7 @@
 ---
-# Bake the mq-nativeha-rhel9 box image (#667, epic .github#88). The RHEL native-HA peer
+# Bake the RHEL mq-nativeha box image (#667, epic .github#88). The RHEL native-HA peer
 # of bake-mq-rdqm.yml: it bakes the per-run-invariant install work the six nha-rhel-*
-# nodes pay EVERY bootstrap on the bare rhel/9-x86_64 base — base IBM MQ (NO RDQM/DRBD, NO
+# nodes pay EVERY bootstrap on the bare RHEL base box — base IBM MQ (NO RDQM/DRBD, NO
 # kernel pin: Native HA replicates in the raft log) + acl + node-exporter + alloy.
 #
 # ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue
@@ -12,10 +12,10 @@
 #   ansible-playbook -i inventory/bake-host.ini bake-nativeha-rhel.yml
 #
 # Full proof (the RHEL MQ media for the rpm install + the install DVD) rides the actual
-# box build (build-fatbox.sh --box mq-nativeha-rhel9), which overrides the media path to
+# box build (build-fatbox.sh --box <the RHEL mq-nativeha box>), which overrides the media path to
 # the host-durable main-worktree cache. See docs/development/box-bake-manifest.md for the
 # authoritative per-role bake-vs-configure classification.
-- name: Bake mq-nativeha-rhel9 (install adapter only; no QMs, no formation, no secrets)
+- name: Bake the RHEL mq-nativeha box (install adapter only; no QMs, no formation, no secrets)
   hosts: bake
   become: true
   vars:

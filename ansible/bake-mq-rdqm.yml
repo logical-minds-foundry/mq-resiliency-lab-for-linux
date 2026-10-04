@@ -1,5 +1,5 @@
 ---
-# Bake the mq-rdqm-rhel9 box image (#602, epic .github#70 Task 1).
+# Bake the mq-rdqm box image (#602, epic .github#70 Task 1).
 #
 # ADDITIVE FOUNDATION: this installs only the image-bakeable software for the RDQM
 # RHEL 9 box — the slow, per-run-invariant install work that a golden image should
@@ -13,7 +13,7 @@
 #
 # See docs/development/box-bake-manifest.md for the authoritative per-role
 # bake-vs-configure classification and the rationale for every include below.
-- name: Bake mq-rdqm-rhel9 (install-only; no lab config, no QMs, no secrets)
+- name: Bake the mq-rdqm box (install-only; no lab config, no QMs, no secrets)
   hosts: bake
   become: true
   vars:

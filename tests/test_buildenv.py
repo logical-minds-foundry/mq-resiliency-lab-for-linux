@@ -315,6 +315,24 @@ def test_migrate_moves_known_entries(tmp_path):
     assert not (build / "mq").exists()
 
 
+def test_migrate_moves_a_root_install_dvd_into_state(tmp_path):
+    # The install DVD is matched by pattern (MIGRATION_GLOBS), not by a hand-written
+    # versioned name, so any <name>-dvd.iso at the build/ root lands in state (#1279).
+    main = tmp_path / "main"
+    (main / ".git").mkdir(parents=True)
+    run = _real_git(main, main)
+    build = main / "build"
+    build.mkdir()
+    (build / "rhel-9.6-x86_64-dvd.iso").write_text("iso")
+    (build / "notes.iso").write_text("x")  # not an install DVD: not migrated
+    b.ensure(main, run=run)
+    planned = b.migrate(main)
+    assert (build / "state" / "rhel-9.6-x86_64-dvd.iso").read_text() == "iso"
+    assert not (build / "rhel-9.6-x86_64-dvd.iso").exists()
+    assert (build / "notes.iso").exists()
+    assert any(src.endswith("/rhel-9.6-x86_64-dvd.iso") for src, _ in planned)
+
+
 def test_migrate_dry_run_moves_nothing(tmp_path):
     main = tmp_path / "main"
     (main / ".git").mkdir(parents=True)

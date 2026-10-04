@@ -121,7 +121,7 @@
       when: _apt_debian.stat.exists and not (_apt_autoupdate_already_off | bool)
 
 # The BIND9 install (package + /etc/bind/zones scaffolding) is BAKED into the
-# infra-ubuntu24 box (ansible/bake-infra.yml), so per-run we run ONLY bind-dns's
+# infra box (ansible/bake-infra.yml), so per-run we run ONLY bind-dns's
 # configure half: the topology-rendered zone data and this node's
 # named.conf.{options,local} (keyed by inventory_hostname). This is the #606
 # strip — the baked install half does not re-run at bootstrap. (node-exporter + alloy

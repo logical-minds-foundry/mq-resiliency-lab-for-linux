@@ -16,7 +16,7 @@
       ansible.builtin.dnf:
         name: acl
 
-# As on site A: the heavy MQ + RDQM install is baked into mq-rdqm-rhel9, so per-run we
+# As on site A: the heavy MQ + RDQM install is baked into the mq-rdqm box, so per-run we
 # run ONLY rdqm-install's configure half (drbd module + drbdpool VG on this instance's
 # fresh extra disk). The DVD dnf repo it (re)mounts is what makes
 # `mqlab obs instrument` find packages like unzip on rdqm_b later (#288, #604).

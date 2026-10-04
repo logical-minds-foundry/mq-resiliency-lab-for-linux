@@ -1,5 +1,5 @@
 # RDQM install — PER-RUN (configure) half (#604, epic .github#70). Everything keyed to
-# the specific lab instance, so it runs at bootstrap even on the baked mq-rdqm-rhel9 box
+# the specific lab instance, so it runs at bootstrap even on the baked mq-rdqm box
 # (which already carries the install half). Two concerns:
 #   1. load the DRBD kernel module for this boot;
 #   2. build the drbdpool VG on THIS instance's fresh extra disk (/dev/vdb) — the baked
@@ -11,7 +11,7 @@
 # depsolve conflict. OS currency now comes from rebuilding the box, not updating at boot.
 #
 # Ensure the DVD dnf repo is mounted first: on a baked box the fstab entry + repo file are
-# baked, but the mount may not be up yet this boot; on a fresh rhel/9-x86_64 box install.yml
+# baked, but the mount may not be up yet this boot; on a fresh RHEL base box install.yml
 # already mounted it. Idempotent either way.
 - name: ensure the install DVD is mounted (offline dnf source)
   ansible.builtin.shell: |

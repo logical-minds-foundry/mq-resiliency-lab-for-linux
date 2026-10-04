@@ -366,7 +366,7 @@ def _vms_build_steps(
     the speed<->reliability tradeoff and `_batch_guests` for the ordering guarantee.
 
     When a batch contains two+ guests that clone the SAME box (e.g. the six nha-rhel-*
-    on mq-nativeha-rhel9, or the three mq-client-ubuntu24 commons), the parallel default
+    on the RHEL mq-nativeha box, or the three mq-client commons), the parallel default
     races on staging that box's base volume and trips vagrant-libvirt's per-machine
     lock, so that batch is issued `--no-parallel` (serial within the batch — each boot
     stages the shared volume before the next clones it). A batch whose guests all clone
