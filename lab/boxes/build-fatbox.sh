@@ -296,7 +296,10 @@ sudo cp "$BASE_IMG" "$IMG"
 # is exactly what a relative +12G (→ ~22G) did to obs (#1144 → this fix #1146). 18G gives
 # ~2x the room the 8.7G overflow needed while leaving the guest's own growpart headroom to
 # fill p1 to 20G on first boot, same as the un-resized boxes. qcow2 stays sparse.
-sudo qemu-img resize "$IMG" 18G
+# GROW-ONLY (#1340): the RHEL base is already 20G (rhel/build-box.sh), and an
+# unconditional resize to 18G would be a shrink, which qemu-img refuses. The helper leaves
+# a base at or above the target alone.
+./_grow-build-disk.sh "$IMG" 18
 
 # 3. RHEL bakes need the install DVD attached as a cdrom: rdqm-install builds its offline
 #    dnf repo from it (BaseOS+AppStream) to resolve the MQ rpms' base-OS deps. Stage it into
