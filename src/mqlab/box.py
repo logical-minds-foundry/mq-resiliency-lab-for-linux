@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -779,6 +779,8 @@ class GcResult:
     kept: list[str]  # the current image(s) per stem (registered box's, else newest)
     skipped_in_use: list[str]  # stale images protected — a live overlay backs onto them
     dry_run: bool
+    # volumes listed by vol-list but deleted before vol-dumpxml read them (#1336)
+    vanished: list[str] = field(default_factory=list)
 
 
 def _vagrant_boxes_dir() -> Path:
@@ -816,12 +818,32 @@ def _virsh_out(args: list[str]) -> str:
 
     Unlike `_capture`, this never masks a virsh failure as an empty result — a
     broken `vol-list` must raise, not silently make GC a no-op (#759)."""
-    lines: list[str] = []
-    code = SubprocessRunner().run(Command([*_VIRSH, *args]), lines.append)
-    out = "\n".join(lines)
+    code, out = _virsh_run(args)
     if code != 0:
         raise RuntimeError(f"virsh {' '.join(args)} failed (rc={code}): {out}")
     return out
+
+
+def _virsh_run(args: list[str]) -> tuple[int, str]:
+    """Run a virsh command; return (exit-code, joined output) for the caller to judge."""
+    lines: list[str] = []
+    code = SubprocessRunner().run(Command([*_VIRSH, *args]), lines.append)
+    return code, "\n".join(lines)
+
+
+# virsh's wording when a named volume is not in the pool: "Storage volume not found"
+# (VIR_ERR_NO_STORAGE_VOL) and libvirt's "no storage vol with matching name/path".
+_VOLUME_VANISHED_MARKERS = ("storage volume not found", "no storage vol with matching")
+
+
+class VolumeVanishedError(RuntimeError):
+    """A pool volume listed by `vol-list` was gone by the time it was read (#1336)."""
+
+
+def _is_volume_vanished(output: str) -> bool:
+    """True iff virsh's error output says the named volume does not exist (and only that)."""
+    low = output.lower()
+    return any(marker in low for marker in _VOLUME_VANISHED_MARKERS)
 
 
 def _pool_volume_names(pool: str = _DEFAULT_POOL) -> list[str]:
@@ -839,8 +861,16 @@ def _vol_detail(name: str, pool: str = _DEFAULT_POOL) -> tuple[int, str | None]:
     """(allocation-bytes, backing-image-basename-or-None) from the volume XML.
 
     Reads the exact `<allocation unit='bytes'>` and any `<backingStore><path>` —
-    the backing path is what marks a base image as in-use by an overlay."""
-    xml = _virsh_out(["vol-dumpxml", name, "--pool", pool])
+    the backing path is what marks a base image as in-use by an overlay. Raises
+    `VolumeVanishedError` if the volume no longer exists; any other virsh failure
+    raises a plain RuntimeError (fail-loud)."""
+    args = ["vol-dumpxml", name, "--pool", pool]
+    code, xml = _virsh_run(args)
+    if code != 0:
+        msg = f"virsh {' '.join(args)} failed (rc={code}): {xml}"
+        if _is_volume_vanished(xml):
+            raise VolumeVanishedError(msg)
+        raise RuntimeError(msg)
     alloc_match = re.search(r"<allocation unit='bytes'>(\d+)</allocation>", xml)
     alloc = int(alloc_match.group(1)) if alloc_match else 0
     backing_match = re.search(r"<backingStore>.*?<path>([^<]+)</path>", xml, re.DOTALL)
@@ -872,11 +902,19 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     run repeatedly; `dry_run` reports without deleting."""
     current = _current_box_volumes()
     retired = _retired_volume_stems()
-    names = _pool_volume_names(pool)
     alloc: dict[str, int] = {}
     in_use: set[str] = set()
-    for name in names:
-        alloc[name], backing = _vol_detail(name, pool)
+    names: list[str] = []
+    vanished: list[str] = []
+    for name in _pool_volume_names(pool):
+        try:
+            alloc[name], backing = _vol_detail(name, pool)
+        except VolumeVanishedError:
+            # Deleted between vol-list and vol-dumpxml (e.g. a build domain's console
+            # log): already gone, so nothing to reclaim or protect — skip it (#1336).
+            vanished.append(name)
+            continue
+        names.append(name)
         if backing:
             in_use.add(backing)
 
@@ -919,6 +957,7 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
         kept=kept,
         skipped_in_use=skipped,
         dry_run=dry_run,
+        vanished=vanished,
     )
 
 

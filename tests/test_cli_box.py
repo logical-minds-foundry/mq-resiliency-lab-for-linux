@@ -767,12 +767,15 @@ class _FakeVirsh:
     """Route virsh subcommands by argv: vol-list -> the name table, vol-dumpxml ->
     that volume's XML, vol-delete -> record + scripted rc. Unexpected argv raises."""
 
-    def __init__(self, names, xml_by_name, *, delete_rc=0, delete_out=""):
+    def __init__(self, names, xml_by_name, *, delete_rc=0, delete_out="", dumpxml_errors=None):
         self.names = names
         self.xml_by_name = xml_by_name
         self.deleted: list[str] = []
+        self.dumped: list[str] = []
         self.delete_rc = delete_rc
         self.delete_out = delete_out
+        # name -> virsh error line: vol-dumpxml of that volume fails (rc=1) with it
+        self.dumpxml_errors = dumpxml_errors or {}
 
     def run(self, command, on_line):
         argv = command.argv
@@ -783,7 +786,12 @@ class _FakeVirsh:
                 on_line(f" {n}   /var/lib/libvirt/images/{n}")
             return 0
         if "vol-dumpxml" in argv:
-            on_line(self.xml_by_name[argv[argv.index("vol-dumpxml") + 1]])
+            name = argv[argv.index("vol-dumpxml") + 1]
+            self.dumped.append(name)
+            if name in self.dumpxml_errors:
+                on_line(self.dumpxml_errors[name])
+                return 1
+            on_line(self.xml_by_name[name])
             return 0
         if "vol-delete" in argv:
             self.deleted.append(argv[argv.index("vol-delete") + 1])
@@ -941,6 +949,101 @@ def test_gc_stale_volume_backing_a_live_overlay_is_still_protected(tmp_path, mon
     assert result.skipped_in_use == [stale]
     assert result.kept == [cur]
     assert fake.deleted == []
+
+
+_VANISHED_ERRORS = [
+    # what virsh printed in the D1 bake (#1336)
+    "error: failed to get vol 'x', specifying --pool might help\n"
+    "error: Storage volume not found: no storage vol with matching path 'x'",
+    "error: Storage volume not found",
+    "error: no storage vol with matching name 'x'",
+]
+
+
+@pytest.mark.parametrize("err", _VANISHED_ERRORS)
+def test_gc_skips_a_volume_that_vanishes_before_dumpxml(monkeypatch, err):
+    # A fatbox build domain's console log is listed, then removed before vol-dumpxml:
+    # GC treats it as already gone and still evaluates (and reclaims) the rest (#1336).
+    stem = "mq-rdqm-rhel9"
+    old = f"{stem}_vagrant_box_image_0_100_box.img"
+    new = f"{stem}_vagrant_box_image_0_200_box.img"
+    gone = "fatbox-mq-nativeha-ubuntu24-build-console.log"
+    fake = _FakeVirsh(
+        [gone, old, new],
+        {old: _vol_xml(old, 1000), new: _vol_xml(new, 2000)},
+        dumpxml_errors={gone: err},
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert fake.dumped == [gone, old, new]  # every listed volume was still evaluated
+    assert result.vanished == [gone]
+    assert result.deleted == [old]
+    assert result.kept == [new]
+    assert result.freed_bytes == 1000
+    assert fake.deleted == [old]  # the vanished volume is never vol-deleted
+
+
+def test_gc_vanished_volume_keeps_in_use_protection(monkeypatch):
+    # Another volume vanishing does not weaken the backing-store guard for live overlays.
+    stem = "obs-ubuntu24"
+    old = f"{stem}_vagrant_box_image_0_100_box.img"
+    new = f"{stem}_vagrant_box_image_0_200_box.img"
+    overlay = "lab_obs.img"
+    gone = "build-console.log"
+    fake = _FakeVirsh(
+        [old, gone, new, overlay],
+        {
+            old: _vol_xml(old, 1000),
+            new: _vol_xml(new, 1000),
+            overlay: _vol_xml(overlay, 10, backing=old),
+        },
+        dumpxml_errors={gone: "error: Storage volume not found"},
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images()
+    assert result.vanished == [gone]
+    assert result.skipped_in_use == [old]
+    assert result.deleted == []
+    assert fake.deleted == []
+
+
+def test_gc_other_dumpxml_error_still_fails_loud(monkeypatch):
+    # Only "the volume is gone" is tolerated; any other virsh failure aborts the pass.
+    stem = "mq-rdqm-rhel9"
+    old = f"{stem}_vagrant_box_image_0_100_box.img"
+    new = f"{stem}_vagrant_box_image_0_200_box.img"
+    fake = _FakeVirsh(
+        [old, new],
+        {new: _vol_xml(new, 2000)},
+        dumpxml_errors={old: "error: failed to connect to the hypervisor"},
+    )
+    _install_virsh(monkeypatch, fake)
+    with pytest.raises(RuntimeError, match="vol-dumpxml") as excinfo:
+        box.gc_orphaned_images()
+    assert not isinstance(excinfo.value, box.VolumeVanishedError)
+    assert fake.deleted == []
+
+
+def test_vol_detail_raises_vanished_only_for_missing_volume(monkeypatch):
+    name = "x.img"
+    fake = _FakeVirsh([name], {}, dumpxml_errors={name: "error: Storage volume not found"})
+    _install_virsh(monkeypatch, fake)
+    with pytest.raises(box.VolumeVanishedError, match="Storage volume not found"):
+        box._vol_detail(name)
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        *((err, True) for err in _VANISHED_ERRORS),
+        ("error: failed to connect to the hypervisor", False),
+        ("error: Storage pool not found: no storage pool with matching name 'x'", False),
+        ("error: Requested operation is not valid: storage pool 'default' is not active", False),
+        ("", False),
+    ],
+)
+def test_is_volume_vanished_is_narrow(output, expected):
+    assert box._is_volume_vanished(output) is expected
 
 
 def test_current_box_volumes_escapes_slash_and_skips_versioned(tmp_path, monkeypatch):
