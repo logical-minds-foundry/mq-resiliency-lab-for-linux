@@ -78,6 +78,15 @@ def versions_catalog_path() -> Path:
     return repo_root() / "lab" / "versions.yaml"
 
 
+def components_dir() -> Path:
+    """The lab's guest components (epic .github#294), one standalone uv project each.
+
+    ``components/<name>/`` is NOT part of mqlab: it carries its own pyproject.toml and
+    uv.lock, is built by ``mqlab component build``, and never imports mqlab.
+    """
+    return repo_root() / "components"
+
+
 def selection_state_path(setup: str) -> Path:
     """Manifest selection pin for a live setup — shared state/ (#266, #286)."""
     return state("manifests", f"{setup}.yaml")

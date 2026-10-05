@@ -64,7 +64,11 @@ def test_san_nodes_resolve_to_baked_san_box(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_san_role_bakes_bake_san_on_ubuntu_only() -> None:
     catalog = versions.load_catalog()
-    assert catalog.roles["san"] == {"bake": {"ubuntu": "san"}, "mq_bearing": False}
+    assert catalog.roles["san"] == {
+        "bake": {"ubuntu": "san"},
+        "mq_bearing": False,
+        "components": (),
+    }
     assert box_bakes()[_san_box()] == ("ubuntu", "san")
 
 

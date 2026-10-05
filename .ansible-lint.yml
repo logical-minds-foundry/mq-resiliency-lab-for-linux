@@ -21,3 +21,6 @@ exclude_paths:
   # build/: gitignored working tree — downloaded collections (community.crypto),
   # lab state, generated renders; never our authored Ansible source (#414).
   - build/
+  # components/: standalone guest components (epic .github#294), plain uv projects that
+  # are not Ansible content and not part of mqlab's validation tier.
+  - components/

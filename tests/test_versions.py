@@ -118,6 +118,72 @@ def test_committed_catalog_is_at_todays_versions():
     assert ubuntu24.ibm_unsupported_source is None
 
 
+def test_committed_runtime_pin():
+    """The ONE guest runtime (epic .github#294 spec §5.2): the build T2 proved."""
+    pin = load_catalog().runtime
+    assert (pin.version, pin.pbs_release, pin.minor, pin.token) == (
+        "3.14.8",
+        "20261003",
+        "3.14",
+        "3.14.8+20261003",
+    )
+    assert pin.sha256 == {
+        "x86_64": "371b6c281bbb09b29279e9e3a2996bab4ae2ea03cca52bf869f8bd89286b0ae8",
+        "aarch64": "abc0c8dd54a144909a5e4905737bc33f244cb17ce8afc4a7b0791ee1e006ae23",
+    }
+    assert pin.tarball("aarch64") == (
+        "cpython-3.14.8+20261003-aarch64-unknown-linux-gnu-install_only.tar.gz"
+    )
+    assert pin.url("x86_64") == (
+        "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/"
+        "cpython-3.14.8+20261003-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    )
+
+
+def test_runtime_tarball_unknown_arch():
+    pin = load_catalog().runtime
+    with pytest.raises(VersionError, match=r"arch 's390x' \(pinned: aarch64, x86_64\)"):
+        pin.tarball("s390x")
+
+
+def test_committed_roles_bake_no_components_yet():
+    """T3 adds the key; T6/T8 populate it once components/<name>/ exist."""
+    cat = load_catalog()
+    assert all(spec["components"] == () for spec in cat.roles.values())
+    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == ()
+
+
+def test_role_components_flow_to_box_entry(tmp_path, monkeypatch):
+    comps = tmp_path / "components"
+    for name in ("alpha", "beta"):
+        (comps / name).mkdir(parents=True)
+        (comps / name / "pyproject.toml").write_text("")
+    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "beta"]))
+    cat = load_catalog(path)
+    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == ("alpha", "beta")
+    assert cat.box("obs", OsRef("ubuntu", 24)).components == ()
+
+
+def test_role_components_refuses_a_dir_without_pyproject(tmp_path, monkeypatch):
+    comps = tmp_path / "components"
+    (comps / "half").mkdir(parents=True)  # a directory, but not a uv project
+    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["half"]))
+    with pytest.raises(VersionError, match="roles.pcmk: unknown component half"):
+        load_catalog(path)
+
+
+def test_role_components_refuses_duplicates(tmp_path, monkeypatch):
+    comps = tmp_path / "components"
+    (comps / "alpha").mkdir(parents=True)
+    (comps / "alpha" / "pyproject.toml").write_text("")
+    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "alpha"]))
+    with pytest.raises(VersionError, match="roles.pcmk: components lists a name twice"):
+        load_catalog(path)
+
+
 def test_bake_stems_name_real_playbooks():
     cat = load_catalog()
     ansible = versions_catalog_path().parent.parent / "ansible"
@@ -317,8 +383,40 @@ def test_catalog_not_a_mapping(tmp_path):
 @pytest.mark.parametrize(
     ("keys", "value", "match"),
     [
-        (("extra",), 1, r"unknown key 'extra' \(allowed: os, roles, infra, stacks\)"),
+        (("extra",), 1, r"unknown key 'extra' \(allowed: os, roles, infra, stacks, runtime\)"),
         (("stacks",), _DELETE, "missing required key stacks"),
+        (("runtime",), _DELETE, "missing required key runtime"),
+        # runtime: (epic .github#294)
+        (("runtime",), "3.14.8", "runtime must be a mapping"),
+        (("runtime", "node"), {}, "runtime: unknown key 'node'"),
+        (("runtime", "python"), _DELETE, "runtime: missing required 'python'"),
+        (("runtime", "python"), "3.14.8", "runtime.python must be a mapping"),
+        (("runtime", "python", "colour"), 1, r"runtime.python: unknown key 'colour'"),
+        (("runtime", "python", "version"), _DELETE, "runtime.python: missing required 'version'"),
+        (("runtime", "python", "version"), 3.14, r"'version' must be a string \(quote it\)"),
+        (("runtime", "python", "version"), "3.14", r"exact <major>.<minor>.<patch>"),
+        (("runtime", "python", "version"), "3.14.8rc1", r"exact <major>.<minor>.<patch>"),
+        (("runtime", "python", "pbs_release"), "2026-10-03", "8-digit release tag"),
+        (("runtime", "python", "pbs_release"), _DELETE, "missing required 'pbs_release'"),
+        (("runtime", "python", "sha256"), _DELETE, "runtime.python.sha256 must be a mapping"),
+        (
+            ("runtime", "python", "sha256"),
+            {"x86_64": "a" * 64},
+            r"sha256 must pin exactly aarch64, x86_64; got x86_64",
+        ),
+        (("runtime", "python", "sha256"), {}, r"must pin exactly aarch64, x86_64; got none"),
+        (
+            ("runtime", "python", "sha256"),
+            {"x86_64": "a" * 64, "aarch64": "a" * 64, "s390x": "a" * 64},
+            r"got aarch64, s390x, x86_64",
+        ),
+        (("runtime", "python", "sha256", "aarch64"), "ABC", "sha256.aarch64 must be a 64-hex"),
+        (("runtime", "python", "sha256", "x86_64"), 7, "sha256.x86_64 must be a 64-hex"),
+        (("runtime", "python", "sha256", "x86_64"), "A" * 64, "sha256.x86_64 must be a 64-hex"),
+        # roles.<role>.components: (epic .github#294)
+        (("roles", "obs", "components"), "x", "roles.obs: components must be a list of names"),
+        (("roles", "obs", "components"), [1], "roles.obs: components must be a list of names"),
+        (("roles", "obs", "components"), ["nope"], "roles.obs: unknown component nope"),
         # os:
         (("os",), [], "os must be a mapping"),
         (("os",), {}, "os: declares no OS versions"),
