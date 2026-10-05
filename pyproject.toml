@@ -44,6 +44,10 @@ python-preference = "only-managed"
 [tool.ruff]
 target-version = "py314"
 line-length = 100
+# components/<name>/ are standalone uv projects with their OWN [tool.ruff] (epic
+# .github#294 spec §5.1): mqlab's rules must never apply to them, even on a bare root
+# `ruff` run or in an editor. tests/test_component_boundary.py guards this.
+extend-exclude = ["components"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "SIM", "TCH", "ARG", "PTH", "ERA"]

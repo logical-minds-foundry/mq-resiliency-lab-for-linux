@@ -3,6 +3,8 @@
 Sits in FRONT of the host resolver (platforms.resolve): it owns lab/versions.yaml (the
 only place OS version tokens are written by hand) and an optional build file, and
 works out each stack's OS major and each box's generated ``<role>-<os><major>`` name.
+The catalog also pins the ONE guest Python runtime (``runtime.python``) and names the
+guest components each box role bakes (``roles.<role>.components``), epic .github#294.
 
 Pure: no host probing, no subprocesses. Callers pass HostFacts. Everything fails
 loudly with a VersionError whose message names the fix — there are no silent
@@ -19,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from mqlab import instances
-from mqlab.paths import versions_catalog_path
+from mqlab.paths import components_dir, versions_catalog_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,9 +39,15 @@ KNOWN_REQUIREMENTS: frozenset[str] = frozenset()
 HOST_ARCHES = ("aarch64", "x86_64")
 
 _REF_RE = re.compile(r"([a-z]+):([0-9]+)")
-_TOP_KEYS = ("os", "roles", "infra", "stacks")
+_TOP_KEYS = ("os", "roles", "infra", "stacks", "runtime")
 _OS_KEYS = ("base_box", "base_box_version", "point", "iso", "arch", "requires", "ibm_support")
-_ROLE_KEYS = ("bake", "mq_bearing")
+_ROLE_KEYS = ("bake", "mq_bearing", "components")
+_RUNTIME_KEYS = ("python",)
+_PYTHON_KEYS = ("version", "pbs_release", "sha256")
+_PY_VERSION_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+_PBS_RELEASE_RE = re.compile(r"[0-9]{8}")
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+_PBS_DOWNLOADS = "https://github.com/astral-sh/python-build-standalone/releases/download"
 _STACK_KEYS = ("supported", "default")
 _SUPPORT_KEYS = ("status", "source")
 _BUILD_KEYS = ("os",)
@@ -103,6 +111,7 @@ class BoxEntry:
     os: OsEntry
     bake_stem: str
     mq_bearing: bool
+    components: tuple[str, ...] = ()  # guest components the box bakes (epic .github#294)
 
 
 @dataclass(frozen=True)
@@ -111,11 +120,50 @@ class BuildFile:
 
 
 @dataclass(frozen=True)
+class RuntimePin:
+    """The ONE pinned guest Python runtime (epic .github#294 spec §5.2).
+
+    A python-build-standalone CPython ``install_only`` build. The contract is the minor
+    (``3.14``); each build pins the exact patch, release and per-arch sha256, so a
+    patch bump is an edit to ``runtime.python`` in lab/versions.yaml and nowhere else.
+    """
+
+    version: str  # e.g. "3.14.8"
+    pbs_release: str  # e.g. "20261003"
+    sha256: dict[str, str]  # arch -> hex digest of the install_only tarball; keys == HOST_ARCHES
+
+    @property
+    def minor(self) -> str:
+        """The contract version, e.g. ``"3.14"`` (also keys the guest path)."""
+        major, minor, _patch = self.version.split(".")
+        return f"{major}.{minor}"
+
+    @property
+    def token(self) -> str:
+        """The exact build, e.g. ``"3.14.8+20261003"``."""
+        return f"{self.version}+{self.pbs_release}"
+
+    def tarball(self, arch: str) -> str:
+        """The release asset name for ``arch`` (unknown arch -> VersionError)."""
+        if arch not in self.sha256:
+            raise VersionError(
+                f"runtime.python has no build for arch {arch!r} (pinned: "
+                f"{', '.join(sorted(self.sha256))}) — {_CATALOG_FIX}"
+            )
+        return f"cpython-{self.token}-{arch}-unknown-linux-gnu-install_only.tar.gz"
+
+    def url(self, arch: str) -> str:
+        """Where the tarball for ``arch`` is published."""
+        return f"{_PBS_DOWNLOADS}/{self.pbs_release}/{self.tarball(arch)}"
+
+
+@dataclass(frozen=True)
 class Catalog:
     oses: dict[OsRef, OsEntry]
     roles: dict[str, dict[str, Any]]
     infra: OsRef
     stacks: dict[str, dict[str, Any]]
+    runtime: RuntimePin
 
     def _entry(self, ref: OsRef) -> OsEntry:
         if ref not in self.oses:
@@ -147,6 +195,7 @@ class Catalog:
             os=entry,
             bake_stem=stem,
             mq_bearing=spec["mq_bearing"],
+            components=spec["components"],
         )
 
     def _stack(self, stack: str) -> dict[str, Any]:
@@ -471,8 +520,62 @@ def _roles(raw: Any) -> dict[str, dict[str, Any]]:
         mq_bearing = spec.get("mq_bearing", False)
         if not isinstance(mq_bearing, bool):
             raise VersionError(f"{where}: mq_bearing must be true or false — {_CATALOG_FIX}")
-        out[str(role)] = {"bake": dict(bake), "mq_bearing": mq_bearing}
+        out[str(role)] = {
+            "bake": dict(bake),
+            "mq_bearing": mq_bearing,
+            "components": _components(spec.get("components", []), where),
+        }
     return out
+
+
+def _components(raw: Any, where: str) -> tuple[str, ...]:
+    """A role's baked guest components: each must be a real ``components/<name>/`` project."""
+    if not isinstance(raw, list) or not all(isinstance(c, str) for c in raw):
+        raise VersionError(f"{where}: components must be a list of names — {_CATALOG_FIX}")
+    if len(set(raw)) != len(raw):
+        raise VersionError(f"{where}: components lists a name twice — {_CATALOG_FIX}")
+    root = components_dir()
+    missing = [c for c in raw if not (root / c / "pyproject.toml").is_file()]
+    if missing:
+        raise VersionError(
+            f"{where}: unknown component {', '.join(missing)} (no {root}/<name>/pyproject.toml) "
+            f"— {_CATALOG_FIX}"
+        )
+    return tuple(raw)
+
+
+def _runtime(raw: Any) -> RuntimePin:
+    runtime = _mapping(raw, "runtime")
+    _check_keys(runtime, _RUNTIME_KEYS, "runtime", _CATALOG_FIX)
+    where = "runtime.python"
+    if "python" not in runtime:
+        raise VersionError(f"runtime: missing required 'python' — {_CATALOG_FIX}")
+    spec = _mapping(runtime["python"], where)
+    _check_keys(spec, _PYTHON_KEYS, where, _CATALOG_FIX)
+    version = _required(spec, "version", where)
+    if _PY_VERSION_RE.fullmatch(version) is None:
+        raise VersionError(
+            f"{where}: version must be an exact <major>.<minor>.<patch> (e.g. 3.14.8); "
+            f"got {version!r} — {_CATALOG_FIX}"
+        )
+    release = _required(spec, "pbs_release", where)
+    if _PBS_RELEASE_RE.fullmatch(release) is None:
+        raise VersionError(
+            f"{where}: pbs_release must be the 8-digit release tag (e.g. 20261003); "
+            f"got {release!r} — {_CATALOG_FIX}"
+        )
+    sha = _mapping(spec.get("sha256"), f"{where}.sha256")
+    if set(sha) != set(HOST_ARCHES):
+        raise VersionError(
+            f"{where}.sha256 must pin exactly {', '.join(HOST_ARCHES)}; got "
+            f"{', '.join(sorted(str(k) for k in sha)) or 'none'} — {_CATALOG_FIX}"
+        )
+    for arch, digest in sha.items():
+        if not isinstance(digest, str) or _SHA256_RE.fullmatch(digest) is None:
+            raise VersionError(
+                f"{where}.sha256.{arch} must be a 64-hex-digit lowercase sha256 — {_CATALOG_FIX}"
+            )
+    return RuntimePin(version=version, pbs_release=release, sha256=dict(sha))
 
 
 def _known(ref: OsRef, oses: dict[OsRef, OsEntry], where: str) -> OsRef:
@@ -524,7 +627,13 @@ def load_catalog(path: Path | None = None) -> Catalog:
     oses = _oses(data["os"])
     roles = _roles(data["roles"])
     infra = _known(_ref(data["infra"], "infra"), oses, "infra")
-    catalog = Catalog(oses=oses, roles=roles, infra=infra, stacks=_stacks(data["stacks"], oses))
+    catalog = Catalog(
+        oses=oses,
+        roles=roles,
+        infra=infra,
+        stacks=_stacks(data["stacks"], oses),
+        runtime=_runtime(data["runtime"]),
+    )
     for role in INFRA_ROLES:
         catalog.box(role, infra)  # every infra role must be bakeable on the infra OS
     return catalog

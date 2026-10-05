@@ -35,3 +35,16 @@ stacks:
   pcmk-ubuntu: { supported: [ubuntu:24], default: ubuntu:24 }
   nativeha-rhel-crr: { supported: [rhel:9], default: rhel:9 }
   rdqm-rhel: { supported: [rhel:9], default: rhel:9 }
+# The ONE pinned guest Python runtime (epic .github#294 spec §5.2): a
+# python-build-standalone CPython install_only build, run by every guest component and
+# by `mqlab component build`'s tests. The contract is the minor (3.14); a patch bump is
+# this block only. sha256 = the install_only tarballs, from the release's SHA256SUMS:
+# https://github.com/astral-sh/python-build-standalone/releases/download/20261003/SHA256SUMS
+# Proven on Ubuntu 24.04 (both arches) and RHEL 9.6: docs/reports/2026-10-guest-runtime-spike.md.
+runtime:
+  python:
+    version: "3.14.8"
+    pbs_release: "20261003"
+    sha256:
+      x86_64: "371b6c281bbb09b29279e9e3a2996bab4ae2ea03cca52bf869f8bd89286b0ae8"
+      aarch64: "abc0c8dd54a144909a5e4905737bc33f244cb17ce8afc4a7b0791ee1e006ae23"
