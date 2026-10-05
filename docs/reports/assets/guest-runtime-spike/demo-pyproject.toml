@@ -1,0 +1,18 @@
+# Throwaway stand-in for components/mq-resiliency-clients/pyproject.toml (epic
+# logical-minds-foundry/.github#294, spike T2 / #1349). bundle.py copies this into a
+# scratch dir, runs `uv lock`, and stages exactly what `mqlab component build` will
+# stage (spec §5.6): the `mqi` extra's runtime set and the `sdist-build` group's
+# build-requirements set, each with hashes, artifacts fetched from uv.lock URLs.
+[project]
+name = "spike-clients"
+version = "0.0.0"
+requires-python = "==3.14.*"
+dependencies = []
+
+[project.optional-dependencies]
+mqi = ["pymqi==1.12.13"]
+
+[dependency-groups]
+# Build requirements of our sdist deps: pymqi has no [build-system] and its setup.py
+# imports distutils (gone from the stdlib since 3.12), so setuptools' shim is needed.
+sdist-build = ["setuptools", "wheel"]
