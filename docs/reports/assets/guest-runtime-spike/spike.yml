@@ -21,20 +21,6 @@
 #               install of pure wheels into a venv on the pinned runtime.
 # Everything on the guest lives under /var/tmp/spike294 and is removed at the end.
 
-- name: "T2 spike — preflight"
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: spike_dir must point at a prepared bundle
-      ansible.builtin.assert:
-        that:
-          - spike_dir is defined
-          - (spike_dir ~ '/build-requirements.txt') is file
-        fail_msg: >-
-          pass -e spike_dir=<dir> prepared by bundle.py (see this file's header)
-    - name: results dir
-      ansible.builtin.file: {path: "{{ spike_dir }}/results", state: directory, mode: "0755"}
-
 - name: "T2 spike — common setup + row 1 (runtime)"
   hosts: all
   gather_facts: true
@@ -46,6 +32,21 @@
       x86_64: 371b6c281bbb09b29279e9e3a2996bab4ae2ea03cca52bf869f8bd89286b0ae8
       aarch64: abc0c8dd54a144909a5e4905737bc33f244cb17ce8afc4a7b0791ee1e006ae23
   tasks:
+    # Controller-side preflight lives HERE (run_once + delegate_to), not in a
+    # `hosts: localhost` play: --limit <guests> filters such a play out entirely.
+    - name: spike_dir must point at a prepared bundle
+      run_once: true
+      delegate_to: localhost
+      ansible.builtin.assert:
+        that:
+          - spike_dir is defined
+          - (spike_dir ~ '/build-requirements.txt') is file
+        fail_msg: >-
+          pass -e spike_dir=<dir> prepared by bundle.py (see this file's header)
+    - name: results dir
+      run_once: true
+      delegate_to: localhost
+      ansible.builtin.file: {path: "{{ spike_dir }}/results", state: directory, mode: "0755"}
     - name: guest staging dir
       become: true
       ansible.builtin.file: {path: "{{ gdir }}", state: directory, mode: "0755"}
@@ -107,7 +108,11 @@
         echo "== build reqs (offline, hashes)"
         $P install $F -r {{ gdir }}/build-requirements.txt || exit 11
         echo "== pymqi (offline, hashes, --no-build-isolation)"
-        $P install $F --no-build-isolation -r {{ gdir }}/requirements.txt || exit 12
+        # pbs CPython is built with clang and its sysconfig CC/LDSHARED name clang,
+        # which the guests lack (first run: No such file or directory: clang).
+        # Point C-extension builds at the system compiler.
+        echo "== sysconfig CC/LDSHARED"; {{ gdir }}/cpython-3.14/bin/python3.14 -c 'import sysconfig as s; print(s.get_config_var("CC")); print(s.get_config_var("LDSHARED"))'
+        CC=gcc LDSHARED="gcc -shared" $P install $F --no-build-isolation -r {{ gdir }}/requirements.txt || exit 12
         echo "== import"
         LD_LIBRARY_PATH=/opt/mqm/lib64 {{ gdir }}/venv-mqi/bin/python -c 'import pymqi, sys; print("pymqi", pymqi.__version__, "from", pymqi.__file__, "on", sys.version.split()[0])' || exit 13
         echo "== freeze"; $P freeze
