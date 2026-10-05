@@ -69,7 +69,7 @@
         rm -rf {{ gdir }}/cpython-3.14 && mkdir -p {{ gdir }}/cpython-3.14
         tar -xzf {{ gdir }}/{{ tarball }} -C {{ gdir }}/cpython-3.14 --strip-components=1
         echo "== os";    grep PRETTY_NAME /etc/os-release
-        echo "== glibc"; ldd --version | head -1
+        echo "== glibc"; ldd --version | sed -n 1p   # not head -1: SIGPIPE under pipefail (#1359)
         echo "== arch";  uname -m
         {{ gdir }}/cpython-3.14/bin/python3.14 -c 'import sys, ssl, sqlite3, ctypes, venv, ensurepip, zlib, lzma, bz2; print("== python", sys.version); print("== ssl", ssl.OPENSSL_VERSION); print("== sqlite", sqlite3.sqlite_version); print("== ctypes/venv/ensurepip/zlib/lzma/bz2 import ok")'
       args: {executable: /bin/bash}
@@ -104,7 +104,7 @@
         F="--no-index --find-links {{ gdir }}/deps --require-hashes"
         rm -rf {{ gdir }}/venv-mqi
         {{ gdir }}/cpython-3.14/bin/python3.14 -m venv {{ gdir }}/venv-mqi || exit 10
-        echo "== gcc"; gcc --version | head -1 || echo "NO GCC"
+        echo "== gcc"; gcc --version | sed -n 1p || echo "NO GCC"
         echo "== build reqs (offline, hashes)"
         $P install $F -r {{ gdir }}/build-requirements.txt || exit 11
         echo "== pymqi (offline, hashes, --no-build-isolation)"
