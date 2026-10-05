@@ -1,0 +1,170 @@
+# Reproducible spike for epic logical-minds-foundry/.github#294, task T2 (#1349).
+# Evidence for docs/reports/2026-10-guest-runtime-spike.md. NOT part of the lab's
+# provisioning; never included by any site/bake playbook.
+#
+# Prepare the bundle first (controller side, needs internet):
+#   python3 docs/reports/assets/guest-runtime-spike/bundle.py "$(uv run mqlab build path temp)/spike-294"
+# Run (from ansible/, against the running lab):
+#   uv run ansible-playbook -i "$(uv run mqlab build path work)/inventory.ini" \
+#     ../docs/reports/assets/guest-runtime-spike/spike.yml \
+#     -e spike_dir="$(uv run mqlab build path temp)/spike-294" --limit <hosts>
+# Raw output per host lands in <spike_dir>/results/<host>.txt.
+#
+# Rows:
+#   1 runtime — every host: sha256-check + unpack the pinned pbs CPython 3.14.8, run it,
+#               record os-release / glibc / arch / ssl / sqlite / stdlib C modules.
+#   2 pymqi   — Debian hosts with the MQ SDK (the mq-client box: app-client, svc-sim):
+#               venv on the pinned runtime; OFFLINE hash-pinned setuptools+wheel; pymqi
+#               1.12.13 from sdist with --no-build-isolation; import against /opt/mqm.
+#               (Under the #294 design only the mq-client box ever compiles pymqi.)
+#   3 offline — RedHat hosts: show PyPI is unreachable, then an OFFLINE hash-pinned
+#               install of pure wheels into a venv on the pinned runtime.
+# Everything on the guest lives under /var/tmp/spike294 and is removed at the end.
+
+- name: "T2 spike — preflight"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: spike_dir must point at a prepared bundle
+      ansible.builtin.assert:
+        that:
+          - spike_dir is defined
+          - (spike_dir ~ '/build-requirements.txt') is file
+        fail_msg: >-
+          pass -e spike_dir=<dir> prepared by bundle.py (see this file's header)
+    - name: results dir
+      ansible.builtin.file: {path: "{{ spike_dir }}/results", state: directory, mode: "0755"}
+
+- name: "T2 spike — common setup + row 1 (runtime)"
+  hosts: all
+  gather_facts: true
+  vars:
+    gdir: /var/tmp/spike294
+    arch: "{{ {'x86_64': 'x86_64', 'aarch64': 'aarch64', 'arm64': 'aarch64'}[ansible_architecture] }}"
+    tarball: "cpython-3.14.8+20261003-{{ arch }}-unknown-linux-gnu-install_only.tar.gz"
+    pin_sha:
+      x86_64: 371b6c281bbb09b29279e9e3a2996bab4ae2ea03cca52bf869f8bd89286b0ae8
+      aarch64: abc0c8dd54a144909a5e4905737bc33f244cb17ce8afc4a7b0791ee1e006ae23
+  tasks:
+    - name: guest staging dir
+      become: true
+      ansible.builtin.file: {path: "{{ gdir }}", state: directory, mode: "0755"}
+    - name: copy the pinned runtime tarball for this arch
+      become: true
+      ansible.builtin.copy: {src: "{{ spike_dir }}/runtime/{{ tarball }}", dest: "{{ gdir }}/{{ tarball }}", mode: "0644"}
+    - name: copy the offline deps and requirement files
+      become: true
+      ansible.builtin.copy: {src: "{{ spike_dir }}/{{ item }}", dest: "{{ gdir }}/", mode: preserve}
+      loop: [deps, build-requirements.txt, requirements.txt]
+    - name: verify the tarball sha256 on the guest
+      become: true
+      ansible.builtin.stat: {path: "{{ gdir }}/{{ tarball }}", checksum_algorithm: sha256}
+      register: tar
+      failed_when: tar.stat.checksum != pin_sha[arch]
+    - name: row 1 — unpack and run the pinned interpreter
+      become: true
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rm -rf {{ gdir }}/cpython-3.14 && mkdir -p {{ gdir }}/cpython-3.14
+        tar -xzf {{ gdir }}/{{ tarball }} -C {{ gdir }}/cpython-3.14 --strip-components=1
+        echo "== os";    grep PRETTY_NAME /etc/os-release
+        echo "== glibc"; ldd --version | head -1
+        echo "== arch";  uname -m
+        {{ gdir }}/cpython-3.14/bin/python3.14 -c 'import sys, ssl, sqlite3, ctypes, venv, ensurepip, zlib, lzma, bz2; print("== python", sys.version); print("== ssl", ssl.OPENSSL_VERSION); print("== sqlite", sqlite3.sqlite_version); print("== ctypes/venv/ensurepip/zlib/lzma/bz2 import ok")'
+      args: {executable: /bin/bash}
+      register: row1
+      changed_when: false
+    - name: start this host's results file
+      delegate_to: localhost
+      ansible.builtin.copy:
+        dest: "{{ spike_dir }}/results/{{ inventory_hostname }}.txt"
+        mode: "0644"
+        content: |
+          ### {{ inventory_hostname }} — row 1 (runtime)  rc={{ row1.rc }}
+          tarball sha256 {{ tar.stat.checksum }} (pin {{ pin_sha[arch] }})
+          {{ row1.stdout }}
+          {{ row1.stderr }}
+
+- name: "T2 spike — row 2 (pymqi from sdist, offline, mq-client box)"
+  hosts: all
+  gather_facts: false
+  vars:
+    gdir: /var/tmp/spike294
+  tasks:
+    - name: is the MQ SDK here?
+      ansible.builtin.stat: {path: /opt/mqm/inc/cmqc.h}
+      register: sdk
+    - name: row 2 — venv, offline build reqs, pymqi sdist (no build isolation), import
+      when: ansible_os_family == 'Debian' and sdk.stat.exists
+      become: true
+      ansible.builtin.shell: |
+        set -uo pipefail
+        P={{ gdir }}/venv-mqi/bin/pip
+        F="--no-index --find-links {{ gdir }}/deps --require-hashes"
+        rm -rf {{ gdir }}/venv-mqi
+        {{ gdir }}/cpython-3.14/bin/python3.14 -m venv {{ gdir }}/venv-mqi || exit 10
+        echo "== gcc"; gcc --version | head -1 || echo "NO GCC"
+        echo "== build reqs (offline, hashes)"
+        $P install $F -r {{ gdir }}/build-requirements.txt || exit 11
+        echo "== pymqi (offline, hashes, --no-build-isolation)"
+        $P install $F --no-build-isolation -r {{ gdir }}/requirements.txt || exit 12
+        echo "== import"
+        LD_LIBRARY_PATH=/opt/mqm/lib64 {{ gdir }}/venv-mqi/bin/python -c 'import pymqi, sys; print("pymqi", pymqi.__version__, "from", pymqi.__file__, "on", sys.version.split()[0])' || exit 13
+        echo "== freeze"; $P freeze
+      args: {executable: /bin/bash}
+      register: row2
+      changed_when: false
+      # The rc IS the result (recorded below with its legend); the play must keep going
+      # so every host's evidence is captured. Not a swallowed failure.
+      failed_when: false
+    - name: append row 2
+      when: row2 is not skipped
+      delegate_to: localhost
+      ansible.builtin.blockinfile:
+        path: "{{ spike_dir }}/results/{{ inventory_hostname }}.txt"
+        marker: "### {mark} row 2 (pymqi)"
+        block: |
+          rc={{ row2.rc }}  (0 ok; 10 venv, 11 build reqs, 12 pymqi build, 13 import)
+          {{ row2.stdout }}
+          {{ row2.stderr }}
+
+- name: "T2 spike — row 3 (offline hash-pinned install, RHEL)"
+  hosts: all
+  gather_facts: false
+  vars:
+    gdir: /var/tmp/spike294
+  tasks:
+    - name: row 3 — show PyPI is unreachable, then an offline install of pure wheels
+      when: ansible_os_family == 'RedHat'
+      become: true
+      ansible.builtin.shell: |
+        set -uo pipefail
+        echo "== pypi reachability (expect unreachable)"
+        if curl -sS -m 8 -o /dev/null https://pypi.org/simple/ 2>&1; then echo "PYPI REACHABLE"; else echo "pypi unreachable"; fi
+        rm -rf {{ gdir }}/venv-off
+        {{ gdir }}/cpython-3.14/bin/python3.14 -m venv {{ gdir }}/venv-off || exit 10
+        echo "== offline install (hashes)"
+        {{ gdir }}/venv-off/bin/pip install --no-index --find-links {{ gdir }}/deps --require-hashes -r {{ gdir }}/build-requirements.txt || exit 11
+        echo "== freeze"; {{ gdir }}/venv-off/bin/pip freeze
+      args: {executable: /bin/bash}
+      register: row3
+      changed_when: false
+      failed_when: false  # rc recorded below; see row 2's note
+    - name: append row 3
+      when: row3 is not skipped
+      delegate_to: localhost
+      ansible.builtin.blockinfile:
+        path: "{{ spike_dir }}/results/{{ inventory_hostname }}.txt"
+        marker: "### {mark} row 3 (offline RHEL)"
+        block: |
+          rc={{ row3.rc }}  (0 ok; 10 venv, 11 offline install)
+          {{ row3.stdout }}
+          {{ row3.stderr }}
+
+- name: "T2 spike — clean up the guest"
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: remove /var/tmp/spike294
+      become: true
+      ansible.builtin.file: {path: /var/tmp/spike294, state: absent}
