@@ -1,12 +1,23 @@
-# Deploy the continuous app requester as a managed service on the app host (#429).
-# The pymqi venv + the app-client keystore are already placed by the mq-client role.
-- name: deploy the app requester
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../clients/app_requester.py"
-    dest: /home/vagrant/app_requester.py
-    owner: vagrant
-    group: vagrant
-    mode: "0644"
+# Run the continuous app requester as a managed service on the app host (#429). The
+# requester is the BAKED mq-resiliency-clients component (epic .github#294 T9): entry point
+# mq-app-requester and the static mq-app-requester.service in /usr/lib/systemd/system, both
+# laid down by component-install at bake. This role only: asserts the component is baked ->
+# retires the pre-#294 /etc unit copy (it SHADOWS the component unit) -> renders the
+# deployer-owned env file -> daemon-reload + enable/start. The app-client keystore is placed
+# by the mq-client role (which also retires the old venv + loose scripts).
+- name: look for the baked clients component
+  ansible.builtin.stat:
+    path: /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json
+  register: _app_requester_baked
+
+- name: the clients component is baked on this box
+  ansible.builtin.assert:
+    that: _app_requester_baked.stat.exists
+    fail_msg: >-
+      mq-resiliency-clients is not installed on {{ inventory_hostname }}
+      (no /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json) -
+      rebuild its box (mqlab box build <box>) or install it live
+      (mqlab component install mq-resiliency-clients --host {{ inventory_hostname }})
 
 # The requester runs as vagrant but must publish its .prom into node-exporter's
 # textfile dir. Don't fight node-exporter for sole ownership (its `observe` phase
@@ -38,21 +49,47 @@
     mode: "02775"
   become: true
 
-- name: app-requester systemd unit
+# A pre-#294 enable linked multi-user.target.wants to the /etc copy removed below; drop
+# that link (only that one) so the enable at the end re-links the component unit.
+- name: look for a multi-user.target.wants link to the retired /etc unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/multi-user.target.wants/mq-app-requester.service
+    follow: false
+  register: _app_requester_wants
+
+- name: drop the wants link to the retired /etc unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/multi-user.target.wants/mq-app-requester.service
+    state: absent
+  when: (_app_requester_wants.stat.lnk_target | default('')) == '/etc/systemd/system/mq-app-requester.service'
+  become: true
+
+# systemd prefers /etc/systemd/system over /usr/lib/systemd/system: a surviving copy would
+# keep running the old pre-#294 venv ExecStart (epic .github#294 Review Focus 1).
+- name: retire the pre-#294 /etc unit copy (it shadows the component unit)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/mq-app-requester.service
+  become: true
+  register: app_requester_retired
+
+- name: render the deployer-owned env file (read by the component's static unit)
   ansible.builtin.template:
-    src: mq-app-requester.service.j2
-    dest: /etc/systemd/system/mq-app-requester.service
+    src: mq-app-requester.env.j2
+    dest: /etc/opt/logical-minds-foundry/mq-resiliency-clients/mq-app-requester.env
     mode: "0644"
   become: true
-  register: app_requester_unit
+  register: app_requester_env
 
-# Restart on a unit change OR when vagrant just gained the node_exporter group: a
-# running process won't pick up a new supplementary group until it re-execs, so this
+# Restart on an env/unit change OR when vagrant just gained the node_exporter group: a
+# running process does not pick up a new supplementary group until it re-execs, so this
 # heals an already-crash-looping deployment on the next run without a full rebuild.
-- name: enable + (re)start the app requester
+- name: daemon-reload, enable + (re)start the app requester
   ansible.builtin.systemd:
     name: mq-app-requester
     enabled: true
-    state: "{{ 'restarted' if (app_requester_unit is changed or app_requester_group is changed) else 'started' }}"
+    state: "{{ 'restarted' if (app_requester_env is changed or app_requester_retired is changed or app_requester_group is changed) else 'started' }}"
     daemon_reload: true
   become: true

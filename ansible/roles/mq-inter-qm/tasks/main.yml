@@ -4,6 +4,28 @@
 #   our_qm     — our HA QM name (e.g. PCMKAPP, RDQMAPP, NHARCAPP)
 #   our_conn   — CONNAME list of our partner VIPs, e.g. '10.60.0.10(1414),10.60.0.20(1414)'
 # The SVC QM must already be created + started (mq-qmgr role runs first).
+#
+# The responder is the BAKED mq-resiliency-clients component (epic .github#294 T9): entry
+# point mq-svc-responder and the static mq-svc-responder@.service in /usr/lib/systemd/system,
+# both laid down by component-install at bake. This role renders its deployer-owned env file
+# and the QM-ordering drop-in, retires the pre-#294 venv/script/unit copy, then enables
+# this stack's instance.
+
+# FIRST: the clients component must be baked into this box. Fail loud, naming the fix,
+# before changing anything.
+- name: look for the baked clients component
+  ansible.builtin.stat:
+    path: /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json
+  register: _mq_inter_qm_baked
+
+- name: the clients component is baked on this box
+  ansible.builtin.assert:
+    that: _mq_inter_qm_baked.stat.exists
+    fail_msg: >-
+      mq-resiliency-clients is not installed on {{ inventory_hostname }}
+      (no /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json) -
+      rebuild its box (mqlab box build <box>) or install it live
+      (mqlab component install mq-resiliency-clients --host {{ inventory_hostname }})
 
 # TLS (#250): wire the SVC QM's keystore before the channel MQSC (which now defines
 # the channels with SSLCIPH/SSLPEER) — else the RCVR/SDR have no cert. Verified
@@ -41,14 +63,6 @@
   changed_when: true
   failed_when: mqsc_apply.rc not in [0, 10]
 
-# pymqi for the responder, built against /opt/mqm (mq-install provides the SDK +
-# build deps). The bakeable half (#1227), split into install.yml so the mq-client box
-# bake (bake-mq-ubuntu.yml, `tasks_from: install`) builds the venv once. Per-run it is
-# a near no-op against the baked venv (`creates:` guard + pip's satisfied check), and
-# still builds it in full on an un-baked box.
-- name: responder pymqi venv (baked; near no-op per-run)
-  ansible.builtin.import_tasks: install.yml
-
 # TLS (#250): the responder is a SVRCONN *client* (client-mode to localhost), so
 # it needs its own cert + a .sth stash, distinct from the SVC QM's server keystore
 # above. SSLPEER on SVC.SVRCONN matches O=svc-org (svc-responder is svc-org).
@@ -61,28 +75,65 @@
     pki_owner: mqm
     pki_stash: true
 
-- name: deploy the service responder
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../clients/svc_responder.py"
-    dest: /var/mqm/svc_responder.py
-    owner: mqm
-    group: mqm
-    mode: "0644"
+# A pre-#294 enable linked multi-user.target.wants to the /etc template removed below;
+# drop this stack instance link (only if it points there) so the enable re-links it.
+- name: look for a multi-user.target.wants link to the retired /etc unit
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/multi-user.target.wants/mq-svc-responder@{{ svc_req_queue }}.service"
+    follow: false
+  register: _mq_inter_qm_wants
+
+- name: drop the wants link to the retired /etc unit
+  ansible.builtin.file:
+    path: "/etc/systemd/system/multi-user.target.wants/mq-svc-responder@{{ svc_req_queue }}.service"
+    state: absent
+  when: (_mq_inter_qm_wants.stat.lnk_target | default('')) == '/etc/systemd/system/mq-svc-responder@.service'
   become: true
 
-- name: responder systemd template unit (per-stack instance; #446)
+# No dual running (spec 8), and systemd prefers /etc/systemd/system over
+# /usr/lib/systemd/system: a surviving template copy would keep running the old
+# /var/mqm venv ExecStart (epic .github#294 Review Focus 1).
+- name: retire the pre-#294 responder venv, script and /etc unit copy
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/mqm/rvenv
+    - /var/mqm/svc_responder.py
+    - /etc/systemd/system/mq-svc-responder@.service
+  become: true
+  register: mq_inter_qm_retired
+
+- name: render the deployer-owned env file (read by the component's static unit)
   ansible.builtin.template:
-    src: mq-svc-responder@.service.j2
-    dest: /etc/systemd/system/mq-svc-responder@.service
+    src: mq-svc-responder.env.j2
+    dest: /etc/opt/logical-minds-foundry/mq-resiliency-clients/mq-svc-responder.env
     mode: "0644"
   become: true
+  register: mq_inter_qm_env
+
+- name: responder drop-in dir
+  ansible.builtin.file:
+    path: /etc/systemd/system/mq-svc-responder@.service.d
+    state: directory
+    mode: "0755"
+  become: true
+
+# The component unit cannot name the site QM; order every instance after it here.
+- name: responder QM-ordering drop-in (After= + Requires= mq-<QM>.service)
+  ansible.builtin.template:
+    src: mq-svc-responder-qm.conf.j2
+    dest: /etc/systemd/system/mq-svc-responder@.service.d/qm.conf
+    mode: "0644"
+  become: true
+  register: mq_inter_qm_dropin
 
 # Each stack enables its OWN instance keyed on its request queue ({SHORT}.SVC.REQUEST),
 # so responders stay independent across the stacks sharing the one SVCQM (#446).
-- name: enable + start the responder for this stack's request queue
+- name: daemon-reload, enable + (re)start the responder for this stack's request queue
   ansible.builtin.systemd:
     name: "mq-svc-responder@{{ svc_req_queue }}.service"
     enabled: true
-    state: started
+    state: "{{ 'restarted' if (mq_inter_qm_env is changed or mq_inter_qm_dropin is changed or mq_inter_qm_retired is changed) else 'started' }}"
     daemon_reload: true
   become: true

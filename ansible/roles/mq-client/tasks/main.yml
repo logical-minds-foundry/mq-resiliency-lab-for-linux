@@ -1,4 +1,25 @@
-# Client node: MQ client/sdk debs + a pymqi venv for the requester.
+# Client node: MQ client/sdk debs, the gcc compiler, the mqclient.ini diag logging and the
+# app-client keystore. The clients themselves (requester, bench, probes, DR flow) are the
+# BAKED mq-resiliency-clients component (epic .github#294 T9): entry points under
+# /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin, laid down by component-install
+# at bake. This role asserts it is baked and retires the pre-#294 venv + loose scripts.
+
+# FIRST: the clients component must be baked into this box (mq-ubuntu bake: runtime-install,
+# then component-install). Fail loud, naming the fix, before changing anything.
+- name: look for the baked clients component
+  ansible.builtin.stat:
+    path: /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json
+  register: _mqc_baked
+
+- name: the clients component is baked on this box
+  ansible.builtin.assert:
+    that: _mqc_baked.stat.exists
+    fail_msg: >-
+      mq-resiliency-clients is not installed on {{ inventory_hostname }}
+      (no /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json) -
+      rebuild its box (mqlab box build <box>) or install it live
+      (mqlab component install mq-resiliency-clients --host {{ inventory_hostname }})
+
 # Ubuntu tar suffix tracks the guest arch (host-resolved, #276): ARM64 on the Mac
 # dev path, X64 on an x86 host. (The host-side fetch/manifest map mirrors this.)
 
@@ -33,11 +54,14 @@
     creates: /var/mqm
   become: true
 
-- name: install client + sdk debs and build deps
+# gcc STAYS on the running box (spec 5.8): mqlab component install mq-resiliency-clients
+# recompiles pymqi against the MQ SDK on the guest. The distro python3-venv/python3-dev are
+# gone: the pinned runtime ships its own venv module and headers.
+- name: install client + sdk debs and the pymqi compiler
   ansible.builtin.shell: |
     set -e
     apt-get update
-    apt-get install -y python3-venv python3-dev gcc
+    apt-get install -y gcc
     cd /tmp/MQServer
     apt-get install -y ./ibmmq-runtime_*.deb ./ibmmq-client_*.deb \
       ./ibmmq-sdk_*.deb ./ibmmq-gskit_*.deb
@@ -51,25 +75,24 @@
     creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
   become: true
 
-# venv creation (no network) is split from the pip install (hits PyPI) so the
-# retry below re-runs ONLY the fetch: a `creates:` guard keyed on the venv would
-# skip the retry after the venv exists but the flaked install left pymqi absent.
-- name: pymqi venv (create; no network)
-  ansible.builtin.command:
-    cmd: python3 -m venv /home/vagrant/mqvenv
-    creates: /home/vagrant/mqvenv/bin/python
-
-# Per-run PyPI fetch: retry so a rate-limited parallel-boot DNS burst (#648) does
-# not fail the one-shot cold rebuild. The pip module is idempotent (no-op once
-# satisfied), so retries are safe and a settled index resolves fine.
-- name: install pymqi into the venv
-  ansible.builtin.pip:
-    name: pymqi
-    virtualenv: /home/vagrant/mqvenv
-  register: pymqi_install
-  until: pymqi_install is succeeded
-  retries: 5
-  delay: 10
+# No dual running (spec 8): the pre-#294 per-provision pymqi venv and the loose client
+# scripts copied into the home dir are replaced by the component; remove them.
+- name: retire the pre-#294 pymqi venv and loose client scripts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /home/vagrant/mqvenv
+    - /home/vagrant/app_requester.py
+    - /home/vagrant/bench_client.py
+    - /home/vagrant/authz_probe.py
+    - /home/vagrant/dlq_probe.py
+    - /home/vagrant/reconnect_probe.py
+    - /home/vagrant/dr_flow.py
+    - /home/vagrant/dr_responder.py
+    - /home/vagrant/dr_mqi.py
+    - /home/vagrant/dr_baseline.py
+    - /home/vagrant/dr_forced.py
 
 - name: JSON diagnostic logging for client apps (mqclient.ini) (#282)
   ansible.builtin.include_role:

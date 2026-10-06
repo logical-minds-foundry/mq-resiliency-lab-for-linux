@@ -3,7 +3,7 @@
 # lever). This is the Ubuntu peer of bake-mq-rdqm.yml: it bakes the slow, per-run-invariant
 # install work the three un-baked Ubuntu MQ commons (svc-sim, app-client, mon-probe) were
 # still paying EVERY bootstrap on the plain cloud-image base — MQ + node-exporter + alloy +
-# the cgo mq_prometheus build + acl.
+# the cgo mq_prometheus build + acl — plus the mq-resiliency-clients component.
 #
 # ADDITIVE FOUNDATION: installs only the image-bakeable software. It creates NO queue
 # managers, forms NO channels, deploys NO app-requester, drops NO per-run renders (alloy
@@ -56,16 +56,25 @@
       ansible.builtin.include_role:
         name: mq-install
 
-    # The svc responder's pymqi venv (#1227): pymqi compiles against the MQ SDK, so it
-    # MUST follow mq-install above (the install half asserts cmqc.h is present). It was
-    # ~48s/run at provision (venv create + PyPI fetch + C build) on svc-sim; pymqi
-    # changes rarely, so the weekly cold rebake picks up a new release. Install half
-    # ONLY: the channel MQSC, keystores and the responder service stay per-run in
-    # mq-inter-qm's main.yml, whose re-run of this half is a near no-op on a baked box.
-    - name: svc responder pymqi venv (mq-inter-qm install half)
+    # Guest components (epic .github#294 spec 5.7, 5.8): this box's catalog entry
+    # (lab/versions.yaml roles.mq-client.components) bakes mq-resiliency-clients, the
+    # requester, bench, svc responder, probes and DR clients for svc-sim, app-client and
+    # mon-probe. pymqi compiles from sdist against the MQ SDK (and gcc), so both MUST follow
+    # mq-install above. The pinned runtime goes down FIRST (component-install checks it),
+    # then the component: venv, INSTALLED.json and the static units in
+    # /usr/lib/systemd/system, left INERT (component_start_units defaults false). The
+    # per-run roles (app-requester, mq-inter-qm) render the env files and enable the units.
+    # runtime_python + component_artifacts arrive via build-fatbox.sh -e @<install-vars.json>
+    # (mqlab box build <box> writes it). This replaces the pre-#294 responder venv bake.
+    - name: pinned guest runtime (/opt/vergil/cpython-<minor>, epic .github#294)
       ansible.builtin.include_role:
-        name: mq-inter-qm
-        tasks_from: install
+        name: runtime-install
+
+    - name: clients component (baked; units installed inert)
+      ansible.builtin.include_role:
+        name: component-install
+      vars:
+        component_name: mq-resiliency-clients
 
     # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
     # toolchain — exactly the work worth baking once (mon-probe paid ~2.8 min/run). The

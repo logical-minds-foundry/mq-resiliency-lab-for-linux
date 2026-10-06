@@ -1,0 +1,8 @@
+{# Deployer-owned drop-in for the mq-resiliency-clients mq-svc-responder@.service (epic
+   .github#294 T9). The component's static unit cannot name the site's SVC QM (systemd never
+   expands environment variables in [Unit]), so its ordering on the QM's own unit lives
+   here: every responder instance starts after, and requires, mq-<QM>.service. #}
+# Managed by Ansible (role mq-inter-qm).
+[Unit]
+After=mq-{{ qmgr_name }}.service
+Requires=mq-{{ qmgr_name }}.service
