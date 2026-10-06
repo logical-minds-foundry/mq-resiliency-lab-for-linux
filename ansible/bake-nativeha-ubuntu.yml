@@ -77,6 +77,23 @@
         name: alloy
         tasks_from: install
 
+    # Guest components (epic .github#294 spec §5.7, §5.8): this box's catalog entry
+    # (lab/versions.yaml roles.<role>.components) bakes mq-resiliency-observability. The
+    # pinned runtime goes down FIRST (component-install's precondition checks it), then the
+    # component itself: venv, INSTALLED.json and the static units in /usr/lib/systemd/system,
+    # left INERT (component_start_units defaults false). The per-run collector role renders
+    # its env file and enables the timer. runtime_python + component_artifacts arrive via
+    # build-fatbox.sh's `-e @<install-vars.json>` (mqlab box build <box> writes it).
+    - name: pinned guest runtime (/opt/vergil/cpython-<minor>, epic .github#294)
+      ansible.builtin.include_role:
+        name: runtime-install
+
+    - name: observability component (baked; units installed inert)
+      ansible.builtin.include_role:
+        name: component-install
+      vars:
+        component_name: mq-resiliency-observability
+
 # The per-login dynamic MOTD is OFF in every baked Ubuntu box (#1229): pam_motd ran
 # /etc/update-motd.d (50-landscape-sysinfo at ~90% CPU per login) on every SSH session.
 # Its own play, LAST, so it is independent of the install work above.

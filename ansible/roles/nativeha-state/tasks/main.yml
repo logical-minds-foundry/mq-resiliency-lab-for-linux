@@ -1,45 +1,83 @@
 ---
-# Deploy the nativeha-state collector (the tested mqlab.nativehastate module, verbatim) and
-# run it on a 5s timer. Mirrors cluster-state (#177): textfile dir -> deploy collector ->
-# service + timer -> enable. The QM name comes from the observability overlay (nativeha_qm);
-# the collector shells through `su - mqm -c` so dspmq runs as the mqm user (the arm's
-# qm-status verb does the same), while the unit itself runs as root to write the textfile dir.
+# Per-run half of the nativeha-state + log-health collectors (#279, #810; epic .github#294
+# T7). Both collectors are the BAKED mq-resiliency-observability component (entry points
+# lab-nativeha-state and lab-loglifecycle-state, run by the component's static
+# lab-nativeha-state.service on its 5s timer; laid down by component-install at bake).
+# This role only: asserts the component is baked -> retires the pre-#294 payloads and the
+# /etc/systemd/system unit copies (they SHADOW the component units) -> renders the
+# deployer-owned env file -> daemon-reload + enable the timer. The QM name comes from the
+# observability overlay (nativeha_qm). The collectors shell through `su - mqm -c` so dspmq
+# runs as the mqm user, while the unit itself runs as root to write the textfile dir.
+- name: look for the baked observability component
+  ansible.builtin.stat:
+    path: /opt/logical-minds-foundry/mq-resiliency-observability/INSTALLED.json
+  register: _nhs_baked
+
+- name: the observability component is baked on this box
+  ansible.builtin.assert:
+    that: _nhs_baked.stat.exists
+    fail_msg: >-
+      mq-resiliency-observability is not installed on {{ inventory_hostname }}
+      (no /opt/logical-minds-foundry/mq-resiliency-observability/INSTALLED.json) —
+      rebuild its box (mqlab box build <box>) or install it live
+      (mqlab component install mq-resiliency-observability --host {{ inventory_hostname }})
+
 - name: textfile dir
   ansible.builtin.file:
     path: /var/lib/node_exporter/textfile
     state: directory
     mode: "0755"
 
-- name: deploy the nativeha-state collector (the tested mqlab module, verbatim)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../src/mqlab/nativehastate.py"
-    dest: /usr/local/bin/lab-nativeha-state
-    mode: "0755"
+# A pre-#294 `systemctl enable` linked the timer to the /etc copy removed below; drop
+# that link (only that one) so the enable at the end re-links the component unit.
+- name: look for a timers.target.wants link to the retired /etc timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/timers.target.wants/lab-nativeha-state.timer
+    follow: false
+  register: _nhs_wants
 
-# The log-health collector reuses nativehastate's dspmq role-detection, so drop
-# nativehastate.py alongside it as an importable module (the script above has no .py
-# extension and is not importable). Running lab-loglifecycle-state puts /usr/local/bin on
-# sys.path[0], so `import nativehastate` resolves to this file (#810).
-- name: deploy nativehastate as an importable sibling module (for loglifecycle)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../src/mqlab/nativehastate.py"
-    dest: /usr/local/bin/nativehastate.py
-    mode: "0644"
+- name: drop the wants link to the retired /etc timer
+  ansible.builtin.file:
+    path: /etc/systemd/system/timers.target.wants/lab-nativeha-state.timer
+    state: absent
+  when: (_nhs_wants.stat.lnk_target | default('')) == '/etc/systemd/system/lab-nativeha-state.timer'
 
-- name: deploy the log-health collector (the tested mqlab module, verbatim)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../src/mqlab/loglifecycle.py"
-    dest: /usr/local/bin/lab-loglifecycle-state
-    mode: "0755"
+# systemd prefers /etc/systemd/system over /usr/lib/systemd/system: a surviving copy would
+# keep running the old /usr/bin/python3 ExecStart (epic .github#294 Review Focus 1). The
+# pre-#294 nativehastate.py sibling (the import shim loglifecycle used, #810) goes too.
+- name: retire the pre-#294 payloads and /etc unit copies (they shadow the component units)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/lab-nativeha-state
+    - /usr/local/bin/nativehastate.py
+    - /usr/local/bin/lab-loglifecycle-state
+    - /etc/systemd/system/lab-nativeha-state.service
+    - /etc/systemd/system/lab-nativeha-state.timer
 
-- name: install service + timer
+# Importing the retired sibling module compiled it into /usr/local/bin/__pycache__.
+- name: find the retired sibling module bytecode
+  ansible.builtin.find:
+    paths: /usr/local/bin/__pycache__
+    patterns: "nativehastate.*.pyc"
+  register: _nhs_pyc
+
+- name: retire the sibling module bytecode
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ _nhs_pyc.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: render the deployer-owned env file (read by the component's static unit)
   ansible.builtin.template:
-    src: "{{ item }}"
-    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    src: lab-nativeha-state.env.j2
+    dest: /etc/opt/logical-minds-foundry/mq-resiliency-observability/lab-nativeha-state.env
     mode: "0644"
-  loop: [lab-nativeha-state.service.j2, lab-nativeha-state.timer.j2]
 
-- name: enable + start the timer
+- name: daemon-reload, enable + start the timer
   ansible.builtin.systemd:
     name: lab-nativeha-state.timer
     enabled: true

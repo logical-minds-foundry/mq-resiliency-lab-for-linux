@@ -235,6 +235,8 @@ each Ubuntu bake's manifest-hash closure; the RHEL boxes are unaffected.
 | `rdqm-install` | ✅ full | MQ server set + SDK + samples + web, plus bundled LINBIT/DRBD + Pacemaker + MQSeriesRDQM, one pre-QM pass. Its last step seeds the #282/#569 journald `DiagnosticMessages` drop-in (journald-only on RDQM) — the diagnostic default baked into the image. |
 | `node-exporter` | ✅ full | All-install (static config); no split needed. |
 | `alloy` | ✅ install half | Binary + unit baked; `config.alloy` (per-QM-node mqweb-tail, loki endpoint) + start stay per-run. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`rdqm-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
 ### `obs-ubuntu24` → `ansible/bake-obs.yml`
 
@@ -294,6 +296,8 @@ the RDQM box — **no DRBD/RDQM and no kernel pin** are baked.
 | `mq-nativeha` (`tasks_from: install-RedHat`) | ✅ install half | Base IBM MQ (server + client + SDK + samples + web, **no** RDQM) via the native-HA OS adapter's **install body only**. `main.yml`'s `crtmqm` / peer-set / `mqmonitor@` **formation stays per-run** (see "Stays configure" below). The per-run `install-RedHat.yml` skip-if-baked-guards the tar copy/unpack on a stat of `/opt/mqm/inc/cmqc.h` (#659), so the media is copied once — here. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a native-HA box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`nativeha-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
 Per-run skips are enforced by #648-style **skip-if-baked** guards rather than a
 role split: `mq-install`/`mq-client` gate the ~700 MB tar copy + unpack on a stat
@@ -319,6 +323,8 @@ arch is not pinned.
 | `mq-nativeha` (`tasks_from: install-Debian`) | ✅ install half | Base IBM MQ (server + client + SDK + samples debs, **no** RDQM) via the native-HA OS adapter's **install body only** — the Ubuntu peer of the RHEL box's `install-RedHat`. `main.yml`'s `crtmqm` / peer-set / `mqmonitor@` **formation stays per-run** (see "Stays configure" below). The per-run `install-Debian.yml` skip-if-baked-guards the tar copy/unpack on a stat of `/opt/mqm/inc/cmqc.h` (#103 T6), so the host-arch Ubuntu MQ media is copied once — here. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a native-HA box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`nativeha-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
 ### `pcmk-ubuntu24` → `ansible/bake-pcmk-ubuntu.yml` (#103 T7, epic .github#103)
 
@@ -336,6 +342,8 @@ or x86), guest arch not pinned.
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path (server + client + SDK + samples; unpack debs, licence, `setmqinst`, ulimits) — the way the Pacemaker cluster nodes install MQ in `_pcmk-cluster-ha.yml` (`roles: [mq-install]`). **No** RDQM/DRBD, **no** QM created; `crtmqm` / resource-group / cluster formation stay per-run (`mq-pcmk-qmgr`). Already carries the stat-of-`cmqc.h` skip-if-baked guard (#648/#659) and the arch-derived tarball, so the ~700 MB tar copy/unpack + install runs once — here. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a Pacemaker box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
 ### `san-ubuntu24` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
 
@@ -354,6 +362,8 @@ DRBD resource and no iSCSI target; both stay per-run. Host-resolved.
 | modules check | ✅ | `modinfo drbd` and `modinfo target_core_mod` must resolve for the baked kernel, so a missing module fails the bake rather than a later provision. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
 > The log-search stack (`opensearch`, `opensearch-dashboards`, `data-prepper`)
 > formerly baked into a standalone `logsearch-ubuntu2404` box (`ansible/bake-logsearch.yml`,
@@ -384,7 +394,9 @@ unaffected.
 The whole configure surface: queue-manager and cluster creation
 (`mq-qmgr`, `mq-pcmk-qmgr`, `mq-nativeha`, `rdqm-ha`, `pcmk-cluster`,
 `pcmk-stonith`); RDQM/HA/DR state and reconcile (`rdqm-active-node`, `rdqm-state`,
-`cluster-state`, `nativeha-state`, `host-resolver`, `net-reach`);
+`cluster-state`, `nativeha-state` — these three collector roles only render the env
+file and enable the timer of the baked `mq-resiliency-observability` component —
+`host-resolver`, `net-reach`);
 all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
 `rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-client-ubuntu24` (#1227) — `mq-event-monitor`,
 `app-requester`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
