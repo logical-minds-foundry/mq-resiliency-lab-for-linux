@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # mq-bench (#1106, epic #227) — on-demand wrapper for the Native HA benchmark
-# client. Bakes this stack's QM/conn/TLS defaults; any extra args passed to
-# mq-bench are appended after them, so a later --qm/--offered-rate/--delay-ms/
-# --mode/--results wins (argparse takes the last occurrence). The sweep drives
-# this per {mode, delay} point:
+# client. DEPLOYER-OWNED (epic .github#294 spec §5.4 r3): it bakes this stack's
+# QM/conn/TLS defaults and execs the BAKED mq-resiliency-clients component's
+# mq-bench entry point. Any extra args passed to mq-bench are appended after the
+# defaults, so a later --qm/--offered-rate/--delay-ms/--mode/--results wins
+# (argparse takes the last occurrence). The sweep drives this per {mode, delay}:
 #   ./mq-bench --qm NHARIAPP --mode strict --delay-ms 10 --offered-rate 500 \
 #              --results /path/results.jsonl
 set -euo pipefail
 
-exec /home/vagrant/mqvenv/bin/python /home/vagrant/bench_client.py \
+exec /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-bench \
   --qm {{ bench_client_qm }} \
   --conn "{{ bench_client_conn }}" \
   --channel {{ bench_client_channel }} \

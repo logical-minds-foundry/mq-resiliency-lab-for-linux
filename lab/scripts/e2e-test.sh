@@ -3,7 +3,8 @@
 #   app -> <our HA QM> -> inter-QM SENDER/RECEIVER -> <SVC QM> -> service -> reply back.
 # The SVC service responder runs as a systemd service (mq-svc-responder on
 # svc-sim), so we just drive the app. Exits non-zero unless every request
-# round-trips (app_requester returns 1 on any miss). (#148)
+# round-trips (mq-app-requester returns 1 on any miss). (#148) The requester is the
+# baked mq-resiliency-clients component entry point (epic .github#294).
 #
 # Arm-agnostic: the app targets our-side HA QM by name + CONNAME. Defaults are the
 # Pacemaker arm (PCMKAPP, VIP FQDNs pcmk-vip-a/-b.client.com); pass QM + CONN to drive
@@ -12,11 +13,11 @@
 set -euo pipefail
 N="${1:-5}"
 QM="${2:-PCMKAPP}"
-# CONN is a client CONNAME (what app_requester dials) -> use the generated VIP FQDNs (#494)
+# CONN is a client CONNAME (what mq-app-requester dials) -> use the generated VIP FQDNs (#494)
 CONN="${3:-pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)}"
 cd "$(dirname "$0")/.."
 # TLS (#250): present the app-client cert over the mutual-TLS APP.SVRCONN. The
 # keystore stem (+ sibling .sth stash) and cert label are placed by mq-client.
 vagrant ssh app-client -c \
-  "~/mqvenv/bin/python ~/app_requester.py --qm '${QM}' --conn '${CONN}' --count ${N} \
+  "LD_LIBRARY_PATH=/opt/mqm/lib64 /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester --qm '${QM}' --conn '${CONN}' --count ${N} \
      --keyrepo /home/vagrant/ssl/app-client --certlabel app-client"

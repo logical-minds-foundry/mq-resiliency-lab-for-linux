@@ -27,15 +27,14 @@
 #       RESOLVED (#792): the first play fetches it from mon-probe and stages it on
 #       the app host (option a). Verified live on the running pcmk-ubuntu arm.
 #
-#   (2) The positive flow uses `app_requester.py --count 1` (a bounded one-shot).
-#       app_requester.py has NO `--once` flag (the plan's placeholder); --count 1
+#   (2) The positive flow uses `mq-app-requester --count 1` (a bounded one-shot).
+#       mq-app-requester has NO `--once` flag (the plan's placeholder); --count 1
 #       does exactly one request/reply and exits 0 on success, non-zero on failure.
 #       Its TLS args (keyrepo/certlabel) are the app-requester role defaults.
 #
-#   (3) Client sync path: scripts are copied per-file to /home/vagrant/ and run via
-#       the pymqi venv /home/vagrant/mqvenv/bin/python (roles/mq-client +
-#       roles/app-requester), NOT a /opt/mqlab checkout. The stage-probe task below
-#       mirrors roles/app-requester's copy idiom. Confirm the venv+path on #618.
+#   (3) Client path: the probes and the requester are entry points of the baked
+#       mq-resiliency-clients component (epic .github#294), run from its venv
+#       /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*; nothing is staged.
 # ============================================================================
 
 # (#792) Stage the OU=ops (mq_prometheus) keystore from mon-probe onto the app host.
@@ -63,10 +62,8 @@
     # Data-plane CONNAME: both site VIPs as a reconnect list (matches site-pcmk.yml
     # app_conn) so a one-shot connect reaches the QM on whichever node is active.
     app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
-    venv_python: /home/vagrant/mqvenv/bin/python
-    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
-    probe_dest: /home/vagrant/authz_probe.py
-    app_requester: /home/vagrant/app_requester.py # placed by roles/app-requester
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     # app-client keystore (OU=apps): stem /home/vagrant/ssl/key, label app-client,
     # owner vagrant -- placed on the app host by roles/mq-client (#250). Grounded.
     app_keyrepo: /home/vagrant/ssl/key
@@ -92,22 +89,13 @@
         mode: "0600"
       loop: [key.p12, key.sth]
 
-    - name: stage the authz probe on the app host (alongside app_requester.py)
-      ansible.builtin.copy:
-        src: "{{ probe_src }}"
-        dest: "{{ probe_dest }}"
-        owner: vagrant
-        group: vagrant
-        mode: "0644"
-
     # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to
     # APP.REPLY -- monitoring is read-only (dsp/inq/sub, no put/get). Expect 2035.
     # NB: depends on KNOWN-UNKNOWN (1) -- the OU=ops keystore being available here.
     - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -133,8 +121,7 @@
     - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -160,8 +147,7 @@
     - name: POSITIVE -- app trade flow still works (app_requester round-trip)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ app_requester }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester
           - --count
           - "1"
           - --qm
@@ -206,9 +192,8 @@
   vars:
     app_qm: "{{ qm_app }}"
     app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
-    venv_python: /home/vagrant/mqvenv/bin/python
-    probe_dest: /home/vagrant/authz_probe.py
-    app_requester: /home/vagrant/app_requester.py
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
     mon_keyrepo: /home/vagrant/ssl/mqmon/key # staged on the app host by the first play (#792)
@@ -217,8 +202,7 @@
     - name: N1 (post-failover) -- mqmon still denied an MQPUT (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -242,8 +226,7 @@
     - name: POSITIVE (post-failover) -- app trade flow still works
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ app_requester }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester
           - --count
           - "1"
           - --qm
@@ -381,11 +364,10 @@
     qm: "{{ qm_app }}"
     app_host: app-client
     app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
-    venv_python: /home/vagrant/mqvenv/bin/python
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
-    probe_dest: /home/vagrant/authz_probe.py
-    dlq_dest: /home/vagrant/dlq_probe.py
     rogue_ctrl_p12: /tmp/authz-n2-rogue/rogue.p12
     rogue_pw: "n2-rogue-pw"
     rogue_repo: /home/vagrant/ssl/rogue/key
@@ -396,21 +378,6 @@
   tasks:
     - name: PART B safe induced checks
       block:
-        - name: stage authz_probe + dlq_probe on the app host
-          ansible.builtin.copy:
-            src: "{{ playbook_dir }}/../clients/{{ item.s }}"
-            dest: "{{ item.d }}"
-            owner: vagrant
-            group: vagrant
-            mode: "0644"
-          loop:
-            - s: authz_probe.py
-              d: "{{ probe_dest }}"
-            - s: dlq_probe.py
-              d: "{{ dlq_dest }}"
-          delegate_to: "{{ app_host }}"
-          become: false
-
         # ================= N2 -- unmapped cert -> deny-all back-stop =================
         - name: N2 -- create the rogue keystore dir on the app host
           ansible.builtin.file:
@@ -443,8 +410,7 @@
         - name: "N2 -- rogue (unmapped) cert on APP.SVRCONN must be refused 2035 (back-stop)"
           ansible.builtin.command:
             argv:
-              - "{{ venv_python }}"
-              - "{{ probe_dest }}"
+              - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
               - --qmgr
               - "{{ qm }}"
               - --conn
@@ -481,8 +447,7 @@
         - name: "N4a -- mqapp SET_IDENTITY_CONTEXT put (spoof MQMD.UserIdentifier) is denied 2035"
           ansible.builtin.command:
             argv:
-              - "{{ venv_python }}"
-              - "{{ probe_dest }}"
+              - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
               - --qmgr
               - "{{ qm }}"
               - --conn
@@ -609,27 +574,16 @@
     qm: "{{ qm_app }}"
     app_host: app-client
     app_conn: "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"
-    venv_python: /home/vagrant/mqvenv/bin/python
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
-    app_requester: /home/vagrant/app_requester.py
-    dlq_dest: /home/vagrant/dlq_probe.py
     dlq: "SYSTEM.DEAD.LETTER.QUEUE"
     recv_chl: "SVCQM.PCMKAPP"
     testq: "N5.INDUCE.REPLY"
   tasks:
     - name: N5 induced demonstration
       block:
-        - name: "N5i -- stage dlq_probe on the app host"
-          ansible.builtin.copy:
-            src: "{{ playbook_dir }}/../clients/dlq_probe.py"
-            dest: "{{ dlq_dest }}"
-            owner: vagrant
-            group: vagrant
-            mode: "0644"
-          delegate_to: "{{ app_host }}"
-          become: false
-
         - name: "N5i -- create a throwaway reply queue, put-inhibited, + grants"
           ansible.builtin.command:
             cmd: "su - mqm -c \"{{ item }}\""
@@ -643,8 +597,7 @@
         - name: "N5i -- drive a round-trip whose reply routes to the put-inhibited queue"
           ansible.builtin.command:
             argv:
-              - "{{ venv_python }}"
-              - "{{ app_requester }}"
+              - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester
               - --count
               - "1"
               - --qm
@@ -671,8 +624,7 @@
         - name: "N5i -- assert the reply dead-lettered to the DLQ with Reason 2051 (PUT_INHIBITED)"
           ansible.builtin.command:
             argv:
-              - "{{ venv_python }}"
-              - "{{ dlq_dest }}"
+              - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-dlq-probe
               - --qmgr
               - "{{ qm }}"
               - --conn
@@ -718,8 +670,7 @@
         - name: "teardown -- drain any leftover dead-letters + the throwaway queue"
           ansible.builtin.command:
             argv:
-              - "{{ venv_python }}"
-              - "{{ dlq_dest }}"
+              - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-dlq-probe
               - --qmgr
               - "{{ qm }}"
               - --conn

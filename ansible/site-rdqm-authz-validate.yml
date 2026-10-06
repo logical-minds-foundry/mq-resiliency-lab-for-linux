@@ -31,7 +31,7 @@
 #   (1) mon_keyrepo -- the OU=ops (mqmon) keystore mq_prometheus is on mon-probe
 #       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT the app host. The first play
 #       fetches it from mon-probe and stages it on the app host (as pcmk #792 / nativeha).
-#   (2) positive uses app_requester.py --count 1 (exit 0 on a reply). app-client keystore
+#   (2) positive uses mq-app-requester --count 1 (exit 0 on a reply). app-client keystore
 #       (/home/vagrant/ssl/key, label app-client) is placed by roles/mq-client (shared).
 #   (3) app_conn is the single data VIP rdqm-vip-a.client.com(1414) (site-rdqm.yml).
 # ============================================================================
@@ -61,10 +61,8 @@
     # Single floating data VIP: Pacemaker moves it with the DRBD primary, so one CONNAME
     # reaches the live primary whether before or after an HA failover (site-rdqm.yml).
     app_conn: "rdqm-vip-a.client.com(1414)"
-    venv_python: /home/vagrant/mqvenv/bin/python
-    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
-    probe_dest: /home/vagrant/authz_probe.py
-    app_requester: /home/vagrant/app_requester.py
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     app_keyrepo: /home/vagrant/ssl/key
     app_certlabel: app-client
     mon_keyrepo: /home/vagrant/ssl/mqmon/key
@@ -89,21 +87,11 @@
       loop: [key.p12, key.sth]
       tags: [stage, induced, postfail]
 
-    - name: stage the authz probe on the app host (alongside app_requester.py)
-      ansible.builtin.copy:
-        src: "{{ probe_src }}"
-        dest: "{{ probe_dest }}"
-        owner: vagrant
-        group: vagrant
-        mode: "0644"
-      tags: [stage, induced, positive, authzpos, postfail]
-
     # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to APP.REPLY.
     - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -129,8 +117,7 @@
     - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -156,8 +143,7 @@
     - name: POSITIVE -- app trade flow round-trip (app_requester --count 1)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ app_requester }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester
           - --count
           - "1"
           - --qm
@@ -178,8 +164,7 @@
     - name: AUTHZ-POSITIVE -- mqapp authorized to PUT SVC.REQUEST (reason 0)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn

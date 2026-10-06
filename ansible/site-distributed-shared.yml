@@ -54,14 +54,6 @@
 
 - hosts: app
   tasks:
-    - name: pymqi venv
-      ansible.builtin.shell: |
-        set -e
-        python3 -m venv /home/vagrant/mqvenv
-        /home/vagrant/mqvenv/bin/pip install pymqi
-      args:
-        creates: /home/vagrant/mqvenv/bin/python
-
     - name: client TCP KeepAlive in mqclient.ini (fast dead-peer detection)
       become: true
       ansible.builtin.blockinfile:
@@ -88,15 +80,15 @@
       notify: apply mq keepalive sysctl
 
     # The always-on request/reply stream + round-trip signal (#429). Placed last so
-    # the venv + app-client keystore + mqclient.ini tuning are all in place first.
+    # the app-client keystore + mqclient.ini tuning are all in place first. The client
+    # itself is the baked mq-resiliency-clients component (epic .github#294).
     - name: deploy the app-requester service
       ansible.builtin.include_role:
         name: app-requester
 
-    # The purpose-built benchmark client (#1106) — on-demand, not a service.
-    # After app-requester so app_requester.py is co-located (bench_client.py
-    # reuses it at runtime). Parameterized by target QM; the epic's sweep
-    # (Task 8) invokes ./mq-bench per {mode, delay} point.
+    # The purpose-built benchmark client (#1106) — on-demand, not a service:
+    # the deployer-owned /home/vagrant/mq-bench wrapper (stack defaults) in front of
+    # the component entry point; the sweep (Task 8) runs it per {mode, delay} point.
     - name: deploy the benchmark client
       ansible.builtin.include_role:
         name: bench-client

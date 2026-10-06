@@ -44,10 +44,11 @@
 #       only one in the lab is `mq_prometheus`, placed by roles/mq-exporter on mon-probe
 #       (/var/mqm/ssl/mq_prometheus/, owner mqm), NOT on the app host. The first play
 #       fetches it from mon-probe and stages it on the app host (as the pcmk harness #792).
-#   (2) The positive uses `app_requester.py --count 1` (bounded one-shot: exit 0 on a
+#   (2) The positive uses `mq-app-requester --count 1` (bounded one-shot: exit 0 on a
 #       reply, non-zero on failure). Its TLS args are the app-requester role defaults.
-#   (3) Client sync path: scripts copied per-file to /home/vagrant/ and run via the pymqi
-#       venv /home/vagrant/mqvenv/bin/python (roles/mq-client + roles/app-requester).
+#   (3) Client path: the probes and the requester are entry points of the baked
+#       mq-resiliency-clients component (epic .github#294), run from its venv
+#       /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*; nothing is staged.
 #       app-client is shared across arms; the keystore stem/label are arm-independent
 #       (/home/vagrant/ssl/key, label app-client). Only qm_app + app_conn are arm-specific.
 # ============================================================================
@@ -79,10 +80,8 @@
     # net-data-b) currently holds it. Native HA has no VIP (site-nativeha-ubuntu.yml).
     app_conn: >-
       nha-ubuntu-a1-data-a.client.com(1414),nha-ubuntu-a2-data-a.client.com(1414),nha-ubuntu-a3-data-a.client.com(1414),nha-ubuntu-b1-data-b.client.com(1414),nha-ubuntu-b2-data-b.client.com(1414),nha-ubuntu-b3-data-b.client.com(1414)
-    venv_python: /home/vagrant/mqvenv/bin/python
-    probe_src: "{{ playbook_dir }}/../clients/authz_probe.py"
-    probe_dest: /home/vagrant/authz_probe.py
-    app_requester: /home/vagrant/app_requester.py # placed by roles/app-requester
+    # The clients run from the baked mq-resiliency-clients component's entry points
+    # (/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-*, epic .github#294).
     # app-client keystore (OU=apps): stem /home/vagrant/ssl/key, label app-client, owner
     # vagrant -- placed on the app host by roles/mq-client (shared across arms).
     app_keyrepo: /home/vagrant/ssl/key
@@ -110,22 +109,12 @@
       loop: [key.p12, key.sth]
       tags: [stage, induced, postfail]
 
-    - name: stage the authz probe on the app host (alongside app_requester.py)
-      ansible.builtin.copy:
-        src: "{{ probe_src }}"
-        dest: "{{ probe_dest }}"
-        owner: vagrant
-        group: vagrant
-        mode: "0644"
-      tags: [stage, induced, positive, authzpos, postfail]
-
     # NEGATIVE N1: mqmon (OU=ops via MON.SVRCONN) must be DENIED an MQPUT to APP.REPLY --
     # monitoring is read-only (dsp/inq/sub, no put/get). Expect 2035.
     - name: N1 -- mqmon MQPUT to APP.REPLY is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -152,8 +141,7 @@
     - name: N3 -- mqapp MQGET from SVC.REQUEST is denied (2035)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
@@ -181,8 +169,7 @@
     - name: POSITIVE -- app trade flow round-trip (app_requester --count 1)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ app_requester }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester
           - --count
           - "1"
           - --qm
@@ -206,8 +193,7 @@
     - name: AUTHZ-POSITIVE -- mqapp authorized to PUT SVC.REQUEST (reason 0)
       ansible.builtin.command:
         argv:
-          - "{{ venv_python }}"
-          - "{{ probe_dest }}"
+          - /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-authz-probe
           - --qmgr
           - "{{ app_qm }}"
           - --conn
