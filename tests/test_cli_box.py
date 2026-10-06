@@ -484,6 +484,10 @@ def _stub_build_env(monkeypatch, steps_sink):
     monkeypatch.setattr(box, "box_decision", _reuse)  # the base box dep: cached, no DVD
     monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
     monkeypatch.setattr(box, "run_steps", lambda steps, **kw: steps_sink.extend(steps))
+    # A fat box that bakes guest components (epic .github#294) would run a REAL
+    # `mqlab component build` (git + uv + network) before baking; that seam has its own
+    # tests (test_box_components.py). Here it is part of the faked build environment.
+    monkeypatch.setattr(box, "_ensure_component_artifacts", lambda plan, facts: None)
 
 
 def test_build_boxes_renders_resolved_topology(monkeypatch):
