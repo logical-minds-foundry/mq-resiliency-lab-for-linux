@@ -55,7 +55,33 @@ components/<name>/
 4. **Ship `<name>-selfcheck`.** It imports every module, asserts CPython 3.14, and
    reports versions via `importlib.metadata` (never a module's `__version__`; pymqi's
    is stale). The install runs it on the box before going live.
-5. **The install records itself** in `/opt/logical-minds-foundry/<name>/INSTALLED.json`.
+5. **The install records itself** in `/opt/logical-minds-foundry/<name>/INSTALLED.json`
+   (version, tree, release id, runtime).
+
+## The install layout and rollback
+
+A Python venv is **not relocatable**: pip writes absolute shebangs into console scripts.
+So every install is a **release** that is built at its final path and never moved. Going
+live is an atomic flip of a symlink:
+
+```text
+/opt/logical-minds-foundry/<name>/releases/<version>+<tree>-<UTC stamp>/venv   built here, never moved
+/opt/logical-minds-foundry/<name>/venv     -> releases/<live>/venv                what the units run
+/opt/logical-minds-foundry/<name>/previous -> releases/<prev>/venv                the rollback target
+```
+
+The install (Ansible role `component-install`, used by the bake and by
+`mqlab component install`) works in this order:
+
+1. Build the release.
+2. Selfcheck it **in place**. A failure removes it, and nothing goes live.
+3. Flip `venv` with `ln -s` + `mv -T` and record `previous`.
+4. Selfcheck again **through `venv/bin`**. A failure flips back to `previous`.
+5. Prune to the live and previous releases.
+
+**Rollback by hand:** run `ln -s "$(readlink previous)" venv.tmp && mv -T venv.tmp venv`
+in the component's directory, then restart its units. (Design: #1372, from the V1 #1357
+finding.)
 6. **Operator-facing names stay stable**: unit names, entry points, textfile paths.
 
 ## The runtime
