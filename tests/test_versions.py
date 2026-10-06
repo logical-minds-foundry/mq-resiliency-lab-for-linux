@@ -163,19 +163,27 @@ def test_runtime_tarball_unknown_arch():
 
 
 def test_committed_roles_bake_their_components():
-    """Each collector-host role bakes mq-resiliency-observability (epic .github#294 T6)."""
+    """Collector hosts bake mq-resiliency-observability (T6); the mq-client box bakes
+    mq-resiliency-clients (T8); the commons infra/obs boxes bake none (epic .github#294)."""
     cat = load_catalog()
     obs = ("mq-resiliency-observability",)
     assert {role: spec["components"] for role, spec in cat.roles.items()} == {
         "infra": (),
         "obs": (),
         "san": obs,
-        "mq-client": (),
+        "mq-client": ("mq-resiliency-clients",),
         "mq-nativeha": obs,
         "pcmk": obs,
         "mq-rdqm": obs,
     }
     assert cat.box("pcmk", OsRef("ubuntu", 24)).components == obs
+
+
+def test_mq_client_bakes_the_clients_component():
+    """The app-client / svc-sim role bakes mq-resiliency-clients (epic .github#294 T8)."""
+    cat = load_catalog()
+    assert cat.roles["mq-client"]["components"] == ("mq-resiliency-clients",)
+    assert cat.box("mq-client", OsRef("ubuntu", 24)).components == ("mq-resiliency-clients",)
 
 
 def test_role_components_flow_to_box_entry(tmp_path, monkeypatch):

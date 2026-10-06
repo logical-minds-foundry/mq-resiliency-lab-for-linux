@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from mqlab import cli, instances, perfrun, topology, versions
-from tests.boxfleet import REAL_CATALOG, X86_FACTS, x86_fleet
+from tests.boxfleet import REAL_CATALOG, REAL_COMPONENTS, X86_FACTS, x86_fleet
 from tests.fakes import FakeSampleSource
 
 # The catalog-derived fleet as an x86_64 host sees it, built once per session.
@@ -171,4 +171,4 @@ def _committed_versions_catalog(monkeypatch):
     shape, never the component set. A test exercising other components patches
     ``versions.components_dir`` itself."""
     monkeypatch.setattr(versions, "versions_catalog_path", lambda: REAL_CATALOG)
-    monkeypatch.setattr(versions, "components_dir", lambda: REAL_CATALOG.parents[1] / "components")
+    monkeypatch.setattr(versions, "components_dir", lambda: REAL_COMPONENTS)

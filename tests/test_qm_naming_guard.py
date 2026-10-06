@@ -1,10 +1,11 @@
 """Regression guard (#351 Phase 2): no retired QM-name literal in production code.
 
-Scans the production code paths only — ansible/, src/mqlab/, lab/scripts/, clients/,
-and lab/topology.yaml. It deliberately does NOT scan tests/ (seeded test topologies
-legitimately use the old names to exercise the no-`short` fallback) or docs/ (which
-cite the history). The single source of QM names is the per-arm `short` token; nothing
-in production code should hardcode QMPCMK/QMSVC/QMNATIVE/QMRDQM anymore.
+Scans the production code paths only — ansible/, src/mqlab/, lab/scripts/, each
+component's components/<name>/src/, and lab/topology.yaml. It deliberately does NOT
+scan tests/ (seeded test topologies legitimately use the old names to exercise the
+no-`short` fallback) or docs/ (which cite the history). The single source of QM names
+is the per-arm `short` token; nothing in production code should hardcode
+QMPCMK/QMSVC/QMNATIVE/QMRDQM anymore.
 """
 
 from __future__ import annotations
@@ -13,7 +14,9 @@ import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SCAN_DIRS = ["ansible", "src/mqlab", "lab/scripts", "clients"]
+SCAN_DIRS = ["ansible", "src/mqlab", "lab/scripts"]
+# Component sources only: not their tests (as above) nor a local .venv.
+SCAN_GLOBS = ["components/*/src"]
 SCAN_FILES = ["lab/topology.yaml"]
 SCAN_SUFFIXES = {".yml", ".yaml", ".j2", ".py", ".sh", ".mqsc", ".json"}
 RETIRED = re.compile(r"\bQM(PCMK|SVC|NATIVE|RDQM)\b")
@@ -24,8 +27,9 @@ ALLOW = {
 
 def _retired_literals() -> list[str]:
     paths: list[Path] = []
-    for d in SCAN_DIRS:
-        paths += [p for p in (REPO / d).rglob("*") if p.is_file() and p.suffix in SCAN_SUFFIXES]
+    dirs = [REPO / d for d in SCAN_DIRS] + [d for g in SCAN_GLOBS for d in REPO.glob(g)]
+    for d in dirs:
+        paths += [p for p in d.rglob("*") if p.is_file() and p.suffix in SCAN_SUFFIXES]
     paths += [REPO / f for f in SCAN_FILES]
     offenders: list[str] = []
     for p in paths:

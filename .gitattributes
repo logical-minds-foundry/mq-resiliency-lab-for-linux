@@ -4,11 +4,11 @@
 # already excluded by git archive and need no entry here.)
 #
 # The published tarball ships runtime + product docs ONLY (issue #918):
-#   runtime = src/mqlab, ansible, clients, lab, manifests, scripts,
+#   runtime = src/mqlab, ansible, components, lab, manifests, scripts,
 #             pyproject.toml, uv.lock, VERSION, RELEASE-KEY.asc
 #   product = docs/site, README.md, LICENSE, CHANGELOG.md
 # Everything below is developer-only / engineering-record and is stripped.
-# clients/ is KEPT: the ansible roles load it at runtime as {{ playbook_dir }}/../clients/*.py.
+# components/ is KEPT: `mqlab component build` builds the guest components from it (.github#294).
 
 # --- Repo scaffolding & agent/dev tooling ---
 .gitattributes        export-ignore

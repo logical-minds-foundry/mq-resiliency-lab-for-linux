@@ -21,6 +21,8 @@ FAKE_TREE = "0" * 40
 # The committed catalog, located from this file (not paths.repo_root, which a test may
 # have pointed at a tmp dir via MQLAB_REPO_ROOT).
 REAL_CATALOG = Path(__file__).resolve().parents[1] / "lab" / "versions.yaml"
+# The committed guest components the catalog's roles.<role>.components name (.github#294).
+REAL_COMPONENTS = Path(__file__).resolve().parents[1] / "components"
 
 
 def x86_fleet() -> dict[str, box.BoxSpec]:

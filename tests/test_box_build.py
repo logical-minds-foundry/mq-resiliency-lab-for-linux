@@ -138,6 +138,9 @@ def test_build_steps_base_builder_takes_major_point_iso(monkeypatch, tmp_path):
 def test_build_steps_ubuntu_fat_box_tracks_host_arch_under_kvm(monkeypatch, tmp_path):
     monkeypatch.setattr(box, "FLEET", box._build_fleet(_ARM))
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # mq-client bakes mq-resiliency-clients (epic .github#294) and tmp_path is no git
+    # repo: stub the component source identity (its own seam, test_box_components).
+    monkeypatch.setattr(box, "_component_tree", lambda name: "f" * 40)
     argv = box._build_steps([("mq-client-ubuntu24", False)], _ARM)[0].command.argv
     assert argv[argv.index("--arch") + 1] == "aarch64"
     assert argv[argv.index("--domain-type") + 1] == "kvm"

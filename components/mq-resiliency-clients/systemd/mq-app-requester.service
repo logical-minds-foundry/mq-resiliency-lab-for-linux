@@ -1,0 +1,22 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Site values come from the
+# deployer-owned EnvironmentFile; never edit this file on a host. TLS_ARGS is empty for
+# a plaintext app channel, or "--keyrepo <stem> --certlabel <label>" when it is TLS
+# (unbraced, so systemd splits it into words; an empty value adds no arguments).
+[Unit]
+Description=mq-app-requester — continuous request/reply stream (#429)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vagrant
+Group=vagrant
+EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-clients/mq-app-requester.env
+Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
+# --textfile publishes the round-trip metric for node-exporter.
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester --qm ${QM} --conn ${CONN} --channel ${CHANNEL} --rate ${RATE} --msg-size ${MSG_SIZE} --textfile ${TEXTFILE} $TLS_ARGS
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

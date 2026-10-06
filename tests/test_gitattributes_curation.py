@@ -35,11 +35,12 @@ EXCLUDED = [
     "docs/shareable/",
 ]
 # Runtime + product-doc paths that must survive into the tarball (#918).
-# clients/ is runtime: the ansible roles load it as {{ playbook_dir }}/../clients/*.py.
+# components/ is runtime: `mqlab component build` builds the guest components from it
+# (epic .github#294).
 INCLUDED = [
     "src/mqlab/",
     "ansible/",
-    "clients/",
+    "components/",
     "lab/",
     "manifests/",
     "scripts/",

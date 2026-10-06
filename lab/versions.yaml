@@ -24,7 +24,7 @@ roles:
   obs: { bake: { ubuntu: obs } }
   # The SAN targets (san-a/san-b): DRBD + LIO install half, no MQ payload (spec §4.7.1).
   san: { bake: { ubuntu: san }, components: [mq-resiliency-observability] }
-  mq-client: { bake: { ubuntu: mq-ubuntu }, mq_bearing: true }
+  mq-client: { bake: { ubuntu: mq-ubuntu }, mq_bearing: true, components: [mq-resiliency-clients] }
   mq-nativeha:
     bake: { ubuntu: nativeha-ubuntu, rhel: nativeha-rhel }
     mq_bearing: true
