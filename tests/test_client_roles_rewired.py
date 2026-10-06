@@ -52,7 +52,7 @@ OLD_PAYLOADS = {
             )
         ),
     },
-    "bench-client": {"/home/vagrant/bench_client.py", "/home/vagrant/mq-bench"},
+    "bench-client": {"/home/vagrant/bench_client.py"},
     "app-requester": {"/etc/systemd/system/mq-app-requester.service"},
     "mq-inter-qm": {
         "/var/mqm/rvenv",
@@ -212,7 +212,8 @@ def test_client_roles_never_copy_source(role: str) -> None:
 
 
 def test_client_roles_keep_only_env_templates() -> None:
-    """The units belong to the component now; the roles keep their env/drop-in renders."""
+    """The units belong to the component now; the roles keep their env/drop-in renders
+    and the deployer-owned mq-bench wrapper (stack defaults, spec §5.4 r3/r6)."""
     templates = {
         role: sorted(p.name for p in (ROLES / role / "templates").glob("*"))
         for role in CLIENT_ROLES
@@ -220,6 +221,7 @@ def test_client_roles_keep_only_env_templates() -> None:
     }
     assert templates == {
         "app-requester": ["mq-app-requester.env.j2"],
+        "bench-client": ["mq-bench.j2"],
         "mq-inter-qm": [
             "mq-svc-responder-qm.conf.j2",
             "mq-svc-responder.env.j2",
@@ -293,13 +295,41 @@ def test_mq_client_keeps_compiler_drops_distro_python_dev() -> None:
         assert "ansible.builtin.pip" not in task, "no per-provision pip install"
 
 
-def test_bench_client_links_the_entry_point() -> None:
+def test_bench_wrapper_keeps_its_path_and_stack_defaults() -> None:
+    """Operator-facing mq-bench is unchanged (spec §5.4 r6): same path, same baked
+    QM/conn/TLS defaults, same "$@" override; only its exec target is the component."""
     tasks = _tasks("bench-client")
-    (link,) = [
-        t["ansible.builtin.file"] for t in tasks if "src" in t.get("ansible.builtin.file", {})
-    ]
-    assert link == {"src": f"{BIN}/mq-bench", "dest": "/usr/local/bin/mq-bench", "state": "link"}
-    assert not (ROLES / "bench-client" / "templates").exists(), "the wrapper template is gone"
+    (wrapper,) = [t["ansible.builtin.template"] for t in tasks if "ansible.builtin.template" in t]
+    assert wrapper == {
+        "src": "mq-bench.j2",
+        "dest": "/home/vagrant/mq-bench",
+        "owner": "vagrant",
+        "group": "vagrant",
+        "mode": "0755",
+    }
+    text = (ROLES / "bench-client" / "templates" / "mq-bench.j2").read_text()
+    assert f"exec {BIN}/mq-bench \\" in text
+    for flag in (
+        "--qm {{ bench_client_qm }}",
+        '--conn "{{ bench_client_conn }}"',
+        "--channel {{ bench_client_channel }}",
+        "--queue {{ bench_client_queue }}",
+        "--keyrepo {{ bench_client_keyrepo }}",
+        "--certlabel {{ bench_client_certlabel }}",
+    ):
+        assert flag in text, flag
+    assert text.rstrip().endswith('"$@"'), "caller args come last so they override defaults"
+    assert "mqvenv" not in text and "bench_client.py" not in text
+    defaults = yaml.safe_load((ROLES / "bench-client" / "defaults" / "main.yml").read_text())
+    assert set(defaults) == {
+        "bench_client_qm",
+        "bench_client_conn",
+        "bench_client_tls",
+        "bench_client_channel",
+        "bench_client_queue",
+        "bench_client_keyrepo",
+        "bench_client_certlabel",
+    }
 
 
 # --- playbooks + scripts -------------------------------------------------------------

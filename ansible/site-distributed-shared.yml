@@ -87,8 +87,8 @@
         name: app-requester
 
     # The purpose-built benchmark client (#1106) — on-demand, not a service:
-    # /usr/local/bin/mq-bench, the component's entry point. The epic's sweep
-    # (Task 8) invokes mq-bench per {mode, delay} point with its target flags.
+    # the deployer-owned /home/vagrant/mq-bench wrapper (stack defaults) in front of
+    # the component entry point; the sweep (Task 8) runs it per {mode, delay} point.
     - name: deploy the benchmark client
       ansible.builtin.include_role:
         name: bench-client

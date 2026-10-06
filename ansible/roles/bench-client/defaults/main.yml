@@ -1,0 +1,16 @@
+---
+# bench-client (#1106, epic #227): the purpose-built Native HA benchmark client on the
+# app host. UNLIKE app-requester (the always-on request/reply stream), this is an
+# ON-DEMAND measurement tool — no systemd service. The epic's sweep (Task 8) invokes
+# it per {mode, delay} point via the `mq-bench` wrapper, which bakes these defaults in
+# front of the mq-resiliency-clients component's mq-bench entry point (epic
+# .github#294 T9). Parameterized by target QM: the CRR app QM by default; the sweep
+# overrides --qm per mode (NHARCAPP | NHARIAPP).
+bench_client_qm: "{{ our_qm }}"
+bench_client_conn: "{{ app_conn }}"
+bench_client_tls: "{{ app_tls | default(true) }}"
+bench_client_channel: APP.SVRCONN
+bench_client_queue: APP.REPLY
+# The app-client keystore stem + label placed by the mq-client role (#250).
+bench_client_keyrepo: /home/vagrant/ssl/key
+bench_client_certlabel: app-client

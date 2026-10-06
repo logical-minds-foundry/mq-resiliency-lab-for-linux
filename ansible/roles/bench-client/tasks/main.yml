@@ -1,10 +1,10 @@
 # The purpose-built benchmark client on the app host (#1106, epic #227). On-demand tool,
 # NOT a managed service: deliberately not entangled with the always-on mq-app-requester
 # stream. The client is the BAKED mq-resiliency-clients component's mq-bench entry point
-# (epic .github#294 T9); this role only asserts the component is baked, retires the
-# pre-#294 home-dir copy + wrapper, and puts mq-bench on PATH. The entry point takes every
-# target flag itself (--qm, --conn, --channel, --queue, --keyrepo, --certlabel; argparse
-# defaults otherwise), so the sweep passes them per {mode, delay} point.
+# (epic .github#294 T9); this role asserts the component is baked, retires the pre-#294
+# home-dir script, and renders the deployer-owned /home/vagrant/mq-bench wrapper that
+# bakes this stack's QM/conn/TLS defaults in front of the entry point (operator-facing
+# path and behaviour unchanged, spec §5.4 r6).
 - name: look for the baked clients component
   ansible.builtin.stat:
     path: /opt/logical-minds-foundry/mq-resiliency-clients/INSTALLED.json
@@ -19,19 +19,23 @@
       rebuild its box (mqlab box build <box>) or install it live
       (mqlab component install mq-resiliency-clients --host {{ inventory_hostname }})
 
-# No dual running (spec 8): the pre-#294 home-dir script and its wrapper go.
-- name: retire the pre-#294 benchmark script and wrapper
+# No dual running (spec 8): the pre-#294 home-dir script goes.
+- name: retire the pre-#294 benchmark script
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
     - /home/vagrant/bench_client.py
-    - /home/vagrant/mq-bench
   become: true
 
-- name: mq-bench on PATH (symlink to the component entry point)
-  ansible.builtin.file:
-    src: /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-bench
-    dest: /usr/local/bin/mq-bench
-    state: link
+# A thin, deployer-owned wrapper baking this stack's QM/conn/TLS defaults. The sweep
+# passes extra args ("$@") that override them (argparse: last occurrence wins), so one
+# wrapper still targets NHARCAPP or NHARIAPP via `mq-bench --qm <QM>`.
+- name: benchmark client wrapper (mq-bench)
+  ansible.builtin.template:
+    src: mq-bench.j2
+    dest: /home/vagrant/mq-bench
+    owner: vagrant
+    group: vagrant
+    mode: "0755"
   become: true
