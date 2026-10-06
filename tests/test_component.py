@@ -688,6 +688,34 @@ def test_read_installed_with_no_plays(lab, tools):
     assert component.read_installed("demo", ["a1"], tools) == {"a1": "no result"}
 
 
+def test_read_installed_ignores_the_timing_callbacks_around_the_json(lab, tools):
+    """#1374 (V1 #1357 check 2): the repo's ansible.cfg timing callbacks print a timestamp
+    BEFORE the json document and a TASKS/PLAYBOOK RECAP AFTER it; json.loads crashed on
+    the trailing text ('Extra data'). Shape captured from a real run on 2026-10-06."""
+    report = {"plays": [{"tasks": [{"hosts": {"a1": {"content": _installed(TREE)}}}]}]}
+    tools.ansible_out = [
+        "Tuesday 06 October 2026  13:55:12 -0400 (0:00:00.017)       0:00:00.017 ******* ",
+        *json.dumps(report, indent=4).splitlines(),
+        "",
+        "TASKS RECAP ********************************************************************",
+        "Tuesday 06 October 2026  13:55:12 -0400 (0:00:00.260)       0:00:00.278 ******* ",
+        "=" * 79,
+        "ansible.builtin.slurp --------------------------------------------------- 0.26s",
+        "",
+        "PLAYBOOK RECAP *****************************************************************",
+        "Playbook run took 0 days, 0 hours, 0 minutes, 0 seconds",
+    ]
+    got = component.read_installed("demo", ["a1"], tools)
+    assert got == {"a1": {"version": "0.1.0", "tree": TREE, "runtime_installed": "3.14.8+20261003"}}
+
+
+@pytest.mark.parametrize("out", [["{ not json at all"], ["[1, 2]"]])
+def test_read_installed_undecodable_json_is_a_component_error(lab, tools, out):
+    tools.ansible_out = out
+    with pytest.raises(ComponentError, match="ansible"):
+        component.read_installed("demo", ["a1"], tools)
+
+
 def test_render_status_not_built(lab, tools):
     assert component.render_status(["demo"], tools).splitlines()[1] == (
         f"demo  (not built)  -  -  {TREE[:12]}"
