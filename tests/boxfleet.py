@@ -9,11 +9,14 @@ the catalog inputs tests used to scrape from the shell builders' old `case` tabl
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from mqlab import box
 from mqlab.hostfacts import X86_64, HostFacts
 
 X86_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True)
+# A baked component's stand-in git tree hash (the real one needs git).
+FAKE_TREE = "0" * 40
 
 # The committed catalog, located from this file (not paths.repo_root, which a test may
 # have pointed at a tmp dir via MQLAB_REPO_ROOT).
@@ -44,9 +47,18 @@ def manifest_hash_args(name: str) -> list[str]:
         "1" if spec.mq_bearing else "0",
         "--os-pin",
         box.os_pin(spec.os),
+        "--runtime-pin",
+        spec.runtime_pin,
+        "--components",
+        # FAKE_TREE, as fatbox_args pins it, so a seeded hash matches the builder's.
+        ",".join(f"{c}@{FAKE_TREE}" for c in spec.components),
     ]
 
 
 def fatbox_args(name: str) -> list[str]:
-    """The full build-fatbox.sh argv tail mqlab passes for fat box ``name`` on x86_64."""
-    return box.builder_args(x86_fleet()[name], X86_FACTS)
+    """The full build-fatbox.sh argv tail mqlab passes for fat box ``name`` on x86_64.
+
+    A baked component's tree hash comes from git (box._component_tree); it is pinned to
+    FAKE_TREE here so the helper never shells out."""
+    with patch.object(box, "_component_tree", lambda _name: FAKE_TREE):
+        return box.builder_args(x86_fleet()[name], X86_FACTS)

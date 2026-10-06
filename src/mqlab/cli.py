@@ -1851,7 +1851,7 @@ from mqlab.runtime import RuntimePinError  # noqa: E402
 
 component_app = typer.Typer(
     help="lab guest components (epic .github#294): build (test on the pinned runtime + stage) "
-    "/ status",
+    "/ install (onto running guests) / status",
     no_args_is_help=True,
 )
 app.add_typer(component_app, name="component")
@@ -1911,6 +1911,34 @@ def component_status(names: _ComponentNames = None, host: _StatusHosts = None) -
         typer.echo(component.render_status(selected, SubprocessRunner(), host))
     except component.ComponentError as exc:
         typer.echo(f"mqlab component status: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+
+_InstallHosts = Annotated[
+    list[str],
+    typer.Option("--host", help="guest to install onto (repeatable; required)"),
+]
+_InstallVersion = Annotated[
+    str | None,
+    typer.Option(
+        "--version",
+        help="a staged artifact (<version>+<tree>, or a version naming one); default: HEAD's",
+    ),
+]
+
+
+@component_app.command("install")
+def component_install(
+    name: Annotated[str, typer.Argument(help="the component to install")],
+    host: _InstallHosts,
+    version: _InstallVersion = None,
+) -> None:
+    """Install a BUILT component onto running hosts (the same role the bake uses)."""
+    _select_components([name], all_=False)
+    try:
+        component.install(name, host, runner=SubprocessRunner(), on_line=typer.echo, wanted=version)
+    except (component.ComponentError, RuntimePinError, VersionError) as exc:
+        typer.echo(f"mqlab component install {name}: {exc}", err=True)
         raise typer.Exit(code=1) from None
 
 

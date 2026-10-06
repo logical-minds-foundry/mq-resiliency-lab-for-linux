@@ -16,6 +16,10 @@ venv it asserts was made from that interpreter. Then it stages, under
 
 ``<tree>`` is the git tree hash of ``components/<name>`` at HEAD: an artifact is keyed
 by SOURCE, so an edited-but-unbuilt component can never pass for a built one.
+
+Install (spec §5.7) has ONE path, the ``component-install`` Ansible role: the box bakes
+run it, and so does ``mqlab component install`` against a running lab. This module only
+resolves the artifact and writes the role variables (:func:`install_vars`).
 """
 
 from __future__ import annotations
@@ -402,6 +406,130 @@ def ensure_built(
         on_line(f"{name}: reusing {found.path}")
         return found
     return build(name, runner=runner, on_line=on_line, pin=pin, fetch=fetch)
+
+
+# --- install (spec §5.7) ----------------------------------------------------------------
+
+
+def install_vars_path() -> Path:
+    """Where :func:`install_vars` writes the role variables (local work/ bucket)."""
+    return work("components", "install-vars.json")
+
+
+def install_vars(
+    artifacts: list[Artifact],
+    arch: str | None = None,
+    *,
+    pin: RuntimePin | None = None,
+    fetch: Callable[[str, Path], None] = runtime.fetch_url,
+) -> Path:
+    """Write the runtime-install/component-install role variables; return the file.
+
+    ``runtime_python`` describes the pin. With ``arch`` (a bake), the pinned tarball for
+    that arch is ensured and sha256-verified in the cache, and named for runtime-install;
+    without it (``mqlab component install`` on a running lab, which never touches the
+    interpreter) no tarball is offered, so runtime-install cannot run from these vars.
+    ``component_artifacts`` maps each component to its staged artifact directory.
+    """
+    pin = pin if pin is not None else load_catalog().runtime
+    tarballs: dict[str, str] = {}
+    sha256: dict[str, str] = {}
+    if arch is not None:
+        runtime.ensure_tarball(pin, arch, fetch=fetch)
+        tarballs[arch] = pin.tarball(arch)
+        sha256[arch] = pin.sha256[arch]
+    data = {
+        "runtime_python": {
+            "version": pin.version,
+            "pbs_release": pin.pbs_release,
+            "minor": pin.minor,
+            "token": pin.token,
+            "tarball_dir": str(runtime.tarball_dir()),
+            "tarballs": tarballs,
+            "sha256": sha256,
+        },
+        "component_artifacts": {a.name: str(a.path) for a in artifacts},
+    }
+    path = install_vars_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    return path
+
+
+def resolve_artifact(
+    name: str,
+    wanted: str | None,
+    *,
+    runner: CommandRunner,
+    on_line: Callable[[str], None],
+    pin: RuntimePin | None = None,
+    fetch: Callable[[str, Path], None] = runtime.fetch_url,
+) -> Artifact:
+    """The artifact to install: HEAD's (built now if missing), or an explicit staged one.
+
+    ``wanted`` is an artifact directory name (``<version>+<tree>``) or a bare version
+    that names exactly one staged artifact. It is never built: an explicit version must
+    already be staged.
+    """
+    if wanted is None:
+        return ensure_built(name, runner=runner, on_line=on_line, pin=pin, fetch=fetch)
+    component_dir(name)
+    loaded = (_load(name, p) for p in sorted(artifacts_dir(name).glob("*+*")))
+    staged = [a for a in loaded if a is not None]
+    matches = [a for a in staged if wanted in (a.path.name, a.version)]
+    if len(matches) != 1:
+        listed = ", ".join(a.path.name for a in staged) or "none"
+        problem = "matches several" if matches else "is not a staged artifact"
+        raise ComponentError(
+            f"{name} --version {wanted} {problem} (staged: {listed}) — pass one of the "
+            f"staged <version>+<tree> names, or omit --version to install HEAD "
+            f"(mqlab component build {name})"
+        )
+    return matches[0]
+
+
+def install_command(name: str, hosts: list[str], vars_file: Path) -> Command:
+    """The ``ansible-playbook component-install.yml`` run for ``mqlab component install``."""
+    return Command(
+        [
+            "ansible-playbook",
+            "component-install.yml",
+            "-i",
+            str(inventory_path()),
+            "--limit",
+            ",".join(hosts),
+            "-e",
+            f"component_name={name}",
+            "-e",
+            "component_start_units=true",
+            "-e",
+            f"@{vars_file}",
+        ],
+        cwd=repo_root() / "ansible",
+    )
+
+
+def install(
+    name: str,
+    hosts: list[str],
+    *,
+    runner: CommandRunner,
+    on_line: Callable[[str], None],
+    wanted: str | None = None,
+    pin: RuntimePin | None = None,
+    fetch: Callable[[str, Path], None] = runtime.fetch_url,
+) -> Artifact:
+    """Install a built component onto running hosts with the role the bake uses."""
+    artifact = resolve_artifact(name, wanted, runner=runner, on_line=on_line, pin=pin, fetch=fetch)
+    vars_file = install_vars([artifact], pin=pin, fetch=fetch)
+    on_line(f"installing {name} {artifact.path.name} on {', '.join(hosts)}")
+    rc = _run(runner, install_command(name, hosts, vars_file), on_line)
+    if rc != 0:
+        raise ComponentError(
+            f"ansible-playbook component-install.yml exited {rc} installing {name} on "
+            f"{', '.join(hosts)} (see its output above)"
+        )
+    return artifact
 
 
 # --- status -----------------------------------------------------------------------------

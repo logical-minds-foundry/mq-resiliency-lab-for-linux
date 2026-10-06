@@ -111,3 +111,50 @@ def test_status_error_exits_1(known, monkeypatch):
     result = runner.invoke(cli.app, ["component", "status"])
     assert result.exit_code == 1
     assert "mqlab component status: ansible returned no JSON" in result.output
+
+
+def test_install_passes_hosts_and_version(known, monkeypatch):
+    seen: list = []
+    monkeypatch.setattr(
+        component, "install", lambda name, hosts, **kw: seen.append((name, hosts, kw["wanted"]))
+    )
+    args = ["component", "install", "alpha", "--host", "a1", "--host", "a2", "--version", "0.2"]
+    assert runner.invoke(cli.app, args).exit_code == 0
+    assert seen == [("alpha", ["a1", "a2"], "0.2")]
+
+
+def test_install_defaults_to_heads_artifact(known, monkeypatch):
+    seen: list = []
+    monkeypatch.setattr(component, "install", lambda name, hosts, **kw: seen.append(kw["wanted"]))
+    assert runner.invoke(cli.app, ["component", "install", "beta", "--host", "a1"]).exit_code == 0
+    assert seen == [None]
+
+
+def test_install_requires_a_host(known):
+    result = runner.invoke(cli.app, ["component", "install", "alpha"])
+    assert result.exit_code == 2
+    assert "--host" in result.output
+
+
+def test_install_unknown_component(known):
+    result = runner.invoke(cli.app, ["component", "install", "gamma", "--host", "a1"])
+    assert result.exit_code == 2
+    assert "unknown component(s): gamma" in result.output
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        component.ComponentError("components/alpha has uncommitted changes — commit them"),
+        RuntimePinError("bad pin"),
+        VersionError("bad yaml"),
+    ],
+)
+def test_install_failure_exits_1(known, monkeypatch, error):
+    def boom(name, hosts, **_k):
+        raise error
+
+    monkeypatch.setattr(component, "install", boom)
+    result = runner.invoke(cli.app, ["component", "install", "alpha", "--host", "a1"])
+    assert result.exit_code == 1
+    assert f"mqlab component install alpha: {error}" in result.output

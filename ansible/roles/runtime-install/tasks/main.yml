@@ -1,0 +1,91 @@
+---
+# Lay down the ONE pinned guest Python runtime (epic .github#294 spec §5.2, §5.7): the
+# python-build-standalone install_only tarball mqlab verified into build/cache/runtime,
+# unpacked to /opt/vergil/cpython-<minor>/ and stamped with a PIN file.
+#
+# - Idempotent: a matching <root>/PIN is a no-op.
+# - The tarball's sha256 is re-checked ON THE GUEST against the pin BEFORE it is unpacked.
+# - It unpacks beside the live tree (<root>.new), proves the interpreter runs and reports
+#   the pinned version, and only then swaps into place.
+# - This interpreter is NEVER Ansible's: ansible_python_interpreter stays /usr/bin/python3
+#   (it drives apt/dnf), and the system Python is never a component's.
+#
+# Run by the bake plays only. `mqlab component install` never runs this role: a running
+# guest whose runtime does not match the pin is rebaked (mqlab box build <box>), and
+# component-install's precondition says so.
+- name: Gather the guest architecture (when the play did not)
+  ansible.builtin.setup:
+    gather_subset: [min]
+  when: ansible_architecture is not defined
+
+- name: Map the guest arch to the pinned tarball
+  ansible.builtin.set_fact:
+    _rt_arch: "{{ {'x86_64': 'x86_64', 'aarch64': 'aarch64', 'arm64': 'aarch64'}.get(ansible_architecture, ansible_architecture) }}"
+    _rt_root: "{{ runtime_install_prefix }}/cpython-{{ runtime_python.minor }}"
+
+- name: Precondition — mqlab staged a verified tarball for this arch
+  ansible.builtin.assert:
+    that:
+      - _rt_arch in runtime_python.tarballs
+      - _rt_arch in runtime_python.sha256
+    fail_msg: >-
+      no pinned runtime tarball for {{ inventory_hostname }}'s arch {{ _rt_arch }}
+      (offered: {{ runtime_python.tarballs | list | join(', ') or 'none' }}) — the bake
+      must be driven by mqlab box build <box>, which stages the tarball for the box's arch
+
+- name: Is a runtime already installed?
+  ansible.builtin.stat:
+    path: "{{ _rt_root }}/PIN"
+  register: _rt_pin_stat
+
+- name: Read the installed runtime PIN
+  ansible.builtin.slurp:
+    src: "{{ _rt_root }}/PIN"
+  register: _rt_pin
+  when: _rt_pin_stat.stat.exists
+
+- name: Install the pinned runtime
+  when: >-
+    not _rt_pin_stat.stat.exists
+    or (_rt_pin.content | b64decode | trim) != runtime_python.token
+  become: true
+  block:
+    - name: Copy the pinned tarball to the guest
+      ansible.builtin.copy:
+        src: "{{ runtime_python.tarball_dir }}/{{ runtime_python.tarballs[_rt_arch] }}"
+        dest: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        mode: "0644"
+
+    - name: Verify its sha256 against the pin (BEFORE unpacking)
+      ansible.builtin.stat:
+        path: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        checksum_algorithm: sha256
+      register: _rt_tar
+      failed_when: >-
+        not _rt_tar.stat.exists
+        or _rt_tar.stat.checksum != runtime_python.sha256[_rt_arch]
+
+    - name: Unpack beside the live tree, prove it runs, then swap into place
+      ansible.builtin.shell: |
+        set -euo pipefail
+        root="{{ _rt_root }}"
+        rm -rf "$root.new" "$root.old"
+        mkdir -p "$root.new"
+        tar -xzf "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}" -C "$root.new" --strip-components=1
+        got="$("$root.new/bin/python{{ runtime_python.minor }}" -c 'import platform; print(platform.python_version())')"
+        if [ "$got" != "{{ runtime_python.version }}" ]; then
+          echo "unpacked runtime reports Python $got, not the pinned {{ runtime_python.version }}" >&2
+          exit 1
+        fi
+        printf '%s\n' "{{ runtime_python.token }}" > "$root.new/PIN"
+        if [ -d "$root" ]; then mv "$root" "$root.old"; fi
+        mv "$root.new" "$root"
+        rm -rf "$root.old"
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Remove the copied tarball
+      ansible.builtin.file:
+        path: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        state: absent

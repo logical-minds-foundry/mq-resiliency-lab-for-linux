@@ -1,0 +1,18 @@
+---
+# runtime_python is REQUIRED and has no default: mqlab writes it (with the staged
+# artifacts) to $(mqlab build path work)/components/install-vars.json, from the
+# runtime.python pin in lab/versions.yaml — the pin's only hand-written home. A bake
+# passes that file as `-e @<install-vars>`. Its shape:
+#
+#   runtime_python:
+#     version: "3.14.8"            # the pinned CPython patch
+#     pbs_release: "20261003"      # the python-build-standalone release
+#     minor: "3.14"                # keys the guest path /opt/vergil/cpython-<minor>/
+#     token: "3.14.8+20261003"     # written to <root>/PIN; what component-install checks
+#     tarball_dir: <dev-host dir holding the verified install_only tarballs>
+#     tarballs: {<arch>: <tarball file name>}   # only the arch(es) mqlab verified
+#     sha256: {<arch>: <hex digest>}
+#
+# The guest interpreter's root. Minor-keyed: a patch bump replaces it in place, and the
+# component venvs (whose pyvenv.cfg home points here) keep working.
+runtime_install_prefix: /opt/vergil

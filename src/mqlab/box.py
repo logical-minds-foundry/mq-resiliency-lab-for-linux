@@ -17,6 +17,7 @@ touch real git/fs/virsh/vagrant.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -27,13 +28,14 @@ from typing import TYPE_CHECKING, Any
 import typer
 import yaml
 
-from mqlab import cli, mqexporter, venvsync
+from mqlab import cli, component, mqexporter, venvsync
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import cache, repo_root, state
 from mqlab.platforms import box_build_arch, box_build_domain_virt, ensure_resolved
 from mqlab.retired_boxes import RETIRED_BASE_ARTIFACTS, RETIRED_BOX_NAMES
 from mqlab.runner import Command, SubprocessRunner
+from mqlab.runtime import RuntimePinError
 from mqlab.versions import (
     HOST_ARCHES,
     INFRA_ROLES,
@@ -69,6 +71,8 @@ class BoxSpec:
     role: str | None = None  # the box role; None for a base OS box
     bake_stem: str | None = None  # ansible/bake-<stem>.yml; None for a base OS box
     mq_bearing: bool = False
+    components: tuple[str, ...] = ()  # guest components the box bakes (epic .github#294)
+    runtime_pin: str = ""  # the catalog's runtime.python token; "" for a base OS box
 
     @property
     def manifest_hash_artifact(self) -> str:
@@ -76,6 +80,12 @@ class BoxSpec:
         match `<box>-<arch>.box` (#103 D4). Only meaningful for fat boxes
         (has_manifest_hash True); the base box carries none."""
         return f"{self.name}-{self.arch}.manifest-hash"
+
+    @property
+    def components_record_artifact(self) -> str:
+        """What a component-baking fat box baked, recorded beside its cache artifact by
+        build-fatbox.sh (epic .github#294 spec §5.8). MUST match its COMPONENTS_FILE."""
+        return f"{self.name}-{self.arch}.components.json"
 
 
 def os_pin(entry: OsEntry) -> str:
@@ -115,7 +125,7 @@ def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
     return entry.arch_pin is None or entry.arch_pin == facts.arch
 
 
-def _fat_spec(entry: BoxEntry, facts: HostFacts) -> BoxSpec:
+def _fat_spec(entry: BoxEntry, facts: HostFacts, runtime_pin: str) -> BoxSpec:
     arch = box_build_arch({"arch": entry.os.arch_pin}, facts)
     return BoxSpec(
         name=entry.name,
@@ -127,6 +137,8 @@ def _fat_spec(entry: BoxEntry, facts: HostFacts) -> BoxSpec:
         role=entry.role,
         bake_stem=entry.bake_stem,
         mq_bearing=entry.mq_bearing,
+        components=entry.components,
+        runtime_pin=runtime_pin,
     )
 
 
@@ -163,7 +175,7 @@ def _build_fleet(
         if ref.family == "rhel" and _host_can_run(entry, facts):
             fleet[entry.base_box] = _base_spec(entry, facts)
     for box_entry in catalog.all_boxes(facts, roles):
-        fleet[box_entry.name] = _fat_spec(box_entry, facts)
+        fleet[box_entry.name] = _fat_spec(box_entry, facts, catalog.runtime.token)
     return fleet
 
 
@@ -251,7 +263,30 @@ def builder_args(spec: BoxSpec, facts: HostFacts) -> list[str]:
         "--mq-bearing",
         "1" if spec.mq_bearing else "0",
         *virt,
+        *_component_args(spec),
     ]
+
+
+def _component_tree(name: str) -> str:
+    """A baked component's source identity: its git tree hash at HEAD (seam)."""
+    return component.tree_hash(name, SubprocessRunner())
+
+
+def _component_args(spec: BoxSpec) -> list[str]:
+    """The runtime pin and each baked component at its git tree hash (spec §5.8).
+
+    The builder folds both into the manifest hash, which keys on SOURCE: a committed
+    component change flips it even before the component is rebuilt. A box that bakes
+    components is also handed the install-vars file build_boxes writes before a bake."""
+    try:
+        baked = ",".join(f"{name}@{_component_tree(name)}" for name in spec.components)
+    except component.ComponentError as exc:
+        typer.echo(f"mqlab box: {spec.name}: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    args = ["--runtime-pin", spec.runtime_pin, "--components", baked]
+    if spec.components:
+        args += ["--install-vars", str(component.install_vars_path())]
+    return args
 
 
 def _builder_argv(spec: BoxSpec, facts: HostFacts) -> list[str]:
@@ -305,6 +340,37 @@ def _build_plan(names: list[str], *, force: bool) -> list[tuple[str, bool]]:
     ]
     plan = [(base, False) for base in dict.fromkeys(deps) if base not in names]
     return plan + [(name, force) for name in dict.fromkeys(names)]
+
+
+def _ensure_component_artifacts(plan: list[tuple[str, bool]], facts: HostFacts) -> None:
+    """Build what a bake needs before the builder runs (epic .github#294 spec §5.8).
+
+    For every planned box that bakes guest components and will actually BAKE (forced, or
+    a builder decision other than REUSE), ensure each component's artifact for its
+    current tree hash exists — `mqlab component build` runs here, with its full test
+    gate, when it does not — then write the install-vars file the builder hands the
+    bake (the runtime tarball for this host's arch plus the staged artifacts). A box
+    REUSEd from cache needs neither. Uncommitted component changes refuse, naming the
+    fix, exactly as `mqlab component build` does."""
+    names = list(
+        dict.fromkeys(
+            name
+            for box_name, force in plan
+            if FLEET[box_name].components and (force or box_decision(box_name).action != "REUSE")
+            for name in FLEET[box_name].components
+        )
+    )
+    if not names:
+        return
+    runner = SubprocessRunner()
+    try:
+        artifacts = [
+            component.ensure_built(name, runner=runner, on_line=typer.echo) for name in names
+        ]
+        component.install_vars(artifacts, facts.arch)
+    except (component.ComponentError, RuntimePinError, VersionError) as exc:
+        typer.echo(f"mqlab box build: {exc}", err=True)
+        raise typer.Exit(code=1) from None
 
 
 # --------------------------------------------------------------------------- #
@@ -420,6 +486,26 @@ def _fmt_hash(spec: BoxSpec, hash_match: bool | None) -> str:
     return "match" if hash_match else "mismatch"
 
 
+def baked_components(name: str) -> str:
+    """What the cached box baked, from build-fatbox.sh's ``<box>-<arch>.components.json``
+    (epic .github#294 spec §5.8): ``<name>@<tree12>,… (<runtime pin>)``, or ``-`` when
+    the box carries no record (a base box, an uncached box, or one baking no component).
+    A record that is not valid JSON of that shape fails loud, naming the fix."""
+    spec = FLEET[name]
+    path = _boxes_cache_dir() / spec.components_record_artifact
+    if not spec.has_manifest_hash or not path.is_file():
+        return "-"
+    try:
+        record = json.loads(path.read_text())
+        baked = ",".join(f"{c}@{str(t)[:12]}" for c, t in sorted(record["components"].items()))
+        return f"{baked} ({record['runtime']})"
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError(
+            f"mqlab box: {path} is not a components record ({exc!r}) — rebake the box: "
+            f"mqlab box rebuild {name}"
+        ) from exc
+
+
 def _fmt_row(d: BoxDecision) -> str:
     return (
         f"{d.name:<22} "
@@ -428,14 +514,16 @@ def _fmt_row(d: BoxDecision) -> str:
         f"{(f'{d.age_days}d' if d.age_days is not None else '-'):<6} "
         f"{_fmt_hash(FLEET[d.name], d.hash_match):<9} "
         f"{('yes' if d.registered else 'no'):<11} "
-        f"{d.action}"
+        f"{d.action:<12} "
+        f"{baked_components(d.name)}"
     )
 
 
 def render_status(names: list[str]) -> str:
     """Render the fleet status table for the given box names."""
     header = (
-        f"{'BOX':<22} {'ARCH':<8} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} DECISION"
+        f"{'BOX':<22} {'ARCH':<8} {'CACHED':<7} {'AGE':<6} {'HASH':<9} {'REGISTERED':<11} "
+        f"{'DECISION':<12} COMPONENTS"
     )
     rows = [_fmt_row(box_decision(name)) for name in names]
     return "\n".join([header, *rows])
@@ -625,7 +713,9 @@ def build_boxes(names: list[str], *, force: bool) -> None:
     for name, box_force in plan:
         if _rhel_base_needs_dvd(name, force=box_force):
             verify_rhel_dvd(FLEET[name].os)
-    steps = _build_steps(plan, probe())
+    facts = probe()
+    steps = _build_steps(plan, facts)  # refuses a cross-arch box before anything is built
+    _ensure_component_artifacts(plan, facts)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
     deps = cli.build_deps("box-build", timestamp)
     try:
@@ -691,10 +781,11 @@ def clean_boxes(names: list[str]) -> list[str]:
             artifact.unlink()
             removed.append(str(artifact))
         if spec.has_manifest_hash:
-            manifest = cache_dir / spec.manifest_hash_artifact
-            if manifest.is_file():
-                manifest.unlink()
-                removed.append(str(manifest))
+            for record in (spec.manifest_hash_artifact, spec.components_record_artifact):
+                path = cache_dir / record
+                if path.is_file():
+                    path.unlink()
+                    removed.append(str(path))
         _vagrant_box_remove(name)
         removed.append(f"vagrant box '{name}'")
     return removed

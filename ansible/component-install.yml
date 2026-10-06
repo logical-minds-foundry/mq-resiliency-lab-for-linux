@@ -1,0 +1,31 @@
+---
+# `mqlab component install <name> --host <guest>...` (epic .github#294 spec §5.7, §5.8):
+# reinstall one BUILT component onto running guests with the SAME role the bakes use.
+# Run by mqlab, which passes every input:
+#
+#   --limit <host>[,<host>...] -e component_name=<name> -e component_start_units=true
+#   -e @<install-vars.json>      (runtime_python + component_artifacts, from mqlab)
+#
+# The guests are chosen by --limit (REQUIRED: the play refuses to run fleet-wide, and
+# refuses a --limit naming a host the inventory does not have, rather than silently
+# installing on fewer guests than asked).
+#
+# Deliberately NOT runtime-install: the dev loop never swaps a running guest's
+# interpreter. A guest whose runtime does not match the pin fails component-install's
+# precondition, before any change, naming `mqlab box build <box>` (a rebake).
+- name: Install a built component onto running guests
+  hosts: all
+  gather_facts: false
+  pre_tasks:
+    - name: Precondition — exactly the guests named with --limit
+      run_once: true
+      ansible.builtin.assert:
+        that:
+          - ansible_limit is defined
+          - ansible_limit.split(',') | difference(ansible_play_hosts_all) | length == 0
+        fail_msg: >-
+          name the guests with --limit (mqlab component install <name> --host <guest>);
+          not in the inventory: {{ (ansible_limit | default('')).split(',')
+          | difference(ansible_play_hosts_all) | join(', ') or '(no --limit given)' }}
+  roles:
+    - component-install

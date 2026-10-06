@@ -97,6 +97,10 @@ def test_build_steps_pass_catalog_flags_for_fatbox(monkeypatch, tmp_path):
             "kvm",
             "--cpu-mode",
             "host-passthrough",
+            "--runtime-pin",
+            box.FLEET["mq-rdqm-rhel9"].runtime_pin,
+            "--components",
+            "",
         ]
     ]
 
@@ -256,6 +260,8 @@ def test_build_fatbox_requires_bake_flag():
         "--dvd",
         "--os-pin",
         "--mq-bearing",
+        "--runtime-pin",
+        "--components",
     ],
 )
 def test_each_catalog_flag_is_required(flag, tmp_path):
@@ -452,10 +458,15 @@ def _hash_with(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+# The runtime pin + baked components every caller passes (epic .github#294 T5): here, a
+# box that bakes none.
+_NO_COMPONENTS = ["--runtime-pin", "3.14.8+20261003", "--components", ""]
+
+
 def test_manifest_hash_flips_on_os_pin():
     # Plan T4: the OS pin (base box + point / box version) enters the digest, so a re-pin
     # forces a rebake.
-    stem = ["--bake-stem", "nativeha-ubuntu", "--mq-bearing", "1"]
+    stem = ["--bake-stem", "nativeha-ubuntu", "--mq-bearing", "1", *_NO_COMPONENTS]
     a = _hash_with("mq-nativeha-ubuntu24", *stem, "--os-pin", "x@1")
     b = _hash_with("mq-nativeha-ubuntu24", *stem, "--os-pin", "x@2")
     assert a.returncode == b.returncode == 0
@@ -468,9 +479,11 @@ def test_manifest_hash_requires_a_box():
     assert "<box> is required" in result.stderr
 
 
-@pytest.mark.parametrize("flag", ["--bake-stem", "--mq-bearing", "--os-pin"])
+@pytest.mark.parametrize(
+    "flag", ["--bake-stem", "--mq-bearing", "--os-pin", "--runtime-pin", "--components"]
+)
 def test_manifest_hash_requires_each_flag(flag):
-    args = ["--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1"]
+    args = ["--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1", *_NO_COMPONENTS]
     i = args.index(flag)
     result = _hash_with("obs-ubuntu24", *args[:i], *args[i + 2 :])
     assert result.returncode == 2
@@ -478,7 +491,7 @@ def test_manifest_hash_requires_each_flag(flag):
 
 
 def test_manifest_hash_rejects_bad_mq_bearing_and_unknown_flag():
-    base = ["obs-ubuntu24", "--bake-stem", "obs", "--os-pin", "x@1"]
+    base = ["obs-ubuntu24", "--bake-stem", "obs", "--os-pin", "x@1", *_NO_COMPONENTS]
     assert "--mq-bearing must be 0 or 1" in _hash_with(*base, "--mq-bearing", "2").stderr
     assert "unknown arg: --x" in _hash_with(*base, "--mq-bearing", "0", "--x").stderr
 
@@ -487,9 +500,72 @@ def test_manifest_hash_rejects_unknown_bake_stem():
     # #649: a stem with no bake playbook is a hard error, not a silent empty digest.
     # (Pre-#649 the script dereferenced bake-<full-box>.yml, which existed for NO box,
     # so the bake inputs were silently omitted instead.)
-    result = _hash_with("x", "--bake-stem", "no-such-stem", "--mq-bearing", "0", "--os-pin", "x")
+    result = _hash_with(
+        "x", "--bake-stem", "no-such-stem", "--mq-bearing", "0", "--os-pin", "x", *_NO_COMPONENTS
+    )
     assert result.returncode == 2
     assert "no-such-stem" in result.stderr
+
+
+# --- the runtime pin + baked components (epic .github#294 T5, spec §5.8) ---------------
+_OBS = ["obs-ubuntu24", "--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1"]
+
+
+def _component_hash(pin: str, components: str) -> str:
+    result = _hash_with(*_OBS, "--runtime-pin", pin, "--components", components)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def test_manifest_hash_flips_on_component_tree_change():  # Review Focus 2
+    # The hash keys on the component's SOURCE tree: a committed edit flips it even
+    # before the component is rebuilt, so a stale box is never REUSEd.
+    pin = "3.14.8+20261003"
+    assert _component_hash(pin, "demo@aaa") != _component_hash(pin, "demo@bbb")
+    assert _component_hash(pin, "demo@aaa") != _component_hash(pin, "")  # baking one at all
+    # The digest is order-independent (mqlab's order is the catalog's; the bake is not).
+    assert _component_hash(pin, "a@1,b@2") == _component_hash(pin, "b@2,a@1")
+
+
+def test_manifest_hash_flips_on_runtime_pin_change():
+    assert _component_hash("3.14.8+20261003", "demo@aaa") != _component_hash(
+        "3.14.9+20261101", "demo@aaa"
+    )
+
+
+def test_manifest_hash_runtime_pin_spares_boxes_baking_no_component():
+    # Like the MQ pin for commons boxes (#1087): a box that bakes no component never
+    # bakes the runtime either, so a runtime bump must not spuriously rebake it.
+    assert _component_hash("3.14.8+20261003", "") == _component_hash("3.14.9+20261101", "")
+
+
+def test_manifest_hash_requires_runtime_pin_flag():
+    result = _hash_with(*_OBS, "--components", "demo@aaa")
+    assert result.returncode == 2
+    assert "ERROR: --runtime-pin is required" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "message"),
+    [
+        ("--runtime-pin", "3.14", "--runtime-pin must be <version>+<pbs_release>"),
+        ("--components", "Demo@aaa", "--components entries are <name>@<tree hash>"),
+        ("--components", "demo", "--components entries are <name>@<tree hash>"),
+        ("--components", "demo@xyz", "--components entries are <name>@<tree hash>"),
+    ],
+)
+def test_manifest_hash_rejects_malformed_pin_or_components(flag, value, message):
+    args = ["--runtime-pin", "3.14.8+20261003", "--components", "demo@aaa"]
+    args[args.index(flag) + 1] = value
+    result = _hash_with(*_OBS, *args)
+    assert result.returncode == 2
+    assert message in result.stderr
+
+
+def test_manifest_hash_components_needs_a_value():
+    result = _hash_with(*_OBS, "--runtime-pin", "3.14.8+20261003", "--components")
+    assert result.returncode == 2
+    assert "--components needs a value" in result.stderr
 
 
 # --------------------------------------------------------------------------- #

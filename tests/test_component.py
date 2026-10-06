@@ -12,6 +12,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -508,6 +509,141 @@ def test_ensure_built_refuses_dirty(lab, tools):
     tools.dirty = ["components/demo/pyproject.toml"]
     with pytest.raises(ComponentError, match="uncommitted changes"):
         component.ensure_built("demo", runner=tools, on_line=lambda _l: None, pin=PIN)
+
+
+# --- install (spec §5.7) ------------------------------------------------------------------
+
+
+@pytest.fixture
+def tarballs(lab, monkeypatch):
+    """runtime.ensure_tarball recorded, the tarball cache under the lab's build/cache."""
+    ensured: list[str] = []
+    monkeypatch.setattr(
+        component.runtime, "ensure_tarball", lambda pin, arch, fetch: ensured.append(arch)
+    )
+    monkeypatch.setattr(component.runtime, "tarball_dir", lambda: lab / "build/cache/runtime")
+    return ensured
+
+
+def _vars(path: Path) -> dict:
+    data: dict = json.loads(path.read_text())
+    return data
+
+
+def test_install_vars_for_a_bake_name_the_verified_tarball(lab, tools, tarballs):
+    art = _build(tools)
+    path = component.install_vars([art], "aarch64", pin=PIN)
+    assert path == lab / "build/work/components/install-vars.json"
+    assert path == component.install_vars_path()
+    assert tarballs == ["aarch64"]
+    assert _vars(path) == {
+        "runtime_python": {
+            "version": "3.14.8",
+            "pbs_release": "20261003",
+            "minor": "3.14",
+            "token": "3.14.8+20261003",
+            "tarball_dir": str(lab / "build/cache/runtime"),
+            "tarballs": {
+                "aarch64": "cpython-3.14.8+20261003-aarch64-unknown-linux-gnu-install_only.tar.gz"
+            },
+            "sha256": {"aarch64": "2" * 64},
+        },
+        "component_artifacts": {"demo": str(art.path)},
+    }
+
+
+def test_install_vars_without_an_arch_offer_no_tarball(lab, tools, tarballs, monkeypatch):
+    # `mqlab component install` never swaps the interpreter: no tarball is ensured.
+    monkeypatch.setattr(component, "load_catalog", lambda: SimpleNamespace(runtime=PIN))
+    art = _build(tools)
+    data = _vars(component.install_vars([art]))
+    assert tarballs == []
+    assert data["runtime_python"]["tarballs"] == {} == data["runtime_python"]["sha256"]
+    assert data["runtime_python"]["token"] == PIN.token
+
+
+def test_resolve_artifact_defaults_to_heads(lab, tools):
+    art = component.resolve_artifact(
+        "demo", None, runner=tools, on_line=lambda _l: None, pin=PIN, fetch=fetch
+    )
+    assert art.tree == TREE
+
+
+def test_resolve_artifact_by_version_or_dir_name(lab, tools):
+    art = _build(tools)
+    tools.recorded.clear()
+    for wanted in ("0.1.0", f"0.1.0+{TREE}"):
+        found = component.resolve_artifact("demo", wanted, runner=tools, on_line=print)
+        assert found == art
+    assert tools.recorded == []  # an explicit version is never built, nor checked for dirt
+
+
+def test_resolve_artifact_unknown_version(lab, tools):
+    _build(tools)
+    with pytest.raises(ComponentError, match=rf"--version 9.9 is not a staged .*0.1.0\+{TREE}"):
+        component.resolve_artifact("demo", "9.9", runner=tools, on_line=print)
+
+
+def test_resolve_artifact_nothing_staged(lab, tools):
+    with pytest.raises(ComponentError, match=r"staged: none"):
+        component.resolve_artifact("demo", "0.1.0", runner=tools, on_line=print)
+
+
+def test_resolve_artifact_ambiguous_version(lab, tools):
+    _build(tools)
+    tools.tree = "b" * 40
+    _build(tools)
+    with pytest.raises(ComponentError, match="matches several"):
+        component.resolve_artifact("demo", "0.1.0", runner=tools, on_line=print)
+
+
+def test_resolve_artifact_unknown_component(lab, tools):
+    with pytest.raises(ComponentError, match="unknown component 'x'"):
+        component.resolve_artifact("x", "0.1.0", runner=tools, on_line=print)
+
+
+def test_install_runs_the_component_install_play(lab, tools, tarballs):
+    lines: list[str] = []
+    art = component.install(
+        "demo", ["app-client", "svc-sim"], runner=tools, on_line=lines.append, pin=PIN,
+        fetch=fetch,
+    )  # fmt: skip
+    play = tools.recorded[-1]
+    assert play.argv == [
+        "ansible-playbook",
+        "component-install.yml",
+        "-i",
+        str(lab / "inventory.ini"),
+        "--limit",
+        "app-client,svc-sim",
+        "-e",
+        "component_name=demo",
+        "-e",
+        "component_start_units=true",
+        "-e",
+        f"@{lab / 'build/work/components/install-vars.json'}",
+    ]
+    assert play.cwd == lab / "ansible"
+    assert _vars(component.install_vars_path())["component_artifacts"] == {"demo": str(art.path)}
+    assert tarballs == []  # the running guest's runtime is never reinstalled
+    assert f"installing demo {art.path.name} on app-client, svc-sim" in lines
+
+
+def test_install_play_failure_raises(lab, tools, tarballs):
+    tools.fail["ansible-playbook component-install.yml"] = 2
+    with pytest.raises(ComponentError, match="component-install.yml exited 2 installing demo"):
+        component.install(
+            "demo", ["a1"], runner=tools, on_line=lambda _l: None, pin=PIN, fetch=fetch
+        )
+
+
+def test_install_not_built_and_dirty_names_commit_then_build(lab, tools):
+    tools.dirty = ["components/demo/src/x.py"]
+    with pytest.raises(ComponentError) as exc:
+        component.install("demo", ["a1"], runner=tools, on_line=lambda _l: None, pin=PIN)
+    message = str(exc.value)
+    assert message.index("commit") < message.index("mqlab component build demo")
+    assert not any(a[0] == "ansible-playbook" for a in tools.argvs())
 
 
 # --- status -------------------------------------------------------------------------------
