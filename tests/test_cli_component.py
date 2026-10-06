@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -133,7 +135,9 @@ def test_install_defaults_to_heads_artifact(known, monkeypatch):
 def test_install_requires_a_host(known):
     result = runner.invoke(cli.app, ["component", "install", "alpha"])
     assert result.exit_code == 2
-    assert "--host" in result.output
+    # rich colours typer's usage error on GitHub Actions (it forces colour there), which
+    # splits the option name with ANSI codes; compare the plain text.
+    assert "--host" in re.sub(r"\x1b\[[0-9;]*m", "", result.output)
 
 
 def test_install_unknown_component(known):
