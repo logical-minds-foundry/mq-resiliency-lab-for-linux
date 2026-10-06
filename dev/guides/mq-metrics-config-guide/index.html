@@ -1607,7 +1607,8 @@ for per-application data and is <strong>not</strong> required for the exporter p
 <p>The exporter path above (the IBM MQ Prometheus exporter reading the monitoring
 and statistics publications this guide enables) is only one of the metric
 sources on the boards. For the <strong>Native HA</strong> arms the lab also runs a
-stdlib-only, <strong>out-of-band</strong> collector — <code>src/mqlab/loglifecycle.py</code>, deployed
+stdlib-only, <strong>out-of-band</strong> collector —
+<code>components/mq-resiliency-observability/src/mqro/loglifecycle.py</code>, deployed
 as <code>lab-loglifecycle-state</code> — that polls each instance's log filesystem (no
 MQI, so it is independent of MQ monitoring) and emits
 <code>mqlab_log_disk_used_bytes</code>, <code>mqlab_log_disk_total_bytes</code>,
