@@ -1,40 +1,65 @@
 ---
-# Deploy the rdqm-state collector (the tested mqlab.rdqmstate module, verbatim) and run it on
-# a 5s timer. Mirrors cluster-state (#177) / nativeha-state (#279): textfile dir -> deploy
-# collector -> service + timer -> enable. RDQM owns Pacemaker + DRBD behind rdqmadm, so the
-# collector reuses clusterstate.parse_drbd verbatim. Unlike the single-file collectors, this
-# one therefore deploys as a minimal `mqlab` package (rdqmstate.py + clusterstate.py + an empty
-# __init__.py) under /usr/local/lib, run as `python3 -m mqlab.rdqmstate` — so the import
-# `from mqlab.clusterstate import parse_drbd` resolves identically in-repo and on the node.
-# rdqmstatus + drbdsetup both run as root, so the unit runs as root (no `su - mqm`, unlike the
-# dspmq-based nativeha-state). The QM name comes from the observability overlay (rdqm_qm).
+# Per-run half of the rdqm-state collector (#287; epic .github#294 T7). The collector is
+# the BAKED mq-resiliency-observability component (entry point lab-rdqm-state, static units
+# in /usr/lib/systemd/system, both laid down by component-install at bake); it reuses
+# clusterstate.parse_drbd inside the component, so the cut-down `mqlab` package this role
+# used to deploy under /usr/local/lib is gone. This role only: asserts the component is
+# baked -> retires the pre-#294 payload and the /etc/systemd/system unit copies (they
+# SHADOW the component units) -> renders the deployer-owned env file -> daemon-reload +
+# enable the 5s timer. rdqmstatus + drbdsetup both run as root, so the unit runs as root.
+# The QM name comes from the observability overlay (rdqm_qm).
+- name: look for the baked observability component
+  ansible.builtin.stat:
+    path: /opt/logical-minds-foundry/mq-resiliency-observability/INSTALLED.json
+  register: _rs_baked
+
+- name: the observability component is baked on this box
+  ansible.builtin.assert:
+    that: _rs_baked.stat.exists
+    fail_msg: >-
+      mq-resiliency-observability is not installed on {{ inventory_hostname }}
+      (no /opt/logical-minds-foundry/mq-resiliency-observability/INSTALLED.json) —
+      rebuild its box (mqlab box build <box>) or install it live
+      (mqlab component install mq-resiliency-observability --host {{ inventory_hostname }})
+
 - name: textfile dir
   ansible.builtin.file:
     path: /var/lib/node_exporter/textfile
     state: directory
     mode: "0755"
 
-- name: collector package dir
+# A pre-#294 `systemctl enable` linked the timer to the /etc copy removed below; drop
+# that link (only that one) so the enable at the end re-links the component unit.
+- name: look for a timers.target.wants link to the retired /etc timer
+  ansible.builtin.stat:
+    path: /etc/systemd/system/timers.target.wants/lab-rdqm-state.timer
+    follow: false
+  register: _rs_wants
+
+- name: drop the wants link to the retired /etc timer
   ansible.builtin.file:
-    path: /usr/local/lib/lab-rdqm-state/mqlab
-    state: directory
-    mode: "0755"
+    path: /etc/systemd/system/timers.target.wants/lab-rdqm-state.timer
+    state: absent
+  when: (_rs_wants.stat.lnk_target | default('')) == '/etc/systemd/system/lab-rdqm-state.timer'
 
-- name: deploy the collector package (rdqmstate + its parse_drbd dependency, verbatim)
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../src/mqlab/{{ item }}"
-    dest: "/usr/local/lib/lab-rdqm-state/mqlab/{{ item }}"
-    mode: "0644"
-  loop: [__init__.py, clusterstate.py, rdqmstate.py]
+# systemd prefers /etc/systemd/system over /usr/lib/systemd/system: a surviving copy would
+# keep running the old /usr/bin/python3 ExecStart (epic .github#294 Review Focus 1).
+- name: retire the pre-#294 payload and /etc unit copies (they shadow the component units)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/lib/lab-rdqm-state
+    - /etc/systemd/system/lab-rdqm-state.service
+    - /etc/systemd/system/lab-rdqm-state.timer
 
-- name: install service + timer
+- name: render the deployer-owned env file (read by the component's static unit)
   ansible.builtin.template:
-    src: "{{ item }}"
-    dest: "/etc/systemd/system/{{ item | basename | regex_replace('\\.j2$', '') }}"
+    src: lab-rdqm-state.env.j2
+    dest: /etc/opt/logical-minds-foundry/mq-resiliency-observability/lab-rdqm-state.env
     mode: "0644"
-  loop: [lab-rdqm-state.service.j2, lab-rdqm-state.timer.j2]
 
-- name: enable + start the timer
+- name: daemon-reload, enable + start the timer
   ansible.builtin.systemd:
     name: lab-rdqm-state.timer
     enabled: true
