@@ -3,8 +3,9 @@
 Scans the production code paths only — ansible/, src/mqlab/, lab/scripts/, each
 component's components/<name>/src/, and lab/topology.yaml. It deliberately does NOT
 scan tests/ (seeded test topologies legitimately use the old names to exercise the
-no-`short` fallback) or docs/ (which cite the history). The single source of QM names is the per-arm `short` token; nothing
-in production code should hardcode QMPCMK/QMSVC/QMNATIVE/QMRDQM anymore.
+no-`short` fallback) or docs/ (which cite the history). The single source of QM names
+is the per-arm `short` token; nothing in production code should hardcode
+QMPCMK/QMSVC/QMNATIVE/QMRDQM anymore.
 """
 
 from __future__ import annotations
