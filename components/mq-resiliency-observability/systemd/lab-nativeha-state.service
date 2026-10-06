@@ -1,0 +1,13 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Site values come from the
+# deployer-owned EnvironmentFile; never edit this file on a host.
+# lab-nativeha-state.service — render the Native HA textfiles once per tick. Type=oneshot
+# with two ExecStart lines runs both collectors on the same fire (#810); each writes its
+# own .prom (lab_nativeha_state.prom / lab_loglifecycle_state.prom).
+[Unit]
+Description=Render lab_nativeha_state + lab_loglifecycle_state textfiles (mq-resiliency-observability)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-observability/lab-nativeha-state.env
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/lab-nativeha-state --qm ${QM}
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/lab-loglifecycle-state --qm ${QM}

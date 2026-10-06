@@ -22,7 +22,7 @@
 > Sources: `ansible/roles/mq-nativeha/tasks/{main,tls,crr}.yml`,
 > `ansible/site-nativeha.yml`, `ansible/site-nativeha-dr.yml`,
 > `ansible/roles/lab-pki`, `docs/reference/lab-gotchas.md`,
-> `src/mqlab/nativehastate.py`.
+> `components/mq-resiliency-observability/src/mqro/nativehastate.py`.
 
 ## 1. Topology
 

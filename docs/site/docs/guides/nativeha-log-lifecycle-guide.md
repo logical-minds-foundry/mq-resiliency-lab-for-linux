@@ -150,8 +150,9 @@ Grafana board, present only on the Native HA arms. It is built to be read
 replicas are drawn as separate lines because they genuinely diverge.
 
 !!! note "How this lab implements it"
-    A stdlib-only collector (`src/mqlab/loglifecycle.py`, deployed as
-    `lab-loglifecycle-state`) polls each instance's filesystem — no MQI — for
+    A stdlib-only collector
+    (`components/mq-resiliency-observability/src/mqro/loglifecycle.py`, deployed
+    as `lab-loglifecycle-state`) polls each instance's filesystem — no MQI — for
     disk usage and the `active/` extent split, and tags every sample by
     `instance` and `role` (`dspmq -m <QM> -o nativeha -x`). It emits
     `mqlab_log_disk_used_bytes`, `mqlab_log_disk_total_bytes`,

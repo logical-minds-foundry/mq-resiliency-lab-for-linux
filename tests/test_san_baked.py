@@ -67,7 +67,7 @@ def test_san_role_bakes_bake_san_on_ubuntu_only() -> None:
     assert catalog.roles["san"] == {
         "bake": {"ubuntu": "san"},
         "mq_bearing": False,
-        "components": (),
+        "components": ("mq-resiliency-observability",),
     }
     assert box_bakes()[_san_box()] == ("ubuntu", "san")
 

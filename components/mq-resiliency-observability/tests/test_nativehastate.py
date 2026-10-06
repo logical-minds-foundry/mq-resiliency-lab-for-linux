@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from mqlab import nativehastate
+from mqro import nativehastate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "nativehastate"
 

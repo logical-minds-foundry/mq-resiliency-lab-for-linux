@@ -55,6 +55,22 @@ def _mutated(keys: tuple[Any, ...], value: Any) -> dict[str, Any]:
     return data
 
 
+def _fake_components(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *names: str) -> Path:
+    """A components/ dir holding ``names`` as uv projects, plus every committed component.
+
+    The committed ones keep the rest of the (mutated) committed catalog loadable, so a
+    test isolates the one role it mutates.
+    """
+    comps = tmp_path / "components"
+    committed = versions_catalog_path().parents[1] / "components"
+    real = [p.parent.name for p in committed.glob("*/pyproject.toml")]
+    for name in (*real, *names):
+        (comps / name).mkdir(parents=True, exist_ok=True)
+        (comps / name / "pyproject.toml").write_text("")
+    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    return comps
+
+
 def _with_ubuntu26(*, unsupported: bool, default: str = "ubuntu:24") -> dict[str, Any]:
     """The committed catalog plus an ubuntu:26 entry offered to nativeha-ubuntu."""
     data = copy.deepcopy(_committed())
@@ -146,19 +162,24 @@ def test_runtime_tarball_unknown_arch():
         pin.tarball("s390x")
 
 
-def test_committed_roles_bake_no_components_yet():
-    """T3 adds the key; T6/T8 populate it once components/<name>/ exist."""
+def test_committed_roles_bake_their_components():
+    """Each collector-host role bakes mq-resiliency-observability (epic .github#294 T6)."""
     cat = load_catalog()
-    assert all(spec["components"] == () for spec in cat.roles.values())
-    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == ()
+    obs = ("mq-resiliency-observability",)
+    assert {role: spec["components"] for role, spec in cat.roles.items()} == {
+        "infra": (),
+        "obs": (),
+        "san": obs,
+        "mq-client": (),
+        "mq-nativeha": obs,
+        "pcmk": obs,
+        "mq-rdqm": obs,
+    }
+    assert cat.box("pcmk", OsRef("ubuntu", 24)).components == obs
 
 
 def test_role_components_flow_to_box_entry(tmp_path, monkeypatch):
-    comps = tmp_path / "components"
-    for name in ("alpha", "beta"):
-        (comps / name).mkdir(parents=True)
-        (comps / name / "pyproject.toml").write_text("")
-    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    _fake_components(tmp_path, monkeypatch, "alpha", "beta")
     path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "beta"]))
     cat = load_catalog(path)
     assert cat.box("pcmk", OsRef("ubuntu", 24)).components == ("alpha", "beta")
@@ -166,19 +187,15 @@ def test_role_components_flow_to_box_entry(tmp_path, monkeypatch):
 
 
 def test_role_components_refuses_a_dir_without_pyproject(tmp_path, monkeypatch):
-    comps = tmp_path / "components"
-    (comps / "half").mkdir(parents=True)  # a directory, but not a uv project
-    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    comps = _fake_components(tmp_path, monkeypatch)
+    (comps / "half").mkdir()  # a directory, but not a uv project
     path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["half"]))
     with pytest.raises(VersionError, match="roles.pcmk: unknown component half"):
         load_catalog(path)
 
 
 def test_role_components_refuses_duplicates(tmp_path, monkeypatch):
-    comps = tmp_path / "components"
-    (comps / "alpha").mkdir(parents=True)
-    (comps / "alpha" / "pyproject.toml").write_text("")
-    monkeypatch.setattr(versions, "components_dir", lambda: comps)
+    _fake_components(tmp_path, monkeypatch, "alpha")
     path = _write(tmp_path, _mutated(("roles", "pcmk", "components"), ["alpha", "alpha"]))
     with pytest.raises(VersionError, match="roles.pcmk: components lists a name twice"):
         load_catalog(path)

@@ -1,8 +1,8 @@
 """Cluster-state collector for the PCMK drill cockpit (#177, Plan 1a).
 
-Stdlib-only so this exact file is deployed verbatim to the pcmk/san guests as
-/usr/local/bin/lab-cluster-state and run by a 5s systemd timer, AND imported by the
-repo's unit tests. Pure parse functions turn command output into metric rows;
+Stdlib-only; installed on the pcmk/san guests as the `lab-cluster-state` console-script
+entry point of mq-resiliency-observability and run by a 5s systemd timer. Pure parse
+functions turn command output into metric rows;
 render_cluster_state_prom turns rows into a node_exporter textfile; probe() runs each
 source bounded + non-blocking (timeout -> no fresh sample -> the cell reads STALE).
 """
@@ -254,7 +254,7 @@ def collect(role: str, node: str, now: int) -> str:
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the deployed collector. `lab-cluster-state --role {cluster,storage}`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--role", required=True, choices=sorted(PROBE_SETS))
@@ -267,7 +267,4 @@ def main(argv: list[str] | None = None) -> None:
     tmp = Path(args.out + ".tmp")
     tmp.write_text(body)
     tmp.replace(args.out)
-
-
-if __name__ == "__main__":
-    main()
+    return 0

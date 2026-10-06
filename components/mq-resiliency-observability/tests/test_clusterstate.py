@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from mqlab import clusterstate
+from mqro import clusterstate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "clusterstate"
 

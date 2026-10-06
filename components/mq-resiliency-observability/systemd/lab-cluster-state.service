@@ -1,0 +1,11 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Site values come from the
+# deployer-owned EnvironmentFile; never edit this file on a host.
+# lab-cluster-state.service — run the cluster-state collector once for this node's role
+# (ROLE=cluster|storage).
+[Unit]
+Description=Render lab_cluster_state textfile (mq-resiliency-observability)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-observability/lab-cluster-state.env
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/lab-cluster-state --role ${ROLE}

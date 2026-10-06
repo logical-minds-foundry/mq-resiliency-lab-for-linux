@@ -1,9 +1,8 @@
 """RDQM cluster-state collector for the lab-rdqm-rhel-cluster cockpit (#287).
 
-Stdlib-only (apart from reusing clusterstate.parse_drbd) so this exact module deploys
-verbatim to the rdqm nodes — the rdqm-state role lays down a minimal `mqlab` package
-(this module + clusterstate.py) and runs `python3 -m mqlab.rdqmstate` on a 5s systemd
-timer, AND it is imported by the repo's unit tests. Pure parse functions turn
+Stdlib-only (apart from reusing clusterstate.parse_drbd); installed on the rdqm nodes as
+the `lab-rdqm-state` console-script entry point of mq-resiliency-observability and run by
+a 5s systemd timer. Pure parse functions turn
 `rdqmstatus -m <qm>` / `drbdsetup status` output into rows; render_rdqm_state_prom turns
 rows into a node_exporter textfile; probe() runs each source bounded + non-blocking
 (timeout -> no fresh sample -> STALE).
@@ -25,7 +24,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from mqlab.clusterstate import parse_drbd
+from mqro.clusterstate import parse_drbd
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -311,7 +310,7 @@ def collect(node: str, qm: str, now: int) -> str:
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the deployed collector: `lab-rdqm-state --qm RDQMAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
@@ -324,7 +323,4 @@ def main(argv: list[str] | None = None) -> None:
     tmp = Path(args.out + ".tmp")
     tmp.write_text(body)
     tmp.replace(args.out)
-
-
-if __name__ == "__main__":
-    main()
+    return 0
