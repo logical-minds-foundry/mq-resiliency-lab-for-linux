@@ -1,0 +1,203 @@
+---
+# Install ONE staged component artifact (epic .github#294 spec §5.7). This is the ONLY
+# install path: the bake plays run it, and so does `mqlab component install` against a
+# running lab. The live venv is untouched unless the new one passes its selfcheck.
+#
+#   1. precondition: the pinned runtime is on the guest (checked BEFORE any change);
+#   2. copy the staged artifact (wheel, requirements, deps/, systemd/, BUILD.json);
+#   3. build venv.new with the pinned interpreter and THAT venv's own pip, always
+#      offline (--no-index --find-links deps/) and hash-pinned — never uv, never PyPI;
+#   4. run <name>-selfcheck from venv.new — a failure fails the play, no swap;
+#   5. swap (venv -> venv.prev, venv.new -> venv), record INSTALLED.json, install the
+#      static units, daemon-reload, and (live lab only) restart the enabled ones.
+
+# --- 1. precondition (read-only; nothing above this line or in it changes the guest) ---
+- name: Is the pinned runtime installed?
+  ansible.builtin.stat:
+    path: "{{ component_runtime_prefix }}/cpython-{{ runtime_python.minor }}/PIN"
+  register: _c_pin_stat
+
+- name: Read the runtime PIN
+  ansible.builtin.slurp:
+    src: "{{ component_runtime_prefix }}/cpython-{{ runtime_python.minor }}/PIN"
+  register: _c_pin
+  when: _c_pin_stat.stat.exists
+
+- name: Precondition — the guest runtime matches the pin (checked BEFORE any change)
+  ansible.builtin.assert:
+    that:
+      - _c_pin_stat.stat.exists
+      - (_c_pin.content | b64decode | trim) == runtime_python.token
+    fail_msg: >-
+      the guest runtime on {{ inventory_hostname }} is
+      {{ (_c_pin.content | b64decode | trim) if _c_pin_stat.stat.exists else 'absent' }},
+      not the pinned {{ runtime_python.token }} ({{ component_runtime_prefix }}/cpython-{{
+      runtime_python.minor }}) — rebuild its box (mqlab box build <box>; mqlab box status
+      lists them) and re-provision the guest. Nothing was changed.
+
+- name: Precondition — a staged artifact was supplied for this component
+  ansible.builtin.assert:
+    that:
+      - component_name is defined
+      - component_name in component_artifacts
+    fail_msg: >-
+      no staged artifact for component {{ component_name | default('(component_name unset)') }}
+      (supplied: {{ component_artifacts | list | join(', ') or 'none' }}) — run
+      mqlab component build <name>, then mqlab component install <name> --host <guest>
+
+- name: Set the component paths
+  ansible.builtin.set_fact:
+    _c_runtime: "{{ component_runtime_prefix }}/cpython-{{ runtime_python.minor }}/bin/python{{ runtime_python.minor }}"
+    _c_root: "{{ component_install_prefix }}/{{ component_name }}"
+    _c_etc: "{{ component_config_prefix }}/{{ component_name }}"
+    _c_src: "{{ component_artifacts[component_name] }}"
+    _c_stage: "/var/tmp/component-{{ component_name }}"
+
+# --- 2. copy the artifact ----------------------------------------------------------------
+- name: Clear the guest staging dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ _c_stage }}"
+    state: absent
+
+- name: Copy the staged artifact (trailing slash = its contents)
+  become: true
+  ansible.builtin.copy:
+    src: "{{ _c_src }}/"
+    dest: "{{ _c_stage }}/"
+    mode: preserve
+
+- name: Component dirs (/opt payload, /etc/opt deployer config)
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ _c_root }}"
+    - "{{ _c_etc }}"
+
+# --- 3. build venv.new -------------------------------------------------------------------
+# sdist dependencies (pymqi) compile here, against the box's MQ SDK. The pinned runtime's
+# sysconfig names `clang` (CC/LDSHARED), which the guests do not have (spike report
+# docs/reports/2026-10-guest-runtime-spike.md, correction C2): CC and LDSHARED are derived
+# from the venv interpreter's OWN sysconfig with only the leading `clang` swapped for
+# `gcc`, which keeps the recorded hardening flags (relro, now, noexecstack) and cannot
+# drift on a pin bump. No `| head` anywhere: under pipefail a multi-line producer piped
+# into an early-exiting reader dies of SIGPIPE (rc 141, #1359).
+- name: Build venv.new (pinned runtime, the venv's own pip, offline, hash-pinned)
+  become: true
+  ansible.builtin.shell: |
+    set -euo pipefail
+    root="{{ _c_root }}"
+    stage="{{ _c_stage }}"
+    rm -rf "$root/venv.new"
+    "{{ _c_runtime }}" -m venv "$root/venv.new"
+    py="$root/venv.new/bin/python"
+    pip="$root/venv.new/bin/pip"
+    if [ -s "$stage/build-requirements.txt" ]; then
+      "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
+        -r "$stage/build-requirements.txt"
+    fi
+    if [ -s "$stage/requirements.txt" ]; then
+      gcc_for() {
+        "$py" -c 'import re, sys, sysconfig; v = sysconfig.get_config_var(sys.argv[1]) or ""; print(re.sub(r"^clang(?=\s|$)", "gcc", v))' "$1"
+      }
+      CC="$(gcc_for CC)"
+      LDSHARED="$(gcc_for LDSHARED)"
+      if [ -z "$CC" ] || [ -z "$LDSHARED" ]; then
+        echo "the pinned runtime's sysconfig has no CC/LDSHARED (CC='$CC' LDSHARED='$LDSHARED')" >&2
+        exit 1
+      fi
+      export CC LDSHARED
+      echo "sdist builds use CC='$CC' LDSHARED='$LDSHARED'"
+      "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
+        --no-build-isolation -r "$stage/requirements.txt"
+    fi
+    "$pip" install --no-index --no-deps "$stage"/*.whl
+  args:
+    executable: /bin/bash
+  environment:
+    LD_LIBRARY_PATH: /opt/mqm/lib64
+  changed_when: true
+
+# --- 4. selfcheck BEFORE the swap ----------------------------------------------------------
+- name: Selfcheck from venv.new (a failure fails the play; the live venv is untouched)
+  become: true
+  ansible.builtin.command:
+    argv: ["{{ _c_root }}/venv.new/bin/{{ component_name }}-selfcheck"]
+  environment:
+    LD_LIBRARY_PATH: /opt/mqm/lib64
+  changed_when: false
+
+# --- 5. swap, record, units ----------------------------------------------------------------
+- name: Swap venv.new into place, keeping venv.prev
+  become: true
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd "{{ _c_root }}"
+    rm -rf venv.prev
+    if [ -d venv ]; then mv venv venv.prev; fi
+    mv venv.new venv
+  args:
+    executable: /bin/bash
+  changed_when: true
+
+- name: Record INSTALLED.json
+  become: true
+  ansible.builtin.copy:
+    dest: "{{ _c_root }}/INSTALLED.json"
+    mode: "0644"
+    content: >-
+      {{ (lookup('ansible.builtin.file', _c_src + '/BUILD.json') | from_json)
+         | combine({'installed_at': now(utc=true).isoformat(),
+                    'runtime_installed': runtime_python.token})
+         | to_nice_json }}
+
+- name: Remove the guest staging dir
+  become: true
+  ansible.builtin.file:
+    path: "{{ _c_stage }}"
+    state: absent
+
+- name: List the component's static units
+  ansible.builtin.set_fact:
+    _c_units: "{{ query('ansible.builtin.fileglob', _c_src + '/systemd/*') | map('basename') | sort }}"
+
+- name: Install the component's static units
+  become: true
+  ansible.builtin.copy:
+    src: "{{ _c_src }}/systemd/{{ item }}"
+    dest: "/usr/lib/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: "{{ _c_units }}"
+
+- name: Daemon-reload
+  become: true
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY (the systemd
+# module cannot query without changing state).
+- name: Which of this component's units are enabled (live lab only)  # noqa: command-instead-of-module
+  when: component_start_units | bool
+  ansible.builtin.command:
+    argv: ["systemctl", "is-enabled", "{{ item }}"]
+  loop: "{{ _c_units }}"
+  register: _c_enabled
+  changed_when: false
+  # is-enabled exits non-zero for "disabled"/"static", so judge by its output: a unit we
+  # just installed must report SOME state; an empty answer is a real failure.
+  failed_when: _c_enabled.stdout | default('') | length == 0
+
+- name: Restart the enabled ones onto the new venv (a failed restart FAILS the play)
+  when:
+    - component_start_units | bool
+    - item.stdout == 'enabled'
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ item.item }}"
+    state: restarted
+  loop: "{{ _c_enabled.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"

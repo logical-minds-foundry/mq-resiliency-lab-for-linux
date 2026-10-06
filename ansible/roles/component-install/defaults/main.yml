@@ -1,0 +1,23 @@
+---
+# Inputs (epic .github#294 spec §5.7). runtime_python and component_artifacts have no
+# default: mqlab writes them to $(mqlab build path work)/components/install-vars.json
+# (see the runtime-install role's defaults for runtime_python's shape), passed as
+# `-e @<install-vars>`.
+#
+#   component_name:       the component to install (a key of component_artifacts)
+#   component_artifacts:  {<name>: <dev-host dir of a staged artifact>} from
+#                         `mqlab component build` (wheel, requirements, deps/, systemd/,
+#                         BUILD.json)
+#
+# false during a bake: the units are installed but left inert (the per-run roles enable
+# them). `mqlab component install` passes true, so the units this component owns that
+# are ENABLED on a running guest are restarted onto the new venv.
+component_start_units: false
+
+# The pinned interpreter's root; MUST equal the runtime-install role's
+# runtime_install_prefix (a structural test pins the two together).
+component_runtime_prefix: /opt/vergil
+
+# The install layout (spec §5.3): /opt/<org>/<component>/ and /etc/opt/<org>/<component>/.
+component_install_prefix: /opt/logical-minds-foundry
+component_config_prefix: /etc/opt/logical-minds-foundry

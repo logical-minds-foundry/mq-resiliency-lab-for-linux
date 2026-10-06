@@ -21,6 +21,12 @@
 #                                       (rhel bakes attach it; none for ubuntu)
 #   --os-pin <base@pin>                 REQUIRED; the OS pin folded into the manifest hash
 #   --mq-bearing <0|1>                  REQUIRED; whether the lab/mq-version pin is hashed
+#   --runtime-pin <ver+release>         REQUIRED; the pinned guest Python (runtime.python)
+#   --components <name@tree,...|"">     REQUIRED (may be empty); the guest components the
+#                                       box bakes, each at its git tree hash (epic
+#                                       .github#294); both fold into the manifest hash
+#   --install-vars <path>               REQUIRED when --components is non-empty: the role
+#                                       vars mqlab wrote (runtime tarball + staged artifacts)
 #   --domain-type <kvm|qemu>            REQUIRED; mqlab supplies it from host facts
 #   --cpu-mode <host-passthrough|maximum> REQUIRED; pairs with --domain-type
 #   --rebuild-box / LAB_REBUILD_BOX=1   force a fresh build (overwrite the cache)
@@ -41,6 +47,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=lab/boxes/_box-register.sh
 . ./_box-register.sh
+# shellcheck source=lab/boxes/_components.sh
+. ./_components.sh
 
 WARN_DAYS="${WARN_DAYS:-7}"
 REFUSE_DAYS="${REFUSE_DAYS:-14}"
@@ -57,6 +65,10 @@ OS_PIN=""
 MQ_BEARING=""
 DOMAIN_TYPE=""
 CPU_MODE=""
+RUNTIME_PIN=""
+COMPONENTS=""
+COMPONENTS_SET=0   # --components is required but may be EMPTY (a box baking none)
+INSTALL_VARS=""
 
 usage() {
   cat >&2 <<'USAGE'
@@ -64,9 +76,11 @@ usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --base-kind <ubuntu|
                        --base-box <name> --base-box-version <v|none> --bake <stem> \
                        --dvd <iso|none> --os-pin <base@pin> --mq-bearing <0|1> \
                        --domain-type <kvm|qemu> --cpu-mode <host-passthrough|maximum> \
-                       [--rebuild-box] [--dry-run]
+                       --runtime-pin <ver+release> --components <name@tree,...|""> \
+                       [--install-vars <path>] [--rebuild-box] [--dry-run]
 
-  Every flag but --rebuild-box/--dry-run is REQUIRED. mqlab supplies them all from the
+  Every flag but --install-vars/--rebuild-box/--dry-run is REQUIRED, and --install-vars
+  is required too whenever --components is non-empty. mqlab supplies them all from the
   catalog (lab/versions.yaml) and host facts: run `mqlab box build <box>` rather than
   this script by hand (`mqlab box status` lists the boxes).
   --arch is one of aarch64/x86_64 (the canonical hostfacts arch): it selects the guest
@@ -91,6 +105,13 @@ while [ "$#" -gt 0 ]; do
     --dry-run) DRY_RUN=1 ;;
     --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
     --cpu-mode) CPU_MODE="${2:-}"; shift ;;
+    --runtime-pin) RUNTIME_PIN="${2:-}"; shift ;;
+    --components)
+      if [ "$#" -lt 2 ]; then
+        echo 'ERROR: --components needs a value ("" for none)' >&2; usage; exit 2
+      fi
+      COMPONENTS="$2"; COMPONENTS_SET=1; shift ;;
+    --install-vars) INSTALL_VARS="${2:-}"; shift ;;
     *) echo "ERROR: unknown arg: $1" >&2; usage; exit 2 ;;
   esac
   shift
@@ -113,6 +134,21 @@ require base-box-version "$BASE_BOX_VERSION"
 require dvd "$DVD"
 require os-pin "$OS_PIN"
 require mq-bearing "$MQ_BEARING"
+require runtime-pin "$RUNTIME_PIN"
+if [ "$COMPONENTS_SET" != 1 ]; then
+  echo 'ERROR: --components is required ("" for a box that bakes none)' >&2
+  usage
+  exit 2
+fi
+components_check "$COMPONENTS" || { usage; exit 2; }
+# A component bake installs from the runtime tarball + staged artifacts mqlab names in its
+# install-vars file (written under mqlab's work/ bucket; this script never builds a
+# build/ path for it), so a box that bakes components must be handed one.
+if [ -n "$COMPONENTS" ] && [ -z "$INSTALL_VARS" ]; then
+  echo "ERROR: --install-vars is required when --components is non-empty" >&2
+  usage
+  exit 2
+fi
 case "$BASE_KIND" in
   ubuntu|rhel) ;;
   *) echo "ERROR: --base-kind must be 'ubuntu' or 'rhel' (got '${BASE_KIND}')" >&2; usage; exit 2 ;;
@@ -174,8 +210,12 @@ mkdir -p "$CACHE_DIR"
 # agree with what this script writes.
 CACHE="$CACHE_DIR/${BOX}-${ARCH}.box"
 HASH_FILE="$CACHE_DIR/${BOX}-${ARCH}.manifest-hash"
+# What the box baked (epic .github#294 spec §5.8): the runtime pin + each component's tree,
+# written beside the .box after a bake. MUST match box.py's components_record_artifact.
+COMPONENTS_FILE="$CACHE_DIR/${BOX}-${ARCH}.components.json"
 
-CURRENT_HASH="$(./_manifest-hash.sh "$BOX" --bake-stem "$BAKE" --mq-bearing "$MQ_BEARING" --os-pin "$OS_PIN")"
+CURRENT_HASH="$(./_manifest-hash.sh "$BOX" --bake-stem "$BAKE" --mq-bearing "$MQ_BEARING" \
+  --os-pin "$OS_PIN" --runtime-pin "$RUNTIME_PIN" --components "$COMPONENTS")"
 
 # Decide the action up front (the testable surface, exercised via --dry-run).
 age_days=0
@@ -360,6 +400,17 @@ case "$BAKE" in
     ;;
 esac
 
+# Guest components (epic .github#294 spec §5.8): the bake installs each from the artifact
+# staged for the component's current tree hash (box.build_boxes builds a missing one
+# first) through the runtime-install + component-install roles. mqlab names the runtime
+# tarball and the artifacts in its install-vars file; baked_components (a JSON list)
+# tells the bake play which components this box bakes.
+if [ -n "$COMPONENTS" ]; then
+  test -f "$INSTALL_VARS" \
+    || { echo "ERROR: install vars not found: $INSTALL_VARS — run: mqlab box build $BOX" >&2; exit 1; }
+  BAKE_EXTRA_VARS+=(-e "@$INSTALL_VARS" -e "{\"baked_components\": $(components_names_json "$COMPONENTS")}")
+fi
+
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
 #    `virsh shutdown` powers it off cleanly).
 # aarch64 needs UEFI (AAVMF) firmware: on the arm 'virt' machine ACPI requires UEFI (#736),
@@ -482,6 +533,13 @@ mv "$WORK/box.img.tmp" "$WORK/box.img"
 printf '{"provider":"libvirt","format":"qcow2","virtual_size":20}\n' > "$WORK/metadata.json"
 tar -C "$WORK" -cf "$CACHE" metadata.json box.img
 printf '%s\n' "$CURRENT_HASH" > "$HASH_FILE"   # stamp the manifest hash beside the box
+# Record what this bake baked (spec §5.8); a box baking no component carries no record.
+if [ -n "$COMPONENTS" ]; then
+  components_record "$RUNTIME_PIN" "$COMPONENTS" > "$COMPONENTS_FILE.tmp"
+  mv "$COMPONENTS_FILE.tmp" "$COMPONENTS_FILE"
+else
+  rm -f "$COMPONENTS_FILE"
+fi
 # Always re-add a fresh bake, stamped with the NEW cache identity (#1248).
 box_register "$BOX" "$(box_reg_identity "$CACHE" "$CURRENT_HASH")" \
   --provider libvirt --force "$BOX" "$CACHE"

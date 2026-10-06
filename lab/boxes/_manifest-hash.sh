@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # lab/boxes/_manifest-hash.sh <box> --bake-stem S --mq-bearing 0|1 --os-pin P
+#                             --runtime-pin <version>+<pbs_release>
+#                             --components "<name>@<tree>[,<name>@<tree>...]"
 #   - the bake-manifest hash for a fat box.
 #
 # A fat box is only worth REUSEing from cache while the inputs that shaped it are
@@ -45,6 +47,18 @@
 #     pin (e.g. <base_box>@<pin>), passed as --os-pin. A re-pin (a new point release, a
 #     new cloud-image version) flips the digest and forces a rebake.
 #
+#   * for boxes that BAKE GUEST COMPONENTS only (epic .github#294 spec §5.8), each baked
+#     component's git TREE HASH (--components name@tree, from roles.<role>.components)
+#     and the pinned guest runtime (--runtime-pin, runtime.python's <version>+<release>).
+#     The hash keys on the component's SOURCE (`git rev-parse HEAD:components/<name>`),
+#     NOT on its staged artifact: keying on the `CURRENT` artifact would let a component
+#     that was edited and committed but not yet rebuilt match an old box and REUSE it -
+#     the same silent-drift bug class as #649 (roles), #1324 (shared includes) and #1087
+#     (the MQ pin) above. Any committed component change or pin bump flips the digest,
+#     and mqlab builds the missing artifact itself before the bake. Like the MQ pin, both
+#     are folded in ONLY when the box bakes a component, so a box that bakes none (an
+#     empty --components "") is never spuriously rebaked by a runtime bump.
+#
 # Dumb hasher (epic .github#280): every input that used to come from a hand-written
 # box table is now a REQUIRED flag, supplied by mqlab from the catalog
 # (lab/versions.yaml) through build-fatbox.sh. The bake playbook is named by its STEM
@@ -68,7 +82,7 @@
 # bake recipe, or a baked role gets a distinct hash and forces a rebuild.
 set -euo pipefail
 
-USAGE="usage: _manifest-hash.sh <box> --bake-stem <stem> --mq-bearing <0|1> --os-pin <base@pin>"
+USAGE="usage: _manifest-hash.sh <box> --bake-stem <stem> --mq-bearing <0|1> --os-pin <base@pin> --runtime-pin <ver+release> --components <name@tree,...|\"\">"
 BOX="${1:-}"
 case "$BOX" in
   "" | --*) echo "ERROR: <box> is required" >&2; echo "$USAGE" >&2; exit 2 ;;
@@ -77,20 +91,30 @@ shift
 BAKE_STEM=""
 MQ_BEARING=""
 OS_PIN=""
+RUNTIME_PIN=""
+COMPONENTS=""
+COMPONENTS_SET=0   # --components is required but may be EMPTY (a box baking none)
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --bake-stem) BAKE_STEM="${2:-}"; shift ;;
     --mq-bearing) MQ_BEARING="${2:-}"; shift ;;
     --os-pin) OS_PIN="${2:-}"; shift ;;
+    --runtime-pin) RUNTIME_PIN="${2:-}"; shift ;;
+    --components)
+      if [ "$#" -lt 2 ]; then
+        echo "ERROR: --components needs a value (\"\" for none)" >&2; echo "$USAGE" >&2; exit 2
+      fi
+      COMPONENTS="$2"; COMPONENTS_SET=1; shift ;;
     *) echo "ERROR: unknown arg: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
   esac
   shift
 done
-for flag in bake-stem mq-bearing os-pin; do
+for flag in bake-stem mq-bearing os-pin runtime-pin; do
   case "$flag" in
     bake-stem) value="$BAKE_STEM" ;;
     mq-bearing) value="$MQ_BEARING" ;;
     os-pin) value="$OS_PIN" ;;
+    runtime-pin) value="$RUNTIME_PIN" ;;
   esac
   if [ -z "$value" ]; then
     echo "ERROR: --${flag} is required" >&2
@@ -98,10 +122,30 @@ for flag in bake-stem mq-bearing os-pin; do
     exit 2
   fi
 done
+if [ "$COMPONENTS_SET" != 1 ]; then
+  echo "ERROR: --components is required (\"\" for a box that bakes none)" >&2
+  echo "$USAGE" >&2
+  exit 2
+fi
 case "$MQ_BEARING" in
   0|1) ;;
   *) echo "ERROR: --mq-bearing must be 0 or 1 (got '${MQ_BEARING}')" >&2; exit 2 ;;
 esac
+if ! [[ "$RUNTIME_PIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]]; then
+  echo "ERROR: --runtime-pin must be <version>+<pbs_release> (got '${RUNTIME_PIN}')" >&2
+  exit 2
+fi
+# Each component is <name>@<git tree hash>; split on commas into COMPONENT_ITEMS.
+COMPONENT_ITEMS=()
+if [ -n "$COMPONENTS" ]; then
+  IFS=, read -r -a COMPONENT_ITEMS <<< "$COMPONENTS"
+fi
+for item in ${COMPONENT_ITEMS[@]+"${COMPONENT_ITEMS[@]}"}; do
+  if ! [[ "$item" =~ ^[a-z0-9][a-z0-9._-]*@[0-9a-f]+$ ]]; then
+    echo "ERROR: --components entries are <name>@<tree hash> (got '${item}')" >&2
+    exit 2
+  fi
+done
 cd "$(dirname "$0")"
 
 PINS="../../ansible/group_vars/all/versions.yml"
@@ -265,6 +309,12 @@ done
   if [ "$MQ_BEARING" = 1 ] && [ -f "$MQ_VERSION_PIN" ]; then
     printf 'mq_version_pin='
     cat "$MQ_VERSION_PIN"
+  fi
+  # Component-baking boxes only (epic .github#294): the runtime pin and each baked
+  # component's source tree hash, sorted for a stable digest (see the header).
+  if [ "${#COMPONENT_ITEMS[@]}" -gt 0 ]; then
+    printf 'runtime_pin=%s\n' "$RUNTIME_PIN"
+    printf 'component=%s\n' "${COMPONENT_ITEMS[@]}" | sort
   fi
   if [ -f "$BAKE" ]; then cat "$BAKE"; fi
   # Every file of every resolved role, name-sorted then path-sorted for a stable
