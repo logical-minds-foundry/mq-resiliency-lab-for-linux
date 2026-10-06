@@ -559,10 +559,18 @@ def read_installed(
     )
     _rc, lines = _capture(runner, command)  # non-zero whenever any host lacks the file
     text = "\n".join(lines)
+    # The repo's ansible.cfg enables timing callbacks, which print a timestamp line BEFORE
+    # the json callback's document and a TASKS/PLAYBOOK RECAP AFTER it (#1374): decode
+    # exactly one JSON document from the first "{" and ignore whatever follows.
     start = text.find("{")
-    if start < 0:
-        raise ComponentError(f"ansible returned no JSON reading {installed_path(name)}: {text}")
-    report = json.loads(text[start:])
+    try:
+        if start < 0:
+            raise ValueError("no '{' in the output")
+        report, _end = json.JSONDecoder().raw_decode(text, start)
+    except ValueError as exc:  # json.JSONDecodeError is a ValueError
+        raise ComponentError(
+            f"ansible returned no JSON reading {installed_path(name)} ({exc}): {text}"
+        ) from None
     results: dict[str, dict[str, Any] | str] = {}
     for task in report.get("plays", [{}])[0].get("tasks", []):
         for host, result in task.get("hosts", {}).items():
