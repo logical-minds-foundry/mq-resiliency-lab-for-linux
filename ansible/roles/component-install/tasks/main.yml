@@ -1,15 +1,23 @@
 ---
 # Install ONE staged component artifact (epic .github#294 spec §5.7). This is the ONLY
 # install path: the bake plays run it, and so does `mqlab component install` against a
-# running lab. The live venv is untouched unless the new one passes its selfcheck.
+# running lab. The live install is untouched unless the new release passes its selfcheck.
+#
+# Layout (#1372): every install is a release built at its FINAL path and never moved
+# (venvs are not relocatable); `venv` and `previous` are symlinks into releases/:
+#   <prefix>/<name>/releases/<version>+<tree>-<stamp>/venv
+#   <prefix>/<name>/venv     -> releases/<live>/venv       (what units run)
+#   <prefix>/<name>/previous -> releases/<prev>/venv       (rollback: flip venv back)
 #
 #   1. precondition: the pinned runtime is on the guest (checked BEFORE any change);
 #   2. copy the staged artifact (wheel, requirements, deps/, systemd/, BUILD.json);
-#   3. build venv.new with the pinned interpreter and THAT venv's own pip, always
-#      offline (--no-index --find-links deps/) and hash-pinned — never uv, never PyPI;
-#   4. run <name>-selfcheck from venv.new — a failure fails the play, no swap;
-#   5. swap (venv -> venv.prev, venv.new -> venv), record INSTALLED.json, install the
-#      static units, daemon-reload, and (live lab only) restart the enabled ones.
+#   3. build the release venv with the pinned interpreter and THAT venv's own pip,
+#      always offline (--no-index --find-links deps/) and hash-pinned — never uv/PyPI;
+#   4. selfcheck the release in place — a failure removes it and fails, nothing flips;
+#   5. flip `venv` to it atomically (ln -s + mv -T), recording `previous`;
+#   6. selfcheck through the live venv/bin path — a failure flips back and fails;
+#   7. prune to live + previous, record INSTALLED.json, install the static units,
+#      daemon-reload, and (live lab only) restart the enabled ones.
 
 # --- 1. precondition (read-only; nothing above this line or in it changes the guest) ---
 - name: Is the pinned runtime installed?
@@ -77,7 +85,19 @@
     - "{{ _c_root }}"
     - "{{ _c_etc }}"
 
-# --- 3. build venv.new -------------------------------------------------------------------
+# --- 3. build the release, in place ------------------------------------------------------
+# A Python venv is NOT relocatable: pip writes absolute shebangs into console scripts. So
+# each install is built at its FINAL, unique path releases/<version>+<tree>-<stamp>/venv
+# and never moved; going live is an atomic flip of the `venv` symlink (#1372, the V1
+# #1357 finding: a venv.new -> venv rename left every entry point pointing at venv.new).
+- name: Name this release (unique per install, never reused, never moved)
+  ansible.builtin.set_fact:
+    _c_release_id: "{{ _c_src | basename }}-{{ now(utc=true).strftime('%Y%m%dT%H%M%SZ') }}"
+
+- name: Release path
+  ansible.builtin.set_fact:
+    _c_release: "{{ _c_root }}/releases/{{ _c_release_id }}"
+
 # sdist dependencies (pymqi) compile here, against the box's MQ SDK. The pinned runtime's
 # sysconfig names `clang` (CC/LDSHARED), which the guests do not have (spike report
 # docs/reports/2026-10-guest-runtime-spike.md, correction C2): CC and LDSHARED are derived
@@ -85,63 +105,153 @@
 # `gcc`, which keeps the recorded hardening flags (relro, now, noexecstack) and cannot
 # drift on a pin bump. No `| head` anywhere: under pipefail a multi-line producer piped
 # into an early-exiting reader dies of SIGPIPE (rc 141, #1359).
-- name: Build venv.new (pinned runtime, the venv's own pip, offline, hash-pinned)
-  become: true
-  ansible.builtin.shell: |
-    set -euo pipefail
-    root="{{ _c_root }}"
-    stage="{{ _c_stage }}"
-    rm -rf "$root/venv.new"
-    "{{ _c_runtime }}" -m venv "$root/venv.new"
-    py="$root/venv.new/bin/python"
-    pip="$root/venv.new/bin/pip"
-    if [ -s "$stage/build-requirements.txt" ]; then
-      "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
-        -r "$stage/build-requirements.txt"
-    fi
-    if [ -s "$stage/requirements.txt" ]; then
-      gcc_for() {
-        "$py" -c 'import re, sys, sysconfig; v = sysconfig.get_config_var(sys.argv[1]) or ""; print(re.sub(r"^clang(?=\s|$)", "gcc", v))' "$1"
-      }
-      CC="$(gcc_for CC)"
-      LDSHARED="$(gcc_for LDSHARED)"
-      if [ -z "$CC" ] || [ -z "$LDSHARED" ]; then
-        echo "the pinned runtime's sysconfig has no CC/LDSHARED (CC='$CC' LDSHARED='$LDSHARED')" >&2
-        exit 1
-      fi
-      export CC LDSHARED
-      echo "sdist builds use CC='$CC' LDSHARED='$LDSHARED'"
-      "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
-        --no-build-isolation -r "$stage/requirements.txt"
-    fi
-    "$pip" install --no-index --no-deps "$stage"/*.whl
-  args:
-    executable: /bin/bash
-  environment:
-    LD_LIBRARY_PATH: /opt/mqm/lib64
-  changed_when: true
+- name: Build and selfcheck the release (a failure removes it; the live venv is untouched)
+  block:
+    - name: Build the release venv (pinned runtime, the venv's own pip, offline, hash-pinned)
+      become: true
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rel="{{ _c_release }}"
+        stage="{{ _c_stage }}"
+        rm -rf "$rel"
+        mkdir -p "$rel"
+        "{{ _c_runtime }}" -m venv "$rel/venv"
+        py="$rel/venv/bin/python"
+        pip="$rel/venv/bin/pip"
+        if [ -s "$stage/build-requirements.txt" ]; then
+          "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
+            -r "$stage/build-requirements.txt"
+        fi
+        if [ -s "$stage/requirements.txt" ]; then
+          gcc_for() {
+            "$py" -c 'import re, sys, sysconfig; v = sysconfig.get_config_var(sys.argv[1]) or ""; print(re.sub(r"^clang(?=\s|$)", "gcc", v))' "$1"
+          }
+          CC="$(gcc_for CC)"
+          LDSHARED="$(gcc_for LDSHARED)"
+          if [ -z "$CC" ] || [ -z "$LDSHARED" ]; then
+            echo "the pinned runtime's sysconfig has no CC/LDSHARED (CC='$CC' LDSHARED='$LDSHARED')" >&2
+            exit 1
+          fi
+          export CC LDSHARED
+          echo "sdist builds use CC='$CC' LDSHARED='$LDSHARED'"
+          "$pip" install --no-index --find-links "$stage/deps" --require-hashes \
+            --no-build-isolation -r "$stage/requirements.txt"
+        fi
+        "$pip" install --no-index --no-deps "$stage"/*.whl
+      args:
+        executable: /bin/bash
+      environment:
+        LD_LIBRARY_PATH: /opt/mqm/lib64
+      changed_when: true
 
-# --- 4. selfcheck BEFORE the swap ----------------------------------------------------------
-- name: Selfcheck from venv.new (a failure fails the play; the live venv is untouched)
-  become: true
-  ansible.builtin.command:
-    argv: ["{{ _c_root }}/venv.new/bin/{{ component_name }}-selfcheck"]
-  environment:
-    LD_LIBRARY_PATH: /opt/mqm/lib64
-  changed_when: false
+    # --- 4. selfcheck the release IN PLACE, before it goes live ---------------------------
+    - name: Selfcheck the release in place (before going live)
+      become: true
+      ansible.builtin.command:
+        argv: ["{{ _c_release }}/venv/bin/{{ component_name }}-selfcheck"]
+      environment:
+        LD_LIBRARY_PATH: /opt/mqm/lib64
+      changed_when: false
+  rescue:
+    - name: Remove the failed release (nothing went live)
+      become: true
+      ansible.builtin.file:
+        path: "{{ _c_release }}"
+        state: absent
 
-# --- 5. swap, record, units ----------------------------------------------------------------
-- name: Swap venv.new into place, keeping venv.prev
+    - name: Fail loudly (the live venv was not touched)
+      ansible.builtin.fail:
+        msg: >-
+          {{ component_name }} release {{ _c_release_id }} failed to build or selfcheck on
+          {{ inventory_hostname }}; it was removed and the live install is unchanged — see
+          the task output above, fix the component, then mqlab component build
+          {{ component_name }} and mqlab component install {{ component_name }} --host
+          {{ inventory_hostname }}
+
+# --- 5. go live: atomic flip of the venv symlink, remembering the previous release -------
+# `venv` -> releases/<id>/venv (relative). The flip is `ln -s` to a temp name then
+# `mv -T` (rename(2) is atomic). Legacy layouts are cleared: a real `venv` directory and
+# any venv.new / venv.prev from before #1372.
+- name: Flip venv to the new release (atomic), recording previous
   become: true
   ansible.builtin.shell: |
     set -euo pipefail
     cd "{{ _c_root }}"
-    rm -rf venv.prev
-    if [ -d venv ]; then mv venv venv.prev; fi
-    mv venv.new venv
+    new="releases/{{ _c_release_id }}/venv"
+    prev=""
+    if [ -L venv ]; then
+      prev="$(readlink venv)"
+    elif [ -e venv ]; then
+      rm -rf venv
+    fi
+    rm -rf venv.new venv.prev venv.tmp previous.tmp
+    ln -s "$new" venv.tmp
+    mv -T venv.tmp venv
+    if [ -n "$prev" ] && [ "$prev" != "$new" ]; then
+      ln -s "$prev" previous.tmp
+      mv -T previous.tmp previous
+    fi
+    echo "live=$new previous=${prev:-none}"
   args:
     executable: /bin/bash
+  register: _c_flip
   changed_when: true
+
+# --- 6. prove it through the LIVE path; on failure flip back ------------------------------
+- name: Selfcheck through the live path (a failure flips back to previous)
+  block:
+    - name: Selfcheck through venv/bin (proves the live entry points execute)
+      become: true
+      ansible.builtin.command:
+        argv: ["{{ _c_root }}/venv/bin/{{ component_name }}-selfcheck"]
+      environment:
+        LD_LIBRARY_PATH: /opt/mqm/lib64
+      changed_when: false
+  rescue:
+    - name: Flip back to the previous release (or take the broken one offline)
+      become: true
+      ansible.builtin.shell: |
+        set -euo pipefail
+        cd "{{ _c_root }}"
+        if [ -L previous ]; then
+          ln -s "$(readlink previous)" venv.tmp
+          mv -T venv.tmp venv
+          echo "flipped back to $(readlink venv)"
+        else
+          rm -f venv
+          echo "no previous release: venv removed so nothing broken runs"
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Fail loudly (the live path did not selfcheck)
+      ansible.builtin.fail:
+        msg: >-
+          {{ component_name }} release {{ _c_release_id }} passed its in-place selfcheck but
+          FAILED through the live path {{ _c_root }}/venv on {{ inventory_hostname }}; the
+          flip was reverted — see the task output above
+
+# --- 7. prune: keep the live release and the previous one --------------------------------
+- name: Prune old releases (keep live + previous)
+  become: true
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd "{{ _c_root }}"
+    keep_live="$(basename "$(dirname "$(readlink venv)")")"
+    keep_prev=""
+    if [ -L previous ]; then keep_prev="$(basename "$(dirname "$(readlink previous)")")"; fi
+    for d in releases/*/; do
+      id="$(basename "$d")"
+      if [ "$id" != "$keep_live" ] && [ "$id" != "$keep_prev" ]; then
+        rm -rf "releases/$id"
+        echo "pruned $id"
+      fi
+    done
+  args:
+    executable: /bin/bash
+  register: _c_prune
+  changed_when: _c_prune.stdout | length > 0
 
 - name: Record INSTALLED.json
   become: true
@@ -151,7 +261,8 @@
     content: >-
       {{ (lookup('ansible.builtin.file', _c_src + '/BUILD.json') | from_json)
          | combine({'installed_at': now(utc=true).isoformat(),
-                    'runtime_installed': runtime_python.token})
+                    'runtime_installed': runtime_python.token,
+                    'release': _c_release_id})
          | to_nice_json }}
 
 - name: Remove the guest staging dir

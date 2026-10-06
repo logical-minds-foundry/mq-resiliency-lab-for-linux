@@ -1,8 +1,10 @@
 """Guard the runtime-install / component-install roles (epic .github#294 T5, spec §5.7).
 
 Structural tests over the role YAML (the live proof is the V1/V2 cold rebuilds): the
-runtime precondition runs before any change, the live venv is swapped only after the
-new one passes its selfcheck, guests install offline from hashes with the venv's own pip
+runtime precondition runs before any change, each install is a release built at its final
+path (venvs are not relocatable, #1372) that goes live by an atomic symlink flip only after
+an in-place selfcheck, is re-checked through the live path (failure flips back), guests
+install offline from hashes with the venv's own pip
 (never uv, never PyPI), sdist builds use gcc derived from the pinned runtime's sysconfig
 (spike correction C2), and the pinned interpreter is never Ansible's.
 """
@@ -29,12 +31,16 @@ def _load(path: Path) -> Any:
 
 
 def _flat(tasks: list[dict[str, Any]], inherited: dict[str, Any] | None = None) -> list[dict]:
-    """Tasks in run order, blocks expanded; a block's become/when is inherited."""
+    """Tasks in order, blocks expanded (block, then rescue, then always); a block's
+    become/when is inherited. Rescue tasks are tagged ``_rescue`` with the block's name."""
     out: list[dict[str, Any]] = []
     for task in tasks:
         if "block" in task:
             keep = {k: task[k] for k in ("become", "when") if k in task}
             out += _flat(task["block"], {**(inherited or {}), **keep})
+            rescue = {**(inherited or {}), **keep, "_rescue": task.get("name", "")}
+            out += _flat(task.get("rescue", []), rescue)
+            out += _flat(task.get("always", []), {**(inherited or {}), **keep})
         else:
             out.append({**(inherited or {}), **task})
     return out
@@ -95,23 +101,85 @@ def test_component_install_copies_with_builtin_only():
 
 
 def test_component_install_swaps_only_after_selfcheck():  # Review Focus 3
+    """Build in place, selfcheck in place, THEN flip; a failed build/selfcheck removes the
+    release and fails without touching the live venv (#1372)."""
     tasks = _tasks(COMPONENT)
-    build = _index(tasks, "Build venv.new")
-    selfcheck = _index(tasks, "Selfcheck from venv.new")
-    swap = _index(tasks, "Swap venv.new into place")
-    assert build < selfcheck < swap
+    build = _index(tasks, "Build the release venv")
+    selfcheck = _index(tasks, "Selfcheck the release in place")
+    remove = _index(tasks, "Remove the failed release")
+    flip = _index(tasks, "Flip venv to the new release")
+    assert build < selfcheck < remove < flip
     check = tasks[selfcheck]
     assert check["ansible.builtin.command"]["argv"] == [
-        "{{ _c_root }}/venv.new/bin/{{ component_name }}-selfcheck"
+        "{{ _c_release }}/venv/bin/{{ component_name }}-selfcheck"
     ]
-    # A selfcheck failure must fail the play (so the swap never runs).
     assert "failed_when" not in check and "ignore_errors" not in check
-    assert "mv venv.new venv" in _shell(tasks[swap])
-    assert "mv venv venv.prev" in _shell(tasks[swap])
-    # Nothing before the swap touches the live venv.
-    for task in tasks[:swap]:
+    # The rescue removes the failed release, then fails the play (never flips).
+    assert tasks[remove]["_rescue"].startswith("Build and selfcheck the release")
+    assert tasks[remove]["ansible.builtin.file"] == {"path": "{{ _c_release }}", "state": "absent"}
+    fail = tasks[remove + 1]
+    assert fail["_rescue"] == tasks[remove]["_rescue"] and "ansible.builtin.fail" in fail
+    # Nothing before the flip touches the live venv / previous links.
+    for task in tasks[:flip]:
         if "ansible.builtin.shell" in task:
-            assert not re.search(r"/venv(\"|\s|$)", _shell(task)), task["name"]
+            assert not re.search(r"\b(venv\.tmp|previous)\b|mv -T", _shell(task)), task["name"]
+
+
+def test_component_install_builds_each_release_at_its_final_path():  # #1372
+    """Venvs are not relocatable (absolute shebangs): build at the final, unique release
+    path and never move it. A venv.new -> venv rename is exactly the V1 #1357 defect."""
+    tasks = _tasks(COMPONENT)
+    name = tasks[_index(tasks, "Name this release")]["ansible.builtin.set_fact"]
+    assert name["_c_release_id"].startswith("{{ _c_src | basename }}-{{ now(utc=true)")
+    path = tasks[_index(tasks, "Release path")]["ansible.builtin.set_fact"]
+    assert path["_c_release"] == "{{ _c_root }}/releases/{{ _c_release_id }}"
+    script = _shell(tasks[_index(tasks, "Build the release venv")])
+    assert '"{{ _c_runtime }}" -m venv "$rel/venv"' in script
+    every_shell = "\n".join(_shells(tasks))
+    assert "-m venv" in script and every_shell.count("-m venv") == 1
+    assert not re.search(r"mv\s+(\S*/)?venv\.new", every_shell), "never rename a built venv"
+    assert not re.search(r"mv\s+[\"']?\$?\w*rel", every_shell), "never move a release"
+
+
+def test_component_install_flips_venv_atomically_and_records_previous():  # #1372
+    tasks = _tasks(COMPONENT)
+    script = _shell(tasks[_index(tasks, "Flip venv to the new release")])
+    assert 'new="releases/{{ _c_release_id }}/venv"' in script  # relative, inside the root
+    assert 'ln -s "$new" venv.tmp' in script and "mv -T venv.tmp venv" in script
+    assert 'prev="$(readlink venv)"' in script
+    assert "mv -T previous.tmp previous" in script
+    # Legacy (pre-#1372) layouts are cleared: a real venv dir, venv.new, venv.prev.
+    assert "elif [ -e venv ]; then" in script and "rm -rf venv.new venv.prev" in script
+
+
+def test_component_install_proves_the_live_path_and_flips_back_on_failure():  # #1372
+    """The in-place selfcheck cannot see a broken live path (the V1 #1357 gap): after the
+    flip, selfcheck through venv/bin; on failure flip back to previous and fail."""
+    tasks = _tasks(COMPONENT)
+    flip = _index(tasks, "Flip venv to the new release")
+    live = _index(tasks, "Selfcheck through venv/bin")
+    back = _index(tasks, "Flip back to the previous release")
+    assert flip < live < back
+    assert tasks[live]["ansible.builtin.command"]["argv"] == [
+        "{{ _c_root }}/venv/bin/{{ component_name }}-selfcheck"
+    ]
+    assert "failed_when" not in tasks[live] and "ignore_errors" not in tasks[live]
+    rescue = _shell(tasks[back])
+    assert tasks[back]["_rescue"].startswith("Selfcheck through the live path")
+    assert 'ln -s "$(readlink previous)" venv.tmp' in rescue and "mv -T venv.tmp venv" in rescue
+    assert "rm -f venv" in rescue  # no previous: take the broken release offline
+    fail = tasks[back + 1]
+    assert fail["_rescue"] == tasks[back]["_rescue"] and "ansible.builtin.fail" in fail
+
+
+def test_component_install_prunes_to_live_and_previous():  # #1372
+    tasks = _tasks(COMPONENT)
+    prune = tasks[_index(tasks, "Prune old releases")]
+    script = _shell(prune)
+    assert 'keep_live="$(basename "$(dirname "$(readlink venv)")")"' in script
+    assert 'keep_prev="$(basename "$(dirname "$(readlink previous)")")"' in script
+    assert 'rm -rf "releases/$id"' in script
+    assert _index(tasks, "Selfcheck through venv/bin") < _index(tasks, "Prune old releases")
 
 
 def test_component_install_never_uses_uv_or_pypi():
@@ -129,7 +197,7 @@ def test_component_install_never_uses_uv_or_pypi():
 
 
 def test_component_install_sets_gcc_compiler_before_requirements_install():  # C2
-    script = _shell(_tasks(COMPONENT)[_index(_tasks(COMPONENT), "Build venv.new")])
+    script = _shell(_tasks(COMPONENT)[_index(_tasks(COMPONENT), "Build the release venv")])
     deps = script.index('-r "$stage/requirements.txt"')
     exported = script.index("export CC LDSHARED")
     assert exported < deps
@@ -139,7 +207,7 @@ def test_component_install_sets_gcc_compiler_before_requirements_install():  # C
     helper = script[script.index("gcc_for() {") : exported]
     assert '"$py" -c' in helper and "sysconfig.get_config_var" in helper
     assert 're.sub(r"^clang(?=\\s|$)", "gcc", v)' in helper
-    assert 'py="$root/venv.new/bin/python"' in script
+    assert 'py="$rel/venv/bin/python"' in script
     # The build requirements (wheels) come first, then the --no-build-isolation deps.
     assert script.index('-r "$stage/build-requirements.txt"') < deps
     assert "--no-build-isolation" in script[deps - 200 : deps]
@@ -160,7 +228,8 @@ def test_component_install_records_installed_json():
     tasks = _tasks(COMPONENT)
     record = tasks[_index(tasks, "Record INSTALLED.json")]
     assert record["ansible.builtin.copy"]["dest"] == "{{ _c_root }}/INSTALLED.json"
-    assert _index(tasks, "Swap venv.new") < _index(tasks, "Record INSTALLED.json")
+    assert _index(tasks, "Prune old releases") < _index(tasks, "Record INSTALLED.json")
+    assert "'release': _c_release_id" in record["ansible.builtin.copy"]["content"]
     assert "runtime_installed" in record["ansible.builtin.copy"]["content"]
 
 
