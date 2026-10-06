@@ -1,0 +1,26 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Site values come from the
+# deployer-owned EnvironmentFile; never edit this file on a host.
+#
+# Per-stack responder (#446): %i is this stack's request queue on the shared SVC QM
+# (e.g. mq-svc-responder@PCMK.SVC.REQUEST). Each stack gets its own instance so their
+# always-on #429 streams stay independent — a stuck responder affects only its stack.
+#
+# Ordering on the SVC QM's own unit (After=/Requires=mq-<QM>.service) names a
+# site-specific QM, and systemd never expands environment variables in [Unit]. The
+# deployer therefore supplies it as a drop-in,
+# /etc/systemd/system/mq-svc-responder@.service.d/qm.conf.
+[Unit]
+Description=SVC service responder for %i (client-mode localhost; QM-to-QM #147/#180)
+
+[Service]
+Type=simple
+User=mqm
+Group=mqm
+EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-clients/mq-svc-responder.env
+Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-svc-responder --qm ${QM} --in-queue %i --channel ${CHANNEL} --conn ${CONN} --keyrepo ${KEYREPO} --certlabel ${CERTLABEL}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

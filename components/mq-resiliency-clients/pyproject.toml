@@ -1,0 +1,49 @@
+[project]
+name = "mq-resiliency-clients"
+version = "0.1.0"
+description = "IBM MQ reference clients (load, bench, probes, DR flow) and the DR measurement framework"
+readme = "README.md"
+requires-python = "==3.14.*"
+license = "MIT"
+dependencies = []
+
+[project.optional-dependencies]
+# Compiled on the guest at install, against the box's MQ SDK. NEVER on the dev VM
+# (no MQ SDK there): tests run without this extra, using a fake pymqi module.
+mqi = ["pymqi==1.12.13"]
+
+[project.scripts]
+mq-app-requester = "mqrc.app_requester:main"
+mq-bench = "mqrc.bench_client:main"
+mq-svc-responder = "mqrc.svc_responder:main"
+mq-authz-probe = "mqrc.authz_probe:main"
+mq-dlq-probe = "mqrc.dlq_probe:main"
+mq-reconnect-probe = "mqrc.reconnect_probe:main"
+mq-dr-flow = "mqrc.dr_flow:main"
+mq-dr-responder = "mqrc.dr_responder:main"
+mq-dr-baseline = "mqrc.dr_baseline:main"
+mq-dr-forced = "mqrc.dr_forced:main"
+mq-resiliency-clients-selfcheck = "mqrc.selfcheck:main"
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff"]
+# Build requirements of our sdist deps: pymqi has no [build-system] table and its
+# setup.py imports distutils (removed in 3.12), so setuptools' shim must be present.
+# Exported by `mqlab component build` to build-requirements.txt. Versions proven by
+# the guest runtime spike (docs/reports/2026-10-guest-runtime-spike.md).
+sdist-build = ["setuptools==84.0.0", "wheel==0.48.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mqrc"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=mqrc --cov-branch --cov-report=term-missing"

@@ -1975,7 +1975,7 @@ def pki_list() -> None:
 
 # --- dr: cross-site DR cutover / failback (the DR *operation*, #867) --------------
 # This is the operator verb that DRIVES a cross-site cutover, distinct from the
-# mqlab.dr package (the DR *measurement* framework: ledger/classifier/report). It
+# mqrc.dr package (the DR *measurement* framework in the mq-resiliency-clients component). It
 # wraps lab/scripts/rdqm-dr-cutover.sh — which needs `ansible` on PATH — by shelling
 # it from inside the mqlab venv (SubprocessRunner inherits this process's env, so the
 # venv PATH carries ansible), removing the manual `uv run` the bare script required
