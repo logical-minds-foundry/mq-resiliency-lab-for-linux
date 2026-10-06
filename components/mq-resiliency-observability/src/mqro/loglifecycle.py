@@ -1,8 +1,8 @@
 """Non-MQI log-health collector for the Native HA log-lifecycle cockpit band (#810).
 
-Stdlib-only so this exact file deploys verbatim to the nha nodes as
-/usr/local/bin/lab-loglifecycle-state and runs on the existing nativeha-state 5s timer,
-AND is imported by the repo's unit tests — the nativehastate.py invariant. It polls the
+Stdlib-only; installed on the nha nodes as the `lab-loglifecycle-state` console-script
+entry point of mq-resiliency-observability and run by the nativeha-state 5s timer (a
+second ExecStart of lab-nativeha-state.service). It polls the
 filesystem (no MQI, no PyMQI, no compiled deps): `df` for disk used/total, an `ls` of the
 per-QM `active/` extent dir for the S/R extent split, and reuses nativehastate's
 `dspmq -o nativeha -x` role detection to tag every metric by instance + role (active and
@@ -32,19 +32,10 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mqro import nativehastate
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    from mqlab import nativehastate
-else:
-    # The type checkers only ever see the package import above; at runtime we pick the import
-    # by context. In tests / an installed package it is mqlab.nativehastate; deployed as a
-    # standalone script, lab-loglifecycle-state puts /usr/local/bin on sys.path[0], so the
-    # sibling nativehastate.py (deployed by the same role) resolves as a bare import (#810).
-    try:
-        from mqlab import nativehastate
-    except ImportError:  # pragma: no cover - deployed context: sibling script on sys.path[0]
-        import nativehastate
 
 # Extent files: S<digits>.LOG are standard (in-use) extents; R<digits>.LOG are
 # reserved/recycled (spike S3). Everything else in active/ (amqhlctl.lfh, nativeha.ini)
@@ -198,7 +189,7 @@ def collect(instance: str, qm: str, log_root: str = _LOG_ROOT) -> str:
     return render_prom(row)
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the deployed collector: `lab-loglifecycle-state --qm NHARCAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
@@ -210,7 +201,4 @@ def main(argv: list[str] | None = None) -> None:
     tmp = Path(args.out + ".tmp")
     tmp.write_text(body)
     tmp.replace(args.out)
-
-
-if __name__ == "__main__":
-    main()
+    return 0

@@ -1,0 +1,12 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Never edit this file on a host.
+# lab-rdqm-state.timer — 5s cadence (§4.2): the cockpit's latency-to-visible
+[Unit]
+Description=Refresh lab_rdqm_state every 5s
+
+[Timer]
+OnBootSec=5
+OnUnitActiveSec=5
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

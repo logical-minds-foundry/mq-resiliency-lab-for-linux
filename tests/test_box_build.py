@@ -70,8 +70,18 @@ def test_fleet_builders_cover_base_and_fat_boxes():
 
 def test_build_steps_pass_catalog_flags_for_fatbox(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    # tmp_path is no git repo: stub the component source identity (its own seam).
+    monkeypatch.setattr(box, "_component_tree", lambda name: "f" * 40)
     steps = box._build_steps([("mq-rdqm-rhel9", False)], _X86)
-    assert [s.command.argv for s in steps] == [
+    assert len(steps) == 1
+    argv = steps[0].command.argv
+    # The component tail follows the catalog's roles.mq-rdqm.components (epic
+    # .github#294); its mechanics are covered in test_box_components.
+    cut = argv.index("--components")
+    baked = box.FLEET["mq-rdqm-rhel9"].components
+    assert argv[cut + 1] == ",".join(f"{name}@{'f' * 40}" for name in baked)
+    assert argv[cut + 2] == "--install-vars"
+    assert [argv[:cut]] == [
         [
             "bash",
             str(tmp_path / "lab/boxes/build-fatbox.sh"),
@@ -99,8 +109,6 @@ def test_build_steps_pass_catalog_flags_for_fatbox(monkeypatch, tmp_path):
             "host-passthrough",
             "--runtime-pin",
             box.FLEET["mq-rdqm-rhel9"].runtime_pin,
-            "--components",
-            "",
         ]
     ]
 

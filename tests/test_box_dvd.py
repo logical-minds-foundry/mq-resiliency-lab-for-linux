@@ -121,6 +121,10 @@ def _stub_build_env(monkeypatch, verified):
     monkeypatch.setattr(box.cli, "build_deps", lambda verb, ts: _fake_deps())
     monkeypatch.setattr(box, "run_steps", lambda steps, **kw: None)
     monkeypatch.setattr(box, "verify_rhel_dvd", lambda entry: verified.append(entry))
+    # A fat box that bakes guest components (epic .github#294) would run a REAL
+    # `mqlab component build` (git + uv + network) before baking; that seam has its own
+    # tests (test_box_components.py). Here it is part of the faked build environment.
+    monkeypatch.setattr(box, "_ensure_component_artifacts", lambda plan, facts: None)
 
 
 def test_build_boxes_verifies_dvd_on_rhel_force_build(monkeypatch):

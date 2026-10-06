@@ -164,5 +164,11 @@ def _committed_versions_catalog(monkeypatch):
     """Resolve the version layer against the COMMITTED lab/versions.yaml in every test
     (epic .github#280), even when a test re-roots the repo (MQLAB_REPO_ROOT) to seed its
     own topology: a seeded topology fakes the lab shape, never the OS catalog. A test
-    exercising a different catalog passes its path to load_catalog explicitly."""
+    exercising a different catalog passes its path to load_catalog explicitly.
+
+    The catalog's ``roles.<role>.components`` names are checked against the COMMITTED
+    components/ for the same reason (epic .github#294): a re-rooted test fakes the lab
+    shape, never the component set. A test exercising other components patches
+    ``versions.components_dir`` itself."""
     monkeypatch.setattr(versions, "versions_catalog_path", lambda: REAL_CATALOG)
+    monkeypatch.setattr(versions, "components_dir", lambda: REAL_CATALOG.parents[1] / "components")

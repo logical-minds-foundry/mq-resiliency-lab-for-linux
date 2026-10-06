@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from mqlab import loglifecycle
+from mqro import loglifecycle
 
 
 def test_parse_disk_from_df_posix():

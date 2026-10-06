@@ -1,0 +1,10 @@
+# Component-owned, static (epic .github#294 spec §5.4 r3). Site values come from the
+# deployer-owned EnvironmentFile; never edit this file on a host.
+# lab-rdqm-state.service — render lab_rdqm_state textfile once per tick (HA + DR + DRBD).
+[Unit]
+Description=Render lab_rdqm_state textfile (mq-resiliency-observability)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-observability/lab-rdqm-state.env
+ExecStart=/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/lab-rdqm-state --qm ${QM}

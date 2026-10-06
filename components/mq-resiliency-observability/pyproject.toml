@@ -1,0 +1,49 @@
+[project]
+name = "mq-resiliency-observability"
+version = "0.1.0"
+description = "Stdlib-only, non-MQI HA/DR state collectors that render node_exporter textfiles"
+readme = "README.md"
+requires-python = "==3.14.*"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+lab-cluster-state = "mqro.clusterstate:main"
+lab-nativeha-state = "mqro.nativehastate:main"
+lab-loglifecycle-state = "mqro.loglifecycle:main"
+lab-rdqm-state = "mqro.rdqmstate:main"
+mq-resiliency-observability-selfcheck = "mqro.selfcheck:main"
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mqro"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "SIM", "TCH", "ARG", "PTH", "ERA", "BLE"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mqro"]
+
+[tool.ruff.lint.per-file-ignores]
+# S101: assert is idiomatic in pytest; S603/S607: test helpers' subprocess calls are trusted
+"tests/**" = ["S101", "S603", "S607", "ARG"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=mqro --cov-branch --cov-report=term-missing"
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]

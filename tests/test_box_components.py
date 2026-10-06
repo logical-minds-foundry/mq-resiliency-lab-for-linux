@@ -98,7 +98,7 @@ def test_builder_args_carry_components_and_pin(baking):
 
 
 def test_builder_args_for_a_box_baking_nothing_pass_an_empty_list():
-    argv = box.builder_args(box.FLEET["pcmk-ubuntu24"], _FACTS)
+    argv = box.builder_args(box.FLEET["obs-ubuntu24"], _FACTS)
     assert argv[argv.index("--runtime-pin") + 1] == PIN
     assert argv[argv.index("--components") + 1] == ""
     assert "--install-vars" not in argv
@@ -163,8 +163,8 @@ def test_box_reuse_builds_no_component(baking, monkeypatch):
 def test_box_build_of_boxes_baking_nothing_builds_no_component(monkeypatch):
     events: list = []
     _stub_build(monkeypatch, events, "BUILD")
-    box.build_boxes(["pcmk-ubuntu24"], force=False)
-    assert events == [("run", ["box pcmk-ubuntu24"])]
+    box.build_boxes(["infra-ubuntu24"], force=False)
+    assert events == [("run", ["box infra-ubuntu24"])]
 
 
 @pytest.mark.parametrize(
@@ -260,7 +260,7 @@ def test_fatbox_requires_runtime_pin_and_components(flag, tmp_path):
 
 
 def test_fatbox_requires_install_vars_with_components(tmp_path):
-    args = _with(fatbox_args("pcmk-ubuntu24"), "--components", "demo@aaa")
+    args = _with(fatbox_args("obs-ubuntu24"), "--components", "demo@aaa")
     r = _fatbox(*args, "--dry-run", cache_dir=tmp_path)
     assert r.returncode == 2
     assert "--install-vars is required when --components is non-empty" in r.stderr

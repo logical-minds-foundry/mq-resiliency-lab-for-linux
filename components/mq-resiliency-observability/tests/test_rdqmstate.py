@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from mqlab import rdqmstate
+from mqro import rdqmstate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rdqmstate"
 
@@ -238,7 +238,7 @@ def test_render_unknown_role_and_absent_optional_blocks():
 
 def test_render_projects_both_drbd_resources():
     # reuse clusterstate.parse_drbd verbatim for the HA (qmrdqm) + DR (qmrdqm.dr) resources
-    from mqlab.clusterstate import parse_drbd
+    from mqro.clusterstate import parse_drbd
 
     drbd = parse_drbd((FIXTURES / "drbdsetup_status.txt").read_text())
     out = rdqmstate.render_rdqm_state_prom(

@@ -1,8 +1,8 @@
 """Native-HA cluster-state collector for the lab-nativeha-rhel-crr-cluster cockpit (#279).
 
-Stdlib-only so this exact file deploys verbatim to the nha nodes as
-/usr/local/bin/lab-nativeha-state and runs on a 5s systemd timer, AND is imported by the
-repo's unit tests. Pure parse functions turn `dspmq -o nativeha -x`/`-g` output into rows;
+Stdlib-only; installed on the nha nodes as the `lab-nativeha-state` console-script entry
+point of mq-resiliency-observability and run by a 5s systemd timer. Pure parse functions
+turn `dspmq -o nativeha -x`/`-g` output into rows;
 render_nativeha_state_prom turns rows into a node_exporter textfile; probe() runs each source
 bounded + non-blocking (timeout -> no fresh sample -> the cell reads STALE).
 
@@ -215,7 +215,7 @@ def collect(node: str, qm: str, now: int) -> str:
     )
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
     """Entry point for the deployed collector: `lab-nativeha-state --qm NHARCAPP`."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", required=True)
@@ -228,7 +228,4 @@ def main(argv: list[str] | None = None) -> None:
     tmp = Path(args.out + ".tmp")
     tmp.write_text(body)
     tmp.replace(args.out)
-
-
-if __name__ == "__main__":
-    main()
+    return 0
