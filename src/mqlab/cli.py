@@ -1846,6 +1846,74 @@ def qm_status(stack: str) -> None:
 # Wraps the connection=local site-pki.yml playbook (the provider generates CA +
 # entity material under build/state/secrets/pki/). Mirrors the qm command-wraps-playbook
 # shape. Cert expiry/rotation is out of scope (spec §8.2).
+from mqlab import component  # noqa: E402
+from mqlab.runtime import RuntimePinError  # noqa: E402
+
+component_app = typer.Typer(
+    help="lab guest components (epic .github#294): build (test on the pinned runtime + stage) "
+    "/ status",
+    no_args_is_help=True,
+)
+app.add_typer(component_app, name="component")
+
+_ComponentNames = Annotated[
+    list[str] | None, typer.Argument(help="components (default with --all: every component)")
+]
+_AllComponents = Annotated[bool, typer.Option("--all", help="every component under components/")]
+_StatusHosts = Annotated[
+    list[str] | None,
+    typer.Option("--host", help="also read INSTALLED.json from this guest (repeatable)"),
+]
+
+
+def _select_components(names: list[str] | None, all_: bool) -> list[str]:
+    """--all, or the named components; fail loud (exit 2) on neither or an unknown name."""
+    known = component.known_components()
+    if all_:
+        return known
+    if not names:
+        typer.echo(
+            "mqlab component: name at least one component or pass --all "
+            f"(components: {', '.join(known) or 'none yet'})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    unknown = [n for n in names if n not in known]
+    if unknown:
+        typer.echo(
+            f"mqlab component: unknown component(s): {', '.join(unknown)} "
+            f"(components: {', '.join(known) or 'none yet'})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return names
+
+
+@component_app.command("build")
+def component_build(names: _ComponentNames = None, all_: _AllComponents = False) -> None:
+    """Test on the pinned runtime and stage an installable artifact (the ONLY producer)."""
+    for name in _select_components(names, all_):
+        try:
+            component.build(name, runner=SubprocessRunner(), on_line=typer.echo)
+        except (component.ComponentError, RuntimePinError, VersionError) as exc:
+            typer.echo(f"mqlab component build {name}: {exc}", err=True)
+            raise typer.Exit(code=1) from None
+
+
+@component_app.command("status")
+def component_status(names: _ComponentNames = None, host: _StatusHosts = None) -> None:
+    """Each component's CURRENT artifact vs HEAD, and with --host what each guest runs."""
+    selected = _select_components(names, all_=not names)
+    if not selected:
+        typer.echo("mqlab component status: no components under components/ yet")
+        return
+    try:
+        typer.echo(component.render_status(selected, SubprocessRunner(), host))
+    except component.ComponentError as exc:
+        typer.echo(f"mqlab component status: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+
 pki_app = typer.Typer(help="lab PKI / TLS certificate provider", no_args_is_help=True)
 app.add_typer(pki_app, name="pki")
 
