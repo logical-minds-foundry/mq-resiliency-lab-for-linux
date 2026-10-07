@@ -145,12 +145,55 @@
         opensearch_restore_id: "{{ opensearch_repo_snapshots.json.snapshots | map(attribute='snapshot') | sort | last }}"
       when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
 
-    - name: restore the latest repo snapshot
+    # Idempotent restore (#1379). site-obs.yml runs on EVERY stack bootstrap, and the
+    # commons (obs) outlive any one stack. The first bring-up restores the snapshot and
+    # opens its indices; the Data Prepper sink then keeps writing into the current daily
+    # index. A second stack bootstrap that re-POSTs the full restore collides with those
+    # open indices (HTTP 500 "an open index with same name already exists") and fails the
+    # observe phase. So restore ONLY the snapshot indices the cluster does not already
+    # hold. A present index is never overwritten: it already carries the restored corpus
+    # plus whatever the live sink appended since. A fresh cold obs holds none of them, so
+    # the first restore still restores everything. Genuine API failures stay fail-loud.
+    - name: list the indices the cluster already holds (open or closed)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ opensearch_http_port }}/_cat/indices?format=json&h=index&expand_wildcards=all"
+        method: GET
+        status_code: 200
+      register: opensearch_existing_indices
+      when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+
+    - name: compute the snapshot indices missing from the cluster
+      ansible.builtin.set_fact:
+        opensearch_restore_indices: >-
+          {{ opensearch_repo_snapshots.json.snapshots
+             | selectattr('snapshot', 'equalto', opensearch_restore_id)
+             | map(attribute='indices') | first
+             | difference(opensearch_existing_indices.json | map(attribute='index') | list)
+             | sort }}
+      when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+
+    - name: restore the latest repo snapshot (only the indices not already present)
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ opensearch_http_port }}/_snapshot/{{ opensearch_snapshot_repo }}/{{ opensearch_restore_id }}/_restore?wait_for_completion=true"
         method: POST
+        body_format: json
+        body:
+          indices: "{{ opensearch_restore_indices | join(',') }}"
+          include_global_state: false
         status_code: 200
-      when: opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+      when:
+        - opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+        - opensearch_restore_indices | length > 0
+
+    - name: report when every snapshot index is already present (restore skipped)
+      ansible.builtin.debug:
+        msg: >-
+          opensearch: every index in snapshot '{{ opensearch_restore_id }}' is already
+          present in the cluster (an earlier bring-up restored it), so the restore is
+          skipped and the live indices are kept.
+      when:
+        - opensearch_repo_snapshots.json.snapshots | default([]) | length > 0
+        - opensearch_restore_indices | length == 0
 
 - name: report when there is no snapshot to restore (fresh build starts empty)
   ansible.builtin.debug:
