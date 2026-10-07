@@ -1,5 +1,20 @@
 # Native HA Cluster Cockpit — Design
 
+> **Superseded packaging (epic
+> [logical-minds-foundry/.github#294](https://github.com/logical-minds-foundry/.github/issues/294),
+> spec `epics/294-guest-component-packaging/spec.md` in `logical-minds-foundry/.github`).**
+> The collector packaging below is historical: `src/mqlab/nativehastate.py`, deployed
+> verbatim to the nha nodes on the system Python, is gone.
+> They now ship in the `mq-resiliency-observability` guest component
+> ([`components/mq-resiliency-observability/`](../../components/mq-resiliency-observability/README.md),
+> import package `mqro`) as console-script entry points under
+> `/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/`, on the pinned
+> CPython 3.14 runtime, with static units in `/usr/lib/systemd/system/` and
+> deployer-rendered env files under `/etc/opt/logical-minds-foundry/`; see
+> [`components/README.md`](../../components/README.md). The design boundary
+> still stands: the collectors are stdlib-only and non-MQI, shelling out to the
+> cluster's own CLIs. This record's body is kept as written.
+
 **Date:** 2026-06-18
 **Issue:** #279
 **Builds on:** `docs/specs/2026-06-18-cluster-cockpit-canvas-rebuild-design.md` — the

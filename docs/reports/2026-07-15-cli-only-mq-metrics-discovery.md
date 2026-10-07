@@ -1,5 +1,20 @@
 # CLI-only / filesystem-only MQ state worth mapping to metrics — discovery
 
+> **Superseded packaging (epic
+> [logical-minds-foundry/.github#294](https://github.com/logical-minds-foundry/.github/issues/294),
+> spec `epics/294-guest-component-packaging/spec.md` in `logical-minds-foundry/.github`).**
+> Where this report names the lab's collectors as `src/mqlab/nativehastate.py`,
+> `rdqmstate.py` and `clusterstate.py`, those locations are historical.
+> They now ship in the `mq-resiliency-observability` guest component
+> ([`components/mq-resiliency-observability/`](../../components/mq-resiliency-observability/README.md),
+> import package `mqro`) as console-script entry points under
+> `/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/`, on the pinned
+> CPython 3.14 runtime, with static units in `/usr/lib/systemd/system/` and
+> deployer-rendered env files under `/etc/opt/logical-minds-foundry/`; see
+> [`components/README.md`](../../components/README.md). The design boundary
+> still stands: the collectors are stdlib-only and non-MQI, shelling out to the
+> cluster's own CLIs. This record's body is kept as written.
+>
 > **Issue:** #646 (task **T16**) · **Epic:** `logical-minds-foundry/.github`#79 ·
 > **Date:** 2026-07-15 · **Status:** Discovery captured — **discovery-only**,
 > builds nothing this epic; feeds follow-on brainstorm #81.

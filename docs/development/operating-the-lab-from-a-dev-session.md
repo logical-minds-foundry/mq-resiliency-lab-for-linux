@@ -82,7 +82,7 @@ Nodes sit on **`10.50.0.0/24`** (render the authoritative map with
 | a2 | `10.50.0.12` | Native-HA app QM `NHAUAPP` node |
 | a3 | `10.50.0.13` | Native-HA app QM `NHAUAPP` node |
 | svc-sim | `10.50.0.50` | Service/counterparty QM `SVCQM` |
-| app-client | `10.50.0.60` | MQ client host (Python venv, TLS keystore) |
+| app-client | `10.50.0.60` | MQ client host (`mq-resiliency-clients` component, TLS keystore) |
 
 SSH in as **`vagrant`** with the Vagrant insecure key; `sudo` is enabled.
 **Host keys churn on every rebuild**, so a normal `ssh` trips
@@ -142,10 +142,14 @@ with `AMQ8148E` while any handle (e.g. a browsing collector) holds the queue ope
 `amqsput` puts a plain message but **cannot** set report options, build a grouped
 MQMD-v2 message, or attach named properties. For those, put with **pymqi** on the
 **app-client (`10.50.0.60`)**, client-connecting over the **`APP.SVRCONN`**
-channel with **mutual TLS**. The app-client carries the Python venv and the TLS
+channel with **mutual TLS**. The app-client carries pymqi, in the baked
+`mq-resiliency-clients` guest component's venv (epic .github#294, #1356; see
+[Guest components](../site/docs/operate/guest-components.md)), and the TLS
 keystore:
 
-- Python: `/home/vagrant/mqvenv/bin/python`
+- Python: `/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/python`
+  (it imports `pymqi`; the pre-#294 `/home/vagrant/mqvenv` is gone). Export
+  `LD_LIBRARY_PATH=/opt/mqm/lib64` first, as the component's own units do.
 - Key repository: `/home/vagrant/ssl/key` (stem — MQ appends `.kdb`)
 - Client certificate label: `app-client`
 - Channel `APP.SVRCONN`, cipher `ANY_TLS13_OR_HIGHER`
@@ -155,7 +159,8 @@ keystore:
 ### Minimal pymqi connect + put
 
 ```python
-# run with /home/vagrant/mqvenv/bin/python, on app-client (10.50.0.60)
+# run with /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/python,
+# on app-client (10.50.0.60)
 import pymqi
 from pymqi import CMQC as C
 

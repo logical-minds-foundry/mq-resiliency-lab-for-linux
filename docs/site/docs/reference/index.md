@@ -143,6 +143,7 @@ Command groups:
 | `mqlab netem` | `set` · `show` · `clear` | Inject delay-only WAN latency on the cross-region plane (`virbr-wan`) |
 | `mqlab perf` | `diff` | Compare two bootstrap perf reports (`perf-*.json`): per-phase and milestone deltas, contention means; no verdict |
 | `mqlab box` | `status` · `build` · `rebuild` · `clean` · `gc` | Baked-box fleet lifecycle |
+| `mqlab component` | `build` · `status` · `install` | Guest components (epic .github#294): test on the pinned guest runtime and stage an artifact, compare built vs installed, reinstall onto running guests ([Guest components](../operate/guest-components.md)) |
 | `mqlab build` | `path` · `ensure` · `clean` · `status` · `migrate` | `build/` bucket lifecycle (cache/state/work/temp) |
 
 ## Gotchas & in-repo reference

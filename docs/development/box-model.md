@@ -26,14 +26,22 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 
 | Box | Base | Arch | Role(s) that boot it | Bakes |
 |-----|------|------|----------------------|-------|
-| `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default |
-| `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
+| `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default + the guest runtime + `mq-resiliency-observability` |
+| `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `obs-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the svc responder pymqi venv (#1227) |
-| `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy |
-| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy |
-| `san-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the SAN targets — `san-a`, `san-b` | the install halves of `drbd-san` (`drbd-utils` + the kernel-modules package with the in-tree DRBD module) and `iscsi-target` (`targetcli-fb`), **no** MQ, **no** DRBD resource or iSCSI target (both per-run; #1278, spec §4.7.1) + node-exporter + alloy |
+| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (pymqi compiled from sdist at bake; replaces the pre-#294 responder venv, #1227) |
+| `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+| `san-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the SAN targets — `san-a`, `san-b` | the install halves of `drbd-san` (`drbd-utils` + the kernel-modules package with the in-tree DRBD module) and `iscsi-target` (`targetcli-fb`), **no** MQ, **no** DRBD resource or iSCSI target (both per-run; #1278, spec §4.7.1) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+
+"The guest runtime" is the pinned python-build-standalone CPython at
+`/opt/vergil/cpython-<minor>/`; `mq-resiliency-observability` (the HA/DR state
+collectors) and `mq-resiliency-clients` are the lab's
+[guest components](../site/docs/operate/guest-components.md) (epic
+`logical-minds-foundry/.github#294`), baked with their units inert from
+`roles.<role>.components` in `lab/versions.yaml`. Neither runs on the distro Python,
+and no collector is copied into `/usr/local/bin` any more.
 
 ### Box names: `<role>-<os><major>`
 
@@ -140,7 +148,11 @@ answer to a kernel-pin problem:
   `logical-minds-foundry/.github#88`; the RDQM box bakes from this same base, above.)
 
 Both attach the RHEL install DVD as a cdrom — it doubles as a complete offline
-BaseOS+AppStream dnf repo for the unregistered guests.
+BaseOS+AppStream dnf repo for the unregistered guests. "Offline" describes the
+repo, not the guest: a RHEL guest can still reach the internet (the RHEL 9.6 guest
+reached PyPI in #1359). Guest-component installs never rely on either; they never
+consult a package index (see
+[`components/README.md`](../../components/README.md)).
 
 ## 2. Bake vs. configure, and phased startup
 
@@ -431,6 +443,12 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   BUILD on the next bootstrap while the commons boxes (`obs-ubuntu24`,
   `infra-ubuntu24`, and `pcmk-ubuntu24`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
+  For a box that bakes **guest components** (`roles.<role>.components`), the hash
+  also folds in the pinned guest runtime (`--runtime-pin <version>+<pbs_release>`)
+  and each component's git tree hash (`--components <name>@<tree>`), keyed on the
+  committed source rather than the staged artifact. A committed component change or
+  a runtime bump rebakes exactly those boxes; a box that bakes none is unaffected
+  (epic `.github#294`).
 - **Graduated age** — under 7 days: REUSE silently; 7–14 days: REUSE but emit a
   NOTICE to refresh; **14 days or older: REFUSE** (non-zero exit) demanding
   `--rebuild-box`, because a bake that old may miss base-OS security updates.

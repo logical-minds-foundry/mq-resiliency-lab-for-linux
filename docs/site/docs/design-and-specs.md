@@ -26,6 +26,11 @@ how it was built. They live in-repo under `docs/specs/`, `docs/plans/`, and
 - **[MQ diagnostic logging in JSON — a research study](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-06-19-mq-json-logging-research.md)**
   — every way MQ 9.4 emits JSON-format diagnostic logs (server/system/client +
   mqweb), the full text-log surface, and the JSON-only ingestion decision (#282).
+- **[Guest runtime spike](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-10-guest-runtime-spike.md)**
+  — the pinned CPython 3.14 guest runtime, pymqi built from sdist, and hash-pinned
+  installs that never consult an index, proven on Ubuntu 24.04 and RHEL 9.6 for
+  the [guest components](operate/guest-components.md) (epic
+  [.github#294](https://github.com/logical-minds-foundry/.github/issues/294)).
 
 ## Related tooling
 
