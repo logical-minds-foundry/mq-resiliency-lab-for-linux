@@ -226,8 +226,11 @@ Recovery group in site B over async CRR. To exercise it under realistic
 inter-region distance, inject tunable WAN latency on the cross-region plane with
 `mqlab netem set --delay <d>` (see
 [Operate & Observe → Inject WAN latency](../site/docs/operate/index.md)); the
-`clients/bench_client.py` benchmark client measures the resulting commit-latency
-percentiles.
+`mq-bench` benchmark client measures the resulting commit-latency percentiles. It
+is an entry point of the baked `mq-resiliency-clients` guest component, run on
+`app-client` through the `/home/vagrant/mq-bench` wrapper that a Native HA stack's
+provision renders; it is Native HA only (#1380; see
+[Guest components](../site/docs/operate/guest-components.md)).
 
 ---
 

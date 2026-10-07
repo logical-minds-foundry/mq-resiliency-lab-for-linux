@@ -4,7 +4,9 @@ This page is the **how** — how to *run* the lab and *watch* it. It sits at
 operational altitude: the commands you type against a live stack and the boards
 you watch them on. For the **why** — the shape of the lab, the four arms, and the
 reasoning behind each HA/DR mechanism — read [Architecture](../architecture/index.md)
-first; everything below assumes that mental model.
+first; everything below assumes that mental model. The code the lab runs on its
+guests (the collectors, clients and benchmark) and the `mqlab component` verbs that
+build and reinstall it are on [Guest components](guest-components.md).
 
 Every verb here is stack-dispatched: you name a **stack** and `mqlab` resolves
 the right mechanism-specific action from
@@ -182,23 +184,38 @@ host (they need `CAP_NET_ADMIN`).
 
 ### Measuring the sync tax with the benchmark client
 
-`clients/bench_client.py` is the purpose-built instrument for the latency sweep.
-It PUT+commits persistent messages under syncpoint at a chosen offered rate and
-reports commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
+`mq-bench` is the purpose-built instrument for the latency sweep. It is an entry
+point of the baked `mq-resiliency-clients`
+[guest component](guest-components.md) on `app-client`. It PUT+commits
+persistent messages under syncpoint at a chosen offered rate and reports
+commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
 `{mode, delay, msg_size, rate}` point, while emitting a node-exporter textfile for
-the live dashboards:
+the live dashboards.
+
+`mq-bench` is a **Native HA** benchmark only
+([#1380](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1380)):
+it measures the commit cost of Native HA replication (async CRR versus strict) on
+`NHARCAPP` or `NHARIAPP`. Provisioning a Native HA stack renders the wrapper
+`/home/vagrant/mq-bench` on `app-client`, with that stack's QM, CONNAME and TLS
+defaults in front of the entry point. RDQM and Pacemaker stacks leave the wrapper
+alone. Arguments you pass are appended after the defaults, so a later `--qm` or
+`--offered-rate` wins:
 
 ```bash
-python3 clients/bench_client.py --qm NHARCAPP --conn <conname-list> \
-  --mode strict --delay-ms 10 --msg-size 2048 \
-  --warmup-seconds 30 --measure-seconds 120 --results bench.jsonl
+# on app-client, after a Native HA stack is provisioned
+./mq-bench --qm NHARCAPP --mode strict --delay-ms 10 --msg-size 2048 \
+  --offered-rate 500 --warmup-seconds 30 --measure-seconds 120 --results bench.jsonl
 ```
+
+When a run produces no commits, `mq-bench` reports the MQ reason codes it saw. It
+says "QM unreachable" only when every failure was a connection failure; a 2035
+`MQRC_NOT_AUTHORIZED`, for example, is reported as a refusal.
 
 Pair it with `mqlab netem set` to quantify how injected WAN delay lands on the
 commit critical path — the cost strict-sync replication puts on every commit
-versus async CRR. It reuses `app_requester.py`'s metrics/reconnect plumbing and
-is deliberately separate from that always-on cockpit stream (which is
-"good-enough noise", not a measurement tool).
+versus async CRR. It is deliberately separate from the always-on
+`mq-app-requester` cockpit stream (which is "good-enough noise", not a
+measurement tool).
 
 ## The Watcher
 

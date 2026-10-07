@@ -1,5 +1,20 @@
 # Native HA Cockpit — PR1: `nativehastate` collector — Implementation Plan
 
+> **Superseded packaging (epic
+> [logical-minds-foundry/.github#294](https://github.com/logical-minds-foundry/.github/issues/294),
+> spec `epics/294-guest-component-packaging/spec.md` in `logical-minds-foundry/.github`).**
+> The paths below are historical: `src/mqlab/nativehastate.py`, copied verbatim to
+> `/usr/local/bin` on the system Python, is gone.
+> They now ship in the `mq-resiliency-observability` guest component
+> ([`components/mq-resiliency-observability/`](../../components/mq-resiliency-observability/README.md),
+> import package `mqro`) as console-script entry points under
+> `/opt/logical-minds-foundry/mq-resiliency-observability/venv/bin/`, on the pinned
+> CPython 3.14 runtime, with static units in `/usr/lib/systemd/system/` and
+> deployer-rendered env files under `/etc/opt/logical-minds-foundry/`; see
+> [`components/README.md`](../../components/README.md). The design boundary
+> still stands: the collectors are stdlib-only and non-MQI, shelling out to the
+> cluster's own CLIs. This record's body is kept as written.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps
 > use checkbox (`- [ ]`) syntax for tracking.

@@ -57,6 +57,7 @@ components/<name>/
    is stale). The install runs it on the box before going live.
 5. **The install records itself** in `/opt/logical-minds-foundry/<name>/INSTALLED.json`
    (version, tree, release id, runtime).
+6. **Operator-facing names stay stable**: unit names, entry points, textfile paths.
 
 ## The install layout and rollback
 
@@ -81,8 +82,8 @@ The install (Ansible role `component-install`, used by the bake and by
 
 **Rollback by hand:** run `ln -s "$(readlink previous)" venv.tmp && mv -T venv.tmp venv`
 in the component's directory, then restart its units. (Design: #1372, from the V1 #1357
-finding.)
-6. **Operator-facing names stay stable**: unit names, entry points, textfile paths.
+finding.) The operator guide, with the `mqlab component` verbs, is
+[`docs/site/docs/operate/guest-components.md`](../docs/site/docs/operate/guest-components.md).
 
 ## The runtime
 

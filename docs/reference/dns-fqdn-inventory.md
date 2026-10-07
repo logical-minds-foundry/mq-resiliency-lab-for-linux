@@ -22,9 +22,14 @@ the var *value*, not scattered literals.
 | Our-side ext CONNAME — SVC → our Native-HA QM (3 instances) | `our_conn` in `site-nativeha*.yml` | `10.60.0.11-13(1414)` | `nha-ubuntu-a{1,2,3}-ext.client.com(1414)` (per arm) |
 | App data-plane CONNAME — Native-HA arms (3 instances) | `app_conn` in `site-nativeha*.yml` → `app-requester` role | `10.10.1.11-13(1414)` | `nha-ubuntu-a{1,2,3}-data-a.client.com(1414)` (per arm) |
 | App data-plane CONNAME — VIP arms (pcmk/rdqm) | `app_conn` (the stack VIP) | `10.10.1.200` / `10.10.1.100` | `pcmk-vip.client.com` / `rdqm-vip.client.com` |
-| App default/fallback CONNAME (site-A + site-B VIP) | `DEFAULT_CONN` in `clients/app_requester.py` | `10.10.1.200(1414),10.10.2.200(1414)` | `pcmk-vip.client.com(1414),`**`pcmk-vip-b.client.com`**`(1414)` — ⚠ see gap 1 |
-| DR-flow client CONNAME | `clients/dr_flow.py` | (1 addr) | → FQDN (confirm target during C2) |
+| App default/fallback CONNAME (site-A + site-B VIP) | `DEFAULT_CONN` in `components/mq-resiliency-clients/src/mqrc/app_requester.py` (was `clients/app_requester.py` before #1356) | `10.10.1.200(1414),10.10.2.200(1414)` | `pcmk-vip.client.com(1414),`**`pcmk-vip-b.client.com`**`(1414)` — ⚠ see gap 1 |
+| DR-flow client CONNAME | `--conn` of `mq-dr-flow` (`components/mq-resiliency-clients/src/mqrc/dr_flow.py`; was `clients/dr_flow.py`) | (1 addr) | → FQDN (confirm target during C2) |
 | Partner-facing ext CONNAME (pcmk) | `our_conn` (pcmk/rdqm arms) | `10.60.0.10` (`vip_ext`) | `pcmk-vip-ext.client.com` |
+
+The "Current (IP)" column is the C1 snapshot. As built today, `DEFAULT_CONN` is
+already the FQDN pair `pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)`.
+The clients moved into the `mq-resiliency-clients` guest component in #1356
+(epic .github#294).
 
 Note: the VIP itself is still **bound** by IP (Pacemaker `IPaddr2` / `rdqmint`
 floating IP) — only the CONNAME *to* the VIP becomes a name.
@@ -70,7 +75,7 @@ Admin readability: where a fabric IP is kept, the host still gets its lab FQDN i
    only from the site-A `qm.vip` (and `<short>-vip-ext` from `vip_ext`); the
    site-B DR VIP (`10.10.2.200`, `10.10.2.100`) and site-B instance addresses are
    absent from the zones. Any DR CONNAME that names the site-B VIP
-   (`app_requester.py` `DEFAULT_CONN`, DR flows) needs a site-B name first —
+   (`mqrc/app_requester.py` `DEFAULT_CONN`, DR flows) needs a site-B name first —
    e.g. add `<short>-vip-b.client.com` to the topology + generator. Small
    B-style follow-up; do it before (or as the first step of) C2.
 2. **Per-arm confirmation.** `our_conn`/`app_conn` are per-arm literals across all

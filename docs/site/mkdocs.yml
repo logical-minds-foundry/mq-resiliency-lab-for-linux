@@ -64,7 +64,9 @@ nav:
   - Methodology: methodology.md
   - Getting Started: getting-started.md
   - Architecture: architecture/index.md
-  - Operate & Observe: operate/index.md
+  - Operate & Observe:
+      - operate/index.md
+      - Guest components: operate/guest-components.md
   - Guides:
       - guides/index.md
       - Authoring standard: guides/guide-standard.md

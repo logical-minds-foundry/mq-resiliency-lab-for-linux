@@ -59,15 +59,22 @@ the builder REUSEs a box that no longer matches the code. So editing a baked rol
 or a shared file it includes forces a rebake of exactly the boxes that reach it,
 while editing a per-run configure role leaves every fat box at REUSE.
 
-| Box role | Bake stem (Ubuntu / RHEL) | MQ-bearing |
-|----------|---------------------------|------------|
-| `infra` | `infra` / — | no |
-| `obs` | `obs` / — | no |
-| `san` | `san` / — | no |
-| `mq-client` | `mq-ubuntu` / — | yes |
-| `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes |
-| `pcmk` | `pcmk-ubuntu` / — | no |
-| `mq-rdqm` | — / `mq-rdqm` | yes |
+| Box role | Bake stem (Ubuntu / RHEL) | MQ-bearing | Guest components |
+|----------|---------------------------|------------|------------------|
+| `infra` | `infra` / — | no | — |
+| `obs` | `obs` / — | no | — |
+| `san` | `san` / — | no | `mq-resiliency-observability` |
+| `mq-client` | `mq-ubuntu` / — | yes | `mq-resiliency-clients` |
+| `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes | `mq-resiliency-observability` |
+| `pcmk` | `pcmk-ubuntu` / — | no | `mq-resiliency-observability` |
+| `mq-rdqm` | — / `mq-rdqm` | yes | `mq-resiliency-observability` |
+
+The last column is `roles.<role>.components` in `lab/versions.yaml` (epic
+`.github#294`). For a box that bakes a component, the manifest hash also folds in
+each component's git tree hash and the pinned guest runtime (`runtime.python`), so a
+committed component change or a runtime bump rebakes exactly those boxes. A box
+that bakes none is never rebaked by a runtime bump. See
+[`components/README.md`](../../components/README.md).
 
 The pre-rename names (`obs-ubuntu2404`, `infra-ubuntu2404`, `mq-ubuntu2404`,
 `mq-nativeha-ubuntu`, `pcmk-ubuntu`, base `rhel/9.6-x86_64`) are retired; see
@@ -278,7 +285,8 @@ their ~15–20 min of per-run installs.
 |------|---------|-------|
 | `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-distributed-shared.yml`. Baked, not fetched per-run — kills the #659 acl stall. |
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path — the **server set includes client + SDK + samples**, so one install serves svc (server + QM), app (client + SDK for pymqi), and the exporter's cgo SDK. No QM created. |
-| `mq-inter-qm` (`tasks_from: install`) | ✅ install half | The svc responder's pymqi venv (`/var/mqm/rvenv`, owned by `mqm`; #1227): venv create + the PyPI pymqi install (unpinned, as before) + an import check. Must follow `mq-install` (pymqi compiles against the MQ SDK; the half asserts `cmqc.h` first). The channel MQSC, the SVC QM / responder keystores and the `mq-svc-responder@` service stay per-run in `main.yml`, which re-imports this half as a near no-op (`creates:` guard + pip's satisfied check). Pulling in the role also folds `mq-inter-qm` (and `pki-distribute`, which its `main.yml` includes) into this box's manifest hash: deliberate over-inclusion, so an edit to either rebakes this box. |
+| `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
+| `component-install` (`mq-resiliency-clients`) | ✅ full, units inert | The clients component (#1356): requester, bench, svc responder, probes and DR clients for `svc-sim`, `app-client` and `mon-probe`. A release venv under `/opt/logical-minds-foundry/mq-resiliency-clients/`, `INSTALLED.json`, and its static units in `/usr/lib/systemd/system/`, left inert. Must follow `mq-install`: pymqi compiles from its hash-pinned sdist against the MQ SDK with `gcc`. The per-run roles (`app-requester`, `mq-inter-qm`, `bench-client`) render the env files under `/etc/opt/logical-minds-foundry/mq-resiliency-clients/` and enable the units. This replaces the pre-#294 svc-responder venv bake (`mq-inter-qm` `tasks_from: install`, `/var/mqm/rvenv`, #1227), which `mq-inter-qm` now deletes if it finds it. |
 | `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container, copied in — #1065; no in-guest Go toolchain, which used to auto-download a full Go toolchain and overflow this guest). Its `mq-install` include (runtime libs) is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
@@ -398,8 +406,11 @@ The whole configure surface: queue-manager and cluster creation
 file and enable the timer of the baked `mq-resiliency-observability` component —
 `host-resolver`, `net-reach`);
 all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
-`rdqm-ssh-access`); messaging config (`mq-inter-qm` — bar its pymqi-venv install half, baked into `mq-client-ubuntu24` (#1227) — `mq-event-monitor`,
-`app-requester`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
+`rdqm-ssh-access`); messaging config (`mq-inter-qm` — the channels and keystores,
+plus the responder's env file and QM-ordering drop-in — and `app-requester` and
+`bench-client`, which render the requester's env file and the `mq-bench` wrapper;
+all three drive the baked `mq-resiliency-clients` component and install no client
+code — `mq-event-monitor`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
 (`iscsi-initiator`, plus the DRBD resource and iSCSI target configuration halves of
 `drbd-san` and `iscsi-target`, whose install halves are baked into `san-ubuntu24`); and
 `mqweb` (per-QM REST config +
