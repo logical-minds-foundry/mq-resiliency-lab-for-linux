@@ -7,8 +7,14 @@ RoundTripStats / render_prom / write_textfile helpers) imports without it.
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 import sys
 import types
+from pathlib import Path
+
+import pytest
 
 from mqrc import app_requester as ar
 
@@ -41,14 +47,79 @@ def test_render_prom_histogram_is_cumulative_and_wellformed():
     assert "# TYPE app_roundtrip_total counter" in text
 
 
-def test_write_textfile_is_atomic_and_owner_only(tmp_path):
+@pytest.fixture
+def umask_0027():
+    old = os.umask(0o027)  # the mq-app-requester unit's UMask
+    try:
+        yield
+    finally:
+        os.umask(old)
+
+
+def test_write_textfile_is_atomic_and_keeps_group_read_without_world(tmp_path, umask_0027):
     p = tmp_path / "app_roundtrip.prom"
     ar.write_textfile(str(p), "hello\n")
     assert p.read_text() == "hello\n"
-    # Owner-only mode bits (mkstemp's 0600) — no group/world read/write. node-exporter
-    # reads it cross-user via a POSIX ACL set by provisioning, not a mode bit (#493).
-    assert p.stat().st_mode & 0o777 == 0o600
+    # #1378: the create mode must carry group read — a default ACL derives the file's
+    # mask from it, and mkstemp's hard 0600 (umask-independent) gave mask ---, which
+    # masked node-exporter's ACL read away. With no ACL here the unit umask applies:
+    # 0640, never world-readable.
+    assert p.stat().st_mode & 0o777 == 0o640
     assert list(tmp_path.iterdir()) == [p]  # no leftover temp file
+
+
+def test_write_textfile_replaces_an_existing_file(tmp_path, umask_0027):
+    p = tmp_path / "app_roundtrip.prom"
+    ar.write_textfile(str(p), "one\n")
+    ar.write_textfile(str(p), "two\n")
+    assert p.read_text() == "two\n"
+    assert list(tmp_path.iterdir()) == [p]
+
+
+def test_write_textfile_removes_its_temp_file_when_the_rename_fails(tmp_path, monkeypatch):
+    def _boom(src, dst):
+        raise OSError(18, "Invalid cross-device link")
+
+    monkeypatch.setattr(ar.os, "replace", _boom)
+    with pytest.raises(OSError, match="cross-device"):
+        ar.write_textfile(str(tmp_path / "app_roundtrip.prom"), "x\n")
+    assert list(tmp_path.iterdir()) == []  # the partial temp file is cleaned up
+
+
+def test_write_textfile_raises_when_the_dir_is_missing(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        ar.write_textfile(str(tmp_path / "absent" / "app_roundtrip.prom"), "x\n")
+
+
+def _setfacl_default(directory: Path) -> None:
+    """Mirror the node-exporter role's drop-zone default ACL, with `nobody` standing in
+    for node_exporter; skip (visibly) where the tool or filesystem cannot do ACLs."""
+    if shutil.which("setfacl") is None or shutil.which("getfacl") is None:
+        pytest.skip("setfacl/getfacl not installed")
+    res = subprocess.run(
+        ["setfacl", "-d", "-m", "u:nobody:r,g::r,o::-", str(directory)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if res.returncode != 0:
+        pytest.skip(f"filesystem does not support POSIX ACLs: {res.stderr.strip()}")
+
+
+def test_write_textfile_leaves_the_default_acl_read_effective(tmp_path):
+    # The live #1378 failure, end to end: under the drop zone's default ACL the
+    # published .prom must keep the named reader's read EFFECTIVE (mask r--, not ---)
+    # and give the world nothing.
+    _setfacl_default(tmp_path)
+    p = tmp_path / "app_roundtrip.prom"
+    ar.write_textfile(str(p), "hello\n")
+    acl = subprocess.run(
+        ["getfacl", "-c", str(p)], capture_output=True, text=True, check=True
+    ).stdout.split()
+    assert "user:nobody:r--" in acl
+    assert "#effective:---" not in acl
+    assert "mask::r--" in acl
+    assert "other::---" in acl
 
 
 def test_publish_metrics_writes_the_textfile(tmp_path):
