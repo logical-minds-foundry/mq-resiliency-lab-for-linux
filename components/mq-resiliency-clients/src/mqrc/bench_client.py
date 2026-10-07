@@ -1,5 +1,9 @@
 """Purpose-built Native HA benchmark client (#1106, epic #227).
 
+Native HA ONLY (#1380): it targets a Native HA app QM (NHARCAPP / NHARIAPP) and
+PUTs persistent messages to APP.REPLY on it. The deployer renders the `mq-bench`
+wrapper for Native HA stacks only; RDQM/Pacemaker are not benchmark targets.
+
 Measures the *sync tax* of persistent-message commits: the cost strict-sync
 IRR (`SyncConsistency=Strict`) puts on the critical path of every commit vs
 async CRR, as a function of injected cross-region latency. This is the
@@ -37,6 +41,7 @@ import json
 import math
 import os
 import time
+from collections import Counter
 from datetime import UTC, datetime
 
 from mqrc import app_requester
@@ -54,6 +59,17 @@ _is_reconnectable = app_requester._is_reconnectable
 # app_requester's env fallback.
 DEFAULT_QM = os.environ.get("MQLAB_QM", "NHARCAPP")
 DEFAULT_CONN = app_requester.DEFAULT_CONN
+
+# MQ reasons that mean the QM could not be reached or the connection is dead: the
+# dead-connection set app_requester reconnects on, plus the connect-time "nothing
+# answering" pair. Only when EVERY failure is one of these is the QM reported
+# "unreachable" (#1380) -- a 2035 means the QM answered and refused.
+_UNREACHABLE_REASONS: frozenset[int] = app_requester._RECONNECT_REASONS | frozenset(
+    {
+        2537,  # MQRC_CHANNEL_NOT_AVAILABLE
+        2538,  # MQRC_HOST_NOT_AVAILABLE
+    }
+)
 
 
 # --- pure logic (unit-tested) ----------------------------------------------
@@ -146,6 +162,42 @@ def results_record(
         "measure_seconds": measure_seconds,
         "timestamp": timestamp or datetime.now(UTC).isoformat(),
     }
+
+
+def reason_names(cmqc: object) -> dict[int, str]:
+    """reason code -> MQRC_* name, read off a pymqi CMQC namespace. The caller passes
+    the lazily-imported pymqi.CMQC, so this helper stays pymqi-free."""
+    names: dict[int, str] = {}
+    for attr in sorted(dir(cmqc)):
+        value = getattr(cmqc, attr)
+        if attr.startswith("MQRC_") and isinstance(value, int):
+            names.setdefault(value, attr)
+    return names
+
+
+def no_commits_message(reasons: list[int], names: dict[int, str]) -> str:
+    """The diagnosis printed when the measure window produced no commits (#1380).
+
+    Reports the REAL failure -- the MQ reason codes seen (most common + last, with
+    their MQRC names). Says "QM unreachable" only when every failure was a
+    connection failure (_UNREACHABLE_REASONS); anything else (e.g. 2035
+    MQRC_NOT_AUTHORIZED) means the QM answered and refused every commit."""
+    head = "bench produced NO measured commits"
+    if not reasons:
+        return f"{head} -- no commit was attempted in the measure window"
+
+    def _fmt(reason: int) -> str:
+        return f"{reason} {names.get(reason, 'MQRC_UNKNOWN')}"
+
+    tally = Counter(reasons)
+    seen = ", ".join(f"{_fmt(r)} x{n}" for r, n in tally.most_common())
+    if all(r in _UNREACHABLE_REASONS for r in tally):
+        return f"{head} -- QM unreachable the whole window (connection failures: {seen})"
+    common, common_n = tally.most_common(1)[0]
+    return (
+        f"{head} -- the QM refused every commit: most common MQRC {_fmt(common)} "
+        f"(x{common_n} of {len(reasons)}), last MQRC {_fmt(reasons[-1])}; seen: {seen}"
+    )
 
 
 def append_jsonl(path: str, record: dict[str, object]) -> None:
@@ -250,6 +302,9 @@ def run(args: argparse.Namespace) -> int:
             pass
 
     state: dict[str, object] = {"qmgr": None, "queue": None}
+    # Every MQ reason seen in the measure window, in order -- the no-commits
+    # diagnosis reports these instead of guessing "unreachable" (#1380).
+    measure_reasons: list[int] = []
 
     def _commit_once() -> float:
         """PUT one persistent message under syncpoint and COMMIT, returning the
@@ -295,6 +350,7 @@ def run(args: argparse.Namespace) -> int:
             except pymqi.MQMIError as exc:
                 if record:
                     stats.record_failure()
+                    measure_reasons.append(exc.reason)
                 print(f"commit FAILED: {exc}", flush=True)
                 if _is_reconnectable(exc.reason):
                     _disconnect(state["qmgr"])
@@ -315,7 +371,7 @@ def run(args: argparse.Namespace) -> int:
         _disconnect(state["qmgr"])
 
     if not latencies:
-        print("bench produced NO measured commits -- QM unreachable the whole window", flush=True)
+        print(no_commits_message(measure_reasons, reason_names(pymqi.CMQC)), flush=True)
         return 1
 
     record = results_record(

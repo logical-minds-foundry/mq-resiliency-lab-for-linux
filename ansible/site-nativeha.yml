@@ -170,6 +170,9 @@
     # the app requester connects over TLS -> app_tls true. (#411)
     app_conn: "nha-rhel-crr-a1-data-a.client.com(1414),nha-rhel-crr-a2-data-a.client.com(1414),nha-rhel-crr-a3-data-a.client.com(1414)"
     app_tls: true
+    # This stack is Native HA: the bench-client role renders the Native-HA-only
+    # mq-bench wrapper for it (non-Native-HA stacks leave the wrapper alone). (#1380)
+    app_qm_nativeha: true
 
 # Skip the DR (CRR) replication half entirely under `bootstrap --no-dr` (#188): with
 # no site-B up there is nothing to replicate to. Default (dr_enabled unset → true) runs

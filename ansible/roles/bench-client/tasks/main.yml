@@ -31,6 +31,9 @@
 # A thin, deployer-owned wrapper baking this stack's QM/conn/TLS defaults. The sweep
 # passes extra args ("$@") that override them (argparse: last occurrence wins), so one
 # wrapper still targets NHARCAPP or NHARIAPP via `mq-bench --qm <QM>`.
+# NATIVE HA ONLY (#1380, see defaults/main.yml): rendered only for a Native HA stack; a
+# non-Native-HA provision neither renders nor overwrites it (an existing Native HA
+# wrapper stays, since the sweep may target a Native HA stack that is still up).
 - name: benchmark client wrapper (mq-bench)
   ansible.builtin.template:
     src: mq-bench.j2
@@ -39,3 +42,12 @@
     group: vagrant
     mode: "0755"
   become: true
+  when: bench_client_enabled | bool
+
+- name: mq-bench wrapper left untouched (not a Native HA stack)
+  ansible.builtin.debug:
+    msg: >-
+      mq-bench is a Native HA benchmark: not rendering /home/vagrant/mq-bench for
+      {{ bench_client_qm }} (not a Native HA stack); any existing Native HA wrapper is
+      left as is
+  when: not (bench_client_enabled | bool)

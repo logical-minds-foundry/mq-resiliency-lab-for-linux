@@ -89,6 +89,8 @@
     # The purpose-built benchmark client (#1106) — on-demand, not a service:
     # the deployer-owned /home/vagrant/mq-bench wrapper (stack defaults) in front of
     # the component entry point; the sweep (Task 8) runs it per {mode, delay} point.
+    # Native HA only (#1380): the wrapper renders only when the importer passes
+    # app_qm_nativeha: true; other stacks leave an existing wrapper untouched.
     - name: deploy the benchmark client
       ansible.builtin.include_role:
         name: bench-client

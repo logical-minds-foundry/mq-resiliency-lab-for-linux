@@ -6,6 +6,17 @@
 # front of the mq-resiliency-clients component's mq-bench entry point (epic
 # .github#294 T9). Parameterized by target QM: the CRR app QM by default; the sweep
 # overrides --qm per mode (NHARCAPP | NHARIAPP).
+#
+# NATIVE HA ONLY (#1380): mq-bench is a Native HA persistent-commit benchmark. It PUTs
+# to APP.REPLY, which only the Native HA arms define for the app-client identity; on
+# RDQM the same wrapper failed every commit with 2035. So the wrapper is rendered only
+# when the provisioning stack declares itself Native HA: its importer of
+# site-distributed-shared.yml passes `app_qm_nativeha: true` (site-nativeha.yml,
+# site-nativeha-ubuntu.yml). Any other stack (RDQM, Pacemaker) leaves an existing
+# /home/vagrant/mq-bench untouched -- not deleted, because the sweep may still target a
+# Native HA stack that is up on the shared app-client. `-e bench_client_enabled=true`
+# forces the render for a deliberate experiment.
+bench_client_enabled: "{{ app_qm_nativeha | default(false) | bool }}"
 bench_client_qm: "{{ our_qm }}"
 bench_client_conn: "{{ app_conn }}"
 bench_client_tls: "{{ app_tls | default(true) }}"
