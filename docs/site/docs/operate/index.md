@@ -65,6 +65,28 @@ mqlab perf diff a.json b.json   # per-phase/milestone deltas + ratios, top steal
 Reading the report and the one-lever-at-a-time tuning loop are covered in
 [perf and staging](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md).
 
+### When a bring-up is slow or fails
+
+Bring-up is built to either finish or stop loudly at a named step, never to hang:
+
+- **VM boot.** Guests boot in batches of at most `boot_batch` (4 by default), and each
+  batch's `vagrant up` is retried up to 3 times with backoff, so a transient
+  management-NIC DHCP lease timeout does not end the run.
+- **Readiness waits.** Each service the data path depends on has a bounded,
+  fatal readiness wait. The log-search tier (OpenSearch, Data Prepper, Dashboards)
+  waits up to 40 minutes each. A service the data path does not need (per-node mqweb,
+  when enabled) only warns if it is slow. The waits are pinned by a guardrail test,
+  so they cannot drift back to too-short values.
+- **Package updates.** Baked Ubuntu boxes ship with apt auto-updates turned off. On
+  any host that was not baked that way, provisioning masks the apt timers early, so a
+  background update cannot hold the dpkg lock mid-run.
+
+If a run does stop, fix the cause and resume from the failed phase with
+`mqlab bootstrap <stack> --from <phase>` instead of starting over. The transcript and
+perf report in `$(mqlab build path state)/runs/` show which step failed and how
+long each phase took. A healthy cold `nativeha-ubuntu --no-dr` bootstrap takes
+about 9–13 minutes on either platform, varying from run to run.
+
 ## The end-to-end request/reply path
 
 The lab always has a live workload: a continuous request/reply stream between our
