@@ -77,8 +77,9 @@ nodes:
   # the mq_prometheus exporter (metrics) AND OpenSearch + OpenSearch Dashboards + Data
   # Prepper (logs). The former logsearch node (2 vCPU / 6 GB, its own mgmt IP) was folded in:
   # one adequately-resourced instrumentation node with localhost inter-service links beats
-  # two undersized ones (spec §5.1). Sized cpus:4 / memory:10240 (the 2+2 vCPU, 4096+6144 MB
-  # combined figure); bump only if a cold-rebuild shows pressure. mon-probe carries net-data
+  # two undersized ones (spec §5.1). First sized cpus:4 / memory:10240 (the 2+2 vCPU,
+  # 4096+6144 MB combined figure); vCPU since raised to 12 on cold-rebuild evidence (see the
+  # obs node below, #1186/#1194). mon-probe carries net-data
   # NICs for the (Plan B) client-mode MQ exporters, plus net-ext to reach the SVC
   # counterparty QM across the inter-business WAN (#182). ---
   obs:

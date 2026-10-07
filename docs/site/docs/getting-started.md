@@ -329,7 +329,7 @@ boards show both what the fleet is *doing* (metrics) and what MQ is *reporting*
 
 The observability stack is stood up **as part of `mqlab bootstrap`** — its
 `observe` phase renders the scrape targets and dashboards from topology and
-provisions the obs pair plus this stack's exporters. To bring the shared
+provisions obs, the `mon-probe` exporter host and this stack's exporters. To bring the shared
 observability VMs up on their own (independently of any stack), use `mqlab
 commons up`. A few renders and the front door are exposed directly:
 

@@ -159,10 +159,14 @@ Both were once separate bring-up steps; they are now **phases of `bootstrap`**:
   hand). The groomed `lab/scripts/net-up.sh` / `net-down.sh` remain as a
   hand-run reference for the whole fabric in one shot.
 - The **`observe` phase** renders the scrape targets/dashboards and provisions
-  the obs pair + this stack's exporters + node instrumentation. obs runs the
-  whole observability platform, including the log-search tier (OpenSearch,
-  Dashboards and Data Prepper), so this phase waits for `opensearch_green`,
-  `data_prepper_ready` and `dashboards_ready`, and the perf report records them.
+  obs + the `mon-probe` exporter host + this stack's exporters + node
+  instrumentation. obs runs the whole observability platform, including the
+  log-search tier (OpenSearch, Dashboards and Data Prepper). `site-obs.yml`
+  starts that tier **first**, each service gated ready, and only then the
+  metrics services, because the reverse order starved OpenSearch's cold start
+  (#1194). So this phase waits for `opensearch_green`, `data_prepper_ready` and
+  `dashboards_ready`, and the perf report records them. OpenSearch's green wait
+  allows up to 40 minutes (#1197), so a long, quiet wait there is expected.
 
 To stand the shared observability VMs up **independently of any stack**:
 
