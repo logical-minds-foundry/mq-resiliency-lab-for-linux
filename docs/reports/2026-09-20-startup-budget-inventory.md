@@ -1,5 +1,12 @@
 # Startup readiness-budget inventory — right-sizing & fatality
 
+> **Later finding (2026-10).** This report sizes budgets to a "nested-virt JVM
+> cold-start tax". Epic `.github#275` later measured the real arm64 cause: nested-virt
+> second-level page-fault cost (#1240), fixed by huge-page guest RAM (#1241). OpenSearch
+> now reaches green in about 11 s on macOS. The log-tier waits were also raised from
+> 900 s to 2400 s (#1197). The current values are pinned by `tests/test_startup_budgets.py`
+> and `tests/test_logsearch_budgets.py`; the tables below are the 2026-09-20 state.
+
 **Date:** 2026-09-20
 **Issue:** #1162 (epic logical-minds-foundry/.github#249 — macOS/arm64 startup
 reliability & bring-up hardening)

@@ -1,5 +1,11 @@
 # JVM Cold-Start Concurrency Audit — bring-up serialization (A)
 
+> **Later finding (2026-10).** This audit assumes a ~7× "nested-virt JVM cold-start
+> tax". Epic `.github#275` later measured the real arm64 cause: nested-virt
+> second-level page-fault cost (#1240), fixed by huge-page guest RAM (#1241). With it,
+> JVM services cold-start in seconds on macOS (OpenSearch green in about 11 s). The
+> serialization this audit led to (#1161, #1194) still stands.
+
 **Date:** 2026-09-20
 **Issue:** #1161 (epic logical-minds-foundry/.github#249 — macOS/arm64 startup
 reliability & bring-up hardening)

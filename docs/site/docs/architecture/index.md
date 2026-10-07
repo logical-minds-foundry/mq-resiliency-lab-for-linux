@@ -101,8 +101,17 @@ both an Ubuntu arm (`NHAUAPP`) and a RHEL arm (`NHARCAPP`).
 
 ## The admin plane — mqweb (data-plane infrastructure)
 
-Every queue manager runs **mqweb** — the MQ administrative REST API and Console
-(WebSphere Liberty, `9443/HTTPS`) — as a stateless per-node service. It is
+> **Status: off by default.** Per-node mqweb is gated by `mqweb_enabled`
+> (`ansible/group_vars/all/admin.yml`, default `false`; #1171, #1188), so a default
+> bootstrap starts no mqweb anywhere. It was turned off after mqweb failed to cold-start
+> reliably on the 2-vCPU QM nodes under macOS/arm64 nested virtualization. Those failures
+> predate the huge-page fix for arm64 page-fault cost (#1240, #1241), so they may not
+> recur. The role is kept; set `mqweb_enabled: true` to run it deliberately. Whether and
+> how mqweb comes back is undecided (tracked in the ad-hoc backlog, `.github#266`). The
+> rest of this section describes the design when it is enabled.
+
+When enabled, each queue manager runs **mqweb** — the MQ administrative REST API and
+Console (WebSphere Liberty, `9443/HTTPS`) — as a stateless per-node service. It is
 **data-plane infrastructure**: the control surface co-located with the queue
 manager it fronts, part of what the lab *instruments*, **not** part of the
 management/observability ("Watcher") plane that observes it. Clients reach it at

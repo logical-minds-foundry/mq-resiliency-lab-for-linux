@@ -1,5 +1,11 @@
 # Boot-layer flakiness diagnosis — IP-lease timeouts & DNS `no route to host`
 
+> **Later finding (2026-10).** This note attributes the macOS slowness to a
+> "nested-virt tax". Epic `.github#275` later measured the real arm64 cause: nested-virt
+> second-level page-fault cost (#1240), fixed by huge-page guest RAM (#1241). The
+> boot-layer fixes from this diagnosis (#1164: bounded boot retry, infra/DNS first)
+> still stand.
+
 - **Date:** 2026-09-20
 - **Epic:** `logical-minds-foundry/.github#249` (macOS/arm64 startup reliability)
 - **Task:** #1164, plan Task 6 (diagnose) → Task 7 (fix)
