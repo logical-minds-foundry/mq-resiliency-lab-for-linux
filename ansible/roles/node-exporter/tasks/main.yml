@@ -70,19 +70,26 @@
     mode: "0644"
   notify: apply node_exporter textfile tmpfiles
 
-# node-exporter (a separate service user) reads the app-requester's OWNER-ONLY
-# (0600) .prom files via a POSIX default ACL — so the files need no group/world mode
-# bit (which CodeQL flags as py/overly-permissive-file, #491). The cross-user read is
-# an env-specific implementation detail: a dependency on the `acl` package (#493).
+# node-exporter (a separate service user) reads the app-requester .prom files via a
+# POSIX default ACL, so the writer sets no group/world mode bit itself (which CodeQL
+# flags as py/overly-permissive-file, #491). The cross-user read is an env-specific
+# implementation detail: a dependency on the `acl` package (#493).
 - name: acl package (setfacl for the drop-zone default ACL)
   ansible.builtin.package:
     name: acl
     state: present
   become: true
 
-- name: default ACL — node_exporter reads new .prom files in the drop zone (#493)
+# A new file in a dir with a default ACL takes that ACL, with the umask ignored; its
+# ACL mask is the create-mode group bits ANDed with the default mask. So every writer
+# must create with group read in its requested mode (open()/shell redirection request
+# 0666; mkstemp 0600 yields mask --- and masks node_exporter out, the #1378 failure).
+# Pinning the default group to r and other to --- (no x, no world access) makes every
+# new .prom come out owner rw, node_exporter r, group r, other ---, whoever wrote it
+# (the root collectors, net-reach, or the vagrant app-requester).
+- name: default ACL — node_exporter reads new .prom files in the drop zone (#493, #1378)
   ansible.builtin.command:
-    cmd: setfacl -d -m u:node_exporter:r /var/lib/node_exporter/textfile
+    cmd: setfacl -d -m u:node_exporter:r,g::r,o::- /var/lib/node_exporter/textfile
   become: true
   changed_when: false
 

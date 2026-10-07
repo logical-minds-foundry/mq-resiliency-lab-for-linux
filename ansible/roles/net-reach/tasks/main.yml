@@ -1,9 +1,22 @@
 ---
-- name: textfile dir
-  ansible.builtin.file:
+# The textfile drop zone is OWNED by the node-exporter role (02775 + the default ACL,
+# #449/#458/#493), which runs earlier in this play. This role only checks it: a
+# file task here once reset it to 0755 and stripped the requester write access
+# (#1378), so never manage its mode outside node-exporter.
+- name: look for the shared textfile drop zone
+  ansible.builtin.stat:
     path: /var/lib/node_exporter/textfile
-    state: directory
-    mode: "0755"
+  register: _nr_dropzone
+
+- name: the textfile drop zone is the node-exporter shared 02775 dir
+  ansible.builtin.assert:
+    that:
+      - _nr_dropzone.stat.isdir | default(false)
+      - _nr_dropzone.stat.mode == '2775'
+    fail_msg: >-
+      /var/lib/node_exporter/textfile on {{ inventory_hostname }} is missing or not
+      mode 2775 - run the node-exporter role (observability.yml) to restore the
+      shared drop zone
 
 - name: deploy the peer-ping script (this host's peers baked in)
   ansible.builtin.template:

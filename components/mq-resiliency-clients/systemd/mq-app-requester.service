@@ -11,6 +11,10 @@ Wants=network-online.target
 Type=simple
 User=vagrant
 Group=vagrant
+# No world bits on anything the requester creates (#1378). In the textfile drop zone
+# the default ACL governs instead (the umask is ignored there), so this only bites
+# where no default ACL exists; there the .prom comes out 0640, never world-readable.
+UMask=0027
 EnvironmentFile=/etc/opt/logical-minds-foundry/mq-resiliency-clients/mq-app-requester.env
 Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
 # --textfile publishes the round-trip metric for node-exporter.

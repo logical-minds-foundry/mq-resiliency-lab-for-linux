@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import tempfile
+import secrets
 import time
 
 # Latency histogram bucket edges (ms), cumulative in the Prometheus sense. Sized
@@ -124,18 +124,30 @@ def render_prom(stats: RoundTripStats) -> str:
 
 def write_textfile(path: str, text: str) -> None:
     """Atomically publish the metric textfile: write a sibling temp file then
-    os.replace it, so node-exporter never reads a half-written .prom."""
+    os.replace it, so node-exporter never reads a half-written .prom.
+
+    The temp file is created with open()'s default mode request (0666, no mode
+    literal), NOT mkstemp's hard 0600. That is load-bearing for the cross-user read
+    (#1378): node-exporter (a separate service user) reads the .prom through the drop
+    zone's POSIX default ACL entry user:node_exporter:r (#493). For a file created in
+    a dir with a default ACL, the file's ACL *mask* is the create mode's group bits
+    ANDed with the default mask. mkstemp's 0600 has no group bits, so the mask came
+    out --- and masked node-exporter's read away (effective ---, so
+    node_textfile_scrape_error=1). Requesting 0666 lets the mask keep r--. The umask
+    is NOT applied when a default ACL exists; that ACL sets the final permissions (the
+    node-exporter role pins it to owner rw, node_exporter r, group r, other ---: no
+    world access). Without a default ACL the process umask applies instead (the
+    mq-app-requester unit sets UMask=0027). No group/world bit is ever set from a mode
+    literal here (CodeQL py/overly-permissive-file, #491/#493)."""
     directory = os.path.dirname(path) or "."
-    fd, tmp = tempfile.mkstemp(dir=directory, suffix=".tmp")
+    # Dot-prefixed, non-.prom name: node-exporter only reads *.prom, so it never sees
+    # the partial file. Mode "x" is O_CREAT|O_EXCL, so a name collision fails loudly.
+    tmp = os.path.join(
+        directory, f".{os.path.basename(path)}.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    )
     try:
-        with os.fdopen(fd, "w") as handle:
+        with open(tmp, "x", encoding="utf-8") as handle:
             handle.write(text)
-        # Leave the file OWNER-ONLY (mkstemp's 0600) — deliberately no group/world
-        # mode bit. node-exporter (a separate service user) reads the .prom via a
-        # POSIX default ACL granting node_exporter read on the drop zone, set by
-        # provisioning (#493). Keeping the mode owner-only avoids CodeQL
-        # py/overly-permissive-file, and that cross-user read is an env-specific
-        # implementation detail (the `acl` dependency), not part of the atomic write.
         os.replace(tmp, path)
     except BaseException:
         if os.path.exists(tmp):
