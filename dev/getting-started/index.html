@@ -1906,7 +1906,7 @@ boards show both what the fleet is <em>doing</em> (metrics) and what MQ is <em>r
 (events).</p>
 <p>The observability stack is stood up <strong>as part of <code>mqlab bootstrap</code></strong> — its
 <code>observe</code> phase renders the scrape targets and dashboards from topology and
-provisions the obs pair plus this stack's exporters. To bring the shared
+provisions obs, the <code>mon-probe</code> exporter host and this stack's exporters. To bring the shared
 observability VMs up on their own (independently of any stack), use <code>mqlab
 commons up</code>. A few renders and the front door are exposed directly:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">       </span><span class="c1"># print the Grafana URL + how to reach it from your workstation</span>
