@@ -322,6 +322,7 @@ def test_bench_wrapper_keeps_its_path_and_stack_defaults() -> None:
     assert "mqvenv" not in text and "bench_client.py" not in text
     defaults = yaml.safe_load((ROLES / "bench-client" / "defaults" / "main.yml").read_text())
     assert set(defaults) == {
+        "bench_client_enabled",
         "bench_client_qm",
         "bench_client_conn",
         "bench_client_tls",
@@ -330,6 +331,74 @@ def test_bench_wrapper_keeps_its_path_and_stack_defaults() -> None:
         "bench_client_keyrepo",
         "bench_client_certlabel",
     }
+
+
+# --- mq-bench is Native HA only (#1380) ----------------------------------------------
+
+BENCH_WRAPPER = "/home/vagrant/mq-bench"
+# Every site playbook importing the shared app layer -> is its app QM Native HA?
+SHARED_IMPORTERS = {
+    "site-nativeha.yml": True,
+    "site-nativeha-ubuntu.yml": True,
+    "site-rdqm.yml": False,
+    "site-pcmk.yml": False,
+}
+
+
+def _shared_import_vars(playbook: str) -> dict[str, Any]:
+    plays = yaml.safe_load((ANSIBLE / playbook).read_text(encoding="utf-8"))
+    (hit,) = [p for p in plays if p.get("import_playbook") == "site-distributed-shared.yml"]
+    return hit.get("vars") or {}
+
+
+def test_bench_enabled_defaults_off_unless_the_stack_is_native_ha() -> None:
+    defaults = yaml.safe_load((ROLES / "bench-client" / "defaults" / "main.yml").read_text())
+    assert defaults["bench_client_enabled"] == "{{ app_qm_nativeha | default(false) | bool }}"
+
+
+def test_bench_wrapper_renders_only_when_enabled() -> None:
+    tasks = _tasks("bench-client")
+    (render,) = [t for t in tasks if "ansible.builtin.template" in t]
+    assert render["when"] == "bench_client_enabled | bool"
+    (skip,) = [t for t in tasks if "ansible.builtin.debug" in t]
+    assert skip["when"] == "not (bench_client_enabled | bool)"
+    assert "Native HA" in skip["ansible.builtin.debug"]["msg"]
+
+
+def test_bench_wrapper_is_never_deleted() -> None:
+    """A non-Native-HA provision leaves an existing Native HA wrapper in place: the sweep
+    may still target a Native HA stack that is up on the shared app-client."""
+    for task in _iter_tasks(_tasks("bench-client")):
+        assert BENCH_WRAPPER not in _absent_paths(task), task
+
+
+def test_every_shared_importer_is_classified() -> None:
+    importers = {
+        p.name
+        for p in ANSIBLE.glob("site-*.yml")
+        if any(
+            isinstance(play, dict) and play.get("import_playbook") == "site-distributed-shared.yml"
+            for play in yaml.safe_load(p.read_text(encoding="utf-8")) or []
+        )
+    }
+    assert importers == set(SHARED_IMPORTERS)
+
+
+@pytest.mark.parametrize(("playbook", "nativeha"), sorted(SHARED_IMPORTERS.items()))
+def test_only_native_ha_stacks_enable_the_bench(playbook: str, nativeha: bool) -> None:
+    import_vars = _shared_import_vars(playbook)
+    assert "bench_client_enabled" not in import_vars, "declare the stack, not the toggle"
+    if nativeha:
+        assert import_vars["app_qm_nativeha"] is True
+    else:
+        assert "app_qm_nativeha" not in import_vars
+
+
+def test_bench_wrapper_and_readme_say_native_ha_only() -> None:
+    wrapper = (ROLES / "bench-client" / "templates" / "mq-bench.j2").read_text()
+    assert "NATIVE HA ONLY (#1380)" in wrapper
+    readme = (REPO_ROOT / "components" / COMPONENT / "README.md").read_text()
+    assert "`mq-bench` is a **Native HA** persistent-commit benchmark" in readme
 
 
 # --- playbooks + scripts -------------------------------------------------------------

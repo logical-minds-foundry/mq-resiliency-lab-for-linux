@@ -10,6 +10,8 @@ the module and its pure helpers import without the MQ client libs present.
 from __future__ import annotations
 
 import json
+import sys
+import types
 
 from mqrc import bench_client as bc
 
@@ -179,3 +181,141 @@ def test_reuses_app_requester_helpers():
     assert bc.render_prom is bc.app_requester.render_prom
     assert bc.publish_metrics is bc.app_requester.publish_metrics
     assert bc._is_reconnectable is bc.app_requester._is_reconnectable
+
+
+# --- no-commits diagnosis reports the real MQRC (#1380) ---------------------
+
+_NAMES = {
+    2009: "MQRC_CONNECTION_BROKEN",
+    2035: "MQRC_NOT_AUTHORIZED",
+    2085: "MQRC_UNKNOWN_OBJECT_NAME",
+    2538: "MQRC_HOST_NOT_AVAILABLE",
+}
+
+
+def test_no_commits_message_2035_is_refused_not_unreachable():
+    msg = bc.no_commits_message([2035] * 20, _NAMES)
+    assert "unreachable" not in msg
+    assert "refused every commit" in msg
+    assert "most common MQRC 2035 MQRC_NOT_AUTHORIZED (x20 of 20)" in msg
+    assert "last MQRC 2035 MQRC_NOT_AUTHORIZED" in msg
+
+
+def test_no_commits_message_connection_failures_are_unreachable():
+    msg = bc.no_commits_message([2538, 2538, 2009], _NAMES)
+    assert "QM unreachable the whole window" in msg
+    assert "2538 MQRC_HOST_NOT_AVAILABLE x2" in msg
+    assert "2009 MQRC_CONNECTION_BROKEN x1" in msg
+
+
+def test_no_commits_message_mixed_reports_most_common_and_last():
+    # One connection blip does not make it "unreachable" when the QM refused the rest.
+    msg = bc.no_commits_message([2009, 2035, 2035, 2085], _NAMES)
+    assert "unreachable" not in msg
+    assert "most common MQRC 2035 MQRC_NOT_AUTHORIZED (x2 of 4)" in msg
+    assert "last MQRC 2085 MQRC_UNKNOWN_OBJECT_NAME" in msg
+
+
+def test_no_commits_message_unknown_reason_name():
+    msg = bc.no_commits_message([9999], {})
+    assert "9999 MQRC_UNKNOWN" in msg
+
+
+def test_no_commits_message_no_attempts():
+    msg = bc.no_commits_message([], _NAMES)
+    assert "no commit was attempted" in msg
+    assert "unreachable" not in msg
+
+
+def test_reason_names_reads_mqrc_constants_only():
+    class CMQC:
+        MQRC_NOT_AUTHORIZED = 2035
+        MQRC_HOST_NOT_AVAILABLE = 2538
+        MQXPT_TCP = 2  # not a reason code
+        MQRC_NOT_AN_INT = "x"
+
+    names = bc.reason_names(CMQC)
+    assert names == {2035: "MQRC_NOT_AUTHORIZED", 2538: "MQRC_HOST_NOT_AVAILABLE"}
+
+
+def _fake_pymqi(*, put_reason: int = 0, connect_reason: int = 0) -> types.ModuleType:
+    """A fake pymqi for driving run(): every put (or every connect) fails with the
+    given MQ reason, so the measure window produces no commits."""
+
+    class MQMIError(Exception):
+        def __init__(self, comp: int, reason: int) -> None:
+            self.comp = comp
+            self.reason = reason
+            super().__init__(f"MQI Error. Comp: {comp}, Reason {reason}")
+
+    class CMQC:
+        MQXPT_TCP = 2
+        MQCNO_RECONNECT = 0x01000000
+        MQFMT_STRING = b"MQSTR   "
+        MQPER_PERSISTENT = 1
+        MQPMO_SYNCPOINT = 0x02
+        MQPMO_FAIL_IF_QUIESCING = 0x2000
+        MQRC_CONNECTION_BROKEN = 2009
+        MQRC_NOT_AUTHORIZED = 2035
+        MQRC_HOST_NOT_AVAILABLE = 2538
+
+    class _Struct:
+        def __init__(self, **kw: object) -> None:
+            for key, value in kw.items():
+                setattr(self, key, value)
+
+    class QueueManager:
+        def __init__(self, _name: object) -> None:
+            pass
+
+        def connect_with_options(self, _name, cd=None, sco=None, opts=0) -> None:
+            if connect_reason:
+                raise MQMIError(2, connect_reason)
+
+        def commit(self) -> None:
+            pass
+
+        def disconnect(self) -> None:
+            pass
+
+    class Queue:
+        def __init__(self, _qmgr: object, _name: object, open_opts: int = 0) -> None:
+            pass
+
+        def put(self, _msg, _md=None, _pmo=None) -> None:
+            if put_reason:
+                raise MQMIError(2, put_reason)
+
+    m = types.ModuleType("pymqi")
+    for name, obj in {
+        "MQMIError": MQMIError,
+        "CMQC": CMQC,
+        "CD": _Struct,
+        "SCO": _Struct,
+        "MD": _Struct,
+        "PMO": _Struct,
+        "QueueManager": QueueManager,
+        "Queue": Queue,
+    }.items():
+        setattr(m, name, obj)
+    return m
+
+
+_RUN_ARGS = ["--warmup-seconds", "0", "--count", "3", "--qm", "NHARCAPP"]
+
+
+def test_run_put_2035_reports_not_authorized(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(put_reason=2035))
+    assert bc.main(_RUN_ARGS) == 1
+    out = capsys.readouterr().out
+    assert "the QM refused every commit" in out
+    assert "2035 MQRC_NOT_AUTHORIZED" in out
+    assert "unreachable" not in out
+
+
+def test_run_connect_failure_reports_unreachable(monkeypatch, capsys):
+    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(connect_reason=2538))
+    assert bc.main(_RUN_ARGS) == 1
+    out = capsys.readouterr().out
+    assert "QM unreachable the whole window" in out
+    assert "2538 MQRC_HOST_NOT_AVAILABLE x3" in out

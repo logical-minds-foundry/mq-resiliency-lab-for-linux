@@ -7,6 +7,9 @@
 # (argparse takes the last occurrence). The sweep drives this per {mode, delay}:
 #   ./mq-bench --qm NHARIAPP --mode strict --delay-ms 10 --offered-rate 500 \
 #              --results /path/results.jsonl
+# NATIVE HA ONLY (#1380): mq-bench is a Native HA persistent-commit benchmark
+# (NHARCAPP / NHARIAPP, PUT to APP.REPLY). This wrapper is rendered only by a
+# Native HA stack provision; RDQM and Pacemaker are not benchmark targets.
 set -euo pipefail
 
 exec /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-bench \

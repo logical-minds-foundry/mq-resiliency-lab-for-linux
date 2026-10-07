@@ -25,7 +25,7 @@ and use a fake `pymqi` module, because the dev VM has no MQ SDK.
 | Command | Module | Purpose |
 |---|---|---|
 | `mq-app-requester` | `mqrc.app_requester` | steady request/reply load + round-trip textfile |
-| `mq-bench` | `mqrc.bench_client` | Native HA commit-latency benchmark (JSONL record) |
+| `mq-bench` | `mqrc.bench_client` | Native HA commit-latency benchmark (JSONL record); Native HA only (#1380) |
 | `mq-svc-responder` | `mqrc.svc_responder` | counterparty responder: reply with the request's correlation id |
 | `mq-authz-probe` | `mqrc.authz_probe` | induced-denial authorization probe |
 | `mq-dlq-probe` | `mqrc.dlq_probe` | dead-letter queue inspector |
@@ -35,6 +35,14 @@ and use a fake `pymqi` module, because the dev VM has no MQ SDK.
 | `mq-dr-baseline` | `mqrc.dr_baseline` | no-fault self-correctness check (RPO 0) |
 | `mq-dr-forced` | `mqrc.dr_forced` | forced cross-site DR loss attribution (RPO > 0) |
 | `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real pymqi when the `mqi` extra is installed |
+
+`mq-bench` is a **Native HA** persistent-commit benchmark: it measures the commit cost of
+Native HA replication (async CRR vs strict IRR) by PUTting persistent messages to
+`APP.REPLY` on a Native HA app QM (`NHARCAPP` / `NHARIAPP`). It is not a benchmark for
+RDQM or Pacemaker stacks, so the deployer renders its `/home/vagrant/mq-bench` wrapper
+only when it provisions a Native HA stack. When a run produces no commits, it reports
+the MQ reason codes it saw. It says "QM unreachable" only when every failure was a
+connection failure; for example, 2035 `MQRC_NOT_AUTHORIZED` is reported as a refusal.
 
 ## Units and configuration
 
