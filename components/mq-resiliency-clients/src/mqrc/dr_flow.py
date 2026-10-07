@@ -64,7 +64,7 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
     pending = None  # (seq, uuid, payload) built but not yet confirmed-sent
     while keep():
         if qmgr is None:
-            qmgr = dr_mqi.connect_retry(c.qm, c.conn, c.channel, keep)
+            qmgr = c.connect_retry(keep)
             if qmgr is None:
                 break
             q = pymqi.Queue(qmgr, req_queue)
@@ -144,7 +144,7 @@ def consumer(c, reply_queue, ledger, lock):
     qmgr, q = None, None
     while keep():
         if qmgr is None:
-            qmgr = dr_mqi.connect_retry(c.qm, c.conn, c.channel, keep)
+            qmgr = c.connect_retry(keep)
             if qmgr is None:
                 break
             q = pymqi.Queue(qmgr, reply_queue)
@@ -196,8 +196,19 @@ def consumer(c, reply_queue, ledger, lock):
 
 
 class _Conn:
-    def __init__(self, conn, channel, qm):
+    def __init__(self, conn, channel, qm, keyrepo="", certlabel=""):
         self.conn, self.channel, self.qm = conn, channel, qm
+        self.keyrepo, self.certlabel = keyrepo, certlabel
+
+    def connect_retry(self, keep_going):
+        return dr_mqi.connect_retry(
+            self.qm,
+            self.conn,
+            self.channel,
+            keep_going,
+            keyrepo=self.keyrepo,
+            certlabel=self.certlabel,
+        )
 
 
 def main(argv=None):
@@ -218,10 +229,14 @@ def main(argv=None):
         help="per-message expiry in seconds (default: unlimited)",
     )
     ap.add_argument("--ledger", required=True)
+    # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
+    # sibling .sth supplies the password (pymqi's SCO has none). Omit both -> plaintext.
+    ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/key")
+    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args(argv)
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
-    c = _Conn(args.conn, args.channel, args.qm)
+    c = _Conn(args.conn, args.channel, args.qm, args.keyrepo, args.certlabel)
     ledger, lock = Ledger(), threading.Lock()
     t = threading.Thread(target=consumer, args=(c, args.reply_queue, ledger, lock), daemon=True)
     t.start()
