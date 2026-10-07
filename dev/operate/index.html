@@ -14,7 +14,7 @@
         <link rel="prev" href="../architecture/">
       
       
-        <link rel="next" href="../guides/">
+        <link rel="next" href="guest-components/">
       
       
         
@@ -114,7 +114,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Operate & Observe
+              Operate &amp; Observe
             
           </span>
         </div>
@@ -326,17 +326,20 @@
     
   
   
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
-        
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
   
   
     
   
   Operate & Observe
 
-      </a>
-    </li>
+        </a>
+      </li>
+    
   
 
       
@@ -743,16 +746,37 @@
   
   
   
-    <li class="md-nav__item md-nav__item--active">
+    
+    
       
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
       
       
         
       
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
           
+          <div class="md-nav__link md-nav__container">
+            <a href="./" class="md-nav__link md-nav__link--active">
+              
   
   
   <span class="md-ellipsis">
@@ -766,17 +790,43 @@
   
   
 
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+            </a>
+            
+              
+              <label class="md-nav__link md-nav__link--active" for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & Observe
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guest-components/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Operate & Observe
+    Guest components
   
 
     
@@ -785,164 +835,13 @@
   
 
       </a>
-      
-        
+    </li>
+  
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#bring-a-stack-up" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Bring a stack up
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-end-to-end-requestreply-path" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The end-to-end request/reply path
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#failover-drills" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Failover drills
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#dr-cutover-and-failback" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        DR: cutover and failback
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#inject-wan-latency-mqlab-netem" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Inject WAN latency (mqlab netem)
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Inject WAN latency (mqlab netem)">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#measuring-the-sync-tax-with-the-benchmark-client" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Measuring the sync tax with the benchmark client
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#the-watcher" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The Watcher
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="The Watcher">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mqlab-obs-verbs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        mqlab obs verbs
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#mqlab-logsearch-verbs" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        mqlab logsearch verbs
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="mqlab logsearch verbs">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#rejected-log-documents-are-loud-not-lost" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Rejected log documents are loud, not lost
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#the-boards" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The boards
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-    </ul>
-  
-</nav>
+              
+            
+          </ul>
+        </nav>
       
     </li>
   
@@ -1530,7 +1429,9 @@
 operational altitude: the commands you type against a live stack and the boards
 you watch them on. For the <strong>why</strong> — the shape of the lab, the four arms, and the
 reasoning behind each HA/DR mechanism — read <a href="../architecture/">Architecture</a>
-first; everything below assumes that mental model.</p>
+first; everything below assumes that mental model. The code the lab runs on its
+guests (the collectors, clients and benchmark) and the <code>mqlab component</code> verbs that
+build and reinstall it are on <a href="guest-components/">Guest components</a>.</p>
 <p>Every verb here is stack-dispatched: you name a <strong>stack</strong> and <code>mqlab</code> resolves
 the right mechanism-specific action from
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml"><code>lab/topology.yaml</code></a>.
@@ -1703,20 +1604,33 @@ touched — intra-group Native HA replication is same-site and must stay unshape
 <code>set</code> / <code>clear</code> / <code>show</code> shell out to <code>tc</code> / <code>ip</code> under <code>sudo</code> on the libvirt
 host (they need <code>CAP_NET_ADMIN</code>).</p>
 <h3 id="measuring-the-sync-tax-with-the-benchmark-client">Measuring the sync tax with the benchmark client<a class="headerlink" href="#measuring-the-sync-tax-with-the-benchmark-client" title="Permanent link">&para;</a></h3>
-<p><code>clients/bench_client.py</code> is the purpose-built instrument for the latency sweep.
-It PUT+commits persistent messages under syncpoint at a chosen offered rate and
-reports commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
+<p><code>mq-bench</code> is the purpose-built instrument for the latency sweep. It is an entry
+point of the baked <code>mq-resiliency-clients</code>
+<a href="guest-components/">guest component</a> on <code>app-client</code>. It PUT+commits
+persistent messages under syncpoint at a chosen offered rate and reports
+commit-latency percentiles (p50/p95/p99/max) as one JSONL record per
 <code>{mode, delay, msg_size, rate}</code> point, while emitting a node-exporter textfile for
-the live dashboards:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>python3<span class="w"> </span>clients/bench_client.py<span class="w"> </span>--qm<span class="w"> </span>NHARCAPP<span class="w"> </span>--conn<span class="w"> </span>&lt;conname-list&gt;<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--mode<span class="w"> </span>strict<span class="w"> </span>--delay-ms<span class="w"> </span><span class="m">10</span><span class="w"> </span>--msg-size<span class="w"> </span><span class="m">2048</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--warmup-seconds<span class="w"> </span><span class="m">30</span><span class="w"> </span>--measure-seconds<span class="w"> </span><span class="m">120</span><span class="w"> </span>--results<span class="w"> </span>bench.jsonl
+the live dashboards.</p>
+<p><code>mq-bench</code> is a <strong>Native HA</strong> benchmark only
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1380">#1380</a>):
+it measures the commit cost of Native HA replication (async CRR versus strict) on
+<code>NHARCAPP</code> or <code>NHARIAPP</code>. Provisioning a Native HA stack renders the wrapper
+<code>/home/vagrant/mq-bench</code> on <code>app-client</code>, with that stack's QM, CONNAME and TLS
+defaults in front of the entry point. RDQM and Pacemaker stacks leave the wrapper
+alone. Arguments you pass are appended after the defaults, so a later <code>--qm</code> or
+<code>--offered-rate</code> wins:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># on app-client, after a Native HA stack is provisioned</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>./mq-bench<span class="w"> </span>--qm<span class="w"> </span>NHARCAPP<span class="w"> </span>--mode<span class="w"> </span>strict<span class="w"> </span>--delay-ms<span class="w"> </span><span class="m">10</span><span class="w"> </span>--msg-size<span class="w"> </span><span class="m">2048</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--offered-rate<span class="w"> </span><span class="m">500</span><span class="w"> </span>--warmup-seconds<span class="w"> </span><span class="m">30</span><span class="w"> </span>--measure-seconds<span class="w"> </span><span class="m">120</span><span class="w"> </span>--results<span class="w"> </span>bench.jsonl
 </code></pre></div>
+<p>When a run produces no commits, <code>mq-bench</code> reports the MQ reason codes it saw. It
+says "QM unreachable" only when every failure was a connection failure; a 2035
+<code>MQRC_NOT_AUTHORIZED</code>, for example, is reported as a refusal.</p>
 <p>Pair it with <code>mqlab netem set</code> to quantify how injected WAN delay lands on the
 commit critical path — the cost strict-sync replication puts on every commit
-versus async CRR. It reuses <code>app_requester.py</code>'s metrics/reconnect plumbing and
-is deliberately separate from that always-on cockpit stream (which is
-"good-enough noise", not a measurement tool).</p>
+versus async CRR. It is deliberately separate from the always-on
+<code>mq-app-requester</code> cockpit stream (which is "good-enough noise", not a
+measurement tool).</p>
 <h2 id="the-watcher">The Watcher<a class="headerlink" href="#the-watcher" title="Permanent link">&para;</a></h2>
 <p>The <strong>Watcher</strong> is the management/observability plane — the <code>net-mgmt</code> side of the
 lab that observes every node but never carries transit traffic. It runs on the
