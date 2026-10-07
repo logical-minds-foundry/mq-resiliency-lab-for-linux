@@ -117,13 +117,27 @@ app-client                     our HA queue manager            svc-sim
   `mq-svc-responder@PCMK.SVC.REQUEST`). Per-stack queues keep the always-on
   streams independent — a stuck responder affects only its own stack.
 
-To fire a bounded burst by hand (each request must round-trip or the script exits
-non-zero):
+To fire a bounded burst by hand, run `mqlab qm e2e`. Every request must round-trip
+or the command exits non-zero:
 
 ```bash
-# lab/scripts/e2e-test.sh [COUNT=5] [QM=PCMKAPP] [CONN=<conname-list>]
-lab/scripts/e2e-test.sh 20 PCMKAPP
+# mqlab qm e2e <stack> [--count N]   (N defaults to 5)
+mqlab qm e2e nativeha-ubuntu --count 20
 ```
+
+It runs `mq-app-requester --count N` on `app-client` with the same settings the
+always-on requester is deployed with, so nothing is typed by hand:
+
+- **QM** is the stack's app queue manager, `<SHORT>APP` (for example `NHAUAPP`).
+- **CONN** is the `app_conn` that the stack's provision playbook passes to
+  `site-distributed-shared.yml`. That is the site-A instance list on the Native HA
+  stacks and the VIP FQDNs on the Pacemaker and RDQM stacks.
+- **TLS** uses the `app-requester` role's keystore stem (`/home/vagrant/ssl/key`) and
+  certificate label.
+
+It reaches the lab through the shared Vagrant state in `build/state/vagrant`, so it
+works from any checkout or worktree. Like the other stack-scoped verbs, it refuses
+a running stack that has no instance record.
 
 ## Failover drills
 

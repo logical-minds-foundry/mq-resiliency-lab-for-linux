@@ -14,7 +14,17 @@ import typer
 import yaml
 from rich.console import Console
 
-from mqlab import buildenv, coldboot, hugepages, instances, parity, perfdiff, topology, venvsync
+from mqlab import (
+    buildenv,
+    coldboot,
+    e2e,
+    hugepages,
+    instances,
+    parity,
+    perfdiff,
+    topology,
+    venvsync,
+)
 from mqlab.artifact import (
     download_mq_tarball,
     ensure_mq_tarballs_for_boxes,
@@ -1840,6 +1850,55 @@ def qm_down(stack: str) -> None:
 def qm_status(stack: str) -> None:
     """Show the queue manager's HA resource state."""
     _qm_dispatch(stack, "qm-status")
+
+
+_E2eCount = Annotated[
+    int, typer.Option("--count", min=1, help="requests to send; every one must round-trip")
+]
+
+
+def _qm_e2e_run(stack_name: str, count: int) -> None:
+    # A bounded request/reply burst from the app host through the stack's flow (#1342).
+    # QM / CONN / TLS keystore come from topology + the playbook and role the always-on
+    # requester is deployed from (mqlab.e2e), never literals. Runs `vagrant ssh -c` from
+    # lab/ against the shared dotfile (#355), so it finds the lab from any worktree.
+    # mq-app-requester exits 1 unless every request round-trips; that exit propagates.
+    stack = _stack_qm_or_exit(stack_name)
+    _require_record_if_live(stack.name)  # a live stack with no OS record is refused (#280)
+    try:
+        params = e2e.derive(stack, repo=repo_root(), topo=topology.load())
+    except e2e.E2EConfigError as exc:
+        typer.echo(f"mqlab qm e2e {stack.name}: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    _prepare_lab()  # vagrant loads the Vagrantfile — ensure the resolved topology exists
+    step = CommandStep(
+        f"{stack.name} e2e x{count} via {params.host}",
+        Command(
+            ["vagrant", "ssh", params.host, "-c", e2e.remote_command(params, count)],  # noqa: S607
+            cwd=repo_root() / "lab",
+            env=_vagrant_env(),
+        ),
+    )
+    deps = build_deps("qm-e2e", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@qm_app.command("e2e")
+def qm_e2e(stack: str, count: _E2eCount = 5) -> None:
+    """Send COUNT requests through the stack's distributed flow; non-zero unless all round-trip."""
+    _qm_e2e_run(stack, count)
 
 
 # --- pki: the lab PKI / TLS certificate provider (#210) --------------------------

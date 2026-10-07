@@ -245,6 +245,7 @@ mqlab status [<stack>]               # the stack's recorded OS + phase completio
 mqlab qm up      <stack>             # start the QM (pcs enable / strmqm / systemctl start, per mechanism)
 mqlab qm down    <stack>             # stop the QM cleanly (HA intact)
 mqlab qm status  <stack>             # the QM's HA resource / instance state
+mqlab qm e2e     <stack> [--count N] # N requests app-client → QM → SVCQM → reply; non-zero unless all round-trip
 mqlab teardown   <stack>             # remove the stack's guests + overlay disks (base box untouched)
 mqlab teardown   <stack> --commons   # …and also reclaim the shared commons VMs
 ```

@@ -325,3 +325,122 @@ def test_qm_verb_runs_on_a_live_recorded_stack(monkeypatch, tmp_path, verb):
     result = CliRunner().invoke(cli.app, ["qm", verb, "pcmk-ubuntu"])
     assert result.exit_code == 0, result.output
     assert runner.recorded[-1].argv[0] == "ansible"
+
+
+# --- qm e2e: a bounded burst through the stack's flow, from the app host (#1342) -------
+# Per-stack QM/CONN/keyrepo derivation against the committed sources is in test_e2e.py;
+# these pin the verb's wiring: vagrant ssh to the app host from lab/ with the shared
+# dotfile (#355), the record gate, exit propagation, and fail-loud config errors.
+_NHA_TOPO = (
+    "nodes:\n  nha-ubuntu-a1: {nics: {net-mgmt: 10.50.0.61}}\n"
+    "  app-client: {nics: {net-mgmt: 10.50.0.40}}\n"
+    "groups:\n  nha_ubuntu_a: [nha-ubuntu-a1]\n  app: [app-client]\n"
+    "stacks:\n  nativeha-ubuntu:\n    mechanism: native-ha\n    os_family: ubuntu\n"
+    "    short: NHAU\n    cluster_group: nha_ubuntu_a\n    groups: [nha_ubuntu_a]\n"
+    "    provision: ansible/site-nativeha-ubuntu.yml\n    qm: {}\n    verbs: {}\n"
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
+)
+_NHA_CONN = "nha-ubuntu-a1-data-a.client.com(1414),nha-ubuntu-a2-data-a.client.com(1414)"
+
+
+def _seed_e2e(monkeypatch, tmp_path, *, playbook=True):
+    _seed(monkeypatch, tmp_path, _NHA_TOPO)
+    defaults = tmp_path / "ansible" / "roles" / "app-requester" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text(
+        "app_requester_channel: APP.SVRCONN\n"
+        "app_requester_keyrepo: /home/vagrant/ssl/key\n"
+        "app_requester_certlabel: app-client\n"
+    )
+    if playbook:
+        (tmp_path / "ansible" / "site-nativeha-ubuntu.yml").write_text(
+            "- import_playbook: site-distributed-shared.yml\n"
+            f"  vars:\n    app_conn: '{_NHA_CONN}'\n    app_tls: true\n"
+        )
+
+
+def test_qm_e2e_runs_the_requester_on_the_app_host(monkeypatch, tmp_path, prepare_lab_calls):
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["20/20 round-trips"])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu", "--count", "20"])
+    assert result.exit_code == 0, result.output
+    [cmd] = runner.recorded
+    assert cmd.argv[:4] == ["vagrant", "ssh", "app-client", "-c"]
+    assert cmd.argv[4] == (
+        "LD_LIBRARY_PATH=/opt/mqm/lib64 "
+        "/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/mq-app-requester "
+        f"--qm NHAUAPP --conn '{_NHA_CONN}' --channel APP.SVRCONN --count 20 "
+        "--keyrepo /home/vagrant/ssl/key --certlabel app-client"
+    )
+    assert cmd.cwd == tmp_path / "lab"
+    # the shared Vagrant dotfile, resolved the same way every vagrant-driving verb does
+    assert cmd.env == {"VAGRANT_DOTFILE_PATH": str((tmp_path / "build/state/vagrant").resolve())}
+    assert prepare_lab_calls == ["prepare"]
+
+
+def test_qm_e2e_count_defaults_to_5(monkeypatch, tmp_path):
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert " --count 5 " in runner.recorded[0].argv[4]
+
+
+def test_qm_e2e_missed_round_trip_exits_nonzero(monkeypatch, tmp_path):
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult(["MQRC 2381"], exit_code=1)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
+    assert result.exit_code == 1
+
+
+def test_qm_e2e_rejects_a_zero_count(monkeypatch, tmp_path):
+    # --count 0 would make mq-app-requester stream forever; refuse it at the CLI.
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu", "--count", "0"])
+    assert result.exit_code == 2
+    assert runner.recorded == []
+
+
+def test_qm_e2e_config_error_exits_2_before_any_step(monkeypatch, tmp_path, prepare_lab_calls):
+    _seed_e2e(monkeypatch, tmp_path, playbook=False)
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
+    assert result.exit_code == 2
+    assert "mqlab qm e2e nativeha-ubuntu: cannot read" in result.stderr
+    assert runner.recorded == []
+    assert prepare_lab_calls == []
+
+
+def test_qm_e2e_unknown_stack_exits_2(monkeypatch, tmp_path):
+    _seed_e2e(monkeypatch, tmp_path)
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nope"])
+    assert result.exit_code == 2
+    assert "no stack" in result.output
+
+
+def test_qm_e2e_refuses_a_live_stack_without_record(monkeypatch, tmp_path):
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
+    assert result.exit_code == 2
+    assert "nativeha-ubuntu is running without a version record" in result.stderr
+    assert runner.recorded == []
+
+
+def test_qm_e2e_runs_on_a_live_recorded_stack(monkeypatch, tmp_path):
+    _seed_e2e(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda v, ts: _deps(runner))
+    monkeypatch.setattr(cli, "_stack_live", lambda name: True)
+    instances.write_record(InstanceRecord("nativeha-ubuntu", OsRef("ubuntu", 24), None, "t"))
+    result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert runner.recorded[0].argv[:3] == ["vagrant", "ssh", "app-client"]
