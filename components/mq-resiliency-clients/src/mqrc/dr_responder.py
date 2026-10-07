@@ -103,6 +103,12 @@ def main(argv=None):
     ap.add_argument("--out-queue", default="APP.REPLY")
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--ledger", required=True)
+    # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
+    # sibling .sth supplies the password (pymqi's SCO has none). Omit both -> plaintext.
+    ap.add_argument(
+        "--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder/key"
+    )
+    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args(argv)
     pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
 
@@ -114,7 +120,12 @@ def main(argv=None):
         # endmqm disconnects us non-reconnectably, until the deadline.
         while time.monotonic() < deadline:
             qmgr = dr_mqi.connect_retry(
-                args.qm, args.conn, args.channel, lambda: time.monotonic() < deadline
+                args.qm,
+                args.conn,
+                args.channel,
+                lambda: time.monotonic() < deadline,
+                keyrepo=args.keyrepo,
+                certlabel=args.certlabel,
             )
             if qmgr is None:
                 break

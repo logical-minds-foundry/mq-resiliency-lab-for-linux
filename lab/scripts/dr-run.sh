@@ -32,6 +32,7 @@ CLIENTS=/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin
 vagrant ssh svc-sim -c \
   "LD_LIBRARY_PATH=/opt/mqm/lib64 $CLIENTS/mq-dr-responder --qm ${QM_SVC:-SVCQM} --conn 'localhost(1414)' \
    --in-queue SVC.REQUEST --out-queue APP.REPLY --seconds $((SECONDS_RUN + 10)) \
+   --keyrepo /var/mqm/ssl/svc-responder/key --certlabel svc-responder \
    --ledger ~/dr-ledgers/svc.jsonl" &
 RESP_PID=$!
 
@@ -39,6 +40,7 @@ RESP_PID=$!
 vagrant ssh app-client -c \
   "LD_LIBRARY_PATH=/opt/mqm/lib64 $CLIENTS/mq-dr-flow --qm ${QM} --conn '${VIP}(1414)' \
    --req-queue DR.REQUEST --reply-queue DR.REPLY --rate ${RATE} --seconds ${SECONDS_RUN} \
+   --keyrepo /home/vagrant/ssl/key --certlabel app-client \
    --ledger ~/dr-ledgers/app.jsonl"
 wait "$RESP_PID"
 

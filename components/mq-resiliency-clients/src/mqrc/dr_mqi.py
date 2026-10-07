@@ -65,8 +65,14 @@ RECONNECT = (
 _CONNECT_RETRY = RECONNECT + (2059,)  # MQRC_Q_MGR_NOT_AVAILABLE
 
 
-def connect(qm, conn, channel):
-    """Open a reconnectable client connection to qm via conn over channel."""
+def connect(qm, conn, channel, keyrepo="", certlabel=""):
+    """Open a reconnectable client connection to qm via conn over channel.
+
+    TLS (#1377) mirrors mqrc.app_requester exactly: keyrepo is the keystore *stem*
+    (a sibling .sth stash supplies the password -- pymqi's SCO has none) and turns
+    on mutual TLS (ANY_TLS13_OR_HIGHER); certlabel picks the client cert. Omit
+    keyrepo -> plaintext, as before.
+    """
     import pymqi
 
     cd = pymqi.CD(
@@ -74,27 +80,36 @@ def connect(qm, conn, channel):
         ConnectionName=conn.encode(),
         TransportType=pymqi.CMQC.MQXPT_TCP,
     )
+    # Always a valid SCO: connect_with_options calls sco.pack(), so a None sco crashes
+    # on the plaintext path. TLS just sets its fields (same as app_requester, #442).
+    sco = pymqi.SCO()
+    if keyrepo:
+        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
+        sco.KeyRepository = keyrepo.encode()
+        if certlabel:
+            sco.CertificateLabel = certlabel.encode()
     qmgr = pymqi.QueueManager(None)
     # MQCNO_RECONNECT_Q_MGR: auto-reconnect to the SAME QM via its conn name
     # (VIP, or the Native HA multi-instance CONNAME list). This
     # covers ABRUPT breaks (crash/kill/fence) transparently; the explicit
     # rebuild loops below cover the CONTROLLED-endmqm case it does not.
-    qmgr.connect_with_options(qm, cd=cd, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
+    qmgr.connect_with_options(qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT_Q_MGR)
     return qmgr
 
 
-def connect_retry(qm, conn, channel, keep_going):
+def connect_retry(qm, conn, channel, keep_going, keyrepo="", certlabel=""):
     """MQCONNX with backoff until it succeeds or keep_going() turns False.
 
     MQCONNX is never auto-retried by the client library, so during a failover
     (QM not yet up on the survivor) we must retry it ourselves. Returns a live
-    QueueManager, or None if keep_going() went False first.
+    QueueManager, or None if keep_going() went False first. keyrepo/certlabel are
+    passed straight to connect() (TLS; empty keyrepo -> plaintext).
     """
     import pymqi
 
     while keep_going():
         try:
-            return connect(qm, conn, channel)
+            return connect(qm, conn, channel, keyrepo, certlabel)
         except pymqi.MQMIError as e:
             if e.reason in _CONNECT_RETRY:
                 time.sleep(1.0)
