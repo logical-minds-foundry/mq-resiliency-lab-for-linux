@@ -8,16 +8,25 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 [`box-model.md`](../development/box-model.md) and the site docs
 (`docs/site/docs/architecture/index.md`).
 
+> **The tier runs on `obs`.** The log-search stack was first built on a dedicated
+> `logsearch` node (`10.50.0.4`, its own `logsearch-ubuntu2404` box and
+> `site-logsearch.yml`). The observability-consolidation epic
+> (`logical-minds-foundry/.github#267`, #1178/#1179) folded it onto the `obs` node
+> (`net-mgmt` `10.50.0.2`): it is baked into the `obs` box and started by
+> `site-obs.yml`, log tier first and then the metrics services (#1194). The procedure
+> below targets the consolidated layout. The run record at the end is the
+> pre-consolidation run, kept as it happened.
+
 ## What it proves
 
 | # | Scenario | Expected |
 |---|---|---|
-| **L1** | Box bake | `mqlab box build logsearch-ubuntu2404` bakes an inert fat box (OpenSearch + Dashboards + Data Prepper + node-exporter + alloy install halves), one-pass, no manual fixups. |
-| **L2** | Cold bring-up | `mqlab commons up` renders topology, brings up the `logsearch` node (mgmt plane `10.50.0.4`) and runs `site-logsearch.yml` — OpenSearch, Data Prepper and Dashboards start; the fan-out gate is rendered. |
+| **L1** | Box bake | `mqlab box build obs-ubuntu24` bakes the inert obs fat box (the metrics stack **plus** the OpenSearch + Dashboards + Data Prepper install halves), one-pass, no manual fixups. |
+| **L2** | Cold bring-up | `mqlab commons up` renders topology, brings up the `obs` node (mgmt plane `10.50.0.2`) and runs `site-obs.yml` — OpenSearch, Data Prepper and Dashboards start first, each gated ready, before the metrics services; the fan-out gate is rendered. |
 | **L3** | Health | `mqlab logsearch status` → `cluster: green` on a single node (`number_of_replicas:0`, so green is honest not luck) and a `disk:` line. Dashboards reachable via `mqlab logsearch open`. |
 | **L4** | Ingestion | Fleet-wide fan-out flows: every node's alloy writes the same corpus Loki receives to OpenSearch via Data Prepper (`:21892`). Daily index `logs-YYYY.MM.DD`, doc count **rising**. |
 | **L5** | Search + aggregate | A full-text `match` query returns hits; an events-per-hour `date_histogram` (bucketed by host) returns non-empty. |
-| **L6** | Snapshot round-trip | `mqlab logsearch snapshot` captures `logs-*` and fetches the tarball to `build/state/logsearch/`; after `destroy logsearch` + re-provision, restore-on-bring-up brings the corpus back. |
+| **L6** | Snapshot round-trip | `mqlab logsearch snapshot` captures `logs-*` and fetches the tarball to `build/state/logsearch/`; after `destroy obs` + re-provision, restore-on-bring-up brings the corpus back. |
 | **L7** | Empty-store tradeoff | A destroy with **no** host snapshot re-provisions to a clean empty store (a logged no-op, not a failure). |
 | **L8** | Loud-not-silent | `status` reports disk-used and would surface a read-only / flood-stage-full store loudly (`read_only_allow_delete` index block), failing rather than lying. |
 | **L9** | Rejections are loud | A document OpenSearch rejects moves Data Prepper's `documentErrors` counter, shows on the Watcher's ③ Log pipeline panel, and fires the `DataPrepperDocumentsRejected` Prometheus alert (#1238). |
@@ -36,23 +45,29 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 ## Step 1 — cold rebuild (L1, L2)
 
 ```bash
-uv run mqlab box build logsearch-ubuntu2404 obs-ubuntu2404 mq-ubuntu2404 infra-ubuntu2404
+uv run mqlab box build obs-ubuntu24 mq-client-ubuntu24 infra-ubuntu24
 uv run mqlab commons up
 ```
 
 Box bake is a **separate step before** the bring-up — `commons up` does **not**
 bake boxes; it renders topology (via `_prepare_lab`, which also writes
 `build/work/lab/topology.resolved.yaml` the Vagrantfile needs) and `vagrant up`s
-the registered boxes. Bake every box the commons needs (`obs`, `mq-client-ubuntu24`
-for svc/app/probe, `infra-ubuntu24` for the DNS pair, `logsearch`) or the
-bring-up fails `Couldn't open file lab/<box>` when vagrant can't find one.
+the registered boxes. Bake every box the commons needs (`obs-ubuntu24`, which now
+carries the log-search stack too; `mq-client-ubuntu24` for svc/app/probe;
+`infra-ubuntu24` for the DNS pair) or the bring-up fails
+`Couldn't open file lab/<box>` when vagrant can't find one.
+
+The log tier's JVM/Node cold starts are slow on an oversubscribed host, so the
+readiness gates are generous: OpenSearch's cluster-green wait allows up to 40 minutes
+(480 x 5 s, #1197), and the downstream gates were widened to match (#1198). A quiet
+wait at OpenSearch green is normal; a wait that runs past the budget fails loud.
 
 ## Step 2 — baseline (L3, L4, L5)
 
 ```bash
 uv run mqlab logsearch status          # cluster: green (healthy); disk: NN% used
 uv run mqlab logsearch open            # prints the Dashboards + Discover URLs
-IP=10.50.0.4
+IP=10.50.0.2                                            # obs (mgmt plane)
 curl -s "http://$IP:9200/logs-*/_count"                 # rising between calls
 curl -s "http://$IP:9200/logs-*/_search" -H 'Content-Type: application/json' \
   -d '{"query":{"match":{"body":"server"}}}'            # full-text hits
@@ -68,14 +83,16 @@ journald backlog, so the count climbs fast then tracks live events.
 
 ```bash
 uv run mqlab logsearch snapshot        # -> build/state/logsearch/snap-<utc>.tar.gz
-# fresh node:
-( cd lab && vagrant destroy -f logsearch )   # see gotcha below if it refuses
+# fresh node (this takes the whole obs node down, metrics stack included):
+( cd lab && vagrant destroy -f obs )   # see gotcha below if it refuses
 uv run mqlab commons up                # re-provision; restore-on-bring-up restores logs-*
-curl -s "http://10.50.0.4:9200/logs-*/_count"            # corpus present again
+curl -s "http://10.50.0.2:9200/logs-*/_count"            # corpus present again
 ```
 
 For L7, clear the host store (`rm build/state/logsearch/*.tar.gz`) before the
 destroy: re-provision then logs `starting with an empty store` and comes up clean.
+Because the tier shares obs, a destroy also resets Prometheus, Grafana and Loki;
+run L6/L7 when no drill is relying on the Watcher.
 
 ## Step 4 — loud-not-silent (L8)
 
@@ -124,10 +141,12 @@ without the counter.
 - **Drive the bake with `uv run mqlab`.** Calling the venv's `mqlab` by path,
   without the venv's `bin/` on `PATH`, cannot find `ansible-playbook` (exit 127
   mid-bake).
-- **`vagrant destroy logsearch` can refuse** with a vagrant-libvirt state desync
-  (`Name 'lab_logsearch' … already taken` on a *destroy*, when vagrant's machine
-  id file is gone but the domain still runs). Force via libvirt and re-provision:
-  `virsh -c qemu:///system destroy lab_logsearch && virsh -c qemu:///system undefine lab_logsearch --remove-all-storage`.
+- **`vagrant destroy` can refuse** with a vagrant-libvirt state desync
+  (`Name 'lab_<node>' … already taken` on a *destroy*, when vagrant's machine
+  id file is gone but the domain still runs). The 2026-08-07 run hit it on the
+  then-separate `logsearch` node; on today's layout the node is `obs`. Force via
+  libvirt and re-provision:
+  `virsh -c qemu:///system destroy lab_obs && virsh -c qemu:///system undefine lab_obs --remove-all-storage`.
 - **Snapshot names must be lowercase** and the fs-repo transport needs `--become`
   (both fixed in #962) — see the run record.
 - **Don't take ad-hoc full snapshots into the fs repo.** The snapshot tarball
@@ -138,6 +157,9 @@ without the counter.
   `logs-*`, timestamp-named snapshots, which restore cleanly.
 
 ## Run record — 2026-08-07
+
+*Historical: this run predates the consolidation onto obs (#1179), so it names the
+retired `logsearch` node, its `10.50.0.4` address and the `logsearch-ubuntu2404` box.*
 
 **Outcome: SUCCESS (after fixes).** The cold rebuild did its job as the epic's
 proof: nothing had ever baked and operated the tier end-to-end, and it surfaced
