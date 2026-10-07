@@ -1939,7 +1939,9 @@ Health</strong> board (<code>lab-fleet-node</code>) still renders a tile per nod
 <strong>data-plane infrastructure</strong> co-located with each queue manager — reached at the
 QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
 which has no VIP) — <strong>not</strong> on the management / Watcher plane. <code>mqlab rest render</code>
-prints each queue manager's canonical REST endpoint(s) for both sites.</p>
+prints each queue manager's canonical REST endpoint(s) for both sites. Per-node mqweb
+is <strong>off by default</strong> (<code>mqweb_enabled: false</code>, #1171), so a default bootstrap starts
+none; see the architecture page's admin-plane section for why and how to enable it.</p>
 <p>Because <code>bootstrap</code> already made every node a scrape target, a fault is something
 you can <em>watch</em>. Kill a live cluster node the same way the lab exposes every
 other step — by hand, with <code>virsh</code>:</p>

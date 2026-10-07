@@ -1633,8 +1633,10 @@ detects the environment (Apple Virtualization → <code>macos</code>, Google Com
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md#how-mqlab_env-actually-applies">perf and staging</a>.</p>
 <h2 id="rest-endpoints">REST endpoints<a class="headerlink" href="#rest-endpoints" title="Permanent link">&para;</a></h2>
 <p>Each queue manager's admin REST API / Console (Liberty <code>mqweb</code>, HTTPS on
-<strong><code>9443</code></strong>) is a published endpoint derived from the topology. Render the
-current map (both sites) to <code>build/work/rest/endpoints.json</code> with:</p>
+<strong><code>9443</code></strong>) is a published endpoint derived from the topology. Per-node mqweb is
+<strong>off by default</strong> (<code>mqweb_enabled: false</code>, #1171), so these addresses only answer
+when it has been enabled; the rendered map still describes where they would be.
+Render the current map (both sites) to <code>build/work/rest/endpoints.json</code> with:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mqlab<span class="w"> </span>rest<span class="w"> </span>render
 </code></pre></div>
 <p>Each record is <code>{stack, kind, endpoints}</code>, where <code>kind</code> is one of:</p>

@@ -30,7 +30,7 @@
         </div>
         <div class="admin">
           <div class="glabel">mqweb — admin REST/Console, per instance</div>
-          <span class="tag">Runs on all 3 instances (stateless). The <b>Active</b> instance's mqweb serves admin, reached at its <b>data-plane node IP</b> <code>:9443</code> — resolved at runtime (<code>dspmq -o nativeha</code>). Data-plane infrastructure, not the Watcher plane.</span>
+          <span class="tag">Off by default (<code>mqweb_enabled</code>, #1171). When enabled, runs on all 3 instances (stateless). The <b>Active</b> instance's mqweb serves admin, reached at its <b>data-plane node IP</b> <code>:9443</code> — resolved at runtime (<code>dspmq -o nativeha</code>). Data-plane infrastructure, not the Watcher plane.</span>
         </div>
       </div>
 
@@ -54,7 +54,7 @@
         </div>
         <div class="admin">
           <div class="glabel">mqweb — also per instance here</div>
-          <span class="tag">Present on every recovery instance; serves admin once this site is promoted.</span>
+          <span class="tag">Off by default; when enabled, present on every recovery instance and serves admin once this site is promoted.</span>
         </div>
       </div>
     </div>

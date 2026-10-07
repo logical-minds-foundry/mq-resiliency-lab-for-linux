@@ -1277,6 +1277,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Bring a stack up">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-a-bring-up-is-slow-or-fails" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a bring-up is slow or fails
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1507,6 +1524,26 @@ To compare two runs (before and after a change, or macOS against cloud), use:</p
 </code></pre></div>
 <p>Reading the report and the one-lever-at-a-time tuning loop are covered in
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/perf-and-staging.md">perf and staging</a>.</p>
+<h3 id="when-a-bring-up-is-slow-or-fails">When a bring-up is slow or fails<a class="headerlink" href="#when-a-bring-up-is-slow-or-fails" title="Permanent link">&para;</a></h3>
+<p>Bring-up is built to either finish or stop loudly at a named step, never to hang:</p>
+<ul>
+<li><strong>VM boot.</strong> Guests boot in batches of at most <code>boot_batch</code> (4 by default), and each
+  batch's <code>vagrant up</code> is retried up to 3 times with backoff, so a transient
+  management-NIC DHCP lease timeout does not end the run.</li>
+<li><strong>Readiness waits.</strong> Each service the data path depends on has a bounded,
+  fatal readiness wait. The log-search tier (OpenSearch, Data Prepper, Dashboards)
+  waits up to 40 minutes each. A service the data path does not need (per-node mqweb,
+  when enabled) only warns if it is slow. The waits are pinned by a guardrail test,
+  so they cannot drift back to too-short values.</li>
+<li><strong>Package updates.</strong> Baked Ubuntu boxes ship with apt auto-updates turned off. On
+  any host that was not baked that way, provisioning masks the apt timers early, so a
+  background update cannot hold the dpkg lock mid-run.</li>
+</ul>
+<p>If a run does stop, fix the cause and resume from the failed phase with
+<code>mqlab bootstrap &lt;stack&gt; --from &lt;phase&gt;</code> instead of starting over. The transcript and
+perf report in <code>$(mqlab build path state)/runs/</code> show which step failed and how
+long each phase took. A healthy cold <code>nativeha-ubuntu --no-dr</code> bootstrap takes
+about 9–13 minutes on either platform, varying from run to run.</p>
 <h2 id="the-end-to-end-requestreply-path">The end-to-end request/reply path<a class="headerlink" href="#the-end-to-end-requestreply-path" title="Permanent link">&para;</a></h2>
 <p>The lab always has a live workload: a continuous request/reply stream between our
 HA queue manager and the simulated cross-business counterparty (<code>svc-sim</code>). This
