@@ -23,12 +23,7 @@ os:
     # only nativeha-rhel-crr offers it. 10.2 = the latest GA minor (2026-05-19). Built for
     # x86-64-v3, so it needs a v3 CPU under KVM.
     # Sources: docs/reference/os-version-support-matrix.md.
-    10:
-      base_box: rhel/10-x86_64
-      point: "10.2"
-      iso: rhel-10.2-x86_64-dvd.iso
-      arch: x86_64
-      requires: [x86-64-v3]
+    10: { base_box: rhel/10-x86_64, point: "10.2", iso: rhel-10.2-x86_64-dvd.iso, arch: x86_64, requires: [x86-64-v3] }
 roles:
   infra: { bake: { ubuntu: infra } }
   obs: { bake: { ubuntu: obs } }
