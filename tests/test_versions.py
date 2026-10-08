@@ -276,13 +276,19 @@ def test_stack_rejects_unsupported_version():
 
 
 def test_stack_rejects_family_mismatch():
-    with pytest.raises(VersionError, match="nativeha-ubuntu is an ubuntu stack; got rhel:9"):
+    # A cross-family refusal names the supported versions too, not just the family (#1391).
+    with pytest.raises(
+        VersionError,
+        match=r"nativeha-ubuntu is an ubuntu stack and supports \[ubuntu:24\]; got rhel:9 — edit",
+    ):
         load_catalog().stack_os("nativeha-ubuntu", BuildFile(os=OsRef("rhel", 9)), X86)
 
 
 def test_stack_rejects_family_mismatch_rhel_article():
-    with pytest.raises(VersionError, match="rdqm-rhel is a rhel stack; got ubuntu:24"):
-        load_catalog().stack_os("rdqm-rhel", BuildFile(os=OsRef("ubuntu", 24)), X86)
+    with pytest.raises(
+        VersionError, match=r"rdqm-rhel is a rhel stack and supports \[rhel:9\]; got ubuntu:26"
+    ):
+        load_catalog().stack_os("rdqm-rhel", BuildFile(os=OsRef("ubuntu", 26)), X86)
 
 
 def test_rhel_refused_on_aarch64():
