@@ -32,7 +32,7 @@ from tests.fakes import RecordingRunner
 
 runner = CliRunner()
 
-_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True, x86_64_v3=True)
 
 
 class _NoPause:
@@ -60,15 +60,26 @@ def test_fleet_has_the_catalog_boxes():
     # (#1178) and the standalone logsearch box was retired (#1179, epic .github#267).
     assert set(box.FLEET) == {
         "rhel/9-x86_64",
+        "rhel/10-x86_64",
         "mq-rdqm-rhel9",
         "obs-ubuntu24",
         "infra-ubuntu24",
         "mq-client-ubuntu24",
         "san-ubuntu24",
         "mq-nativeha-rhel9",
+        "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
     }
+
+
+def test_fleet_omits_v3_only_boxes_on_a_non_v3_host():
+    # T10: RHEL 10 requires x86-64-v3, so a v2 (or TCG-only) x86 host builds no RHEL 10
+    # box at all - neither the base box nor the fat box - while RHEL 9 is untouched.
+    fleet = box._build_fleet(dataclasses.replace(_FACTS, x86_64_v3=False))
+    assert "rhel/10-x86_64" not in fleet
+    assert "mq-nativeha-rhel10" not in fleet
+    assert {"rhel/9-x86_64", "mq-nativeha-rhel9", "mq-rdqm-rhel9"} <= set(fleet)
 
 
 def test_fleet_derives_from_catalog():
@@ -92,7 +103,7 @@ def test_fleet_derives_from_catalog():
 def test_fleet_skips_rhel_on_an_arm_host():
     # Catalog.all_boxes skips an OS the host cannot run (RHEL is x86_64-pinned), and so
     # does the base box: the arm64 fleet is the Ubuntu boxes only.
-    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     fleet = box._build_fleet(arm)
     assert set(fleet) == {
         "obs-ubuntu24",
@@ -151,7 +162,7 @@ def test_build_fleet_fat_boxes_carry_arch_x86():
 
 
 def test_build_fleet_unpinned_ubuntu_tracks_host_arm64():
-    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     fleet = box._build_fleet(facts)
     # Un-pinned Ubuntu fat box tracks the host arch (arm64 on Apple Silicon).
     assert fleet["mq-client-ubuntu24"].arch == "aarch64"
@@ -159,7 +170,7 @@ def test_build_fleet_unpinned_ubuntu_tracks_host_arm64():
 
 
 def test_manifest_hash_artifact_is_arch_suffixed():
-    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    facts = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     fleet = box._build_fleet(facts)
     assert (
         fleet["mq-client-ubuntu24"].manifest_hash_artifact
@@ -228,14 +239,14 @@ def test_boxes_for_build_family_selects_its_stacks():
 
 
 def test_boxes_for_build_default_skips_what_the_host_cannot_run():
-    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     names = box.boxes_for_build(BuildFile(os=None), facts=arm)
     assert "mq-rdqm-rhel9" not in names
     assert "mq-nativeha-ubuntu24" in names
 
 
 def test_boxes_for_build_refuses_an_explicit_request_the_host_cannot_run():
-    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+    arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     with pytest.raises(VersionError, match="needs an x86_64 host"):
         box.boxes_for_build(BuildFile(os=OsRef("rhel", 9)), facts=arm)
 

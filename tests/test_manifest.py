@@ -8,8 +8,8 @@ from mqlab import manifest as m
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.versions import OsRef, load_catalog
 
-ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86_64_v3=True)
 
 
 def _write(tmp_path, rel, text):

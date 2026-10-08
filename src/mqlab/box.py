@@ -42,6 +42,7 @@ from mqlab.versions import (
     BoxEntry,
     Catalog,
     VersionError,
+    host_can_run,
     load_catalog,
     stack_roles,
 )
@@ -120,11 +121,6 @@ def _topology_stack_roles(catalog: Catalog) -> dict[str, set[str]]:
     return stack_roles(_load_topology(), catalog)
 
 
-def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
-    """Whether this host can build/run an OS entry (its arch pin, if any, is the host's)."""
-    return entry.arch_pin is None or entry.arch_pin == facts.arch
-
-
 def _fat_spec(entry: BoxEntry, facts: HostFacts, runtime_pin: str) -> BoxSpec:
     arch = box_build_arch({"arch": entry.os.arch_pin}, facts)
     return BoxSpec(
@@ -172,7 +168,7 @@ def _build_fleet(
     roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
     fleet: dict[str, BoxSpec] = {}
     for ref, entry in sorted(catalog.oses.items()):
-        if ref.family == "rhel" and _host_can_run(entry, facts):
+        if ref.family == "rhel" and host_can_run(entry, facts):
             fleet[entry.base_box] = _base_spec(entry, facts)
     for box_entry in catalog.all_boxes(facts, roles):
         fleet[box_entry.name] = _fat_spec(box_entry, facts, catalog.runtime.token)
@@ -208,7 +204,7 @@ def boxes_for_build(
             )
         default = catalog.stacks[stack]["default"]
         if build.os is None:
-            if not _host_can_run(catalog.oses[default], facts):
+            if not host_can_run(catalog.oses[default], facts):
                 continue
         elif build.os.family != default.family:
             continue

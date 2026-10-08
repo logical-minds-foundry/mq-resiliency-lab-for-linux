@@ -28,8 +28,8 @@ from tests.boxfleet import box_bakes, fatbox_args, manifest_hash_args
 _REPO = Path(__file__).resolve().parents[1]
 _FATBOX = _REPO / "lab" / "boxes" / "build-fatbox.sh"
 _MANIFEST = _REPO / "lab" / "boxes" / "_manifest-hash.sh"
-_X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
-_ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+_X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True, x86_64_v3=True)
+_ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -135,6 +135,19 @@ def test_build_steps_base_builder_takes_major_point_iso(monkeypatch, tmp_path):
     assert "--box" not in argv  # the base-OS builder is not box-parameterized
 
 
+def test_rhel10_base_and_fat_box_take_their_catalog_inputs():
+    # T10 (#1286): the RHEL 10 base box is built from the catalog's os.rhel.10 pin, and
+    # its Native HA fat box bakes from it with the same nativeha-rhel stem.
+    base = box.builder_args(box.FLEET["rhel/10-x86_64"], _X86)
+    assert base[:6] == ["--major", "10", "--point", "10.2", "--iso", "rhel-10.2-x86_64-dvd.iso"]
+    fat = box.FLEET["mq-nativeha-rhel10"]
+    assert (fat.arch, fat.bake_stem, fat.os.base_box) == (
+        "x86_64",
+        "nativeha-rhel",
+        "rhel/10-x86_64",
+    )
+
+
 def test_build_steps_ubuntu_fat_box_tracks_host_arch_under_kvm(monkeypatch, tmp_path):
     monkeypatch.setattr(box, "FLEET", box._build_fleet(_ARM))
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
@@ -163,7 +176,7 @@ def test_build_steps_refuses_rhel_fat_box_on_arm(monkeypatch, tmp_path):
 
 def test_build_steps_tcg_without_kvm(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
-    no_kvm = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=True)
+    no_kvm = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=True, x86_64_v3=False)
     argv = box._build_steps([("rhel/9-x86_64", False)], no_kvm)[0].command.argv
     assert argv[argv.index("--domain-type") + 1] == "qemu"
     assert argv[argv.index("--cpu-mode") + 1] == "maximum"

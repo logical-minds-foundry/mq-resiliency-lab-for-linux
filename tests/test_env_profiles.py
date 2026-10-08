@@ -18,7 +18,7 @@ from mqlab import topology as t
 from mqlab.hostfacts import X86_64, HostFacts
 from mqlab.paths import repo_root
 
-X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True, x86_64_v3=True)
 
 BASE: dict[str, Any] = {
     "boxes": {"ubuntu24-x86_64": {"box": "cloud-image/ubuntu-24.04", "arch": "x86_64"}},

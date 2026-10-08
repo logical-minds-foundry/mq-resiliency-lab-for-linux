@@ -13,8 +13,8 @@ from mqlab.versions import VersionError
 
 runner = CliRunner()
 
-VERGIL = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
+VERGIL = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86_64_v3=True)
 
 
 # --- mqlab doctor command (exercises the real _doctor_checks) ---

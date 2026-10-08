@@ -7,6 +7,7 @@ needs no libvirt; the --dry-run decision is driven at a tmp cache via LAB_BOX_CA
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -91,3 +92,41 @@ def test_dry_run_reuses_a_present_cache(tmp_path):
     result = _run(*_CATALOG, *_VIRT, "--dry-run", cache_dir=tmp_path)
     assert result.returncode == 0, result.stderr
     assert "decision:  REUSE" in result.stdout
+
+
+_RHEL10 = ["--major", "10", "--point", "10.2", "--iso", "rhel-10.2-x86_64-dvd.iso"]
+
+
+def test_rhel10_dry_run_names_its_box_cache_and_the_shared_kickstart(tmp_path):
+    # T10 (#1286): RHEL 10's Anaconda takes the shared ks.cfg unchanged, so no
+    # ks-10.cfg is committed and the shared file is the one chosen.
+    assert not SCRIPT.with_name("ks-10.cfg").exists()
+    result = _run(*_RHEL10, *_VIRT, "--dry-run", cache_dir=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert f"box cache: {tmp_path}/rhel-10-x86_64.box" in result.stdout
+    assert "kickstart: ks.cfg" in result.stdout
+
+
+def test_a_per_major_kickstart_is_chosen_when_present(tmp_path):
+    """ks-<major>.cfg beside the script wins for that major only (copy of the builder,
+    since no per-major kickstart is committed); the other majors keep ks.cfg."""
+    boxes = tmp_path / "lab" / "boxes"
+    (boxes / "rhel").mkdir(parents=True)
+    shutil.copy(SCRIPT, boxes / "rhel" / SCRIPT.name)
+    shutil.copy(SCRIPT.parents[1] / "_box-register.sh", boxes / "_box-register.sh")
+    (boxes / "rhel" / "ks.cfg").write_text("# shared\n")
+    (boxes / "rhel" / "ks-10.cfg").write_text("# major 10\n")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)  # noqa: S603, S607
+    copy = boxes / "rhel" / SCRIPT.name
+    cache = tmp_path / "cache"
+    env = {**os.environ, "LAB_BOX_CACHE_DIR": str(cache)}
+    for catalog, want in ((_RHEL10, "ks-10.cfg"), (_CATALOG, "ks.cfg")):
+        result = subprocess.run(  # noqa: S603
+            ["bash", str(copy), *catalog, *_VIRT, "--dry-run"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        assert result.returncode == 0, result.stderr
+        assert f"kickstart: {want}\n" in result.stdout

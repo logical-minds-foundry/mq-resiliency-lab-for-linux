@@ -81,7 +81,11 @@ commands. It cannot change your shell's `PATH`, so activate the venv once per
 shell. The bare `mqlab` commands on this site assume it is active. (Prefixing
 each command with `uv run`, e.g. `uv run mqlab doctor`, works too.)
 `mqlab doctor` then confirms the host can actually run the guests
-before you commit to a bring-up.
+before you commit to a bring-up. Two of its lines are informational and never fail the
+host. `rhel-stacks` says whether the RHEL arms can run here (they need x86_64).
+`x86-64-v3: yes` or `no` says whether the host counts as x86-64-v3: an x86_64 CPU with
+AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it; on a `no` host,
+build the RHEL stack on RHEL 9 (`os: rhel:9` in a `--config` file).
 
 !!! note "After a Python-version bump"
     The pinned Python version lives in `.python-version`. If it changes (or you

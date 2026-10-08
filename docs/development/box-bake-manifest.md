@@ -25,7 +25,9 @@ the slow install work that never varies per run, so a per-run bootstrap can skip
 
 Box names are **generated** as `<role>-<os><major>` from the OS version catalog,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic `logical-minds-foundry/.github#280`,
-#1274); the names above are today's (Ubuntu 24, RHEL 9). The catalog's `roles:` block
+#1274); the names above are today's (Ubuntu 24, RHEL 9). On an x86-64-v3 host with KVM the
+fleet also bakes `mq-nativeha-rhel10`: the same `nativeha-rhel` bake on the RHEL 10 base
+box `rhel/10-x86_64` (#1286; RHEL 10 runs Native HA only, never RDQM). The catalog's `roles:` block
 maps each box role to its bake playbook stem per OS family, and to whether it is
 MQ-bearing. That is the only box-to-bake mapping: `mqlab` passes it to
 `build-fatbox.sh` as `--bake <stem>` and `--mq-bearing 0|1`, and the builder digests
@@ -153,7 +155,10 @@ The vars lookup uses `playbook_dir`, which is `ansible/` for bake and site plays
 because every playbook lives there. `tests/test_ansible_os_vars.py` derives the required files from
 `lab/versions.yaml`: each role must ship a file for every OS its stacks support.
 Roles using it today: `rdqm-install` (EL tag, RDQM PreReqs dirs, DVD repo name),
-`mq-nativeha` and `mq-nativeha-spike` (DVD repo name).
+`mq-nativeha` and `mq-nativeha-spike` (DVD repo name). `mq-nativeha` ships `RedHat-9.yml`
+and `RedHat-10.yml`, because `nativeha-rhel-crr` supports both majors. `rdqm-install` and
+`mq-nativeha-spike` ship `RedHat-9.yml` only: RDQM is RHEL 9 only, and the spike runs on
+the RDQM slots.
 
 ## Phased startup — baked inert, started per-run
 
@@ -297,6 +302,20 @@ The RHEL native-HA peer of `bake-mq-rdqm.yml`, for the six `nha-rhel-crr-*` node
 (`nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3`) repointed to this box so a bootstrap skips
 their per-run base-MQ install. Native HA replicates in the raft log, so — unlike
 the RDQM box — **no DRBD/RDQM and no kernel pin** are baked.
+
+**RHEL 10** (`mq-nativeha-rhel10`, #1286) runs this same playbook unchanged on the
+`rhel/10-x86_64` base box. It loads its own per-version vars file
+(`mq-nativeha/vars/RedHat-10.yml`), whose one value, the DVD repo name, matches RHEL 9's.
+The packages the bake names from the DVD (`acl`, `unzip`, `rng-tools`, `libicu`) are all
+in the RHEL 10 BaseOS repository
+([RHEL 10 package manifest](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html-single/package_manifest/index)).
+The pinned guest runtime and components are OS-major-agnostic tarball installs. To
+bake it, stage the DVD and build the pair on an x86-64-v3 KVM host:
+
+```bash
+lab/scripts/stage-rhel-iso.sh --iso rhel-10.2-x86_64-dvd.iso
+mqlab box build rhel/10-x86_64 mq-nativeha-rhel10
+```
 
 | Role | In bake | Notes |
 |------|---------|-------|

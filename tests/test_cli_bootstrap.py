@@ -35,8 +35,8 @@ from tests.boxfleet import REAL_CATALOG
 from tests.fakes import RecordingRunner, ScriptedResult
 
 # Host-facts fixtures for the #847 RHEL-on-aarch64 preflight gate.
-ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False)
-X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False, x86_64_v3=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86_64_v3=True)
 
 # A seeded topology mirroring tests/test_phases.py: nodes + groups + a stacks:
 # block + commons + two lab networks (for the net phase to enumerate).

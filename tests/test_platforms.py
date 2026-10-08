@@ -10,9 +10,9 @@ from mqlab import topology
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.versions import load_catalog, node_boxes
 
-ARM_KVM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
-X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
-X86_NOKVM = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=False)
+ARM_KVM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
+X86_KVM = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86_64_v3=True)
+X86_NOKVM = HostFacts(arch=X86_64, kvm=False, distro_family="dnf", in_vergil=False, x86_64_v3=False)
 
 TOPO = {
     "defaults": {"cpus": 1, "memory": 1024},

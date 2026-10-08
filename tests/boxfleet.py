@@ -14,7 +14,7 @@ from unittest.mock import patch
 from mqlab import box
 from mqlab.hostfacts import X86_64, HostFacts
 
-X86_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True)
+X86_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
 # A baked component's stand-in git tree hash (the real one needs git).
 FAKE_TREE = "0" * 40
 

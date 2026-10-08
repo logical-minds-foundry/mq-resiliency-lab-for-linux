@@ -20,7 +20,9 @@ The fleet is **generated from the OS version catalog**,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic
 `logical-minds-foundry/.github#280`). Nothing else writes a box name or an OS
 version by hand. At today's versions the lab builds **nine boxes locally**: the
-bare `rhel/9-x86_64` base box plus **eight per-role fat boxes**. Each fat box is a
+bare `rhel/9-x86_64` base box plus **eight per-role fat boxes**. An x86-64-v3 host
+with KVM builds **eleven**: it adds the RHEL 10 pair, the bare `rhel/10-x86_64` base
+box and `mq-nativeha-rhel10` (see "RHEL 10" below). Each fat box is a
 **minimal per-role fat box**: it carries only the install surface that role needs,
 nothing more. The taxonomy is **role × OS major × host-arch**:
 
@@ -28,6 +30,7 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 |-----|------|------|----------------------|-------|
 | `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3` | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+| `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes, when the stack runs on RHEL 10 (`os: rhel:10` in a `--config` file) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
 | `obs-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (pymqi compiled from sdist at bake; replaces the pre-#294 responder venv, #1227) |
@@ -59,7 +62,9 @@ never carry a version. A playbook may carry the OS family
 (`infra`, `obs`, `mq-client`, `san`) on the catalog's `infra:` OS, then each stack's box
 roles on every OS major that stack supports and this host can run, plus one RHEL
 base box per catalog RHEL major. RHEL is `x86_64`-only, so on an `aarch64` host the
-fleet is the Ubuntu boxes alone. A stack's box roles are the `box:` roles its
+fleet is the Ubuntu boxes alone. An OS entry that declares `requires: [x86-64-v3]`
+(RHEL 10) is also left out on an x86 host that does not count as x86-64-v3
+(`versions.host_can_run`; see "RHEL 10" below). A stack's box roles are the `box:` roles its
 nodes declare in `lab/topology.yaml` (`versions.stack_roles`).
 
 ### Topology names roles; the version layer picks the box
@@ -153,6 +158,44 @@ repo, not the guest: a RHEL guest can still reach the internet (the RHEL 9.6 gue
 reached PyPI in #1359). Guest-component installs never rely on either; they never
 consult a package index (see
 [`components/README.md`](../../components/README.md)).
+
+### RHEL 10 (Native HA only; needs x86-64-v3)
+
+The catalog offers RHEL 10 to **`nativeha-rhel-crr` only** (`supported: [rhel:9,
+rhel:10]`; the default stays `rhel:9` until the RHEL 10 row is validated live). IBM
+supports MQ 10.0 and Native HA on RHEL 10 but **not RDQM** (no DRBD kernel module), so
+`rdqm-rhel` stays RHEL 9 only and no `mq-rdqm-rhel10` box exists. The sources are in
+[`os-version-support-matrix.md`](../reference/os-version-support-matrix.md).
+
+- **The pin.** `os.rhel.10` pins point release `10.2` and the DVD
+  `rhel-10.2-x86_64-dvd.iso`. That filename is **the lab's canonical name** (the
+  catalog's `iso:`), following the RHEL 9 convention. If the file you download from Red
+  Hat is named differently, rename it to the catalog's `iso:` value before you stage it.
+- **The host gate.** RHEL 10 is built for the x86-64-v3 microarchitecture level, so its
+  entry declares `requires: [x86-64-v3]`. `HostFacts.x86_64_v3` is true only on an
+  x86_64 host with usable KVM whose `/proc/cpuinfo` flags include all of `abm avx2 bmi1
+  bmi2 f16c fma movbe xsave`. KVM guests run `host-passthrough`, so they see exactly the
+  host's flags. Without KVM the guest is emulated (TCG, `cpu_mode: maximum`), and what
+  it sees was never measured, so it counts as absent. On a host that lacks it,
+  `Catalog.stack_os` refuses `os: rhel:10`, naming the missing flags and suggesting
+  `os: rhel:9` in the `--config` file. The fleet leaves both RHEL 10 boxes out, and
+  `mqlab doctor` reports `x86-64-v3: no` with the reason (informational).
+- **The base box.** `mqlab box build rhel/10-x86_64` runs
+  `rhel/build-box.sh --major 10 --point 10.2 --iso rhel-10.2-x86_64-dvd.iso`.
+  It uses the same q35, legacy-BIOS build domain as RHEL 9 (`build-domain.xml.tpl`).
+  Red Hat's RHEL 10 docs still document legacy-BIOS installs, Secure Boot applies only
+  to UEFI guests, and q35 is the machine type Red Hat recommends. The kickstart is the
+  shared `ks.cfg`: every command and option in it is still valid in RHEL 10's kickstart
+  reference, and none is on the removed list. `build-box.sh` would pick a
+  `ks-<major>.cfg` beside it if one existed. It prints the chosen file as `kickstart:`.
+- **Staging the DVD.** Put it in `build/state/` (or your DVD archive, §6). Then stage it
+  into the libvirt pool with
+  `lab/scripts/stage-rhel-iso.sh --iso rhel-10.2-x86_64-dvd.iso`. Then run
+  `mqlab box build rhel/10-x86_64 mq-nativeha-rhel10`.
+- **Name resolution.** Unchanged from RHEL 9. NetworkManager still writes
+  `/etc/resolv.conf` on a default install. RHEL 10 makes `systemd-resolved` fully
+  supported, but it remains opt-in. The `host-resolver` role therefore keeps
+  NetworkManager's `global-dns` drop-in on every RHEL major.
 
 ## 2. Bake vs. configure, and phased startup
 
@@ -572,7 +615,9 @@ with the `MQLAB_RHEL_DVD_ARCHIVE` environment variable. The archived ISO must ca
 the lab's canonical filename, the `iso:` value of its `os.rhel.<major>` entry in
 [`lab/versions.yaml`](../../lab/versions.yaml), so it lands where the rest of the
 tooling looks. New RHEL versions are just new ISOs dropped into the same
-directory.
+directory. RHEL 10 is one: archive its DVD as `rhel-10.2-x86_64-dvd.iso` (the
+`os.rhel.10` `iso:`) beside the RHEL 9 one, renaming the download if Red Hat named it
+otherwise.
 
 ### Auto-stage on VM build (host-side rsync)
 

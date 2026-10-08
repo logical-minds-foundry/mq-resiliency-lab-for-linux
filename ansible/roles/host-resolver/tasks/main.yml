@@ -5,10 +5,15 @@
 # the internet directly, mirroring a real enterprise. Also add the host's own lab
 # FQDN to /etc/hosts. Per-host facts come from `mqlab dns render`.
 #
-# The mechanism is OS-specific: Ubuntu has systemd-resolved (a resolved.conf.d
-# drop-in); RHEL does NOT run it, so it uses NetworkManager's global-dns. nsswitch
-# stays `files dns` -- /etc/hosts wins, DNS is the fallthrough. HA/replication fabric
-# names are seeded by the HA roles, not here.
+# The mechanism is OS-family-specific: Ubuntu runs systemd-resolved (a resolved.conf.d
+# drop-in). RHEL does not run it by default on ANY major the catalog offers: NetworkManager
+# writes /etc/resolv.conf itself. RHEL 10 made systemd-resolved fully supported (it was a
+# Technology Preview on RHEL 9), but it stays opt-in: a separate package that must be
+# installed and selected with NetworkManager dns=systemd-resolved (Red Hat, RHEL 10
+# "Configuring and managing networking", and the 10.0 release notes). So RHEL uses
+# NetworkManager's global-dns on every major, unchanged. nsswitch stays `files dns` --
+# /etc/hosts wins, DNS is the fallthrough. HA/replication fabric names are seeded by the
+# HA roles, not here.
 - name: load this host's DNS facts (rendered by `mqlab dns render`)
   ansible.builtin.set_fact:
     host_resolver_dns: >-

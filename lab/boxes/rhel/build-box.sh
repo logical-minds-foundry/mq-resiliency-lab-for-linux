@@ -21,6 +21,12 @@
 #   RHEL_ISO=/path                      override ISO location (else build/state/<iso>)
 #   LAB_BOX_CACHE_DIR=/path             override the cache directory (tests use it)
 #
+# Kickstart (#1286): ks-<major>.cfg when that file exists beside this script, else the
+# shared ks.cfg. This is a deliberate per-major choice of input, not a fallback: a major
+# whose Anaconda needs a different kickstart gets its own ks-<major>.cfg, and every other
+# major uses ks.cfg unchanged. Whichever is chosen goes onto the OEMDRV volume as ks.cfg
+# (the name Anaconda looks for) and is printed with the decision, also on --dry-run.
+#
 # Box name rhel/<major>-x86_64; cache build/state/boxes/rhel-<major>-x86_64.box. Both
 # MUST match src/mqlab/box.py (the base box's name comes from the catalog's base_box,
 # and its cache artifact is that name with '/' -> '-' plus '.box').
@@ -103,6 +109,10 @@ case "$CPU_MODE" in
   *) echo "ERROR: --cpu-mode must be 'host-passthrough' or 'maximum' (got '${CPU_MODE}')" >&2; usage; exit 2 ;;
 esac
 
+KICKSTART="ks.cfg"
+if [ -f "ks-${MAJOR}.cfg" ]; then
+  KICKSTART="ks-${MAJOR}.cfg"
+fi
 BOX_NAME="rhel/${MAJOR}-x86_64"
 BUILD_DOM="rhel${MAJOR}-build"
 POOL_IMG="/var/lib/libvirt/images"
@@ -139,6 +149,7 @@ fi
 
 echo "box cache: $CACHE"
 echo "decision:  $action"
+echo "kickstart: $KICKSTART"
 if [ "$action" = REUSE ]; then
   # The base box carries no manifest hash, so its identity records "-" there.
   IDENTITY="$(box_reg_identity "$CACHE" -)"
@@ -170,8 +181,9 @@ test -n "$ISO" || {
 }
 WORK="$BUILD_DIR/state/rhel${MAJOR}-box"; mkdir -p "$WORK"
 
-# 1. OEMDRV volume: anaconda auto-loads ks.cfg from a volume so labeled.
-genisoimage -quiet -V OEMDRV -o "$WORK/oemdrv.iso" ks.cfg
+# 1. OEMDRV volume: anaconda auto-loads ks.cfg from a volume so labeled. The chosen
+#    kickstart is grafted in under that name.
+genisoimage -quiet -V OEMDRV -graft-points -o "$WORK/oemdrv.iso" "ks.cfg=${KICKSTART}"
 
 # 2. Stage inputs where qemu (its own uid) can read them - the host mount
 #    is not readable by the qemu user (diag-spike permission lesson). The small
