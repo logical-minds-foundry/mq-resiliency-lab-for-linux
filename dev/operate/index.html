@@ -1571,11 +1571,24 @@ is the traffic a failover drill perturbs and the Watcher measures.</p>
   <code>mq-svc-responder@PCMK.SVC.REQUEST</code>). Per-stack queues keep the always-on
   streams independent — a stuck responder affects only its own stack.</li>
 </ul>
-<p>To fire a bounded burst by hand (each request must round-trip or the script exits
-non-zero):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># lab/scripts/e2e-test.sh [COUNT=5] [QM=PCMKAPP] [CONN=&lt;conname-list&gt;]</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>lab/scripts/e2e-test.sh<span class="w"> </span><span class="m">20</span><span class="w"> </span>PCMKAPP
+<p>To fire a bounded burst by hand, run <code>mqlab qm e2e</code>. Every request must round-trip
+or the command exits non-zero:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># mqlab qm e2e &lt;stack&gt; [--count N]   (N defaults to 5)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>e2e<span class="w"> </span>nativeha-ubuntu<span class="w"> </span>--count<span class="w"> </span><span class="m">20</span>
 </code></pre></div>
+<p>It runs <code>mq-app-requester --count N</code> on <code>app-client</code> with the same settings the
+always-on requester is deployed with, so nothing is typed by hand:</p>
+<ul>
+<li><strong>QM</strong> is the stack's app queue manager, <code>&lt;SHORT&gt;APP</code> (for example <code>NHAUAPP</code>).</li>
+<li><strong>CONN</strong> is the <code>app_conn</code> that the stack's provision playbook passes to
+  <code>site-distributed-shared.yml</code>. That is the site-A instance list on the Native HA
+  stacks and the VIP FQDNs on the Pacemaker and RDQM stacks.</li>
+<li><strong>TLS</strong> uses the <code>app-requester</code> role's keystore stem (<code>/home/vagrant/ssl/key</code>) and
+  certificate label.</li>
+</ul>
+<p>It reaches the lab through the shared Vagrant state in <code>build/state/vagrant</code>, so it
+works from any checkout or worktree. Like the other stack-scoped verbs, it refuses
+a running stack that has no instance record.</p>
 <h2 id="failover-drills">Failover drills<a class="headerlink" href="#failover-drills" title="Permanent link">&para;</a></h2>
 <p>The always-on requester is the probe: induce a failure on the active node and
 watch the stream dip and recover while the queue manager fails over. The
