@@ -219,14 +219,17 @@ class Catalog:
         spec = self._stack(stack)
         default: OsRef = spec["default"]
         ref = build.os if build is not None and build.os is not None else default
+        supported: list[OsRef] = spec["supported"]
+        listed = ", ".join(str(r) for r in supported)
         if ref.family != default.family:
+            # Name the supported versions here too, so either refusal says what WOULD work
+            # (#1391).
             article = "an" if default.family[0] in "aeiou" else "a"
             raise VersionError(
-                f"{stack} is {article} {default.family} stack; got {ref} — {_CONFIG_FIX}"
+                f"{stack} is {article} {default.family} stack and supports [{listed}]; "
+                f"got {ref} — {_CONFIG_FIX}"
             )
-        supported: list[OsRef] = spec["supported"]
         if ref not in supported:
-            listed = ", ".join(str(r) for r in supported)
             raise VersionError(f"{stack} supports [{listed}]; got {ref} — {_CONFIG_FIX}")
         entry = self._entry(ref)
         if not _host_can_run(entry, facts):
