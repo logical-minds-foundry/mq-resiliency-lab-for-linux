@@ -1727,32 +1727,48 @@ def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
         deps.transcript.close()
 
 
+def _qm_cmd_targets(deps: Deps, stack: Stack, verb: str) -> list[tuple[str, str | None]]:
+    """The (group, label) pairs a cluster shell verb runs on: the cluster group's first node.
+
+    A Native HA CRR stack's `qm-status` also runs on each DR group's first node (#1392).
+    Site A's `dspmq -o nativeha -x` shows only the Live group's own instances, so site B's
+    Recovery group (its quorum, leader, sync) is otherwise invisible. A DR group whose
+    first node is not running (e.g. `bootstrap --no-dr`) is skipped with a note rather
+    than left to fail on an unreachable guest. RDQM needs no second hop: `rdqmstatus`
+    on site A already reports the DR role, status and remote.
+    """
+    group = stack.cluster_group
+    if verb != "qm-status" or stack.mechanism != "native-ha" or not stack.dr_groups:
+        return [(f"{group}", None)]
+    targets: list[tuple[str, str | None]] = [(f"{group}", "site A")]
+    domains = _probe_states(deps)
+    for dr_group in stack.dr_groups:
+        hosts = group_hosts(dr_group)[:1]
+        if not _probe_skipped_down(deps, f"{verb} site B ({dr_group})", domains, hosts):
+            targets.append((dr_group, "site B"))
+    return targets
+
+
 def _qm_cluster_cmd(stack: Stack, shell_cmd: str, verb: str) -> None:
     # up/down/status: a single streamed shell op on the stack's cluster first node
     # (pcs for pcmk, rdqm*/systemctl for the others). No pre-flight — if the cluster
     # is unreachable, ansible's own error speaks (#109). cluster_group is the correct
     # probe target — NOT groups[0], which may be a SAN host with no MQ tooling.
-    group = stack.cluster_group
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
         _render_inventory(deps)
-        step = CommandStep(
-            f"{stack.name} {verb}",
-            Command(
-                [
-                    "ansible",
-                    f"{group}[0]",
-                    "-b",
-                    "-m",
-                    "shell",
-                    "-a",
-                    shell_cmd,
-                ],  # noqa: S607
-                cwd=repo_root() / "ansible",
-            ),
-        )
+        steps = [
+            CommandStep(
+                f"{stack.name} {verb}" if label is None else f"{stack.name} {verb} ({label})",
+                Command(
+                    ["ansible", f"{group}[0]", "-b", "-m", "shell", "-a", shell_cmd],  # noqa: S607
+                    cwd=repo_root() / "ansible",
+                ),
+            )
+            for group, label in _qm_cmd_targets(deps, stack, verb)
+        ]
         run_steps(
-            [step],
+            steps,
             runner=deps.runner,
             renderer=deps.renderer,
             transcript=deps.transcript,
