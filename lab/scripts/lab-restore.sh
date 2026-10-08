@@ -48,4 +48,4 @@ for dir in "$SRC"/*/; do
   echo ">> $d defined + started"
 done
 
-echo ">> restore complete for '$KEY' — give the guests a moment, then run e2e-test.sh"
+echo ">> restore complete for '$KEY' — give the guests a moment, then run: mqlab qm e2e <stack>"
