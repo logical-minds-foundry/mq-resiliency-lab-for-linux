@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from mqlab import instances
+from mqlab.hostfacts import x86_64_v3_gap
 from mqlab.paths import components_dir, versions_catalog_path
 
 if TYPE_CHECKING:
@@ -33,9 +34,10 @@ FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 # Roles whose box always runs the infra OS: the shared/commons nodes, and the SAN
 # targets' baked `san` box (spec §4.7.1).
 INFRA_ROLES = ("infra", "obs", "mq-client", "san")
-# Host requirements the resolver knows how to gate. Empty in Phase 1; T10 adds
-# "x86-64-v3". An entry naming any other requirement is refused at load.
-KNOWN_REQUIREMENTS: frozenset[str] = frozenset()
+# Host requirements the resolver knows how to gate (os.<family>.<major>.requires). An
+# entry naming any other requirement is refused at load.
+X86_64_V3 = "x86-64-v3"
+KNOWN_REQUIREMENTS: frozenset[str] = frozenset({X86_64_V3})
 HOST_ARCHES = ("aarch64", "x86_64")
 
 _REF_RE = re.compile(r"([a-z]+):([0-9]+)")
@@ -232,13 +234,20 @@ class Catalog:
         if ref not in supported:
             raise VersionError(f"{stack} supports [{listed}]; got {ref} — {_CONFIG_FIX}")
         entry = self._entry(ref)
-        if not _host_can_run(entry, facts):
+        if not _arch_ok(entry, facts):
             raise VersionError(
                 f"{FAMILIES[ref.family]} needs an {entry.arch_pin} host; this host is "
                 f"{facts.arch} — run {stack} on an {entry.arch_pin} host"
             )
-        # entry.requires is always empty in Phase 1 (load refuses any requirement not in
-        # KNOWN_REQUIREMENTS); T10 adds the x86-64-v3 host gate here.
+        if X86_64_V3 in entry.requires and not facts.x86_64_v3:
+            runnable = [r for r in supported if r != ref and host_can_run(self.oses[r], facts)]
+            fix = (
+                f"use os: {runnable[0]} in your --config file (mqlab bootstrap {stack} "
+                "--config <file>)"
+                if runnable
+                else f"run {stack} on an x86-64-v3 host with KVM"
+            )
+            raise VersionError(f"{ref} needs an x86-64-v3 CPU; {x86_64_v3_gap(facts)} — {fix}")
         return ref
 
     def support_warning(self, ref: OsRef) -> str | None:
@@ -256,7 +265,8 @@ class Catalog:
 
         The infra OS box for each INFRA_ROLES role, then for each stack in
         ``stack_roles`` (stack -> the box roles its nodes use) every supported OS the
-        host can run (RHEL is skipped on aarch64).
+        host can run (host_can_run: RHEL is skipped on aarch64, and an OS that requires
+        x86-64-v3 is skipped on a host without it).
         """
         out: dict[str, BoxEntry] = {}
         for role in INFRA_ROLES:
@@ -264,7 +274,7 @@ class Catalog:
             out.setdefault(entry.name, entry)
         for stack, roles in stack_roles.items():
             for ref in self._stack(stack)["supported"]:
-                if not _host_can_run(self.oses[ref], facts):
+                if not host_can_run(self.oses[ref], facts):
                     continue
                 for role in sorted(roles):
                     entry = self.box(role, ref)
@@ -272,8 +282,14 @@ class Catalog:
         return list(out.values())
 
 
-def _host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
+def _arch_ok(entry: OsEntry, facts: HostFacts) -> bool:
     return entry.arch_pin is None or entry.arch_pin == facts.arch
+
+
+def host_can_run(entry: OsEntry, facts: HostFacts) -> bool:
+    """Whether this host can build and run ``entry``: its arch pin (if any) is the
+    host's, and every host requirement it declares is met."""
+    return _arch_ok(entry, facts) and (X86_64_V3 not in entry.requires or facts.x86_64_v3)
 
 
 # --- Topology: nodes name box ROLES; the version layer picks the concrete box --------

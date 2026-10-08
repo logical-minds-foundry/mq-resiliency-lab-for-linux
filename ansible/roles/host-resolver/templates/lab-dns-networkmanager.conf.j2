@@ -1,5 +1,5 @@
-# Managed by the host-resolver role (#497). RHEL 9 does not ship systemd-resolved,
-# so NetworkManager's global-dns forces infra as the resolver for every domain,
+# Managed by the host-resolver role (#497). RHEL does not run systemd-resolved by
+# default, so NetworkManager's global-dns forces infra as the resolver for every domain,
 # overriding the DHCP-provided DNS. NetworkManager writes it to /etc/resolv.conf.
 [global-dns]
 searches=

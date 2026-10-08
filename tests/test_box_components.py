@@ -31,7 +31,7 @@ from tests.fakes import RecordingRunner
 _REPO = Path(__file__).resolve().parents[1]
 _BOXES = _REPO / "lab" / "boxes"
 _FATBOX = _BOXES / "build-fatbox.sh"
-_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True)
+_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
 OBS = "mq-resiliency-observability"
 TREE = "f" * 40
 PIN = box.FLEET["pcmk-ubuntu24"].runtime_pin

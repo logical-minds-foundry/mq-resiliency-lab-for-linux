@@ -22,8 +22,8 @@ from mqlab.stacks import (
 
 # Host-facts fixtures for the arch-capability predicate (#847). Only `arch` is
 # load-bearing here; kvm/distro/vergil are irrelevant to the RHEL-on-aarch64 rule.
-ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False)
-X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False)
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=False, x86_64_v3=False)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=False, x86_64_v3=True)
 
 
 def test_qmconfig_derives_app_svc_and_channel_pair() -> None:

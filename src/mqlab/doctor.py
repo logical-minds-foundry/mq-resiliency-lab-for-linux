@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from mqlab.hostfacts import AARCH64, HostFacts
+from mqlab.hostfacts import AARCH64, HostFacts, x86_64_v3_gap
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -53,6 +53,21 @@ def _rhel_capability(facts: HostFacts) -> Check:
     return Check("rhel-stacks", True, "supported on this x86_64 host")
 
 
+def _x86_64_v3_capability(facts: HostFacts) -> Check:
+    """Whether this host counts as x86-64-v3 (an OS entry's `requires: [x86-64-v3]` in
+    lab/versions.yaml). Informational, like rhel-stacks: an OS major that requires it is
+    refused at bring-up (Catalog.stack_os) and left out of the box fleet, but the other
+    majors run, so this line never fails the host."""
+    if facts.x86_64_v3:
+        return Check("x86-64-v3", True, "yes")
+    return Check(
+        "x86-64-v3",
+        True,
+        f"no — {x86_64_v3_gap(facts)}; OS versions that require x86-64-v3 (os.*.requires in "
+        "lab/versions.yaml) are refused on this host",
+    )
+
+
 def _required_tools(facts: HostFacts) -> list[str]:
     tools = ["qemu-system-x86_64", "virsh", "vagrant", "ansible", "genisoimage"]
     if facts.arch == AARCH64:
@@ -69,10 +84,10 @@ def _install_hint(tool: str, family: str) -> str | None:
 
 
 def run_checks(facts: HostFacts, *, which: Callable[[str], str | None]) -> list[Check]:
-    # The RHEL-stacks capability is a permanent host-arch fact the Vergil profile
-    # cannot change, so it is reported on every host — including inside Vergil,
+    # The RHEL-stacks and x86-64-v3 capabilities are permanent host facts the Vergil
+    # profile cannot change, so they are reported on every host — including inside Vergil,
     # where the rest of the checklist short-circuits (#847).
-    checks: list[Check] = [_rhel_capability(facts)]
+    checks: list[Check] = [_rhel_capability(facts), _x86_64_v3_capability(facts)]
     if facts.in_vergil:
         checks.append(
             Check("vergil", True, "Vergil-managed; prerequisites guaranteed by the profile")

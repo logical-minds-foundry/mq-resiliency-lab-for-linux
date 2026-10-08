@@ -25,7 +25,7 @@ from mqlab.transcript import Transcript, transcript_path
 from tests.boxfleet import x86_fleet
 from tests.fakes import RecordingRunner
 
-_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True)
+_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="dnf", in_vergil=True, x86_64_v3=True)
 _BASE_BOX = "rhel/9-x86_64"
 _ENTRY = x86_fleet()[_BASE_BOX].os  # the catalog's os.rhel.9 entry
 _ISO = str(_ENTRY.iso)

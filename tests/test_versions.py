@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -26,8 +27,8 @@ from mqlab.versions import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-X86 = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True)
-ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True)
+X86 = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
+ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
 
 _DELETE = object()
 
@@ -113,7 +114,7 @@ def test_osref_orders_by_family_then_major():
 def test_committed_catalog_is_at_todays_versions():
     cat = load_catalog()
     assert cat.infra == OsRef("ubuntu", 24)
-    assert set(cat.oses) == {OsRef("ubuntu", 24), OsRef("rhel", 9)}
+    assert set(cat.oses) == {OsRef("ubuntu", 24), OsRef("rhel", 9), OsRef("rhel", 10)}
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": OsRef("ubuntu", 24),
         "pcmk-ubuntu": OsRef("ubuntu", 24),
@@ -127,6 +128,17 @@ def test_committed_catalog_is_at_todays_versions():
         "rhel-9.6-x86_64-dvd.iso",
         "x86_64",
     )
+    assert rhel9.requires == ()
+    rhel10 = cat.oses[OsRef("rhel", 10)]
+    assert (rhel10.base_box, rhel10.point, rhel10.iso, rhel10.arch_pin, rhel10.requires) == (
+        "rhel/10-x86_64",
+        "10.2",
+        "rhel-10.2-x86_64-dvd.iso",
+        "x86_64",
+        ("x86-64-v3",),
+    )
+    assert cat.stacks["nativeha-rhel-crr"]["supported"] == [OsRef("rhel", 9), OsRef("rhel", 10)]
+    assert cat.stacks["rdqm-rhel"]["supported"] == [OsRef("rhel", 9)]  # RDQM: RHEL 9 only
     ubuntu24 = cat.oses[OsRef("ubuntu", 24)]
     assert ubuntu24.base_box == "cloud-image/ubuntu-24.04"
     assert ubuntu24.arch_pin is None
@@ -248,8 +260,10 @@ def test_box_unknown_role():
 
 
 def test_box_unknown_os():
-    with pytest.raises(VersionError, match=r"OS rhel:10 is not in the catalog \(known: rhel:9"):
-        load_catalog().box("mq-rdqm", OsRef("rhel", 10))
+    with pytest.raises(
+        VersionError, match=r"OS rhel:11 is not in the catalog \(known: rhel:9, rhel:10"
+    ):
+        load_catalog().box("mq-rdqm", OsRef("rhel", 11))
 
 
 # --- Catalog.stack_os -----------------------------------------------------------------
@@ -299,6 +313,59 @@ def test_rhel_refused_on_aarch64():
 def test_stack_unknown():
     with pytest.raises(VersionError, match="unknown stack 'nope'"):
         load_catalog().stack_os("nope", None, X86)
+
+
+# --- The x86-64-v3 host gate (T10) ----------------------------------------------------
+
+RHEL10 = BuildFile(os=OsRef("rhel", 10))
+# A KVM x86 host whose CPU is x86-64-v2 (no AVX2 family), and one with no KVM (TCG).
+X86_V2 = replace(X86, x86_64_v3=False, x86_64_v3_missing=("avx2", "bmi1", "bmi2", "fma"))
+X86_TCG = replace(X86, kvm=False, x86_64_v3=False)
+
+
+def test_rhel10_accepted_on_a_v3_host():
+    assert load_catalog().stack_os("nativeha-rhel-crr", RHEL10, X86) == OsRef("rhel", 10)
+
+
+def test_rhel10_refused_without_v3_names_missing_flags_and_rhel9():
+    with pytest.raises(VersionError) as exc:
+        load_catalog().stack_os("nativeha-rhel-crr", RHEL10, X86_V2)
+    assert str(exc.value) == (
+        "rhel:10 needs an x86-64-v3 CPU; this host's CPU lacks avx2, bmi1, bmi2, fma — "
+        "use os: rhel:9 in your --config file (mqlab bootstrap nativeha-rhel-crr "
+        "--config <file>)"
+    )
+
+
+def test_rhel10_refused_under_tcg_says_not_measured():
+    with pytest.raises(VersionError, match="not measured under TCG emulation"):
+        load_catalog().stack_os("nativeha-rhel-crr", RHEL10, X86_TCG)
+
+
+def test_rhel9_default_unaffected_by_the_v3_gate():
+    assert load_catalog().stack_os("nativeha-rhel-crr", None, X86_V2) == OsRef("rhel", 9)
+
+
+def test_rdqm_still_rhel9_only():
+    with pytest.raises(VersionError, match=r"rdqm-rhel supports \[rhel:9\]; got rhel:10"):
+        load_catalog().stack_os("rdqm-rhel", RHEL10, X86)
+
+
+def test_v3_refusal_without_a_runnable_alternative(tmp_path):
+    """A stack whose only version needs v3 cannot suggest another os: — name the host fix."""
+    data = copy.deepcopy(_committed())
+    data["stacks"]["nativeha-rhel-crr"] = {"supported": ["rhel:10"], "default": "rhel:10"}
+    cat = load_catalog(_write(tmp_path, data))
+    with pytest.raises(
+        VersionError, match=r"— run nativeha-rhel-crr on an x86-64-v3 host with KVM$"
+    ):
+        cat.stack_os("nativeha-rhel-crr", None, X86_V2)
+
+
+def test_all_boxes_skips_v3_os_on_a_non_v3_host():
+    names = [b.name for b in load_catalog().all_boxes(X86_V2, _STACK_ROLES)]
+    assert "mq-nativeha-rhel10" not in names
+    assert {"mq-nativeha-rhel9", "mq-rdqm-rhel9"} <= set(names)
 
 
 # --- Support gate ---------------------------------------------------------------------
@@ -360,6 +427,7 @@ def test_all_boxes_on_x86():
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
         "mq-nativeha-rhel9",
+        "mq-nativeha-rhel10",
         "mq-rdqm-rhel9",
     ]
 
@@ -465,7 +533,8 @@ def test_catalog_not_a_mapping(tmp_path):
         (("os", "rhel", 9, "arch"), "s390x", "arch must be one of aarch64, x86_64"),
         (("os", "ubuntu", 24, "requires"), "x86-64-v3", "requires must be a list of strings"),
         (("os", "ubuntu", 24, "requires"), [3], "requires must be a list of strings"),
-        (("os", "ubuntu", 24, "requires"), ["x86-64-v3"], "unknown host requirement x86-64-v3"),
+        (("os", "ubuntu", 24, "requires"), ["x86-64-v4"], "unknown host requirement x86-64-v4"),
+        (("os", "ubuntu", 24, "requires"), ["x86-64-v3"], None),  # known: loads
         (("os", "ubuntu", 24, "ibm_support"), "no", "ibm_support must be a mapping"),
         (("os", "ubuntu", 24, "ibm_support"), {"status": "unsupported", "url": "u"}, "key 'url'"),
         (("os", "ubuntu", 24, "ibm_support"), {"status": "maybe"}, "status must be 'supported'"),
@@ -500,7 +569,7 @@ def test_catalog_not_a_mapping(tmp_path):
         (("stacks", "rdqm-rhel", "supported"), [], "supported must be a non-empty list"),
         (("stacks", "rdqm-rhel", "supported"), "rhel:9", "supported must be a non-empty list"),
         (("stacks", "rdqm-rhel", "supported"), ["rhel:x"], "bad OS reference 'rhel:x'"),
-        (("stacks", "rdqm-rhel", "supported"), ["rhel:10"], "rhel:10 is not declared under os:"),
+        (("stacks", "rdqm-rhel", "supported"), ["rhel:11"], "rhel:11 is not declared under os:"),
         (
             ("stacks", "rdqm-rhel", "supported"),
             ["rhel:9", "ubuntu:24"],
