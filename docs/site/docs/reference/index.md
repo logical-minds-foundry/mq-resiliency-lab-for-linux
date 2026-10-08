@@ -127,7 +127,7 @@ commands:
 | `mqlab teardown` | Destroy a stack's VMs; shared commons only when the last stack is down (or `--commons`) |
 | `mqlab status` | Show phase completion (net/vms/provision/observe) for a stack or all stacks |
 | `mqlab parity` | Print the cross-arm capability matrix (which verbs each arm supports) |
-| `mqlab doctor` | Check this host can run the lab (arch, KVM, required tools) |
+| `mqlab doctor` | Check this host can run the lab (arch, KVM, x86-64-v3, required tools) |
 
 Command groups:
 
