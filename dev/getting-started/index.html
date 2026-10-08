@@ -1659,7 +1659,11 @@ commands. It cannot change your shell's <code>PATH</code>, so activate the venv 
 shell. The bare <code>mqlab</code> commands on this site assume it is active. (Prefixing
 each command with <code>uv run</code>, e.g. <code>uv run mqlab doctor</code>, works too.)
 <code>mqlab doctor</code> then confirms the host can actually run the guests
-before you commit to a bring-up.</p>
+before you commit to a bring-up. Two of its lines are informational and never fail the
+host. <code>rhel-stacks</code> says whether the RHEL arms can run here (they need x86_64).
+<code>x86-64-v3: yes</code> or <code>no</code> says whether the host counts as x86-64-v3: an x86_64 CPU with
+AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it; on a <code>no</code> host,
+build the RHEL stack on RHEL 9 (<code>os: rhel:9</code> in a <code>--config</code> file).</p>
 <div class="admonition note">
 <p class="admonition-title">After a Python-version bump</p>
 <p>The pinned Python version lives in <code>.python-version</code>. If it changes (or you
