@@ -444,3 +444,65 @@ def test_qm_e2e_runs_on_a_live_recorded_stack(monkeypatch, tmp_path):
     result = CliRunner().invoke(cli.app, ["qm", "e2e", "nativeha-ubuntu"])
     assert result.exit_code == 0, result.output
     assert runner.recorded[0].argv[:3] == ["vagrant", "ssh", "app-client"]
+
+
+# Native HA CRR (#1392): qm status shows site B's Recovery group too, not just site A.
+_NHA_CRR_STATUS = "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'"
+_NHA_CRR_TOPO = (
+    "nodes:\n"
+    "  nha-a1: {nics: {net-mgmt: 10.50.0.11}}\n"
+    "  nha-b1: {nics: {net-mgmt: 10.50.0.14}}\n"
+    "groups:\n  nha_a: [nha-a1]\n  nha_b: [nha-b1]\n"
+    "stacks:\n  nha-crr:\n    mechanism: native-ha\n    os_family: rhel\n    short: NHARC\n"
+    "    cluster_group: nha_a\n    groups: [nha_a, nha_b]\n    dr_groups: [nha_b]\n"
+    "    qm: {}\n"
+    "    verbs:\n"
+    f'      qm-status: {{ cmd: "{_NHA_CRR_STATUS}" }}\n'
+    "svc: { short: SVC, conn: 10.60.0.50, listener_port: 1414, exporter_port: 9158 }\n"
+)
+
+
+def _ansible_targets(runner):
+    return [a[1] for a in _argvs(runner) if a[0] == "ansible"]
+
+
+def test_qm_status_native_ha_crr_reports_both_sites(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, _NHA_CRR_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"nha-a1": "running", "nha-b1": "running"}),
+            ScriptedResult([]),
+            ScriptedResult([]),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "status", "nha-crr"])
+    assert result.exit_code == 0, result.output
+    assert _ansible_targets(runner) == ["nha_a[0]", "nha_b[0]"]
+    cmd = "su - mqm -c '/opt/mqm/bin/dspmq -m NHARCAPP -o nativeha -x'"
+    assert all(a[-1] == cmd for a in _argvs(runner) if a[0] == "ansible")
+
+
+def test_qm_status_native_ha_skips_a_site_b_that_is_not_running(monkeypatch, tmp_path):
+    # bootstrap --no-dr leaves site B absent: report site A, say site B was skipped,
+    # and do not fail on an unreachable guest.
+    _seed(monkeypatch, tmp_path, _NHA_CRR_TOPO)
+    runner = RecordingRunner(results=[_probe({"nha-a1": "running"}), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "status", "nha-crr"])
+    assert result.exit_code == 0, result.output
+    assert _ansible_targets(runner) == ["nha_a[0]"]
+
+
+def test_qm_status_native_ha_site_b_failure_propagates(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path, _NHA_CRR_TOPO)
+    runner = RecordingRunner(
+        results=[
+            _probe({"nha-a1": "running", "nha-b1": "running"}),
+            ScriptedResult([]),
+            ScriptedResult([], exit_code=4),
+        ]
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["qm", "status", "nha-crr"])
+    assert result.exit_code == 4

@@ -221,8 +221,13 @@ OS-as-only-variable peers and can coexist on one host.
 ```bash
 mqlab bootstrap nativeha-rhel-crr    # net → vms → provision (site-nativeha.yml, raft HA + CRR) → observe
 mqlab bootstrap nativeha-ubuntu      # net → vms → provision (site-nativeha-ubuntu.yml, raft HA + CRR) → observe
-mqlab qm status nativeha-ubuntu      # dspmq -o nativeha -x
+mqlab qm status nativeha-ubuntu      # dspmq -o nativeha -x on site A (Live) and site B (Recovery)
 ```
+
+On a CRR stack, `qm status` runs `dspmq -o nativeha -x` on the first node of each site.
+Site A shows the Live group and site B shows the Recovery group, each with its own quorum
+and instance sync (#1392). If site B is not running (`bootstrap --no-dr`), its query is
+skipped with a note rather than failing.
 
 The RHEL CRR arm (`nativeha-rhel-crr`, QM `NHARCAPP`, groups `nha_rhel_crr_a` /
 `nha_rhel_crr_b`, nodes `nha-rhel-crr-*`) pairs a Live group in site A with a
