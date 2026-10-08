@@ -33,7 +33,8 @@ def _committed() -> dict[str, Any]:
 
 
 def _catalog_file(tmp_path: Path, defaults: dict[str, str]) -> Path:
-    """The committed catalog plus ubuntu:26, offered to both Ubuntu stacks."""
+    """The committed catalog with ubuntu:26 stripped of its unsupported marker (so a test
+    may flip a default to it), offered to both Ubuntu stacks."""
     data = copy.deepcopy(_committed())
     data["os"]["ubuntu"][26] = {"base_box": "cloud-image/ubuntu-26.04"}
     for stack in ("nativeha-ubuntu", "pcmk-ubuntu"):
@@ -254,5 +255,6 @@ def test_render_combines_records_across_stacks(catalog_24_26):  # Review Focus 1
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu26",
     )
-    assert nb["obs"].name == "obs-ubuntu24"  # the shared nodes get the infra boxes
+    # The shared nodes get the shared boxes: non-MQ on infra, mq-client on infra_mq (#285).
+    assert nb["obs"].name == "obs-ubuntu26"
     assert nb["svc-sim"].name == "mq-client-ubuntu24"

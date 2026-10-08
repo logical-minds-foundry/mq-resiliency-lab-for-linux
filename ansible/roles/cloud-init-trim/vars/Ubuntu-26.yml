@@ -1,0 +1,31 @@
+---
+# cloud-init-trim per-OS-version values for Ubuntu 26.04 (#1282, epic .github#280), loaded by
+# ansible/tasks/os-vars.yml.
+#
+# 26.04 ships cloud-init 26.x in its upstream SINGLE-PROCESS form (introduced in cloud-init
+# 24.3; Ubuntu's 24.04 package patches it back out). One long-running
+# cloud-init-main.service (`cloud-init --all-stages`, TimeoutStartSec=infinity) runs every
+# stage. The per-stage units are only triggers: each one writes "start" to its stage
+# socket (/run/cloud-init/share/<stage>.sock). And cloud-init.service is renamed
+# cloud-init-network.service. Evidence: the resolute cloud-init-base file list
+# (https://packages.ubuntu.com/resolute/all/cloud-init-base/filelist: cloud-init-main,
+# cloud-init-local, cloud-init-network, cloud-config, cloud-final; no cloud-init.service)
+# and the upstream units
+# (https://github.com/canonical/cloud-init/tree/26.1/systemd).
+#
+# So NOTHING is masked here. A masked cloud-config/cloud-final never triggers its socket,
+# and cloud-init-main would wait on it for ever. The drop-in still empties the config and
+# final module lists, so those stages run in-process with nothing to do. The cost that
+# masking saved on 24.04 (a fresh Python process per stage) does not exist here.
+cloud_init_trim_masked_services: []
+
+# All of these must stay enabled. cloud-init-main is the stage runner. cloud-init-local
+# re-renders the clone's mgmt-NIC netplan. cloud-init-network runs growpart + resizefs.
+# cloud-config and cloud-final must still trigger their (empty) stages so that
+# cloud-init-main can finish.
+cloud_init_trim_required_services:
+  - cloud-init-main.service
+  - cloud-init-local.service
+  - cloud-init-network.service
+  - cloud-config.service
+  - cloud-final.service

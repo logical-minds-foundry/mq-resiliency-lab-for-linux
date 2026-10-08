@@ -24,16 +24,6 @@ cloud_init_trim_init_modules:
   - growpart
   - resizefs
 
-# The config and final stages run nothing these guests need (all once-per-instance and
-# already ran at bake, or empty: scripts_per_boot has no scripts, final_message only logs),
-# so their services are masked. Their module lists are emptied too, belt-and-braces, so an
-# unmask still does nothing.
-cloud_init_trim_masked_services:
-  - cloud-config.service
-  - cloud-final.service
-
-# These MUST stay enabled (networking + root growth, above). The role fails the bake if
-# either is masked or disabled, or if cloud-init has been disabled outright.
-cloud_init_trim_required_services:
-  - cloud-init-local.service
-  - cloud-init.service
+# The per-OS-version service lists (cloud_init_trim_masked_services and
+# cloud_init_trim_required_services) live in vars/<Distribution>-<major>.yml, loaded through
+# ansible/tasks/os-vars.yml (#1282): cloud-init's systemd units differ by Ubuntu release.

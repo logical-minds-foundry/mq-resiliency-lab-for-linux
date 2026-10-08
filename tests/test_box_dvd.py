@@ -160,7 +160,8 @@ def test_build_boxes_ensures_exporter_binary_for_exporter_box(monkeypatch, tmp_p
     monkeypatch.setattr(
         box.mqexporter, "ensure_mq_exporter_binary", lambda root: ensured.append(root)
     )
-    box.build_boxes(["obs-ubuntu24"], force=True)
+    obs = next(n for n, s in x86_fleet().items() if s.role == "obs")
+    box.build_boxes([obs], force=True)
     assert ensured == [tmp_path]
 
 

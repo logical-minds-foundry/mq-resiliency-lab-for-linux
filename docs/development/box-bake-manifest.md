@@ -25,9 +25,17 @@ the slow install work that never varies per run, so a per-run bootstrap can skip
 
 Box names are **generated** as `<role>-<os><major>` from the OS version catalog,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic `logical-minds-foundry/.github#280`,
-#1274); the names above are today's (Ubuntu 24, RHEL 9). On an x86-64-v3 host with KVM the
-fleet also bakes `mq-nativeha-rhel10`: the same `nativeha-rhel` bake on the RHEL 10 base
-box `rhel/10-x86_64` (#1286; RHEL 10 runs Native HA only, never RDQM). The catalog's `roles:` block
+#1274); the names above are the Phase-1 ones (Ubuntu 24, RHEL 9). On an x86-64-v3 host
+with KVM the fleet also bakes `mq-nativeha-rhel10`: the same `nativeha-rhel` bake on the
+RHEL 10 base box `rhel/10-x86_64` (#1286; RHEL 10 runs Native HA only, never RDQM).
+Since #1282 the shared non-MQ boxes run the catalog's `infra:` OS, Ubuntu 26
+(`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`), while `mq-client-ubuntu24` stays on
+the support-gated `infra_mq:` OS. Both Ubuntu stacks also bake a lab-only Ubuntu 26
+variant (`mq-nativeha-ubuntu26`, `pcmk-ubuntu26`) from the same playbooks; see
+[`box-model.md`](box-model.md#shared-nodes-infra-and-infra_mq-ubuntu-26-is-lab-only).
+The sections below name the 24 boxes; a playbook bakes every major its role runs on,
+and the only per-major differences are the role `vars/Ubuntu-<major>.yml` files noted
+in the tables. The catalog's `roles:` block
 maps each box role to its bake playbook stem per OS family, and to whether it is
 MQ-bearing. That is the only box-to-bake mapping: `mqlab` passes it to
 `build-fatbox.sh` as `--bake <stem>` and `--mq-bearing 0|1`, and the builder digests
@@ -209,7 +217,7 @@ Ubuntu-specific and assert a Debian-family host.
 
 | Role | In bake | Notes |
 |------|---------|-------|
-| `cloud-init-trim` | ✅ full | Keeps `cloud-init-local` (re-renders the mgmt NIC's netplan for the clone's MAC) and `cloud-init` (trimmed to `growpart` + `resizefs`, which grow `/` to the 20G guest disk). Drops `/etc/cloud/cloud.cfg.d/99_lab_trim.cfg` (empty config/final module lists, `preserve_hostname: true`) and masks `cloud-config.service` and `cloud-final.service`. Fail-loud checks: cloud-init's own merged config carries the trimmed lists, the two services read `masked`, the two kept services read `enabled`, and no `cloud-init.disabled` marker exists. No per-run half. |
+| `cloud-init-trim` | ✅ full | Keeps `cloud-init-local` (re-renders the mgmt NIC's netplan for the clone's MAC) and the network stage (trimmed to `growpart` + `resizefs`, which grow `/` to the 20G guest disk). Drops `/etc/cloud/cloud.cfg.d/99_lab_trim.cfg` (empty config/final module lists, `preserve_hostname: true`). The service lists are per OS version (`vars/Ubuntu-<major>.yml`, fail-loud `os-vars.yml`, #1282). **24.04** masks `cloud-config.service` and `cloud-final.service` and requires `cloud-init-local` + `cloud-init` enabled. **26.04** runs cloud-init's single-process `cloud-init-main.service`, which waits on every stage's trigger, so it masks nothing and requires `cloud-init-main`, `cloud-init-local`, `cloud-init-network` (the renamed `cloud-init.service`), `cloud-config` and `cloud-final` enabled. Fail-loud checks: cloud-init's own merged config carries the trimmed lists, any masked service reads `masked`, the required ones read `enabled`, and no `cloud-init.disabled` marker exists. No per-run half. |
 | `snapd-off` | ✅ full | `snapd_off_mode: purge` (default): refuses if `snap list` shows any snap, purges `snapd`, pins it out (`/etc/apt/preferences.d/99lab-no-snapd`), and verifies it is gone with no install candidate. The purge's `deb-systemd-helper purge` also rmdirs every empty directory under `/etc/systemd/{system,user}`, so the role records those first and restores and verifies them afterwards; snapd's own stay gone (#1265). `keep` (obs on aarch64 only, for the chromium snap behind `grafana-image-renderer`): masks only `snapd.seeded.service` and verifies that `snapd.service`/`snapd.socket` stay enabled. No per-run half. |
 
 Rationale and evidence: [`box-model.md` §2](box-model.md#cloud-init-and-snapd-trimmed-off-the-boot-path-1250).
@@ -227,8 +235,8 @@ list. The per-box lists:
 | Box | Directories |
 |-----|-------------|
 | every Ubuntu box | `/etc/alloy` (alloy configure: `config.alloy`) |
-| `infra-ubuntu24` | `/etc/bind/zones` (bind-dns configure: the zone files) |
-| `obs-ubuntu24` | `/etc/systemd/system/grafana-server.service.d` (grafana's env drop-ins), `/etc/prometheus/targets` (prometheus targets), `/var/lib/opensearch/snapshots` (opensearch `path.repo`) |
+| `infra-ubuntu26` | `/etc/bind/zones` (bind-dns configure: the zone files) |
+| `obs-ubuntu26` | `/etc/systemd/system/grafana-server.service.d` (grafana's env drop-ins), `/etc/prometheus/targets` (prometheus targets), `/var/lib/opensearch/snapshots` (opensearch `path.repo`) |
 
 Why: #1265's x86_64 obs box lost its empty `grafana-server.service.d` to snapd-off's purge
 (snapd's postrm runs `deb-systemd-helper purge`, which rmdirs every empty directory under
@@ -250,7 +258,7 @@ each Ubuntu bake's manifest-hash closure; the RHEL boxes are unaffected.
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
 | `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`rdqm-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
-### `obs-ubuntu24` → `ansible/bake-obs.yml`
+### `obs-ubuntu26` → `ansible/bake-obs.yml`
 
 Since the observability-consolidation epic (`logical-minds-foundry/.github#267`), this
 box bakes the **whole** observability platform: the metrics stack
@@ -272,7 +280,7 @@ per-run render stay in `site-obs.yml`.
 | `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
 | `data-prepper` | ✅ install half | JDK-bundled binary + data dir + OpenSearch-sink DLQ dir + static config + pipeline templates + inert unit baked, plus the DLQ logrotate rule and its inert hourly rotate timer (#1239; see [`data-prepper-dlq.md`](../reference/data-prepper-dlq.md)); the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait, and the DLQ rotate timer enable, stay per-run (#939, #1239). Its OpenSearch sink is `localhost:9200` (co-located). |
 
-### `infra-ubuntu24` → `ansible/bake-infra.yml`
+### `infra-ubuntu26` → `ansible/bake-infra.yml`
 
 | Role | In bake | Notes |
 |------|---------|-------|
@@ -360,7 +368,7 @@ The Pacemaker/SAN peer, for the six Pacemaker **cluster** nodes (`pcmk-a1..3`,
 install. It bakes the MQ product install the cluster nodes run via `mq-install`
 (the same role `_pcmk-cluster-ha.yml` drives on `pcmk_a`/`pcmk_b`). It does **not**
 touch the SAN targets (`san-a`/`san-b`) — they carry no IBM-MQ payload and boot
-their own `san-ubuntu24` box (below). Host-resolved: baked natively per host (arm64
+their own `san-ubuntu26` box (below). Host-resolved: baked natively per host (arm64
 or x86), guest arch not pinned.
 
 | Role | In bake | Notes |
@@ -372,7 +380,7 @@ or x86), guest arch not pinned.
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
 | `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
 
-### `san-ubuntu24` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
+### `san-ubuntu26` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
 
 The two SAN targets (`san-a`/`san-b`). It bakes only the **install halves** of the
 SAN roles, on the target OS itself, against the box's own kernel. It replaced the
@@ -384,8 +392,8 @@ DRBD resource and no iSCSI target; both stay per-run. Host-resolved.
 
 | Role | In bake | Notes |
 |------|---------|-------|
-| `drbd-san` (`tasks_from: install`) | ✅ install half | `drbd-utils` + the kernel-modules package carrying the in-tree DRBD module. The package name is per OS version (`roles/drbd-san/vars/Ubuntu-24.yml`: `linux-modules-extra-<kver>`), loaded through the fail-loud `ansible/tasks/os-vars.yml`. The resource file, `create-md`, `drbdadm up` and the attach check stay per-run in `main.yml`, which reruns the install half behind a `package_facts` skip-if-baked guard. |
-| `iscsi-target` (`tasks_from: install`) | ✅ install half | `targetcli-fb`. The backstore, IQN, LUN, ACLs and portal stay per-run in `main.yml`, which reruns the install half behind the same `package_facts` guard. |
+| `drbd-san` (`tasks_from: install`) | ✅ install half | `drbd-utils` + the kernel-modules package carrying the in-tree DRBD module. The package name is per OS version (`roles/drbd-san/vars/Ubuntu-24.yml`: `linux-modules-extra-<kver>`; `Ubuntu-26.yml`: the base `linux-modules-<kver>`, because 26.04 has no `linux-modules-extra` and ships `drbd.ko` and the LIO modules there, #1282), loaded through the fail-loud `ansible/tasks/os-vars.yml`. The resource file, `create-md`, `drbdadm up` and the attach check stay per-run in `main.yml`, which reruns the install half behind a `package_facts` skip-if-baked guard. |
+| `iscsi-target` (`tasks_from: install`) | ✅ install half | `targetcli-fb`. The backstore, IQN, LUN, ACLs and portal stay per-run in `main.yml`, which reruns the install half behind the same `package_facts` guard. The per-run portal step drops the auto-created wildcard portal, which is `0.0.0.0:3260` on targetcli-fb 2.x (24.04) and `[::0]:3260` from 3.0.1 (26.04, #1282). |
 | modules check | ✅ | `modinfo drbd` and `modinfo target_core_mod` must resolve for the baked kernel, so a missing module fails the bake rather than a later provision. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |

@@ -135,7 +135,7 @@ def test_resolved_topology_has_no_platform_key(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     text = p.ensure_resolved(facts=X86_KVM, topo=real).read_text()
     assert "platform:" not in text
-    assert f"box: mq-nativeha-{CATALOG.infra.token}" in text
+    assert f"box: mq-nativeha-{CATALOG.default_os('nativeha-ubuntu').token}" in text
 
 
 def test_resolved_node_has_every_vagrantfile_field():

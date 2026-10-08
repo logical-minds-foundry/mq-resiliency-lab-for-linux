@@ -54,9 +54,9 @@ def test_ensure_prereqs_for_commons_runs_mq_then_galaxy_then_pki(monkeypatch, tm
 
     cli._ensure_prereqs_for_commons()
 
-    # MQ tarball ensured for the commons boxes (infra OS) at the repo-default version
+    # MQ tarball ensured for the commons boxes (their shared OSes) at the repo-default version
     cat = load_catalog()
-    commons = {cat.box("obs", cat.infra).name, cat.box("mq-client", cat.infra).name}
+    commons = {cat.box("obs", cat.infra).name, cat.box("mq-client", cat.infra_mq).name}
     assert ensured == [(commons, cli.DEFAULT_MQ_VERSION)]
     argvs = [c.argv for c in runner.recorded]
     # galaxy collections installed before the PKI play (which needs community.crypto)

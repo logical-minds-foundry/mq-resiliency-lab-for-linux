@@ -173,6 +173,31 @@ def test_ubuntu24_names_linux_modules_extra_for_the_running_kernel() -> None:
     }
 
 
+def test_ubuntu26_names_the_base_linux_modules_for_the_running_kernel() -> None:
+    """26.04 has no linux-modules-extra; DRBD + LIO ship in linux-modules-<kver> (#1282)."""
+    assert _load(ROLES / "drbd-san" / "vars" / "Ubuntu-26.yml") == {
+        "drbd_san_kernel_modules_pkg": "linux-modules-{{ ansible_kernel }}"
+    }
+
+
+def test_iscsi_target_drops_either_wildcard_default_portal() -> None:
+    """targetcli-fb 2.x auto-creates a 0.0.0.0:3260 portal, 3.0.1+ (Ubuntu 26.04) an
+    [::0]:3260 one; a surviving wildcard blocks the SAN-net portal, so both go (#1282)."""
+    (task,) = [
+        t
+        for t in _iter_tasks(_load(ROLES / "iscsi-target" / "tasks" / "main.yml"))
+        if t.get("name") == "configure target (per-object idempotent probes)"
+    ]
+    script = task["ansible.builtin.shell"]
+    wildcards = (("0.0.0.0:3260", "delete 0.0.0.0 3260"), ("[::0]:3260", "delete ::0 3260"))
+    for listed, deleted in wildcards:
+        assert f"grep -qF -- '{listed}'" in script
+        assert f'targetcli "/iscsi/$iqn/tpg1/portals" {deleted}' in script
+    for script_path in ("pcmk-dr-cutover.sh", "pcmk-dr-force.sh"):
+        text = (REPO_ROOT / "lab" / "scripts" / script_path).read_text(encoding="utf-8")
+        assert "portals delete 0.0.0.0 3260" in text and "portals delete ::0 3260" in text
+
+
 @pytest.mark.parametrize("role", SAN_ROLES)
 def test_per_run_main_runs_the_install_half_first(role: str) -> None:
     tasks = _load(ROLES / role / "tasks" / "main.yml")

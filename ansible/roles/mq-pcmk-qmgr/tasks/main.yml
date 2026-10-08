@@ -260,6 +260,12 @@
   run_once: true
   changed_when: true
 
+# pcs 0.11.7 (24.04) and 0.12.1 (26.04) both accept every pcs command in this role.
+# `--group`/`--after` are deprecated since pcs 0.11.6 in favor of the `group`/`after`
+# keywords but are not removed through 0.12.x (pcs CHANGELOG,
+# https://github.com/ClusterLabs/pcs/blob/main/CHANGELOG.md); `resource defaults update`
+# is the form 0.12 keeps (it removed only the bare `defaults <name>=<value>`) (#1282).
+#
 # 6. The resource group: fs -> vip -> qm. mq_fs monitors with OCF_CHECK_LEVEL=20
 #    (a real read/write probe, not just the mount table) + on-fail=fence, so a
 #    dead SAN under the owner is caught in one interval instead of the default

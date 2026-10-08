@@ -428,7 +428,7 @@ def test_guest_box_resolves_role_to_generated_box():
         _guest_box("nha-rhel-crr-a1", _BOXES)
         == cat.box("mq-nativeha", cat.default_os("nativeha-rhel-crr")).name
     )
-    assert _guest_box("svc-sim", _BOXES) == cat.box("mq-client", cat.infra).name
+    assert _guest_box("svc-sim", _BOXES) == cat.box("mq-client", cat.infra_mq).name
 
 
 def test_guest_box_san_targets_share_the_san_box():

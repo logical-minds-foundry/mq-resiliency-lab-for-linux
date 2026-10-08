@@ -37,7 +37,7 @@
       changed=1
     fi
 
-    # 2. iSCSI target IQN (auto-creates tpg1 + a default 0.0.0.0:3260 portal)
+    # 2. iSCSI target IQN (auto-creates tpg1 + a default wildcard portal on :3260)
     if ! has /iscsi "$iqn"; then
       targetcli /iscsi create "$iqn"
       changed=1
@@ -57,10 +57,22 @@
     fi
     {% endfor %}
 
-    # 5. Portal: bind to the SAN net, dropping the auto-created 0.0.0.0 default.
+    # 5. Portal: bind to the SAN net, dropping the auto-created wildcard default first
+    #    (a wildcard listener on :3260 makes the specific-IP portal create fail). Its
+    #    address depends on the targetcli-fb version: 0.0.0.0 up to 2.x (24.04 ships
+    #    2.1.53), [::0] from 3.0.1 (26.04 ships 3.0.1): "Use portal ::0 instead of
+    #    0.0.0.0 to listen on both IPv6 and IPv4",
+    #    https://github.com/open-iscsi/targetcli-fb/releases/tag/v3.0.1 (#1282).
+    #    Drop whichever is listed. The delete keeps `|| true` (the targetcli exit code is
+    #    unreliable, see #821 above); a wildcard that survives still fails loudly, at
+    #    the specific-IP create below.
     portals=$(targetcli "/iscsi/$iqn/tpg1/portals" ls 2>/dev/null || true)
     if grep -qF -- '0.0.0.0:3260' <<<"$portals"; then
       targetcli "/iscsi/$iqn/tpg1/portals" delete 0.0.0.0 3260 || true
+      changed=1
+    fi
+    if grep -qF -- '[::0]:3260' <<<"$portals"; then
+      targetcli "/iscsi/$iqn/tpg1/portals" delete ::0 3260 || true
       changed=1
     fi
     if ! grep -qF -- "{{ san_portal_ip }}:3260" <<<"$portals"; then

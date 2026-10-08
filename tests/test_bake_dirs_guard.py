@@ -195,7 +195,7 @@ def test_guard_lists_every_configure_dir_of_the_install_halves_each_box_bakes() 
         assert expected, f"{box}: every Ubuntu box bakes at least alloy's install half"
         assert expected <= set(listed), f"{box}: guard misses {sorted(expected - set(listed))}"
         assert set(listed) <= expected, f"{box}: guard lists dirs no baked role relies on"
-    assert DROPIN_DIR in _guard_list("obs-ubuntu24", "obs"), "the #1265 dir itself"
+    assert DROPIN_DIR in _guard_list("the obs box", "obs"), "the #1265 dir itself"
 
 
 @pytest.mark.parametrize("role", sorted(CONFIGURE_DIRS))
@@ -255,6 +255,6 @@ def test_fix_roles_flip_the_right_manifest_hashes(tmp_path: Path, role: str, fli
     probe.write_text(probe.read_text(encoding="utf-8") + "# probe\n", encoding="utf-8")
     after = {box: _hash(tmp_path, box) for box in boxes}
 
-    for box, (kind, _stem) in boxes.items():
-        expect = kind == "ubuntu" if flips == "ubuntu" else box == "obs-ubuntu24"
+    for box, (kind, stem) in boxes.items():
+        expect = kind == "ubuntu" if flips == "ubuntu" else stem == "obs"
         assert (before[box] != after[box]) is expect, f"{box}: {role} edit, flip={expect}"

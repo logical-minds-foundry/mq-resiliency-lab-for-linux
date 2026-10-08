@@ -1,6 +1,16 @@
 # Corosync/Pacemaker formation - the hand-built equivalent of rdqmadm -c.
 # Cluster comms ride the heartbeat net (the same axis the fault suite
 # severs). hacluster password is runtime-injected (PCMK_HACLUSTER_PASSWORD).
+#
+# Version-neutral across Ubuntu LTS: 24.04 ships pacemaker 2.1.6 / pcs 0.11.7, 26.04
+# ships pacemaker 3.0.1 / pcs 0.12.1 (docs/reference/os-version-support-matrix.md §3.3).
+# Reviewed for #1282 against the pcs CHANGELOG (0.12.0a1..0.12.1 "Removed"/"Changed",
+# https://github.com/ClusterLabs/pcs/blob/main/CHANGELOG.md) and the Pacemaker 3.0
+# changes (https://github.com/ClusterLabs/pacemaker/blob/main/ChangeLog.md,
+# https://projects.clusterlabs.org/w/projects/pacemaker/pacemaker_3.0_changes/): none
+# of `pcs host auth`, `pcs cluster setup|enable|start` or `pcs status` used here was
+# removed or changed, and pacemaker's text node list still prints "Online: [ ... ]"
+# (lib/pengine/pe_output.c, Pacemaker-2.1.6 and Pacemaker-3.0.1).
 - name: install cluster stack (OS-adapter)
   ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
