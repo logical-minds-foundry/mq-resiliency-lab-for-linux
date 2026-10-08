@@ -375,7 +375,8 @@ Every flag is required; a missing one exits 2 with `ERROR: --<flag> is required`
 `--base-box-version` and `--dvd` take the literal `none` (an Ubuntu box attaches no
 DVD; a RHEL bake must name one). Run `mqlab box build <box>` rather than a builder
 by hand. `lab/scripts/stage-rhel-iso.sh` and `scripts/push-rhel-iso.sh` take
-`--iso <file>` the same way.
+`--iso <file>` the same way (repeatable, or `--catalog` for every catalog DVD; see
+§6 below).
 
 `lab/boxes/build-fatbox.sh` builds a box by **provision-then-snapshot**:
 
@@ -645,6 +646,40 @@ as a clearly-commented, inert placeholder pending the cross-org capability
 (vergil-project/vergil-tooling#2407, referenced in epic
 `logical-minds-foundry/.github#91`). **Until it ships, run the script by hand after a
 nuclear rebuild.**
+
+### Push or stage every catalog DVD at once (#1395)
+
+The lab now uses several RHEL DVDs, one per `os.rhel.<major>` entry in the catalog.
+The two per-ISO scripts therefore take any number of ISOs. `scripts/push-rhel-iso.sh`
+copies from the macOS host to an off-platform VM's `build/state/` (see
+[off-platform ISO seed](off-platform-iso-seed.md)). `lab/scripts/stage-rhel-iso.sh`
+stages into the libvirt pool on the lab VM, and `mqlab` runs it per DVD during
+bring-up.
+
+```bash
+./scripts/push-rhel-iso.sh --catalog                    # every os.rhel.<major>.iso
+./scripts/push-rhel-iso.sh --iso <file> --iso <file>    # an explicit set
+lab/scripts/stage-rhel-iso.sh --catalog                 # same shapes on the lab VM
+```
+
+Each ISO is handled in turn with the usual idempotent skip and verification. A
+failure (a missing source, a failed copy or stage) does not stop the rest, and the
+run exits non-zero naming every ISO that failed. `push-rhel-iso.sh` looks the VM up
+**once** for the whole set. The `MQLAB_RHEL_ISO` / `RHEL_ISO` source override names a
+single file, so both scripts refuse it with `--catalog` or with more than one `--iso`.
+Use it only with a single `--iso <file>`, exactly as before.
+
+`--catalog` reads the list through `lab/scripts/rhel-catalog-isos.sh`, which prints
+every `os.rhel.<major>.iso` in [`lab/versions.yaml`](../../lab/versions.yaml) in
+catalog order. The push runs on the macOS host, which has only bash 3.2 and BSD awk
+(no `mqlab`, no PyYAML, possibly no `python3`). The reader is therefore a narrow POSIX
+awk extraction rather than a YAML parser. It accepts exactly the catalog's shape, a
+block `os:` → `rhel:` holding one one-line flow mapping per major
+(`<major>: { …, iso: <file>.iso, … }`). Anything else exits 1 naming the offending
+line, for example a block-style or multi-line entry, a missing or duplicated `iso:`,
+or a value that is not a plain `*.iso` filename. `tests/test_rhel_catalog_isos.py`
+pins its output against `mqlab.versions` on the committed catalog, so a catalog
+reformat that the reader cannot follow fails CI rather than silently dropping a DVD.
 
 ### The `mqlab box` verify-and-guide backstop
 
