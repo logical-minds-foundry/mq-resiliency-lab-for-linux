@@ -11,12 +11,7 @@
 #    it adopts the Live QMId. Starting it as a plain group here would permanently
 #    set its own QMId and CRR would be rejected (AMQ3256E). Its first start is the
 #    ordered restart in step 5, after crr.yml (step 4) sets GroupRole=Recovery. (#389)
-- hosts: nha_rhel_crr_b
-  become: true
-  tasks:
-    - name: acl package for unprivileged become
-      ansible.builtin.dnf:
-        name: acl
+#    acl comes from mq-nativeha's install-RedHat.yml, after the offline DVD repo (#1403).
 - hosts: nha_rhel_crr_b
   become: true
   vars:

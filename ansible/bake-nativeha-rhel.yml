@@ -23,14 +23,6 @@
     # concern (mirrors bake-mq-rdqm.yml / bake-mq-ubuntu.yml).
     mq_exporter_tls: false
   tasks:
-    # `acl` for unprivileged become — the site-nativeha.yml prerequisite, hoisted to bake
-    # (coupling-free, dnf on RHEL). Baked (not fetched per-run over a rate-limited
-    # parallel-boot DNS burst) — the #659 acl-stall kill, RHEL side.
-    - name: acl package (unprivileged become prereq)
-      ansible.builtin.dnf:
-        name: acl
-        state: present
-
     # THE big install: base IBM MQ (server + client + SDK + samples + web, NO RDQM) via
     # the native-HA OS adapter's INSTALL body only (tasks_from: install-RedHat) — the way
     # bake-mq-rdqm.yml bakes rdqm-install with tasks_from: install. main.yml's
@@ -39,6 +31,12 @@
     # main.yml links per QM at configure time. Coupling-free (no run_once/delegate/groups);
     # depends on the install DVD + MQ media. The per-run install-RedHat.yml now SKIPS the
     # tar copy/unpack via a stat-of-cmqc.h guard (#659), so the media is copied once — here.
+    #
+    # This include MUST stay the first package-installing step. install-RedHat.yml mounts
+    # the install DVD and writes rhel-dvd.repo (the offline guest's only package source),
+    # then installs `acl` right after it: the unprivileged-become prereq, baked rather than
+    # fetched per-run (the #659 acl-stall kill, RHEL side). A dnf/package task above this
+    # include finds no repo (#1403). tests/test_rhel_dvd_repo_order.py enforces the order.
     - name: base IBM MQ (native-HA RHEL install adapter — install body only)
       ansible.builtin.include_role:
         name: mq-nativeha

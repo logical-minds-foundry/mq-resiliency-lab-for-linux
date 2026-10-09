@@ -48,6 +48,17 @@
       gpgcheck=0
   become: true
 
+# `acl` for unprivileged become. It lives HERE, right after the DVD repo, because the guest
+# is offline and that repo is its only package source: an install placed before it finds
+# nothing unless the base box already carries the package (#1403). configure.yml repeats it
+# after its own DVD mount as the per-run no-op. tests/test_rhel_dvd_repo_order.py pins the
+# order.
+- name: acl package (unprivileged become prereq)
+  ansible.builtin.dnf:
+    name: acl
+    state: present
+  become: true
+
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
     src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"

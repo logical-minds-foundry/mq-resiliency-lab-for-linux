@@ -22,6 +22,15 @@
   become: true
   changed_when: false
 
+# `acl` for unprivileged become: the per-run copy of install.yml's task, a `present` no-op
+# on the baked box. It follows the DVD mount above because the guest is offline and the
+# baked rhel-dvd.repo is its only package source (#1403).
+- name: acl package (unprivileged become prereq)
+  ansible.builtin.dnf:
+    name: acl
+    state: present
+  become: true
+
 - name: drbd module loads against this kernel
   ansible.builtin.command: modprobe drbd
   become: true
