@@ -48,7 +48,7 @@
 
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/cache/mq/9.4.5.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
+    src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
     dest: /tmp/mqadv.tar.gz
     mode: "0644"
 
