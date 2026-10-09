@@ -53,7 +53,8 @@ The manifest hash (`lab/boxes/_manifest-hash.sh`) digests these inputs:
 - the **shared files** the closure includes from outside `ansible/roles/` (#1324),
   path and content. Today that is the per-OS-version vars loader
   `ansible/tasks/os-vars.yml`, which roles include as
-  `include_tasks: ../../../tasks/os-vars.yml` (#1277). The scan takes every
+  `include_tasks: ../../../tasks/os-vars.yml` (#1277), and the staging-dir task
+  `ansible/tasks/lab-stage-dir.yml` (#1417, see [Staging](#staging-large-artifacts-go-to-lab_stage_dir-never-tmp-1417)). The scan takes every
   `.yml`/`.yaml` path literal on a non-comment line of a reached role file, the bake
   playbook, or a shared file already found. It resolves each literal against the
   referencing file's directory, the role's `tasks/` directory and `ansible/`, and
@@ -167,6 +168,53 @@ Roles using it today: `rdqm-install` (EL tag, RDQM PreReqs dirs, DVD repo name),
 and `RedHat-10.yml`, because `nativeha-rhel-crr` supports both majors. `rdqm-install` and
 `mq-nativeha-spike` ship `RedHat-9.yml` only: RDQM is RHEL 9 only, and the spike runs on
 the RDQM slots.
+
+## Staging: large artifacts go to `lab_stage_dir`, never `/tmp` (#1417)
+
+Ubuntu 26.04 mounts `/tmp` as tmpfs sized at 50% of RAM (`tmp.mount` ships enabled):
+about 974M on the 2 GiB build VM. The `obs-ubuntu26` bake ran it out of space unpacking
+the prometheus, loki, logcli, alloy and node_exporter releases, and the multi-GB MQ
+tarball with its `MQServer/` tree could never fit. Ubuntu 24.04 and RHEL 9/10 keep `/tmp`
+on disk, so this never showed there. The tmpfs default stays; the lab no longer stages
+large artifacts in `/tmp` on any OS.
+
+- **One variable.** `lab_stage_dir: /var/tmp/lab-staging`
+  (`ansible/group_vars/all/staging.yml`). `/var/tmp` is disk-backed on every catalog OS,
+  so a bake is bounded by the build disk, not guest RAM. The lab-owned subdirectory keeps
+  the lab's staging apart from anything else in `/var/tmp`.
+- **Created at the point of use.** Each staging role includes
+  `ansible/tasks/lab-stage-dir.yml` (`include_tasks: ../../../tasks/lab-stage-dir.yml`)
+  just before it stages. That task asserts the path is absolute and outside `/tmp`,
+  then makes it `root:root 0755`. Creating it per use rather than once per bake matters:
+  `systemd-tmpfiles` ages `/var/tmp` (30 days), so a box baked long ago can boot without
+  it. `0755` lets apt's unprivileged `_apt` user read the local MQ `.deb`s, as it could
+  under `/tmp`. The staging tasks run with `become: true`, because the pcmk and spike
+  plays apply MQ roles without a play-level become.
+- **Users.** The MQ media (`mqadv.tar.gz` and `MQServer/`) in `mq-install`, `mq-client`,
+  `mq-nativeha` (both adapters), `mq-nativeha-spike` and `rdqm-install`, including
+  `modver`, the kmod `stat` and both `dnf` steps. Also the `prometheus`, `loki`/`logcli`,
+  `alloy` and `node-exporter` release unpacks, the `runtime-install` tarball, the
+  `component-install` artifact, the `opensearch` restore tarball, and `mqlab logsearch
+  snapshot`/`restore` (`GUEST_STAGE_DIR` in `src/mqlab/logsearch.py`, the same path).
+  `opensearch`, `opensearch-dashboards` and `data-prepper` unpack straight into
+  `/usr/share`, and `grafana-image-renderer` downloads straight to `/usr/local/bin`. None
+  of them stages anything.
+- **Cleanup.** `/tmp` was wiped at boot on Ubuntu and aged after 10 days on RHEL, which
+  quietly disposed of the staged media. `/var/tmp` is neither, so each role now removes
+  what it staged once the install has consumed it. Nothing staged is carried into a baked
+  image or a running guest.
+- **Ansible's own temp.** Module transfers (a controller-side `copy` source, a URL
+  `unarchive` download) land in Ansible's remote temp, `remote_tmp = ~/.ansible/tmp`,
+  which `ansible/ansible.cfg` pins explicitly. That is under the connecting user's (or
+  root's) home, on disk.
+- **Guard.** `tests/test_stage_off_tmpfs.py` fails on any non-comment `/tmp` path under
+  `ansible/`, `lab/boxes/` or `src/mqlab/` that is not on its reviewed allow-list of small,
+  ephemeral files (controller-side keystore hand-offs, one stderr capture). It also pins
+  every MQ media and observability unpack to `lab_stage_dir`, and `remote_tmp` off `/tmp`.
+
+`ansible/group_vars/all/staging.yml` is not a manifest-hash input. Nothing staged
+survives into the image, so the staging path does not shape a baked box. The
+`lab-stage-dir.yml` task and every role that uses it are hashed through the closure.
 
 ## Phased startup — baked inert, started per-run
 

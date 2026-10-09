@@ -1,0 +1,35 @@
+---
+# Ensure the on-disk staging dir exists (#1417; lab_stage_dir in group_vars/all/staging.yml).
+#
+# Every role that downloads, copies or unpacks a large artifact includes this right before
+# it stages, from a task file in roles/<role>/tasks/:
+#   - ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+# (the os-vars.yml include idiom: the relative path is how Ansible resolves a role's
+# include_tasks and how ansible-lint and the manifest hash follow it).
+#
+# Point of use, not once per bake: /var/tmp is aged by systemd-tmpfiles, so a box baked
+# long ago may have lost the dir. The task is idempotent and cheap.
+#
+# root:root 0755: only root writes here (the roles stage with become), and others may
+# traverse and read, which apt's unprivileged _apt sandbox user needs to read the local
+# MQ .debs, as it could under /tmp. Nothing secret is staged here.
+- name: the staging dir must be on disk, not /tmp (#1417)
+  ansible.builtin.assert:
+    that:
+      - lab_stage_dir is defined
+      - lab_stage_dir is match('/')
+      - lab_stage_dir is not match('/tmp(/|$)')
+    fail_msg: >-
+      lab_stage_dir ({{ lab_stage_dir | default('undefined') }}) must be an absolute path
+      outside /tmp: Ubuntu 26.04's /tmp is a RAM-sized tmpfs and large artifacts overflow
+      it (#1417). Set it in ansible/group_vars/all/staging.yml.
+    quiet: true
+
+- name: "staging dir {{ lab_stage_dir }} (on disk)"
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true

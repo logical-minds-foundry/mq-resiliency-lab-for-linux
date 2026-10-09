@@ -27,22 +27,36 @@
     path: /usr/local/bin/node_exporter
   register: node_exporter_installed
 
+# Staged on disk under lab_stage_dir, never /tmp (#1417): Ubuntu 26.04's /tmp is a
+# RAM-sized tmpfs.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+  when: not node_exporter_installed.stat.exists
+
 - name: download + unpack node_exporter
   ansible.builtin.unarchive:
     src: "{{ node_exporter_url }}"
-    dest: /tmp
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: "/tmp/{{ node_exporter_pkg }}/node_exporter"
+    creates: "{{ lab_stage_dir }}/{{ node_exporter_pkg }}/node_exporter"
   when: not node_exporter_installed.stat.exists
 
 - name: install the binary
   ansible.builtin.copy:
-    src: "/tmp/{{ node_exporter_pkg }}/node_exporter"
+    src: "{{ lab_stage_dir }}/{{ node_exporter_pkg }}/node_exporter"
     dest: /usr/local/bin/node_exporter
     mode: "0755"
     remote_src: true
   when: not node_exporter_installed.stat.exists
   notify: restart node_exporter
+
+# /var/tmp is not wiped at boot the way /tmp was: remove the unpacked release once the
+# binary is installed, so it is not carried into every baked image.
+- name: remove the staged node_exporter release
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}/{{ node_exporter_pkg }}"
+    state: absent
+  when: not node_exporter_installed.stat.exists
 
 # A shared drop zone, not node_exporter's private dir: the root-run collectors AND
 # the unprivileged app-requester (User=vagrant, in the node_exporter group) publish

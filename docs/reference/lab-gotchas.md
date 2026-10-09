@@ -15,6 +15,7 @@
 - [Pacemaker operational settings that matter](#pacemaker-operational-settings-that-matter)
 - [RDQM DR cold-create: crtmqm mkfs I/O error on the DR device](#rdqm-dr-cold-create-crtmqm-mkfs-io-error-on-the-dr-device)
 - [RDQM bake: kmod WARNING or "Unsupported kernel release"](#rdqm-bake-kmod-warning-or-unsupported-kernel-release)
+- [Bake fails "No space left on device" unpacking into /tmp](#bake-fails-no-space-left-on-device-unpacking-into-tmp)
 
 ## Vagrant leaves orphaned extra-disk volumes
 
@@ -257,3 +258,24 @@ a rebake), not to suppress it. For "Unsupported kernel release.": the MQ media i
 than the kernel. Use an MQ level (or IBM's Fix Central kmod bundle) whose `modver` knows
 that kernel family, or bake from a supported RHEL point release. When IBM's table
 changes, refresh `rdqm_kernel_known_issues` and its `_as_of` date in the vars file.
+
+## Bake fails "No space left on device" unpacking into /tmp
+
+**Symptom.** An Ubuntu 26.04 bake (first seen on `obs-ubuntu26`) fails at a download
+or unpack task, for example `prometheus : download + unpack prometheus`, with
+`tar: ... Cannot write: No space left on device`, while `/` still has gigabytes free.
+
+**Cause.** Ubuntu 26.04 mounts `/tmp` as tmpfs sized at 50% of RAM. `tmp.mount` ships
+enabled (`What=tmpfs`, `Options=...,size=50%%,...`), so a 1.9 GB build VM gets a 974M
+`/tmp`. Check with `findmnt /tmp` and `df -h /tmp`. The roles used to stage there, and
+node_exporter, logcli, loki, prometheus and alloy filled it before the multi-GB MQ
+tarball was even copied. Ubuntu 24.04 and RHEL keep `/tmp` on disk, so this never
+showed on them.
+
+**Fix.** Do not mask `tmp.mount`: the tmpfs default stays. Since #1417 every role
+stages large artifacts under `lab_stage_dir` (`/var/tmp/lab-staging`, on disk), made at
+the point of use by `ansible/tasks/lab-stage-dir.yml`, and removes them once installed.
+If this error comes back, a new task is staging in `/tmp`. `tests/test_stage_off_tmpfs.py`
+should already have failed on it; move the task to `{{ lab_stage_dir }}`, not onto the
+allow-list. See
+[box-bake-manifest.md](../development/box-bake-manifest.md#staging-large-artifacts-go-to-lab_stage_dir-never-tmp-1417).

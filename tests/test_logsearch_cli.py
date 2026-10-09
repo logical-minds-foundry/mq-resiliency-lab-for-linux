@@ -174,6 +174,69 @@ def test_untar_argv_expands_into_repo_dir() -> None:
     assert _TAR in joined
 
 
+def test_stage_dir_argv_makes_the_root_owned_dir() -> None:
+    argv = logsearch.stage_dir_argv("logsearch", "/staging")
+    assert argv[:2] == ["ansible", "logsearch"]
+    assert "--become" in argv
+    assert "ansible.builtin.file" in argv
+    assert argv[-1] == "path=/staging state=directory owner=root group=root mode=0755"
+
+
+def test_remove_argv_deletes_the_staged_file() -> None:
+    argv = logsearch.remove_argv("logsearch", _TAR)
+    assert argv[:2] == ["ansible", "logsearch"]
+    assert "--become" in argv
+    assert "ansible.builtin.file" in argv
+    assert argv[-1] == f"path={_TAR} state=absent"
+
+
+def test_guest_staging_is_on_disk_not_tmp() -> None:
+    """#1417: obs's Ubuntu 26.04 /tmp is a RAM-sized tmpfs."""
+    assert logsearch.GUEST_STAGE_DIR == "/var/tmp/lab-staging"  # noqa: S108 - on-disk path
+
+
+def _staged_steps(monkeypatch, verb: str, cli_args: list[str]) -> list[list[str]]:
+    """Run a transport verb with the I/O seams stubbed; return the step argvs in order."""
+    executed: list[list[str]] = []
+
+    def fake_exec(v: str, steps) -> None:
+        executed.extend(step.command.argv for step in steps)
+
+    monkeypatch.setattr(logsearch, "_execute_steps", fake_exec)
+    result = runner.invoke(cli.app, ["logsearch", verb, *cli_args])
+    assert result.exit_code == 0, result.output
+    return executed
+
+
+def test_snapshot_stages_on_disk_and_cleans_up(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        logsearch, "_put_json", lambda url, body=None: {"snapshot": {"state": "SUCCESS"}}
+    )
+    steps = _staged_steps(monkeypatch, "snapshot", [])
+    stage = logsearch.GUEST_STAGE_DIR
+    assert steps[0] == logsearch.stage_dir_argv(logsearch.INVENTORY_HOST, stage)
+    assert f"src={stage}/" in steps[2][-1]
+    assert steps[-1][:2] == ["ansible", logsearch.INVENTORY_HOST]
+    assert steps[-1][-1].startswith(f"path={stage}/")
+    assert steps[-1][-1].endswith(".tar.gz state=absent")
+    assert f"czf {stage}/" in steps[1][-1]
+
+
+def test_restore_stages_on_disk_and_cleans_up(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    store = logsearch._snapshot_state_dir()
+    store.mkdir(parents=True, exist_ok=True)
+    (store / "snap-20260101T000000Z.tar.gz").write_bytes(b"a")
+    monkeypatch.setattr(logsearch, "_post_json", lambda url, body=None: {})
+    steps = _staged_steps(monkeypatch, "restore", [])
+    stage = logsearch.GUEST_STAGE_DIR
+    remote = f"{stage}/snap-20260101T000000Z.tar.gz"
+    assert steps[0] == logsearch.stage_dir_argv(logsearch.INVENTORY_HOST, stage)
+    assert f"dest={remote}" in steps[1][-1]
+    assert steps[-1] == logsearch.remove_argv(logsearch.INVENTORY_HOST, remote)
+
+
 # --- open: pure command (prints dashboards_url) ---
 
 

@@ -98,21 +98,33 @@
       ansible.builtin.set_fact:
         opensearch_latest_snapshot: "{{ opensearch_host_snapshots.files | map(attribute='path') | sort | last }}"
 
+    # Staged on disk under lab_stage_dir, never /tmp (#1417): a log snapshot can be large
+    # and obs's Ubuntu 26.04 /tmp is a RAM-sized tmpfs.
+    - name: staging dir (on disk)
+      ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
     - name: copy the snapshot tarball to the guest
       ansible.builtin.copy:
         src: "{{ opensearch_latest_snapshot }}"
-        dest: "/tmp/{{ opensearch_latest_snapshot | basename }}"
+        dest: "{{ lab_stage_dir }}/{{ opensearch_latest_snapshot | basename }}"
         owner: "{{ opensearch_user }}"
         group: "{{ opensearch_user }}"
         mode: "0640"
 
     - name: unpack the snapshot repo contents into path.repo
       ansible.builtin.unarchive:
-        src: "/tmp/{{ opensearch_latest_snapshot | basename }}"
+        src: "{{ lab_stage_dir }}/{{ opensearch_latest_snapshot | basename }}"
         dest: "{{ opensearch_repo_dir }}"
         remote_src: true
         owner: "{{ opensearch_user }}"
         group: "{{ opensearch_user }}"
+
+    # /var/tmp is not wiped at boot the way /tmp was: remove the staged tarball now that
+    # its contents are in path.repo.
+    - name: remove the staged snapshot tarball
+      ansible.builtin.file:
+        path: "{{ lab_stage_dir }}/{{ opensearch_latest_snapshot | basename }}"
+        state: absent
 
 # Register the fs repo AFTER any restored files are in place so OpenSearch scans them.
 # Runs on every bring-up (a fresh build registers an empty repo so future snapshots work).

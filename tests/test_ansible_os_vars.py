@@ -80,7 +80,8 @@ RHEL96_FACTS = {
     "ansible_distribution_version": "9.6",
 }
 
-# The pre-#1277 literals, verbatim — the rendered output must reproduce them exactly.
+# The pre-#1277 literals, verbatim — the rendered output must reproduce them exactly
+# (the MQ media dir aside: #1417 moved it from /tmp/MQServer to lab_stage_dir).
 DVD_REPO_BEFORE = """\
 [dvd-baseos]
 name=RHEL 9.6 DVD BaseOS
@@ -96,7 +97,7 @@ gpgcheck=0
 KMOD_RPM = "kmod-drbd-modver-chose.rpm"
 PREREQS_BEFORE = f"""\
 set -e
-cd /tmp/MQServer
+cd "/var/tmp/lab-staging/MQServer"
 dnf install -y \\
   MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \\
   MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \\
@@ -152,6 +153,12 @@ def _render(template: str, context: dict[str, Any]) -> str:
         ),
     )
     return env.from_string(template).render(context)
+
+
+def _staging_vars() -> dict[str, Any]:
+    """``lab_stage_dir`` from group_vars/all, where the MQ media is unpacked (#1417)."""
+    data: dict[str, Any] = _load(ANSIBLE / "group_vars" / "all" / "staging.yml")
+    return data
 
 
 def _rhel96_context(role: str) -> dict[str, Any]:
@@ -217,7 +224,7 @@ def test_dvd_repo_renders_identically_on_rhel96(role: str) -> None:
 
 def test_rdqm_prereq_paths_render_identically_on_rhel96() -> None:
     body = RHEL_INSTALL_BODIES["rdqm-install"]
-    ctx = {**_rhel96_context("rdqm-install"), "rdqm_kmod_rpm": KMOD_RPM}
+    ctx = {**_rhel96_context("rdqm-install"), "rdqm_kmod_rpm": KMOD_RPM, **_staging_vars()}
     modver = _named(body, "ask IBM's modver which drbd kmod fits the running kernel (loud fail)")
     modver_path = _render(modver["ansible.builtin.command"]["argv"][0], ctx)
     assert modver_path.endswith("/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/modver")

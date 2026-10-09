@@ -53,13 +53,18 @@
       (supplied: {{ component_artifacts | list | join(', ') or 'none' }}) — run
       mqlab component build <name>, then mqlab component install <name> --host <guest>
 
+# The artifact is staged under lab_stage_dir (#1417): the lab's one on-disk staging
+# location. The preconditions above passed, so the first guest change is creating it.
+- name: Staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
 - name: Set the component paths
   ansible.builtin.set_fact:
     _c_runtime: "{{ component_runtime_prefix }}/cpython-{{ runtime_python.minor }}/bin/python{{ runtime_python.minor }}"
     _c_root: "{{ component_install_prefix }}/{{ component_name }}"
     _c_etc: "{{ component_config_prefix }}/{{ component_name }}"
     _c_src: "{{ component_artifacts[component_name] }}"
-    _c_stage: "/var/tmp/component-{{ component_name }}"
+    _c_stage: "{{ lab_stage_dir }}/component-{{ component_name }}"
 
 # --- 2. copy the artifact ----------------------------------------------------------------
 - name: Clear the guest staging dir

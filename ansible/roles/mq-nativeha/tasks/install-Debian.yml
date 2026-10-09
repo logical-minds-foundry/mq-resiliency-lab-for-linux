@@ -21,23 +21,31 @@
     path: /opt/mqm/inc/cmqc.h
   register: mq_installed
 
+# The MQ media is staged on disk under lab_stage_dir, never /tmp (#1417): Ubuntu 26.04's
+# /tmp is a RAM-sized tmpfs that the ~2 GiB tarball + its MQServer/ tree cannot fit in.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+  when: not mq_installed.stat.exists
+
 - name: copy MQ Ubuntu tar to node
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
-    dest: /tmp/mqadv.tar.gz
+    dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
+  become: true  # lab_stage_dir is root-owned 0755
   when: not mq_installed.stat.exists
 
 - name: unpack
   ansible.builtin.unarchive:
-    src: /tmp/mqadv.tar.gz
-    dest: /tmp
+    src: "{{ lab_stage_dir }}/mqadv.tar.gz"
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: /tmp/MQServer
+    creates: "{{ lab_stage_dir }}/MQServer"
+  become: true
   when: not mq_installed.stat.exists
 
 - name: accept developer licence
-  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  ansible.builtin.command: "{{ lab_stage_dir }}/MQServer/mqlicense.sh -accept"
   args:
     creates: /var/mqm
 
@@ -50,13 +58,24 @@
   ansible.builtin.shell: |
     set -e
     apt-get update
-    cd /tmp/MQServer
+    cd "{{ lab_stage_dir }}/MQServer"
     apt-get install -y \
       ./ibmmq-runtime_*.deb ./ibmmq-server_*.deb ./ibmmq-gskit_*.deb \
       ./ibmmq-java_*.deb ./ibmmq-jre_*.deb ./ibmmq-web_*.deb \
       ./ibmmq-sdk_*.deb ./ibmmq-client_*.deb ./ibmmq-samples_*.deb
   args:
     creates: /opt/mqm/bin/crtmqm
+  become: true
+
+# /var/tmp is not wiped at boot the way /tmp was: remove the staged tarball and its
+# unpacked tree once the debs are installed, so neither is carried into the baked image.
+- name: remove the staged MQ media
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ lab_stage_dir }}/mqadv.tar.gz"
+    - "{{ lab_stage_dir }}/MQServer"
   become: true
 
 - name: set primary installation (loader path)

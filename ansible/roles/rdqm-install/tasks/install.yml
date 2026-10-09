@@ -59,21 +59,30 @@
     state: present
   become: true
 
+# The MQ media is staged on disk under lab_stage_dir, never /tmp (#1417): the ~2 GiB
+# tarball + its MQServer/ tree overflow a RAM-sized tmpfs /tmp. RHEL's /tmp is on disk
+# today, so this changes nothing in effect here; one location serves every OS. Every
+# MQServer path below (modver, the kmod stat, both dnf steps) follows lab_stage_dir.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
     src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
-    dest: /tmp/mqadv.tar.gz
+    dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
+  become: true  # lab_stage_dir is root-owned 0755
 
 - name: unpack
   ansible.builtin.unarchive:
-    src: /tmp/mqadv.tar.gz
-    dest: /tmp
+    src: "{{ lab_stage_dir }}/mqadv.tar.gz"
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: /tmp/MQServer
+    creates: "{{ lab_stage_dir }}/MQServer"
+  become: true
 
 - name: accept developer licence
-  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  ansible.builtin.command: "{{ lab_stage_dir }}/MQServer/mqlicense.sh -accept"
   args:
     creates: /var/mqm
   become: true
@@ -92,7 +101,7 @@
 - name: ask IBM's modver which drbd kmod fits the running kernel (loud fail)
   ansible.builtin.command:
     argv:
-      - "/tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/modver"
+      - "{{ lab_stage_dir }}/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/modver"
       - -m
       - "{{ ansible_kernel }}"
   register: kmod_modver
@@ -121,14 +130,14 @@
 
 - name: stat the kmod rpm modver chose
   ansible.builtin.stat:
-    path: "/tmp/MQServer/{{ rdqm_kmod_rpm }}"
+    path: "{{ lab_stage_dir }}/MQServer/{{ rdqm_kmod_rpm }}"
   register: kmod_rpm_stat
 
 - name: the kmod modver chose ships in the unpacked media (loud fail)
   ansible.builtin.assert:
     that:
       - kmod_rpm_stat.stat.exists
-    fail_msg: "modver chose {{ rdqm_kmod_rpm }}, but /tmp/MQServer has no such file"
+    fail_msg: "modver chose {{ rdqm_kmod_rpm }}, but {{ lab_stage_dir }}/MQServer has no such file"
     quiet: true
 
 # IBM's known-issue kernels (#1408). modver maps kernel families only; it says nothing
@@ -160,7 +169,7 @@
 - name: install MQ + cluster prereqs (step 1 of 2)
   ansible.builtin.shell: |
     set -e
-    cd /tmp/MQServer
+    cd "{{ lab_stage_dir }}/MQServer"
     dnf install -y \
       MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
       MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
@@ -175,10 +184,21 @@
 - name: install MQSeriesRDQM (step 2 of 2 - after the server files exist)
   ansible.builtin.shell: |
     set -e
-    cd /tmp/MQServer
+    cd "{{ lab_stage_dir }}/MQServer"
     dnf install -y Advanced/RDQM/MQSeriesRDQM-*.rpm
   args:
     creates: /opt/mqm/bin/rdqmadm
+  become: true
+
+# Remove the staged tarball and its unpacked tree once both dnf steps are done, so
+# neither is carried into the baked image (/var/tmp is not cleaned the way /tmp is).
+- name: remove the staged MQ media
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ lab_stage_dir }}/mqadv.tar.gz"
+    - "{{ lab_stage_dir }}/MQServer"
   become: true
 
 - name: set primary installation (loader path)

@@ -103,10 +103,14 @@ def _absent_paths(task: dict[str, Any]) -> set[str]:
 
 def _retire(role: str) -> tuple[int, set[str]]:
     """The single loop task that retires the pre-#294 payloads and unit copies."""
+    # The staged-MQ-media cleanup (#1417) is also a file/absent loop, over lab_stage_dir
+    # paths; it is not the retire step, so it is left out here.
     hits = [
         (i, _absent_paths(t))
         for i, t in enumerate(_tasks(role))
-        if isinstance(t.get("loop"), list) and _absent_paths(t)
+        if isinstance(t.get("loop"), list)
+        and _absent_paths(t)
+        and not any("lab_stage_dir" in p for p in _absent_paths(t))
     ]
     assert len(hits) == 1, f"{role}: expected one retire-loop task, got {hits}"
     return hits[0]
