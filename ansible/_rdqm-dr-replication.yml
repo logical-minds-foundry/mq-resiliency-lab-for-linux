@@ -9,17 +9,12 @@
 # site-B HA group exist so the DR secondary can be created on it. It also makes
 # `mqlab obs instrument` succeed on rdqm_b: rdqm-install configures the DVD dnf repo,
 # without which dnf has no source for packages like unzip (#288).
-- hosts: rdqm_b
-  become: true
-  tasks:
-    - name: acl package for unprivileged become
-      ansible.builtin.dnf:
-        name: acl
 
 # As on site A: the heavy MQ + RDQM install is baked into the mq-rdqm box, so per-run we
 # run ONLY rdqm-install's configure half (drbd module + drbdpool VG on this instance's
 # fresh extra disk). The DVD dnf repo it (re)mounts is what makes
-# `mqlab obs instrument` find packages like unzip on rdqm_b later (#288, #604).
+# `mqlab obs instrument` find packages like unzip on rdqm_b later (#288, #604), and it
+# installs acl only after that mount (#1403).
 - hosts: rdqm_b
   become: true
   tasks:

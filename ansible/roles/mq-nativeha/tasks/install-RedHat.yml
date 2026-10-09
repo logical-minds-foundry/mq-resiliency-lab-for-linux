@@ -49,6 +49,16 @@
       enabled=1
       gpgcheck=0
 
+# `acl` for unprivileged become (main.yml's first `become_user: mqm` step follows this
+# adapter). It lives HERE, right after the DVD repo, because the guest is offline and that
+# repo is its only package source: an install placed before it finds nothing (#1403 — the
+# RHEL 10 minimal base lacks acl; RHEL 9's base happened to carry it). The bake and every
+# per-run play get acl from this one task. tests/test_rhel_dvd_repo_order.py pins the order.
+- name: acl package (unprivileged become prereq)
+  ansible.builtin.dnf:
+    name: acl
+    state: present
+
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
     # mq_media_dir (role default = the per-run path) is overridden by the fat-box bake to

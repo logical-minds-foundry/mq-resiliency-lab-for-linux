@@ -3,17 +3,13 @@
 # ahead of _rdqm-dr-replication.yml (site B). rdqm-ha forms the Pacemaker-managed
 # replicated-data group; the QM itself is created later (folded qm-create) once
 # both sites' groups exist, so the DR secondary has a peer group to land on.
-- hosts: rdqm_a
-  become: true
-  tasks:
-    - name: acl package for unprivileged become
-      ansible.builtin.dnf:
-        name: acl
 
 # The heavy MQ + RDQM (DRBD/Pacemaker) install is BAKED into the mq-rdqm box
 # (ansible/bake-mq-rdqm.yml), so per-run we run ONLY rdqm-install's configure half:
 # drbd module load and the drbdpool VG on this instance's fresh extra disk. This is
-# the #604 strip — the bake roles do not re-run at bootstrap.
+# the #604 strip — the bake roles do not re-run at bootstrap. The configure half also
+# carries acl (the unprivileged-become prereq), after it mounts the offline DVD repo; a
+# standalone acl play ahead of it ran before any repo was up (#1403).
 - hosts: rdqm_a
   become: true
   tasks:

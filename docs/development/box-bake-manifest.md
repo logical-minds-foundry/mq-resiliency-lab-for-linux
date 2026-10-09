@@ -247,12 +247,31 @@ each Ubuntu bake's manifest-hash closure; the RHEL boxes are unaffected.
 
 ## Per-box bake sets
 
+### RHEL boxes: the offline DVD repo comes first (#1403)
+
+The RHEL guests are offline and unregistered. Their only package source is the install
+DVD, which the RHEL install adapter (`rdqm-install`'s `install.yml`, `mq-nativeha`'s
+`install-RedHat.yml`) mounts at `/media/rhel` and exposes through
+`/etc/yum.repos.d/rhel-dvd.repo`. So in both RHEL bakes that include is the **first
+package-installing step**, and `acl` is installed inside the adapter, right after the repo
+task. Every later `dnf`/`package` step (`acl` again in node-exporter, `rng-tools`, `unzip`,
+`libicu`) follows it. A package task placed above the include finds no repo; it passes only
+when the base box already carries the package. That is how the `mq-nativeha-rhel9` bake
+installed `acl` first for months, and why the same playbook failed on RHEL 10, whose
+minimal base has no `acl`.
+
+The per-run plays follow the same rule: `site-nativeha.yml` gets `acl` from the same
+`install-RedHat.yml` task, and `site-rdqm.yml` from `rdqm-install`'s `configure.yml`,
+after it re-mounts the DVD that the baked repo file points at. The standalone `acl` plays
+that used to open `_nativeha-*` and `_rdqm-*` are gone.
+`tests/test_rhel_dvd_repo_order.py` walks both RHEL bakes and both RHEL site entry points
+in execution order and fails if any package install reaches a RHEL host before its repo.
+
 ### `mq-rdqm-rhel9` → `ansible/bake-mq-rdqm.yml`
 
 | Role | In bake | Notes |
 |------|---------|-------|
-| `acl` (dnf pkg) | ✅ full | Unprivileged-become prereq (from `_rdqm-cluster-ha.yml`). |
-| `rdqm-install` | ✅ full | MQ server set + SDK + samples + web, plus bundled LINBIT/DRBD + Pacemaker + MQSeriesRDQM, one pre-QM pass. Its last step seeds the #282/#569 journald `DiagnosticMessages` drop-in (journald-only on RDQM) — the diagnostic default baked into the image. |
+| `rdqm-install` | ✅ full | Mounts the install DVD and writes its offline repo, then installs `acl` (the unprivileged-become prereq), then the MQ server set + SDK + samples + web, plus bundled LINBIT/DRBD + Pacemaker + MQSeriesRDQM, one pre-QM pass. Its last step seeds the #282/#569 journald `DiagnosticMessages` drop-in (journald-only on RDQM) — the diagnostic default baked into the image. |
 | `node-exporter` | ✅ full | All-install (static config); no split needed. |
 | `alloy` | ✅ install half | Binary + unit baked; `config.alloy` (per-QM-node mqweb-tail, loki endpoint) + start stay per-run. |
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
@@ -327,8 +346,7 @@ mqlab box build rhel/10-x86_64 mq-nativeha-rhel10
 
 | Role | In bake | Notes |
 |------|---------|-------|
-| `acl` (dnf pkg) | ✅ full | Unprivileged-become prereq for `site-nativeha.yml` — the RHEL-side #659 acl-stall kill. |
-| `mq-nativeha` (`tasks_from: install-RedHat`) | ✅ install half | Base IBM MQ (server + client + SDK + samples + web, **no** RDQM) via the native-HA OS adapter's **install body only**. `main.yml`'s `crtmqm` / peer-set / `mqmonitor@` **formation stays per-run** (see "Stays configure" below). The per-run `install-RedHat.yml` skip-if-baked-guards the tar copy/unpack on a stat of `/opt/mqm/inc/cmqc.h` (#659), so the media is copied once — here. |
+| `mq-nativeha` (`tasks_from: install-RedHat`) | ✅ install half | Mounts the install DVD and writes its offline repo, then installs `acl` (the unprivileged-become prereq for `site-nativeha.yml`; the RHEL-side #659 acl-stall kill), then base IBM MQ (server + client + SDK + samples + web, **no** RDQM) via the native-HA OS adapter's **install body only**. `main.yml`'s `crtmqm` / peer-set / `mqmonitor@` **formation stays per-run** (see "Stays configure" below). The per-run `install-RedHat.yml` skip-if-baked-guards the tar copy/unpack on a stat of `/opt/mqm/inc/cmqc.h` (#659), so the media is copied once — here. |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). No `rdqm.service` daemon exists on a native-HA box. |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |

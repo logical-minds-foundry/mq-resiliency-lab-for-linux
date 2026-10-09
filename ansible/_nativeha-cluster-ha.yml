@@ -4,13 +4,10 @@
 # layer, and _nativeha-dr-replication.yml (site B + TLS + CRR). mq-nativeha forms
 # the Live group; objects defined on its active instance replicate via raft, and
 # the Recovery group (site B) inherits them by CRR.
-- hosts: nha_rhel_crr_a
-  become: true
-  tasks:
-    - name: acl package for unprivileged become (become_user mqm)
-      ansible.builtin.dnf:
-        name: acl
-
+#
+# acl (the unprivileged-become prereq) comes from mq-nativeha's install-RedHat.yml, right
+# after it configures the offline DVD repo. A standalone acl play here ran BEFORE that repo
+# existed, so it could only pass on a base box that already carried acl (#1403).
 - hosts: nha_rhel_crr_a
   become: true
   vars:

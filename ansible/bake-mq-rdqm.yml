@@ -21,14 +21,6 @@
     # (Belt-and-braces: nothing in this play triggers pki, but keep it explicit.)
     mq_exporter_tls: false
   tasks:
-    # `acl` for unprivileged become — the _rdqm-cluster-ha.yml prerequisite, hoisted
-    # to bake (coupling-free, dnf on RHEL). NOTE: RDQM's Pacemaker/DRBD stack comes
-    # from the MQ Advanced tar's PreReqs (rdqm-install), not a HighAvailability repo.
-    - name: acl package (unprivileged become prereq)
-      ansible.builtin.dnf:
-        name: acl
-        state: present
-
     # THE big install: MQ server set + SDK + samples + web, plus the bundled
     # LINBIT/DRBD + Pacemaker stack and MQSeriesRDQM, in one pre-QM pass. Also seeds
     # the #282/#569 journald diagnostic drop-in (mq-diag-logging system, journald-only
@@ -38,6 +30,14 @@
     # (needs a fresh /dev/vdb), the drbd module load, and the base-OS dnf update live in
     # the role's configure half and run per-run, so the bake needs no extra disk (#604).
     # mq_media_dir is overridden by build-fatbox.sh to the main-worktree media cache.
+    # RDQM's Pacemaker/DRBD stack comes from the MQ Advanced tar's PreReqs, not a
+    # HighAvailability repo.
+    #
+    # This include MUST stay the first package-installing step. install.yml mounts the
+    # install DVD and writes rhel-dvd.repo (the offline guest's only package source), then
+    # installs `acl` (the unprivileged-become prereq) right after it. A dnf/package task
+    # above this include finds no repo unless the base box already carries the package
+    # (#1403). tests/test_rhel_dvd_repo_order.py enforces the order.
     - name: MQ + RDQM (DRBD/Pacemaker) install + journald diagnostic seed
       ansible.builtin.include_role:
         name: rdqm-install
