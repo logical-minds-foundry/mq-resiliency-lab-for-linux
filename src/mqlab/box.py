@@ -38,7 +38,7 @@ from mqlab.runner import Command, SubprocessRunner
 from mqlab.runtime import RuntimePinError
 from mqlab.versions import (
     HOST_ARCHES,
-    INFRA_ROLES,
+    SHARED_ROLES,
     BoxEntry,
     Catalog,
     VersionError,
@@ -187,15 +187,16 @@ def boxes_for_build(
 ) -> list[str]:
     """The boxes a build file needs, for every stack (`mqlab box build --config`).
 
-    The infra boxes, then, for every stack whose OS family the build file covers (a
-    build file naming ``os: rhel:9`` covers the RHEL stacks; one with no ``os`` covers
-    every stack at its default), that stack's roles on the OS Catalog.stack_os resolves
+    The shared boxes (each on its Catalog.shared_os), then, for every stack whose OS
+    family the build file covers (a build file naming ``os: rhel:9`` covers the RHEL
+    stacks; one with no ``os`` covers every stack at its default), that stack's roles
+    on the OS Catalog.stack_os resolves
     — so an unsupported or host-incompatible request fails loudly there. A stack left
     at its default is skipped only when this host cannot run that default (RHEL on
     aarch64), since nothing asked for it."""
     catalog = catalog if catalog is not None else load_catalog()
     roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
-    names = [catalog.box(role, catalog.infra).name for role in INFRA_ROLES]
+    names = [catalog.box(role, catalog.shared_os(role)).name for role in SHARED_ROLES]
     for stack, stack_box_roles in roles.items():
         if stack not in catalog.stacks:
             raise VersionError(

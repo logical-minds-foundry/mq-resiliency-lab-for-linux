@@ -12,6 +12,15 @@
     mode: "0600"
   become: true
 
+# Unchanged on Ubuntu 26.04 (pacemaker 3.0.1, pcs 0.12.1, fence-agents 4.17), reviewed
+# for #1282: Pacemaker 3.0 defaults pcmk_host_argument to "none" only for agents that
+# advertise neither `plug` nor `port`, and fence_virsh advertises both (Pacemaker 3.0
+# behavioral changes,
+# https://projects.clusterlabs.org/w/projects/pacemaker/pacemaker_3.0_changes/pacemaker_3.0_behavioral_changes/).
+# pcs 0.12 removed only creating a stonith device inside a group; these are top-level.
+# pcs 0.12 now runs the agent's own option validation on create, which only warns
+# unless --agent-validation is given (pcs CHANGELOG 0.12.0a1,
+# https://github.com/ClusterLabs/pcs/blob/main/CHANGELOG.md).
 - name: stonith primitives + constraints (run once; idempotent)
   ansible.builtin.shell: |
     set -e

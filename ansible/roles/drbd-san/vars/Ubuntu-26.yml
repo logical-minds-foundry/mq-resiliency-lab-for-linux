@@ -1,0 +1,18 @@
+---
+# drbd-san per-OS-version values for Ubuntu 26.04 (#1282, epic .github#280), loaded by
+# ansible/tasks/os-vars.yml from tasks/install.yml. 26.04 has NO linux-modules-extra:
+# Canonical deprecated it from the 6.15 kernel and ships every module in the base
+# linux-modules-<kver> package, which the cloud image already carries for its kernel
+# (https://discourse.ubuntu.com/t/kernel-development-release-cadence-and-deprecation-of-linux-modules-extra/65176;
+# T0b spike, docs/reports/2026-10-os-axis-spike.md §2.1: drbd.ko and the LIO target
+# modules are in linux-modules-7.0.0-34-generic). Naming it keeps the install's
+# package_facts guard honest: it is already installed, so the bake's apt run is a no-op
+# for it, and bake-san.yml's `modinfo drbd` / `modinfo target_core_mod` still proves both
+# modules exist for the baked kernel.
+#
+# The in-tree module is DRBD 8.4.11, the same as on 24.04 (REL_VERSION in the kernel's
+# include/linux/drbd_config.h at v6.8 and v7.0), driven by the same upstream drbd-utils
+# 9.22.0 (26.04: 9.22.0-1.2build1, 24.04: 9.22.0-1build1; the Debian deltas are a GCC 15
+# build fix and a /usr-merge path move, per the package changelog). So the role's 8.4
+# semantics are unchanged on 26.04.
+drbd_san_kernel_modules_pkg: "linux-modules-{{ ansible_kernel }}"

@@ -39,14 +39,32 @@ DISTRIBUTION = {"rhel": "RedHat", "ubuntu": "Ubuntu"}
 # install-RedHat.yml alone, so it maps to the RHEL stack, never nativeha-ubuntu.
 # mq-nativeha-spike runs on the reused rdqm-* RHEL slots. drbd-san (#1278) routes its
 # kernel-modules package name through the include.
+# INFRA / INFRA_MQ are not stacks: they stand for the catalog's `infra` / `infra_mq` OS,
+# which the shared boxes boot (the SAN targets' `san` box is an infra box, #1282).
+INFRA = "infra"
+INFRA_MQ = "infra_mq"
 ROLE_STACKS = {
     "rdqm-install": ("rdqm-rhel",),
     "mq-nativeha": ("nativeha-rhel-crr",),
     "mq-nativeha-spike": ("rdqm-rhel",),
-    # The SAN targets boot the infra-OS san box but belong to the pcmk-ubuntu stack's
-    # groups; until 26.04 support lands (T8) that stack supports Ubuntu 24 only.
-    "drbd-san": ("pcmk-ubuntu",),
+    # The SAN targets belong to the pcmk-ubuntu stack's groups but boot the san box on
+    # the infra OS, so drbd-san needs a vars file for both.
+    "drbd-san": ("pcmk-ubuntu", INFRA),
+    # Every baked Ubuntu box runs cloud-init-trim (#1250): both Ubuntu stacks' boxes and
+    # the shared boxes on either shared OS (#1282).
+    "cloud-init-trim": ("nativeha-ubuntu", "pcmk-ubuntu", INFRA, INFRA_MQ),
 }
+
+
+def _stack_refs(catalog: Any, stack: str) -> list[Any]:
+    """The OSes a ROLE_STACKS entry runs on: a stack's supported list, or a shared OS."""
+    if stack == INFRA:
+        return [catalog.infra]
+    if stack == INFRA_MQ:
+        return [catalog.infra_mq]
+    supported: list[Any] = catalog.stacks[stack]["supported"]
+    return supported
+
 
 # The RHEL install bodies whose hand-written version literals moved into vars.
 RHEL_INSTALL_BODIES = {
@@ -184,7 +202,7 @@ def test_every_os_vars_caller_names_itself_and_is_listed() -> None:
 def test_role_ships_vars_for_each_catalog_os(role: str) -> None:
     """Derived from lab/versions.yaml: every OS a role's stacks support needs its file."""
     catalog = load_catalog()
-    refs = {ref for stack in ROLE_STACKS[role] for ref in catalog.stacks[stack]["supported"]}
+    refs = {ref for stack in ROLE_STACKS[role] for ref in _stack_refs(catalog, stack)}
     assert refs, f"{role}: its stacks support no OS"
     vars_dir = ANSIBLE / "roles" / role / "vars"
     missing = [

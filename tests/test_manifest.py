@@ -33,7 +33,7 @@ def manifests(tmp_path, monkeypatch):
 
 
 _CAT = load_catalog()
-_UBUNTU = _CAT.infra
+_UBUNTU = _CAT.default_os("nativeha-ubuntu")
 _RHEL = _CAT.default_os("rdqm-rhel")
 
 

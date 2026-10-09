@@ -37,12 +37,15 @@ run "$FROM_SAN" "umount /mqshared 2>/dev/null; targetctl clear 2>/dev/null; drbd
 echo "=== 3. PROMOTE DRBD on $TO_SAN (now the primary copy) ==="
 run "$TO_SAN" "drbdadm primary mqlun && drbdadm status mqlun"
 
+# The auto-created wildcard portal is 0.0.0.0 on targetcli-fb 2.x and [::0] from 3.0.1
+# (https://github.com/open-iscsi/targetcli-fb/releases/tag/v3.0.1); drop both (#1282).
 echo "=== 4. EXPORT the LUN at $TO_SAN (LIO over /dev/drbd0, now accessible) ==="
 run "$TO_SAN" "targetcli /backstores/block create name=mqlun dev=/dev/drbd0 || true
   targetcli /iscsi create iqn.2026-06.lab.mq:${TO_SAN}.lun0 || true
   targetcli /iscsi/iqn.2026-06.lab.mq:${TO_SAN}.lun0/tpg1/luns create /backstores/block/mqlun || true
   for n in $TO_IQNS; do targetcli /iscsi/iqn.2026-06.lab.mq:${TO_SAN}.lun0/tpg1/acls create iqn.2026-06.lab.mq:\$n || true; done
   targetcli /iscsi/iqn.2026-06.lab.mq:${TO_SAN}.lun0/tpg1/portals delete 0.0.0.0 3260 2>/dev/null || true
+  targetcli /iscsi/iqn.2026-06.lab.mq:${TO_SAN}.lun0/tpg1/portals delete ::0 3260 2>/dev/null || true
   targetcli /iscsi/iqn.2026-06.lab.mq:${TO_SAN}.lun0/tpg1/portals create ${TO_PORTAL} 3260 || true
   targetcli saveconfig"
 

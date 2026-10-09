@@ -13,12 +13,14 @@
 # growpart + resizefs grow / to the guest's 20G disk. A plain /etc/cloud/cloud-init.disabled
 # would leave the clone with the bake VM's MAC-matched netplan (no mgmt DHCP, no ssh) and an
 # 18G root. So the role keeps those two services, trims the init stage to growpart +
-# resizefs, empties the config/final module lists and masks their services.
+# resizefs, empties the config/final module lists and, where the release allows it (24.04,
+# not 26.04; see vars/), masks their services.
 #
 # HOW: a cloud.cfg.d drop-in plus /etc/systemd/system masks (both persist in the converted
 # box image), then fail-loud checks: the merged config cloud-init itself reads must carry
-# the trimmed lists, the two masked services must read `masked`, and the two required
-# services must still read `enabled` with no cloud-init.disabled marker.
+# the trimmed lists, the per-version masked services must read `masked`, and the
+# per-version required services must still read `enabled` with no cloud-init.disabled
+# marker.
 # Debian/Ubuntu only — included by the Ubuntu bake playbooks.
 
 - name: assert this is a Debian/Ubuntu bake host (the cloud-image cloud-init setup is Ubuntu's)
@@ -28,6 +30,15 @@
       cloud-init-trim is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
       do not include it from a RHEL bake.
 
+# Which services to mask and which must stay enabled differ by Ubuntu release (#1282):
+# 24.04 runs one process per stage, so it masks config + final; 26.04 runs cloud-init's
+# single-process cloud-init-main, which a masked stage would hang, so it masks nothing.
+# An Ubuntu release the role ships no vars file for fails here, before any change.
+- name: per-OS-version vars (cloud-init service names)
+  ansible.builtin.include_tasks: ../../../tasks/os-vars.yml
+  vars:
+    os_vars_role: cloud-init-trim
+
 - name: write the cloud.cfg.d drop-in (init stage = growpart + resizefs; no config/final modules)
   ansible.builtin.copy:
     src: 99_lab_trim.cfg
@@ -36,7 +47,7 @@
     group: root
     mode: "0644"
 
-- name: mask the cloud-init config + final stages (nothing in them runs on a clone)
+- name: mask the per-version maskable stages (24.04 config + final; none on 26.04)
   ansible.builtin.systemd:
     name: "{{ item }}"
     masked: true
@@ -68,18 +79,20 @@
     fail_msg: "cloud-init's merged config is not the trimmed one (#1250): {{ _cfg }}"
 
 # noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
-- name: verify the cloud-init config + final services are masked  # noqa: command-instead-of-module
+- name: verify the masked stages read masked  # noqa: command-instead-of-module
   ansible.builtin.command:
     argv: "{{ ['systemctl', 'is-enabled'] + cloud_init_trim_masked_services }}"
   register: _cloud_init_trim_masked
   changed_when: false
+  # An empty list (26.04) masks nothing, so there is nothing to query.
+  when: cloud_init_trim_masked_services | length > 0
   # is-enabled exits non-zero for a masked unit, so judge by its per-unit output instead.
   failed_when: >-
     (_cloud_init_trim_masked.stdout_lines | length) != (cloud_init_trim_masked_services | length)
     or (_cloud_init_trim_masked.stdout_lines | unique) != ['masked']
 
 # noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
-- name: verify cloud-init-local + cloud-init stay enabled (clone networking + root growth)  # noqa: command-instead-of-module
+- name: verify the required cloud-init services stay enabled (clone networking + root growth)  # noqa: command-instead-of-module
   ansible.builtin.command:
     argv: "{{ ['systemctl', 'is-enabled'] + cloud_init_trim_required_services }}"
   register: _cloud_init_trim_required

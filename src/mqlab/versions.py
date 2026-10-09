@@ -31,9 +31,15 @@ if TYPE_CHECKING:
 
 # Known OS families -> display name used in messages.
 FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
-# Roles whose box always runs the infra OS: the shared/commons nodes, and the SAN
-# targets' baked `san` box (spec §4.7.1).
-INFRA_ROLES = ("infra", "obs", "mq-client", "san")
+# Shared (commons) roles never take a stack's OS. They split by whether the box runs MQ
+# (spec §2, correction .github#285):
+# - INFRA_ROLES run no MQ (the infra/obs commons and the SAN targets' baked `san` box,
+#   spec §4.7.1). They boot ``catalog.infra``, which is NOT support-gated.
+# - INFRA_MQ_ROLES run MQ (svc-sim, app-client, mon-probe). They boot
+#   ``catalog.infra_mq``, which is support-gated like a stack default.
+INFRA_ROLES = ("infra", "obs", "san")
+INFRA_MQ_ROLES = ("mq-client",)
+SHARED_ROLES = INFRA_ROLES + INFRA_MQ_ROLES
 # Host requirements the resolver knows how to gate (os.<family>.<major>.requires). An
 # entry naming any other requirement is refused at load.
 X86_64_V3 = "x86-64-v3"
@@ -41,7 +47,7 @@ KNOWN_REQUIREMENTS: frozenset[str] = frozenset({X86_64_V3})
 HOST_ARCHES = ("aarch64", "x86_64")
 
 _REF_RE = re.compile(r"([a-z]+):([0-9]+)")
-_TOP_KEYS = ("os", "roles", "infra", "stacks", "runtime")
+_TOP_KEYS = ("os", "roles", "infra", "infra_mq", "stacks", "runtime")
 _OS_KEYS = ("base_box", "base_box_version", "point", "iso", "arch", "requires", "ibm_support")
 _ROLE_KEYS = ("bake", "mq_bearing", "components")
 _RUNTIME_KEYS = ("python",)
@@ -163,7 +169,8 @@ class RuntimePin:
 class Catalog:
     oses: dict[OsRef, OsEntry]
     roles: dict[str, dict[str, Any]]
-    infra: OsRef
+    infra: OsRef  # shared roles that run no MQ (INFRA_ROLES); not support-gated
+    infra_mq: OsRef  # shared roles that run MQ (INFRA_MQ_ROLES); support-gated
     stacks: dict[str, dict[str, Any]]
     runtime: RuntimePin
 
@@ -207,6 +214,21 @@ class Catalog:
                 "add it under stacks: in lab/versions.yaml"
             )
         return self.stacks[stack]
+
+    def shared_os(self, role: str) -> OsRef:
+        """The OS a shared (commons) role boots (#285).
+
+        ``infra_mq`` for an MQ-bearing shared role (INFRA_MQ_ROLES), ``infra`` for the
+        rest. A role that is not shared runs its stack's OS, so asking is an error.
+        """
+        if role in INFRA_MQ_ROLES:
+            return self.infra_mq
+        if role in INFRA_ROLES:
+            return self.infra
+        raise VersionError(
+            f"role {role!r} is not a shared role (shared: {', '.join(SHARED_ROLES)}); it "
+            "runs its stack's OS"
+        )
 
     def default_os(self, stack: str) -> OsRef:
         """The stack's catalog default OS (unknown stack -> VersionError)."""
@@ -263,14 +285,14 @@ class Catalog:
     def all_boxes(self, facts: HostFacts, stack_roles: dict[str, set[str]]) -> list[BoxEntry]:
         """Every buildable box on this host, de-duplicated by name.
 
-        The infra OS box for each INFRA_ROLES role, then for each stack in
-        ``stack_roles`` (stack -> the box roles its nodes use) every supported OS the
+        Each shared role's box on its shared OS (Catalog.shared_os), then for each stack
+        in ``stack_roles`` (stack -> the box roles its nodes use) every supported OS the
         host can run (host_can_run: RHEL is skipped on aarch64, and an OS that requires
         x86-64-v3 is skipped on a host without it).
         """
         out: dict[str, BoxEntry] = {}
-        for role in INFRA_ROLES:
-            entry = self.box(role, self.infra)
+        for role in SHARED_ROLES:
+            entry = self.box(role, self.shared_os(role))
             out.setdefault(entry.name, entry)
         for stack, roles in stack_roles.items():
             for ref in self._stack(stack)["supported"]:
@@ -324,7 +346,7 @@ def node_stacks(topo: dict[str, Any]) -> dict[str, list[str]]:
 def stack_roles(topo: dict[str, Any], catalog: Catalog) -> dict[str, set[str]]:
     """stack -> the stack-OS box roles its member nodes declare (every topology stack).
 
-    Infra roles run the infra OS whatever stack lists the node, so they are not a
+    Shared roles run their shared OS whatever stack lists the node, so they are not a
     stack's roles. Fails loudly on a role the catalog does not
     know, so a topology typo can never silently drop a box from the fleet."""
     nodes: dict[str, Any] = topo.get("nodes") or {}
@@ -332,7 +354,7 @@ def stack_roles(topo: dict[str, Any], catalog: Catalog) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {stack: set() for stack in topo.get("stacks") or {}}
     for node, spec in nodes.items():
         role = _known_role(node, node_role(node, spec), catalog)
-        if role in INFRA_ROLES:
+        if role in SHARED_ROLES:
             continue
         for stack in owners[node]:
             out[stack].add(role)
@@ -360,8 +382,9 @@ def stack_ref(stack: str, catalog: Catalog) -> OsRef:
 def node_boxes(topo: dict[str, Any], catalog: Catalog) -> dict[str, BoxEntry]:
     """node -> BoxEntry for every topology node (the render covers all stacks at once).
 
-    - Infra-role nodes (the shared/commons nodes and the SAN targets) get their role on
-      ``catalog.infra``; no record is consulted, so this works with no stack running.
+    - Shared-role nodes (the commons nodes and the SAN targets) get their role on its
+      shared OS (Catalog.shared_os: ``infra_mq`` for mq-client, else ``infra``). No
+      record is consulted, so this works with no stack running.
     - Every other node gets its role on its owning stack's OS: the stack's instance
       record when one exists, else the stack default (combining every stack's record).
 
@@ -385,8 +408,8 @@ def node_boxes(topo: dict[str, Any], catalog: Catalog) -> dict[str, BoxEntry]:
     out: dict[str, BoxEntry] = {}
     for node, spec in (topo.get("nodes") or {}).items():
         role = _known_role(node, node_role(node, spec), catalog)
-        if role in INFRA_ROLES:
-            out[node] = catalog.box(role, catalog.infra)
+        if role in SHARED_ROLES:
+            out[node] = catalog.box(role, catalog.shared_os(role))
         elif len(owners[node]) != 1:
             listed = ", ".join(owners[node]) or "none"
             raise VersionError(
@@ -646,15 +669,26 @@ def load_catalog(path: Path | None = None) -> Catalog:
     oses = _oses(data["os"])
     roles = _roles(data["roles"])
     infra = _known(_ref(data["infra"], "infra"), oses, "infra")
+    infra_mq = _known(_ref(data["infra_mq"], "infra_mq"), oses, "infra_mq")
+    source = oses[infra_mq].ibm_unsupported_source
+    if source is not None:
+        # The support gate, applied to the shared nodes that run MQ exactly as to a stack
+        # default (spec §4.1, #285). `infra` runs no MQ, so it is deliberately not gated.
+        raise VersionError(
+            f"infra_mq {infra_mq} is IBM-unsupported ({source}); the shared nodes that run "
+            "MQ must be on an IBM-supported version — point infra_mq at a supported "
+            "version in lab/versions.yaml"
+        )
     catalog = Catalog(
         oses=oses,
         roles=roles,
         infra=infra,
+        infra_mq=infra_mq,
         stacks=_stacks(data["stacks"], oses),
         runtime=_runtime(data["runtime"]),
     )
-    for role in INFRA_ROLES:
-        catalog.box(role, infra)  # every infra role must be bakeable on the infra OS
+    for role in SHARED_ROLES:
+        catalog.box(role, catalog.shared_os(role))  # every shared role bakes on its OS
     return catalog
 
 

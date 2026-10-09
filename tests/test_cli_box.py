@@ -62,14 +62,16 @@ def test_fleet_has_the_catalog_boxes():
         "rhel/9-x86_64",
         "rhel/10-x86_64",
         "mq-rdqm-rhel9",
-        "obs-ubuntu24",
-        "infra-ubuntu24",
+        "obs-ubuntu26",
+        "infra-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
+        "san-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu24",
+        "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
+        "pcmk-ubuntu26",
     }
 
 
@@ -88,11 +90,13 @@ def test_fleet_derives_from_catalog():
     names = set(box._build_fleet(facts=_FACTS))
     assert {
         "mq-nativeha-ubuntu24",
+        "mq-nativeha-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
-        "infra-ubuntu24",
-        "obs-ubuntu24",
+        "san-ubuntu26",
+        "infra-ubuntu26",
+        "obs-ubuntu26",
         "pcmk-ubuntu24",
+        "pcmk-ubuntu26",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
         "rhel/9-x86_64",
@@ -106,12 +110,14 @@ def test_fleet_skips_rhel_on_an_arm_host():
     arm = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
     fleet = box._build_fleet(arm)
     assert set(fleet) == {
-        "obs-ubuntu24",
-        "infra-ubuntu24",
+        "obs-ubuntu26",
+        "infra-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
+        "san-ubuntu26",
         "mq-nativeha-ubuntu24",
+        "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
+        "pcmk-ubuntu26",
     }
 
 
@@ -142,7 +148,7 @@ def test_cache_artifact_names():
 
 def test_os_pin_uses_point_then_box_version_then_none():
     rhel = box.FLEET["rhel/9-x86_64"].os
-    ubuntu = box.FLEET["obs-ubuntu24"].os
+    ubuntu = box.FLEET["obs-ubuntu26"].os
     assert box.os_pin(rhel) == f"rhel/9-x86_64@{rhel.point}"
     assert box.os_pin(ubuntu) == f"{ubuntu.base_box}@{ubuntu.base_box_version}"
     floating = dataclasses.replace(ubuntu, base_box_version=None)
@@ -215,10 +221,10 @@ def test_topology_stack_roles_drop_infra_roles(monkeypatch):
 def test_boxes_for_build_default_covers_every_stack():
     names = box.boxes_for_build(BuildFile(os=None), facts=_FACTS)
     assert names == [
-        "infra-ubuntu24",
-        "obs-ubuntu24",
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
         "pcmk-ubuntu24",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
@@ -229,10 +235,10 @@ def test_boxes_for_build_default_covers_every_stack():
 def test_boxes_for_build_family_selects_its_stacks():
     names = box.boxes_for_build(BuildFile(os=OsRef("rhel", 9)), facts=_FACTS)
     assert names == [
-        "infra-ubuntu24",
-        "obs-ubuntu24",
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
     ]
@@ -253,7 +259,21 @@ def test_boxes_for_build_refuses_an_explicit_request_the_host_cannot_run():
 
 def test_boxes_for_build_refuses_an_unsupported_major():
     with pytest.raises(VersionError, match="supports"):
-        box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS)
+        box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 28)), facts=_FACTS)
+
+
+def test_boxes_for_build_ubuntu26_builds_both_ubuntu_stacks_on_26():
+    """A build file naming ubuntu:26 (lab-only) bakes both Ubuntu stacks on 26, beside
+    the shared boxes (mq-client stays on infra_mq) (#1282)."""
+    names = box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS)
+    assert names == [
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
+        "mq-client-ubuntu24",
+        "pcmk-ubuntu26",
+        "mq-nativeha-ubuntu26",
+    ]
 
 
 def test_boxes_for_build_refuses_a_stack_missing_from_the_catalog():
@@ -391,10 +411,10 @@ def test_run_builder_dry_run_base_box_has_no_box_flag(monkeypatch):
 
 def test_registered_boxes_parses_vagrant_list(monkeypatch):
     monkeypatch.setattr(
-        box, "_capture", lambda cmd: "mq-rdqm-rhel9 (libvirt, 0)\nobs-ubuntu24 (libvirt, 0)"
+        box, "_capture", lambda cmd: "mq-rdqm-rhel9 (libvirt, 0)\nobs-ubuntu26 (libvirt, 0)"
     )
     reg = box._registered_boxes()
-    assert set(reg) == {"mq-rdqm-rhel9", "obs-ubuntu24"}
+    assert set(reg) == {"mq-rdqm-rhel9", "obs-ubuntu26"}
 
 
 def test_cache_present(monkeypatch, tmp_path):
@@ -571,9 +591,9 @@ def test_select_boxes_all_returns_whole_fleet():
 
 
 def test_select_boxes_explicit_validated():
-    assert cli._select_boxes(["mq-rdqm-rhel9", "obs-ubuntu24"], all_=False) == [
+    assert cli._select_boxes(["mq-rdqm-rhel9", "obs-ubuntu26"], all_=False) == [
         "mq-rdqm-rhel9",
-        "obs-ubuntu24",
+        "obs-ubuntu26",
     ]
 
 
@@ -672,9 +692,9 @@ def test_clean_skips_absent_artifacts(monkeypatch, tmp_path):
     monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path)
     removed_regs: list[str] = []
     monkeypatch.setattr(box, "_vagrant_box_remove", lambda n: removed_regs.append(n))
-    removed = box.clean_boxes(["obs-ubuntu24"])
-    assert removed_regs == ["obs-ubuntu24"]
-    assert removed == ["vagrant box 'obs-ubuntu24'"]
+    removed = box.clean_boxes(["obs-ubuntu26"])
+    assert removed_regs == ["obs-ubuntu26"]
+    assert removed == ["vagrant box 'obs-ubuntu26'"]
 
 
 def test_clean_base_box_has_no_manifest_hash(monkeypatch, tmp_path):
@@ -843,7 +863,7 @@ def test_gc_keeps_newest_and_deletes_older(monkeypatch):
 
 
 def test_gc_skips_base_image_backing_a_live_overlay(monkeypatch):
-    stem = "obs-ubuntu24"
+    stem = "obs-ubuntu26"
     old = f"{stem}_vagrant_box_image_0_100_box.img"
     new = f"{stem}_vagrant_box_image_0_200_box.img"
     overlay = "lab_obs.img"  # a live VM disk still backed by the OLD base image
@@ -905,7 +925,7 @@ def _register_box(tmp_path, monkeypatch, name, mtime, *, version="0", arch="arm6
 def test_gc_keeps_the_registered_boxes_volume_not_the_newest(tmp_path, monkeypatch):
     # The registered box resolves to the MIDDLE image: it is the one kept, and the
     # newer one (not what the registered box would boot) is stale too (#1248).
-    stem = "obs-ubuntu24"
+    stem = "obs-ubuntu26"
     old, cur, newer = (f"{stem}_vagrant_box_image_0_{ts}_box.img" for ts in (100, 200, 300))
     _register_box(tmp_path, monkeypatch, stem, 200)
     fake = _FakeVirsh([old, cur, newer], {n: _vol_xml(n, 1000) for n in (old, cur, newer)})
@@ -934,7 +954,7 @@ def test_gc_current_volume_survives_repeated_runs(tmp_path, monkeypatch):
 def test_gc_rebaked_box_not_yet_uploaded_drops_the_stale_volume(tmp_path, monkeypatch):
     # A rebake re-added the box (new box.img mtime 900) but nothing booted it yet: the
     # old volume is stale and goes now, though it is the newest image in the pool.
-    stem = "infra-ubuntu24"
+    stem = "infra-ubuntu26"
     stale = f"{stem}_vagrant_box_image_0_400_box.img"
     _register_box(tmp_path, monkeypatch, stem, 900)
     fake = _FakeVirsh([stale], {stale: _vol_xml(stale, 2048)})
@@ -946,7 +966,7 @@ def test_gc_rebaked_box_not_yet_uploaded_drops_the_stale_volume(tmp_path, monkey
 
 
 def test_gc_stale_volume_backing_a_live_overlay_is_still_protected(tmp_path, monkeypatch):
-    stem = "obs-ubuntu24"
+    stem = "obs-ubuntu26"
     stale = f"{stem}_vagrant_box_image_0_100_box.img"
     cur = f"{stem}_vagrant_box_image_0_200_box.img"
     overlay = "lab_obs.img"
@@ -1000,7 +1020,7 @@ def test_gc_skips_a_volume_that_vanishes_before_dumpxml(monkeypatch, err):
 
 def test_gc_vanished_volume_keeps_in_use_protection(monkeypatch):
     # Another volume vanishing does not weaken the backing-store guard for live overlays.
-    stem = "obs-ubuntu24"
+    stem = "obs-ubuntu26"
     old = f"{stem}_vagrant_box_image_0_100_box.img"
     new = f"{stem}_vagrant_box_image_0_200_box.img"
     overlay = "lab_obs.img"
@@ -1336,10 +1356,10 @@ def test_box_build_config_builds_the_build_files_boxes(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert calls == {
         "names": [
-            "infra-ubuntu24",
-            "obs-ubuntu24",
+            "infra-ubuntu26",
+            "obs-ubuntu26",
+            "san-ubuntu26",
             "mq-client-ubuntu24",
-            "san-ubuntu24",
             "mq-rdqm-rhel9",
             "mq-nativeha-rhel9",
         ],

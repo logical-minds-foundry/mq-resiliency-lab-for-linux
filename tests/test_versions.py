@@ -14,7 +14,9 @@ from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.instances import InstanceRecord
 from mqlab.paths import versions_catalog_path
 from mqlab.versions import (
+    INFRA_MQ_ROLES,
     INFRA_ROLES,
+    SHARED_ROLES,
     BuildFile,
     OsRef,
     VersionError,
@@ -111,10 +113,29 @@ def test_osref_orders_by_family_then_major():
 # --- The committed catalog ------------------------------------------------------------
 
 
-def test_committed_catalog_is_at_todays_versions():
+_SPCR_MQ10 = (
+    "https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/"
+    "getTSROsSupportSummary?deliverableId=FA94B1F6888342969E7F9B505149F032"
+)
+
+
+def test_committed_catalog():
     cat = load_catalog()
-    assert cat.infra == OsRef("ubuntu", 24)
-    assert set(cat.oses) == {OsRef("ubuntu", 24), OsRef("rhel", 9), OsRef("rhel", 10)}
+    # Shared nodes split by whether they run MQ (#285): non-MQ on 26, MQ on IBM-listed 24.
+    assert (cat.infra, cat.infra_mq) == (OsRef("ubuntu", 26), OsRef("ubuntu", 24))
+    assert set(cat.oses) == {
+        OsRef("ubuntu", 24),
+        OsRef("ubuntu", 26),
+        OsRef("rhel", 9),
+        OsRef("rhel", 10),
+    }
+    assert {s: spec["supported"] for s, spec in cat.stacks.items()} == {
+        "nativeha-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
+        "pcmk-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
+        "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
+        "rdqm-rhel": [OsRef("rhel", 9)],
+    }
+    # Defaults stay on 24 until an SPCR "Ubuntu 26.04 LTS" row appears (T9).
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": OsRef("ubuntu", 24),
         "pcmk-ubuntu": OsRef("ubuntu", 24),
@@ -144,6 +165,15 @@ def test_committed_catalog_is_at_todays_versions():
     assert ubuntu24.arch_pin is None
     assert ubuntu24.requires == ()
     assert ubuntu24.ibm_unsupported_source is None
+    ubuntu26 = cat.oses[OsRef("ubuntu", 26)]
+    assert (ubuntu26.base_box, ubuntu26.base_box_version, ubuntu26.arch_pin) == (
+        "cloud-image/ubuntu-26.04",
+        "20260927.0.0",
+        None,
+    )
+    assert ubuntu26.requires == ()
+    # Exact match against the cited SPCR (never a URL-substring check, which CodeQL flags).
+    assert ubuntu26.ibm_unsupported_source == _SPCR_MQ10
 
 
 def test_committed_runtime_pin():
@@ -283,6 +313,28 @@ def test_stack_takes_build_file_os(tmp_path):
     assert cat.stack_os("nativeha-ubuntu", build, X86) == OsRef("ubuntu", 26)
 
 
+@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
+@pytest.mark.parametrize("facts", [X86, ARM])
+def test_ubuntu26_selectable_on_both_ubuntu_stacks(stack, facts):
+    """The committed catalog offers ubuntu:26 to both Ubuntu stacks, on either host arch,
+    as lab-only: it resolves, and it carries the IBM-unsupported warning (#1282)."""
+    cat = load_catalog()
+    ref = cat.stack_os(stack, BuildFile(os=OsRef("ubuntu", 26)), facts)
+    assert ref == OsRef("ubuntu", 26)
+    assert cat.support_warning(ref) == (
+        f"WARNING: IBM does not support MQ on ubuntu:26 ({_SPCR_MQ10}); it is selectable "
+        "for lab use only"
+    )
+
+
+@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
+def test_ubuntu_stack_default_still_24(stack):
+    """No SPCR 26.04 row yet, so the default stays on 24 (T9 flips it) (#1282)."""
+    cat = load_catalog()
+    assert cat.stack_os(stack, None, X86) == OsRef("ubuntu", 24)
+    assert cat.support_warning(cat.default_os(stack)) is None
+
+
 def test_stack_rejects_unsupported_version():
     cat = load_catalog()
     with pytest.raises(VersionError, match=r"rdqm-rhel supports \[rhel:9\]; got rhel:10 — edit"):
@@ -293,7 +345,10 @@ def test_stack_rejects_family_mismatch():
     # A cross-family refusal names the supported versions too, not just the family (#1391).
     with pytest.raises(
         VersionError,
-        match=r"nativeha-ubuntu is an ubuntu stack and supports \[ubuntu:24\]; got rhel:9 — edit",
+        match=(
+            r"nativeha-ubuntu is an ubuntu stack and supports \[ubuntu:24, ubuntu:26\]; "
+            r"got rhel:9 — edit"
+        ),
     ):
         load_catalog().stack_os("nativeha-ubuntu", BuildFile(os=OsRef("rhel", 9)), X86)
 
@@ -377,6 +432,9 @@ def test_default_must_not_be_ibm_unsupported(tmp_path):
         "status": "unsupported",
         "source": "https://example.invalid",
     }
+    # Move infra_mq off 24 (onto a supported 26) so the STACK default gate is what trips.
+    del data["os"]["ubuntu"][26]["ibm_support"]
+    data["infra_mq"] = "ubuntu:26"
     with pytest.raises(
         VersionError, match="default ubuntu:24 for nativeha-ubuntu is IBM-unsupported"
     ):
@@ -400,6 +458,36 @@ def test_unsupported_entry_is_selectable_with_warning(tmp_path):
     assert cat.support_warning(OsRef("ubuntu", 24)) is None
 
 
+def test_infra_mq_refuses_ibm_unsupported(tmp_path):
+    """The shared nodes that run MQ are gated like a stack default (#285)."""
+    data = copy.deepcopy(_committed())
+    data["infra_mq"] = "ubuntu:26"  # committed 26 carries ibm_support: unsupported
+    with pytest.raises(VersionError) as exc:
+        load_catalog(_write(tmp_path, data))
+    assert str(exc.value) == (
+        f"infra_mq ubuntu:26 is IBM-unsupported ({_SPCR_MQ10}); the shared nodes that run "
+        "MQ must be on an IBM-supported version — point infra_mq at a supported version "
+        "in lab/versions.yaml"
+    )
+
+
+def test_infra_not_gated():
+    """`infra` runs no MQ, so an IBM-unsupported infra OS loads (the committed catalog
+    puts infra on the unsupported 26), with no warning path involved (#285)."""
+    cat = load_catalog()
+    assert cat.oses[cat.infra].ibm_unsupported_source is not None
+    assert cat.box("obs", cat.infra).name == "obs-ubuntu26"
+
+
+def test_infra_mq_may_flip_once_supported(tmp_path):
+    """T9's flip: once 26 is IBM-supported, infra_mq may point at it."""
+    data = copy.deepcopy(_committed())
+    del data["os"]["ubuntu"][26]["ibm_support"]
+    data["infra_mq"] = "ubuntu:26"
+    cat = load_catalog(_write(tmp_path, data))
+    assert cat.box("mq-client", cat.shared_os("mq-client")).name == "mq-client-ubuntu26"
+
+
 def test_supported_status_with_source_is_accepted(tmp_path):
     data = copy.deepcopy(_committed())
     data["os"]["rhel"][9]["ibm_support"] = {"status": "supported", "source": "https://x"}
@@ -409,23 +497,28 @@ def test_supported_status_with_source_is_accepted(tmp_path):
 
 # --- Catalog.all_boxes ----------------------------------------------------------------
 
+# As stack_roles() derives them from the topology: shared roles are never a stack's.
 _STACK_ROLES = {
     "nativeha-ubuntu": {"mq-nativeha"},
-    "pcmk-ubuntu": {"pcmk", "mq-client"},
+    "pcmk-ubuntu": {"pcmk"},
     "nativeha-rhel-crr": {"mq-nativeha"},
     "rdqm-rhel": {"mq-rdqm"},
 }
 
 
 def test_all_boxes_on_x86():
+    """Shared boxes first (non-MQ on infra = 26, mq-client on infra_mq = 24, #285), then
+    every supported major of every stack."""
     names = [b.name for b in load_catalog().all_boxes(X86, _STACK_ROLES)]
     assert names == [
-        "infra-ubuntu24",
-        "obs-ubuntu24",
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
         "mq-nativeha-ubuntu24",
+        "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
+        "pcmk-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-rhel10",
         "mq-rdqm-rhel9",
@@ -435,13 +528,37 @@ def test_all_boxes_on_x86():
 def test_all_boxes_skips_rhel_on_aarch64():
     names = {b.name for b in load_catalog().all_boxes(ARM, _STACK_ROLES)}
     assert names == {
-        "infra-ubuntu24",
-        "obs-ubuntu24",
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
         "mq-client-ubuntu24",
-        "san-ubuntu24",
         "mq-nativeha-ubuntu24",
+        "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
+        "pcmk-ubuntu26",
     }
+
+
+def test_mq_client_resolves_from_infra_mq(tmp_path):
+    """The MQ-bearing shared role follows infra_mq, the rest follow infra (#285): moving
+    infra alone never moves mq-client."""
+    cat = load_catalog()
+    assert cat.shared_os("mq-client") == cat.infra_mq == OsRef("ubuntu", 24)
+    assert {cat.shared_os(r) for r in INFRA_ROLES} == {cat.infra} == {OsRef("ubuntu", 26)}
+    assert INFRA_MQ_ROLES == ("mq-client",)
+    assert set(SHARED_ROLES) == {*INFRA_ROLES, *INFRA_MQ_ROLES}
+    data = copy.deepcopy(_committed())
+    data["infra"] = "ubuntu:24"
+    moved = load_catalog(_write(tmp_path, data))
+    assert (moved.shared_os("obs"), moved.shared_os("mq-client")) == (
+        OsRef("ubuntu", 24),
+        OsRef("ubuntu", 24),
+    )
+
+
+def test_shared_os_refuses_a_stack_role():
+    with pytest.raises(VersionError, match="role 'pcmk' is not a shared role .* stack's OS"):
+        load_catalog().shared_os("pcmk")
 
 
 def test_all_boxes_covers_every_supported_version(tmp_path):
@@ -482,8 +599,13 @@ def test_catalog_not_a_mapping(tmp_path):
 @pytest.mark.parametrize(
     ("keys", "value", "match"),
     [
-        (("extra",), 1, r"unknown key 'extra' \(allowed: os, roles, infra, stacks, runtime\)"),
+        (
+            ("extra",),
+            1,
+            r"unknown key 'extra' \(allowed: os, roles, infra, infra_mq, stacks, runtime\)",
+        ),
         (("stacks",), _DELETE, "missing required key stacks"),
+        (("infra_mq",), _DELETE, "missing required key infra_mq"),
         (("runtime",), _DELETE, "missing required key runtime"),
         # runtime: (epic .github#294)
         (("runtime",), "3.14.8", "runtime must be a mapping"),
@@ -560,8 +682,13 @@ def test_catalog_not_a_mapping(tmp_path):
         (("roles", "obs"), _DELETE, "unknown box role 'obs'"),
         (("roles", "obs", "bake"), {"rhel": "obs"}, "role 'obs' has no bake for ubuntu"),
         # infra:
-        (("infra",), "ubuntu:26", r"infra: ubuntu:26 is not declared under os:"),
+        (("infra",), "ubuntu:28", r"infra: ubuntu:28 is not declared under os:"),
         (("infra",), 24, "infra: expected <family>:<major>"),
+        (("infra",), "rhel:9", "role 'infra' has no bake for rhel"),
+        # infra_mq: (#285)
+        (("infra_mq",), "ubuntu:28", r"infra_mq: ubuntu:28 is not declared under os:"),
+        (("infra_mq",), 24, "infra_mq: expected <family>:<major>"),
+        (("infra_mq",), "rhel:9", "role 'mq-client' has no bake for rhel"),
         # stacks:
         (("stacks",), [], "stacks must be a mapping"),
         (("stacks", "rdqm-rhel"), "x", "stacks.rdqm-rhel must be a mapping"),
@@ -669,7 +796,7 @@ def test_node_boxes_defaults(no_records):
     assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel9"
     assert nb["rdqm-a1"].name == "mq-rdqm-rhel9"
     assert nb["pcmk-a1"].name == "pcmk-ubuntu24"
-    assert nb["infra-svc"].name == "infra-ubuntu24"
+    assert nb["infra-svc"].name == "infra-ubuntu26"
     assert nb["svc-sim"].name == "mq-client-ubuntu24"
 
 
@@ -694,9 +821,13 @@ def test_san_is_an_infra_role():
 
 
 def test_commons_render_uses_infra_without_records(no_records):  # Review Focus 5
+    """Non-MQ shared nodes get infra, MQ-bearing ones (mq-client) get infra_mq (#285)."""
     cat = load_catalog()
     nb = node_boxes(topology.load(), cat)
-    assert {nb[n].os.ref for n in _SHARED} == {cat.infra}
+    mq = {n for n in _SHARED if nb[n].role in INFRA_MQ_ROLES}
+    assert mq == {"svc-sim", "app-client", "mon-probe"}
+    assert {nb[n].os.ref for n in mq} == {cat.infra_mq}
+    assert {nb[n].os.ref for n in set(_SHARED) - mq} == {cat.infra}
 
 
 def test_shared_nodes_resolve_without_any_record_lookup(monkeypatch):  # Review Focus 5
@@ -709,7 +840,7 @@ def test_shared_nodes_resolve_without_any_record_lookup(monkeypatch):  # Review 
     topo = topology.load()
     commons_only = {"nodes": {n: topo["nodes"][n] for n in _SHARED}}
     nb = node_boxes(commons_only, load_catalog())
-    assert {e.role for e in nb.values()} <= set(INFRA_ROLES)
+    assert {e.role for e in nb.values()} <= set(SHARED_ROLES)
 
 
 def test_node_boxes_reads_each_stack_record(monkeypatch, tmp_path):

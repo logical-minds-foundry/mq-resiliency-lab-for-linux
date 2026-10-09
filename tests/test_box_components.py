@@ -98,7 +98,7 @@ def test_builder_args_carry_components_and_pin(baking):
 
 
 def test_builder_args_for_a_box_baking_nothing_pass_an_empty_list():
-    argv = box.builder_args(box.FLEET["obs-ubuntu24"], _FACTS)
+    argv = box.builder_args(box.FLEET["obs-ubuntu26"], _FACTS)
     assert argv[argv.index("--runtime-pin") + 1] == PIN
     assert argv[argv.index("--components") + 1] == ""
     assert "--install-vars" not in argv
@@ -163,8 +163,8 @@ def test_box_reuse_builds_no_component(baking, monkeypatch):
 def test_box_build_of_boxes_baking_nothing_builds_no_component(monkeypatch):
     events: list = []
     _stub_build(monkeypatch, events, "BUILD")
-    box.build_boxes(["infra-ubuntu24"], force=False)
-    assert events == [("run", ["box infra-ubuntu24"])]
+    box.build_boxes(["infra-ubuntu26"], force=False)
+    assert events == [("run", ["box infra-ubuntu26"])]
 
 
 @pytest.mark.parametrize(
@@ -205,7 +205,7 @@ def test_box_status_shows_baked_components(monkeypatch, tmp_path):
         json.dumps({"runtime": PIN, "components": {OBS: TREE, "a-comp": "1" * 40}}),
     )
     monkeypatch.setattr(box, "box_decision", _decide("REUSE"))
-    out = box.render_status(["pcmk-ubuntu24", "san-ubuntu24"]).splitlines()
+    out = box.render_status(["pcmk-ubuntu24", "san-ubuntu26"]).splitlines()
     assert out[0].endswith("COMPONENTS")
     assert out[1].endswith(f"a-comp@{'1' * 12},{OBS}@{'f' * 12} ({PIN})")
     assert out[2].endswith(" -")  # no record: bakes no component (or is not cached)
@@ -260,7 +260,7 @@ def test_fatbox_requires_runtime_pin_and_components(flag, tmp_path):
 
 
 def test_fatbox_requires_install_vars_with_components(tmp_path):
-    args = _with(fatbox_args("obs-ubuntu24"), "--components", "demo@aaa")
+    args = _with(fatbox_args("obs-ubuntu26"), "--components", "demo@aaa")
     r = _fatbox(*args, "--dry-run", cache_dir=tmp_path)
     assert r.returncode == 2
     assert "--install-vars is required when --components is non-empty" in r.stderr

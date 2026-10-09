@@ -41,27 +41,27 @@ def test_needed_local_boxes_resolves_fat_boxes(monkeypatch):
         "_resolved_nodes",
         lambda: {
             "rdqm-a1": {"box": "mq-rdqm-rhel9"},
-            "obs": {"box": "obs-ubuntu24"},
-            "infra-client": {"box": "infra-ubuntu24"},
+            "obs": {"box": "obs-ubuntu26"},
+            "infra-client": {"box": "infra-ubuntu26"},
             "nha-rhel-crr-a1": {"box": "mq-nativeha-rhel9"},
             "san-a": {"box": "cloud-image/ubuntu-24.04"},  # a cloud box: nothing to build
         },
     )
     needed = cli._needed_local_boxes(["rdqm-a1", "obs", "infra-client", "nha-rhel-crr-a1", "san-a"])
-    assert needed == ["infra-ubuntu24", "mq-nativeha-rhel9", "mq-rdqm-rhel9", "obs-ubuntu24"]
+    assert needed == ["infra-ubuntu26", "mq-nativeha-rhel9", "mq-rdqm-rhel9", "obs-ubuntu26"]
 
 
 def test_fleet_builders_cover_base_and_fat_boxes():
     assert box.FLEET["rhel/9-x86_64"].builder == "lab/boxes/rhel/build-box.sh"
     for fat in (
         "mq-rdqm-rhel9",
-        "obs-ubuntu24",
-        "infra-ubuntu24",
+        "obs-ubuntu26",
+        "infra-ubuntu26",
         "mq-client-ubuntu24",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
-        "san-ubuntu24",
+        "san-ubuntu26",
     ):
         assert box.FLEET[fat].builder == "lab/boxes/build-fatbox.sh"
     # The standalone logsearch-ubuntu2404 box was retired (#1179) — folded into obs.
@@ -197,11 +197,11 @@ def test_builder_args_refuse_a_base_entry_without_point_or_iso():
 
 
 def test_build_plan_puts_a_local_base_box_first_and_never_forces_it():
-    plan = box._build_plan(["mq-rdqm-rhel9", "obs-ubuntu24", "mq-nativeha-rhel9"], force=True)
+    plan = box._build_plan(["mq-rdqm-rhel9", "obs-ubuntu26", "mq-nativeha-rhel9"], force=True)
     assert plan == [
         ("rhel/9-x86_64", False),  # dependency: ensured, never force-rebuilt
         ("mq-rdqm-rhel9", True),
-        ("obs-ubuntu24", True),
+        ("obs-ubuntu26", True),
         ("mq-nativeha-rhel9", True),
     ]
 
@@ -439,7 +439,7 @@ def test_stale_refused_without_rebuild_flag(tmp_path):
 def test_manifest_hash_is_stable_and_box_specific():
     a = _manifest_hash("mq-rdqm-rhel9")
     assert a == _manifest_hash("mq-rdqm-rhel9")  # deterministic
-    assert a != _manifest_hash("obs-ubuntu24")  # box (bake playbook) enters the hash
+    assert a != _manifest_hash("obs-ubuntu26")  # box (bake playbook) enters the hash
     assert len(a) == 64  # sha256 hex digest
 
 
@@ -467,12 +467,12 @@ def test_manifest_hash_covers_ubuntu_ha_boxes():
 def test_fleet_has_the_baked_san_box():
     """#1278 (spec §4.7.1): the SAN targets' box is a host-resolved fat box on the infra
     OS, baked by ansible/bake-san.yml, not MQ-bearing, with its own manifest hash."""
-    spec = box._build_fleet(_X86)["san-ubuntu24"]
+    spec = box._build_fleet(_X86)["san-ubuntu26"]
     assert (spec.role, spec.bake_stem, spec.mq_bearing) == ("san", "san", False)
     assert spec.os.arch_pin is None and spec.has_manifest_hash
-    assert box._build_fleet(_ARM)["san-ubuntu24"].arch == AARCH64
-    h = _manifest_hash("san-ubuntu24")
-    assert len(h) == 64 and h == _manifest_hash("san-ubuntu24")
+    assert box._build_fleet(_ARM)["san-ubuntu26"].arch == AARCH64
+    h = _manifest_hash("san-ubuntu26")
+    assert len(h) == 64 and h == _manifest_hash("san-ubuntu26")
     assert h != _manifest_hash("pcmk-ubuntu24")
 
 
@@ -509,13 +509,13 @@ def test_manifest_hash_requires_a_box():
 def test_manifest_hash_requires_each_flag(flag):
     args = ["--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1", *_NO_COMPONENTS]
     i = args.index(flag)
-    result = _hash_with("obs-ubuntu24", *args[:i], *args[i + 2 :])
+    result = _hash_with("obs-ubuntu26", *args[:i], *args[i + 2 :])
     assert result.returncode == 2
     assert f"ERROR: {flag} is required" in result.stderr
 
 
 def test_manifest_hash_rejects_bad_mq_bearing_and_unknown_flag():
-    base = ["obs-ubuntu24", "--bake-stem", "obs", "--os-pin", "x@1", *_NO_COMPONENTS]
+    base = ["obs-ubuntu26", "--bake-stem", "obs", "--os-pin", "x@1", *_NO_COMPONENTS]
     assert "--mq-bearing must be 0 or 1" in _hash_with(*base, "--mq-bearing", "2").stderr
     assert "unknown arg: --x" in _hash_with(*base, "--mq-bearing", "0", "--x").stderr
 
@@ -532,7 +532,7 @@ def test_manifest_hash_rejects_unknown_bake_stem():
 
 
 # --- the runtime pin + baked components (epic .github#294 T5, spec §5.8) ---------------
-_OBS = ["obs-ubuntu24", "--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1"]
+_OBS = ["obs-ubuntu26", "--bake-stem", "obs", "--mq-bearing", "0", "--os-pin", "x@1"]
 
 
 def _component_hash(pin: str, components: str) -> str:
@@ -611,7 +611,7 @@ def _fake_bake_repo(tmp_path: Path) -> Path:
     """A minimal repo tree _manifest-hash.sh can hash: the real script, a
     versions.yml, a stem-named bake-infra.yml that include_role's `baked-role`,
     and three roles - `baked-role` (which itself pulls in `nested-role`) and an
-    unrelated `unbaked-role` no bake playbook references. Box `infra-ubuntu24`
+    unrelated `unbaked-role` no bake playbook references. Box `infra-ubuntu26`
     maps to the `infra` bake stem, matching bake-infra.yml (the box->stem map the
     script shares with build-fatbox.sh)."""
     root = tmp_path / "repo"
@@ -650,7 +650,7 @@ def _fake_bake_repo(tmp_path: Path) -> Path:
     return root
 
 
-def _hash_in(root: Path, box_name: str = "infra-ubuntu24") -> str:
+def _hash_in(root: Path, box_name: str = "infra-ubuntu26") -> str:
     out = subprocess.run(  # noqa: S603
         [
             "bash",
@@ -728,7 +728,7 @@ def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
 # --------------------------------------------------------------------------- #
 def _fake_bake_repo_with_pin(tmp_path: Path) -> Path:
     """Extend the minimal bake repo with a lab/mq-version pin and a second bake
-    playbook for an MQ-bearing box. `infra-ubuntu24` (-> infra) is a commons
+    playbook for an MQ-bearing box. `infra-ubuntu26` (-> infra) is a commons
     box; `mq-client-ubuntu24` (-> mq-ubuntu) is MQ-bearing. Both hash cleanly against
     this tree so a single pin edit can be checked against both at once."""
     root = _fake_bake_repo(tmp_path)
@@ -761,9 +761,9 @@ def test_manifest_hash_stable_on_pin_change_for_commons_box(tmp_path):
     # (b) Acceptance: the same pin bump leaves a commons (non-MQ) box's digest
     # unchanged, so it stays REUSE — a version change never spuriously rebakes it.
     root = _fake_bake_repo_with_pin(tmp_path)
-    before = _hash_in(root, "infra-ubuntu24")
+    before = _hash_in(root, "infra-ubuntu26")
     (root / "lab" / "mq-version").write_text("10.0.0.0\n")
-    assert _hash_in(root, "infra-ubuntu24") == before  # commons box untouched
+    assert _hash_in(root, "infra-ubuntu26") == before  # commons box untouched
 
 
 def test_manifest_hash_pin_is_box_scoped_not_global(tmp_path):
@@ -943,4 +943,6 @@ def test_manifest_hash_real_os_vars_edit_flips_exactly_the_reaching_boxes(tmp_pa
 
     assert flipped_by_loader == flipped_by_includers
     assert flipped_by_loader  # the loader reaches at least one box
-    assert "obs-ubuntu24" not in flipped_by_loader  # a box that never includes it
+    # Every baked box reaches it: each Ubuntu box via cloud-init-trim (#1282), each RHEL
+    # box via its MQ install role.
+    assert flipped_by_loader == set(box_bakes())

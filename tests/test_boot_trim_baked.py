@@ -34,6 +34,7 @@ CI_ROLE = ROLES / "cloud-init-trim"
 SNAP_ROLE = ROLES / "snapd-off"
 MANIFEST_HASH = REPO_ROOT / "lab" / "boxes" / "_manifest-hash.sh"
 TRIM_ROLES = ("cloud-init-trim", "snapd-off")
+OS_VARS_INCLUDE = "../../../tasks/os-vars.yml"
 
 
 def _box_bakes() -> dict[str, tuple[str, str]]:
@@ -125,7 +126,7 @@ def test_snapd_mode_is_keep_only_for_obs_on_aarch64() -> None:
     for box, stem in ubuntu.items():
         (task,) = _role_includes(_trim_play(box, _plays(stem)), "snapd-off")
         mode = (task.get("vars") or {}).get("snapd_off_mode")
-        if box == "obs-ubuntu24":
+        if stem == "obs":
             assert mode == "{{ 'keep' if ansible_architecture == 'aarch64' else 'purge' }}"
         else:
             assert mode is None, f"{box}: must take the default snapd_off_mode (purge)"
@@ -159,15 +160,46 @@ def test_cloud_init_dropin_trims_to_growpart_and_resizefs() -> None:
     assert defaults["cloud_init_trim_conf"].endswith(".cfg")
 
 
-def test_cloud_init_keeps_its_load_bearing_services() -> None:
+def _ci_vars(release: str) -> dict:
+    """cloud-init-trim's per-OS-version vars file (loaded via ansible/tasks/os-vars.yml)."""
+    path = CI_ROLE / "vars" / f"Ubuntu-{release}.yml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_cloud_init_service_lists_are_per_os_version_only() -> None:
+    """The service names differ by release (#1282), so no family-wide default may hide a
+    missing vars file; the role loads them through the fail-loud os-vars include."""
     defaults = _defaults(CI_ROLE)
-    assert defaults["cloud_init_trim_required_services"] == [
+    assert "cloud_init_trim_masked_services" not in defaults
+    assert "cloud_init_trim_required_services" not in defaults
+    tasks = _tasks(CI_ROLE)
+    (include,) = [t for t in tasks if t.get("ansible.builtin.include_tasks") == OS_VARS_INCLUDE]
+    assert include["vars"] == {"os_vars_role": "cloud-init-trim"}
+    assert tasks.index(include) == 1, "load the vars right after the Debian assert"
+
+
+def test_cloud_init_keeps_its_load_bearing_services() -> None:
+    # 24.04: one process per stage, so config + final are masked.
+    noble = _ci_vars("24")
+    assert noble["cloud_init_trim_required_services"] == [
         "cloud-init-local.service",
         "cloud-init.service",
     ]
-    masked = defaults["cloud_init_trim_masked_services"]
+    masked = noble["cloud_init_trim_masked_services"]
     assert masked == ["cloud-config.service", "cloud-final.service"]
-    assert not set(masked) & set(defaults["cloud_init_trim_required_services"])
+    assert not set(masked) & set(noble["cloud_init_trim_required_services"])
+    # 26.04: single-process cloud-init-main waits on every stage's trigger, so nothing is
+    # masked and every stage unit must stay enabled (cloud-init.service is renamed
+    # cloud-init-network.service).
+    resolute = _ci_vars("26")
+    assert resolute["cloud_init_trim_masked_services"] == []
+    assert resolute["cloud_init_trim_required_services"] == [
+        "cloud-init-main.service",
+        "cloud-init-local.service",
+        "cloud-init-network.service",
+        "cloud-config.service",
+        "cloud-final.service",
+    ]
     # Never disabled outright: no task may create the marker (it is only stat-ed).
     for task in _tasks(CI_ROLE):
         for verb in ("ansible.builtin.file", "ansible.builtin.copy", "ansible.builtin.command"):
@@ -182,9 +214,11 @@ def test_cloud_init_role_verifies_fail_loud() -> None:
     assert "from cloudinit.stages import Init" in argv
     check = _task(CI_ROLE, "verify the merged config")["ansible.builtin.assert"]["that"]
     assert "_cfg.cloud_init_modules == cloud_init_trim_init_modules" in check
-    masked = _task(CI_ROLE, "verify the cloud-init config + final services are masked")
+    masked = _task(CI_ROLE, "verify the masked stages read masked")
     assert "masked" in str(masked["failed_when"])
-    required = _task(CI_ROLE, "verify cloud-init-local + cloud-init stay enabled")
+    assert masked["when"] == "cloud_init_trim_masked_services | length > 0"
+    required = _task(CI_ROLE, "verify the required cloud-init services stay enabled")
+    assert "when" not in required, "the required services are always checked"
     assert "['enabled']" in str(required["failed_when"])
     gone = _task(CI_ROLE, "verify cloud-init is not disabled outright")
     assert gone["ansible.builtin.assert"]["that"] == "not _cloud_init_trim_disabled.stat.exists"

@@ -1,0 +1,19 @@
+---
+# cloud-init-trim per-OS-version values for Ubuntu 24.04 (#1250; moved here in #1282), loaded
+# by ansible/tasks/os-vars.yml. 24.04's cloud-init runs each stage as its own process
+# (cloud-init-local, cloud-init, cloud-config, cloud-final .service), so the config and
+# final stages can simply be masked.
+
+# The config and final stages run nothing these guests need (all once-per-instance and
+# already ran at bake, or empty: scripts_per_boot has no scripts, final_message only logs),
+# so their services are masked. Their module lists are emptied too, belt-and-braces, so an
+# unmask still does nothing.
+cloud_init_trim_masked_services:
+  - cloud-config.service
+  - cloud-final.service
+
+# These MUST stay enabled (networking + root growth, see defaults/main.yml). The role fails
+# the bake if either is masked or disabled, or if cloud-init has been disabled outright.
+cloud_init_trim_required_services:
+  - cloud-init-local.service
+  - cloud-init.service
