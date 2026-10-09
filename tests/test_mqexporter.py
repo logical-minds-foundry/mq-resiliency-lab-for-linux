@@ -22,6 +22,10 @@ _ROLE_DEFAULTS = (
     / "defaults"
     / "main.yml"
 )
+# Synthetic MQ levels: the cache key is whatever the caller passes (box.py passes the
+# lab/mq-version pin), so the tests need no real version literal.
+_VER = "1.2.3.4"
+_OTHER_VER = "1.2.3.5"
 
 
 def test_needs_exporter_binary_true_for_exporter_roles():
@@ -35,9 +39,12 @@ def test_needs_exporter_binary_false_otherwise():
     assert not mqexporter.needs_exporter_binary(["pcmk", "infra", None])
 
 
-def test_exporter_binary_path_is_under_cache_mq_exporter(tmp_path):
-    expected = tmp_path / "mq-exporter" / mqexporter.binary_name()
-    assert mqexporter.exporter_binary_path(tmp_path) == expected
+def test_exporter_binary_path_is_under_cache_mq_exporter_keyed_by_mq_version(tmp_path):
+    # Keyed by the MQ level whose SDK it links (#1407): a pin bump lands in a fresh
+    # directory, so the stale binary built against the old level is never reused.
+    expected = tmp_path / "mq-exporter" / _VER / mqexporter.binary_name()
+    assert mqexporter.exporter_binary_path(tmp_path, _VER) == expected
+    assert mqexporter.exporter_binary_path(tmp_path, _OTHER_VER) != expected
 
 
 def test_binary_name_is_arch_suffixed():
@@ -62,10 +69,11 @@ def test_ensure_returns_cached_binary_without_building(tmp_path):
     calls: list[tuple] = []
     out = mqexporter.ensure_mq_exporter_binary(
         tmp_path,
+        _VER,
         exists=lambda _p: True,
         build=lambda *a: calls.append(a),
     )
-    assert out == mqexporter.exporter_binary_path(tmp_path)
+    assert out == mqexporter.exporter_binary_path(tmp_path, _VER)
     assert calls == []  # cache-hit: no build
 
 
@@ -73,11 +81,13 @@ def test_ensure_builds_once_on_cache_miss(tmp_path):
     calls: list[tuple] = []
     out = mqexporter.ensure_mq_exporter_binary(
         tmp_path,
+        _VER,
         exists=lambda _p: False,
-        build=lambda root, outdir: calls.append((root, outdir)),
+        build=lambda root, outdir, ver: calls.append((root, outdir, ver)),
     )
-    assert out == mqexporter.exporter_binary_path(tmp_path)
-    assert calls == [(tmp_path, out.parent)]  # miss: built once, into the cache dir
+    assert out == mqexporter.exporter_binary_path(tmp_path, _VER)
+    # miss: built once, into the version-keyed cache dir, against that MQ level's SDK
+    assert calls == [(tmp_path, out.parent, _VER)]
 
 
 def test_build_ref_matches_role_default():

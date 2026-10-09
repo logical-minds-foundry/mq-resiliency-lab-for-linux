@@ -6,9 +6,10 @@
 # fatbox build guest's disk). Invoked by `mqlab.mqexporter.ensure_mq_exporter_binary`
 # with these mounts:
 #   /cache  <- the host-durable build cache root (read: /cache/mq/<MQ tarball>)
-#   /out    <- build/cache/mq-exporter (write: the produced binary)
+#   /out    <- build/cache/mq-exporter/<MQ_VERSION> (write: the produced binary)
 #   /build.sh (this file, read-only)
-# Env: MQ_EXPORTER_REF (mq-metric-samples git ref to build).
+# Env: MQ_EXPORTER_REF (mq-metric-samples git ref to build); MQ_VERSION (the
+# lab/mq-version pin whose SDK the binary is built against).
 #
 # mq_prometheus is cgo against the IBM MQ SDK and links the server binding
 # libmqm_r (mq-golang has no client-only build tag), so we extract the SDK from the
@@ -23,6 +24,7 @@
 set -euo pipefail
 
 REF="${MQ_EXPORTER_REF:?MQ_EXPORTER_REF must be set}"
+MQ_VER="${MQ_VERSION:?MQ_VERSION must be set (the lab/mq-version pin)}"
 SDK=/tmp/mqsdk
 SRC=/tmp/mq-metric-samples
 export PATH="/usr/local/go/bin:${PATH}"
@@ -35,8 +37,14 @@ case "$ARCH" in
   *) echo "ERROR: unsupported TARGET_ARCH=$ARCH (want arm64|x64)" >&2; exit 1 ;;
 esac
 
-MQTAR="$(ls /cache/mq/*-IBM-MQ-Advanced-for-Developers-${MQSUFFIX}.tar.gz 2>/dev/null | head -1)"
-[ -n "$MQTAR" ] || { echo "ERROR: no ${MQSUFFIX} MQ tarball under /cache/mq" >&2; exit 1; }
+# Build against EXACTLY the pinned MQ level (#1407). A glob + `head -1` picked whichever
+# cached version sorted first, so with two levels cached (e.g. after a pin bump) the
+# binary silently linked an SDK that was not the lab's pin.
+MQTAR="/cache/mq/${MQ_VER}-IBM-MQ-Advanced-for-Developers-${MQSUFFIX}.tar.gz"
+[ -f "$MQTAR" ] || {
+  echo "ERROR: pinned MQ ${MQ_VER} ${MQSUFFIX} tarball not cached: $MQTAR (run scripts/fetch-mq.sh)" >&2
+  exit 1
+}
 echo "mq-exporter build: go $(go version | awk '{print $3}'), ref ${REF}, MQ media $(basename "$MQTAR")"
 
 # 1. Extract just the MQ debs cgo needs (headers + server/runtime/client libs).

@@ -64,9 +64,14 @@ def binary_name(arch: str | None = None) -> str:
     return f"{BINARY_STEM}-{arch or _target_arch()}"
 
 
-def exporter_binary_path(cache_root: Path) -> Path:
-    """Durable-cache location of the prebuilt exporter binary (host-arch)."""
-    return cache_root / "mq-exporter" / binary_name()
+def exporter_binary_path(cache_root: Path, mq_version: str) -> Path:
+    """Durable-cache location of the prebuilt exporter binary (host-arch).
+
+    Keyed by the MQ version whose SDK it was built against (#1407): a pin bump
+    (lab/mq-version) lands in a fresh directory, so the next bake rebuilds the
+    binary against the new SDK instead of reusing one built against the old level.
+    """
+    return cache_root / "mq-exporter" / mq_version / binary_name()
 
 
 def _runtime() -> str:  # pragma: no cover
@@ -81,10 +86,11 @@ def _runtime() -> str:  # pragma: no cover
     raise RuntimeError(msg)
 
 
-def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cover
+def _container_build(cache_root: Path, out_dir: Path, mq_version: str) -> None:  # pragma: no cover
     """Run the dev-go container to build the binary into out_dir, native to this host's
     arch (the dev-go image is multi-arch, so arm64 runs without emulation). The build
-    script keys the MQ SDK media and output name off TARGET_ARCH."""
+    script keys the MQ SDK media and output name off TARGET_ARCH, and builds against
+    exactly the pinned MQ_VERSION tarball, never whichever version happens to be cached."""
     arch = _target_arch()
     out_dir.mkdir(parents=True, exist_ok=True)
     script = paths.repo_root() / _BUILD_SCRIPT
@@ -104,6 +110,8 @@ def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cov
             f"MQ_EXPORTER_REF={MQ_EXPORTER_REF}",
             "-e",
             f"TARGET_ARCH={arch}",
+            "-e",
+            f"MQ_VERSION={mq_version}",
             DEV_GO_IMAGE,
             "bash",
             "/build.sh",
@@ -114,17 +122,20 @@ def _container_build(cache_root: Path, out_dir: Path) -> None:  # pragma: no cov
 
 def ensure_mq_exporter_binary(
     cache_root: Path,
+    mq_version: str,
     *,
     exists: Callable[[Path], bool] = os.path.isfile,
-    build: Callable[[Path, Path], None] = _container_build,
+    build: Callable[[Path, Path, str], None] = _container_build,
 ) -> Path:
-    """Ensure the prebuilt mq_prometheus binary is in the durable cache; return its path.
+    """Ensure the prebuilt mq_prometheus binary for `mq_version` is in the durable
+    cache; return its path.
 
-    Cache-hit -> return untouched. Miss -> build it once in the Go container, then
-    return it. `exists`/`build` are injected in tests so no real container runs.
+    Cache-hit -> return untouched. Miss -> build it once in the Go container against
+    that MQ version's SDK, then return it. `exists`/`build` are injected in tests so
+    no real container runs.
     """
-    binary = exporter_binary_path(cache_root)
+    binary = exporter_binary_path(cache_root, mq_version)
     if exists(binary):
         return binary
-    build(cache_root, binary.parent)
+    build(cache_root, binary.parent, mq_version)
     return binary
