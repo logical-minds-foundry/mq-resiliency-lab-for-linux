@@ -10,9 +10,11 @@
 # re-logins (ControlPersist expiry between plays) and operator SSH all trigger it. Nothing
 # in the lab needs a dynamic MOTD on these throwaway guests.
 #
-# HOW: comment out every active pam_motd session line in /etc/pam.d/sshd and
-# /etc/pam.d/login (a `replace` that only matches uncommented lines, so it is idempotent),
-# mask motd-news.timer, then verify fail-loud: no file under /etc/pam.d may still carry an
+# HOW: handle EVERY PAM service that includes pam_motd, not a fixed list (#1414): discover
+# the files under /etc/pam.d that still carry an active pam_motd session line (a read-only
+# `grep -rlP` with the same regex the verify uses; Ubuntu 24.04 has sshd + login, 26.04 adds
+# /etc/pam.d/remote), comment those lines out in each (a `replace` that only matches
+# uncommented lines, so it is idempotent; a re-run discovers nothing), mask motd-news.timer, then verify fail-loud: no file under /etc/pam.d may still carry an
 # active pam_motd line, and the timer must read `masked`. The edits are plain files and
 # /etc/systemd/system symlinks, so they persist in the converted box image.
 # Debian/Ubuntu only — included by the Ubuntu bake playbooks.
@@ -24,13 +26,26 @@
       motd-off is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
       do not include it from a RHEL bake.
 
-# replace fails if a listed file is missing (both ship in the Ubuntu base) — fail-loud.
+# noqa command-instead-of-module: a read-only grep over /etc/pam.d is the discovery itself.
+- name: discover the PAM service files that still run pam_motd  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: ["grep", "-rlP", "{{ motd_off_active_regex }}", "/etc/pam.d"]
+  register: _motd_off_found
+  changed_when: false
+  # grep exits 0 when files match (stdout names them), 1 when none do (already disabled,
+  # e.g. a re-run), 2 on error; anything but 0 or 1 fails the bake.
+  failed_when: _motd_off_found.rc not in [0, 1]
+
+- name: record which PAM service files motd-off edits
+  ansible.builtin.debug:
+    msg: "pam_motd active in (to be commented out): {{ _motd_off_found.stdout_lines }}"
+
 - name: comment out the pam_motd session lines (no per-login update-motd.d run)
   ansible.builtin.replace:
     path: "{{ item }}"
     regexp: "{{ motd_off_active_regex }}"
     replace: '# \1  # disabled by motd-off (#1229)'
-  loop: "{{ motd_off_pam_files }}"
+  loop: "{{ _motd_off_found.stdout_lines }}"
 
 - name: stop + mask the motd-news timer so nothing refreshes the MOTD in the background
   ansible.builtin.systemd:

@@ -6,6 +6,8 @@ the bake-time fix:
 
 * every Ubuntu bake (derived from build-fatbox.sh, so a new Ubuntu box cannot slip past)
   includes the `motd-off` role, and no RHEL bake does;
+* the role discovers the PAM files to edit from /etc/pam.d (no fixed sshd/login list;
+  Ubuntu 26.04 adds /etc/pam.d/remote, #1414);
 * the role's regex comments out exactly Ubuntu 24.04's real pam_motd session lines, is
   idempotent, and the role verifies the result fail-loud;
 * the role is in the manifest-hash closure, so a later edit to it forces a rebake.
@@ -118,9 +120,81 @@ def test_every_ubuntu_bake_includes_the_role_and_no_rhel_bake_does() -> None:
     assert wrong == [], f"RHEL bakes must not include the Ubuntu-only role (#1229): {wrong}"
 
 
-def test_role_targets_sshd_and_login() -> None:
-    assert _defaults()["motd_off_pam_files"] == ["/etc/pam.d/sshd", "/etc/pam.d/login"]
-    assert _task("comment out the pam_motd").get("loop") == "{{ motd_off_pam_files }}"
+def test_role_discovers_pam_files_over_etc_pam_d() -> None:
+    """The edited files come from a grep over /etc/pam.d, not a fixed sshd/login list (#1414:
+    Ubuntu 26.04's /etc/pam.d/remote also runs pam_motd)."""
+    names = [t.get("name", "") for t in _role_tasks()]
+    discover_i = next(i for i, n in enumerate(names) if "discover the PAM service files" in n)
+    replace_i = next(i for i, n in enumerate(names) if "comment out the pam_motd" in n)
+    verify_i = next(i for i, n in enumerate(names) if "verify no PAM service" in n)
+    assert discover_i < replace_i < verify_i, f"discover -> replace -> verify order: {names}"
+
+    discover = _role_tasks()[discover_i]
+    argv = discover["ansible.builtin.command"]["argv"]
+    assert argv == ["grep", "-rlP", "{{ motd_off_active_regex }}", "/etc/pam.d"], argv
+    assert discover.get("register") == "_motd_off_found"
+    assert discover.get("changed_when") is False, "discovery is read-only"
+    assert discover.get("failed_when") == "_motd_off_found.rc not in [0, 1]", (
+        "grep rc 0 (files found) and 1 (none, e.g. a re-run) pass; rc 2 (error) must fail"
+    )
+    assert "ignore_errors" not in discover
+
+    replace = _task("comment out the pam_motd")
+    assert replace.get("loop") == "{{ _motd_off_found.stdout_lines }}"
+    assert replace["ansible.builtin.replace"]["path"] == "{{ item }}"
+    # No dead fixed-list variable left behind to drift from what is actually edited.
+    assert "motd_off_pam_files" not in _defaults()
+    assert "motd_off_pam_files" not in (ROLE / "tasks" / "main.yml").read_text(encoding="utf-8")
+    # Which files were edited is recorded in the bake log.
+    record = _task("record which PAM service files")
+    assert "_motd_off_found.stdout_lines" in record["ansible.builtin.debug"]["msg"]
+
+
+def _grep_argv(task_fragment: str, pam_d: Path) -> list[str]:
+    """The role's grep argv, rendered against a scratch /etc/pam.d stand-in."""
+    argv = _task(task_fragment)["ansible.builtin.command"]["argv"]
+    regex = _defaults()["motd_off_active_regex"]
+    return [regex if a == "{{ motd_off_active_regex }}" else a for a in argv[:-1]] + [str(pam_d)]
+
+
+def test_discovery_finds_every_pam_motd_service_and_the_verify_then_passes(tmp_path: Path) -> None:
+    """Run the role's real grep over a scratch pam.d shaped like Ubuntu 26.04 (sshd, login and
+    a `remote` service that also runs pam_motd; the remote stanza is representative), apply the
+    replace to each discovered file, and check the verify's grep then finds nothing."""
+    pam_d = tmp_path / "pam.d"
+    pam_d.mkdir()
+    (pam_d / "sshd").write_text(NOBLE_SSHD_MOTD, encoding="utf-8")
+    (pam_d / "login").write_text(NOBLE_LOGIN_MOTD, encoding="utf-8")
+    (pam_d / "remote").write_text(NOBLE_LOGIN_MOTD, encoding="utf-8")
+    (pam_d / "common-session").write_text("session required pam_unix.so\n", encoding="utf-8")
+
+    found = subprocess.run(
+        _grep_argv("discover the PAM service files", pam_d), capture_output=True, text=True
+    )
+    assert found.returncode == 0, found.stderr
+    files = sorted(found.stdout.splitlines())
+    assert files == sorted(str(pam_d / n) for n in ("sshd", "login", "remote"))
+
+    for name in files:
+        path = Path(name)
+        path.write_text(_apply_replace(path.read_text(encoding="utf-8")), encoding="utf-8")
+
+    for fragment in ("discover the PAM service files", "verify no PAM service"):
+        again = subprocess.run(_grep_argv(fragment, pam_d), capture_output=True, text=True)
+        assert again.returncode == 1, f"{fragment}: still active after the edit: {again.stdout}"
+
+    missing = subprocess.run(
+        _grep_argv("discover the PAM service files", tmp_path / "absent"),
+        capture_output=True,
+        text=True,
+    )
+    assert missing.returncode not in (0, 1), "a grep error must fall outside the passing rcs"
+
+
+def test_no_task_in_the_role_swallows_errors() -> None:
+    for task in _role_tasks():
+        assert "ignore_errors" not in task, f"fail-loud role must not ignore errors: {task}"
+        assert "|| true" not in str(task), f"fail-loud role must not mask exit codes: {task}"
 
 
 def test_regex_comments_out_exactly_the_noble_pam_motd_lines() -> None:
