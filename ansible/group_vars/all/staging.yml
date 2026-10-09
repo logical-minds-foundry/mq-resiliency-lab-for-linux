@@ -1,0 +1,27 @@
+---
+# Guest-side staging for large artifacts (#1417): downloads, MQ media tarballs and their
+# unpack trees, component artifacts, snapshot tarballs. ONE location, on DISK, on every OS.
+#
+# Why not /tmp: Ubuntu 26.04 mounts /tmp as tmpfs sized at 50% of RAM (tmp.mount ships
+# enabled), i.e. ~974M on a 1.9 GB build VM. The obs bake ran it out of space unpacking the
+# prometheus/loki/alloy releases; the multi-GB MQ tarball and its MQServer/ tree could
+# never fit. tmpfs /tmp is a good default and stays (no masking tmp.mount): the lab stops
+# staging large artifacts there instead. RHEL 9/10 and Ubuntu 24.04 keep /tmp on disk, so
+# moving there too changes nothing in effect for them.
+#
+# Why /var/tmp/lab-staging:
+#   * /var/tmp is disk-backed on every catalog OS (the FHS has it preserved across
+#     reboots, so distributions do not mount it as tmpfs), so a bake is bounded by the
+#     build disk, not by guest RAM.
+#   * it is the FHS home for temporary files that outlive a single process, and already
+#     where the #294 runtime/component installs staged their artifacts.
+#   * a lab-owned subdir keeps the lab's staging distinct from anything else in /var/tmp,
+#     so cleanup can remove exactly what the lab staged.
+# systemd-tmpfiles ages /var/tmp (30 days on Ubuntu and RHEL), so a box baked long ago can
+# boot without this directory: every user creates it at the point of use through
+# ansible/tasks/lab-stage-dir.yml, never assuming a bake left it behind. Roles remove what
+# they stage once it is installed, so nothing staged here is carried into a baked image.
+#
+# mqlab's guest-side snapshot staging (src/mqlab/logsearch.py, GUEST_STAGE_DIR) uses the
+# same path; tests/test_stage_off_tmpfs.py pins the two equal and forbids /tmp staging.
+lab_stage_dir: /var/tmp/lab-staging

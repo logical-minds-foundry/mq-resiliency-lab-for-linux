@@ -17,19 +17,30 @@
     name: unzip
     update_cache: true
 
+# Staged on disk under lab_stage_dir, never /tmp (#1417): Ubuntu 26.04's /tmp is a
+# RAM-sized tmpfs that the loki + logcli + prometheus + alloy unpacks overflowed.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
 - name: download + unpack loki
   ansible.builtin.unarchive:
     src: "{{ loki_url }}"
-    dest: /tmp
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: "/tmp/{{ loki_pkg }}"
+    creates: "{{ lab_stage_dir }}/{{ loki_pkg }}"
 
 - name: install the loki binary
   ansible.builtin.copy:
-    src: "/tmp/{{ loki_pkg }}"
+    src: "{{ lab_stage_dir }}/{{ loki_pkg }}"
     dest: /usr/local/bin/loki
     mode: "0755"
     remote_src: true
+
+# /var/tmp is not wiped at boot the way /tmp was: remove the staged binary once installed.
+- name: remove the staged loki binary
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}/{{ loki_pkg }}"
+    state: absent
 
 - name: loki data dirs
   ansible.builtin.file:
@@ -78,13 +89,18 @@
 - name: download + unpack logcli
   ansible.builtin.unarchive:
     src: "{{ logcli_url }}"
-    dest: /tmp
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: "/tmp/{{ logcli_pkg }}"
+    creates: "{{ lab_stage_dir }}/{{ logcli_pkg }}"
 
 - name: install the logcli binary
   ansible.builtin.copy:
-    src: "/tmp/{{ logcli_pkg }}"
+    src: "{{ lab_stage_dir }}/{{ logcli_pkg }}"
     dest: /usr/local/bin/logcli
     mode: "0755"
     remote_src: true
+
+- name: remove the staged logcli binary
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}/{{ logcli_pkg }}"
+    state: absent

@@ -26,20 +26,34 @@
     state: present
   when: not alloy_installed.stat.exists
 
+# Staged on disk under lab_stage_dir, never /tmp (#1417): the ~485M alloy binary alone
+# filled half of Ubuntu 26.04's RAM-sized tmpfs /tmp on the obs bake.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+  when: not alloy_installed.stat.exists
+
 - name: download + unpack alloy
   ansible.builtin.unarchive:
     src: "{{ alloy_url }}"
-    dest: /tmp
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: "/tmp/{{ alloy_pkg }}"
+    creates: "{{ lab_stage_dir }}/{{ alloy_pkg }}"
   when: not alloy_installed.stat.exists
 
 - name: install the alloy binary
   ansible.builtin.copy:
-    src: "/tmp/{{ alloy_pkg }}"
+    src: "{{ lab_stage_dir }}/{{ alloy_pkg }}"
     dest: /usr/local/bin/alloy
     mode: "0755"
     remote_src: true
+  when: not alloy_installed.stat.exists
+
+# /var/tmp is not wiped at boot the way /tmp was: remove the staged binary once installed,
+# so it is not carried into every baked image.
+- name: remove the staged alloy binary
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}/{{ alloy_pkg }}"
+    state: absent
   when: not alloy_installed.stat.exists
 
 - name: alloy config + data dirs

@@ -12,19 +12,31 @@
     shell: /usr/sbin/nologin
     create_home: false
 
+# Staged on disk under lab_stage_dir, never /tmp (#1417): Ubuntu 26.04's /tmp is a
+# RAM-sized tmpfs that the release tree overflowed on the obs bake.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
 - name: download + unpack prometheus
   ansible.builtin.unarchive:
     src: "{{ prometheus_url }}"
-    dest: /tmp
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: "/tmp/{{ prometheus_pkg }}/prometheus"
+    creates: "{{ lab_stage_dir }}/{{ prometheus_pkg }}/prometheus"
 
 - name: install the prometheus binary
   ansible.builtin.copy:
-    src: "/tmp/{{ prometheus_pkg }}/prometheus"
+    src: "{{ lab_stage_dir }}/{{ prometheus_pkg }}/prometheus"
     dest: /usr/local/bin/prometheus
     mode: "0755"
     remote_src: true
+
+# /var/tmp is not wiped at boot the way /tmp was, so remove the unpacked release
+# explicitly once the binary is installed: nothing staged is carried into a baked image.
+- name: remove the staged prometheus release
+  ansible.builtin.file:
+    path: "{{ lab_stage_dir }}/{{ prometheus_pkg }}"
+    state: absent
 
 - name: config + data + targets dirs
   ansible.builtin.file:

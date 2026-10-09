@@ -58,6 +58,13 @@ DASHBOARDS_PORT = 5601
 # the host store resolves through `mqlab build path state` (state("logsearch")).
 SNAPSHOT_REPO = "logsearch-fs"
 REMOTE_REPO_DIR = "/var/lib/opensearch/snapshots"
+# Where the snapshot tarball is staged on the guest between the tar and the fetch (and
+# between the copy and the untar on restore). On disk, never /tmp (#1417): obs runs Ubuntu
+# 26.04, whose /tmp is a RAM-sized tmpfs a log snapshot can overflow. The same path as
+# Ansible's `lab_stage_dir` (ansible/group_vars/all/staging.yml); the ad-hoc calls below
+# do not load the playbook-adjacent group_vars, so it is named here and
+# tests/test_stage_off_tmpfs.py pins the two equal.
+GUEST_STAGE_DIR = "/var/tmp/lab-staging"  # noqa: S108 - guest-side staging dir, on disk (#1417)
 # The Ansible inventory host the transport ad-hoc calls target. Since the log-search
 # tier was consolidated onto obs (#1179), OpenSearch lives on the obs host, so the
 # snapshot/restore ad-hoc runs target `obs`.
@@ -221,6 +228,35 @@ def snapshot_name(now: datetime) -> str:
 # default ad-hoc user (vagrant) cannot read it to tar/fetch, nor write it to
 # copy/untar. Running as root also makes `tar` restore the archived opensearch
 # ownership on untar (root can chown), so OpenSearch can read the restored repo.
+
+
+def stage_dir_argv(host: str, stage_dir: str) -> list[str]:
+    """Ad-hoc: ensure the on-disk guest staging dir exists (root-owned 0755, as
+    ansible/tasks/lab-stage-dir.yml makes it). /var/tmp is aged by systemd-tmpfiles, so
+    the dir is created at the point of use rather than assumed from the bake."""
+    return [
+        "ansible",
+        host,
+        "--become",
+        "-m",
+        "ansible.builtin.file",
+        "-a",
+        f"path={stage_dir} state=directory owner=root group=root mode=0755",
+    ]
+
+
+def remove_argv(host: str, path: str) -> list[str]:
+    """Ad-hoc: remove a staged guest file once it has been consumed (/var/tmp is not
+    wiped at boot, so nothing else would)."""
+    return [
+        "ansible",
+        host,
+        "--become",
+        "-m",
+        "ansible.builtin.file",
+        "-a",
+        f"path={path} state=absent",
+    ]
 
 
 def archive_argv(host: str, repo_dir: str, remote_tar: str) -> list[str]:
@@ -435,8 +471,12 @@ def snapshot(host: str = _HostOpt, port: int = _PortOpt) -> None:
 
     dest = _snapshot_state_dir()
     dest.mkdir(parents=True, exist_ok=True)
-    remote_tar = f"/tmp/{name}.tar.gz"  # noqa: S108 - guest-side staging path
+    remote_tar = f"{GUEST_STAGE_DIR}/{name}.tar.gz"
     steps = [
+        CommandStep(
+            "ensure the guest staging dir",
+            Command(stage_dir_argv(INVENTORY_HOST, GUEST_STAGE_DIR), cwd=_ansible_dir()),
+        ),
         CommandStep(
             "tar snapshot repo on guest",
             Command(archive_argv(INVENTORY_HOST, REMOTE_REPO_DIR, remote_tar), cwd=_ansible_dir()),
@@ -445,13 +485,18 @@ def snapshot(host: str = _HostOpt, port: int = _PortOpt) -> None:
             "fetch snapshot to host state bucket",
             Command(fetch_argv(INVENTORY_HOST, remote_tar, str(dest)), cwd=_ansible_dir()),
         ),
+        CommandStep(
+            "remove the staged tarball from the guest",
+            Command(remove_argv(INVENTORY_HOST, remote_tar), cwd=_ansible_dir()),
+        ),
     ]
     try:
         _execute_steps("logsearch-snapshot", steps)
     except StepFailedError as exc:
         typer.echo(
-            f"mqlab logsearch snapshot: the snapshot '{name}' was taken but the "
-            f"guest->host transport failed; it is not durable on the host yet.",
+            f"mqlab logsearch snapshot: the snapshot '{name}' was taken but a "
+            f"guest->host transport step failed (named above); treat it as not durable "
+            f"on the host yet.",
             err=True,
         )
         raise typer.Exit(code=exc.exit_code) from exc
@@ -494,8 +539,12 @@ def restore(
         )
         raise typer.Exit(code=1)
 
-    remote_tar = f"/tmp/{name}.tar.gz"  # noqa: S108 - guest-side staging path
+    remote_tar = f"{GUEST_STAGE_DIR}/{name}.tar.gz"
     steps = [
+        CommandStep(
+            "ensure the guest staging dir",
+            Command(stage_dir_argv(INVENTORY_HOST, GUEST_STAGE_DIR), cwd=_ansible_dir()),
+        ),
         CommandStep(
             "stage snapshot to guest",
             Command(copy_argv(INVENTORY_HOST, str(local_tar), remote_tar), cwd=_ansible_dir()),
@@ -503,6 +552,10 @@ def restore(
         CommandStep(
             "untar snapshot into guest repo",
             Command(untar_argv(INVENTORY_HOST, REMOTE_REPO_DIR, remote_tar), cwd=_ansible_dir()),
+        ),
+        CommandStep(
+            "remove the staged tarball from the guest",
+            Command(remove_argv(INVENTORY_HOST, remote_tar), cwd=_ansible_dir()),
         ),
     ]
     try:

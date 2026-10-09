@@ -50,15 +50,19 @@
     or (_rt_pin.content | b64decode | trim) != runtime_python.token
   become: true
   block:
+    # Staged under lab_stage_dir (#1417): the lab's one on-disk staging location.
+    - name: Staging dir (on disk)
+      ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
     - name: Copy the pinned tarball to the guest
       ansible.builtin.copy:
         src: "{{ runtime_python.tarball_dir }}/{{ runtime_python.tarballs[_rt_arch] }}"
-        dest: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        dest: "{{ lab_stage_dir }}/{{ runtime_python.tarballs[_rt_arch] }}"
         mode: "0644"
 
     - name: Verify its sha256 against the pin (BEFORE unpacking)
       ansible.builtin.stat:
-        path: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        path: "{{ lab_stage_dir }}/{{ runtime_python.tarballs[_rt_arch] }}"
         checksum_algorithm: sha256
       register: _rt_tar
       failed_when: >-
@@ -71,7 +75,7 @@
         root="{{ _rt_root }}"
         rm -rf "$root.new" "$root.old"
         mkdir -p "$root.new"
-        tar -xzf "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}" -C "$root.new" --strip-components=1
+        tar -xzf "{{ lab_stage_dir }}/{{ runtime_python.tarballs[_rt_arch] }}" -C "$root.new" --strip-components=1
         got="$("$root.new/bin/python{{ runtime_python.minor }}" -c 'import platform; print(platform.python_version())')"
         if [ "$got" != "{{ runtime_python.version }}" ]; then
           echo "unpacked runtime reports Python $got, not the pinned {{ runtime_python.version }}" >&2
@@ -87,5 +91,5 @@
 
     - name: Remove the copied tarball
       ansible.builtin.file:
-        path: "/var/tmp/{{ runtime_python.tarballs[_rt_arch] }}"
+        path: "{{ lab_stage_dir }}/{{ runtime_python.tarballs[_rt_arch] }}"
         state: absent

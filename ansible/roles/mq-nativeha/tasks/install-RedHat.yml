@@ -59,25 +59,34 @@
     name: acl
     state: present
 
+# The MQ media is staged on disk under lab_stage_dir, never /tmp (#1417): the ~2 GiB
+# tarball + its MQServer/ tree overflow a RAM-sized tmpfs /tmp. RHEL's /tmp is on disk
+# today, so this changes nothing in effect here; one location serves every OS.
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+  when: not mq_installed.stat.exists
+
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
     # mq_media_dir (role default = the per-run path) is overridden by the fat-box bake to
     # the host-durable main-worktree cache (#604) — see roles/mq-nativeha/defaults/main.yml.
     src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
-    dest: /tmp/mqadv.tar.gz
+    dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
+  become: true  # lab_stage_dir is root-owned 0755
   when: not mq_installed.stat.exists
 
 - name: unpack
   ansible.builtin.unarchive:
-    src: /tmp/mqadv.tar.gz
-    dest: /tmp
+    src: "{{ lab_stage_dir }}/mqadv.tar.gz"
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: /tmp/MQServer
+    creates: "{{ lab_stage_dir }}/MQServer"
+  become: true
   when: not mq_installed.stat.exists
 
 - name: accept developer licence
-  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  ansible.builtin.command: "{{ lab_stage_dir }}/MQServer/mqlicense.sh -accept"
   args:
     creates: /var/mqm
 
@@ -86,13 +95,24 @@
 - name: install base IBM MQ packages (no RDQM)
   ansible.builtin.shell: |
     set -e
-    cd /tmp/MQServer
+    cd "{{ lab_stage_dir }}/MQServer"
     dnf install -y \
       MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
       MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
       MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm
   args:
     creates: /opt/mqm/bin/crtmqm
+
+# Remove the staged tarball and its unpacked tree once the rpms are installed, so neither
+# is carried into the baked image (/var/tmp is not cleaned the way /tmp is).
+- name: remove the staged MQ media
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ lab_stage_dir }}/mqadv.tar.gz"
+    - "{{ lab_stage_dir }}/MQServer"
+  become: true
 
 - name: set primary installation (loader path)
   ansible.builtin.command: /opt/mqm/bin/setmqinst -i -p /opt/mqm

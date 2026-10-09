@@ -33,18 +33,21 @@ Two hard ordering rules (both encoded in `rdqm-install/tasks/main.yml`):
 2. Install `MQSeriesRDQM` in its **own** `dnf` transaction, *after* the server
    files exist — its preinst scriptlet needs them on disk.
 
+The role unpacks the MQ media under `lab_stage_dir` (`/var/tmp/lab-staging`, on disk,
+never `/tmp`: #1417) and removes it after the install.
+
 ```bash
 # Accept the developer licence
-/tmp/MQServer/mqlicense.sh -accept
+/var/tmp/lab-staging/MQServer/mqlicense.sh -accept
 
 # Ask IBM's modver which DRBD kmod fits the running kernel (kernel-family match).
 # No argument = the running kernel; it prints the rpm file name, or
 # "Unsupported kernel release." and exits 1.
-KDIR=/tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9
+KDIR=/var/tmp/lab-staging/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9
 KMOD="$KDIR/$("$KDIR/modver")"
 
 # Step 1 of 2 — MQ + cluster prereqs (pacemaker, drbd-utils, kmod)
-cd /tmp/MQServer
+cd /var/tmp/lab-staging/MQServer
 dnf install -y \
   MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
   MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \

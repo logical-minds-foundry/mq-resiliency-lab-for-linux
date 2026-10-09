@@ -46,21 +46,29 @@
       gpgcheck=0
   become: true
 
+# The MQ media is staged on disk under lab_stage_dir, never /tmp (#1417).
+- name: staging dir (on disk)
+  ansible.builtin.include_tasks: ../../../tasks/lab-stage-dir.yml
+
 - name: copy MQ LinuxX64 tar to node
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../build/cache/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz"
-    dest: /tmp/mqadv.tar.gz
+    dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
+  # root: lab_stage_dir is root-owned 0755 and this spike's plays run with become: false
+  # (/tmp was world-writable, so the copy used to work as vagrant).
+  become: true
 
 - name: unpack
   ansible.builtin.unarchive:
-    src: /tmp/mqadv.tar.gz
-    dest: /tmp
+    src: "{{ lab_stage_dir }}/mqadv.tar.gz"
+    dest: "{{ lab_stage_dir }}"
     remote_src: true
-    creates: /tmp/MQServer
+    creates: "{{ lab_stage_dir }}/MQServer"
+  become: true
 
 - name: accept developer licence
-  ansible.builtin.command: /tmp/MQServer/mqlicense.sh -accept
+  ansible.builtin.command: "{{ lab_stage_dir }}/MQServer/mqlicense.sh -accept"
   args:
     creates: /var/mqm
   become: true
@@ -70,13 +78,23 @@
 - name: install base IBM MQ packages (no RDQM)
   ansible.builtin.shell: |
     set -e
-    cd /tmp/MQServer
+    cd "{{ lab_stage_dir }}/MQServer"
     dnf install -y \
       MQSeriesRuntime-*.rpm MQSeriesServer-*.rpm MQSeriesGSKit-*.rpm \
       MQSeriesJava-*.rpm MQSeriesJRE-*.rpm MQSeriesWeb-*.rpm \
       MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm
   args:
     creates: /opt/mqm/bin/crtmqm
+  become: true
+
+# /var/tmp is not wiped the way /tmp is: remove the staged media once the rpms are in.
+- name: remove the staged MQ media
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ lab_stage_dir }}/mqadv.tar.gz"
+    - "{{ lab_stage_dir }}/MQServer"
   become: true
 
 - name: set primary installation (loader path)
