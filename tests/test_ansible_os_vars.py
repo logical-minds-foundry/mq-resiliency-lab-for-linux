@@ -93,20 +93,7 @@ baseurl=file:///media/rhel/AppStream
 enabled=1
 gpgcheck=0
 """
-KMOD_PICK_BEFORE = """\
-set -e
-KREL=$(uname -r)
-BASE=${KREL%%.el9*}
-GLOB="/tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/kmod-drbd-*${BASE//-/_}-*.rpm"
-KMOD=$(ls $GLOB 2>/dev/null || true)
-if [ -z "$KMOD" ]; then
-  echo "ERROR: no kmod-drbd for kernel $KREL; shipped kmods:" >&2
-  ls /tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/ >&2
-  exit 1
-fi
-echo "$KMOD"
-"""
-KMOD_RPM = "kmod-drbd-picked-by-the-previous-task.rpm"
+KMOD_RPM = "kmod-drbd-modver-chose.rpm"
 PREREQS_BEFORE = f"""\
 set -e
 cd /tmp/MQServer
@@ -170,7 +157,9 @@ def _render(template: str, context: dict[str, Any]) -> str:
 def _rhel96_context(role: str) -> dict[str, Any]:
     """Facts + the role's RedHat-9 vars, rendered the way Ansible resolves them lazily."""
     raw = _load(ANSIBLE / "roles" / role / "vars" / "RedHat-9.yml")
-    return {**RHEL96_FACTS, **{k: _render(v, RHEL96_FACTS) for k, v in raw.items()}}
+    # Only the string values are templates; data lists (the known-issue ranges) pass as-is.
+    rendered = {k: _render(v, RHEL96_FACTS) for k, v in raw.items() if isinstance(v, str)}
+    return {**RHEL96_FACTS, **raw, **rendered}
 
 
 def test_os_vars_include_fails_loudly_without_a_match() -> None:
@@ -228,8 +217,9 @@ def test_dvd_repo_renders_identically_on_rhel96(role: str) -> None:
 
 def test_rdqm_prereq_paths_render_identically_on_rhel96() -> None:
     body = RHEL_INSTALL_BODIES["rdqm-install"]
-    ctx = {**_rhel96_context("rdqm-install"), "kmod_pick": {"stdout": f"{KMOD_RPM}\n"}}
-    kmod = _named(body, "select the drbd kmod matching the running kernel (loud fail)")
-    assert _render(kmod["ansible.builtin.shell"], ctx) == KMOD_PICK_BEFORE
+    ctx = {**_rhel96_context("rdqm-install"), "rdqm_kmod_rpm": KMOD_RPM}
+    modver = _named(body, "ask IBM's modver which drbd kmod fits the running kernel (loud fail)")
+    modver_path = _render(modver["ansible.builtin.command"]["argv"][0], ctx)
+    assert modver_path.endswith("/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/modver")
     prereqs = _named(body, "install MQ + cluster prereqs (step 1 of 2)")
     assert _render(prereqs["ansible.builtin.shell"], ctx) == PREREQS_BEFORE

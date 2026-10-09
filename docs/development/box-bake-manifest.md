@@ -271,7 +271,7 @@ in execution order and fails if any package install reaches a RHEL host before i
 
 | Role | In bake | Notes |
 |------|---------|-------|
-| `rdqm-install` | ✅ full | Mounts the install DVD and writes its offline repo, then installs `acl` (the unprivileged-become prereq), then the MQ server set + SDK + samples + web, plus bundled LINBIT/DRBD + Pacemaker + MQSeriesRDQM, one pre-QM pass. Its last step seeds the #282/#569 journald `DiagnosticMessages` drop-in (journald-only on RDQM) — the diagnostic default baked into the image. |
+| `rdqm-install` | ✅ full | Mounts the install DVD and writes its offline repo, then installs `acl` (the unprivileged-become prereq), then the MQ server set + SDK + samples + web, plus bundled LINBIT/DRBD + Pacemaker + MQSeriesRDQM, one pre-QM pass. The `kmod-drbd` rpm is the one IBM's shipped `modver -m <kernel>` names for the running kernel (a kernel-family match, #1408); the install fails if modver names none, and prints a WARNING if the kernel is in IBM's known-compatibility-issue list (vendored in `vars/RedHat-9.yml`), which the current RHEL 9.6 GA kernel is. Its last step seeds the #282/#569 journald `DiagnosticMessages` drop-in (journald-only on RDQM) — the diagnostic default baked into the image. |
 | `node-exporter` | ✅ full | All-install (static config); no split needed. |
 | `alloy` | ✅ install half | Binary + unit baked; `config.alloy` (per-QM-node mqweb-tail, loki endpoint) + start stay per-run. |
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |

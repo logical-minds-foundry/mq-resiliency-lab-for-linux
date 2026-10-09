@@ -14,6 +14,7 @@
 - [Ansible silently does nothing (empty inventory)](#ansible-silently-does-nothing-empty-inventory)
 - [Pacemaker operational settings that matter](#pacemaker-operational-settings-that-matter)
 - [RDQM DR cold-create: crtmqm mkfs I/O error on the DR device](#rdqm-dr-cold-create-crtmqm-mkfs-io-error-on-the-dr-device)
+- [RDQM bake: kmod WARNING or "Unsupported kernel release"](#rdqm-bake-kmod-warning-or-unsupported-kernel-release)
 
 ## Vagrant leaves orphaned extra-disk volumes
 
@@ -220,3 +221,39 @@ attempt, so each retry starts clean; no manual pre-clean is needed. The HA-only
 create is not wrapped — with no DR link (`-reh`, no `.dr` device) it cannot hit
 this class. Mirrors the `run_mqsc_retry` idiom (#657) in the same script. See #768;
 amplified by host pressure (#120).
+
+## RDQM bake: kmod WARNING or "Unsupported kernel release"
+
+**Symptom.** Either of two messages from `rdqm-install` while baking `mq-rdqm-rhel9`
+(or running the whole role on a fresh RHEL box):
+
+- a `WARNING: kernel 5.14.0-570.12.1.el9_6.x86_64 is in IBM's RDQM range of kernel
+  versions with known compatibility issues (5.14.0-570.12.1 -> 5.14.0-570.15.1)` line,
+  after which the install carries on; or
+- the task "ask IBM's modver which drbd kmod fits the running kernel" fails with
+  `Unsupported kernel release.`, and nothing is installed.
+
+**Cause.** The role asks IBM's `modver` helper, shipped in the MQ media's
+`Advanced/RDQM/PreReqs/el<N>/kmod-drbd-9/` directory, which `kmod-drbd` rpm fits the
+running kernel. That is the step IBM's
+[10.0 RDQM install doc](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=multiplatforms-installing-rdqm-replicated-data-queue-managers)
+describes (#1408). `modver` matches by kernel family, so a kernel with no same-release
+kmod still gets one (`5.14.0-687.5.3` gets `_687.5.1`). A kernel outside every family
+the media knows gets "Unsupported kernel release." and exit 1; the role fails there, with
+no fallback.
+
+The WARNING is separate. `modver` does not know about IBM's
+[known-compatibility-issue table](https://www.ibm.com/support/pages/node/1087143),
+which lists RHEL 9 kernels `5.14.0-570.12.1 -> 5.14.0-570.15.1` as "known to require a
+new kernel module". The lab's RHEL 9.6 GA kernel, `570.12.1`, is in that range, so every
+bake from the 9.6 DVD prints the WARNING. The role checks a dated copy of the table
+(`ansible/roles/rdqm-install/vars/RedHat-9.yml`), because the guest is offline and IBM
+publishes the table only on that HTML page; the `ibm-mq-rdqm-kmods.json` feed has no
+known-issue field.
+
+**Fix.** For the WARNING on the 9.6 GA kernel: none needed. The lab has run RDQM on it
+since Phase C. Treat it as a reason to move the box to a newer kernel (a newer DVD, then
+a rebake), not to suppress it. For "Unsupported kernel release.": the MQ media is older
+than the kernel. Use an MQ level (or IBM's Fix Central kmod bundle) whose `modver` knows
+that kernel family, or bake from a supported RHEL point release. When IBM's table
+changes, refresh `rdqm_kernel_known_issues` and its `_as_of` date in the vars file.
