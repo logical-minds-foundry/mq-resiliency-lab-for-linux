@@ -1,19 +1,18 @@
 ---
-# The PAM service files whose pam_motd session lines this role comments out at bake (#1229).
-# On Ubuntu LTS both ship the same pair (openssh debian/openssh-server.sshd.pam.in and
-# shadow debian/login.pam):
+# There is deliberately NO fixed list of PAM files (#1414): the role DISCOVERS every file
+# under /etc/pam.d with an active pam_motd session line (grep -rlP with the regex below) and
+# edits each one. Ubuntu 24.04 ships the pair in /etc/pam.d/sshd and /etc/pam.d/login
+# (openssh debian/openssh-server.sshd.pam.in, shadow debian/login.pam); Ubuntu 26.04 also
+# has one in /etc/pam.d/remote, which the old fixed sshd/login list missed:
 #   session    optional     pam_motd.so  motd=/run/motd.dynamic   <- runs /etc/update-motd.d
 #   session    optional     pam_motd.so noupdate                  <- static /etc/motd only
 # The first line is the expensive one (run-parts /etc/update-motd.d, incl.
 # 50-landscape-sysinfo); the second is dropped too so nothing MOTD-related runs per login.
-motd_off_pam_files:
-  - /etc/pam.d/sshd
-  - /etc/pam.d/login
-
+#
 # An ACTIVE pam_motd session line: optional leading space, `session`, a control field (a
 # bare keyword or a bracketed [..] form), then pam_motd.so. A commented line starts with `#`
 # and never matches, which is what makes the replace idempotent. Python- and PCRE-compatible
-# (the replace module and the `grep -P` verify share it).
+# (the replace module and the `grep -P` discovery + verify share it).
 motd_off_active_regex: '^(\s*session\s+(?:\[[^\]]*\]|\S+)\s+pam_motd\.so\b.*)$'
 
 # The base-files timer that refreshes the MOTD news in the background (motd-news.service
