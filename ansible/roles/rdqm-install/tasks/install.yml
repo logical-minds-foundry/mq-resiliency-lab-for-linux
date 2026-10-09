@@ -78,21 +78,81 @@
     creates: /var/mqm
   become: true
 
-- name: select the drbd kmod matching the running kernel (loud fail)
-  ansible.builtin.shell: |
-    set -e
-    KREL=$(uname -r)
-    BASE=${KREL%%.{{ rhel_el_tag }}*}
-    GLOB="/tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/kmod-drbd-*${BASE//-/_}-*.rpm"
-    KMOD=$(ls $GLOB 2>/dev/null || true)
-    if [ -z "$KMOD" ]; then
-      echo "ERROR: no kmod-drbd for kernel $KREL; shipped kmods:" >&2
-      ls /tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/ >&2
-      exit 1
-    fi
-    echo "$KMOD"
-  register: kmod_pick
+# DRBD kmod choice is IBM's, not ours (#1408). The 10.0 RDQM install doc says to run the
+# `modver` helper shipped in the media's kmod-drbd-9 directory to identify the kernel
+# module to install
+# (https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=multiplatforms-installing-rdqm-replicated-data-queue-managers).
+# modver matches by kernel FAMILY (e.g. 5.14.0-687.5.3 -> the _687.5.1 kmod), where the
+# lab's old exact-release glob refused any kernel without a same-release rpm (#1396/#1405).
+# Query mode only (`-m <kernel>`), never `-i`: modver's own install would run a lone
+# `dnf install` outside the two-step, pre-QM ordering below. With `-m` it prints two lines,
+# the kmod rpm file name then the minimum IBM MQ level that kmod needs; an unsupported
+# kernel prints "Unsupported kernel release." and exits 1, which fails this task. There is
+# no fallback: no kmod from modver means no RDQM install.
+- name: ask IBM's modver which drbd kmod fits the running kernel (loud fail)
+  ansible.builtin.command:
+    argv:
+      - "/tmp/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/modver"
+      - -m
+      - "{{ ansible_kernel }}"
+  register: kmod_modver
   changed_when: false
+
+# modver exited 0, but check its answer before trusting it: exactly the two `-m` lines, a
+# kmod rpm file name, and a minimum MQ level no newer than the MQ being installed.
+# tests/test_rdqm_modver.py runs these conditions against captured modver output.
+- name: modver named one kmod rpm that this MQ level supports (loud fail)
+  ansible.builtin.assert:
+    that:
+      - kmod_modver.stdout_lines | length == 2
+      - kmod_modver.stdout_lines[0] is match('kmod-drbd-[^/ ]+[.]rpm$')
+      - kmod_modver.stdout_lines[1] is match('[0-9]+([.][0-9]+){3}$')
+      - kmod_modver.stdout_lines[1] is version(mq_version, '<=')
+    fail_msg: >-
+      IBM's modver gave no usable kmod for kernel {{ ansible_kernel }} with MQ
+      {{ mq_version }}. Expected two lines (kmod rpm, minimum MQ level); got:
+      {{ kmod_modver.stdout_lines }}
+    quiet: true
+
+- name: record the kmod modver chose (relative to the unpacked media) and the kernel release
+  ansible.builtin.set_fact:
+    rdqm_kmod_rpm: "Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/{{ kmod_modver.stdout_lines[0] }}"
+    rdqm_kernel_release: "{{ ansible_kernel.split('.' ~ rhel_el_tag) | first }}"
+
+- name: stat the kmod rpm modver chose
+  ansible.builtin.stat:
+    path: "/tmp/MQServer/{{ rdqm_kmod_rpm }}"
+  register: kmod_rpm_stat
+
+- name: the kmod modver chose ships in the unpacked media (loud fail)
+  ansible.builtin.assert:
+    that:
+      - kmod_rpm_stat.stat.exists
+    fail_msg: "modver chose {{ rdqm_kmod_rpm }}, but /tmp/MQServer has no such file"
+    quiet: true
+
+# IBM's known-issue kernels (#1408). modver maps kernel families only; it says nothing
+# about IBM's "Kernel versions with known compatibility issues" table, so the role checks
+# that table itself, from the vendored copy in vars/<OS>.yml (the guest is offline, and
+# IBM publishes the table only on an HTML support page; the kmod JSON has no such field).
+# A hit is a visible WARNING, not a failure: the lab's current GA kernel, 5.14.0-570.12.1,
+# is in IBM's RHEL 9 range and is the path the lab runs today. A miss prints a skip per
+# range.
+- name: WARN if the running kernel is in IBM's known-compatibility-issue list (non-fatal)
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: kernel {{ ansible_kernel }} is in IBM's RDQM range of kernel versions with
+      known compatibility issues ({{ item.first }} -> {{ item.last }}). IBM says these
+      kernels are "known to require a new kernel module to function correctly with IBM MQ
+      RDQM" and advises deferring to them until updated kmods ship. Source:
+      {{ rdqm_kernel_known_issues_source }} (copy taken {{ rdqm_kernel_known_issues_as_of }}).
+      Installing modver's choice {{ kmod_modver.stdout_lines[0] }} anyway.
+  loop: "{{ rdqm_kernel_known_issues }}"
+  loop_control:
+    label: "{{ item.first }} -> {{ item.last }}"
+  when:
+    - rdqm_kernel_release | replace('-', '.') is version(item.first | replace('-', '.'), '>=')
+    - rdqm_kernel_release | replace('-', '.') is version(item.last | replace('-', '.'), '<=')
 
 # Two steps, pre-QM (Phase B lesson), with RDQM LAST: its preinst
 # scriptlet requires the MQ server files already on disk and fails when
@@ -107,7 +167,7 @@
       MQSeriesSDK-*.rpm MQSeriesClient-*.rpm MQSeriesSamples-*.rpm \
       Advanced/RDQM/PreReqs/{{ pacemaker_dir }}/*.rpm \
       Advanced/RDQM/PreReqs/{{ drbd_utils_dir }}/*.rpm \
-      {{ kmod_pick.stdout | trim }}
+      {{ rdqm_kmod_rpm }}
   args:
     creates: /opt/mqm/bin/crtmqm
   become: true

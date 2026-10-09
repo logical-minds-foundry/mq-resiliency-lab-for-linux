@@ -37,9 +37,11 @@ Two hard ordering rules (both encoded in `rdqm-install/tasks/main.yml`):
 # Accept the developer licence
 /tmp/MQServer/mqlicense.sh -accept
 
-# Pick the DRBD kmod that EXACTLY matches the running kernel (no fuzzy match)
-KREL=$(uname -r); BASE=${KREL%%.el9*}
-KMOD=$(ls /tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/kmod-drbd-*${BASE//-/_}-*.rpm)
+# Ask IBM's modver which DRBD kmod fits the running kernel (kernel-family match).
+# No argument = the running kernel; it prints the rpm file name, or
+# "Unsupported kernel release." and exits 1.
+KDIR=/tmp/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9
+KMOD="$KDIR/$("$KDIR/modver")"
 
 # Step 1 of 2 — MQ + cluster prereqs (pacemaker, drbd-utils, kmod)
 cd /tmp/MQServer
@@ -166,8 +168,10 @@ Synced`.
    `usermod -aG haclient mqm` step above.
 2. **Combined RPM transaction fails** — RDQM package must install *after* MQ
    server files. Two separate `dnf install`.
-3. **DRBD kmod must match the kernel exactly** — no fuzzy match; mismatch fails
-   loud. If `modprobe drbd` fails, you grabbed the wrong kmod.
+3. **Let `modver` pick the DRBD kmod** — it matches by kernel family, not exact
+   release (#1408). If `modprobe drbd` fails, you grabbed the wrong kmod. Also check
+   IBM's known-issue kernel list ([RDQM kernel modules](https://www.ibm.com/support/pages/node/1087143));
+   `rdqm-install` warns when the running kernel is in it.
 4. **`drbdpool` VG must exist before any QM** — RDQM carves QM storage from it.
 5. **HA-only cannot be converted in place to HA/DR** — if you'll ever need
    cross-site DR, create the QM with the DR flags from the start (HA-only →

@@ -195,7 +195,9 @@ There are **two *fat* RHEL 9 boxes plus the bare base**, and the split is the
 answer to a kernel-pin problem:
 
 - **`mq-rdqm-rhel9`** — the fat RDQM box. RDQM's DRBD kernel module
-  (`kmod-drbd`) must match the running kernel exactly. Baking it solves the pin
+  (`kmod-drbd`) must be compatible with the running kernel. IBM's `modver` helper,
+  shipped in the MQ media, picks it by kernel family (#1408; for example the
+  `5.14.0-687.5.3` kernel gets the `_687.5.1` kmod). Baking it solves the pin
   **by construction**: the box is baked from this exact base, so its kernel and
   its baked `kmod-drbd` are matched from birth — there is no separate kernel pin
   to maintain, and no way for a boot-time update to drift the kernel out from

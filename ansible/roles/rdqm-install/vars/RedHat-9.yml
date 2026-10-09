@@ -1,11 +1,25 @@
 ---
 # rdqm-install per-OS-version values for RHEL 9 (#1277, epic .github#280), loaded by
 # ansible/tasks/os-vars.yml. The MQ Advanced tar ships RDQM's prereq rpms under per-EL-major
-# dirs (Advanced/RDQM/PreReqs/el9/...), and the running kernel's release carries the same
-# EL tag, which the kmod pick strips to find the matching kmod-drbd rpm.
+# dirs (Advanced/RDQM/PreReqs/el9/...). IBM's `modver` helper in the kmod dir picks the
+# kmod-drbd rpm for the running kernel (#1408); the kernel release carries the same EL tag,
+# which the known-issue check strips to compare kernel versions.
 rhel_el_tag: el9
 drbd_kmod_dir: el9/kmod-drbd-9
 pacemaker_dir: el9/pacemaker-2
 drbd_utils_dir: el9/drbd-utils-9
 # The offline DVD dnf repo's display name; the point release comes from the guest's facts.
 rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
+
+# IBM's "Kernel versions with known compatibility issues" table, RHEL9 row (#1408), copied
+# by hand: inclusive kernel ranges that IBM says "are known to require a new kernel module
+# to function correctly with IBM MQ RDQM". A running kernel inside a range gets a visible
+# WARNING at install time, never a failure. The guest is offline and IBM publishes this
+# table only on the HTML support page below (the ibm-mq-rdqm-kmods.json feed has no
+# known-issue field), so the role carries a dated copy. Refresh it from the page when
+# moving the lab to a new kernel or MQ level.
+rdqm_kernel_known_issues:
+  - first: 5.14.0-570.12.1
+    last: 5.14.0-570.15.1
+rdqm_kernel_known_issues_source: https://www.ibm.com/support/pages/node/1087143
+rdqm_kernel_known_issues_as_of: "2026-10-09"
