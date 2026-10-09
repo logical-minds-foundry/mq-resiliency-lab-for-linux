@@ -371,14 +371,28 @@ fi
 # arch-specific, so the pre-flight matches the --arch this bake builds for — ARM64 on
 # Apple Silicon, X64 on x86 (#103/#727): a stale X64 literal here hard-failed every arm64
 # bake. Ubuntu registers online, so no DVD is attached. (#605, #659)
+# The pre-flight checks the EXACT pinned tarball (#1407): the role copies
+# <mq_version>-…tar.gz, so a version-agnostic glob passed on a stale cached level and
+# the bake then died deep in Ansible. MQ_PIN is read from THIS checkout (the bake runs
+# this checkout's playbook, whose versions.yml looks up the same file). Read only for
+# the MQ-bearing bakes below; fail loud on a missing or empty pin.
+mq_pin() {
+  local pin
+  test -f ../mq-version || { echo "ERROR: MQ version pin lab/mq-version not found" >&2; exit 1; }
+  pin="$(tr -d '[:space:]' <../mq-version)"
+  [ -n "$pin" ] || { echo "ERROR: MQ version pin lab/mq-version is empty" >&2; exit 1; }
+  printf '%s' "$pin"
+}
 case "$BAKE" in
   obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu)
+    MQ_PIN="$(mq_pin)"
     case "$ARCH" in
       aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;
       *) MQ_MEDIA_TOKEN=UbuntuLinuxX64 ;;  # $ARCH already validated to aarch64|x86_64
     esac
-    ls "$MAIN_ROOT"/build/cache/mq/*-IBM-MQ-Advanced-for-Developers-"${MQ_MEDIA_TOKEN}".tar.gz >/dev/null 2>&1 \
-      || { echo "ERROR: ${MQ_MEDIA_TOKEN} MQ media not found under $MAIN_ROOT/build/cache/mq for the ${BAKE} bake (--arch ${ARCH})" >&2; exit 1; }
+    MQ_MEDIA="$MAIN_ROOT/build/cache/mq/${MQ_PIN}-IBM-MQ-Advanced-for-Developers-${MQ_MEDIA_TOKEN}.tar.gz"
+    test -f "$MQ_MEDIA" \
+      || { echo "ERROR: pinned MQ ${MQ_PIN} ${MQ_MEDIA_TOKEN} media not found at $MQ_MEDIA for the ${BAKE} bake (--arch ${ARCH}); run scripts/fetch-mq.sh" >&2; exit 1; }
     BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
     ;;
 esac
@@ -393,10 +407,14 @@ case "$BAKE" in
     # Arch-suffixed artifact (#1100/#1112): the host builds mq_prometheus for its own
     # arch (aarch64 -> arm64, x86_64 -> x64), matching mqexporter.binary_name().
     case "$ARCH" in aarch64) EXPORTER_SUFFIX=arm64 ;; *) EXPORTER_SUFFIX=x64 ;; esac
-    EXPORTER_BIN="$MAIN_ROOT/build/cache/mq-exporter/mq_prometheus-${EXPORTER_SUFFIX}"
+    MQ_PIN="$(mq_pin)"
+    # Keyed by the MQ pin (#1407, mqexporter.exporter_binary_path): built against that
+    # level's SDK, so a pin bump never reuses a binary built against the old level.
+    EXPORTER_DIR="$MAIN_ROOT/build/cache/mq-exporter/${MQ_PIN}"
+    EXPORTER_BIN="$EXPORTER_DIR/mq_prometheus-${EXPORTER_SUFFIX}"
     test -f "$EXPORTER_BIN" \
       || { echo "ERROR: prebuilt mq_prometheus not found at $EXPORTER_BIN for the ${BAKE} bake — \`mqlab box build\` ensures it; build it first" >&2; exit 1; }
-    BAKE_EXTRA_VARS+=(-e "mq_exporter_media_dir=$MAIN_ROOT/build/cache/mq-exporter")
+    BAKE_EXTRA_VARS+=(-e "mq_exporter_media_dir=$EXPORTER_DIR")
     ;;
 esac
 

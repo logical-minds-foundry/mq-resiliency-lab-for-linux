@@ -8,8 +8,9 @@ lockstep with the lab. For the narrative walk-through of how these pieces fit
 together, see [Architecture](../architecture/index.md); to drive the running
 lab, see [Operate & Observe](../operate/index.md).
 
-The lab pins IBM **MQ 10.0** (currently `10.0.0.0`). The version lives in **one
-authoritative place** — the single-source pin file
+The lab pins IBM **MQ 10.0** (currently `10.0.0.5`, the 10.0 LTS fix pack that
+is also the latest CD level). The version lives in **one authoritative place** —
+the single-source pin file
 [`lab/mq-version`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version).
 Every consumer reads that pin rather than duplicating the literal:
 `manifest.DEFAULT_MQ_VERSION`, `scripts/fetch-mq.sh`, the Ansible `mq_version`

@@ -158,11 +158,14 @@ def test_build_boxes_ensures_exporter_binary_for_exporter_box(monkeypatch, tmp_p
     ensured: list = []
     monkeypatch.setattr(box, "cache", lambda *parts: tmp_path)
     monkeypatch.setattr(
-        box.mqexporter, "ensure_mq_exporter_binary", lambda root: ensured.append(root)
+        box.mqexporter,
+        "ensure_mq_exporter_binary",
+        lambda root, ver: ensured.append((root, ver)),
     )
     obs = next(n for n, s in x86_fleet().items() if s.role == "obs")
     box.build_boxes([obs], force=True)
-    assert ensured == [tmp_path]
+    # Built against the lab/mq-version pin's SDK (#1407), never a stray cached level.
+    assert ensured == [(tmp_path, box.DEFAULT_MQ_VERSION)]
 
 
 def test_build_boxes_skips_dvd_for_non_base_box(monkeypatch):

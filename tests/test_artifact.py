@@ -56,6 +56,21 @@ def test_cache_miss_downloads_then_returns(mqdir):
     assert out == [mqdir / _NAME]
 
 
+def test_missing_sidecar_is_recorded_loudly_never_silently_skipped(mqdir, capsys):
+    # IBM publishes no checksum beside the tarballs, so a hand-placed tarball with no
+    # sidecar gets its digest RECORDED (with a NOTICE) rather than passing unverified;
+    # a later acquire then verifies against it (#1407).
+    (mqdir / _NAME).write_bytes(b"TARBALL")
+    artifact.ensure_mq_tarballs_for_boxes(_BOXES, "9.4.5.0", mqdir, fetch=lambda n, d: None)
+    sidecar = mqdir / f"{_NAME}.sha256"
+    assert sidecar.read_text() == f"{_sha(mqdir / _NAME)}  {_NAME}\n"
+    assert f"NOTICE: {_NAME} had no .sha256 sidecar" in capsys.readouterr().err
+    # The recorded digest now guards the cache: a tampered tarball fails loud.
+    (mqdir / _NAME).write_bytes(b"TAMPERED")
+    with pytest.raises(ValueError, match="sha256 mismatch"):
+        artifact.ensure_mq_tarballs_for_boxes(_BOXES, "9.4.5.0", mqdir, fetch=lambda n, d: None)
+
+
 def test_sha_mismatch_raises(mqdir):
     (mqdir / _NAME).write_bytes(b"TARBALL")
     (mqdir / f"{_NAME}.sha256").write_text("deadbeef  " + _NAME + "\n")

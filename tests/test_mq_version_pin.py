@@ -72,3 +72,28 @@ def test_fetch_mq_script_resolves_to_the_pin():
     text = (repo_root() / "scripts" / "fetch-mq.sh").read_text()
     assert "lab/mq-version" in text, "fetch-mq.sh must read the pin path"
     assert QUOTED_VERSION.search(text) is None, "no hardcoded version literal"
+
+
+# An MQ tarball name with a literal level (9.4.5.0-IBM-MQ-...) or a version-agnostic
+# glob (*-IBM-MQ-...) bypasses the pin: the literal goes stale on a bump, and the glob
+# silently picks whichever cached level sorts first (#1407: the exporter build and the
+# fat-box media pre-flight both did). Consumers must name the tarball from the pin.
+_PINLESS_TARBALL = re.compile(r"(?:\d+\.\d+\.\d+\.\d+|\*)-IBM-MQ-")
+_CONSUMER_DIRS = ("ansible", "lab", "scripts", "src", "components")
+_CONSUMER_SUFFIXES = {".py", ".sh", ".yml", ".yaml", ".j2", ".rb"}
+_SKIP_PARTS = {".venv", "build", "node_modules", "__pycache__", ".pytest_cache"}
+
+
+def test_no_consumer_names_an_mq_tarball_bypassing_the_pin():
+    root = repo_root()
+    offenders = [
+        f"{path.relative_to(root)}:{n}"
+        for top in _CONSUMER_DIRS
+        for path in sorted((root / top).rglob("*"))
+        if path.is_file()
+        and path.suffix in _CONSUMER_SUFFIXES
+        and not _SKIP_PARTS.intersection(path.relative_to(root).parts)
+        for n, line in enumerate(path.read_text(errors="replace").splitlines(), 1)
+        if _PINLESS_TARBALL.search(line)
+    ]
+    assert offenders == [], f"MQ tarball named without the pin: {offenders}"
