@@ -3,13 +3,15 @@
 A pinned (version x arch) tarball is immutable, so it is safely cached. We never
 fail just because a tarball is absent — MQ Advanced for Developers is downloadable
 for every arch we use; `fetch` populates the cache on a miss. The sibling `.sha256`
-(when present) is verified on acquire: integrity, not version-reconciliation.
+is verified on every acquire (recorded on first acquire, since IBM publishes no
+checksum file beside the tarballs): integrity, not version-reconciliation.
 """
 
 from __future__ import annotations
 
 import hashlib
 import shutil
+import sys
 import urllib.request
 from typing import TYPE_CHECKING
 
@@ -52,9 +54,23 @@ def download_mq_tarball(
 
 
 def _verify_sha256(path: Path) -> None:
+    """Verify a cached tarball against its `.sha256` sidecar.
+
+    IBM publishes no checksum file beside the Developer tarballs on the CDN, so the
+    lab's trust model is record-on-first-acquire, verify-on-every-later-use (the same
+    as scripts/fetch-mq.sh). A tarball with no sidecar (placed in the cache by hand)
+    is never silently passed: its digest is recorded now, loudly, so every later
+    acquire verifies against it (#1407).
+    """
     sidecar = path.with_name(path.name + ".sha256")
     if not sidecar.exists():
-        return  # no checksum to verify against — immutability is the guarantee
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        sidecar.write_text(f"{digest}  {path.name}\n")
+        sys.stderr.write(
+            f"NOTICE: {path.name} had no .sha256 sidecar; recorded {digest} "
+            "(trust-on-first-use; verified on every later acquire)\n"
+        )
+        return
     expected = sidecar.read_text().split()[0].strip().lower()
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if actual != expected:
