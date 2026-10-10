@@ -154,6 +154,11 @@ Command groups:
 Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
 (outside the docs site). Curated pointers:
 
+- **[RDQM/Pacemaker strategic position](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-pacemaker-strategic-position.md)**
+  — why Native HA is the lab's strategic arm and RDQM and Pacemaker/DRBD stay
+  as counter-options while IBM supports them (sourced, data vs judgment).
+- **[OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md)**
+  — IBM's MQ, Native HA and RDQM support status per OS release.
 - **[Lab gotchas playbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-gotchas.md)**
   — symptom → cause → fix for libvirt / Vagrant / Pacemaker.
 - **[Lab bootstrap runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-bootstrap.md)**
