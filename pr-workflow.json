@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1399",
+  "branch": "feature/1399-box-gc-unreferenced",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-10T16:55:07Z",
+  "updated_at": "2026-10-10T16:55:07Z",
+  "git": {
+    "base_sha": "b278150720f1546db3460e7fe9dce03767a26d93",
+    "head_sha": "48dee9caf2daada698dfd30f970a686a8082cb2e"
+  },
+  "pr_metadata": {
+    "title": "feat(box): box gc --unreferenced reclaims boxes no catalog selection resolves to",
+    "summary": "Adds an opt-in mqlab box gc --unreferenced pass that deregisters, deletes the caches of, and reclaims the base volumes of boxes no current catalog selection can resolve to on any host (e.g. infra/obs/san-ubuntu24 after infra moved to ubuntu:26), never touching a resolvable box or one a live VM backs onto.",
+    "notes": "Protected set: box.resolvable_box_names = Catalog.all_boxes(None, stack_roles) (new facts=None means no host filter: every SUPPORTED OS of every stack plus the shared roles on infra/infra_mq) + every catalog OS base box + this host's FLEET. Deliberately not host-filtered because build/state/boxes is persistent (RHEL 10 on a non-v3 host stays protected). Candidates are only generated <role>-<os><major> names found registered, cached as <box>-<arch>.box/.manifest-hash/.components.json (any arch), or holding pool volumes; base boxes, cloud images and foreign names are reported as kept and never touched; retired names stay with the retired pass. A candidate whose base image backs a live overlay is kept and reported. Removed boxes' volumes go via gc_orphaned_images(dead_stems=...), keeping none (in-use guard still holds). Report prints the commands run (vagrant box remove, rm) plus every kept box and why. Opt-in flag; plain box gc unchanged; --dry-run previews. Pool absent (#1415) is tolerated (no VM disks to protect); any other virsh failure aborts before removing anything. Docs: docs/development/box-model.md. REMAINING ACCEPTANCE (human, after merge): run mqlab box gc --unreferenced --dry-run, then mqlab box gc --unreferenced, on both hosts; not run against real host boxes here.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)",
+    "linkage": "Closes"
+  },
+  "submitted": null
+}
