@@ -54,7 +54,12 @@ def _git(args: list[str]) -> str:
     cwd = repo_root()
     try:
         return subprocess.run(  # noqa: S603
-            args, capture_output=True, text=True, check=True, cwd=cwd
+            args,
+            stdin=subprocess.DEVNULL,  # never share mqlab's stdin description (#1420)
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
         ).stdout.strip()
     except subprocess.CalledProcessError as exc:
         raise BuildEnvError(

@@ -116,6 +116,9 @@ def _container_build(cache_root: Path, out_dir: Path, mq_version: str) -> None: 
             "bash",
             "/build.sh",
         ],
+        # No `-i`: the container reads nothing from stdin, so give it its own /dev/null
+        # rather than mqlab's shared stdin description (#1420).
+        stdin=subprocess.DEVNULL,
         check=True,
     )
 

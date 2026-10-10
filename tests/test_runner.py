@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+
+from mqlab import runner as runner_mod
 from mqlab.runner import Command, SubprocessRunner
 
 
@@ -49,3 +52,22 @@ def test_subprocess_runner_merges_command_env_over_os_environ(monkeypatch):
         lines.append,
     )
     assert lines == ["base extra"]  # inherited PATH/etc preserved, command.env added
+
+
+def test_subprocess_runner_gives_each_child_its_own_stdin(monkeypatch):
+    # #1420: a step must never inherit mqlab's fd 0. O_NONBLOCK lives on the shared open
+    # file description, so a concurrent ssh flipping it made ansible-playbook refuse.
+    seen: dict[str, object] = {}
+    real_popen = subprocess.Popen
+
+    def spy_popen(argv, **kwargs):  # noqa: ANN001, ANN003, ANN202 - test spy
+        seen.update(kwargs)
+        return real_popen(argv, **kwargs)
+
+    monkeypatch.setattr(runner_mod.subprocess, "Popen", spy_popen)
+    lines: list[str] = []
+    # `cat` on its own /dev/null hits EOF at once: no output, exit 0, never a hang.
+    code = SubprocessRunner().run(Command(["sh", "-c", "cat; echo done"]), lines.append)
+    assert seen["stdin"] is subprocess.DEVNULL
+    assert lines == ["done"]
+    assert code == 0
