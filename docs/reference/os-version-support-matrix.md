@@ -205,7 +205,7 @@ and the resolver warns when it is selected.
 |---|---|---|---|
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
-| `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flip to `rhel:10` is permitted** (T11), once V3 proves the build. Pin point `10.2`. |
+| `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
 | `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported | **Stays `rhel:9`**, as the spec already says. `rhel:10` is not in its supported list. |
 
 - **[judgment]** For both Ubuntu stacks, T9's "if IBM-supported" condition is

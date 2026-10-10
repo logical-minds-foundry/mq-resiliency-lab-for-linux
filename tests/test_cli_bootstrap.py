@@ -9,6 +9,7 @@ runner that probes virsh / the qm-status verb / Prometheus.
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import os
@@ -1670,6 +1671,22 @@ def test_bootstrap_host_gate_refuses_rhel_on_aarch64(monkeypatch, prepare_lab_ca
     assert result.exit_code == 2
     assert "RHEL needs an x86_64 host; this host is aarch64" in result.stderr
     assert prepare_lab_calls == []
+
+
+def test_bootstrap_default_rhel10_refused_without_v3(monkeypatch, prepare_lab_calls):
+    """nativeha-rhel-crr defaults to rhel:10 (T11). On a host without x86-64-v3 a
+    DEFAULT bootstrap fails loud before any lab I/O and names os: rhel:9 via a build
+    file — it never silently falls back to RHEL 9 (spec §4.3)."""
+    v2 = dataclasses.replace(X86, x86_64_v3=False, x86_64_v3_missing=("avx2", "fma"))
+    monkeypatch.setattr(cli, "_host_facts", lambda: v2)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "nativeha-rhel-crr"])
+    assert result.exit_code == 2
+    assert (
+        "rhel:10 needs an x86-64-v3 CPU; this host's CPU lacks avx2, fma — use os: rhel:9 "
+        "in your --config file (mqlab bootstrap nativeha-rhel-crr --config <file>)"
+    ) in result.stderr
+    assert prepare_lab_calls == []
+    assert instances.read_record("nativeha-rhel-crr") is None
 
 
 # --- the liveness probe + record gate helpers -------------------------------------------

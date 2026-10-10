@@ -227,7 +227,7 @@ def test_boxes_for_build_default_covers_every_stack():
         "mq-client-ubuntu24",
         "pcmk-ubuntu24",
         "mq-rdqm-rhel9",
-        "mq-nativeha-rhel9",
+        "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu24",
     ]
 
@@ -249,6 +249,15 @@ def test_boxes_for_build_default_skips_what_the_host_cannot_run():
     names = box.boxes_for_build(BuildFile(os=None), facts=arm)
     assert "mq-rdqm-rhel9" not in names
     assert "mq-nativeha-ubuntu24" in names
+
+
+def test_boxes_for_build_default_skips_rhel10_on_a_non_v3_host():
+    """nativeha-rhel-crr defaults to rhel:10 (T11); a host without x86-64-v3 skips that
+    default (nothing asked for it) but still builds the RHEL 9 stack it can run."""
+    v2 = dataclasses.replace(_FACTS, x86_64_v3=False, x86_64_v3_missing=("avx2",))
+    names = box.boxes_for_build(BuildFile(os=None), facts=v2)
+    assert "mq-nativeha-rhel10" not in names
+    assert "mq-rdqm-rhel9" in names
 
 
 def test_boxes_for_build_refuses_an_explicit_request_the_host_cannot_run():

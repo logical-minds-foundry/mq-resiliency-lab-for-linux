@@ -185,7 +185,7 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
     [
         ("pcmk-ubuntu", "Ubuntu 24"),
         ("nativeha-ubuntu", "Ubuntu 24"),
-        ("nativeha-rhel-crr", "RHEL 9"),
+        ("nativeha-rhel-crr", "RHEL 10"),
         ("rdqm-rhel", "RHEL 9"),
     ],
 )
