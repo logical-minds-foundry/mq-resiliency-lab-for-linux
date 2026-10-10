@@ -1059,6 +1059,53 @@ def test_gc_other_dumpxml_error_still_fails_loud(monkeypatch):
     assert fake.deleted == []
 
 
+class _VolListFails:
+    """virsh whose `vol-list` fails with the given error lines; any other call is a bug."""
+
+    def __init__(self, *lines: str) -> None:
+        self.lines = lines
+
+    def run(self, command, on_line):
+        assert "vol-list" in command.argv, f"unexpected virsh argv: {command.argv}"
+        for line in self.lines:
+            on_line(line)
+        return 1
+
+
+# What virsh prints on a fresh host whose `default` pool vagrant-libvirt has not yet
+# created: the builders write straight to /var/lib/libvirt/images, so only the first
+# `vagrant up` defines it (#1415).
+_NO_POOL = (
+    "error: failed to get pool 'default'",
+    "error: Storage pool not found: no storage pool with matching name 'default'",
+)
+
+
+def test_gc_absent_pool_reclaims_nothing_and_says_why(monkeypatch):
+    _install_virsh(monkeypatch, _VolListFails(*_NO_POOL))
+    result = box.gc_orphaned_images()
+    assert result.absent_pool == "default"
+    assert result.deleted == []
+    assert result.kept == []
+    assert result.freed_bytes == 0
+    summary = box.gc_summary(result)
+    assert "storage pool 'default' is not defined" in summary
+    assert "nothing to reclaim" in summary
+
+
+def test_gc_other_vol_list_failure_still_fails_loud(monkeypatch):
+    # Only "the pool does not exist" is tolerated; any other vol-list failure (#759).
+    _install_virsh(monkeypatch, _VolListFails("error: failed to connect to the hypervisor"))
+    with pytest.raises(RuntimeError, match="vol-list") as excinfo:
+        box.gc_orphaned_images()
+    assert not isinstance(excinfo.value, box.PoolAbsentError)
+
+
+def test_gc_summary_with_a_pool_present_is_unchanged():
+    result = box.GcResult(deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=False)
+    assert box.gc_summary(result) == "box gc: no orphaned box base images — nothing to reclaim"
+
+
 def test_vol_detail_raises_vanished_only_for_missing_volume(monkeypatch):
     name = "x.img"
     fake = _FakeVirsh([name], {}, dumpxml_errors={name: "error: Storage volume not found"})
@@ -1124,15 +1171,18 @@ def test_vol_detail_missing_allocation_defaults_zero(monkeypatch):
     assert box._vol_detail(name) == (0, None)
 
 
-def test_virsh_out_fails_loud_on_nonzero(monkeypatch):
-    class _Boom:
-        def run(self, command, on_line):
-            on_line("error: failed to connect to the hypervisor")
-            return 1
+def test_pool_volume_names_fails_loud_on_nonzero(monkeypatch):
+    # A broken vol-list must raise, never read as an empty pool (#759).
+    _install_virsh(monkeypatch, _VolListFails("error: failed to connect to the hypervisor"))
+    with pytest.raises(RuntimeError, match="failed") as excinfo:
+        box._pool_volume_names()
+    assert not isinstance(excinfo.value, box.PoolAbsentError)
 
-    monkeypatch.setattr(box, "SubprocessRunner", lambda: _Boom())
-    with pytest.raises(RuntimeError, match="failed"):
-        box._virsh_out(["vol-list", "--pool", "default"])
+
+def test_pool_volume_names_raises_pool_absent_for_a_missing_pool(monkeypatch):
+    _install_virsh(monkeypatch, _VolListFails(*_NO_POOL))
+    with pytest.raises(box.PoolAbsentError, match="no storage pool with matching name"):
+        box._pool_volume_names()
 
 
 def test_vol_delete_success(monkeypatch):
