@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1405",
+  "branch": "feature/1405-rdqm-rhel10-eval",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-10T16:46:42Z",
+  "updated_at": "2026-10-10T16:46:42Z",
+  "git": {
+    "base_sha": "b278150720f1546db3460e7fe9dce03767a26d93",
+    "head_sha": "d918d101603ea31f2222f37da34028c4b6d5b9ab"
+  },
+  "pr_metadata": {
+    "title": "docs(reference): record RDQM on RHEL 10 as supported from MQ 10.0.1, not 10.0.0.x",
+    "summary": "Updates the OS-version support matrix: RDQM on RHEL 10 is supported from MQ 10.0.1 (CD, GA 2026-10-13, IBM announcement AD26-0859), not in any 10.0.0.x level. The doc records the decision to keep rdqm-rhel on rhel:9 on the 10.0.0.5 pin until the 10.0.1 re-pin (#1409).",
+    "notes": "Docs-only change; lab/versions.yaml is deliberately untouched. Re-verified 2026-10-10: the SPCR JSON for 10.0 and 10.0.0.5 (RHEL 10 x86-64 still lists RDQM as unsupported, footnote (7); the chain has no 10.0.1 deliverable), the RDQM kmod page and JSON feed (RHEL 7/8/9 only, no 6.12 kernel), the CD download page (latest CD is 10.0.0.5), and the cached 10.0.0.5 Developer tarball (PreReqs el8/el9 only). Not re-verified: the AD26-0859 announcement is JavaScript-rendered and returns 403 to curl and WebFetch, so its quotes come from the human's 2026-10-09 paste (listed as human-fetch item 5 in section 7). The new section 2.4 lists the checks to run once 10.0.1 ships: the el10 PreReqs dirs, and whether modver matches the DVD kernel 6.12.0-211.7.3.el10_2. The implementation follow-on (catalog, vars/RedHat-10.yml, mq-rdqm-rhel10 bake, V-row) will be filed under the new 10.0.1 epic.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)",
+    "linkage": "Closes"
+  },
+  "submitted": null
+}
