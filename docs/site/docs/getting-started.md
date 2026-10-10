@@ -84,8 +84,11 @@ each command with `uv run`, e.g. `uv run mqlab doctor`, works too.)
 before you commit to a bring-up. Two of its lines are informational and never fail the
 host. `rhel-stacks` says whether the RHEL arms can run here (they need x86_64).
 `x86-64-v3: yes` or `no` says whether the host counts as x86-64-v3: an x86_64 CPU with
-AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it; on a `no` host,
-build the RHEL stack on RHEL 9 (`os: rhel:9` in a `--config` file).
+AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it, and RHEL 10 is the
+default OS of the RHEL Native HA stack (`nativeha-rhel-crr`). On a `no` host a plain
+`mqlab bootstrap nativeha-rhel-crr` is refused with that reason; build the stack on
+RHEL 9 instead, with `os: rhel:9` in a build file
+(`mqlab bootstrap nativeha-rhel-crr --config <file>`).
 
 !!! note "After a Python-version bump"
     The pinned Python version lives in `.python-version`. If it changes (or you

@@ -56,8 +56,11 @@ stacks:
   # 26 is selectable (lab-only, warned); the defaults flip only with an SPCR 26.04 row (T9).
   nativeha-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:24 }
   pcmk-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:24 }
-  # The default stays rhel:9 until the RHEL 10 row is validated live (T11 flips it).
-  nativeha-rhel-crr: { supported: [rhel:9, rhel:10], default: rhel:9 }
+  # Defaults to rhel:10 (T11, #1289): IBM's MQ 10.0 SPCR lists MQ server + Native HA on
+  # RHEL 10 (docs/reference/os-version-support-matrix.md), and the row was validated live
+  # (V3, #1288). rhel:10 requires x86-64-v3, so a default bring-up on a host without it
+  # is refused and names os: rhel:9 in a --config build file — never a silent fallback.
+  nativeha-rhel-crr: { supported: [rhel:9, rhel:10], default: rhel:10 }
   # RDQM is RHEL 9 only: IBM ships no DRBD kmod for RHEL 10.
   rdqm-rhel: { supported: [rhel:9], default: rhel:9 }
 # The ONE pinned guest Python runtime (epic .github#294 spec §5.2): a

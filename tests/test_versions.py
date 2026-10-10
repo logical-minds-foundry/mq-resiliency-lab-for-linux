@@ -135,11 +135,12 @@ def test_committed_catalog():
         "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
         "rdqm-rhel": [OsRef("rhel", 9)],
     }
-    # Defaults stay on 24 until an SPCR "Ubuntu 26.04 LTS" row appears (T9).
+    # Ubuntu defaults stay on 24 until an SPCR "Ubuntu 26.04 LTS" row appears (T9);
+    # nativeha-rhel-crr defaults to RHEL 10 (IBM-supported, validated live in V3, T11).
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": OsRef("ubuntu", 24),
         "pcmk-ubuntu": OsRef("ubuntu", 24),
-        "nativeha-rhel-crr": OsRef("rhel", 9),
+        "nativeha-rhel-crr": OsRef("rhel", 10),
         "rdqm-rhel": OsRef("rhel", 9),
     }
     rhel9 = cat.oses[OsRef("rhel", 9)]
@@ -397,8 +398,42 @@ def test_rhel10_refused_under_tcg_says_not_measured():
         load_catalog().stack_os("nativeha-rhel-crr", RHEL10, X86_TCG)
 
 
-def test_rhel9_default_unaffected_by_the_v3_gate():
-    assert load_catalog().stack_os("nativeha-rhel-crr", None, X86_V2) == OsRef("rhel", 9)
+def test_nativeha_rhel_crr_defaults_to_rhel10():
+    """T11: the default is RHEL 10 on an x86-64-v3 host, and it carries no
+    IBM-unsupported warning (the support gate: MQ 10.0 SPCR lists RHEL 10)."""
+    cat = load_catalog()
+    assert cat.stack_os("nativeha-rhel-crr", None, X86) == OsRef("rhel", 10)
+    assert cat.support_warning(cat.default_os("nativeha-rhel-crr")) is None
+
+
+def test_default_refused_without_v3_points_to_rhel9():
+    """T11 / spec §4.3: a DEFAULT bring-up on a non-v3 host fails loudly and names
+    os: rhel:9 via a build file — never a silent fallback to RHEL 9."""
+    with pytest.raises(VersionError) as exc:
+        load_catalog().stack_os("nativeha-rhel-crr", None, X86_V2)
+    assert str(exc.value) == (
+        "rhel:10 needs an x86-64-v3 CPU; this host's CPU lacks avx2, bmi1, bmi2, fma — "
+        "use os: rhel:9 in your --config file (mqlab bootstrap nativeha-rhel-crr "
+        "--config <file>)"
+    )
+
+
+def test_default_refused_under_tcg_points_to_rhel9():
+    with pytest.raises(VersionError, match=r"not measured under TCG.*use os: rhel:9"):
+        load_catalog().stack_os("nativeha-rhel-crr", None, X86_TCG)
+
+
+def test_rhel9_still_selectable_on_a_non_v3_host():
+    """The escape hatch the refusal names actually works."""
+    cat = load_catalog()
+    assert cat.stack_os("nativeha-rhel-crr", BuildFile(os=OsRef("rhel", 9)), X86_V2) == (
+        OsRef("rhel", 9)
+    )
+
+
+def test_default_refused_on_aarch64_by_the_arch_gate():
+    with pytest.raises(VersionError, match="RHEL needs an x86_64 host; this host is aarch64"):
+        load_catalog().stack_os("nativeha-rhel-crr", None, ARM)
 
 
 def test_rdqm_still_rhel9_only():
@@ -793,7 +828,7 @@ def test_osref_label():
 def test_node_boxes_defaults(no_records):
     nb = node_boxes(topology.load(), load_catalog())
     assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu24"
-    assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel9"
+    assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel10"  # default flipped (T11)
     assert nb["rdqm-a1"].name == "mq-rdqm-rhel9"
     assert nb["pcmk-a1"].name == "pcmk-ubuntu24"
     assert nb["infra-svc"].name == "infra-ubuntu26"

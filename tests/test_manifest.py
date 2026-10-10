@@ -106,7 +106,8 @@ def test_every_topology_mq_box_resolves_to_a_tarball():
     for stack in lab_stacks().values():
         boxes |= cli._stack_mq_boxes(stack)
     names = {b.name for b in boxes}
-    assert f"mq-nativeha-{_RHEL.token}" in names  # the #668 repoint is represented
+    nha_rhel = _CAT.default_os("nativeha-rhel-crr")
+    assert f"mq-nativeha-{nha_rhel.token}" in names  # the #668 repoint is represented
     assert f"mq-nativeha-{_UBUNTU.token}" in names  # the #103 T6 repoint is represented
     for entry in sorted(boxes, key=lambda b: b.name):
         m.tarball_name(m.DEFAULT_MQ_VERSION, entry, facts=X86)  # must not raise
