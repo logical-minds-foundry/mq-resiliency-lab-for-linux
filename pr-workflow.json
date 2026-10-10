@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1436",
+  "branch": "feature/309-rdqm-strategy-research",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-10T17:00:15Z",
+  "updated_at": "2026-10-10T17:00:15Z",
+  "git": {
+    "base_sha": "b278150720f1546db3460e7fe9dce03767a26d93",
+    "head_sha": "7e79d46b146253efa748f3bee2f91c08b3552b92"
+  },
+  "pr_metadata": {
+    "title": "docs(reference): record RDQM/Pacemaker strategic position and keep-as-is decision",
+    "summary": "Adds a sourced research write-up (data vs judgment) on RDQM versus Native HA, RDQM's RHEL kmod cadence, DRBD/Pacemaker ecosystem signals and the pcmk-ubuntu justification, and records the 2026-10-09 keep-as-is decision: Native HA is strategic, RDQM and Pacemaker/DRBD stay as completeness counter-options while IBM supports them.",
+    "notes": "Deliverable for logical-minds-foundry/.github#309 (Ref only: the PR tooling closes same-repo issues only, so #1436 is the lab-repo vehicle; #309 still needs the outcome in the #280 retrospective section 5, .github#283, and a closing comment). Docs-only: new docs/reference/rdqm-pacemaker-strategic-position.md; short framing statements on the docs-site Home and Architecture pages; the Reference page links the new note and the OS support matrix. The support matrix is deliberately untouched because #1405 is updating it for MQ 10.0.1. The MQ 10.0.1 announcement (AD26-0859) is JavaScript-rendered; its quotes come from the text the human pasted into #1405. vrg-validate is green.",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
