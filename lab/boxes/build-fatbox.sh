@@ -47,6 +47,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=lab/boxes/_box-register.sh
 . ./_box-register.sh
+# shellcheck source=lab/boxes/_build-cleanup.sh
+. ./_build-cleanup.sh
 # shellcheck source=lab/boxes/_components.sh
 . ./_components.sh
 
@@ -278,6 +280,11 @@ POOL_IMG="/var/lib/libvirt/images"
 IMG="${POOL_IMG}/${BUILD_DOM}.qcow2"
 CONSOLE="${POOL_IMG}/${BUILD_DOM}-console.log"
 VAGRANT_KEY="$HOME/.vagrant.d/insecure_private_key"
+# From here on a failed bake tears its build domain + scratch down on the way out, keeping
+# the console log under build/temp/bake-failures/ (#1404); step 8 still does it on success.
+BUILD_EVIDENCE_DIR="$MAIN_ROOT/build/temp/bake-failures"
+trap build_cleanup_on_exit EXIT
+build_cleanup_add "$IMG"
 
 # 1. Ensure the base box is present. The RHEL base is itself locally built
 #    (rhel/build-box.sh); mqlab builds it FIRST (box.build_boxes orders a local base box
@@ -444,6 +451,7 @@ else
   OS_XML="<os><type arch='${ARCH}' machine='${MACHINE}'>hvm</type></os>"
 fi
 BUILD_XML="$(mktemp)"
+build_cleanup_add "$BUILD_XML"
 cat > "$BUILD_XML" <<XML
 <domain type='${DOMAIN_TYPE}'>
   <name>${BUILD_DOM}</name>
@@ -506,6 +514,7 @@ done
 #    which would install onto THIS host). Run from ansible/ so ansible.cfg applies; point the
 #    collections path at the main-worktree cache (the worktree's build/ is empty).
 BUILD_INV="$(mktemp)"
+build_cleanup_add "$BUILD_INV"
 cat > "$BUILD_INV" <<INV
 [bake]
 ${BUILD_DOM} ansible_host=${BUILD_IP}
@@ -545,6 +554,7 @@ while [ "$(virsh -c qemu:///system domstate "$BUILD_DOM" 2>/dev/null || true)" !
   sleep 5
 done
 WORK="$CACHE_DIR/${BOX}-work"; mkdir -p "$WORK"
+build_cleanup_add "$WORK"
 sudo qemu-img convert -O qcow2 -c "$IMG" "$WORK/box.img.tmp"
 sudo chown "$(id -u)" "$WORK/box.img.tmp"
 mv "$WORK/box.img.tmp" "$WORK/box.img"
