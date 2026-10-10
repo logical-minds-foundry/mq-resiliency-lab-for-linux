@@ -531,6 +531,54 @@ overlay still uses as its backing store is never deleted. Teardown never
 deregisters a box, so in the stack loop the same base volumes survive from run to
 run and `vagrant up` reuses them.
 
+### Unreferenced boxes (`box gc --unreferenced`)
+
+A catalog re-pin leaves boxes behind. When `infra:` moved from `ubuntu:24` to
+`ubuntu:26` (#1282), `infra-ubuntu24`, `obs-ubuntu24` and `san-ubuntu24` stayed
+registered and cached, several GB each per host. They are not retired names: `ubuntu:24`
+is still a catalog OS, and re-pinning `infra` back would resolve them again. So the
+retired-names pass keeps them, and nothing else removes them. `mqlab box gc
+--unreferenced` reclaims them (#1399). Plain `box gc` never does: the pass is opt-in.
+
+**The protected set** is every box name a current catalog selection can resolve to, on
+*any* host (`box.resolvable_box_names`):
+
+- each shared role on its shared OS: `infra`, `obs` and `san` on `infra`, and
+  `mq-client` on `infra_mq`;
+- every stack's roles on every OS the stack **supports**, not only its default (so
+  `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` are protected while the defaults are 24);
+- every catalog OS's base box (`rhel/9-x86_64`, `rhel/10-x86_64`, the cloud images).
+
+This is `Catalog.all_boxes` with the host filter dropped. It is deliberately not
+filtered by host: `build/state/boxes/` is on a persistent disk, and a box this host
+cannot run (RHEL 10 without x86-64-v3) is still one the catalog resolves.
+
+**Candidates** are only names with the generated `<role>-<os><major>` shape (a catalog
+role and a known OS family), found in any of three places: registered in Vagrant, cached
+as `<box>-<arch>.box`, `.manifest-hash` or `.components.json` under
+`build/state/boxes/` (any arch), or holding base-image volumes in the libvirt pool. A base
+box, a cloud image or any foreign name is never touched. Retired names are left to the
+retired pass. For each candidate:
+
+| Candidate | Outcome |
+|-----------|---------|
+| in the protected set | kept, reported `(kept — the catalog resolves it)` |
+| a live VM overlay backs onto one of its base images | kept, reported `(kept — a live VM disk backs onto it …)`: tear that VM down and re-run |
+| otherwise | `vagrant box remove <box>`, its cache files deleted, and every one of its base volumes reclaimed by the orphaned-image pass (none is kept, even the newest; the in-use guard still holds) |
+
+The report shows each removal as the commands it ran (`$ vagrant box remove …`,
+`$ rm …`), then everything it kept and why. With `--dry-run` it reports the same
+without removing anything, so preview first:
+
+```bash
+mqlab box gc --unreferenced --dry-run   # what would go, and what stays and why
+mqlab box gc --unreferenced
+```
+
+The pass reads the pool for its in-use guard. A host with no `default` pool yet has no
+VM disks to protect, so the pass continues. Any other `virsh` failure aborts it before
+anything is removed.
+
 ### The host-durable cache
 
 The baked `.box` artifacts live in **`build/state/boxes/`** on the persistent
@@ -625,7 +673,7 @@ decision, it renders and drives the shell builder's own:
 | `mqlab box build [BOXES…]` | ensure each box is present — REUSE a valid cache, else bake. Auto-renders the host-resolved topology first (so a standalone build never dies at box registration on a fresh checkout). `--all` for the whole fleet; `--config <file>` for every box a build file needs (e.g. `os: rhel:9` builds the infra boxes plus the RHEL stacks' boxes on RHEL 9; an unsupported request exits 2 naming the fix). A RHEL fat box about to bake pulls in its base box first. Shares the ensure-box core with `bootstrap`. |
 | `mqlab box rebuild [BOXES…]` | **force a fresh bake in place** (`--rebuild-box`), overwriting the cache — the targeted "rebake one box" operation, no disk wipe. |
 | `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
-| `mqlab box gc [--dry-run]` | deregister the retired box names and delete their dead caches (§1, the one-time rename), then reclaim orphaned base volumes from re-bakes (§3). |
+| `mqlab box gc [--unreferenced] [--dry-run]` | deregister the retired box names and delete their dead caches (§1, the one-time rename), then reclaim orphaned base volumes from re-bakes (§3). `--unreferenced` also reclaims boxes that no current catalog selection resolves to, such as the boxes a catalog re-pin left behind (§3, [Unreferenced boxes](#unreferenced-boxes-box-gc---unreferenced)). |
 
 A **cold-boot staleness nudge** rides these surfaces: a write-once stamp records
 the last full cold boot, and `box status` / `doctor` / `bootstrap` emit a banded

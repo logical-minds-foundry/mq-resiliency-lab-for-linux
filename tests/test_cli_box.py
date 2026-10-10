@@ -1366,8 +1366,9 @@ def test_box_gc_verb_reports_retired_then_orphans(monkeypatch):
     monkeypatch.setattr(box, "clean_retired_cache", lambda *, dry_run: ["/c/pcmk-ubuntu.box"])
     seen: dict = {}
 
-    def _gc(*, dry_run):
+    def _gc(*, dry_run, dead_stems):
         seen["dry_run"] = dry_run
+        seen["dead_stems"] = dead_stems
         return box.GcResult(deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=dry_run)
 
     monkeypatch.setattr(box, "gc_orphaned_images", _gc)
@@ -1377,7 +1378,7 @@ def test_box_gc_verb_reports_retired_then_orphans(monkeypatch):
     assert "  - vagrant box 'pcmk-ubuntu'" in result.output
     assert "  - /c/pcmk-ubuntu.box" in result.output
     assert "nothing to reclaim" in result.output
-    assert seen == {"dry_run": True}
+    assert seen == {"dry_run": True, "dead_stems": frozenset()}
 
 
 def test_box_gc_verb_quiet_when_nothing_retired(monkeypatch):
@@ -1386,7 +1387,7 @@ def test_box_gc_verb_quiet_when_nothing_retired(monkeypatch):
     monkeypatch.setattr(
         box,
         "gc_orphaned_images",
-        lambda *, dry_run: box.GcResult(
+        lambda *, dry_run, dead_stems: box.GcResult(
             deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=dry_run
         ),
     )
@@ -1398,6 +1399,303 @@ def test_box_gc_verb_quiet_when_nothing_retired(monkeypatch):
 def test_retired_summary_removed_verb():
     out = cli._retired_summary(["a"], [], dry_run=False)
     assert out.startswith("box gc: removed 1 retired box registration(s) and 0 retired cache")
+
+
+# --------------------------------------------------------------------------- #
+# Unreferenced boxes — `box gc --unreferenced` (#1399)                        #
+# --------------------------------------------------------------------------- #
+# Boxes the committed catalog still resolves: every SUPPORTED OS of every stack (not
+# just the defaults), the shared roles on infra (ubuntu:26) / infra_mq (ubuntu:24), and
+# every catalog OS's base box.
+_RESOLVABLE = {
+    "infra-ubuntu26",
+    "obs-ubuntu26",
+    "san-ubuntu26",
+    "mq-client-ubuntu24",
+    "mq-nativeha-ubuntu24",
+    "mq-nativeha-ubuntu26",
+    "pcmk-ubuntu24",
+    "pcmk-ubuntu26",
+    "mq-nativeha-rhel9",
+    "mq-nativeha-rhel10",
+    "mq-rdqm-rhel9",
+    "rhel/9-x86_64",
+    "rhel/10-x86_64",
+    "cloud-image/ubuntu-24.04",
+    "cloud-image/ubuntu-26.04",
+}
+# Left behind by `infra: ubuntu:26`, plus a shared MQ role on an OS infra_mq is not on.
+_UNRESOLVABLE = {"infra-ubuntu24", "obs-ubuntu24", "san-ubuntu24", "mq-client-ubuntu26"}
+
+
+def test_resolvable_box_names_covers_every_selection_and_only_those():
+    names = box.resolvable_box_names()
+    assert names == frozenset(_RESOLVABLE)
+    assert not names & _UNRESOLVABLE
+
+
+def test_resolvable_box_names_is_not_host_filtered(monkeypatch):
+    # An aarch64 / non-v3 host's FLEET omits RHEL 10; the catalog still resolves it, and
+    # the persistent cache must never lose it to a host that cannot run it.
+    monkeypatch.setattr(box, "FLEET", {})
+    names = box.resolvable_box_names()
+    assert {"mq-nativeha-rhel10", "rhel/10-x86_64", "mq-rdqm-rhel9"} <= names
+
+
+@pytest.mark.parametrize(
+    ("name", "generated"),
+    [
+        ("infra-ubuntu24", True),
+        ("mq-nativeha-rhel10", True),
+        ("mq-client-ubuntu26", True),
+        ("rhel/9-x86_64", False),  # a base box
+        ("cloud-image/ubuntu-24.04", False),
+        ("mq-ubuntu2404", False),  # no such role
+        ("mq-nativeha-ubuntu", False),  # no major
+        ("pcmk-debian12", False),  # unknown family
+        ("rhel-9", False),  # the base-box cache stem
+    ],
+)
+def test_generated_box_name(name, generated):
+    assert box.generated_box_name(name, load_catalog()) is generated
+
+
+_RHEL_BASE_VOL = "rhel-VAGRANTSLASH-9-x86_64_vagrant_box_image_0_5_box.img"
+_SAN24_VOL = "san-ubuntu24_vagrant_box_image_0_10_box.img"
+_CLIENT26_VOL = "mq-client-ubuntu26_vagrant_box_image_0_20_box.img"
+_HA26_VOL = "mq-nativeha-ubuntu26_vagrant_box_image_0_30_box.img"
+_RETIRED_VOL = "obs-ubuntu2404_vagrant_box_image_0_40_box.img"
+
+
+def _unreferenced_host(tmp_path, monkeypatch):
+    """A host after the infra re-pin: dead ubuntu24 commons boxes, live fleet boxes,
+    foreign registrations/caches and retired leftovers. Returns (cache dir, the vagrant
+    removals sink, the fake virsh)."""
+    cache_dir = tmp_path / "boxes"
+    cache_dir.mkdir()
+    for name in (
+        "infra-ubuntu24-x86_64.box",  # unreferenced: removed with its records
+        "infra-ubuntu24-x86_64.manifest-hash",
+        "infra-ubuntu24-x86_64.components.json",
+        "obs-ubuntu24-aarch64.box",  # unreferenced, another arch's cache: removed
+        "mq-nativeha-ubuntu26-x86_64.box",  # a supported (non-default) OS: kept
+        "mq-nativeha-rhel9-x86_64.box",  # kept
+        "rhel-9-x86_64.box",  # the base-box cache: not a generated name
+        "rhel-9.6-x86_64-libvirt.box",  # the retired BASE cache `build migrate` renames
+        "obs-ubuntu2404-x86_64.box",  # retired: the retired pass owns it
+        "pcmk-ubuntu.box",  # retired, pre-#103 scheme
+    ):
+        (cache_dir / name).write_text("x")
+    (cache_dir / "infra-ubuntu24-work").mkdir()  # a builder scratch dir: not a cache file
+    registered = [
+        "infra-ubuntu24",
+        "san-ubuntu24",  # unreferenced but a live VM backs onto it
+        "mq-nativeha-ubuntu26",
+        "pcmk-ubuntu24",
+        "mq-client-ubuntu24",
+        "rhel/9-x86_64",
+        "cloud-image/ubuntu-24.04",
+        "mq-nativeha-ubuntu",  # retired
+    ]
+    monkeypatch.setattr(box, "_registered_boxes", lambda: dict.fromkeys(registered, ""))
+    removed: list[str] = []
+    monkeypatch.setattr(box, "_vagrant_box_remove", removed.append)
+    overlay = "lab_san-a.img"
+    vols = [_RHEL_BASE_VOL, _SAN24_VOL, _CLIENT26_VOL, _HA26_VOL, _RETIRED_VOL, overlay]
+    xml = {name: _vol_xml(name, 100) for name in vols}
+    xml[overlay] = _vol_xml(overlay, 10, backing=_SAN24_VOL)
+    fake = _FakeVirsh(vols, xml)
+    _install_virsh(monkeypatch, fake)
+    return cache_dir, removed, fake
+
+
+def test_clean_unreferenced_reclaims_only_unresolvable_boxes(tmp_path, monkeypatch):
+    cache_dir, removed_regs, fake = _unreferenced_host(tmp_path, monkeypatch)
+    result = box.clean_unreferenced(boxes_dir=cache_dir)
+    assert [b.name for b in result.removed] == [
+        "infra-ubuntu24",
+        "mq-client-ubuntu26",
+        "obs-ubuntu24",
+    ]
+    infra, client26, obs = result.removed
+    assert infra.registered
+    assert not infra.has_volumes
+    assert sorted(infra.cache_files) == sorted(
+        str(cache_dir / f"infra-ubuntu24-x86_64.{s}")
+        for s in ("box", "manifest-hash", "components.json")
+    )
+    assert client26 == box.UnreferencedBox("mq-client-ubuntu26", False, (), True)
+    assert obs == box.UnreferencedBox(
+        "obs-ubuntu24", False, (str(cache_dir / "obs-ubuntu24-aarch64.box"),), False
+    )
+    assert [b.name for b in result.in_use] == ["san-ubuntu24"]
+    assert result.resolvable == [
+        "mq-client-ubuntu24",
+        "mq-nativeha-rhel9",
+        "mq-nativeha-ubuntu26",
+        "pcmk-ubuntu24",
+    ]
+    assert result.foreign == sorted(
+        [
+            "rhel/9-x86_64",
+            "cloud-image/ubuntu-24.04",
+            str(cache_dir / "rhel-9-x86_64.box"),
+            str(cache_dir / "rhel-9.6-x86_64-libvirt.box"),
+        ]
+    )
+    assert result.dead_stems == frozenset({"infra-ubuntu24", "mq-client-ubuntu26", "obs-ubuntu24"})
+    assert removed_regs == ["infra-ubuntu24"]  # san-ubuntu24 stays: a live VM backs onto it
+    assert fake.deleted == []  # volumes are the GC pass's job (with dead_stems)
+    assert sorted(p.name for p in cache_dir.iterdir()) == [
+        "infra-ubuntu24-work",
+        "mq-nativeha-rhel9-x86_64.box",
+        "mq-nativeha-ubuntu26-x86_64.box",
+        "obs-ubuntu2404-x86_64.box",
+        "pcmk-ubuntu.box",
+        "rhel-9-x86_64.box",
+        "rhel-9.6-x86_64-libvirt.box",
+    ]
+
+
+def test_clean_unreferenced_dry_run_removes_nothing(tmp_path, monkeypatch):
+    cache_dir, removed_regs, _fake = _unreferenced_host(tmp_path, monkeypatch)
+    before = sorted(p.name for p in cache_dir.iterdir())
+    result = box.clean_unreferenced(boxes_dir=cache_dir, dry_run=True)
+    assert result.dry_run is True
+    assert [b.name for b in result.removed] == [
+        "infra-ubuntu24",
+        "mq-client-ubuntu26",
+        "obs-ubuntu24",
+    ]
+    assert removed_regs == []
+    assert sorted(p.name for p in cache_dir.iterdir()) == before
+
+
+def test_clean_unreferenced_without_a_pool_or_cache_dir(tmp_path, monkeypatch):
+    # A fresh host (#1415): no `default` pool, so no live VM disk to protect, and no
+    # cache dir yet. The registration is still reclaimed; the default dir is used.
+    _install_virsh(monkeypatch, _VolListFails(*_NO_POOL))
+    monkeypatch.setattr(box, "_boxes_cache_dir", lambda: tmp_path / "absent")
+    monkeypatch.setattr(box, "_registered_boxes", lambda: {"obs-ubuntu24": ""})
+    removed: list[str] = []
+    monkeypatch.setattr(box, "_vagrant_box_remove", removed.append)
+    result = box.clean_unreferenced()
+    assert result.removed == [box.UnreferencedBox("obs-ubuntu24", True, (), False)]
+    assert removed == ["obs-ubuntu24"]
+
+
+def test_clean_unreferenced_other_pool_failure_fails_loud(tmp_path, monkeypatch):
+    # The in-use guard needs the pool read: any failure but "no pool" aborts the pass.
+    _install_virsh(monkeypatch, _VolListFails("error: failed to connect to the hypervisor"))
+    monkeypatch.setattr(box, "_registered_boxes", lambda: {"obs-ubuntu24": ""})
+    monkeypatch.setattr(box, "_vagrant_box_remove", lambda name: pytest.fail("removed"))
+    with pytest.raises(RuntimeError, match="vol-list"):
+        box.clean_unreferenced(boxes_dir=tmp_path)
+
+
+def test_gc_drops_every_image_of_a_dead_stem(tmp_path, monkeypatch):
+    # An unreferenced box keeps NO image — even while still registered (dry run) — but the
+    # in-use guard still holds; other stems are untouched.
+    old = "obs-ubuntu24_vagrant_box_image_0_100_box.img"
+    new = "obs-ubuntu24_vagrant_box_image_0_200_box.img"
+    live = "infra-ubuntu24_vagrant_box_image_0_300_box.img"
+    current = "obs-ubuntu26_vagrant_box_image_0_400_box.img"
+    overlay = "lab_infra.img"
+    _register_box(tmp_path, monkeypatch, "obs-ubuntu24", 200)
+    fake = _FakeVirsh(
+        [old, new, live, current, overlay],
+        {
+            old: _vol_xml(old, 100),
+            new: _vol_xml(new, 200),
+            live: _vol_xml(live, 300),
+            current: _vol_xml(current, 400),
+            overlay: _vol_xml(overlay, 10, backing=live),
+        },
+    )
+    _install_virsh(monkeypatch, fake)
+    result = box.gc_orphaned_images(dead_stems=frozenset({"obs-ubuntu24", "infra-ubuntu24"}))
+    assert set(result.deleted) == {old, new}
+    assert result.skipped_in_use == [live]
+    assert result.kept == [current]
+    assert result.freed_bytes == 300
+
+
+def test_unreferenced_summary_renders_commands_and_reasons():
+    result = box.UnreferencedResult(
+        removed=[
+            box.UnreferencedBox("infra-ubuntu24", True, ("/c/infra-ubuntu24-x86_64.box",), True),
+            box.UnreferencedBox("obs-ubuntu24", False, (), False),
+        ],
+        in_use=[box.UnreferencedBox("san-ubuntu24", True, (), True)],
+        resolvable=["mq-nativeha-ubuntu26"],
+        foreign=["cloud-image/ubuntu-24.04"],
+        dry_run=False,
+    )
+    assert box.unreferenced_summary(result).splitlines() == [
+        "box gc --unreferenced: removed 2 box(es) no catalog selection resolves to",
+        "  - infra-ubuntu24",
+        "      $ vagrant box remove infra-ubuntu24",
+        "      $ rm /c/infra-ubuntu24-x86_64.box",
+        "      base-image volumes: reclaimed by the orphaned-image pass below",
+        "  - obs-ubuntu24",
+        "  ~ san-ubuntu24 (kept — a live VM disk backs onto it; tear that VM down, then "
+        "re-run `mqlab box gc --unreferenced`)",
+        "  = mq-nativeha-ubuntu26 (kept — the catalog resolves it)",
+        "  = cloud-image/ubuntu-24.04 (kept — not a catalog-generated box name)",
+    ]
+    empty = {"removed": [], "in_use": [], "resolvable": [], "foreign": []}
+    dry = dataclasses.replace(result, dry_run=True, **empty)
+    assert box.unreferenced_summary(dry) == (
+        "box gc --unreferenced: would remove 0 box(es) no catalog selection resolves to"
+    )
+
+
+def test_box_gc_unreferenced_verb_feeds_dead_stems_to_the_volume_pass(monkeypatch):
+    monkeypatch.setattr(box, "clean_retired", lambda *, dry_run: [])
+    monkeypatch.setattr(box, "clean_retired_cache", lambda *, dry_run: [])
+    found = box.UnreferencedBox("infra-ubuntu24", True, (), True)
+    seen: dict = {}
+
+    def _unref(*, dry_run):
+        seen["unref_dry_run"] = dry_run
+        return box.UnreferencedResult(
+            removed=[found], in_use=[], resolvable=[], foreign=[], dry_run=dry_run
+        )
+
+    def _gc(*, dry_run, dead_stems):
+        seen["dead_stems"] = dead_stems
+        return box.GcResult(
+            deleted=["infra-ubuntu24_vagrant_box_image_0_1_box.img"],
+            freed_bytes=1024,
+            kept=[],
+            skipped_in_use=[],
+            dry_run=dry_run,
+        )
+
+    monkeypatch.setattr(box, "clean_unreferenced", _unref)
+    monkeypatch.setattr(box, "gc_orphaned_images", _gc)
+    result = runner.invoke(cli.app, ["box", "gc", "--unreferenced", "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"unref_dry_run": True, "dead_stems": frozenset({"infra-ubuntu24"})}
+    assert "box gc --unreferenced: would remove 1 box(es)" in result.output
+    assert "      $ vagrant box remove infra-ubuntu24" in result.output
+    assert "would delete 1 orphaned box base image(s)" in result.output
+
+
+def test_box_gc_without_unreferenced_never_runs_the_pass(monkeypatch):
+    monkeypatch.setattr(box, "clean_retired", lambda *, dry_run: [])
+    monkeypatch.setattr(box, "clean_retired_cache", lambda *, dry_run: [])
+    monkeypatch.setattr(box, "clean_unreferenced", lambda **kw: pytest.fail("opt-in only"))
+    monkeypatch.setattr(
+        box,
+        "gc_orphaned_images",
+        lambda *, dry_run, dead_stems: box.GcResult(
+            deleted=[], freed_bytes=0, kept=[], skipped_in_use=[], dry_run=dry_run
+        ),
+    )
+    result = runner.invoke(cli.app, ["box", "gc"])
+    assert result.exit_code == 0, result.output
+    assert "--unreferenced" not in result.output
 
 
 # --------------------------------------------------------------------------- #

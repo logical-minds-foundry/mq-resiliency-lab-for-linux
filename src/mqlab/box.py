@@ -38,6 +38,7 @@ from mqlab.retired_boxes import RETIRED_BASE_ARTIFACTS, RETIRED_BOX_NAMES
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.runtime import RuntimePinError
 from mqlab.versions import (
+    FAMILIES,
     HOST_ARCHES,
     SHARED_ROLES,
     BoxEntry,
@@ -997,33 +998,40 @@ def _vol_delete(name: str, pool: str = _DEFAULT_POOL) -> None:
     raise RuntimeError(f"virsh vol-delete {name} failed (rc={code}): {out}")
 
 
-def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> GcResult:
-    """Reclaim orphaned vagrant box base images from the libvirt pool (#759, #1248).
+@dataclass(frozen=True)
+class _PoolScan:
+    """One read of the pool: every readable volume with its allocation, the base images
+    a live overlay backs onto, and the volumes that vanished mid-read (#1336)."""
 
-    Per box stem, keeps the image(s) the registered box resolves to (or, with no
-    registered box, the newest image; or, for a retired box name, none) and deletes the
-    rest, EXCEPT any still
-    referenced as a backing store by a live overlay volume. Idempotent and safe to
-    run repeatedly; `dry_run` reports without deleting."""
-    current = _current_box_volumes()
-    retired = _retired_volume_stems()
+    names: list[str]
+    alloc: dict[str, int]
+    in_use: set[str]
+    vanished: list[str]
+
+    def box_images(self) -> dict[str, list[tuple[int, str]]]:
+        """Box stem -> its base images as (import-timestamp, volume-name) pairs."""
+        by_stem: dict[str, list[tuple[int, str]]] = {}
+        for name in self.names:
+            match = _BOX_IMAGE_RE.match(name)
+            if match:
+                by_stem.setdefault(match["stem"], []).append((int(match["ts"]), name))
+        return by_stem
+
+    def in_use_stems(self) -> frozenset[str]:
+        """The box stems at least one live overlay backs onto."""
+        return frozenset(
+            match["stem"] for image in self.in_use if (match := _BOX_IMAGE_RE.match(image))
+        )
+
+
+def _scan_pool(pool: str = _DEFAULT_POOL) -> _PoolScan:
+    """Read every pool volume's allocation + backing store. Raises `PoolAbsentError` when
+    the pool is not defined; any other virsh failure is fatal (fail-loud, #759)."""
     alloc: dict[str, int] = {}
     in_use: set[str] = set()
     names: list[str] = []
     vanished: list[str] = []
-    try:
-        pool_volumes = _pool_volume_names(pool)
-    except PoolAbsentError:
-        # No pool yet (fresh host): no volumes, nothing to reclaim — reported, not hidden.
-        return GcResult(
-            deleted=[],
-            freed_bytes=0,
-            kept=[],
-            skipped_in_use=[],
-            dry_run=dry_run,
-            absent_pool=pool,
-        )
-    for name in pool_volumes:
+    for name in _pool_volume_names(pool):
         try:
             alloc[name], backing = _vol_detail(name, pool)
         except VolumeVanishedError:
@@ -1034,22 +1042,48 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
         names.append(name)
         if backing:
             in_use.add(backing)
+    return _PoolScan(names=names, alloc=alloc, in_use=in_use, vanished=vanished)
 
-    by_stem: dict[str, list[tuple[int, str]]] = {}
-    for name in names:
-        match = _BOX_IMAGE_RE.match(name)
-        if match:
-            by_stem.setdefault(match["stem"], []).append((int(match["ts"]), name))
+
+def gc_orphaned_images(
+    *,
+    dry_run: bool = False,
+    pool: str = _DEFAULT_POOL,
+    dead_stems: frozenset[str] = frozenset(),
+) -> GcResult:
+    """Reclaim orphaned vagrant box base images from the libvirt pool (#759, #1248).
+
+    Per box stem, keeps the image(s) the registered box resolves to (or, with no
+    registered box, the newest image; or, for a retired box name or one of
+    ``dead_stems`` — the boxes `box gc --unreferenced` reclaimed, #1399 — none) and
+    deletes the rest, EXCEPT any still referenced as a backing store by a live overlay
+    volume. Idempotent and safe to run repeatedly; `dry_run` reports without deleting."""
+    current = _current_box_volumes()
+    dead = _retired_volume_stems() | dead_stems
+    try:
+        scan = _scan_pool(pool)
+    except PoolAbsentError:
+        # No pool yet (fresh host): no volumes, nothing to reclaim — reported, not hidden.
+        return GcResult(
+            deleted=[],
+            freed_bytes=0,
+            kept=[],
+            skipped_in_use=[],
+            dry_run=dry_run,
+            absent_pool=pool,
+        )
+    alloc, in_use = scan.alloc, scan.in_use
 
     deleted: list[str] = []
     kept: list[str] = []
     skipped: list[str] = []
     freed = 0
-    for stem, images in sorted(by_stem.items()):
+    for stem, images in sorted(scan.box_images().items()):
         images.sort()  # ascending by timestamp
-        if stem in retired:
-            # A retired box name (epic .github#280) is never booted or rebuilt again, so
-            # every one of its images is dead — none is kept (the in-use guard still holds).
+        if stem in dead:
+            # A retired box name (epic .github#280) is never booted or rebuilt again, and
+            # an unreferenced box (#1399) no catalog selection resolves to, so every one
+            # of its images is dead — none is kept (the in-use guard still holds).
             keep: set[str] = set()
         elif stem in current:
             # Registered: keep exactly what the registered box.img resolves to. None of
@@ -1074,7 +1108,7 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
         kept=kept,
         skipped_in_use=skipped,
         dry_run=dry_run,
-        vanished=vanished,
+        vanished=scan.vanished,
     )
 
 
@@ -1115,4 +1149,183 @@ def gc_summary(result: GcResult) -> str:
     ]
     lines += [f"  - {name}" for name in result.deleted]
     lines += [f"  ~ {name} (kept — backing a live VM disk)" for name in result.skipped_in_use]
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Unreferenced boxes — `box gc --unreferenced` (#1399)                        #
+# --------------------------------------------------------------------------- #
+# A catalog re-pin (e.g. moving `infra:` to a newer Ubuntu major) leaves the boxes it
+# moved off — the infra, obs and san boxes on the old major — registered and cached,
+# several GB each. They are not RETIRED names (the old major is still a catalog OS; a
+# re-pin back would resolve them again), so the retired pass rightly keeps them. This
+# pass reclaims a box only when NO current catalog selection can resolve to it on ANY
+# host, and never one a live VM backs onto.
+
+# A fat box's cache file: `<box>-<arch>.box` and its sibling `.manifest-hash` /
+# `.components.json` records (build-fatbox.sh's CACHE / HASH_FILE / COMPONENTS_FILE).
+_FAT_CACHE_RE = re.compile(
+    rf"^(?P<name>.+)-(?:{'|'.join(HOST_ARCHES)})\.(?:box|manifest-hash|components\.json)$"
+)
+_OS_TOKEN_RE = re.compile(r"(?P<family>[a-z]+)[0-9]+")
+
+
+def resolvable_box_names(
+    catalog: Catalog | None = None, stack_roles: dict[str, set[str]] | None = None
+) -> frozenset[str]:
+    """Every box name a current catalog selection can resolve to, on ANY host.
+
+    Catalog.all_boxes with no host filter — each shared role on its shared OS, and every
+    stack's roles on every OS the stack SUPPORTS (not just its default) — plus every
+    catalog OS's base box, plus this host's FLEET (already a subset; unioned so this set
+    can never be narrower than what `box build`/`box status` manage). Deliberately NOT
+    host-filtered: the cache lives on a persistent disk, and a box the host cannot run
+    (RHEL 10 without x86-64-v3) is still one the catalog resolves."""
+    catalog = catalog if catalog is not None else load_catalog()
+    roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
+    names = {entry.name for entry in catalog.all_boxes(None, roles)}
+    names |= {entry.base_box for entry in catalog.oses.values()}
+    names |= set(FLEET)
+    return frozenset(names)
+
+
+def generated_box_name(name: str, catalog: Catalog) -> bool:
+    """Whether ``name`` has the catalog's generated fat-box shape ``<role>-<os><major>``
+    (a catalog role, a known OS family). Only such names are ever reclaim candidates: a
+    cloud base image, a RHEL base box or anything foreign is never touched."""
+    for role in catalog.roles:
+        prefix = f"{role}-"
+        if name.startswith(prefix):
+            match = _OS_TOKEN_RE.fullmatch(name[len(prefix) :])
+            if match and match["family"] in FAMILIES:
+                return True
+    return False
+
+
+@dataclass(frozen=True)
+class UnreferencedBox:
+    """A box no catalog selection resolves to: where it was found on this host."""
+
+    name: str
+    registered: bool  # a Vagrant registration exists
+    cache_files: tuple[str, ...]  # its `<box>-<arch>.*` files under build/state/boxes
+    has_volumes: bool  # base-image volumes of it sit in the libvirt pool
+
+
+@dataclass(frozen=True)
+class UnreferencedResult:
+    """What `box gc --unreferenced` did (or, under dry_run, would do)."""
+
+    removed: list[UnreferencedBox]  # deregistered + caches deleted (volumes: the GC pass)
+    in_use: list[UnreferencedBox]  # kept: a live VM overlay backs onto one of its images
+    resolvable: list[str]  # kept: generated names found here that the catalog resolves
+    foreign: list[str]  # kept: registrations/cache files that are not generated names
+    dry_run: bool
+
+    @property
+    def dead_stems(self) -> frozenset[str]:
+        """The removed boxes' volume stems, for gc_orphaned_images(dead_stems=...)."""
+        return frozenset(box_.name for box_ in self.removed)
+
+
+def clean_unreferenced(
+    *,
+    dry_run: bool = False,
+    pool: str = _DEFAULT_POOL,
+    boxes_dir: Path | None = None,
+    catalog: Catalog | None = None,
+) -> UnreferencedResult:
+    """Deregister and delete the caches of every box no catalog selection resolves to.
+
+    Candidates are generated box names (``<role>-<os><major>``) found registered in
+    Vagrant, cached under build/state/boxes, or holding base-image volumes in the pool,
+    minus the retired names (the retired pass owns those). A candidate in
+    resolvable_box_names is kept; one a live VM overlay backs onto is kept and reported;
+    the rest are removed. Their base volumes are left to the GC pass, which the caller
+    runs with ``dead_stems`` so none survives. `dry_run` reports without removing."""
+    catalog = catalog if catalog is not None else load_catalog()
+    cache_dir = boxes_dir if boxes_dir is not None else _boxes_cache_dir()
+    protected = resolvable_box_names(catalog)
+    retired = set(RETIRED_BOX_NAMES)
+    try:
+        scan = _scan_pool(pool)
+        in_use = scan.in_use_stems()
+        pooled = {stem for stem in scan.box_images() if generated_box_name(stem, catalog)}
+    except PoolAbsentError:
+        # No pool (fresh host, #1415): no volumes, so no live VM disk to protect either.
+        in_use, pooled = frozenset(), set()
+
+    foreign: list[str] = []
+    registered: set[str] = set()
+    for name in _registered_boxes():
+        if name in retired:
+            continue
+        if generated_box_name(name, catalog):
+            registered.add(name)
+        else:
+            foreign.append(name)
+    cached: dict[str, list[Path]] = {}
+    files = sorted(p for p in cache_dir.iterdir() if p.is_file()) if cache_dir.is_dir() else []
+    for path in files:
+        match = _FAT_CACHE_RE.match(path.name)
+        if (match and match["name"] in retired) or path.stem in retired:
+            continue  # the retired pass owns it (both cache schemes)
+        if match and generated_box_name(match["name"], catalog):
+            cached.setdefault(match["name"], []).append(path)
+        else:
+            foreign.append(str(path))
+
+    removed: list[UnreferencedBox] = []
+    kept_in_use: list[UnreferencedBox] = []
+    resolvable: list[str] = []
+    for name in sorted((registered | set(cached) | pooled) - retired):
+        if name in protected:
+            resolvable.append(name)
+            continue
+        found = UnreferencedBox(
+            name=name,
+            registered=name in registered,
+            cache_files=tuple(str(p) for p in cached.get(name, [])),
+            has_volumes=name in pooled,
+        )
+        if name in in_use:
+            kept_in_use.append(found)
+            continue
+        if not dry_run:
+            for path in cached.get(name, []):
+                path.unlink(missing_ok=True)  # already gone is the desired end state
+            if found.registered:
+                _vagrant_box_remove(name)
+        removed.append(found)
+    return UnreferencedResult(
+        removed=removed,
+        in_use=kept_in_use,
+        resolvable=resolvable,
+        foreign=sorted(foreign),
+        dry_run=dry_run,
+    )
+
+
+def unreferenced_summary(result: UnreferencedResult) -> str:
+    """Render a `box gc --unreferenced` result: each removal as the commands it ran (or,
+    under dry_run, would run), then everything it kept and why."""
+    verb = "would remove" if result.dry_run else "removed"
+    lines = [
+        f"box gc --unreferenced: {verb} {len(result.removed)} box(es) no catalog "
+        "selection resolves to"
+    ]
+    for found in result.removed:
+        lines.append(f"  - {found.name}")
+        if found.registered:
+            lines.append(f"      $ vagrant box remove {found.name}")
+        lines += [f"      $ rm {path}" for path in found.cache_files]
+        if found.has_volumes:
+            lines.append("      base-image volumes: reclaimed by the orphaned-image pass below")
+    lines += [
+        f"  ~ {found.name} (kept — a live VM disk backs onto it; tear that VM down, then "
+        "re-run `mqlab box gc --unreferenced`)"
+        for found in result.in_use
+    ]
+    lines += [f"  = {name} (kept — the catalog resolves it)" for name in result.resolvable]
+    lines += [f"  = {name} (kept — not a catalog-generated box name)" for name in result.foreign]
     return "\n".join(lines)

@@ -282,13 +282,17 @@ class Catalog:
             "lab use only"
         )
 
-    def all_boxes(self, facts: HostFacts, stack_roles: dict[str, set[str]]) -> list[BoxEntry]:
+    def all_boxes(
+        self, facts: HostFacts | None, stack_roles: dict[str, set[str]]
+    ) -> list[BoxEntry]:
         """Every buildable box on this host, de-duplicated by name.
 
         Each shared role's box on its shared OS (Catalog.shared_os), then for each stack
         in ``stack_roles`` (stack -> the box roles its nodes use) every supported OS the
         host can run (host_can_run: RHEL is skipped on aarch64, and an OS that requires
-        x86-64-v3 is skipped on a host without it).
+        x86-64-v3 is skipped on a host without it). ``facts=None`` drops the host filter:
+        every box the catalog can resolve on ANY host (what `box gc --unreferenced`
+        protects, #1399).
         """
         out: dict[str, BoxEntry] = {}
         for role in SHARED_ROLES:
@@ -296,7 +300,7 @@ class Catalog:
             out.setdefault(entry.name, entry)
         for stack, roles in stack_roles.items():
             for ref in self._stack(stack)["supported"]:
-                if not host_can_run(self.oses[ref], facts):
+                if facts is not None and not host_can_run(self.oses[ref], facts):
                     continue
                 for role in sorted(roles):
                     entry = self.box(role, ref)

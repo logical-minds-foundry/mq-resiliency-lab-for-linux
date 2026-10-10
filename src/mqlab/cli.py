@@ -1289,14 +1289,34 @@ def _retired_summary(boxes: list[str], artifacts: list[str], *, dry_run: bool) -
     return "\n".join(lines)
 
 
+_GcUnreferenced = Annotated[
+    bool,
+    typer.Option(
+        "--unreferenced",
+        help=(
+            "also reclaim boxes no current catalog selection resolves to on any host "
+            "(e.g. the infra boxes on an old OS major after an `infra:` re-pin): their "
+            "Vagrant registration, "
+            "<box>-<arch>.box cache and base volumes. Never one a live VM backs onto."
+        ),
+    ),
+]
+
+
 @box_app.command("gc")
-def box_gc(dry_run: _GcDryRun = False) -> None:
+def box_gc(dry_run: _GcDryRun = False, unreferenced: _GcUnreferenced = False) -> None:
     """Reclaim box leftovers: deregister retired box names and delete their dead caches
-    (the <role>-<os><major> rename), then drop orphaned base images from re-bakes (#759)."""
+    (the <role>-<os><major> rename), then drop orphaned base images from re-bakes (#759).
+    With --unreferenced, also reclaim boxes a catalog re-pin left behind (#1399)."""
     retired = box.clean_retired(dry_run=dry_run)
     artifacts = box.clean_retired_cache(dry_run=dry_run)
     typer.echo(_retired_summary(retired, artifacts, dry_run=dry_run))
-    typer.echo(box.gc_summary(box.gc_orphaned_images(dry_run=dry_run)))
+    dead_stems: frozenset[str] = frozenset()
+    if unreferenced:
+        result = box.clean_unreferenced(dry_run=dry_run)
+        typer.echo(box.unreferenced_summary(result))
+        dead_stems = result.dead_stems
+    typer.echo(box.gc_summary(box.gc_orphaned_images(dry_run=dry_run, dead_stems=dead_stems)))
 
 
 def _resolved_nodes() -> dict[str, Any]:
