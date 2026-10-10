@@ -59,7 +59,9 @@ _VIRSH = ["virsh", "-c", "qemu:///system"]
 _GUEST_PROBE_CMD = "head -n1 /proc/stat && cat /proc/loadavg"
 _LOCAL_PROC_STAT = Path("/proc/stat")
 # Unattended probes must never prompt or hang on connect: fail fast into a note instead.
-_SSH_PROBE_ARGS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR")
+# `-n` (#1420): ssh reads nothing from stdin, so it never touches (or flips O_NONBLOCK
+# on) any stdin description; belt and braces alongside run_bounded's stdin=DEVNULL.
+_SSH_PROBE_ARGS = ("-n", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR")
 # Connection multiplexing (#1221): one master (one login, one MOTD run) per guest per run.
 # - ControlMaster=auto: the first probe that authenticates becomes the master; later ones
 #   reuse it. A first connect that FAILS creates no socket (ssh binds it only after auth),
@@ -467,10 +469,21 @@ def is_mux_failure(exc: BaseException) -> bool:
 def run_bounded(argv: list[str], timeout: float, *, cwd: Path | None = None) -> str:
     """Run a probe command (from `cwd`, if given) bounded by `timeout`; return stdout.
     FAIL-LOUD: a timeout or non-zero exit raises with the tool's own message (the Sampler
-    turns it into a note); a non-zero exit raises `ProbeError`."""
+    turns it into a note); a non-zero exit raises `ProbeError`.
+
+    stdin=DEVNULL (#1420): a probe runs concurrently with the phase steps, so it must
+    never share mqlab's stdin description. OpenSSH sets O_NONBLOCK on its stdin, which
+    would leak into every sibling that inherited the same fd 0 (ansible-playbook refuses
+    a non-blocking stdin)."""
     try:
         cp = subprocess.run(  # noqa: S603 - fixed internal argv; tools on PATH (lab)
-            argv, capture_output=True, text=True, timeout=timeout, check=False, cwd=cwd
+            argv,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            cwd=cwd,
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"{argv[0]} timed out after {timeout}s") from exc

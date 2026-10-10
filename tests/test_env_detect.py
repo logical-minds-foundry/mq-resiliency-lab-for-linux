@@ -115,6 +115,7 @@ def test_detect_virt_maps_ids(monkeypatch, out, env):
     assert seen["argv"] == ["systemd-detect-virt"]  # bare name via PATH
     assert seen["timeout"] == t.DETECT_VIRT_TIMEOUT
     assert seen["check"] is False
+    assert seen["stdin"] is subprocess.DEVNULL  # own stdin, never mqlab's fd 0 (#1420)
 
 
 @pytest.mark.parametrize(

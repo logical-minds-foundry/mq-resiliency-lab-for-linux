@@ -116,6 +116,7 @@ def run_detect_virt() -> tuple[str | None, str]:
     try:
         proc = subprocess.run(  # noqa: S603 - fixed argv, bare name via PATH by design
             [DETECT_VIRT],
+            stdin=subprocess.DEVNULL,  # never share mqlab's stdin description (#1420)
             capture_output=True,
             text=True,
             timeout=DETECT_VIRT_TIMEOUT,

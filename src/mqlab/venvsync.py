@@ -33,6 +33,7 @@ def _uv_sync(uv: str) -> subprocess.CompletedProcess[str]:  # pragma: no cover -
     return subprocess.run(  # noqa: S603 - trusted uv path from shutil.which; dev-loop tool
         [uv, "sync"],
         cwd=repo_root(),
+        stdin=subprocess.DEVNULL,  # never share mqlab's stdin description (#1420)
         capture_output=True,
         text=True,
         check=False,

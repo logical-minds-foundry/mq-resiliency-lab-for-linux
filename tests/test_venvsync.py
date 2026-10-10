@@ -81,13 +81,16 @@ def test_default_run_seam_targets_uv_sync(monkeypatch):
     # The default subprocess seam is a real call (excluded from coverage); assert its
     # shape by confirming the helper hands `<uv> sync` to subprocess.run in repo_root.
     seen: list[list[str]] = []
+    stdins: list[object] = []
 
     def fake_run(argv, **kwargs):  # noqa: ANN001, ANN003 - test double for subprocess.run
         seen.append(argv)
+        stdins.append(kwargs.get("stdin"))
         return _completed(0)
 
     monkeypatch.setattr(venvsync.subprocess, "run", fake_run)
     result = venvsync._uv_sync("/opt/uv")
 
     assert seen == [["/opt/uv", "sync"]]
+    assert stdins == [subprocess.DEVNULL]  # own stdin, never mqlab's fd 0 (#1420)
     assert result.returncode == 0

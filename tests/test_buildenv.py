@@ -24,6 +24,7 @@ def test_real_git_runs_relative_to_repo_root(monkeypatch):
     def fake_run(args, **kwargs):
         captured["args"] = args
         captured["cwd"] = kwargs.get("cwd")
+        captured["stdin"] = kwargs.get("stdin")
 
         class _Result:
             stdout = "  /repo/.git  \n"
@@ -35,6 +36,7 @@ def test_real_git_runs_relative_to_repo_root(monkeypatch):
     assert b._git(["git", "rev-parse", "--git-dir"]) == "/repo/.git"
     assert captured["cwd"] == Path("/repo")
     assert captured["args"] == ["git", "rev-parse", "--git-dir"]
+    assert captured["stdin"] is b.subprocess.DEVNULL  # own stdin, not mqlab's fd 0 (#1420)
 
 
 _DUBIOUS = (

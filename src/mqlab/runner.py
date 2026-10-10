@@ -47,10 +47,17 @@ class SubprocessRunner:
     def run(self, command: Command, on_line: Callable[[str], None]) -> int:
         cwd = str(command.cwd) if command.cwd is not None else None
         env = {**os.environ, **command.env} if command.env else None
+        # stdin=DEVNULL (#1420): every step gets its OWN fresh /dev/null description,
+        # never mqlab's inherited fd 0. O_NONBLOCK lives on the shared open file
+        # description, so a concurrent child that flips it (the perf sampler's ssh)
+        # would otherwise leak into this one, and ansible-playbook then refuses to run
+        # ("Non-blocking file handles detected: <stdin>"). No step reads stdin; one that
+        # needs the operator terminal opens /dev/tty itself (as pauser.py does).
         process = subprocess.Popen(  # noqa: S603 - trusted internal argv; lab tool (spec §1)
             command.argv,
             cwd=cwd,
             env=env,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

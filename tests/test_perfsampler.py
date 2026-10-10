@@ -513,6 +513,22 @@ def test_run_bounded_runs_from_cwd(tmp_path):
     assert run_bounded(argv, 10, cwd=tmp_path).strip() == str(tmp_path)
 
 
+def test_run_bounded_gives_the_probe_its_own_stdin(monkeypatch):
+    # #1420: a probe runs concurrently with phase steps; it must not share mqlab's fd 0.
+    seen: dict[str, object] = {}
+    real_run = perfsampler.subprocess.run
+
+    def spy_run(argv, **kwargs):  # noqa: ANN001, ANN003, ANN202 - test spy
+        seen.update(kwargs)
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(perfsampler.subprocess, "run", spy_run)
+    assert run_bounded([sys.executable, "-c", "import sys; print(repr(sys.stdin.read()))"], 10) == (
+        "''\n"
+    )
+    assert seen["stdin"] is perfsampler.subprocess.DEVNULL
+
+
 def test_run_bounded_raises_on_timeout():
     argv = [sys.executable, "-c", "import time; time.sleep(5)"]
     with pytest.raises(RuntimeError, match=r"timed out after 0\.2s"):
@@ -588,6 +604,8 @@ def test_real_source_guest_first_reading_is_a_baseline_then_deltas(tmp_path):
     ]
     assert "StrictHostKeyChecking=no" in argv
     assert "BatchMode=yes" in argv
+    # #1420: the probe never reads stdin (`-n`), so it cannot flip a shared fd 0 non-blocking.
+    assert "-n" in argv[: argv.index("vagrant@192.168.121.10")]
 
 
 def test_real_source_local_reads_the_sampling_vms_own_proc_stat():
