@@ -870,6 +870,9 @@ class GcResult:
     dry_run: bool
     # volumes listed by vol-list but deleted before vol-dumpxml read them (#1336)
     vanished: list[str] = field(default_factory=list)
+    # the pool's name when it is not defined yet (fresh host, no `vagrant up`): no pool
+    # volumes exist, so there is nothing to reclaim (#1415)
+    absent_pool: str | None = None
 
 
 def _vagrant_boxes_dir() -> Path:
@@ -902,17 +905,6 @@ def _current_box_volumes(boxes_dir: Path | None = None) -> dict[str, set[str]]:
     return current
 
 
-def _virsh_out(args: list[str]) -> str:
-    """Run a read-only virsh command and return its output, FAIL-LOUD on non-zero.
-
-    Unlike `_capture`, this never masks a virsh failure as an empty result — a
-    broken `vol-list` must raise, not silently make GC a no-op (#759)."""
-    code, out = _virsh_run(args)
-    if code != 0:
-        raise RuntimeError(f"virsh {' '.join(args)} failed (rc={code}): {out}")
-    return out
-
-
 def _virsh_run(args: list[str]) -> tuple[int, str]:
     """Run a virsh command; return (exit-code, joined output) for the caller to judge."""
     lines: list[str] = []
@@ -935,10 +927,34 @@ def _is_volume_vanished(output: str) -> bool:
     return any(marker in low for marker in _VOLUME_VANISHED_MARKERS)
 
 
+# virsh's wording when the named pool is not defined: "Storage pool not found"
+# (VIR_ERR_NO_STORAGE_POOL) and libvirt's "no storage pool with matching name".
+_POOL_ABSENT_MARKERS = ("storage pool not found", "no storage pool with matching name")
+
+
+class PoolAbsentError(RuntimeError):
+    """The libvirt pool GC reads is not defined at all (#1415).
+
+    On a fresh host vagrant-libvirt has not yet created `default`: the box builders
+    write straight to /var/lib/libvirt/images, so only the first `vagrant up` defines
+    it. No pool means no pool volumes, so there is nothing to reclaim. Only this exact
+    condition is tolerated; every other vol-list failure stays fatal (#759)."""
+
+
 def _pool_volume_names(pool: str = _DEFAULT_POOL) -> list[str]:
-    """Volume names in the pool, from `virsh vol-list --pool <pool>` (Name/Path table)."""
+    """Volume names in the pool, from `virsh vol-list --pool <pool>` (Name/Path table).
+
+    Raises `PoolAbsentError` when the pool is not defined; any other virsh failure
+    raises a plain RuntimeError (fail-loud, #759)."""
+    args = ["vol-list", "--pool", pool]
+    code, out = _virsh_run(args)
+    if code != 0:
+        msg = f"virsh {' '.join(args)} failed (rc={code}): {out}"
+        if any(marker in out.lower() for marker in _POOL_ABSENT_MARKERS):
+            raise PoolAbsentError(msg)
+        raise RuntimeError(msg)
     names: list[str] = []
-    for raw in _virsh_out(["vol-list", "--pool", pool]).splitlines():
+    for raw in out.splitlines():
         line = raw.strip()
         if not line or line.startswith("Name") or set(line) <= {"-"}:
             continue
@@ -995,7 +1011,19 @@ def gc_orphaned_images(*, dry_run: bool = False, pool: str = _DEFAULT_POOL) -> G
     in_use: set[str] = set()
     names: list[str] = []
     vanished: list[str] = []
-    for name in _pool_volume_names(pool):
+    try:
+        pool_volumes = _pool_volume_names(pool)
+    except PoolAbsentError:
+        # No pool yet (fresh host): no volumes, nothing to reclaim — reported, not hidden.
+        return GcResult(
+            deleted=[],
+            freed_bytes=0,
+            kept=[],
+            skipped_in_use=[],
+            dry_run=dry_run,
+            absent_pool=pool,
+        )
+    for name in pool_volumes:
         try:
             alloc[name], backing = _vol_detail(name, pool)
         except VolumeVanishedError:
@@ -1073,6 +1101,11 @@ def _human_bytes(num: int) -> str:
 
 def gc_summary(result: GcResult) -> str:
     """Render a box-image GC result for the CLI."""
+    if result.absent_pool is not None:
+        return (
+            f"box gc: storage pool '{result.absent_pool}' is not defined yet (no VM has "
+            "booted on this host) — no base images, nothing to reclaim"
+        )
     if not result.deleted and not result.skipped_in_use:
         return "box gc: no orphaned box base images — nothing to reclaim"
     verb = "would delete" if result.dry_run else "deleted"
