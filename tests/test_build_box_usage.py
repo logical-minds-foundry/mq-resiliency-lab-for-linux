@@ -114,6 +114,7 @@ def test_a_per_major_kickstart_is_chosen_when_present(tmp_path):
     (boxes / "rhel").mkdir(parents=True)
     shutil.copy(SCRIPT, boxes / "rhel" / SCRIPT.name)
     shutil.copy(SCRIPT.parents[1] / "_box-register.sh", boxes / "_box-register.sh")
+    shutil.copy(SCRIPT.parents[1] / "_build-cleanup.sh", boxes / "_build-cleanup.sh")
     (boxes / "rhel" / "ks.cfg").write_text("# shared\n")
     (boxes / "rhel" / "ks-10.cfg").write_text("# major 10\n")
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)  # noqa: S603, S607

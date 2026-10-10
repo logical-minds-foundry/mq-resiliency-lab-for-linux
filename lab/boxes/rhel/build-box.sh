@@ -38,6 +38,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 # shellcheck source=lab/boxes/_box-register.sh
 . ../_box-register.sh
+# shellcheck source=lab/boxes/_build-cleanup.sh
+. ../_build-cleanup.sh
 
 STALE_DAYS="${STALE_DAYS:-30}"
 FORCE="${LAB_REBUILD_BOX:-0}"
@@ -180,6 +182,12 @@ test -n "$ISO" || {
   exit 1
 }
 WORK="$BUILD_DIR/state/rhel${MAJOR}-box"; mkdir -p "$WORK"
+# From here on a failed build tears its install domain + pool scratch down on the way
+# out, keeping the console log under build/temp/bake-failures/ (#1404). $WORK is kept, as
+# on success (the next run regenerates it).
+BUILD_EVIDENCE_DIR="$BUILD_DIR/temp/bake-failures"
+trap build_cleanup_on_exit EXIT
+build_cleanup_add "$DISK" "${POOL_IMG}/oemdrv.iso"
 
 # 1. OEMDRV volume: anaconda auto-loads ks.cfg from a volume so labeled. The chosen
 #    kickstart is grafted in under that name.
