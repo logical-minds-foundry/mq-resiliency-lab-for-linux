@@ -452,6 +452,15 @@ def test_v3_refusal_without_a_runnable_alternative(tmp_path):
         cat.stack_os("nativeha-rhel-crr", None, X86_V2)
 
 
+def test_all_boxes_without_facts_is_every_host():
+    """facts=None drops the host filter: every box any host could resolve (#1399)."""
+    cat = load_catalog()
+    names = {b.name for b in cat.all_boxes(None, _STACK_ROLES)}
+    assert names == {b.name for b in cat.all_boxes(X86, _STACK_ROLES)}
+    assert names > {b.name for b in cat.all_boxes(X86_V2, _STACK_ROLES)}
+    assert names > {b.name for b in cat.all_boxes(ARM, _STACK_ROLES)}
+
+
 def test_all_boxes_skips_v3_os_on_a_non_v3_host():
     names = [b.name for b in load_catalog().all_boxes(X86_V2, _STACK_ROLES)]
     assert "mq-nativeha-rhel10" not in names
