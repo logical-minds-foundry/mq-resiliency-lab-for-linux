@@ -12,6 +12,15 @@ over distributed queuing. Everything shown here is
 **as-built** and traces back to
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml).
 
+**Which HA mechanism is strategic?** **Native HA** is IBM's preferred HA
+solution for MQ on Linux and the lab's primary arm. Choose it for new HA
+deployments. RDQM and Pacemaker/DRBD stay in the lab as **counter-options**,
+so the lab covers the full range of Linux resiliency options. They stay for
+as long as IBM supports them, and the lab drops them only once IBM itself
+deems them non-strategic. NAS-based multi-instance queue managers are out of
+scope. The sourced reasoning is in the
+[RDQM/Pacemaker strategic position](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/rdqm-pacemaker-strategic-position.md).
+
 > **A note on "service".** This lab uses *service* in two distinct senses. The
 > **external service** (`SVC` / `svc-sim`) is the request/reply counterparty our
 > queue manager exchanges messages with across the inter-business network —

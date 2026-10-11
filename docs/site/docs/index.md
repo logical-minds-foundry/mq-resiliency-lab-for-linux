@@ -31,6 +31,9 @@ everything else.
   second site (a full 3+3 stack).
 - Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
   (Pacemaker), and log-replicated (Native HA) — on the same network fabric.
+  **Native HA is the strategic choice** for new HA deployments. RDQM and
+  Pacemaker are counter-options the lab keeps for as long as IBM supports them
+  (see [Architecture](architecture/index.md)).
 
 ## What it actually is
 
