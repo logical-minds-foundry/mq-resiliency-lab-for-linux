@@ -25,6 +25,15 @@
 > on 2026-10-10 (issue
 > [#1405](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1405))
 > after IBM announced RDQM support for RHEL 10 in MQ 10.0.1. See §2.4.
+>
+> **Where the open items went (2026-10-11).** Epic #280 closed on what it shipped.
+> The items that wait on IBM moved to the follow-on epic
+> [logical-minds-foundry/.github#315](https://github.com/logical-minds-foundry/.github/issues/315):
+> the MQ 10.0.1 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)),
+> `rdqm-rhel` on RHEL 10 ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)),
+> and plan task T9, the SPCR-gated move of the Ubuntu stack defaults and `infra_mq`
+> to Ubuntu 26 ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285)).
+> Where this document says "T9", read #1285.
 
 ## 1. The matrix
 
@@ -61,7 +70,7 @@ that as `unsupported` and not as `unknown`.
   `Future Fix Packs`. (S-1)
 - **[data]** For comparison, RHEL 9 x86-64 is supported from `9.6` (`osMinimum: "9.6"`)
   through `9.8`. Releases `Base` through `9.5` are `isSupported: "false"`. The lab's
-  current `rhel/9.6` pin sits at that floor. (S-1)
+  current RHEL 9 point-release pin (`9.6`, `os.rhel.9.point` in `lab/versions.yaml`) sits at that floor. (S-1)
 - **[judgment]** This settles the open item in the #1095 note (§2, §8): RHEL 10 is a
   listed, supported base-QM platform for MQ 10.0, and Native HA is listed with it.
 
@@ -203,8 +212,10 @@ RDQM as unsupported, with no `el10` kmods. The lab's pin is 10.0.0.5, so
   tarball has no `el10` kmods, so there is nothing to build against. Enabling
   `rdqm-rhel@10` depends on re-pinning to 10.0.1
   ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409))
-  and on checks 1–2 above. That work moves to a follow-on epic for the 10.0.1
-  re-pin, which adds `rhel:10` to the catalog, an `rdqm-install`
+  and on checks 1–2 above. That work moves to the follow-on epic for the 10.0.1
+  re-pin ([.github#315](https://github.com/logical-minds-foundry/.github/issues/315),
+  task [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)),
+  which adds `rhel:10` to the catalog, an `rdqm-install`
   `vars/RedHat-10.yml`, an `mq-rdqm-rhel10` bake and a validation row.
 - **[judgment]** This follows the lab's position on RDQM: the lab supports RDQM
   for as long as IBM does. RDQM and Pacemaker/DRBD remain counter-options for
@@ -318,7 +329,7 @@ and the resolver warns when it is selected.
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
-| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`** on the 10.0.0.5 pin. `rhel:10` is not in its supported list. Adding it waits for the 10.0.1 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)) and the §2.4 checks. |
+| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`** on the 10.0.0.5 pin. `rhel:10` is not in its supported list. Adding it waits for the 10.0.1 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)) and the §2.4 checks, tracked as [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440). |
 
 - **[judgment]** For both Ubuntu stacks, T9's "if IBM-supported" condition is
   **not met** today. T9 should re-check S-1 when it runs. If IBM has added an
@@ -331,6 +342,11 @@ and the resolver warns when it is selected.
   and client (the `mq-client-ubuntu24` box bakes them in, per `lab/topology.yaml`), so
   MQ would run on an OS IBM does not list. §4.1 neither covers nor forbids this.
   The epic should decide it explicitly before T8 moves infra to 26.
+  **Resolved** ([.github#285](https://github.com/logical-minds-foundry/.github/issues/285)):
+  the catalog splits the shared nodes. `infra:` (`ubuntu:26`) covers only the
+  nodes that run no MQ (`infra`, `obs`, `san`). A separate `infra_mq:` key covers
+  the MQ commons, stays `ubuntu:24`, and is support-gated like a stack default,
+  so MQ never runs on 26.04 by default.
 - **[data] (side observation, outside this epic's scope)** The MQ 10.0 SPCR lists
   only `x86-64`, `IBM Z and IBM LinuxONE` and `POWER System - Little Endian`
   hardware for its Linux rows. There is no ARM64 row. The lab's arm64 (Apple

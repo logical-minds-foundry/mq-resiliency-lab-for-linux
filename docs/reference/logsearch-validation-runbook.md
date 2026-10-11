@@ -21,7 +21,7 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 
 | # | Scenario | Expected |
 |---|---|---|
-| **L1** | Box bake | `mqlab box build obs-ubuntu24` bakes the inert obs fat box (the metrics stack **plus** the OpenSearch + Dashboards + Data Prepper install halves), one-pass, no manual fixups. |
+| **L1** | Box bake | `mqlab box build obs-ubuntu26` bakes the inert obs fat box (the metrics stack **plus** the OpenSearch + Dashboards + Data Prepper install halves), one-pass, no manual fixups. |
 | **L2** | Cold bring-up | `mqlab commons up` renders topology, brings up the `obs` node (mgmt plane `10.50.0.2`) and runs `site-obs.yml` — OpenSearch, Data Prepper and Dashboards start first, each gated ready, before the metrics services; the fan-out gate is rendered. |
 | **L3** | Health | `mqlab logsearch status` → `cluster: green` on a single node (`number_of_replicas:0`, so green is honest not luck) and a `disk:` line. Dashboards reachable via `mqlab logsearch open`. |
 | **L4** | Ingestion | Fleet-wide fan-out flows: every node's alloy writes the same corpus Loki receives to OpenSearch via Data Prepper (`:21892`). Daily index `logs-YYYY.MM.DD`, doc count **rising**. |
@@ -45,16 +45,16 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 ## Step 1 — cold rebuild (L1, L2)
 
 ```bash
-uv run mqlab box build obs-ubuntu24 mq-client-ubuntu24 infra-ubuntu24
+uv run mqlab box build obs-ubuntu26 mq-client-ubuntu24 infra-ubuntu26
 uv run mqlab commons up
 ```
 
 Box bake is a **separate step before** the bring-up — `commons up` does **not**
 bake boxes; it renders topology (via `_prepare_lab`, which also writes
 `build/work/lab/topology.resolved.yaml` the Vagrantfile needs) and `vagrant up`s
-the registered boxes. Bake every box the commons needs (`obs-ubuntu24`, which now
+the registered boxes. Bake every box the commons needs (`obs-ubuntu26`, which now
 carries the log-search stack too; `mq-client-ubuntu24` for svc/app/probe;
-`infra-ubuntu24` for the DNS pair) or the bring-up fails
+`infra-ubuntu26` for the DNS pair) or the bring-up fails
 `Couldn't open file lab/<box>` when vagrant can't find one.
 
 The log tier's JVM/Node cold starts are slow on an oversubscribed host, so the

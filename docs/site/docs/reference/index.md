@@ -19,7 +19,15 @@ default
 and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
 auto-invalidates those baked images — see
 [`docs/development/box-model.md`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)).
-Bump `lab/mq-version` to rebase the whole lab in one edit.
+Bump `lab/mq-version` to rebase the whole lab in one edit. Adopting MQ 10.0.1
+(a CD release, generally available from 2026-10-13) is tracked in epic
+[logical-minds-foundry/.github#315](https://github.com/logical-minds-foundry/.github/issues/315).
+
+OS versions follow the same single-source rule. The OS version catalog,
+[`lab/versions.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml),
+holds every OS version token: each stack's supported and default OS majors, the
+point release and base box each major pins, and the OS of the shared nodes. Box
+names are generated from it.
 
 ## Topology
 
@@ -39,10 +47,18 @@ Data Center B). Queue-manager names derive from each stack's `short` token
 
 | Stack | Mechanism | OS | `short` | Site-A groups | Site-B groups | QM VIP (A / B) |
 |---|---|---|---|---|---|---|
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
-| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL | `RDQM` | `rdqm_a` | `rdqm_b` | `10.10.1.100` / `10.10.2.100` |
-| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL | `NHARC` | `nha_rhel_crr_a` | `nha_rhel_crr_b` | per-instance (no VIP) |
-| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
+| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 24.04 (26.04 lab-only) | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
+| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 9 | `RDQM` | `rdqm_a` | `rdqm_b` | `10.10.1.100` / `10.10.2.100` |
+| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARC` | `nha_rhel_crr_a` | `nha_rhel_crr_b` | per-instance (no VIP) |
+| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 24.04 (26.04 lab-only) | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
+
+The OS column shows each stack's default first. Defaults and selectable versions
+come from the OS version catalog,
+[`lab/versions.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml);
+pick a non-default one with a build file
+(`mqlab bootstrap <stack> --config <file>`, see
+[Getting Started](../getting-started.md#choose-an-os-version)). A running stack's
+OS is fixed by its instance record, `build/state/instances/<stack>.json`.
 
 Native HA has no floating VIP — clients reach the active instance directly (see
 [REST endpoints](#rest-endpoints) below). A single shared **counterparty**
@@ -134,7 +150,7 @@ Command groups:
 
 | Group | Subcommands | Purpose |
 |---|---|---|
-| `mqlab qm` | `create` · `destroy` · `up` · `down` · `status` | MQ queue-manager per-stack HA lifecycle (stack-dispatched) |
+| `mqlab qm` | `create` · `destroy` · `up` · `down` · `status` · `e2e` | MQ queue-manager per-stack HA lifecycle (stack-dispatched). `status` on a Native HA CRR stack reports both sites; `e2e` sends a bounded request/reply burst and exits non-zero unless every request round-trips |
 | `mqlab dr` | `cutover` · `failback` | Cross-site DR: cut a stack's live QM over to its DR peer (`cutover`, A→B) and back (`failback`, B→A) |
 | `mqlab vm` | `inventory` · `roster` · `ssh` | Guest VM maps (Ansible inventory / salt-ssh roster) + interactive shell |
 | `mqlab obs` | `targets` · `dashboard` · `net-state` · `reach-peers` · `open` | Observability renders (Prometheus targets, Grafana dashboard) + reach the Watcher |
@@ -145,7 +161,7 @@ Command groups:
 | `mqlab logsearch` | `status` · `open` · `snapshot` · `restore` | Operate the log-search tier on obs (single-node OpenSearch + Dashboards): cluster health, Dashboards URL, host-durable snapshot/restore |
 | `mqlab netem` | `set` · `show` · `clear` | Inject delay-only WAN latency on the cross-region plane (`virbr-wan`) |
 | `mqlab perf` | `diff` | Compare two bootstrap perf reports (`perf-*.json`): per-phase and milestone deltas, contention means; no verdict |
-| `mqlab box` | `status` · `build` · `rebuild` · `clean` · `gc` | Baked-box fleet lifecycle |
+| `mqlab box` | `status` · `build` · `rebuild` · `clean` · `gc` | Baked-box fleet lifecycle. Boxes are named `<role>-<os><major>`; `build --config <file>` builds the boxes a build file needs, and `gc --unreferenced` reclaims boxes a catalog re-pin left behind |
 | `mqlab component` | `build` · `status` · `install` | Guest components (epic .github#294): test on the pinned guest runtime and stage an artifact, compare built vs installed, reinstall onto running guests ([Guest components](../operate/guest-components.md)) |
 | `mqlab build` | `path` · `ensure` · `clean` · `status` · `migrate` | `build/` bucket lifecycle (cache/state/work/temp) |
 
