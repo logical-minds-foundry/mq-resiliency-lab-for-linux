@@ -846,6 +846,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#choose-an-os-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose an OS version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-queue-manager-with-mqlab-qm" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1539,6 +1550,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#choose-an-os-version" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choose an OS version
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#build-the-queue-manager-with-mqlab-qm" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1845,12 +1867,89 @@ NICs and platform, and the stack registry itself. See the
 </tr>
 </tbody>
 </table>
+<h3 id="choose-an-os-version">Choose an OS version<a class="headerlink" href="#choose-an-os-version" title="Permanent link">&para;</a></h3>
+<p>Each stack builds on a default OS major and can offer others. Both come from one
+file, the OS version catalog
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml"><code>lab/versions.yaml</code></a>.
+At the current pins:</p>
+<table>
+<thead>
+<tr>
+<th>stack</th>
+<th>default</th>
+<th>also selectable</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pcmk-ubuntu</code></td>
+<td>Ubuntu 24.04</td>
+<td>Ubuntu 26.04 (lab-only)</td>
+</tr>
+<tr>
+<td><code>nativeha-ubuntu</code></td>
+<td>Ubuntu 24.04</td>
+<td>Ubuntu 26.04 (lab-only)</td>
+</tr>
+<tr>
+<td><code>nativeha-rhel-crr</code></td>
+<td>RHEL 10 (10.2; needs an x86-64-v3 host)</td>
+<td>RHEL 9 (9.6)</td>
+</tr>
+<tr>
+<td><code>rdqm-rhel</code></td>
+<td>RHEL 9 (9.6)</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<p>The shared nodes are not selectable. <code>obs</code>, the two DNS nodes and the SAN targets
+run no MQ and are on Ubuntu 26.04. The MQ commons (<code>svc-sim</code>, <code>app-client</code>,
+<code>mon-probe</code>) run MQ, so they stay on Ubuntu 24.04, the Ubuntu release IBM supports.</p>
+<p>A plain <code>mqlab bootstrap &lt;stack&gt;</code> uses the default. To pick another supported
+version, write a <strong>build file</strong> and pass it with <code>--config</code>. There is no
+command-line shorthand; the file is the only way to choose:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">echo</span><span class="w"> </span><span class="s1">'os: rhel:9'</span><span class="w"> </span>&gt;<span class="w"> </span>rhel9.yaml
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-rhel-crr<span class="w"> </span>--config<span class="w"> </span>rhel9.yaml
+</code></pre></div>
+<p>Bootstrap resolves the OS before it renders anything and prints
+<code>&lt;stack&gt;: OS &lt;os&gt; (instance record …)</code>. It writes that choice to the stack's
+<strong>instance record</strong>, <code>build/state/instances/&lt;stack&gt;.json</code>, and the stack keeps that
+OS for its whole life:</p>
+<ul>
+<li>A resume without <code>--config</code> reuses the recorded OS, even if the catalog default
+  has moved since.</li>
+<li>A <code>--config</code> that asks for a different OS is refused
+  (<code>&lt;stack&gt; is running &lt;os&gt;; requested &lt;os&gt;; run mqlab teardown &lt;stack&gt; first</code>).
+  Tear the stack down, which deletes the record, then bootstrap again.</li>
+<li>A stack whose VMs are running without a record (one brought up before records
+  existed) is refused by every stack command except <code>teardown</code>.</li>
+<li>A version the stack does not list is refused, and the message names the versions
+  it supports.</li>
+</ul>
+<p><strong>Lab-only versions.</strong> IBM's MQ 10.0 support matrix (the SPCR) does not list Ubuntu
+26.04. You can still build either Ubuntu stack on it. Bootstrap prints
+<code>WARNING: IBM does not support MQ on ubuntu:26 (&lt;SPCR link&gt;); it is selectable for
+lab use only</code> and carries on. The Ubuntu defaults move to 26.04 only when IBM adds
+an Ubuntu 26.04 row to the SPCR.</p>
+<p><strong>RHEL 10 and x86-64-v3.</strong> RHEL 10 is built for the x86-64-v3 CPU level. On a host
+where <code>mqlab doctor</code> reports <code>x86-64-v3: no</code>, a plain
+<code>mqlab bootstrap nativeha-rhel-crr</code> is refused, and the message tells you to put
+<code>os: rhel:9</code> in a build file. The lab never falls back to RHEL 9 on its own.
+<code>rdqm-rhel</code> is RHEL 9 only: IBM supports RDQM on RHEL 10 only from MQ 10.0.1, and
+the lab is pinned to MQ 10.0.0.5.</p>
+<p>The sourced support status for every stack and OS is in the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md">OS-version support matrix</a>.
+Boxes are named <code>&lt;role&gt;-&lt;os&gt;&lt;major&gt;</code> (for example <code>mq-nativeha-ubuntu24</code>), so each
+OS major gets its own baked box. When a catalog change leaves old boxes behind,
+<code>mqlab box gc --unreferenced --dry-run</code> lists what it would reclaim; see the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md">box model</a>.</p>
 <p>Two <code>mqlab vm</code> utilities render or reach the guests directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">     </span><span class="c1"># render build/work/inventory.ini from topology — the static map</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>inventory<span class="w">     </span><span class="c1"># render build/work/inventory.ini from topology — the static map</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>mqlab<span class="w"> </span>vm<span class="w"> </span>ssh<span class="w"> </span>pcmk-a1<span class="w">   </span><span class="c1"># drop into a shell on one guest</span>
 </code></pre></div>
 <p>When you're done, tear a stack back down:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>teardown<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># destroy the stack's guests + overlay disks</span>
 </code></pre></div>
 <p><code>teardown</code> reclaims the shared commons VMs (obs/probe/svc/app/infra) only when no
 other stack is still up — pass <code>--commons</code> to force their removal, or leave them
@@ -1862,11 +1961,11 @@ stack live — bootstrap leaves you with a running QM. <strong><code>mqlab qm</c
 lifecycle layer <em>on top</em> of that: drive the QM without re-running a whole
 bootstrap. It dispatches per stack, so the same verbs cover every mechanism
 (Pacemaker <code>pcs</code>, RDQM, Native HA <code>systemctl</code>).</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># start it again (pcs resource enable)</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># (re)build the QM + its HA resource group</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># pcs status resources — where mq_group is Started</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w">   </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># stop the QM cluster-side (pcs resource disable)</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w">     </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># start it again (pcs resource enable)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>create<span class="w"> </span>pcmk-ubuntu<span class="w">   </span><span class="c1"># (re)build the QM + its HA resource group</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>destroy<span class="w"> </span>pcmk-ubuntu<span class="w">  </span><span class="c1"># remove the QM + its HA resources</span>
 </code></pre></div>
 <p>For the Pacemaker/SAN stack, <code>qm create</code> runs the <strong><code>mq-pcmk-qmgr</code> Ansible
 role</strong>: the queue manager is created on the shared LUN, taught to every node
@@ -1891,8 +1990,8 @@ queue manager, a simulated upstream (<code>svc-sim</code>), and an application c
 exchanging messages over the client network. The canonical <code>pcmk-ubuntu</code> arm
 above does this; an even lighter arm to try is <strong>Native HA on Ubuntu</strong> (no SAN,
 and it boots native on an x86 dev host):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># bring the whole arm up end to end</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w">  </span>nativeha-ubuntu<span class="w">  </span><span class="c1"># confirm the QM is up (dspmq -o nativeha)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mqlab<span class="w"> </span>bootstrap<span class="w"> </span>nativeha-ubuntu<span class="w">   </span><span class="c1"># bring the whole arm up end to end</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w">  </span>nativeha-ubuntu<span class="w">  </span><span class="c1"># confirm the QM is up: dspmq -o nativeha -x on both sites</span>
 </code></pre></div>
 <p>Send a message, then stop the active instance and watch the standby take over —
 the QM survives, because that is the whole point of the arm.</p>
@@ -1916,12 +2015,12 @@ boards show both what the fleet is <em>doing</em> (metrics) and what MQ is <em>r
 provisions obs, the <code>mon-probe</code> exporter host and this stack's exporters. To bring the shared
 observability VMs up on their own (independently of any stack), use <code>mqlab
 commons up</code>. A few renders and the front door are exposed directly:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">       </span><span class="c1"># print the Grafana URL + how to reach it from your workstation</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">    </span><span class="c1"># render the Prometheus file_sd targets from topology + echo them</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">  </span><span class="c1"># render the Grafana dashboards (Watcher + per-stack cockpits)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">       </span><span class="c1"># print the Grafana URL + how to reach it from your workstation</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">    </span><span class="c1"># render the Prometheus file_sd targets from topology + echo them</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">  </span><span class="c1"># render the Grafana dashboards (Watcher + per-stack cockpits)</span>
 </code></pre></div>
 <p><code>obs</code> is a guest inside the lab, reached on your host at <code>localhost:3000</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>http://localhost:3000/d/lab-watcher   (anonymous — no login)
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http://localhost:3000/d/lab-watcher   (anonymous — no login)
 </code></pre></div>
 <p><code>mqlab obs open</code> prints the exact URLs (and re-heals the forward if a grafana
 restart wedged it).</p>
@@ -1952,7 +2051,7 @@ none; see the architecture page's admin-plane section for why and how to enable 
 <p>Because <code>bootstrap</code> already made every node a scrape target, a fault is something
 you can <em>watch</em>. Kill a live cluster node the same way the lab exposes every
 other step — by hand, with <code>virsh</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_pcmk-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>virsh<span class="w"> </span>-c<span class="w"> </span>qemu:///system<span class="w"> </span>destroy<span class="w"> </span>lab_pcmk-a2<span class="w">   </span><span class="c1"># yank a node out from under the cluster</span>
 </code></pre></div>
 <p>That node's tile turns red within a scrape interval while Pacemaker refloats the
 QM elsewhere; bring it back (<code>mqlab bootstrap pcmk-ubuntu</code>, which resumes at the

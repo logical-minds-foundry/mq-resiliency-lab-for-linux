@@ -1466,25 +1466,25 @@ The four stack names are:</p>
 <tr>
 <td><code>rdqm-rhel</code></td>
 <td>RDQM (replicated-storage HA)</td>
-<td>RHEL</td>
+<td>RHEL 9</td>
 <td><code>RDQMAPP</code></td>
 </tr>
 <tr>
 <td><code>pcmk-ubuntu</code></td>
 <td>Pacemaker/SAN (shared-storage HA)</td>
-<td>Ubuntu</td>
+<td>Ubuntu 24.04 (26.04 lab-only)</td>
 <td><code>PCMKAPP</code></td>
 </tr>
 <tr>
 <td><code>nativeha-rhel-crr</code></td>
 <td>Native HA (log-replicated HA)</td>
-<td>RHEL</td>
+<td>RHEL 10 (RHEL 9 selectable)</td>
 <td><code>NHARCAPP</code></td>
 </tr>
 <tr>
 <td><code>nativeha-ubuntu</code></td>
 <td>Native HA (log-replicated HA)</td>
-<td>Ubuntu</td>
+<td>Ubuntu 24.04 (26.04 lab-only)</td>
 <td><code>NHAUAPP</code></td>
 </tr>
 </tbody>
@@ -1507,6 +1507,14 @@ drops the DR <em>cluster</em> nodes rather than the whole of site B. Observabili
 with <code>mqlab commons up</code> (it provisions the <code>obs</code> guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 <code>mqlab teardown &lt;stack&gt;</code> (shared commons are reclaimed when the last stack exits).</p>
+<p>The OS column above shows each stack's default first. To build a stack on another
+supported OS, pass a build file: <code>mqlab bootstrap &lt;stack&gt; --config &lt;file&gt;</code>, where the
+file holds, for example, <code>os: rhel:9</code>. Bootstrap records the OS in the stack's
+instance record (<code>build/state/instances/&lt;stack&gt;.json</code>). A later request for a
+different OS is refused until <code>mqlab teardown &lt;stack&gt;</code>, and a running stack with no
+record is refused by every stack command except <code>teardown</code>. See
+<a href="../getting-started/#choose-an-os-version">Getting Started</a> for the rules and the
+lab-only Ubuntu 26.04 warning.</p>
 <p><code>bootstrap</code>, <code>teardown</code> and <code>commons up</code> each print the <strong>environment profile</strong>
 they resolved, for example <code>environment: macos (detected: …)</code>. The profile is
 detected from the platform (Apple Virtualization → <code>macos</code>, Google Compute Engine
@@ -1601,6 +1609,12 @@ controlled, stack-dispatched lever is <code>mqlab qm</code>:</p>
 Pacemaker disables/enables the <code>mq_group</code> resource (<code>pcs</code>), RDQM runs
 <code>endmqm -w</code> / <code>strmqm</code>, and Native HA stops/starts the <code>mqmonitor@</code> unit so the
 raft group elects a new leader.</p>
+<p>On the two Native HA stacks, <code>qm status</code> runs <code>dspmq -o nativeha -x</code> on the first
+node of each site: site A shows the Live group and site B the Recovery group, each
+with its own quorum and instance sync. If site B is not running (<code>bootstrap
+--no-dr</code>), its query is skipped with a note instead of failing. RDQM and Pacemaker
+<code>qm status</code> runs on site A only; for RDQM, <code>rdqmstatus</code> there already shows the DR
+relationship.</p>
 <p>For harder, host-side drills that a clean <code>qm down</code> cannot express, the lab ships
 fault scripts (run on the host, not through <code>mqlab</code>):</p>
 <ul>

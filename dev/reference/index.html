@@ -1490,7 +1490,14 @@ default
 and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
 auto-invalidates those baked images — see
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md"><code>docs/development/box-model.md</code></a>).
-Bump <code>lab/mq-version</code> to rebase the whole lab in one edit.</p>
+Bump <code>lab/mq-version</code> to rebase the whole lab in one edit. Adopting MQ 10.0.1
+(a CD release, generally available from 2026-10-13) is tracked in epic
+<a href="https://github.com/logical-minds-foundry/.github/issues/315">logical-minds-foundry/.github#315</a>.</p>
+<p>OS versions follow the same single-source rule. The OS version catalog,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml"><code>lab/versions.yaml</code></a>,
+holds every OS version token: each stack's supported and default OS majors, the
+point release and base box each major pins, and the OS of the shared nodes. Box
+names are generated from it.</p>
 <h2 id="topology">Topology<a class="headerlink" href="#topology" title="Permanent link">&para;</a></h2>
 <p>The lab shape — guest VMs, networks, role×site groups, and the stacks that
 compose them — is declared in
@@ -1519,7 +1526,7 @@ Data Center B). Queue-manager names derive from each stack's <code>short</code> 
 <tr>
 <td><code>pcmk-ubuntu</code></td>
 <td>Pacemaker/SAN (shared-storage HA)</td>
-<td>Ubuntu</td>
+<td>Ubuntu 24.04 (26.04 lab-only)</td>
 <td><code>PCMK</code></td>
 <td><code>san_a</code>, <code>pcmk_a</code></td>
 <td><code>san_b</code>, <code>pcmk_b</code></td>
@@ -1528,7 +1535,7 @@ Data Center B). Queue-manager names derive from each stack's <code>short</code> 
 <tr>
 <td><code>rdqm-rhel</code></td>
 <td>RDQM (replicated-storage HA)</td>
-<td>RHEL</td>
+<td>RHEL 9</td>
 <td><code>RDQM</code></td>
 <td><code>rdqm_a</code></td>
 <td><code>rdqm_b</code></td>
@@ -1537,7 +1544,7 @@ Data Center B). Queue-manager names derive from each stack's <code>short</code> 
 <tr>
 <td><code>nativeha-rhel-crr</code></td>
 <td>Native HA (log-replicated HA)</td>
-<td>RHEL</td>
+<td>RHEL 10 (RHEL 9 selectable)</td>
 <td><code>NHARC</code></td>
 <td><code>nha_rhel_crr_a</code></td>
 <td><code>nha_rhel_crr_b</code></td>
@@ -1546,7 +1553,7 @@ Data Center B). Queue-manager names derive from each stack's <code>short</code> 
 <tr>
 <td><code>nativeha-ubuntu</code></td>
 <td>Native HA (log-replicated HA)</td>
-<td>Ubuntu</td>
+<td>Ubuntu 24.04 (26.04 lab-only)</td>
 <td><code>NHAU</code></td>
 <td><code>nha_ubuntu_a</code></td>
 <td><code>nha_ubuntu_b</code></td>
@@ -1554,6 +1561,13 @@ Data Center B). Queue-manager names derive from each stack's <code>short</code> 
 </tr>
 </tbody>
 </table>
+<p>The OS column shows each stack's default first. Defaults and selectable versions
+come from the OS version catalog,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml"><code>lab/versions.yaml</code></a>;
+pick a non-default one with a build file
+(<code>mqlab bootstrap &lt;stack&gt; --config &lt;file&gt;</code>, see
+<a href="../getting-started/#choose-an-os-version">Getting Started</a>). A running stack's
+OS is fixed by its instance record, <code>build/state/instances/&lt;stack&gt;.json</code>.</p>
 <p>Native HA has no floating VIP — clients reach the active instance directly (see
 <a href="#rest-endpoints">REST endpoints</a> below). A single shared <strong>counterparty</strong>
 (<code>SVCQM</code> on <code>svc-sim</code>, <code>10.60.0.50</code>) sits across the inter-business WAN; each
@@ -1740,8 +1754,8 @@ commands:</p>
 <tbody>
 <tr>
 <td><code>mqlab qm</code></td>
-<td><code>create</code> · <code>destroy</code> · <code>up</code> · <code>down</code> · <code>status</code></td>
-<td>MQ queue-manager per-stack HA lifecycle (stack-dispatched)</td>
+<td><code>create</code> · <code>destroy</code> · <code>up</code> · <code>down</code> · <code>status</code> · <code>e2e</code></td>
+<td>MQ queue-manager per-stack HA lifecycle (stack-dispatched). <code>status</code> on a Native HA CRR stack reports both sites; <code>e2e</code> sends a bounded request/reply burst and exits non-zero unless every request round-trips</td>
 </tr>
 <tr>
 <td><code>mqlab dr</code></td>
@@ -1796,7 +1810,7 @@ commands:</p>
 <tr>
 <td><code>mqlab box</code></td>
 <td><code>status</code> · <code>build</code> · <code>rebuild</code> · <code>clean</code> · <code>gc</code></td>
-<td>Baked-box fleet lifecycle</td>
+<td>Baked-box fleet lifecycle. Boxes are named <code>&lt;role&gt;-&lt;os&gt;&lt;major&gt;</code>; <code>build --config &lt;file&gt;</code> builds the boxes a build file needs, and <code>gc --unreferenced</code> reclaims boxes a catalog re-pin left behind</td>
 </tr>
 <tr>
 <td><code>mqlab component</code></td>
