@@ -469,8 +469,8 @@ DRBD resource and no iSCSI target; both stay per-run. Host-resolved.
 > The log-search stack (`opensearch`, `opensearch-dashboards`, `data-prepper`)
 > formerly baked into a standalone `logsearch-ubuntu2404` box (`ansible/bake-logsearch.yml`,
 > #830). The observability-consolidation epic (`logical-minds-foundry/.github#267`)
-> folded those roles into `obs-ubuntu24` (#1178) and retired the standalone box and its
-> bake playbook (#1179) — see the `obs-ubuntu24` table above.
+> folded those roles into the obs box (#1178; `obs-ubuntu24` then, `obs-ubuntu26` since #1282) and retired the standalone box and its
+> bake playbook (#1179) — see the `obs-ubuntu26` table above.
 
 ## Every Ubuntu box: apt auto-updates disabled at bake (#1225)
 
@@ -505,7 +505,7 @@ plus the responder's env file and QM-ordering drop-in — and `app-requester` an
 all three drive the baked `mq-resiliency-clients` component and install no client
 code — `mq-event-monitor`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
 (`iscsi-initiator`, plus the DRBD resource and iSCSI target configuration halves of
-`drbd-san` and `iscsi-target`, whose install halves are baked into `san-ubuntu24`); and
+`drbd-san` and `iscsi-target`, whose install halves are baked into `san-ubuntu26`); and
 `mqweb` (per-QM REST config +
 injected `mqweb_admin_password`, so it is configure even though the mqweb *server*
 binary is installed by `rdqm-install`).

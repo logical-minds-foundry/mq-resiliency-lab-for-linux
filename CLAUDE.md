@@ -75,6 +75,15 @@ Limitation: the tool resolves `ibm.com/docs/...` only. IBM **Support** pages
 retrievable by neither `WebFetch` nor the tool — fetch those manually (e.g. paste
 the text, or download the PDF into `build/temp/` and read it on the box).
 
+Plain `curl` with a browser `User-Agent` (the same headers the tool sends) does
+work for two IBM sources: IBM Support pages (`ibm.com/support/pages/...`) and the
+SPCR compatibility-report JSON endpoints (`getTSROsSupportSummary`,
+`getDeliverableChain`; see
+[`docs/reference/os-version-support-matrix.md`](docs/reference/os-version-support-matrix.md)
+§6.1 and §8). Cite what you fetch that way, and list each such page as a
+human-verify item so a person confirms it in a browser. JavaScript-rendered pages
+(for example IBM announcements) still return HTTP 403 to `curl`.
+
 <!-- vergil:template:claude-md:begin -->
 ## Memory management
 

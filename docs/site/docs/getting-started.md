@@ -247,6 +247,68 @@ The four stacks bootstrap knows about:
 | `nativeha-rhel-crr` | Native HA (raft-log replication) | RHEL |
 | `nativeha-ubuntu` | Native HA (raft-log replication) | Ubuntu |
 
+### Choose an OS version
+
+Each stack builds on a default OS major and can offer others. Both come from one
+file, the OS version catalog
+[`lab/versions.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml).
+At the current pins:
+
+| stack | default | also selectable |
+|-------|---------|-----------------|
+| `pcmk-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
+| `nativeha-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
+| `nativeha-rhel-crr` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
+| `rdqm-rhel` | RHEL 9 (9.6) | none |
+
+The shared nodes are not selectable. `obs`, the two DNS nodes and the SAN targets
+run no MQ and are on Ubuntu 26.04. The MQ commons (`svc-sim`, `app-client`,
+`mon-probe`) run MQ, so they stay on Ubuntu 24.04, the Ubuntu release IBM supports.
+
+A plain `mqlab bootstrap <stack>` uses the default. To pick another supported
+version, write a **build file** and pass it with `--config`. There is no
+command-line shorthand; the file is the only way to choose:
+
+```bash
+echo 'os: rhel:9' > rhel9.yaml
+mqlab bootstrap nativeha-rhel-crr --config rhel9.yaml
+```
+
+Bootstrap resolves the OS before it renders anything and prints
+`<stack>: OS <os> (instance record …)`. It writes that choice to the stack's
+**instance record**, `build/state/instances/<stack>.json`, and the stack keeps that
+OS for its whole life:
+
+- A resume without `--config` reuses the recorded OS, even if the catalog default
+  has moved since.
+- A `--config` that asks for a different OS is refused
+  (`<stack> is running <os>; requested <os>; run mqlab teardown <stack> first`).
+  Tear the stack down, which deletes the record, then bootstrap again.
+- A stack whose VMs are running without a record (one brought up before records
+  existed) is refused by every stack command except `teardown`.
+- A version the stack does not list is refused, and the message names the versions
+  it supports.
+
+**Lab-only versions.** IBM's MQ 10.0 support matrix (the SPCR) does not list Ubuntu
+26.04. You can still build either Ubuntu stack on it. Bootstrap prints
+`WARNING: IBM does not support MQ on ubuntu:26 (<SPCR link>); it is selectable for
+lab use only` and carries on. The Ubuntu defaults move to 26.04 only when IBM adds
+an Ubuntu 26.04 row to the SPCR.
+
+**RHEL 10 and x86-64-v3.** RHEL 10 is built for the x86-64-v3 CPU level. On a host
+where `mqlab doctor` reports `x86-64-v3: no`, a plain
+`mqlab bootstrap nativeha-rhel-crr` is refused, and the message tells you to put
+`os: rhel:9` in a build file. The lab never falls back to RHEL 9 on its own.
+`rdqm-rhel` is RHEL 9 only: IBM supports RDQM on RHEL 10 only from MQ 10.0.1, and
+the lab is pinned to MQ 10.0.0.5.
+
+The sourced support status for every stack and OS is in the
+[OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md).
+Boxes are named `<role>-<os><major>` (for example `mq-nativeha-ubuntu24`), so each
+OS major gets its own baked box. When a catalog change leaves old boxes behind,
+`mqlab box gc --unreferenced --dry-run` lists what it would reclaim; see the
+[box model](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md).
+
 Two `mqlab vm` utilities render or reach the guests directly:
 
 ```bash
@@ -309,7 +371,7 @@ and it boots native on an x86 dev host):
 
 ```bash
 mqlab bootstrap nativeha-ubuntu   # bring the whole arm up end to end
-mqlab qm status  nativeha-ubuntu  # confirm the QM is up (dspmq -o nativeha)
+mqlab qm status  nativeha-ubuntu  # confirm the QM is up: dspmq -o nativeha -x on both sites
 ```
 
 Send a message, then stop the active instance and watch the standby take over —

@@ -11,6 +11,11 @@ all exchanging messages with a simulated cross-business counterparty (`svc-sim`)
 over distributed queuing. Everything shown here is
 **as-built** and traces back to
 [`lab/topology.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/topology.yaml).
+The OS *version* each arm runs (Ubuntu 24.04 or 26.04, RHEL 9 or 10) is not in the
+topology. It comes from the OS version catalog,
+[`lab/versions.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml),
+which sets each stack's default and the versions it can select instead (see
+[Getting Started](../getting-started.md#choose-an-os-version)).
 
 **Which HA mechanism is strategic?** **Native HA** is IBM's preferred HA
 solution for MQ on Linux and the lab's primary arm. Choose it for new HA

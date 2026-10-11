@@ -15,10 +15,10 @@ The four stack names are:
 
 | Stack | Mechanism | OS | App queue manager |
 |---|---|---|---|
-| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL | `RDQMAPP` |
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu | `PCMKAPP` |
-| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL | `NHARCAPP` |
-| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu | `NHAUAPP` |
+| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 9 | `RDQMAPP` |
+| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 24.04 (26.04 lab-only) | `PCMKAPP` |
+| `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARCAPP` |
+| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 24.04 (26.04 lab-only) | `NHAUAPP` |
 
 Queue-manager names are derived from each stack's short token — no literal is
 hardcoded (`{short}APP` / `{short}SVC`).
@@ -42,6 +42,15 @@ drops the DR *cluster* nodes rather than the whole of site B. Observability come
 with `mqlab commons up` (it provisions the `obs` guest), so the Watcher is
 already live before the first stack lands. Tear a stack down with
 `mqlab teardown <stack>` (shared commons are reclaimed when the last stack exits).
+
+The OS column above shows each stack's default first. To build a stack on another
+supported OS, pass a build file: `mqlab bootstrap <stack> --config <file>`, where the
+file holds, for example, `os: rhel:9`. Bootstrap records the OS in the stack's
+instance record (`build/state/instances/<stack>.json`). A later request for a
+different OS is refused until `mqlab teardown <stack>`, and a running stack with no
+record is refused by every stack command except `teardown`. See
+[Getting Started](../getting-started.md#choose-an-os-version) for the rules and the
+lab-only Ubuntu 26.04 warning.
 
 `bootstrap`, `teardown` and `commons up` each print the **environment profile**
 they resolved, for example `environment: macos (detected: …)`. The profile is
@@ -155,6 +164,13 @@ What each verb runs is per-mechanism (all from the stack's topology `verbs:`):
 Pacemaker disables/enables the `mq_group` resource (`pcs`), RDQM runs
 `endmqm -w` / `strmqm`, and Native HA stops/starts the `mqmonitor@` unit so the
 raft group elects a new leader.
+
+On the two Native HA stacks, `qm status` runs `dspmq -o nativeha -x` on the first
+node of each site: site A shows the Live group and site B the Recovery group, each
+with its own quorum and instance sync. If site B is not running (`bootstrap
+--no-dr`), its query is skipped with a note instead of failing. RDQM and Pacemaker
+`qm status` runs on site A only; for RDQM, `rdqmstatus` there already shows the DR
+relationship.
 
 For harder, host-side drills that a clean `qm down` cannot express, the lab ships
 fault scripts (run on the host, not through `mqlab`):
