@@ -1437,7 +1437,10 @@ everything else.</p>
 <li>Drive an asynchronous <strong>DR / CRR</strong> cutover to a matching 3-node group at a
   second site (a full 3+3 stack).</li>
 <li>Compare the three HA mechanisms — replicated-storage (RDQM), shared-SAN
-  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.</li>
+  (Pacemaker), and log-replicated (Native HA) — on the same network fabric.
+  <strong>Native HA is the strategic choice</strong> for new HA deployments. RDQM and
+  Pacemaker are counter-options the lab keeps for as long as IBM supports them
+  (see <a href="architecture/">Architecture</a>).</li>
 </ul>
 <h2 id="what-it-actually-is">What it actually is<a class="headerlink" href="#what-it-actually-is" title="Permanent link">&para;</a></h2>
 <p>The whole lab is declared as code and rebuilt from scratch on demand. At its
