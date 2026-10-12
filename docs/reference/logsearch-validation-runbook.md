@@ -49,13 +49,14 @@ uv run mqlab box build obs-ubuntu26 mq-client-ubuntu24 infra-ubuntu26
 uv run mqlab commons up
 ```
 
-Box bake is a **separate step before** the bring-up — `commons up` does **not**
-bake boxes; it renders topology (via `_prepare_lab`, which also writes
-`build/work/lab/topology.resolved.yaml` the Vagrantfile needs) and `vagrant up`s
-the registered boxes. Bake every box the commons needs (`obs-ubuntu26`, which now
-carries the log-search stack too; `mq-client-ubuntu24` for svc/app/probe;
-`infra-ubuntu26` for the DNS pair) or the bring-up fails
-`Couldn't open file lab/<box>` when vagrant can't find one.
+The explicit `mqlab box build` is here so the L1 bake is its own observable step.
+`mqlab commons up` does not depend on it: before any `vagrant up` it runs the
+same box ensure as the bootstrap vms phase (#1008). That ensure reuses each
+commons box (`obs-ubuntu26`, which now carries the log-search stack too;
+`mq-client-ubuntu24` for svc/app/probe; `infra-ubuntu26` for the DNS pair) from
+the cache and registers it with Vagrant, or bakes it when no cached image exists.
+A cold lab with the boxes baked but not registered therefore comes up in one
+pass. Before #1008, that state failed with `Couldn't open file lab/<box>`.
 
 The log tier's JVM/Node cold starts are slow on an oversubscribed host, so the
 readiness gates are generous: OpenSearch's cluster-green wait allows up to 40 minutes

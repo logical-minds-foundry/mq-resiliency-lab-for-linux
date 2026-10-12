@@ -25,7 +25,9 @@ for the dev-vs-runtime boundary.
 Everything else a bring-up needs — the baked boxes, the arch-correct MQ tarball,
 the Ansible galaxy collections, and the PKI CA + keystores — is **ensured
 automatically** by `mqlab bootstrap` before the phase that needs it (and only for
-the phases actually selected). There is nothing else to install by hand.
+the phases actually selected). `mqlab commons up` ensures the same set for the
+commons VMs, including the box ensure, before its first `vagrant up` (#1008).
+There is nothing else to install by hand.
 
 Run every `mqlab` command from the **repo root** (the main `develop` checkout).
 
