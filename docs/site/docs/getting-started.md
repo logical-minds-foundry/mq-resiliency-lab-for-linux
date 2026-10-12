@@ -408,14 +408,17 @@ mqlab obs targets    # render the Prometheus file_sd targets from topology + ech
 mqlab obs dashboard  # render the Grafana dashboards (Watcher + per-stack cockpits)
 ```
 
-`obs` is a guest inside the lab, reached on your host at `localhost:3000`:
+`obs` is a guest inside the lab, reached on your host at `localhost:<port>`, where
+`<port>` is the host port your VM profile forwards in `vergil.toml` `port_forwards`
+(`3000` for `vergil-user`, `3001` for `anonymous`):
 
 ```text
-http://localhost:3000/d/lab-watcher   (anonymous — no login)
+http://localhost:3000/d/lab-watcher   (vergil-user; anonymous — no login)
 ```
 
-`mqlab obs open` prints the exact URLs (and re-heals the forward if a grafana
-restart wedged it).
+`mqlab obs open` prints the exact URLs for this VM, read from the installed
+port-forward relay. If a grafana restart wedged the forward, `mqlab obs relay-heal`
+re-heals it.
 
 A second telemetry tier, **log search** (single-node OpenSearch + Dashboards,
 fed by Data Prepper), gives the same log corpus a full-text, aggregation search
