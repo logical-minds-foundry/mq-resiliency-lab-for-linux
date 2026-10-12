@@ -1,0 +1,112 @@
+# ONE attempt of nativeha-on-active.yml (#891): re-detect the Active, apply the whole unit
+# there, record the outcome. Not for direct use — include nativeha-on-active.yml, which
+# documents the inputs, the failure classes and the retry rule.
+#
+# The unit runs ON the Active instance (a when-gate on active_host), not delegated, so a
+# failure belongs to that one host and the block's rescue captures it; the outcome is then
+# read back from that host's vars by a run_once set_fact and broadcast to the whole play.
+- name: "{{ nha_label }} — re-detect the Active (attempt {{ nha_attempt }})"
+  ansible.builtin.include_tasks: nativeha-find-active.yml
+
+# Readiness wait (#435/#888): back off before retrying on the SAME instance. When leadership
+# moved since the failed attempt, the new Active is tried at once.
+- name: "{{ nha_label }} — wait before retrying on the same instance"
+  ansible.builtin.pause:
+    seconds: "{{ nha_delay | default(5) | int }}"
+  when:
+    - _nha_prev.failed | bool
+    - _nha_prev.host == active_host
+
+- name: "{{ nha_label }} — clear this attempt's per-host outcome"
+  ansible.builtin.set_fact:
+    _nha_ok: false
+    _nha_failure: {}
+
+- name: "{{ nha_label }} — apply on the Active instance"
+  when: inventory_hostname == active_host
+  block:
+    - name: "{{ nha_label }} — run each step as mqm on the Active instance"
+      ansible.builtin.command:
+        argv: [su, "-", mqm, -c, "{{ nha_step.cmd }}"]
+        stdin: "{{ nha_step.stdin | default(omit) }}"
+      loop: "{{ nha_steps | default([]) }}"
+      loop_control:
+        loop_var: nha_step
+        label: "{{ nha_step.label }}"
+      register: _nha_run
+      changed_when: true
+      failed_when: _nha_run.rc not in (nha_step.ok_rcs | default([0]))
+      when: nha_steps is defined
+
+    # Native HA runs a replicated (linear-equivalent) log — LOGGEREV is valid here and the
+    # role enables it, after verifying the live QM's LogType matches (#809). delegate_to is
+    # not valid on include_role, hence the when-gate on active_host around this block.
+    - name: "{{ nha_label }} — event monitoring: enable classes + define/start collector (#114)"
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+        tasks_from: service
+      vars:
+        qmgr_name: "{{ nha_qm }}"
+        mq_log_type: replicated
+      when: nha_event_monitor | default(false) | bool
+
+    - name: "{{ nha_label }} — mark this attempt applied"
+      ansible.builtin.set_fact:
+        _nha_ok: true
+  rescue:
+    - name: "{{ nha_label }} — keep the failure for classification"
+      ansible.builtin.set_fact:
+        _nha_failure: "{{ ansible_failed_result }}"
+
+- name: "{{ nha_label }} — record the outcome of attempt {{ nha_attempt }} (broadcast)"
+  vars:
+    _in_play: "{{ active_host in ansible_play_hosts }}"
+    _ok: "{{ _in_play and (hostvars[active_host]._nha_ok | bool) }}"
+    _f: "{{ hostvars[active_host]._nha_failure | default({}) }}"
+    _blob: "{{ _f | to_json }}"
+    _failed_results: >-
+      {{ (_f.results | default([_f])) | selectattr('failed', 'defined')
+         | selectattr('failed') | list }}
+  ansible.builtin.set_fact:
+    _nha_done: "{{ _ok }}"
+    _nha_prev:
+      failed: "{{ not _ok }}"
+      host: "{{ active_host }}"
+      # Worth another attempt only if the target was out of the play, or the failure is the
+      # queue manager's own answer (a command that ran and returned an rc). A failure with no
+      # rc is Ansible-side — an undefined variable, a role's own assert (e.g. the #809
+      # log-type drift guard) — and no re-detection can fix it.
+      retryable: >-
+        {{ not _in_play
+           or (_failed_results | selectattr('rc', 'defined') | list | length > 0) }}
+      reason: >-
+        {{ 'applied' if _ok
+           else ('the Active ' ~ active_host ~ ' is not an active host of this play'
+                 ~ ' (unreachable or failed earlier)') if not _in_play
+           else ('leadership moved: ' ~ active_host ~ ' had become a Replica (AMQ8478E)')
+                if 'AMQ8478E' in _blob
+           else 'the queue manager was not ready yet (AMQ8146E)' if 'AMQ8146E' in _blob
+           else 'error (not a known Native HA transient)' }}
+      detail: >-
+        {% for r in _failed_results -%}
+        [{{ r.nha_step.label | default('step') if r.nha_step is defined else 'task' }}
+        rc={{ r.rc | default('n/a') }}] {{ r.msg | default('') }}
+        {{ r.stdout | default('') }} {{ r.stderr | default('') }}
+        {% endfor %}
+  run_once: true
+
+- name: "{{ nha_label }} — fail now on an error no retry can fix"
+  ansible.builtin.fail:
+    msg: >-
+      {{ nha_label }} failed on {{ _nha_prev.host }} with an error that is not the queue
+      manager's answer, so re-detecting the Active cannot fix it: {{ _nha_prev.detail }}
+  when:
+    - _nha_prev.failed | bool
+    - not (_nha_prev.retryable | bool)
+  run_once: true
+
+- name: "{{ nha_label }} — attempt {{ nha_attempt }} did not apply"
+  ansible.builtin.debug:
+    msg: "Attempt {{ nha_attempt }} on {{ _nha_prev.host }}: {{ _nha_prev.reason }}. {{ _nha_prev.detail }}"
+  when: _nha_prev.failed | bool
+  run_once: true

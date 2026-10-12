@@ -1,0 +1,10 @@
+# One slot of nativeha-on-active.yml's bounded attempt loop (#891). Not for direct use.
+#
+# A looped include_tasks expands every iteration before any of them runs, so its own `when`
+# cannot see what an earlier iteration did. This one-task file moves the "stop once applied"
+# gate to run time: each slot's include is evaluated only when the slot is reached, after the
+# previous attempt has recorded _nha_done. A slot after success is then one skipped task, not
+# a whole attempt's worth of skipped tasks.
+- name: "{{ nha_label }} — attempt {{ nha_attempt }}, unless an earlier attempt applied it"
+  ansible.builtin.include_tasks: nativeha-on-active-attempt.yml
+  when: not (_nha_done | bool)
