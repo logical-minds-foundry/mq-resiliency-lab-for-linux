@@ -223,15 +223,47 @@ def _commons_mq_boxes() -> set[BoxEntry]:
     return {boxes[h] for h in mq_hosts}
 
 
+def _untimed(_label: str, fn: Callable[[], None]) -> None:
+    fn()
+
+
+def _ensure_boxes(
+    guests: list[str],
+    *,
+    step: bool,
+    timed: Callable[[str, Callable[[], None]], None] = _untimed,
+) -> None:
+    """THE box ensure every bring-up path runs before its `vagrant up` (#1008).
+
+    Any path that boots a guest from a baked box depends on that box being registered
+    with Vagrant — a cold lab has the images baked in the state bucket but nothing
+    registered, so a bare `vagrant up` fails with "Box ... could not be found". Both
+    bring-up paths (bootstrap's vms phase via _ensure_prereqs_for_stack, and `mqlab
+    commons up` via _ensure_prereqs_for_commons) call this one helper, so the ensure is
+    universal by construction rather than by each path remembering it:
+      1. reconcile stale box_meta (#858) — forget a guest whose cached box names a
+         box the topology has since repointed away from, else `vagrant up` boots the
+         OLD box;
+      2. build/register the local boxes the guests boot (REUSE from cache when
+         baked) and stage any RHEL DVD (_ensure_local_boxes).
+    `timed` (#1248) wraps each step so bootstrap's perf report keeps both labels."""
+    timed("reconcile box meta", lambda: _reconcile_box_meta(guests, step=step))
+    timed("box ensure", lambda: _ensure_local_boxes(guests))
+
+
 def _ensure_prereqs_for_commons(*, step: bool = False) -> None:
     """Ensure every fresh-volume prerequisite the commons (obs/site-obs.yml) provision
     needs (#343/#350). All live under build/ on the persistent volume, which a recreate
     wipes, so commons up regenerates them — idempotently, in dependency order:
+      0. the baked boxes every commons VM boots, registered with Vagrant (#1008) —
+         the same _ensure_boxes the bootstrap vms phase runs, before any `vagrant up`
       1. the MQ-for-Developers tarball(s) for the commons guest boxes
       2. Ansible galaxy collections (community.crypto — required by the PKI play)
       3. the PKI CA + entity keystores (the exporters consume these)
-    MQ is a Python fetch; galaxy + PKI run through the step runner (progress/transcript).
+    Boxes + MQ are Python-driven; galaxy + PKI run through the step runner
+    (progress/transcript).
     """
+    _ensure_boxes(_commons_members(), step=step)
     ensure_mq_tarballs_for_boxes(
         _commons_mq_boxes(),
         DEFAULT_MQ_VERSION,
@@ -336,9 +368,8 @@ def _ensure_prereqs_for_stack(
         # guest whose cached box_meta names a box the topology has since repointed away
         # from — otherwise the stale box_meta wins over the Vagrantfile's node.vm.box and
         # `vagrant up` boots the OLD box. #636 handles this on teardown; this handles the
-        # repoint-then-bootstrap-without-teardown path.
-        timed("reconcile box meta", lambda: _reconcile_box_meta(all_vms(stack), step=step))
-        timed("box ensure", lambda: _ensure_local_boxes(all_vms(stack)))
+        # repoint-then-bootstrap-without-teardown path. Shared with commons up (#1008).
+        _ensure_boxes(all_vms(stack), step=step, timed=timed)
     if "mq" in kinds:
         timed("mq artifacts", lambda: _ensure_mq_artifacts_for_stack(stack))
     once = [k for k in _ONCE_PER_RUN_KINDS if k in kinds]
