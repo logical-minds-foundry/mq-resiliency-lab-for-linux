@@ -426,8 +426,8 @@ def _prepare_lab() -> None:
 
 
 def _emit_cold_boot_nudge() -> None:
-    """Surface the banded cold-boot staleness NOTICE when there is one (epic
-    .github#91 T6). Advisory only — never blocks, never raises."""
+    """Surface the banded dev-box (Vergil VM) staleness NOTICE when there is one
+    (epic .github#91 T6, #1010). Advisory only — never blocks, never raises."""
     message = coldboot.nudge()
     if message:
         typer.echo(message)
