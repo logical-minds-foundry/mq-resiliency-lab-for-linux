@@ -39,22 +39,88 @@
     state: started
   become: true
 
-- name: auth + cluster setup (run once; idempotent via corosync.conf probe)
-  ansible.builtin.shell: |
-    set -e
-    if grep -q 'cluster_name: {{ pcmk_cluster_name }}' /etc/corosync/corosync.conf 2>/dev/null; then
-      echo already-formed
-      exit 0
-    fi
-    pcs host auth {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} -u hacluster -p "{{ lookup('env', 'PCMK_HACLUSTER_PASSWORD') }}"
-    pcs cluster setup {{ pcmk_cluster_name }} {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} --force
-    pcs cluster enable --all
-    pcs cluster start --all
+# Readiness gate (#916). `systemd: state=started` returns as soon as the unit is
+# started, not when pcsd is listening, and each node starts its own pcsd in
+# parallel. `pcs host auth` (below) runs on the run_once node and talks to every
+# site node's pcsd over the heartbeat address (TCP 2224, the pcsd default), so gate
+# on exactly that path from exactly that node. Bounded; fails loud naming the node.
+- name: wait for pcsd on every site node (hb address, TCP 2224)
+  ansible.builtin.wait_for:
+    host: "{{ item.hb }}"
+    port: 2224
+    timeout: 180
+    msg: >-
+      pcsd on {{ item.name }} ({{ item.hb }}:2224) not reachable from
+      {{ inventory_hostname }} within 180s — cannot run pcs host auth for
+      {{ pcmk_cluster_name }} (#916)
+  loop: "{{ pcmk_site_nodes }}"
+  loop_control:
+    label: "{{ item.name }} {{ item.hb }}"
   run_once: true
-  register: pcsform
-  changed_when: "'already-formed' not in pcsform.stdout"
-  no_log: true
+
+# auth + cluster setup, with a bounded retry (#916: a transient b-site failure
+# during a cold provision recovered on a plain `--from provision` re-run).
+#
+# Retry safety:
+# - `pcs host auth` is repeatable: it re-issues and overwrites the pcsd tokens.
+# - `pcs cluster setup ... --force` only runs while the corosync.conf probe says the
+#   cluster is not formed; `--force` overrides "node already in a cluster", so a
+#   setup that half-distributed corosync.conf to the peers is redone cleanly.
+# - `pcs cluster enable|start --all` run on EVERY attempt, outside the probe. Both are
+#   idempotent on a running cluster, and this heals the half-formed case where a
+#   failed attempt wrote corosync.conf here but never started the cluster (the probe
+#   would otherwise say "already-formed" and skip the start forever). Anything still
+#   not right is caught by "wait for all nodes online" below, which fails loud.
+#
+# Secret handling: the hacluster password reaches the script via `environment:` and
+# is referenced as "$PCMK_HACLUSTER_PASSWORD", so it is never in the rendered command
+# line; `no_log` stays on the task that handles it. On final failure the rescue
+# surfaces pcs's rc + stdout/stderr with the password redacted, so the flake names
+# its cause instead of hiding behind the no_log censor.
+- name: auth + cluster setup (run once; bounded retry; redacted diagnostics)
+  run_once: true
   become: true
+  block:
+    - name: auth + cluster setup (run once; idempotent via corosync.conf probe)
+      ansible.builtin.shell: |
+        set -e
+        if grep -q 'cluster_name: {{ pcmk_cluster_name }}' /etc/corosync/corosync.conf 2>/dev/null; then
+          echo already-formed
+        else
+          pcs host auth {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} -u hacluster -p "$PCMK_HACLUSTER_PASSWORD"
+          pcs cluster setup {{ pcmk_cluster_name }} {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} --force
+        fi
+        pcs cluster enable --all
+        pcs cluster start --all
+      args:
+        executable: /bin/bash
+      environment:
+        PCMK_HACLUSTER_PASSWORD: "{{ lookup('env', 'PCMK_HACLUSTER_PASSWORD') }}"
+      register: pcsform
+      until: pcsform.rc is defined and pcsform.rc == 0
+      retries: 4
+      delay: 15
+      changed_when: "'already-formed' not in pcsform.stdout"
+      no_log: true
+  rescue:
+    # Not no_log: everything printed is passed through the redaction filter, which
+    # replaces every occurrence of the password. The guard skips the replace for an
+    # empty password (which chpasswd above already rejects) — replace('') would
+    # otherwise splice the marker between every character.
+    - name: fail loud with pcs rc + output (password redacted)
+      vars:
+        _pcmk_pw: "{{ lookup('env', 'PCMK_HACLUSTER_PASSWORD') }}"
+        _pcmk_rc: "{{ pcsform.rc | default('n/a') }}"
+        _pcmk_raw: >-
+          module_msg={{ pcsform.msg | default('') }} ||
+          stdout={{ pcsform.stdout | default('') }} ||
+          stderr={{ pcsform.stderr | default('') }}
+      ansible.builtin.fail:
+        msg: >-
+          pcs auth/cluster setup for {{ pcmk_cluster_name }} failed on
+          {{ inventory_hostname }} after {{ pcsform.attempts | default('?') }}
+          attempt(s), last rc={{ _pcmk_rc }} (#916):
+          {{ (_pcmk_raw | replace(_pcmk_pw, '<redacted>')) if (_pcmk_pw | length > 0) else _pcmk_raw }}
 
 - name: wait for all nodes online
   ansible.builtin.shell: |
