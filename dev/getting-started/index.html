@@ -2019,11 +2019,14 @@ commons up</code>. A few renders and the front door are exposed directly:</p>
 <a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w">    </span><span class="c1"># render the Prometheus file_sd targets from topology + echo them</span>
 <a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">  </span><span class="c1"># render the Grafana dashboards (Watcher + per-stack cockpits)</span>
 </code></pre></div>
-<p><code>obs</code> is a guest inside the lab, reached on your host at <code>localhost:3000</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http://localhost:3000/d/lab-watcher   (anonymous — no login)
+<p><code>obs</code> is a guest inside the lab, reached on your host at <code>localhost:&lt;port&gt;</code>, where
+<code>&lt;port&gt;</code> is the host port your VM profile forwards in <code>vergil.toml</code> <code>port_forwards</code>
+(<code>3000</code> for <code>vergil-user</code>, <code>3001</code> for <code>anonymous</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http://localhost:3000/d/lab-watcher   (vergil-user; anonymous — no login)
 </code></pre></div>
-<p><code>mqlab obs open</code> prints the exact URLs (and re-heals the forward if a grafana
-restart wedged it).</p>
+<p><code>mqlab obs open</code> prints the exact URLs for this VM, read from the installed
+port-forward relay. If a grafana restart wedged the forward, <code>mqlab obs relay-heal</code>
+re-heals it.</p>
 <p>A second telemetry tier, <strong>log search</strong> (single-node OpenSearch + Dashboards,
 fed by Data Prepper), gives the same log corpus a full-text, aggregation search
 surface alongside Grafana/Loki. It runs on the same <code>obs</code> node, so it comes up

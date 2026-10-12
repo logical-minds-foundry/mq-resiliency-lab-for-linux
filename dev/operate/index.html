@@ -1716,7 +1716,15 @@ lab that observes every node but never carries transit traffic. It runs on the
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># render lab_network_state metrics from virsh (stdout; render-only)</span>
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>relay-heal<span class="w"> </span><span class="o">[</span>--step<span class="o">]</span><span class="w">         </span><span class="c1"># restart the Grafana port-forward relay + verify the forward</span>
 </code></pre></div>
+<p>The workstation reaches Grafana through a <code>vergil-portforward-&lt;vm-port&gt;.service</code>
+relay that vergil-vm installs from the VM profile's <code>port_forwards</code> in
+<code>vergil.toml</code>. The port is per profile: <code>vergil-user</code> forwards <code>3000</code>, <code>anonymous</code>
+forwards <code>3001</code>. <code>mqlab obs open</code> and <code>mqlab obs relay-heal</code> therefore discover the
+relay from the installed units (<code>systemctl list-units --all
+'vergil-portforward-*.service'</code>) rather than assuming <code>:3000</code>, and fail loud with
+the remedy if no relay to Grafana (<code>10.50.0.2:3000</code>) is installed.</p>
 <p>The render verbs are pure topology→file projections; the observe phase of
 <code>mqlab commons up</code> runs them and hands the output to <code>site-obs.yml</code>, so a normal
 bring-up leaves the boards current without a manual render.</p>
