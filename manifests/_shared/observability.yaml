@@ -1,19 +1,19 @@
 # Shared obs stack — a singleton served by `mqlab obs up` for every arm (#266).
 # Values track today's role defaults. The exporter ref is pinned to the role default
 # (#1120, retires #172); grafana is now pinned (obs currency, epic .github#236, #1132).
-prometheus: "3.13.3" # ansible/roles/prometheus/defaults; 3.x LTS, was 2.53.2 EOL (currency, epic .github#236; #1133 T7 off spike #1128)
+prometheus: "3.13.4" # ansible/roles/prometheus/defaults; 3.13 LTS line (patch refresh #1446), was 2.53.2 EOL (currency, epic .github#236; #1133 T7 off spike #1128)
 node_exporter: "1.12.1" # ansible/roles/node-exporter/defaults
-loki: "3.7.7" # ansible/roles/loki/defaults
-alloy: "1.19.2" # ansible/roles/alloy/defaults
-grafana: "13.2.2" # matches grafana_version in ansible/group_vars/all/versions.yml (BAKE-authoritative); pinned #1132 (obs currency)
+loki: "3.7.8" # ansible/roles/loki/defaults (also drives logcli)
+alloy: "1.20.1" # ansible/roles/alloy/defaults
+grafana: "13.2.3" # matches grafana_version in ansible/group_vars/all/versions.yml (BAKE-authoritative); pinned #1132 (obs currency)
 mq_metric_samples_ref: "v6.0.0" # ansible/roles/mq-exporter/defaults (mq_exporter_ref) == mqexporter.MQ_EXPORTER_REF; pinned #1120 (retires #172)
 # logsearch tier (#829, epic .github#149). OpenSearch + Dashboards share one upstream
 # version; pin both here so a re-bake never changes the engine version under an existing
-# snapshot. Currency (obs version-currency, epic .github#236) — reviewed 2026-09-16:
-# 3.8.0 latest; next move 3.9.0 ~2026-09-29 (opensearch.org/downloads.html; releases at
+# snapshot. Currency (obs version-currency, epic .github#236) — reviewed 2026-10-12 (#1446):
+# 3.9.0 latest (engine 2026-09-29, Dashboards 2026-10-12; opensearch.org/downloads.html; releases at
 # github.com/opensearch-project/OpenSearch/releases).
-opensearch: "3.8.0" # ansible/roles/opensearch/defaults (role added in a later #149 task)
-opensearch_dashboards: "3.8.0" # ansible/roles/opensearch-dashboards/defaults (later task)
+opensearch: "3.9.0" # ansible/roles/opensearch/defaults (role added in a later #149 task)
+opensearch_dashboards: "3.9.0" # ansible/roles/opensearch-dashboards/defaults (later task)
 # Data Prepper — the Alloy -> OTLP -> OpenSearch connector (#939, epic .github#149). The
 # gating connector spike (#826) proved 2.16.0 end-to-end; pin it here so a re-bake never
 # changes the shipper version. The data-prepper role (#939) consumes this pin.
