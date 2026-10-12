@@ -300,14 +300,21 @@ build_cleanup_add "$IMG"
 #    from */libvirt/*, transient VM via virsh), so libvirt is always correct; a no-op on the
 #    Linux/KVM path (libvirt is the only provider there).
 BASE_DIR="$HOME/.vagrant.d/boxes/${BASE_BOX//\//-VAGRANTSLASH-}"
+# Capture the box list FIRST, then match on a here-string (#1451). Piping `vagrant box
+# list` straight into an early-exiting `grep -q` lets grep quit before vagrant finishes
+# writing; vagrant then takes SIGPIPE and, under pipefail, the pipeline returns 141 —
+# which the `|| ...` below misread as "not registered" (a false ERROR, or a redundant
+# box add). Same class as the _manifest-hash.sh worklist fix (#1274). A failing
+# `vagrant box list` now fails loud here (set -e) instead of masquerading as "absent".
+BOX_LIST="$(vagrant box list)"
 if [ "$BASE_KIND" = rhel ]; then
-  vagrant box list | grep -q "^${BASE_BOX} " \
+  grep -q "^${BASE_BOX} " <<<"$BOX_LIST" \
     || { echo "ERROR: base box ${BASE_BOX} is not registered — run: mqlab box build ${BASE_BOX}" >&2; exit 1; }
 elif [ "$BASE_BOX_VERSION" = none ]; then
-  vagrant box list | grep -q "^${BASE_BOX} " \
+  grep -q "^${BASE_BOX} " <<<"$BOX_LIST" \
     || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" "$BASE_BOX"
 else
-  vagrant box list | grep -qF "${BASE_BOX} (libvirt, ${BASE_BOX_VERSION}" \
+  grep -qF "${BASE_BOX} (libvirt, ${BASE_BOX_VERSION}" <<<"$BOX_LIST" \
     || vagrant box add --provider libvirt --architecture "$VAGRANT_ARCH" \
          --box-version "$BASE_BOX_VERSION" "$BASE_BOX"
   BASE_DIR="$BASE_DIR/$BASE_BOX_VERSION"  # bake exactly the pinned version
@@ -494,8 +501,11 @@ virsh -c qemu:///system start "$BUILD_DOM"
 MAC="$(virsh -c qemu:///system domiflist "$BUILD_DOM" | awk '/vagrant-libvirt/ {print $NF}')"
 BUILD_IP=""
 for _ in $(seq 1 60); do
+  # First matching lease only, selected by a stage that DRAINS its input (`awk 'NR == 1'`),
+  # never `head -n1`: an early-exiting reader can SIGPIPE the upstream stages, and under
+  # pipefail the 141 aborts the build via set -e (#1451).
   BUILD_IP="$(virsh -c qemu:///system net-dhcp-leases vagrant-libvirt 2>/dev/null \
-    | awk -v m="$MAC" 'tolower($0) ~ tolower(m) {print $5}' | cut -d/ -f1 | head -n1)"
+    | awk -v m="$MAC" 'tolower($0) ~ tolower(m) {print $5}' | cut -d/ -f1 | awk 'NR == 1')"
   [ -n "$BUILD_IP" ] && break
   sleep 5
 done
