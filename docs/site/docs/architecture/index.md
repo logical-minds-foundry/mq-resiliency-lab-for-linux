@@ -192,7 +192,7 @@ The template also turns off dynamic date detection (`date_detection: false`) and
 maps MQ's free-form `ibm_commentInsert*` fields as text. Otherwise, the first insert
 of the day that looked like a date fixed that field as `date`, and OpenSearch then
 rejected the rest of the day's MQ JSON logs that carried text there (#1230;
-[OpenSearch: date detection](https://docs.opensearch.org/3.8/mappings/#date-detection)).
+[OpenSearch: date detection](https://docs.opensearch.org/3.9/mappings/#date-detection)).
 
 **Nothing is dropped silently.** Data Prepper parses a body as JSON only when it
 starts with `{` (`parse_when`, #1220), so plain journal lines are indexed unparsed
