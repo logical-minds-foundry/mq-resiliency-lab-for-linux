@@ -22,6 +22,7 @@ from mqlab import (
     instances,
     parity,
     perfdiff,
+    relay,
     topology,
     venvsync,
 )
@@ -63,7 +64,7 @@ from mqlab.phases import (
     group_hosts,
 )
 from mqlab.platforms import PlatformError, ensure_resolved
-from mqlab.relay import GRAFANA_URL, RELAY_UNITS, WORKSTATION_GRAFANA_URL
+from mqlab.relay import GRAFANA_URL, RELAY_LIST_ARGV, Relay, RelayError
 from mqlab.render import Renderer
 from mqlab.retired_boxes import RETIRED_BOX_NAMES
 from mqlab.roster import lab_roster, roster_path
@@ -934,9 +935,9 @@ def obs_reach_peers() -> None:
         deps.transcript.close()
 
 
-# GRAFANA_URL / WORKSTATION_GRAFANA_URL / RELAY_UNITS now live in mqlab.relay
-# (imported at top) so the import-pure observe phase (phases.py) can share them
-# without importing cli.py (circular). (#383)
+# GRAFANA_URL and the port-forward relay discovery live in mqlab.relay (imported at
+# top), a leaf module the import-pure observe phase (phases.py) can share without
+# importing cli.py (circular). (#383, #1450)
 
 
 def _obs_up_steps() -> list[CommandStep]:
@@ -1041,47 +1042,100 @@ def _obs_up_steps() -> list[CommandStep]:
             Command(["bash", str(lab_script("net-state-publish.sh"))]),  # noqa: S607
         ),
         CommandStep(
-            # provisioning above bounced grafana; clear the relay's stale downstream
-            # so the workstation forward isn't left wedged (#264).
+            # provisioning above bounced grafana; clear the relay's stale downstream so
+            # the workstation forward isn't left wedged (#264), then verify it serves.
+            # The relay unit + port are discovered at run time, per VM profile (#1450).
             "heal grafana port-forward relay",
-            Command(["sudo", "systemctl", "restart", *RELAY_UNITS]),  # noqa: S607
-        ),
-        CommandStep(
-            # fail loud if the workstation-facing endpoint isn't actually serving —
-            # don't report success while the browser path is dead (#264). -f makes
-            # curl exit non-zero on any non-2xx or a dropped connection.
-            "verify grafana reachable (workstation forward)",
-            Command(
-                ["curl", "-fsS", "-m", "5", f"{WORKSTATION_GRAFANA_URL}/api/health"]  # noqa: S607
-            ),
+            Command(["mqlab", "obs", "relay-heal"]),  # noqa: S607
         ),
     ]
+
+
+def _grafana_relays_or_exit() -> list[Relay]:
+    """Discover the Grafana relay(s), or fail the verb loud with the remedy (#1450)."""
+    try:
+        return relay.grafana_relays()
+    except RelayError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _relay_heal_steps(relays: list[Relay]) -> list[CommandStep]:
+    """Restart the discovered Grafana relay unit(s), then verify each workstation URL."""
+    steps = [
+        CommandStep(
+            "restart grafana port-forward relay",
+            Command(["sudo", "systemctl", "restart", *(r.unit for r in relays)]),  # noqa: S607
+        )
+    ]
+    # Fail loud if the workstation-facing endpoint isn't actually serving — don't report
+    # success while the browser path is dead (#264). Retry, don't single-shot: `systemctl
+    # restart` returns before the relay has re-bound its port, so an immediate curl races
+    # it and gets connection-refused (#1067); --retry-connrefused waits the relay out and
+    # still fails loud once the budget is spent. -f exits non-zero on any non-2xx.
+    steps.extend(
+        CommandStep(
+            f"verify grafana reachable (workstation forward :{r.port})",
+            Command(
+                [  # noqa: S607
+                    "curl",
+                    "-fsS",
+                    "--retry",
+                    "10",
+                    "--retry-connrefused",
+                    "--retry-delay",
+                    "2",
+                    "-m",
+                    "5",
+                    f"{r.workstation_url}/api/health",
+                ]
+            ),
+        )
+        for r in relays
+    )
+    return steps
+
+
+@obs_app.command("relay-heal")
+def obs_relay_heal(step: _StepFlag = False) -> None:
+    """Restart the Grafana port-forward relay and verify the workstation forward serves.
+
+    The relay unit is discovered from the installed units, not assumed (#1450):
+    `systemctl list-units --all 'vergil-portforward-*.service'` lists them, and the one
+    whose forward target is the obs Grafana is restarted.
+    """
+    relays = _grafana_relays_or_exit()
+    typer.echo(f"discovered via: {' '.join(RELAY_LIST_ARGV)}")
+    for r in relays:
+        typer.echo(f"grafana relay:  {r.unit}  (:{r.port} -> {r.target})")
+    _execute("obs-relay-heal", _relay_heal_steps(relays), step_mode=step)
 
 
 @obs_app.command("open")
 def obs_open() -> None:
     """Print the Grafana URL and how to reach it from your workstation."""
-    typer.echo(f"Workstation: {WORKSTATION_GRAFANA_URL}/d/lab-watcher  (The Watcher — lab state)")
+    primary = _grafana_relays_or_exit()[0]
+    workstation = primary.workstation_url
+    typer.echo(f"Workstation: {workstation}/d/lab-watcher  (The Watcher — lab state)")
     typer.echo(f"In the VM:   {GRAFANA_URL}/d/lab-watcher  (direct to the obs guest)")
-    typer.echo(
-        f"Fleet — Node Health (#488 predecessor): {WORKSTATION_GRAFANA_URL}/d/lab-fleet-node"
-    )
-    typer.echo(f"Live tail:   {WORKSTATION_GRAFANA_URL}/explore  (pick the Loki datasource, e.g.")
+    typer.echo(f"Fleet — Node Health (#488 predecessor): {workstation}/d/lab-fleet-node")
+    typer.echo(f"Live tail:   {workstation}/explore  (pick the Loki datasource, e.g.")
     typer.echo('             query {unit="mq-app-requester"} and toggle Live)')
     typer.echo("")
     typer.echo("The forward is automatic — no manual tunnel. Lima forwards the VM's")
-    typer.echo("port 3000 to your Mac's localhost:3000, and the vergil-portforward relay")
-    typer.echo("bridges that to the obs guest. Just browse localhost:3000 (anonymous —")
-    typer.echo("no login, #258). If it drops after an 'obs up', the relay was wedged by a")
-    typer.echo("grafana restart; 'mqlab obs up' now re-heals it as its last step (#264).")
+    typer.echo(f"port {primary.port} to your Mac's localhost:{primary.port}, and the relay")
+    typer.echo(f"{primary.unit} bridges that to the obs guest. Just browse")
+    typer.echo(f"localhost:{primary.port} (anonymous — no login, #258). If it drops after a")
+    typer.echo("grafana restart, the relay was wedged; 'mqlab obs relay-heal' re-heals it")
+    typer.echo("(bootstrap's observe phase and 'mqlab commons up' run it as a step, #264).")
 
 
 # The periodic relay self-heal (lab-relay-heal.timer + lab/scripts/relay-heal.sh, #984)
 # is retired (#1251): the sustained-use fd leak it recovered is fixed upstream
 # (vergil-project/vergil-vm#298), and it ran from one checkout's path, so it failed every
-# tick once that checkout was deleted. The `obs up` post-provision bounce above stays: it
-# covers the separate grafana-restart wedge (#264), runs as the lab user, and is
-# checkout-independent.
+# tick once that checkout was deleted. The `obs relay-heal` post-provision bounce above
+# stays: it covers the separate grafana-restart wedge (#264), runs as the lab user, and
+# is checkout-independent.
 
 
 # ---------------------------------------------------------------------------

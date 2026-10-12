@@ -6,7 +6,7 @@ import json
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli
+from mqlab import cli, relay
 from mqlab.render import Renderer
 from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
@@ -263,6 +263,92 @@ def test_obs_open_prints_workstation_url_and_automatic_forward():
     # the forward is automatic and anonymous now — the stale manual-tunnel /
     # admin-login guidance must be gone (#264, #258)
     assert "automatic" in result.stdout
+    # the discovered relay unit and the heal verb are named (#1450)
+    assert "vergil-portforward-3000.service" in result.stdout
+    assert "mqlab obs relay-heal" in result.stdout
+
+
+_ANONYMOUS_RELAY = (
+    "vergil-portforward-3001.service loaded active running "
+    "Vergil port-forward relay (:3001 -> 10.50.0.2:3000)\n"
+)
+
+
+def test_obs_open_follows_the_profiles_relay_port(monkeypatch):
+    # [vm.anonymous] forwards 3001 -> obs Grafana: the workstation URL follows (#1450)
+    monkeypatch.setattr(relay, "list_relay_units", lambda: _ANONYMOUS_RELAY)
+    result = CliRunner().invoke(cli.app, ["obs", "open"])
+    assert result.exit_code == 0
+    assert "http://localhost:3001/d/lab-watcher" in result.stdout
+    assert "localhost:3000" not in result.stdout
+
+
+def test_obs_open_without_a_grafana_relay_fails_loud(monkeypatch):
+    monkeypatch.setattr(relay, "list_relay_units", lambda: "")
+    result = CliRunner().invoke(cli.app, ["obs", "open"])
+    assert result.exit_code == 1
+    assert "no vergil port-forward relay" in result.stderr
+    assert "mqlab obs relay-heal" in result.stderr
+
+
+# --- relay-heal: restart the DISCOVERED relay unit, then verify its forward (#1450) ---
+
+
+def test_obs_relay_heal_restarts_discovered_unit_and_verifies_its_port(monkeypatch):
+    monkeypatch.setattr(relay, "list_relay_units", lambda: _ANONYMOUS_RELAY)
+    runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([])])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 0
+    # glass-box: the discovery command and what it found are printed
+    assert "systemctl list-units --all" in result.stdout
+    assert "vergil-portforward-3001.service  (:3001 -> 10.50.0.2:3000)" in result.stdout
+    restart, verify = (c.argv for c in runner.recorded)
+    assert restart == ["sudo", "systemctl", "restart", "vergil-portforward-3001.service"]
+    assert verify[0] == "curl"
+    assert verify[-1] == "http://localhost:3001/api/health"
+    # retries on connection-refused to wait out the relay's re-bind (#1067)
+    assert "--retry-connrefused" in verify
+
+
+def test_obs_relay_heal_verifies_every_grafana_relay(monkeypatch):
+    both = _ANONYMOUS_RELAY + _ANONYMOUS_RELAY.replace("3001", "3000", 2)
+    monkeypatch.setattr(relay, "list_relay_units", lambda: both)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(3)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 0
+    argvs = [c.argv for c in runner.recorded]
+    assert argvs[0][3:] == ["vergil-portforward-3000.service", "vergil-portforward-3001.service"]
+    assert [a[-1] for a in argvs[1:]] == [
+        "http://localhost:3000/api/health",
+        "http://localhost:3001/api/health",
+    ]
+
+
+def test_obs_relay_heal_without_a_grafana_relay_fails_loud_and_runs_nothing(monkeypatch):
+    monkeypatch.setattr(relay, "list_relay_units", lambda: "")
+    runner = RecordingRunner()
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 1
+    assert "port_forwards" in result.stderr
+    assert runner.recorded == []
+
+
+def test_obs_relay_heal_propagates_a_failed_verify(monkeypatch):
+    runner = RecordingRunner(results=[ScriptedResult([]), ScriptedResult([], exit_code=7)])
+    monkeypatch.setattr(cli, "build_deps", lambda verb, ts: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["obs", "relay-heal"])
+
+    assert result.exit_code == 7
     assert "ssh -F" not in result.stdout
     assert "-L 3000:" not in result.stdout
     assert "admin / admin" not in result.stdout

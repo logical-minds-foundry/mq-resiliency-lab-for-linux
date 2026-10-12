@@ -293,7 +293,16 @@ mqlab obs dashboard                   # render every Grafana board from topology
 mqlab obs net-state                   # render lab_network_state metrics from virsh (stdout; render-only)
 mqlab obs reach-peers                 # render host→net→peer reachability
 mqlab obs open                        # print the Grafana URLs + a Loki live-tail query
+mqlab obs relay-heal [--step]         # restart the Grafana port-forward relay + verify the forward
 ```
+
+The workstation reaches Grafana through a `vergil-portforward-<vm-port>.service`
+relay that vergil-vm installs from the VM profile's `port_forwards` in
+`vergil.toml`. The port is per profile: `vergil-user` forwards `3000`, `anonymous`
+forwards `3001`. `mqlab obs open` and `mqlab obs relay-heal` therefore discover the
+relay from the installed units (`systemctl list-units --all
+'vergil-portforward-*.service'`) rather than assuming `:3000`, and fail loud with
+the remedy if no relay to Grafana (`10.50.0.2:3000`) is installed.
 
 The render verbs are pure topology→file projections; the observe phase of
 `mqlab commons up` runs them and hands the output to `site-obs.yml`, so a normal

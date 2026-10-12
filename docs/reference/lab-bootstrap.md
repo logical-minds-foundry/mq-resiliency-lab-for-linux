@@ -176,6 +176,7 @@ To stand the shared observability VMs up **independently of any stack**:
 mqlab commons up          # boot obs + probe + svc + app + infra, provision Prometheus/Grafana/Loki + OpenSearch/Data Prepper/Dashboards
 mqlab commons status      # commons health (topology × live virsh state)
 mqlab obs open            # print the Grafana URL + the (automatic) forward recipe
+mqlab obs relay-heal      # restart the discovered Grafana port-forward relay + verify it
 ```
 
 ---

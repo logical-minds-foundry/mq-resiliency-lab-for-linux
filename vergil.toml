@@ -58,9 +58,11 @@ packages = [
 vagrant_plugins = ["vagrant-libvirt"]
 # Expose the lab's Grafana to the workstation. The obs guest's Grafana is a nested
 # libvirt guest (static 10.50.0.2:3000) the host can't see directly; vergil-vm (#170)
-# provisions a systemd-socket-proxyd relay on the base VM's 0.0.0.0:3000, forwarded
-# to the workstation's localhost:3000. Records are "<vm-port>|<host:port>". Takes
-# effect on the next `vrg-vm rebuild`.
+# provisions a socat relay unit, vergil-portforward-<vm-port>.service, on the base
+# VM's 0.0.0.0:3000, forwarded to the workstation's localhost:3000. Records are
+# "<vm-port>|<host:port>". mqlab discovers the unit and port from what is installed
+# (`mqlab obs relay-heal`, #1450), so another vm-port works too. Takes effect on the
+# next `vrg-vm rebuild`.
 port_forwards = ["3000|10.50.0.2:3000"]
 
 # --- Post-build hook: RHEL DVD auto-stage (PLACEHOLDER — INERT, NOT YET ACTIVE) ---
