@@ -1,0 +1,82 @@
+# Apply a change to a Native HA queue manager on whichever instance is Active AT THE TIME
+# OF EACH ATTEMPT — leadership-following, bounded, fail-loud (#891).
+#
+# Why: runmqsc/setmqaut only work on the Active instance (a Replica rejects them, AMQ8478E),
+# and raft can re-elect between "find the Active" and "apply". The old shape pinned
+# active_host once at detection and delegated every later apply to it; when leadership
+# moved (common early in bring-up) every retry hit the now-Replica and the provision failed
+# with a perfectly healthy QM. Here each attempt re-resolves the Active
+# (nativeha-find-active.yml) and applies there, so a leadership move costs one attempt.
+#
+# Each attempt is nativeha-on-active-attempt.yml: re-detect the Active, apply the whole
+# unit there. A failed attempt is classified from its output, and the next attempt acts on
+# the class:
+#   AMQ8478E   the target was a Replica: leadership moved after detection. The next
+#              attempt re-detects; if the Active did move it retries there AT ONCE.
+#   AMQ8146E   the Active's admin interface was not up yet (the #435/#888 readiness race).
+#              The next attempt re-detects the same Active and waits nha_delay first —
+#              the pre-#891 readiness retry, unchanged in effect.
+#   other rc   any other failing command rc is retried the same way, as the pre-#891
+#              `until: rc in [0, 10]` loop did, so a transient this lab has not met yet
+#              cannot turn into a new flake. A real error still fails loud at the bound.
+#   no rc      an Ansible-side failure (an undefined variable, a role's own assert such as
+#              the #809 log-type drift guard) is not the queue manager's answer and no
+#              re-detection can fix it: the play FAILS at once.
+# Rule: retry immediately when the Active changed since the failed attempt, otherwise wait
+# nha_delay. When the attempts run out the play FAILS, naming the unit, the last target,
+# the last class and the last error output. Nothing is skipped silently and no error is
+# swallowed.
+#
+# Every unit must be idempotent, because a retry re-applies all of it: MQSC DEFINE ...
+# REPLACE / SET CHLAUTH ... ACTION(REPLACE) / SET AUTHREC, setmqaut grants and REFRESH
+# SECURITY are all safe to repeat; the mq-event-monitor service role is idempotent by design.
+#
+# Include from a play whose hosts are the group's instances. Inputs:
+#   nha_group     inventory group holding the instances (e.g. nha_ubuntu_a)
+#   nha_qm        the Native HA queue manager name
+#   nha_label     short name of the unit, for task names and failure messages
+#   exactly one of:
+#     nha_steps          list of { label, cmd, stdin (optional), ok_rcs (default [0]) }.
+#                        cmd runs in mqm's login shell (su - mqm -c) on the Active; stdin
+#                        is fed to it (e.g. an MQSC script for runmqsc). All steps run, in
+#                        order, as one unit: the unit succeeds only if every step does.
+#     nha_event_monitor  true: run mq-event-monitor's service tasks on the Active (Native
+#                        HA's replicated log type).
+#   nha_attempts  bound on attempts (default 30)
+#   nha_delay     seconds between attempts on the same instance (default 5)
+- name: "{{ nha_label }} — check the unit is well-formed"
+  ansible.builtin.assert:
+    that:
+      - nha_group is defined and nha_group in groups
+      - nha_qm is defined and nha_qm | length > 0
+      - (nha_steps is defined) != (nha_event_monitor | default(false) | bool)
+      - nha_steps is not defined or (nha_steps | length > 0)
+    fail_msg: >-
+      nativeha-on-active.yml needs nha_group (an inventory group), nha_qm, and exactly one
+      of nha_steps (a non-empty list) or nha_event_monitor: true.
+    quiet: true
+  run_once: true
+
+- name: "{{ nha_label }} — reset the leadership-following state"
+  ansible.builtin.set_fact:
+    _nha_done: false
+    _nha_prev: { failed: false, retryable: true, host: "", reason: "", detail: "" }
+  run_once: true
+
+# A looped include expands every iteration up front, so the "stop once applied" gate cannot
+# sit on this task: it lives in the slot file, where it is checked as each slot is reached.
+- name: "{{ nha_label }} — apply on the current Active (leadership-following, #891)"
+  ansible.builtin.include_tasks: nativeha-on-active-slot.yml
+  loop: "{{ range(1, (nha_attempts | default(30) | int) + 1) | list }}"
+  loop_control:
+    loop_var: nha_attempt
+
+- name: "{{ nha_label }} — fail loud if no attempt succeeded"
+  ansible.builtin.assert:
+    that: _nha_done | bool
+    fail_msg: >-
+      {{ nha_label }} was not applied to {{ nha_qm }}: all {{ nha_attempts | default(30) }}
+      attempts failed. Last target: {{ _nha_prev.host }}. Last failure: {{ _nha_prev.reason }}.
+      Detail: {{ _nha_prev.detail }}
+    success_msg: "{{ nha_label }} applied on the Active instance {{ active_host }}."
+  run_once: true

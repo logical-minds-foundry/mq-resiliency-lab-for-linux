@@ -67,84 +67,50 @@
     qm_svc_name: "{{ qm_svc }}"
     svc_conn: "svc-sim-ext.service.com"
   tasks:
-    # Match the per-instance detail line 'INSTANCE(<node>) ROLE(Active)', NOT the local
-    # summary line 'ROLE(Active) INSTANCE(<node>)': dspmq -x is delegated to nha_rhel_crr_a[0]
-    # (a1), and the summary line reports only a1's OWN role — so the old summary-order grep
-    # found the active only while a1 itself was active, and timed out (empty) whenever the
-    # active had drifted to a2/a3. The detail lines list every instance from any node, so
-    # this resolves the active regardless of which instance answers (#722).
-    - name: find the active Native HA instance
-      ansible.builtin.shell: |
-        set -o pipefail
-        su - mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x" \
-          | grep -oE 'INSTANCE\(nha-rhel-crr-a[0-9]\) ROLE\(Active\)' \
-          | grep -oE 'nha-rhel-crr-a[0-9]' | head -1 || true
-      args:
-        executable: /bin/bash
-      register: act
-      changed_when: false
-      run_once: true
-      delegate_to: "{{ groups['nha_rhel_crr_a'][0] }}"
-      # Wait out leader election: the HA role starts the instances but returns
-      # before the group elects an Active. Poll until one appears, else this step
-      # (not a downstream AMQ8146E) fails loud and names the real culprit. (#421)
-      until: act.stdout | trim | length > 0
-      retries: 30
-      delay: 5
-
-    - name: record the active host
-      ansible.builtin.set_fact:
-        active_host: "{{ act.stdout | trim }}"
-      run_once: true
-
+    # Every QM change below goes through tasks/nativeha-on-active.yml (#891): runmqsc only
+    # works on the ACTIVE instance (a Replica rejects it, AMQ8478E), and raft can re-elect
+    # between finding the Active and applying. So the Active is re-resolved on every attempt
+    # and a leadership move is followed, never pinned; the AMQ8146E readiness retry (#435) —
+    # slow-host timing (macOS-era TCG) can mask that race, but on an x86 host this RHEL arm
+    # runs native KVM (per platforms.py) and may expose it — is kept inside the same bounded
+    # loop, which fails loud when spent. Native HA then raft-replicates the objects to every
+    # instance.
     - name: apply our-side + app MQSC on the active instance (once; raft-replicated)
-      ansible.builtin.shell: |
-        su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }}" <<'MQSC'
-        DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
-        START LISTENER(L1414)
-        DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') HBINT(15) KAINT(15) REPLACE
-        DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
-        ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ') CERTLABL('{{ qm_name }}') MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)
-        REFRESH SECURITY TYPE(CONNAUTH)
-        DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
-        DEFINE QREMOTE(SVC.REQUEST) RNAME({{ svc_req_queue }}) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
-        DEFINE QLOCAL({{ qm_svc_name }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.{{ qm_svc_name }}) REPLACE
-        DEFINE CHANNEL({{ qm_name }}.{{ qm_svc_name }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc_name }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
-        DEFINE CHANNEL({{ qm_svc_name }}.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
-        START CHANNEL({{ qm_name }}.{{ qm_svc_name }})
-        MQSC
-      register: mqsc
-      changed_when: true
-      failed_when: mqsc.rc not in [0, 10]
-      run_once: true
-      delegate_to: "{{ active_host }}"
-      # The raft layer assigns ROLE(Active) a beat before the QM's admin interface
-      # is up (STATUS reaches Running slightly later); runmqsc in that window fails
-      # AMQ8146E (rc 20). Slow-host timing (macOS-era TCG) can mask it, but the race
-      # exists regardless — on an x86 host this RHEL arm runs native KVM (per
-      # platforms.py) and may expose it — so retry until the active QM accepts the
-      # MQSC, mirroring #421's wait. (#435)
-      until: mqsc.rc in [0, 10]
-      retries: 30
-      delay: 5
+      ansible.builtin.include_tasks: tasks/nativeha-on-active.yml
+      vars:
+        nha_group: nha_rhel_crr_a
+        nha_qm: "{{ qm_name }}"
+        nha_label: our-side + app MQSC
+        nha_steps:
+          - label: runmqsc our-side + app MQSC
+            cmd: /opt/mqm/bin/runmqsc {{ qm_name }}
+            # rc 10 = warnings (e.g. START LISTENER/CHANNEL already running): a re-provision
+            # no-op, accepted as before.
+            ok_rcs: [0, 10]
+            stdin: |
+              DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
+              START LISTENER(L1414)
+              DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') HBINT(15) KAINT(15) REPLACE
+              DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
+              ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ') CERTLABL('{{ qm_name }}') MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)
+              REFRESH SECURITY TYPE(CONNAUTH)
+              DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
+              DEFINE QREMOTE(SVC.REQUEST) RNAME({{ svc_req_queue }}) RQMNAME({{ qm_svc_name }}) XMITQ({{ qm_svc_name }}) REPLACE
+              DEFINE QLOCAL({{ qm_svc_name }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ qm_name }}.{{ qm_svc_name }}) REPLACE
+              DEFINE CHANNEL({{ qm_name }}.{{ qm_svc_name }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc_name }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) REPLACE
+              DEFINE CHANNEL({{ qm_svc_name }}.{{ qm_name }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') REPLACE
+              START CHANNEL({{ qm_name }}.{{ qm_svc_name }})
 
     # Enable classes + define/start the collector on the ACTIVE instance; Native HA
-    # replicates the SERVICE/QMGR objects to all instances via raft. runmqsc only works
-    # on the active instance — a passive replica rejects it with AMQ8478E (Standby queue
-    # manager, rc 20), so a bare run_once (which targets groups['nha_rhel_crr_a'][0]) fails
-    # whenever the active instance is a2/a3. delegate_to is not valid on include_role, so
-    # we target the active instance with a when-guard on active_host (the run_once set_fact
-    # above, broadcast to all hosts): the role runs exactly once, on the active instance.
+    # replicates the SERVICE/QMGR objects to all instances via raft. Leadership-following
+    # like the apply above (#891): the role is retried on the re-detected Active.
     - name: event monitoring — enable classes + define/start collector (active, once) (#114)
-      ansible.builtin.include_role:
-        name: mq-event-monitor
-        tasks_from: service
+      ansible.builtin.include_tasks: tasks/nativeha-on-active.yml
       vars:
-        qmgr_name: "{{ qm_name }}"
-        # Native HA runs a replicated (linear-equivalent) log — LOGGEREV is valid here
-        # and the role enables it, after verifying the live QM's LogType matches (#809).
-        mq_log_type: replicated
-      when: inventory_hostname == active_host
+        nha_group: nha_rhel_crr_a
+        nha_qm: "{{ qm_name }}"
+        nha_label: event monitoring
+        nha_event_monitor: true
 
 # HA-site (Live group) TLS keystore — apply it here ONLY when the DR half is skipped
 # (`bootstrap --no-dr`, dr_enabled=false). Site-A TLS is otherwise deployed inside
