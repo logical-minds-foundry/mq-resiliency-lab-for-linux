@@ -185,7 +185,7 @@ base_mqsc() {
   # which broke the resume path (bootstrap --from provision). The DEFINEs above are idempotent
   # via REPLACE; CONTROL(QMGR) also (re)starts the listener on QM start/failover.
   run_mqsc_retry "listener start (L1414)" \
-    "printf 'DISPLAY LSSTATUS(L1414) STATUS\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' 2>/dev/null | grep -q 'STATUS(RUNNING)' || printf 'START LISTENER(L1414)\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
+    "printf 'DISPLAY LSSTATUS(L1414) STATUS\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM' 2>/dev/null | grep 'STATUS(RUNNING)' >/dev/null || printf 'START LISTENER(L1414)\n' | su mqm -c '/opt/mqm/bin/runmqsc $QM'"
 }
 
 # Auto-detect HA/DR: present iff the site-B HA group is formed (rdqm_b provisioned via
@@ -196,7 +196,9 @@ if ansible rdqm-b1 -b -m shell -a "/opt/mqm/bin/rdqmstatus -n" >/dev/null 2>&1; 
 fi
 
 # Skip the create if the QM already exists on the site-A primary (idempotent re-provision).
-qm_exists() { run rdqm-a1 "/opt/mqm/bin/dspmq | grep -q 'QMNAME($QM)'" >/dev/null 2>&1; }
+# The remote pipelines here (and in base_mqsc) end in a DRAINING `grep ... >/dev/null`, not
+# `grep -q`, so the lab-wide SIGPIPE-safe rule (#1451) holds even in remote shell strings.
+qm_exists() { run rdqm-a1 "/opt/mqm/bin/dspmq | grep 'QMNAME($QM)' >/dev/null" >/dev/null 2>&1; }
 
 if [ "$DR" = 1 ]; then
   echo "=== HA/DR detected (site-B group formed) — coordinated create (crtmqm auto-creates secondaries) ==="
