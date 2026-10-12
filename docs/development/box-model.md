@@ -675,10 +675,17 @@ decision, it renders and drives the shell builder's own:
 | `mqlab box clean [BOXES…]` | pristine cache removal + Vagrant deregister (`--all` is confirm-guarded). `clean` then `build` round-trips a box from scratch. |
 | `mqlab box gc [--unreferenced] [--dry-run]` | deregister the retired box names and delete their dead caches (§1, the one-time rename), then reclaim orphaned base volumes from re-bakes (§3). `--unreferenced` also reclaims boxes that no current catalog selection resolves to, such as the boxes a catalog re-pin left behind (§3, [Unreferenced boxes](#unreferenced-boxes-box-gc---unreferenced)). |
 
-A **cold-boot staleness nudge** rides these surfaces: a write-once stamp records
-the last full cold boot, and `box status` / `doctor` / `bootstrap` emit a banded
-NOTICE as it ages — a reminder to nuke-and-rebake periodically rather than let the
-fleet rot. (An automated build cadence is a follow-on.)
+A **dev-box staleness nudge** rides these surfaces: `box status` / `doctor` /
+`bootstrap` emit a banded note (from 7 days) and NOTICE (from 30 days) as the
+Vergil dev box itself ages — a reminder to re-provision it with `vrg-vm rebuild`
+rather than let its OS packages and tooling rot. The age is read from the VM-local,
+write-once Vergil provisioning marker `/etc/vergil/provisioned.base`, which a
+`vrg-vm rebuild` genuinely resets; outside a Vergil box the nudge is silent. It
+says nothing about the baked boxes — their own age gate is §3 above. (Before #1010
+the age came from a stamp in the host-mounted `build/state/` bucket, which survives
+`vrg-vm rebuild`, so the nudge misreported the box's age; that stamp is retired and
+any leftover `build/state/.cold-boot-stamp` is inert and safe to delete. An
+automated build cadence is a follow-on.)
 
 ## 5. OS currency comes from rebuilding the box
 

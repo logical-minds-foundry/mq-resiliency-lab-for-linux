@@ -1,95 +1,94 @@
-"""Cold-boot staleness nudge (epic .github#91, T6).
+"""Dev-box staleness nudge (epic .github#91 T6; corrected in #1010).
 
-The stamp is write-once (buildenv.ensure lays it down the first time a fresh
-/vergil runs a lab command); coldboot reads it and returns a *banded* NOTICE.
-The nudge NEVER blocks and NEVER raises — a missing or corrupt stamp yields None.
-Every I/O seam is monkeypatchable so these unit tests never touch a real clock/fs.
+The box age is the mtime of the VM-local, write-once Vergil provisioning marker
+(/etc/vergil/provisioned.base), which `vrg-vm rebuild` genuinely resets — not a
+stamp in the host-mounted build/state bucket, which survives a rebuild. The nudge
+NEVER blocks and NEVER raises: no marker (not a Vergil box) is silent, and an
+unreadable marker is reported as a line rather than swallowed. The clock and the
+marker path are injected as keyword arguments, so no test touches /etc or the
+real clock.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import os
+from datetime import UTC, datetime, timedelta
 
 from mqlab import coldboot
 
-
-def _at(days_ago: int):
-    """A `now` seam that reports the clock `days_ago` after a fixed stamp epoch."""
-    epoch = datetime(2026, 1, 1, tzinfo=UTC)
-    return epoch, (lambda: epoch + _timedelta(days_ago))
+_EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _timedelta(days: int):
-    from datetime import timedelta
+def _marker(tmp_path, *, provisioned: datetime = _EPOCH):
+    """A provisioning marker whose mtime is `provisioned` (like `touch` at provision)."""
+    marker = tmp_path / "provisioned.base"
+    marker.touch()
+    ts = provisioned.timestamp()
+    os.utime(marker, (ts, ts))
+    return marker
 
-    return timedelta(days=days)
 
-
-def _write_stamp(monkeypatch, tmp_path, *, iso: str) -> None:
-    stamp = tmp_path / coldboot.COLD_BOOT_STAMP
-    stamp.write_text(iso)
-    monkeypatch.setattr(coldboot, "_stamp_path", lambda: stamp)
+def _clock(days_after_epoch: int):
+    return lambda: _EPOCH + timedelta(days=days_after_epoch)
 
 
 # --------------------------------------------------------------------------- #
-# cold_boot_age_days                                                          #
+# provisioned_age_days                                                        #
 # --------------------------------------------------------------------------- #
-def test_age_is_none_without_stamp(monkeypatch, tmp_path):
-    monkeypatch.setattr(coldboot, "_stamp_path", lambda: tmp_path / "absent")
-    assert coldboot.cold_boot_age_days() is None
+def test_age_is_none_outside_a_vergil_box(tmp_path):
+    assert coldboot.provisioned_age_days(marker=tmp_path / "absent") is None
 
 
-def test_age_is_whole_days(monkeypatch, tmp_path):
-    epoch, now = _at(5)
-    _write_stamp(monkeypatch, tmp_path, iso=epoch.isoformat())
-    assert coldboot.cold_boot_age_days(now=now) == 5
+def test_age_is_whole_days_since_provisioning(tmp_path):
+    marker = _marker(tmp_path)
+    assert coldboot.provisioned_age_days(now=_clock(5), marker=marker) == 5
 
 
-def test_age_is_none_on_corrupt_stamp(monkeypatch, tmp_path):
-    _write_stamp(monkeypatch, tmp_path, iso="not-a-timestamp")
-    # never raises — a corrupt stamp is treated as "unknown", not an error
-    assert coldboot.cold_boot_age_days() is None
+def test_age_tracks_the_marker_so_a_rebuild_resets_it(tmp_path):
+    # a rebuild lays a fresh marker; the age is measured from it, not some older stamp
+    marker = _marker(tmp_path, provisioned=_EPOCH + timedelta(days=40))
+    assert coldboot.provisioned_age_days(now=_clock(41), marker=marker) == 1
+
+
+def test_default_marker_is_the_vm_local_vergil_provisioning_marker():
+    assert str(coldboot.PROVISIONED_MARKER) == "/etc/vergil/provisioned.base"
 
 
 # --------------------------------------------------------------------------- #
 # nudge banding                                                               #
 # --------------------------------------------------------------------------- #
-def test_nudge_silent_without_stamp(monkeypatch, tmp_path):
-    monkeypatch.setattr(coldboot, "_stamp_path", lambda: tmp_path / "absent")
-    assert coldboot.nudge() is None
+def test_nudge_silent_outside_a_vergil_box(tmp_path):
+    assert coldboot.nudge(now=_clock(400), marker=tmp_path / "absent") is None
 
 
-def test_nudge_silent_in_quiet_band(monkeypatch, tmp_path):
-    epoch, now = _at(coldboot.QUIET_DAYS - 1)
-    _write_stamp(monkeypatch, tmp_path, iso=epoch.isoformat())
-    assert coldboot.nudge(now=now) is None
+def test_nudge_silent_in_quiet_band(tmp_path):
+    marker = _marker(tmp_path)
+    assert coldboot.nudge(now=_clock(coldboot.QUIET_DAYS - 1), marker=marker) is None
 
 
-def test_nudge_informational_in_mid_band(monkeypatch, tmp_path):
-    epoch, now = _at(coldboot.QUIET_DAYS)
-    _write_stamp(monkeypatch, tmp_path, iso=epoch.isoformat())
-    msg = coldboot.nudge(now=now)
+def test_nudge_informational_in_mid_band(tmp_path):
+    marker = _marker(tmp_path)
+    msg = coldboot.nudge(now=_clock(coldboot.QUIET_DAYS), marker=marker)
     assert msg is not None
     assert "NOTICE" not in msg  # mid band is informational, not the loud NOTICE
-    assert str(coldboot.QUIET_DAYS) in msg
+    assert f"provisioned {coldboot.QUIET_DAYS} days ago" in msg
+    assert "vrg-vm rebuild" in msg
 
 
-def test_nudge_loud_notice_at_loud_threshold(monkeypatch, tmp_path):
-    epoch, now = _at(coldboot.LOUD_DAYS)
-    _write_stamp(monkeypatch, tmp_path, iso=epoch.isoformat())
-    msg = coldboot.nudge(now=now)
+def test_nudge_loud_notice_at_loud_threshold(tmp_path):
+    marker = _marker(tmp_path)
+    msg = coldboot.nudge(now=_clock(coldboot.LOUD_DAYS), marker=marker)
     assert msg is not None
     assert msg.startswith("NOTICE")
-    assert str(coldboot.LOUD_DAYS) in msg
+    assert f"provisioned {coldboot.LOUD_DAYS} days ago" in msg
+    assert "vrg-vm rebuild" in msg
 
 
-def test_nudge_never_raises_on_old_corrupt_stamp(monkeypatch, tmp_path):
-    _write_stamp(monkeypatch, tmp_path, iso="garbage")
-    assert coldboot.nudge() is None  # must not raise
-
-
-def test_stamp_path_is_under_state_bucket():
-    # the real stamp lives in the shared state bucket as the write-once dotfile
-    p = coldboot._stamp_path()
-    assert p.name == coldboot.COLD_BOOT_STAMP
-    assert p.parent.name == "state"
+def test_nudge_reports_an_unreadable_marker_instead_of_raising(tmp_path):
+    # a stat failure other than "absent" must be surfaced, not swallowed or aged
+    marker = tmp_path / "not-a-dir" / "provisioned.base"
+    (tmp_path / "not-a-dir").write_text("a file, so stat-ing beneath it fails")
+    msg = coldboot.nudge(now=_clock(400), marker=marker)
+    assert msg is not None
+    assert "could not determine" in msg
+    assert str(marker) in msg
