@@ -583,3 +583,19 @@ def test_commons_up_threads_obs_manifest_overlay(monkeypatch, tmp_path):
     argv = obs_step.argv
     pairs = [argv[i : i + 2] for i in range(len(argv) - 1)]
     assert ["-e", f"@{overlay}"] in pairs
+
+
+def test_commons_up_heals_the_discovered_relay_after_net_state(monkeypatch, tmp_path):
+    """commons up heals the Grafana relay via `mqlab obs relay-heal`, which discovers the
+    profile's relay unit + port at run time, never a hardcoded :3000 unit (#1450)."""
+    _seed(monkeypatch, tmp_path)
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(12)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+
+    result = CliRunner().invoke(cli.app, ["commons", "up"])
+
+    assert result.exit_code == 0
+    argvs = [s.argv for s in _recorded_steps(runner)]
+    heal = argvs.index(["mqlab", "obs", "relay-heal"])
+    assert argvs[heal - 1][1].endswith("lab/scripts/net-state-publish.sh")
+    assert not any("vergil-portforward" in " ".join(a) for a in argvs)

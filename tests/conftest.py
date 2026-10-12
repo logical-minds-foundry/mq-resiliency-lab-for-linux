@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mqlab import cli, instances, perfrun, topology, versions
+from mqlab import cli, instances, perfrun, relay, topology, versions
 from tests.boxfleet import REAL_CATALOG, REAL_COMPONENTS, X86_FACTS, x86_fleet
 from tests.fakes import FakeSampleSource
 
@@ -149,6 +149,23 @@ def _stack_not_live(monkeypatch):
     stack reads as not live, so the record gate passes; tests of the gate override this,
     and the real probe is tested via the import captured before this stub."""
     monkeypatch.setattr(cli, "_stack_live", lambda stack_name: False)
+
+
+# What `systemctl list-units … 'vergil-portforward-*.service'` prints on a vergil-user VM
+# (port_forwards = ["3000|10.50.0.2:3000"]), captured from a live box (#1450).
+VERGIL_USER_RELAY_LISTING = (
+    "vergil-portforward-3000.service loaded active running "
+    "Vergil port-forward relay (:3000 -> 10.50.0.2:3000)\n"
+)
+
+
+@pytest.fixture(autouse=True)
+def _vergil_user_relay_units(monkeypatch):
+    """Neutralise relay.list_relay_units in every test — it shells `systemctl` to
+    discover the installed port-forward relays (#1450). Tests see the vergil-user
+    profile's single :3000 Grafana relay; the real function is tested directly via the
+    import captured before this stub."""
+    monkeypatch.setattr(relay, "list_relay_units", lambda: VERGIL_USER_RELAY_LISTING)
 
 
 @pytest.fixture(autouse=True)

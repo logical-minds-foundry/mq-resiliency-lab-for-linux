@@ -36,7 +36,6 @@ from mqlab.lifecycle import ACTIVE, RUNNING, classify, classify_net
 from mqlab.netsel import lab_net_names
 from mqlab.orchestrator import CommandStep, RetryPolicy
 from mqlab.paths import lab_script, repo_root, state
-from mqlab.relay import RELAY_UNITS, WORKSTATION_GRAFANA_URL
 from mqlab.runner import Command
 from mqlab.scrape import mq_exporters_path
 from mqlab.stacks import Stack, stack_members_effective
@@ -654,32 +653,11 @@ def _observe_build_steps(
         ),
         # site-obs.yml bounced grafana, which wedges the held downstream of the
         # vergil port-forward relay (#264) — heal it so the workstation can browse
-        # grafana, then fail loud if that endpoint isn't actually serving.
-        CommandStep(
-            "heal grafana port-forward relay",
-            Command(["sudo", "systemctl", "restart", *RELAY_UNITS]),
-        ),
-        # Retry, don't single-shot: `systemctl restart` above returns before the
-        # socket-proxy relay has re-bound :3000, so an immediate curl races it and
-        # gets connection-refused, flaking the whole bootstrap (#1067). --retry-
-        # connrefused waits the relay out; still fail-loud once the budget is spent.
-        CommandStep(
-            "verify grafana reachable (workstation forward)",
-            Command(
-                [
-                    "curl",
-                    "-fsS",
-                    "--retry",
-                    "10",
-                    "--retry-connrefused",
-                    "--retry-delay",
-                    "2",
-                    "-m",
-                    "5",
-                    f"{WORKSTATION_GRAFANA_URL}/api/health",
-                ]
-            ),
-        ),
+        # grafana, then fail loud if that endpoint isn't actually serving. The relay
+        # unit + workstation port differ per VM profile, so they are discovered from
+        # the installed units at run time (#1450) — a `mqlab obs ...` step like the
+        # renders above, keeping this module subprocess-free.
+        CommandStep("heal grafana port-forward relay", Command(["mqlab", "obs", "relay-heal"])),
     ]
     return _stamped(OBSERVE, steps)
 

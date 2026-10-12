@@ -694,14 +694,14 @@ def test_observe_build_steps_render_and_playbook(monkeypatch, tmp_path):
     # nodes (cluster + commons) — a cluster node + a commons node both appear.
     limit = obs_argv[obs_argv.index("--limit") + 1]
     assert "pcmk-a1" in limit and "svc-sim" in limit
-    # site-obs bounces grafana -> heal the relay, then fail-loud verify the
-    # workstation-facing endpoint actually serves (#264/#383).
-    argvs = [s.command.argv for s in steps]
-    assert any(a[:3] == ["sudo", "systemctl", "restart"] for a in argvs)
-    # The verify retries on connection-refused so it waits out the relay's re-bind
-    # after the restart above, instead of single-shot racing it (#1067).
-    curl_argv = next(a for a in argvs if a[0] == "curl" and a[-1].endswith("/api/health"))
-    assert "--retry-connrefused" in curl_argv
+    # site-obs bounces grafana -> heal the relay + fail-loud verify the workstation
+    # forward (#264/#383) as the LAST step. The relay unit/port is profile-specific, so
+    # it is discovered at run time by `mqlab obs relay-heal`, never a hardcoded
+    # vergil-portforward-3000 unit or localhost:3000 URL in the phase (#1450).
+    assert steps[-1].command.argv == ["mqlab", "obs", "relay-heal"]
+    flat = " ".join(" ".join(s.command.argv) for s in steps)
+    assert "vergil-portforward" not in flat
+    assert "localhost:3000" not in flat
 
 
 def test_all_vms_includes_svc_and_app(monkeypatch, tmp_path):
