@@ -65,9 +65,9 @@
   # text + .keyword shape explicitly. The MQ numeric inserts (ibm_arithInsert1-2) are
   # JSON numbers and are left to the default numeric mapping.
   # The mapping is fixed when a daily index is created, so a change here applies only from
-  # the next new logs-YYYY.MM.DD index. Docs (OpenSearch 3.8):
-  #   https://docs.opensearch.org/3.8/mappings/#date-detection
-  #   https://docs.opensearch.org/3.8/mappings/#dynamic-templates
+  # the next new logs-YYYY.MM.DD index. Docs (OpenSearch 3.9):
+  #   https://docs.opensearch.org/3.9/mappings/#date-detection
+  #   https://docs.opensearch.org/3.9/mappings/#dynamic-templates
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ opensearch_http_port }}/_index_template/{{ opensearch_index_template_name }}"
     method: PUT

@@ -7,7 +7,7 @@
 # mqlab.manifest.obs_overlay() as the `opensearch_dashboards_version` extra-var and passed
 # to the play via `-e @_obs.overlay.json` (mqlab.cli._obs_manifest_args). Keep this literal
 # in sync with that manifest entry, exactly as opensearch_version tracks its manifest key.
-opensearch_dashboards_version: "3.8.0"
+opensearch_dashboards_version: "3.9.0"
 # Dashboards tarball arch tokens are x64 / arm64 (match the opensearch role, NOT amd64).
 opensearch_dashboards_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
 opensearch_dashboards_pkg: "opensearch-dashboards-{{ opensearch_dashboards_version }}-linux-{{ opensearch_dashboards_arch }}"
