@@ -34,7 +34,7 @@ components/<name>/
                    own [tool.ruff] / [tool.pytest] config
   uv.lock          this component's lock only (incl. an optional `sdist-build`
                    dependency group: the build requirements of any sdist
-                   dependency, e.g. setuptools + wheel for pymqi)
+                   dependency, e.g. setuptools for ibmmq's sdist)
   src/<import_pkg>/
   tests/
   systemd/         static unit files (no templating)
@@ -53,8 +53,8 @@ components/<name>/
    `EnvironmentFile=/etc/opt/logical-minds-foundry/<name>/<unit>.env`, rendered by
    Ansible.
 4. **Ship `<name>-selfcheck`.** It imports every module, asserts CPython 3.14, and
-   reports versions via `importlib.metadata` (never a module's `__version__`; pymqi's
-   is stale). The install runs it on the box before going live.
+   reports versions via `importlib.metadata` (never a module's `__version__`, which
+   can be stale). The install runs it on the box before going live.
 5. **The install records itself** in `/opt/logical-minds-foundry/<name>/INSTALLED.json`
    (version, tree, release id, runtime).
 6. **Operator-facing names stay stable**: unit names, entry points, textfile paths.

@@ -39,7 +39,7 @@
 
 # (#792) Stage the OU=ops (mq_prometheus) keystore from mon-probe onto the app host.
 # The mqmon identity's only keystore is placed by roles/mq-exporter on mon-probe
-# (mqm-owned), but N1 runs on the app host (pymqi + app keystore live there). MQ
+# (mqm-owned), but N1 runs on the app host (the MQI clients + app keystore live there). MQ
 # authorizes by cert DN (SSLPEERMAP -> mqmon), NOT source host, so the denial
 # reproduces identically from the app host. Fetch to the controller, then copy over.
 - name: stage the OU=ops keystore from mon-probe (fetch to controller)

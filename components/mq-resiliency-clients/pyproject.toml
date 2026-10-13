@@ -8,9 +8,10 @@ license = "MIT"
 dependencies = []
 
 [project.optional-dependencies]
-# Compiled on the guest at install, against the box's MQ SDK. NEVER on the dev VM
-# (no MQ SDK there): tests run without this extra, using a fake pymqi module.
-mqi = ["pymqi==1.12.13"]
+# IBM's maintained MQI binding. Installed on the guest: the abi3 wheel on x86_64,
+# compiled from sdist against the box's MQ SDK on aarch64 (no upstream wheel yet,
+# .github#302). NEVER on the dev VM (no MQ SDK): tests use a fake ibmmq module.
+mqi = ["ibmmq==2.1.1"]
 
 [project.scripts]
 mq-app-requester = "mqrc.app_requester:main"
@@ -27,11 +28,11 @@ mq-resiliency-clients-selfcheck = "mqrc.selfcheck:main"
 
 [dependency-groups]
 dev = ["pytest", "pytest-cov", "ruff"]
-# Build requirements of our sdist deps: pymqi has no [build-system] table and its
-# setup.py imports distutils (removed in 3.12), so setuptools' shim must be present.
-# Exported by `mqlab component build` to build-requirements.txt. Versions proven by
-# the guest runtime spike (docs/reports/2026-10-guest-runtime-spike.md).
-sdist-build = ["setuptools==84.0.0", "wheel==0.48.0"]
+# Build requirements of our sdist deps, pre-installed because guest installs are
+# offline with --no-build-isolation: ibmmq's sdist declares setuptools>=75 as its
+# build backend (needed on aarch64, where there is no wheel). Exported by
+# `mqlab component build` to build-requirements.txt.
+sdist-build = ["setuptools==84.0.0"]
 
 [build-system]
 requires = ["hatchling"]

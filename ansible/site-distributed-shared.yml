@@ -37,7 +37,7 @@
   # our_qm / our_conn are supplied by the importing playbook (per arm).
   roles: [mq-inter-qm]
 
-# --- Business A's app (requester): MQ client libs + pymqi + the reconnect-aware
+# --- Business A's app (requester): MQ client libs + the ibmmq binding + the reconnect-aware
 #     app client. The TCP-keepalive tuning lets a blocking MQI call detect a
 #     fenced peer in ~30s -- the client HA-cooperation contract (#64). (#148) ---
 - hosts: app

@@ -14,7 +14,7 @@ logged to stderr and the process exits non-zero (fail loud) and systemd restarts
 
 Installed as the `mq-svc-responder` console script of the mq-resiliency-clients
 component and run by its `mq-svc-responder@.service` unit (#147). It serves forever
-unless `--seconds` bounds the run (tests, ad-hoc drills). pymqi is imported lazily
+unless `--seconds` bounds the run (tests, ad-hoc drills). ibmmq is imported lazily
 inside the MQI functions, so the module imports without the MQ client libs present
 (unit tests, the component selfcheck).
 """
@@ -38,64 +38,65 @@ def serve(
     """Get/reply/commit on a client connection to `qmgr_name` -- forever, or until
     `seconds` have elapsed when it is given.
 
-    Client-mode to localhost -- the QM is co-located, but pip-installed pymqi
-    links the client library only, so a true bindings connect fails 2058 (#180).
-    A loopback client connection is local-in-spirit and matches dr_responder.py.
+    Client-mode to localhost -- the QM is co-located, but the responder deliberately
+    connects client-mode over the TLS SVC.SVRCONN (#180); passing an MQCD makes ibmmq
+    connect as a client. A loopback client connection is local-in-spirit and matches
+    dr_responder.py.
 
     TLS (#250): when `keyrepo` is given (the keystore stem, no .p12), connect with
     mutual TLS 1.3 -- a sibling .sth stash supplies the PKCS#12 password and
     `certlabel` selects the cert. Omit it for a plaintext connect.
     """
-    import pymqi
+    import ibmmq
 
     deadline = None if seconds is None else time.monotonic() + seconds
-    cd = pymqi.CD(
-        ChannelName=channel.encode(),
-        ConnectionName=conn.encode(),
-        TransportType=pymqi.CMQC.MQXPT_TCP,
+    cd = ibmmq.CD(
+        ChannelName=channel,
+        ConnectionName=conn,
+        TransportType=ibmmq.CMQC.MQXPT_TCP,
     )
     sco = None
     if keyrepo:
-        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
-        sco = pymqi.SCO(KeyRepository=keyrepo.encode())
+        cd.SSLCipherSpec = "ANY_TLS13_OR_HIGHER"
+        sco = ibmmq.SCO(KeyRepository=keyrepo)
         if certlabel:
-            sco.CertificateLabel = certlabel.encode()
-    qmgr = pymqi.QueueManager(None)
+            sco.CertificateLabel = certlabel
+    qmgr = ibmmq.QueueManager(None)
     qmgr.connect_with_options(qmgr_name, cd=cd, sco=sco)
-    qin = pymqi.Queue(qmgr, in_queue)
-    gmo = pymqi.GMO(
+    qin = ibmmq.Queue(qmgr, in_queue)
+    gmo = ibmmq.GMO(
         Options=(
-            pymqi.CMQC.MQGMO_SYNCPOINT | pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
+            ibmmq.CMQC.MQGMO_SYNCPOINT | ibmmq.CMQC.MQGMO_WAIT | ibmmq.CMQC.MQGMO_FAIL_IF_QUIESCING
         ),
         WaitInterval=5000,
     )
-    pmo = pymqi.PMO(
+    pmo = ibmmq.PMO(
         Options=(
-            pymqi.CMQC.MQPMO_SYNCPOINT
-            | pymqi.CMQC.MQPMO_NEW_MSG_ID
-            | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING
+            ibmmq.CMQC.MQPMO_SYNCPOINT
+            | ibmmq.CMQC.MQPMO_NEW_MSG_ID
+            | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING
         )
     )
     try:
         while deadline is None or time.monotonic() < deadline:
-            req_md = pymqi.MD()
+            req_md = ibmmq.MD()
             try:
                 body = qin.get(None, req_md, gmo)
-            except pymqi.MQMIError as exc:
-                if exc.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+            except ibmmq.MQMIError as exc:
+                if exc.reason == ibmmq.CMQC.MQRC_NO_MSG_AVAILABLE:
                     continue
                 raise  # fail loud -- never swallow an MQI error
-            reply_md = pymqi.MD(
+            reply_md = ibmmq.MD(
                 CorrelId=req_md.MsgId,  # the correlation contract
-                Persistence=pymqi.CMQC.MQPER_PERSISTENT,
+                Persistence=ibmmq.CMQC.MQPER_PERSISTENT,
                 Format=req_md.Format,
             )
-            reply_od = pymqi.OD(
+            reply_od = ibmmq.OD(
                 ObjectName=req_md.ReplyToQ,
                 ObjectQMgrName=req_md.ReplyToQMgr,  # resolves to the xmitq -> SENDER
             )
-            qout = pymqi.Queue(qmgr)
-            qout.open(reply_od, pymqi.CMQC.MQOO_OUTPUT | pymqi.CMQC.MQOO_FAIL_IF_QUIESCING)
+            qout = ibmmq.Queue(qmgr)
+            qout.open(reply_od, ibmmq.CMQC.MQOO_OUTPUT | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING)
             qout.put(b"REPLY:" + body, reply_md, pmo)
             qout.close()
             qmgr.commit()
@@ -104,7 +105,7 @@ def serve(
 
 
 def main(argv: list[str] | None = None) -> int:
-    import pymqi
+    import ibmmq
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--qm", default="PCMKSVC")
@@ -133,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             args.certlabel,
             args.seconds,
         )
-    except pymqi.MQMIError as exc:  # logged, then a non-zero exit -- never swallowed
+    except ibmmq.MQMIError as exc:  # logged, then a non-zero exit -- never swallowed
         print(f"svc-responder: MQ error: {exc} (reason {exc.reason})", file=sys.stderr)
         return 1
     return 0

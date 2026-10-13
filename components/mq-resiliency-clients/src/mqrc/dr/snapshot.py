@@ -1,9 +1,9 @@
 """Post-event queue snapshots.
 
-The pure half (`seqs_from_bodies`) turns a list of browsed message bodies into
-the set of DR sequence numbers present — used to build `secondary_present` and
-`primary_disk_present` for reconcile(). The live browse that produces those
-bodies (pymqi) lives in browse_queue() and runs only on the lab.
+`seqs_from_bodies` turns a list of browsed message bodies into the set of DR
+sequence numbers present — used to build `secondary_present` and
+`primary_disk_present` for reconcile(). This module only parses bodies the caller
+has already browsed; it makes no MQI calls.
 """
 
 from __future__ import annotations

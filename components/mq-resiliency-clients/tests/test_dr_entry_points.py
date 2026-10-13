@@ -1,8 +1,8 @@
-"""The DR entry points' argv-based main()s and dr_mqi's lazy pymqi (epic .github#294 T8).
+"""The DR entry points' argv-based main()s and dr_mqi's lazy ibmmq (epic .github#294 T8).
 
 dr_baseline / dr_forced took positional Python arguments as loose scripts; as console
 scripts they parse argv. dr_mqi's reason-code families are literal MQRC_* numbers so
-the module imports without pymqi; connect_retry is driven with a fake pymqi.
+the module imports without ibmmq; connect_retry is driven with a fake ibmmq.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def test_forced_attributes_the_post_break_window_as_lost(tmp_path, capsys):
     assert "window [15,30]" in out
 
 
-def _fake_pymqi(failures: list[int]) -> types.ModuleType:
+def _fake_ibmmq(failures: list[int]) -> types.ModuleType:
     class MQMIError(Exception):
         def __init__(self, reason: int) -> None:
             self.reason = reason
@@ -76,7 +76,7 @@ def _fake_pymqi(failures: list[int]) -> types.ModuleType:
                 raise MQMIError(failures.pop(0))
             self.qm, self.cd, self.sco, self.opts = qm, cd, sco, opts
 
-    mod = types.ModuleType("pymqi")
+    mod = types.ModuleType("ibmmq")
     mod.MQMIError = MQMIError
     mod.CMQC = CMQC
     mod.CD = lambda **kw: types.SimpleNamespace(**kw)
@@ -92,23 +92,23 @@ def test_reason_code_families_are_the_mqrc_numbers():
 
 
 def test_connect_retry_rides_out_a_failover(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([2059, 2009]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([2059, 2009]))
     monkeypatch.setattr(dr_mqi.time, "sleep", lambda _s: None)
     qmgr = dr_mqi.connect_retry("PCMKAPP", "vip(1414)", "APP.SVRCONN", lambda: True)
     assert qmgr.qm == "PCMKAPP"
-    assert qmgr.cd.ConnectionName == b"vip(1414)"
+    assert qmgr.cd.ConnectionName == "vip(1414)"
     assert qmgr.opts == 0x4000000  # MQCNO_RECONNECT_Q_MGR
 
 
 def test_connect_retry_raises_a_non_failover_error(monkeypatch):
-    fake = _fake_pymqi([2035])  # MQRC_NOT_AUTHORIZED: not retryable
-    monkeypatch.setitem(sys.modules, "pymqi", fake)
+    fake = _fake_ibmmq([2035])  # MQRC_NOT_AUTHORIZED: not retryable
+    monkeypatch.setitem(sys.modules, "ibmmq", fake)
     with pytest.raises(fake.MQMIError):
         dr_mqi.connect_retry("PCMKAPP", "vip(1414)", "APP.SVRCONN", lambda: True)
 
 
 def test_connect_retry_gives_up_when_told_to(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     assert dr_mqi.connect_retry("PCMKAPP", "vip(1414)", "APP.SVRCONN", lambda: False) is None
 
 
@@ -116,7 +116,7 @@ def test_connect_retry_gives_up_when_told_to(monkeypatch):
 
 
 def test_connect_without_keyrepo_is_plaintext_but_still_passes_an_sco(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     qmgr = dr_mqi.connect("PCMKAPP", "vip(1414)", "APP.SVRCONN")
     assert not hasattr(qmgr.cd, "SSLCipherSpec")
     # a valid (empty) SCO, never None: connect_with_options packs it (#442)
@@ -125,40 +125,40 @@ def test_connect_without_keyrepo_is_plaintext_but_still_passes_an_sco(monkeypatc
 
 
 def test_connect_with_keyrepo_and_certlabel_sets_mutual_tls(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     qmgr = dr_mqi.connect(
         "PCMKAPP", "vip(1414)", "APP.SVRCONN", "/home/vagrant/ssl/key", "app-client"
     )
-    assert qmgr.cd.SSLCipherSpec == b"ANY_TLS13_OR_HIGHER"
-    assert qmgr.sco.KeyRepository == b"/home/vagrant/ssl/key"
-    assert qmgr.sco.CertificateLabel == b"app-client"
-    assert qmgr.cd.ChannelName == b"APP.SVRCONN"
+    assert qmgr.cd.SSLCipherSpec == "ANY_TLS13_OR_HIGHER"
+    assert qmgr.sco.KeyRepository == "/home/vagrant/ssl/key"
+    assert qmgr.sco.CertificateLabel == "app-client"
+    assert qmgr.cd.ChannelName == "APP.SVRCONN"
 
 
 def test_connect_with_keyrepo_only_leaves_the_cert_label_to_the_client(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     qmgr = dr_mqi.connect("PCMKAPP", "vip(1414)", "APP.SVRCONN", keyrepo="/k/key")
-    assert qmgr.cd.SSLCipherSpec == b"ANY_TLS13_OR_HIGHER"
-    assert qmgr.sco.KeyRepository == b"/k/key"
+    assert qmgr.cd.SSLCipherSpec == "ANY_TLS13_OR_HIGHER"
+    assert qmgr.sco.KeyRepository == "/k/key"
     assert not hasattr(qmgr.sco, "CertificateLabel")
 
 
 def test_certlabel_without_keyrepo_stays_plaintext(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     qmgr = dr_mqi.connect("PCMKAPP", "vip(1414)", "APP.SVRCONN", certlabel="app-client")
     assert not hasattr(qmgr.cd, "SSLCipherSpec")
     assert vars(qmgr.sco) == {}
 
 
 def test_connect_retry_threads_tls_through_a_failover(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([2059]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([2059]))
     monkeypatch.setattr(dr_mqi.time, "sleep", lambda _s: None)
     qmgr = dr_mqi.connect_retry(
         "PCMKAPP", "vip(1414)", "APP.SVRCONN", lambda: True, keyrepo="/k/key", certlabel="lbl"
     )
-    assert qmgr.cd.SSLCipherSpec == b"ANY_TLS13_OR_HIGHER"
-    assert qmgr.sco.KeyRepository == b"/k/key"
-    assert qmgr.sco.CertificateLabel == b"lbl"
+    assert qmgr.cd.SSLCipherSpec == "ANY_TLS13_OR_HIGHER"
+    assert qmgr.sco.KeyRepository == "/k/key"
+    assert qmgr.sco.CertificateLabel == "lbl"
 
 
 def _capture_connect_retry(monkeypatch) -> list[dict]:
@@ -215,7 +215,7 @@ def test_dr_flow_defaults_to_plaintext(monkeypatch, tmp_path):
 def _run_responder(monkeypatch, tmp_path, extra: list[str]) -> list[dict]:
     from mqrc import dr_responder
 
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi([]))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq([]))
     calls = _capture_connect_retry(monkeypatch)
     assert dr_responder.main(["--ledger", str(tmp_path / "svc.jsonl"), *extra]) == 0
     assert len(calls) == 1

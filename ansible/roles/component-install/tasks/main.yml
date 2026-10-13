@@ -103,8 +103,9 @@
   ansible.builtin.set_fact:
     _c_release: "{{ _c_root }}/releases/{{ _c_release_id }}"
 
-# sdist dependencies (pymqi) compile here, against the box's MQ SDK. The pinned runtime's
-# sysconfig names `clang` (CC/LDSHARED), which the guests do not have (spike report
+# sdist dependencies (ibmmq on aarch64; x86_64 takes its wheel) compile here, against
+# the box's MQ SDK. The pinned runtime's sysconfig names `clang` (CC/LDSHARED), which
+# the guests do not have (spike report
 # docs/reports/2026-10-guest-runtime-spike.md, correction C2): CC and LDSHARED are derived
 # from the venv interpreter's OWN sysconfig with only the leading `clang` swapped for
 # `gcc`, which keeps the recorded hardening flags (relro, now, noexecstack) and cannot

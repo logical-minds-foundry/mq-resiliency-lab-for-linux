@@ -137,50 +137,51 @@ with `AMQ8148E` while any handle (e.g. a browsing collector) holds the queue ope
 
 ---
 
-## 5. Custom MQMD (report options, groups, properties) — pymqi on the app-client
+## 5. Custom MQMD (report options, groups, properties) — ibmmq on the app-client
 
 `amqsput` puts a plain message but **cannot** set report options, build a grouped
-MQMD-v2 message, or attach named properties. For those, put with **pymqi** on the
-**app-client (`10.50.0.60`)**, client-connecting over the **`APP.SVRCONN`**
-channel with **mutual TLS**. The app-client carries pymqi, in the baked
+MQMD-v2 message, or attach named properties. For those, put with **ibmmq** (IBM's
+MQI binding) on the **app-client (`10.50.0.60`)**, client-connecting over the
+**`APP.SVRCONN`** channel with **mutual TLS**. The app-client carries ibmmq, in the baked
 `mq-resiliency-clients` guest component's venv (epic .github#294, #1356; see
 [Guest components](../site/docs/operate/guest-components.md)), and the TLS
 keystore:
 
 - Python: `/opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/python`
-  (it imports `pymqi`; the pre-#294 `/home/vagrant/mqvenv` is gone). Export
-  `LD_LIBRARY_PATH=/opt/mqm/lib64` first, as the component's own units do.
+  (it imports `ibmmq`; run it there, not from `/home/vagrant/mqvenv`, the retired
+  pre-#294 venv). Export `LD_LIBRARY_PATH=/opt/mqm/lib64` first, as the
+  component's own units do.
 - Key repository: `/home/vagrant/ssl/key` (stem — MQ appends `.kdb`)
 - Client certificate label: `app-client`
 - Channel `APP.SVRCONN`, cipher `ANY_TLS13_OR_HIGHER`
 - Connection name: all Native-HA nodes comma-separated, so the client reaches
   whichever is active — `10.50.0.11(1414),10.50.0.12(1414),10.50.0.13(1414)`
 
-### Minimal pymqi connect + put
+### Minimal ibmmq connect + put
 
 ```python
 # run with /opt/logical-minds-foundry/mq-resiliency-clients/venv/bin/python,
 # on app-client (10.50.0.60)
-import pymqi
-from pymqi import CMQC as C
+import ibmmq
+from ibmmq import CMQC as C
 
-cd = pymqi.CD(ChannelName=b"APP.SVRCONN",
-              ConnectionName=b"10.50.0.11(1414),10.50.0.12(1414),10.50.0.13(1414)",
+cd = ibmmq.CD(ChannelName="APP.SVRCONN",
+              ConnectionName="10.50.0.11(1414),10.50.0.12(1414),10.50.0.13(1414)",
               TransportType=C.MQXPT_TCP)
-cd.ChannelType   = C.MQCHT_CLNTCONN
-cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
-sco = pymqi.SCO(KeyRepository=b"/home/vagrant/ssl/key")   # -> /home/vagrant/ssl/key.kdb
-sco.CertificateLabel = b"app-client"
+cd.ChannelType   = ibmmq.CMQXC.MQCHT_CLNTCONN
+cd.SSLCipherSpec = "ANY_TLS13_OR_HIGHER"
+sco = ibmmq.SCO(KeyRepository="/home/vagrant/ssl/key")   # -> /home/vagrant/ssl/key.kdb
+sco.CertificateLabel = "app-client"
 
-qmgr = pymqi.QueueManager(None)
-qmgr.connect_with_options(b"NHAUAPP", cd=cd, sco=sco)
+qmgr = ibmmq.QueueManager(None)
+qmgr.connect_with_options("NHAUAPP", cd=cd, sco=sco)
 
-md = pymqi.MD()
+md = ibmmq.MD()
 # report options:  md.Report = C.MQRO_COA | C.MQRO_COD; md.ReplyToQ/ReplyToQMgr
 # grouped (v2):     md.Version = C.MQMD_VERSION_2; md.GroupId/MsgSeqNumber/MsgFlags
 # named properties: md.Format = C.MQFMT_RF_HEADER_2 and prepend an MQRFH2 <usr> folder
-pmo = pymqi.PMO(Options=C.MQPMO_NO_SYNCPOINT | C.MQPMO_NEW_MSG_ID)
-q = pymqi.Queue(qmgr, b"<TARGET.QUEUE>", C.MQOO_OUTPUT)
+pmo = ibmmq.PMO(Options=C.MQPMO_NO_SYNCPOINT | C.MQPMO_NEW_MSG_ID)
+q = ibmmq.Queue(qmgr, "<TARGET.QUEUE>", C.MQOO_OUTPUT)
 q.put(b"PROBE-PAYLOAD", md, pmo)
 print("MsgId:", md.MsgId.hex())     # correlate against copies / reports later
 q.close(); qmgr.disconnect()
@@ -203,7 +204,7 @@ produced a COA/COD). `Feedback 259 = MQFB_COA`, `260 = MQFB_COD`.
 | Find active Native-HA node | `sudo dspmq -o nativeha -x` on a1/a2/a3 |
 | DISPLAY queues | `printf "DISPLAY QLOCAL(*)\n" \| sudo -u mqm runmqsc <QM>` |
 | Browse a queue (MQMD dump) | `sudo -u mqm /opt/mqm/samp/bin/amqsbcg <QUEUE> <QM>` |
-| Custom MQMD / reports / groups / props | pymqi on app-client (`10.50.0.60`), `APP.SVRCONN` mutual TLS |
+| Custom MQMD / reports / groups / props | ibmmq on app-client (`10.50.0.60`), `APP.SVRCONN` mutual TLS |
 
 Addresses and the Vagrant insecure key here are lab-internal and not
 client-identifiable; keep it that way.

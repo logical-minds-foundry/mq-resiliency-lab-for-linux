@@ -1,7 +1,7 @@
 """Unit tests for the dead-letter-queue inspector (#617 / N5).
 
 parse_mqdlh is pure -- exercised against a synthetic MQDLH byte buffer. inspect()/
-main() are driven with a fake pymqi (dlq_probe imports pymqi lazily), mirroring
+main() are driven with a fake ibmmq (dlq_probe imports ibmmq lazily), mirroring
 tests/test_app_requester.py.
 """
 
@@ -48,7 +48,7 @@ def test_parse_mqdlh_rejects_non_dlh():
     assert dp.parse_mqdlh(b"DLH ") is None  # too short to hold the fixed fields
 
 
-def _fake_pymqi(state: dict) -> types.ModuleType:
+def _fake_ibmmq(state: dict) -> types.ModuleType:
     class MQMIError(Exception):
         def __init__(self, comp: int, reason: int) -> None:
             self.comp = comp
@@ -56,14 +56,16 @@ def _fake_pymqi(state: dict) -> types.ModuleType:
             super().__init__(f"MQI Error. Comp: {comp}, Reason {reason}")
 
     class PYIFError(Exception):
-        """pymqi's own error (best-effort teardown must swallow it too)."""
+        """the binding's own error (best-effort teardown must swallow it too)."""
 
     class CMQC:
-        MQCHT_CLNTCONN = 6
         MQXPT_TCP = 1
         MQOO_INPUT_AS_Q_DEF = 0x01
         MQOO_FAIL_IF_QUIESCING = 0x2000
         MQGMO_FAIL_IF_QUIESCING = 0x2000
+
+    class CMQXC:
+        MQCHT_CLNTCONN = 6
 
     class _Struct:
         def __init__(self, **kw: object) -> None:
@@ -76,7 +78,7 @@ def _fake_pymqi(state: dict) -> types.ModuleType:
             pass
 
         def connect_with_options(self, _name, cd=None, sco=None, opts=0) -> None:
-            pass
+            state["connect"] = (_name, cd, sco)
 
         def disconnect(self) -> None:
             pass
@@ -93,11 +95,12 @@ def _fake_pymqi(state: dict) -> types.ModuleType:
         def close(self) -> None:
             pass
 
-    m = types.ModuleType("pymqi")
+    m = types.ModuleType("ibmmq")
     for name, obj in {
         "MQMIError": MQMIError,
         "PYIFError": PYIFError,
         "CMQC": CMQC,
+        "CMQXC": CMQXC,
         "CD": _Struct,
         "SCO": _Struct,
         "MD": _Struct,
@@ -131,30 +134,39 @@ def _args(reason: int, destq: str) -> object:
 
 
 def test_inspect_returns_parsed_header(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi({"body": _make_dlh(2051, "TESTQ")}))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"body": _make_dlh(2051, "TESTQ")}))
     dlh = dp.inspect(_args(2051, "TESTQ"))
     assert dlh["reason"] == 2051 and dlh["dest_q"] == "TESTQ"
 
 
+def test_probe_sets_clntconn_channel_type_from_cmqxc(monkeypatch):
+    state: dict = {"body": _make_dlh(2051, "TESTQ")}
+    fake = _fake_ibmmq(state)
+    monkeypatch.setitem(sys.modules, "ibmmq", fake)
+    dp.inspect(_args(2051, "TESTQ"))
+    assert state["connect"][1].ChannelType == fake.CMQXC.MQCHT_CLNTCONN
+    assert not hasattr(fake.CMQC, "MQCHT_CLNTCONN")
+
+
 def test_inspect_returns_none_on_empty_dlq(monkeypatch):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi({"empty": True}))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"empty": True}))
     assert dp.inspect(_args(2051, "TESTQ")) is None
 
 
 def test_main_pass_when_reason_and_destq_match(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi({"body": _make_dlh(2051, "TESTQ")}))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"body": _make_dlh(2051, "TESTQ")}))
     assert dp.main(_argv(2051, "TESTQ")) == 0
     assert "PASS" in capsys.readouterr().out
 
 
 def test_main_fail_on_reason_mismatch(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi({"body": _make_dlh(2035, "TESTQ")}))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"body": _make_dlh(2035, "TESTQ")}))
     assert dp.main(_argv(2051, "TESTQ")) == 1
     assert "FAIL" in capsys.readouterr().out
 
 
 def test_main_fail_on_empty_dlq(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi({"empty": True}))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq({"empty": True}))
     assert dp.main(_argv(2051, "TESTQ")) == 1
     assert "FAIL" in capsys.readouterr().out
 

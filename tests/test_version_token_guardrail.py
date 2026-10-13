@@ -144,7 +144,7 @@ def test_token_matcher_catches_os_tokens_only():
     for benign in (
         "RHEL 9 does not ship systemd-resolved",  # guest-rendered prose, not a token
         "Ubuntu 24.04's stock timer",
-        "pymqi 9.6",
+        "ibmmq 9.6",
         "port 2404",
         "noblesse",
         "the infra box",

@@ -30,7 +30,8 @@ TREE = "a" * 40
 HEAD = "c" * 40
 PIN = RuntimePin("3.14.8", "20261003", {"x86_64": "1" * 64, "aarch64": "2" * 64})
 
-PYMQI_SDIST = b"pymqi sdist bytes"
+IBMMQ_SDIST = b"ibmmq sdist bytes"
+IBMMQ_WHL_X86 = b"ibmmq x86 wheel bytes"
 SETUPTOOLS_WHL = b"setuptools wheel bytes"
 
 
@@ -38,11 +39,14 @@ def _sha(blob: bytes) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
-PYMQI_HASH = f"sha256:{_sha(PYMQI_SDIST)}"
+IBMMQ_HASH = f"sha256:{_sha(IBMMQ_SDIST)}"
+IBMMQ_WHL_X86_HASH = f"sha256:{_sha(IBMMQ_WHL_X86)}"
+IBMMQ_WHL_X86_URL = "https://f.ex/ibmmq-2.1.1-cp39-abi3-manylinux_2_28_x86_64.whl"
 SETUP_HASH = f"sha256:{_sha(SETUPTOOLS_WHL)}"
 
 URLS = {
-    "https://f.ex/pymqi-1.12.13.tar.gz": PYMQI_SDIST,
+    "https://f.ex/ibmmq-2.1.1.tar.gz": IBMMQ_SDIST,
+    IBMMQ_WHL_X86_URL: IBMMQ_WHL_X86,
     "https://f.ex/setuptools-84.0.0-py3-none-any.whl": SETUPTOOLS_WHL,
 }
 
@@ -55,9 +59,13 @@ version = "0.1.0"
 source = {{ editable = "." }}
 
 [[package]]
-name = "pymqi"
-version = "1.12.13"
-sdist = {{ url = "https://f.ex/pymqi-1.12.13.tar.gz", hash = "{PYMQI_HASH}" }}
+name = "ibmmq"
+version = "2.1.1"
+sdist = {{ url = "https://f.ex/ibmmq-2.1.1.tar.gz", hash = "{IBMMQ_HASH}" }}
+wheels = [
+    {{ url = "{IBMMQ_WHL_X86_URL}", hash = "{IBMMQ_WHL_X86_HASH}" }},
+    {{ url = "https://f.ex/ibmmq-2.1.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:00" }},
+]
 
 [[package]]
 name = "setuptools"
@@ -74,7 +82,7 @@ name = "demo"
 version = "0.1.0"
 
 [project.optional-dependencies]
-mqi = ["pymqi==1.12.13"]
+mqi = ["ibmmq==2.1.1"]
 
 [dependency-groups]
 dev = ["pytest"]
@@ -134,7 +142,8 @@ class FakeTools:
                 out.write_text(f"setuptools==84.0.0 \\\n    --hash=sha256:{_sha(SETUPTOOLS_WHL)}\n")
             else:
                 out.write_text(
-                    f"# header\npymqi==1.12.13 \\\n    --hash=sha256:{_sha(PYMQI_SDIST)}\n"
+                    f"# header\nibmmq==2.1.1 \\\n    --hash=sha256:{_sha(IBMMQ_SDIST)} \\\n"
+                    f"    --hash=sha256:{_sha(IBMMQ_WHL_X86)}\n"
                 )
         elif argv[0] == "ansible":
             for line in self.ansible_out:
@@ -264,7 +273,8 @@ def test_build_runs_the_gate_in_order_and_stages_everything(lab, tools):
         "systemd",
     ]
     assert sorted(p.name for p in (final / "deps").iterdir()) == [
-        "pymqi-1.12.13.tar.gz",
+        "ibmmq-2.1.1-cp39-abi3-manylinux_2_28_x86_64.whl",  # macOS wheel not staged
+        "ibmmq-2.1.1.tar.gz",  # sdist: aarch64 compiles it
         "setuptools-84.0.0-py3-none-any.whl",  # the win32 wheel is not staged
     ]
     assert (final / "systemd" / "demo.service").is_file()
@@ -405,6 +415,8 @@ def test_assert_pinned_venv_with_no_version(tmp_path):
         ("x-1.0-cp314-cp314-win_amd64.whl", False),
         ("x-1.0-cp314-cp314-macosx_11_0_arm64.whl", False),
         ("x-1.0-py2-none-any.whl", False),
+        ("ibmmq-2.1.1-cp39-abi3-manylinux_2_28_x86_64.whl", True),
+        ("ibmmq-2.1.1-cp39-abi3-macosx_11_0_arm64.whl", False),
     ],
 )
 def test_wheel_installable(filename, ok):
@@ -425,8 +437,8 @@ def _lock(tmp_path: Path, text: str) -> Path:
 
 def test_stage_deps_exported_but_not_locked(tmp_path):
     lock = _lock(tmp_path, "version = 1\n[[package]]\nname = 'demo'\nversion = '0'\n")
-    with pytest.raises(ComponentError, match="exported but not locked: pymqi"):
-        component.stage_deps(lock, {"pymqi"}, tmp_path / "deps", fetch)
+    with pytest.raises(ComponentError, match="exported but not locked: ibmmq"):
+        component.stage_deps(lock, {"ibmmq"}, tmp_path / "deps", fetch)
 
 
 def test_stage_deps_no_installable_artifact(tmp_path):
@@ -442,25 +454,23 @@ def test_stage_deps_no_installable_artifact(tmp_path):
 def test_stage_deps_hash_mismatch_deletes_the_file(tmp_path):
     lock = _lock(
         tmp_path,
-        "version = 1\n[[package]]\nname = 'pymqi'\nversion = '1.12.13'\n"
-        "sdist = { url = 'https://f.ex/pymqi-1.12.13.tar.gz', hash = 'sha256:00' }\n",
+        "version = 1\n[[package]]\nname = 'ibmmq'\nversion = '2.1.1'\n"
+        "sdist = { url = 'https://f.ex/ibmmq-2.1.1.tar.gz', hash = 'sha256:00' }\n",
     )
-    with pytest.raises(
-        ComponentError, match="pymqi-1.12.13.tar.gz: sha256 .* != uv.lock sha256:00"
-    ):
-        component.stage_deps(lock, {"pymqi"}, tmp_path / "deps", fetch)
-    assert not (tmp_path / "deps" / "pymqi-1.12.13.tar.gz").exists()
+    with pytest.raises(ComponentError, match="ibmmq-2.1.1.tar.gz: sha256 .* != uv.lock sha256:00"):
+        component.stage_deps(lock, {"ibmmq"}, tmp_path / "deps", fetch)
+    assert not (tmp_path / "deps" / "ibmmq-2.1.1.tar.gz").exists()
 
 
 def test_stage_deps_refuses_a_non_sha256_hash(tmp_path):
-    digest = _sha(PYMQI_SDIST)
+    digest = _sha(IBMMQ_SDIST)
     lock = _lock(
         tmp_path,
-        "version = 1\n[[package]]\nname = 'pymqi'\nversion = '1.12.13'\n"
-        f"sdist = {{ url = 'https://f.ex/pymqi-1.12.13.tar.gz', hash = 'md5:{digest}' }}\n",
+        "version = 1\n[[package]]\nname = 'ibmmq'\nversion = '2.1.1'\n"
+        f"sdist = {{ url = 'https://f.ex/ibmmq-2.1.1.tar.gz', hash = 'md5:{digest}' }}\n",
     )
     with pytest.raises(ComponentError, match="!= uv.lock md5:"):
-        component.stage_deps(lock, {"pymqi"}, tmp_path / "deps", fetch)
+        component.stage_deps(lock, {"ibmmq"}, tmp_path / "deps", fetch)
 
 
 # --- artifacts and reuse --------------------------------------------------------------------
