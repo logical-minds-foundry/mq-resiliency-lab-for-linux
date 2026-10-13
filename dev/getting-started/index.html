@@ -1899,7 +1899,7 @@ At the current pins:</p>
 <tr>
 <td><code>rdqm-rhel</code></td>
 <td>RHEL 9 (9.6)</td>
-<td>none</td>
+<td>RHEL 10 (10.2; needs an x86-64-v3 host)</td>
 </tr>
 </tbody>
 </table>
@@ -1936,9 +1936,10 @@ an Ubuntu 26.04 row to the SPCR.</p>
 where <code>mqlab doctor</code> reports <code>x86-64-v3: no</code>, a plain
 <code>mqlab bootstrap nativeha-rhel-crr</code> is refused, and the message tells you to put
 <code>os: rhel:9</code> in a build file. The lab never falls back to RHEL 9 on its own.
-<code>rdqm-rhel</code> is RHEL 9 only for now. IBM supports RDQM on RHEL 10 from MQ 10.0.1,
-the lab's current MQ pin; offering <code>rhel:10</code> for <code>rdqm-rhel</code> is tracked in
-<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440">#1440</a>.</p>
+<code>rdqm-rhel</code> defaults to RHEL 9. IBM supports RDQM on RHEL 10 from MQ 10.0.1, the
+lab's current MQ pin, so you can select it with <code>os: rhel:10</code> in a build file
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440">#1440</a>).
+It needs the same x86-64-v3 host as <code>nativeha-rhel-crr</code> on RHEL 10.</p>
 <p>The sourced support status for every stack and OS is in the
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md">OS-version support matrix</a>.
 Boxes are named <code>&lt;role&gt;-&lt;os&gt;&lt;major&gt;</code> (for example <code>mq-nativeha-ubuntu24</code>), so each
