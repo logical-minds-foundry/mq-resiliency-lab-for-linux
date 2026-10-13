@@ -25,6 +25,9 @@
 > on 2026-10-10 (issue
 > [#1405](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1405))
 > after IBM announced RDQM support for RHEL 10 in MQ 10.0.1. See §2.4.
+> On 2026-10-13 the lab re-pinned to MQ **10.0.1.0**
+> ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)),
+> and §2.4 records the "Verify when 10.0.1 ships" results.
 >
 > **Where the open items went (2026-10-11).** Epic #280 closed on what it shipped.
 > The items that wait on IBM moved to the follow-on epic
@@ -39,7 +42,7 @@
 
 | OS | IBM MQ 10.0 server | Native HA | RDQM |
 |---|---|---|---|
-| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. Kernel-family/`modver` caveat, §2.4. |
+| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. The 10.0.1.0 tarball ships `el10` kmods, and `modver` maps the RHEL 10.2 GA kernel to one [data, §2.4]. The SPCR has no 10.0.1 row yet. |
 | **Ubuntu 26.04 LTS** | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** [data, S-1 footnotes (1)/(3)] |
 
 Source key (full URLs in §8):
@@ -77,7 +80,8 @@ that as `unsupported` and not as `unknown`.
 ### 2.2 RDQM: unsupported in MQ 10.0.0.x
 
 > Superseded for MQ 10.0.1 by §2.4. Everything below still holds for every
-> 10.0.0.x level, including the lab's `lab/mq-version` pin of 10.0.0.5.
+> 10.0.0.x level, including 10.0.0.5, the lab's `lab/mq-version` pin until the
+> 10.0.1.0 re-pin on 2026-10-13.
 
 - **[data]** The RHEL 10 SPCR row lists `Replicated Data Queue Manager (RDQM)` under
   `serverUnsupportedComps` on every architecture. Footnote (7) on that row reads
@@ -125,8 +129,12 @@ that as `unsupported` and not as `unknown`.
 Continuous Delivery modification-level release that becomes available on
 **2026-10-13**. No 10.0.0.x level supports it: the SPCR, the kernel-modules
 page and feed, and the lab's 10.0.0.5 Developer tarball all still show RHEL 10
-RDQM as unsupported, with no `el10` kmods. The lab's pin is 10.0.0.5, so
-`rdqm-rhel` stays on RHEL 9 for now.
+RDQM as unsupported, with no `el10` kmods. 10.0.1 shipped on 2026-10-13 and the
+lab re-pinned to 10.0.1.0 the same day. Its Developer tarball carries an `el10`
+RDQM prereq set, and IBM's `modver` maps the lab's RHEL 10.2 GA kernel to an
+`el10` kmod (checks 1–2 below pass). `rdqm-rhel` still stays on RHEL 9 until
+[#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)
+adds and proves `rhel:10`.
 
 **Release and edition**
 
@@ -182,8 +190,8 @@ RDQM as unsupported, with no `el10` kmods. The lab's pin is 10.0.0.5, so
   which matches by **kernel family**, not exact release (#1408). On RHEL 9 it
   maps the 9.8 GA kernel `5.14.0-687.5.3.el9_8` to the `_687.5.1` kmod (#1405
   research comment).
-- **[judgment] Kernel caveat.** IBM has not yet published which RHEL 10
-  kernel(s) the 10.0.1 kmods target. The lab's 10.2 GA kernel is covered only if
+- **[judgment] Kernel caveat (2026-10-10; answered by the 2026-10-13
+  results below).** IBM had not yet published which RHEL 10 kernel(s) the 10.0.1 kmods target. The lab's 10.2 GA kernel is covered only if
   10.0.1 ships an `el10` kmod in the `6.12.0-211` family that `modver` selects
   for `6.12.0-211.7.3.el10_2`. IBM's RHEL 9 history makes that likely but not
   certain. It shipped a kmod for the 9.6 GA family (`570.12.1`) but listed 9.6
@@ -205,6 +213,83 @@ RDQM as unsupported, with no `el10` kmods. The lab's pin is 10.0.0.5, so
 4. The SPCR adds a 10.0.1 deliverable whose RHEL 10 x86-64 row moves RDQM to
    `serverSupportedComps`. Cite its deliverable ID and `lastModified`.
 
+**Results (2026-10-13, [#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409))**
+
+- **[data] Release.** The *Downloading IBM MQ 10.0 CD* page (modified
+  2026-10-13) reads "Latest CD Release: IBM MQ 10.0.1", with defect fixes
+  until 12 October 2027. The public Developer directory holds all three
+  `10.0.1.0-IBM-MQ-Advanced-for-Developers-{LinuxX64,UbuntuLinuxX64,UbuntuLinuxARM64}.tar.gz`
+  tarballs, dated 2026-10-13. A `10.0.1-…` file name returns HTTP 404, so the pin
+  string is `10.0.1.0`. (S-7)
+- **[data] (local) Media.** `scripts/fetch-mq.sh` on the 10.0.1.0 pin
+  downloaded `10.0.1.0-IBM-MQ-Advanced-for-Developers-LinuxX64.tar.gz`
+  (597,696,780 bytes, sha256 `f0744d4e1f8bfa33277fcaa4af0b8c9d86142e8e76a46c54d9591bf753b93304`)
+  and `…-UbuntuLinuxARM64.tar.gz` (548,269,450 bytes, sha256
+  `62746769ea5b7af87f930c6d544720aee9af6a820978ccd73ad368ad0b5695e2`) and
+  recorded both checksums. A second run verified them (`sha256sum -c`: OK).
+  These are the lab's own first-download checksums; IBM publishes none in that
+  directory to compare against. The UbuntuLinuxX64 tarball was not fetched,
+  because `fetch-mq.sh` fetches only the host-arch Ubuntu flavour and this
+  host is aarch64.
+- **[data] (local) Check 1 passes.** The 10.0.1.0 LinuxX64 tarball has
+  `MQServer/Advanced/RDQM/PreReqs/el10/` with three subdirectories:
+  - `el10/kmod-drbd-9/`: `modver` plus three kmods,
+    `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_55.9.1-1.x86_64.rpm` (RHEL
+    10.0 family), `…_6.12.0_124.8.1-1.x86_64.rpm` (10.1) and
+    `…_6.12.0_211.7.1-1.x86_64.rpm` (10.2).
+  - `el10/pacemaker-3/`: **Pacemaker 3** (`pacemaker-3.0.1.linbit-1.el10`,
+    `corosync-3.1.9.linbit-2.0.el10`, `crmsh-4.6.2.linbit-1.0.117.721d6d2a.el10`,
+    `resource-agents-4.17.0.linbit-3.0.36.c8cff50d.el10`, and their libraries).
+    The el8 and el9 sets use `pacemaker-2/`.
+  - `el10/drbd-utils-9/`: `drbd-utils-9.33.1-1.el10` and its `drbd-*`
+    noarch companions.
+
+  The `el9` set changed only in its kmod names, from `kmod-drbd-9.3.2_<kernel>`
+  to `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_<kernel>`, for the same twelve
+  kernels. `el9/pacemaker-2/` and `el9/drbd-utils-9/` are unchanged from
+  10.0.0.5, so `vars/RedHat-9.yml` needs no change.
+- **[data] (local) Check 2 passes.** `el10/kmod-drbd-9/modver` is a bash script
+  that maps kernel families with a `case` on the kernel release (`6.12.0-55.*`,
+  `6.12.0-124.*`, `6.12.0-211.*`). Given a kernel argument it reads nothing from
+  the host, so running it on this non-RHEL box gives the same answer as on a
+  RHEL guest. `modver -m 6.12.0-211.7.3.el10_2.x86_64` printed
+  `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1-1.x86_64.rpm` then
+  `10.0.0.0`, exit 0. The selected kmod is in the `211` family. The `el9`
+  `modver` from the same tarball still rejects that kernel ("Unsupported
+  kernel release.", exit 1), so RHEL 10 needs the `el10` directory.
+- **[data] modver and the kmod page disagree on the minimum MQ level.** The
+  `el10` `modver -m` prints `10.0.0.0` as the minimum MQ level, but the
+  kernel-modules page and feed give `minVrmf` `10.0.1.0` for the RHEL 10 kmod.
+  The role's parse only requires modver's level to be no newer than the pin,
+  so either value passes on the 10.0.1.0 pin. **[judgment]** The page is the
+  authoritative figure: no 10.0.0.x tarball ships an `el10` kmod.
+- **[data] Check 3 passes.** The kernel-modules page (modified 2026-10-13) has
+  a "RHEL 10 kernel versions" table: kernel `6.12.0-211.65.1`, validated IBM MQ
+  version `10.0.1.0`, kmod `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1-1`,
+  minimum MQ `10.0.1.0`. Its "known compatibility issues" table has no RHEL 10
+  row (RHEL 9 is still `5.14.0-570.12.1 -> 5.14.0-570.15.1`). The JSON feed
+  (`lastUpdated` 2026-10-13T08:27:01+00:00) adds three RHEL 10 kernel levels,
+  `6.12.0-55.109.1` (kmod `…_6.12.0_55.9.1-1`), `6.12.0-211.64.1` and
+  `6.12.0-211.65.1` (both kmod `…_6.12.0_211.7.1-1`), all under the `10.0.x`
+  key with `minVrmf` `10.0.1.0`. The bundle key is `10.0.x`
+  (`10.0-CD-IBM-MQ-RDQM-Kmods`), not `10.0.1`. (S-6)
+- **[data] Check 4 is still open.** The SPCR deliverable chain still lists only
+  `10.0` (`lastModified` 2026-09-28) and `10.0.0.5` (`lastModified`
+  2026-10-01). Both still list RDQM under `serverUnsupportedComps` for RHEL 10
+  x86-64. Re-verified 2026-10-13. (S-1)
+- **[data] IBM Docs lag.** The MQ 10.0.x *Hardware and software requirements
+  on Linux* and *Installing RDQM* topics (re-fetched 2026-10-13 with
+  `tools/ibm_doc_cache.py`, content path `SSYHRD_10.0.0`) still list RDQM
+  prerequisites for RHEL 8 and RHEL 9 only. (S-3)
+- **[judgment]** The media gate for
+  [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)
+  holds: there is an `el10` kmod set, and IBM's own selector covers the lab's
+  RHEL 10.2 GA kernel. #1440's `vars/RedHat-10.yml` should use
+  `el10/kmod-drbd-9`, `el10/pacemaker-3` and `el10/drbd-utils-9`. Pacemaker 3
+  is a new major for the lab's RDQM arm, so #1440 must prove that the RHEL
+  10.2 DVD supplies its OS dependencies offline. Cite the SPCR row once a
+  10.0.1 deliverable appears.
+
 **Decision (2026-10-10): not yet.**
 
 - **[judgment]** `rdqm-rhel` stays `supported: [rhel:9]`, default `rhel:9`, on
@@ -220,6 +305,15 @@ RDQM as unsupported, with no `el10` kmods. The lab's pin is 10.0.0.5, so
 - **[judgment]** This follows the lab's position on RDQM: the lab supports RDQM
   for as long as IBM does. RDQM and Pacemaker/DRBD remain counter-options for
   completeness alongside Native HA, the strategic HA technology.
+
+**Update (2026-10-13): unblocked, not yet enabled.**
+
+- **[judgment]** The lab now pins 10.0.1.0, and checks 1–2 pass (see the
+  results above), so nothing blocks
+  [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440).
+  The re-pin does not change the catalog: `rdqm-rhel` stays
+  `supported: [rhel:9]`, default `rhel:9`, until #1440 adds `rhel:10` and
+  proves it with a cold-rebuild validation row.
 
 ## 3. Ubuntu 26.04 LTS
 
@@ -329,7 +423,7 @@ and the resolver warns when it is selected.
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
-| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`** on the 10.0.0.5 pin. `rhel:10` is not in its supported list. Adding it waits for the 10.0.1 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)) and the §2.4 checks, tracked as [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440). |
+| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`**. `rhel:10` is not in its supported list yet. The 10.0.1.0 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)) is done and the §2.4 media checks pass, so adding it is now [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440). |
 
 - **[judgment]** For both Ubuntu stacks, T9's "if IBM-supported" condition is
   **not met** today. T9 should re-check S-1 when it runs. If IBM has added an
@@ -506,6 +600,17 @@ a browser to confirm or extend the data above. Nothing here paraphrases them.
    403 to `curl` and `WebFetch`). Confirm the RDQM RHEL 10 line and the
    2026-10-13 date quoted in §2.4:
    <https://www.ibm.com/docs/en/announcements/mq-1001>
+6. **10.0.1 results (2026-10-13, #1409).** These were fetched with a browser
+   user-agent `curl`. Confirm in a browser:
+   - the kernel-modules page's "RHEL 10 kernel versions" table and its "known
+     compatibility issues" table (no RHEL 10 row):
+     <https://www.ibm.com/support/pages/node/1087143>;
+   - "Latest CD Release: IBM MQ 10.0.1" on
+     <https://www.ibm.com/support/pages/downloading-ibm-mq-100-cd>;
+   - the "Fix list for IBM MQ 10.0.x Continuous Delivery" page, which had not
+     been updated for 10.0.1 (modified 2026-09-10):
+     <https://www.ibm.com/support/pages/fix-list-ibm-mq-100x-continuous-delivery>
+     (also <https://www.ibm.com/support/pages/node/7276511>).
 
 ## 8. Sources
 
@@ -559,12 +664,12 @@ a browser to confirm or extend the data above. Nothing here paraphrases them.
   <https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv/ibm-mq-rdqm-kmods.json>
   (keys `kernelLevels`, `latestKmodBundleFixIds`,
   `latestKnownCompatibleKernelLevels`, `lastUpdated`). Both were fetched on
-  2026-10-10 with a browser user-agent.
+  2026-10-10 and again on 2026-10-13 with a browser user-agent.
 - **S-7: MQ 10.0 CD releases.**
   <https://www.ibm.com/support/pages/downloading-ibm-mq-100-cd> and the public
   Developer download directory
   <https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv/>,
-  both fetched on 2026-10-10 with a browser user-agent.
+  both fetched on 2026-10-10 and again on 2026-10-13 with a browser user-agent.
 - **Prior art in this repo:**
   [`mq10-rhel9-vs-rhel10-and-rdqm-support.md`](mq10-rhel9-vs-rhel10-and-rdqm-support.md)
   (#1095/#1096). IBM's
