@@ -35,9 +35,10 @@ _INFINITY = 1000000
 # crm_mon role -> instances-matrix state code: Started/Promoted = active leader (2, green),
 # Unpromoted = healthy replica (1, blue), anything else (Stopped/None) = 0 (neutral).
 _PM_CODE = {"Started": 2, "Promoted": 2, "Master": 2, "Unpromoted": 1, "Slave": 1}
-# The pacemaker resources of the QM stack the board surfaces per node (the technology layer
-# rdqmadm wraps): the QM itself, the HA + DR DRBD clones, and the floating-IP resource.
-_PM_RESOURCES = ("qmrdqm", "p_drbd_qmrdqm", "p_drbd_dr_qmrdqm", "p_ip_qmrdqm")
+# Characters IBM MQ rewrites when it turns a queue manager name into its directory name
+# (`.` and `/`). RDQM names its resources after that DIRECTORY name, so for a QM name holding
+# either one the name -> resource mapping below would be wrong; refuse it loudly instead.
+_DIRNAME_REWRITTEN = frozenset("./")
 
 # HA role -> numeric code for the instances-matrix role cell. Primary (runs the QM) is the
 # healthy green leader; Secondary is a healthy standby (blue); anything else codes 0=Unknown.
@@ -58,6 +59,31 @@ _LOCAL_FIELDS = {
     "DR role": "dr_role",
     "DR status": "dr_status",
 }
+
+
+def rdqm_resource_base(qm: str) -> str:
+    """The base name RDQM gives every Pacemaker/DRBD resource of queue manager `qm`.
+
+    IBM's "RDQM architecture" topic: the resources "have names based on the Directory name of
+    the queue manager" (for TMPQM1 that is `tmpqm1`), and the DRBD resource name "is the same
+    as the Directory name". For a QM name of letters/digits/`_`/`%` that is the name in
+    lowercase. A name containing `.` or `/` is rewritten in its directory name, so it raises
+    ValueError rather than return a resource name that matches nothing (fail-loud)."""
+    if not qm or _DIRNAME_REWRITTEN.intersection(qm):
+        msg = (
+            f"cannot derive RDQM resource names from queue manager {qm!r}: an empty name, or"
+            " one containing '.' or '/', does not map to its directory name by lowercasing"
+        )
+        raise ValueError(msg)
+    return qm.lower()
+
+
+def rdqm_pm_resources(qm: str) -> tuple[str, str, str, str]:
+    """The Pacemaker resources of `qm` surfaced per node (the technology layer rdqmadm wraps):
+    the QM primitive itself, the HA + DR DRBD primitives, and the floating-IP resource.
+    `p_ip_<base>` exists only when a floating IP is configured; an absent resource reads 0."""
+    base = rdqm_resource_base(qm)
+    return base, f"p_drbd_{base}", f"p_drbd_dr_{base}", f"p_ip_{base}"
 
 
 def parse_rdqmstatus(text: str) -> dict[str, Any]:
@@ -103,9 +129,10 @@ def _parse_failcount(fc: str | None) -> int:
     return int(fc) if fc.lstrip("-").isdigit() else 0
 
 
-def parse_crm(text: str) -> dict[str, Any]:
+def parse_crm(text: str, qm: str) -> dict[str, Any]:
     """Parse `crm_mon --one-shot --output-as=xml` into the pacemaker view of the QM stack:
-    per-node online state, per-resource placement/role, and the QM's per-node fail-count.
+    per-node online state, per-resource placement/role, and queue manager `qm`'s per-node
+    fail-count (read from its QM primitive, named by rdqm_resource_base).
 
     This is the resource-manager layer that rdqmadm wraps — rdqmstatus reports HA/DRBD health
     but NOT whether pacemaker can actually start the QM, so a banned/failed resource is only
@@ -128,10 +155,11 @@ def parse_crm(text: str) -> dict[str, Any]:
             if held is not None:  # a Stopped instance has no <node> placement -> skip
                 roles.setdefault(res.get("id", ""), {})[held.get("name", "")] = res.get("role", "")
 
+    qm_resource = rdqm_resource_base(qm)
     failcount: dict[str, int] = {}
     for n in root.findall(".//node_history/node"):
         for rh in n.findall("resource_history"):
-            if rh.get("id") == "qmrdqm":
+            if rh.get("id") == qm_resource:
                 failcount[n.get("name", "")] = _parse_failcount(rh.get("fail-count"))
 
     return {"nodes": nodes, "roles": roles, "failcount": failcount}
@@ -237,7 +265,7 @@ def render_rdqm_state_prom(
         for member, st in crm["nodes"].items():
             base = {"node": node, "member": member}
             lines.append(_m("cluster_rdqm_pm_online", base, 1 if st["online"] else 0))
-            for res in _PM_RESOURCES:
+            for res in rdqm_pm_resources(qm):
                 role = crm["roles"].get(res, {}).get(member)
                 state = {**base, "resource": res}
                 lines.append(_m("cluster_rdqm_pm_state", state, _PM_CODE.get(role, 0)))
@@ -288,6 +316,7 @@ def probe(cmd: list[str], timeout: int, *, merge_stderr: bool = False) -> str | 
 
 def collect(node: str, qm: str, now: int) -> str:
     """Run the rdqmstatus + drbd + crm_mon probes and render the textfile body."""
+    rdqm_resource_base(qm)  # an underivable QM name fails before any probe runs
     cmds = _commands(qm)
     fresh: list[str] = []
     raw = probe(*cmds["rdqmstatus"], merge_stderr=True)  # rdqmstatus reports on stderr
@@ -303,7 +332,7 @@ def collect(node: str, qm: str, now: int) -> str:
     raw_crm = probe(*cmds["crm"])
     crm = None
     if raw_crm is not None:
-        crm = parse_crm(raw_crm)
+        crm = parse_crm(raw_crm, qm)
         fresh.append("crm")
     return render_rdqm_state_prom(
         node=node, qm=qm, status=status, drbd=drbd, crm=crm, now=now, fresh_sources=tuple(fresh)

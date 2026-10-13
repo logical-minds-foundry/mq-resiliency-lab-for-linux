@@ -1012,16 +1012,36 @@ def _fit_table(panel: dict[str, Any]) -> dict[str, Any]:
     return panel
 
 
-def _rdqm_instance_cols(site_regex: str) -> list[Column]:
+def _rdqm_resource_base(qm: str) -> str:
+    """The base name RDQM gives every Pacemaker/DRBD resource of queue manager `qm` (#1472).
+
+    IBM's "RDQM architecture" topic: the resources "have names based on the Directory name of
+    the queue manager" (TMPQM1 -> `tmpqm1`); the HA DRBD resource is `<base>`, the DR one
+    `<base>.dr`, and the Pacemaker primitives `<base>`, `p_drbd_<base>`, `p_drbd_dr_<base>`,
+    `p_ip_<base>`. For a plain QM name the directory name is the name in lowercase; MQ rewrites
+    `.` and `/` in directory names, so such a name (or an empty one) fails loud rather than
+    render panels that match nothing. Mirrors mqro.rdqmstate.rdqm_resource_base, the collector
+    side that emits these resource labels (mqlab does not depend on the component)."""
+    if not qm or "." in qm or "/" in qm:
+        msg = (
+            f"cannot derive RDQM resource names from queue manager {qm!r}: an empty name, or"
+            " one containing '.' or '/', does not map to its directory name by lowercasing"
+        )
+        raise ValueError(msg)
+    return qm.lower()
+
+
+def _rdqm_instance_cols(site_regex: str, qm: str) -> list[Column]:
     """RDQM instances-matrix columns for one site (rdqm-a.* / rdqm-b.*): HA status (online if
     Normal) · role (Primary/Secondary, coded) · QM-running · a single Pacemaker summary cell ·
     DRBD in-sync. The Pacemaker cell (node_ready = online AND able to run the QM) sits between
     QM-running and DRBD so a NOT-READY site shows its cause inline; the per-resource pacemaker
     detail lives one section down in ③ (#287). The per-member columns key on `member`; the DRBD
-    column keys on `node` and pins the HA resource (qmrdqm) so the cross-site DR resource
-    (qmrdqm.dr) never bleeds into the in-sync cell (spec §5 ②)."""
+    column keys on `node` and pins the QM's HA resource (`<base>`) so the cross-site DR resource
+    (`<base>.dr`) never bleeds into the in-sync cell (spec §5 ②)."""
     member = f'member=~"{site_regex}"'
     node = f'node=~"{site_regex}"'
+    ha = _rdqm_resource_base(qm)
     return [
         ("HA status", _norm(f"cluster_node_online{{{member}}}", "member"), "up"),
         ("role", _norm(f"cluster_rdqm_role_code{{{member}}}", "member"), "rdqm_role"),
@@ -1029,7 +1049,7 @@ def _rdqm_instance_cols(site_regex: str) -> list[Column]:
         ("Pacemaker", _norm(f"cluster_rdqm_node_ready{{{member}}}", "member"), "node_ready"),
         (
             "DRBD in-sync",
-            _norm(f'cluster_drbd_disk{{resource="qmrdqm",disk="UpToDate",{node}}}', "node"),
+            _norm(f'cluster_drbd_disk{{resource="{ha}",disk="UpToDate",{node}}}', "node"),
             "up",
         ),
     ]
@@ -1076,7 +1096,8 @@ def _rdqm_integrity_expr() -> str:
     DRBD hazards are scoped to rdqm groups so another arm's DRBD can't trip this light."""
     g = _RDQM_GROUPS
     # dual-primary is counted per resource AND per site (groups): a DR pair legitimately runs one
-    # qmrdqm primary on each side, so a global per-resource count of 2 is normal, not split-brain.
+    # HA-resource primary on each side, so a global per-resource count of 2 is normal, not
+    # split-brain.
     hazards = (
         f'(count(cluster_drbd_conn{{conn="StandAlone",{g}}}) or vector(0))'
         f' + (count(cluster_drbd_disk{{disk="Diskless",{g}}}) or vector(0))'
@@ -1090,11 +1111,12 @@ def _rdqm_integrity_expr() -> str:
     return f"({hazards}) and on() (count(cluster_rdqm_ha_status_ok) > 0)"
 
 
-def rdqm_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
+def rdqm_status_band(ds_uid: str, y: int, qm: str) -> list[dict[str, Any]]:
     """① Cluster status as ONE compact full-width row of five equal tiles — Running-on node ·
     HA status · Nodes online · Floating IP (the single VIP) · Integrity. The floating IP is
     first-class (spec §5 ①); integrity is a tile among equals, value font capped to reclaim
-    vertical space (the #279 compaction)."""
+    vertical space (the #279 compaction). The running-on tile reads the collector's
+    cluster_resource_owner, which is labelled with the QM name itself (resource=`qm`)."""
     online = f"max by (member)(cluster_node_online{_RDQM_SEL})"
     health_maps = [
         {
@@ -1110,7 +1132,7 @@ def rdqm_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
     return [
         _stat(
             "Running on",
-            'max by (holder)(cluster_resource_owner{resource="RDQMAPP"})',
+            f'max by (holder)(cluster_resource_owner{{resource="{qm}"}})',
             ds_uid,
             0,
             y,
@@ -1157,11 +1179,11 @@ def rdqm_status_band(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
-def _rdqm_storage_cols() -> list[Column]:
-    """③ Storage — DRBD: per-node resync % · out-of-sync for the HA resource (qmrdqm), scoped
-    to rdqm nodes. The cross-site DR resource (qmrdqm.dr) is surfaced as the ④ DR backlog, not
-    here, so this matrix is the intra-site HA replication health (spec §5 ③)."""
-    res = 'resource="qmrdqm",node=~"rdqm-.*"'
+def _rdqm_storage_cols(qm: str) -> list[Column]:
+    """③ Storage — DRBD: per-node resync % · out-of-sync for the QM's HA resource (`<base>`),
+    scoped to rdqm nodes. The cross-site DR resource (`<base>.dr`) is surfaced as the ④ DR
+    backlog, not here, so this matrix is the intra-site HA replication health (spec §5 ③)."""
+    res = f'resource="{_rdqm_resource_base(qm)}",node=~"rdqm-.*"'
     return [
         ("resync %", _norm(f"cluster_drbd_resync_pct{{{res}}}", "node"), "sessions"),
         # tolerant mapping: a benign sub-extent (~1KB) secondary↔secondary delta reads green
@@ -1169,13 +1191,14 @@ def _rdqm_storage_cols() -> list[Column]:
     ]
 
 
-def _rdqm_pacemaker_cols(site_regex: str) -> list[Column]:
+def _rdqm_pacemaker_cols(site_regex: str, qm: str) -> list[Column]:
     """⑤ Pacemaker resources for one site (the technology layer rdqmadm wraps, exposed exactly
     like the PCMK board's compute matrix): per node — online · the QM resource · the HA + DR
     DRBD clones · the floating-IP resource (each as a pm_state cell) · the QM fail-count. The
     fail-count cell is the one that turns RED when pacemaker has banned the QM from a node — the
     failure that rdqmstatus reports as HA-Normal and the board was previously blind to (#287)."""
     member = f'member=~"{site_regex}"'
+    base = _rdqm_resource_base(qm)
 
     def state(resource: str) -> str:
         return _norm(f'cluster_rdqm_pm_state{{resource="{resource}",{member}}}', "member")
@@ -1183,18 +1206,19 @@ def _rdqm_pacemaker_cols(site_regex: str) -> list[Column]:
     return [
         # "ready" = online AND startable, so a banned-but-online node reads red, not green "up"
         ("ready", _norm(f"cluster_rdqm_node_ready{{{member}}}", "member"), "node_ready"),
-        ("QM", state("qmrdqm"), "pm_state"),
-        ("DRBD HA", state("p_drbd_qmrdqm"), "pm_state"),
-        ("DR repl", state("p_drbd_dr_qmrdqm"), "pm_state"),
-        ("float-IP", state("p_ip_qmrdqm"), "pm_state"),
+        ("QM", state(base), "pm_state"),
+        ("DRBD HA", state(f"p_drbd_{base}"), "pm_state"),
+        ("DR repl", state(f"p_drbd_dr_{base}"), "pm_state"),
+        ("float-IP", state(f"p_ip_{base}"), "pm_state"),
         ("fail-count", _norm(f"cluster_rdqm_failcount{{{member}}}", "member"), "failcount"),
     ]
 
 
-def rdqm_dr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
+def rdqm_dr_card(ds_uid: str, y: int, qm: str) -> list[dict[str, Any]]:
     """④ Cross-site DR (rdqmdr): DR status · which node/site is DR primary · replication
-    backlog. rdqmstatus reports no backlog field, so the honest backlog is the DR DRBD
-    resource's (qmrdqm.dr) out-of-sync bytes (spec §4/§5 ④)."""
+    backlog. rdqmstatus reports no backlog field, so the honest backlog is the QM's DR DRBD
+    resource's (`<base>.dr`) out-of-sync bytes (spec §4/§5 ④)."""
+    dr = f"{_rdqm_resource_base(qm)}.dr"
     status_maps = [
         {
             "type": "value",
@@ -1267,7 +1291,7 @@ def rdqm_dr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
         ),
         _stat(
             "DR backlog",
-            'max(cluster_drbd_out_of_sync_bytes{resource="qmrdqm.dr"})',
+            f'max(cluster_drbd_out_of_sync_bytes{{resource="{dr}"}})',
             ds_uid,
             18,
             y,
@@ -1279,20 +1303,23 @@ def rdqm_dr_card(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
-_RDQM_TIMELINE_SIGNALS = [
-    ("QM running", "max(cluster_rdqm_qm_running)"),
-    ("HA Normal", "min(cluster_rdqm_ha_status_ok)"),
-    ("DRBD primary", 'count(cluster_drbd_role{resource="qmrdqm",role="Primary"})'),
-    ("DR connected", "min(cluster_rdqm_dr_status_ok)"),
-]
+def _rdqm_timeline_signals(qm: str) -> list[tuple[str, str]]:
+    """The failover-timeline signals; the DRBD-primary one counts the QM's HA resource."""
+    ha = _rdqm_resource_base(qm)
+    return [
+        ("QM running", "max(cluster_rdqm_qm_running)"),
+        ("HA Normal", "min(cluster_rdqm_ha_status_ok)"),
+        ("DRBD primary", f'count(cluster_drbd_role{{resource="{ha}",role="Primary"}})'),
+        ("DR connected", "min(cluster_rdqm_dr_status_ok)"),
+    ]
 
 
-def _rdqm_timeline(ds_uid: str, y: int) -> dict[str, Any]:
+def _rdqm_timeline(ds_uid: str, y: int, qm: str) -> dict[str, Any]:
     """The RDQM failover story: QM running, HA Normal, DRBD primary present, DR connected."""
-    return _state_timeline("⟳ Failover timeline", _RDQM_TIMELINE_SIGNALS, ds_uid, y)
+    return _state_timeline("⟳ Failover timeline", _rdqm_timeline_signals(qm), ds_uid, y)
 
 
-def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
+def _rdqm_log_row(loki_uid: str, y: int, qm: str) -> dict[str, Any]:
     """RDQM logs: the Pacemaker/DRBD/MQ journald units on the rdqm-* hosts, severity-filtered
     by the shared $level toggle. Since #282 MQ's own diagnostic log (AMQERR JSON) is emitted
     to journald and relabeled by Alloy to unit="ibm-mq" (#742/#744), so the QM's HA/DR error
@@ -1306,7 +1333,7 @@ def _rdqm_log_row(loki_uid: str, y: int) -> dict[str, Any]:
     )
     note = (
         "Shows Pacemaker/DRBD/MQ journald units on the rdqm nodes, including MQ's own "
-        "diagnostic error log: since #282 the AMQERR JSON for RDQMAPP is emitted to journald "
+        f"diagnostic error log: since #282 the AMQERR JSON for {qm} is emitted to journald "
         'and Alloy relabels it to unit="ibm-mq", so the QM HA/DR error events render here.'
     )
     return _logs_panel("▤ RDQM logs (severity: $level)", sel, loki_uid, y, description=note)
@@ -1381,16 +1408,19 @@ def rdqm_net_section(ds_uid: str, y: int) -> list[dict[str, Any]]:
     ]
 
 
-def _rdqm_board(ds_uid: str) -> dict[str, Any]:
+def _rdqm_board(ds_uid: str, qm: str) -> dict[str, Any]:
     """The RDQM cockpit (lab-rdqm-rhel-cluster), top-to-bottom: title banner · ① status band ·
     ② Site A/B instance matrices (with LIVE/RECOVERY chips) · ③ DRBD storage · ④ cross-site DR ·
     failover timeline · logs · perf · network. RDQM is the richest arm — Native-HA-style HA
     roles + cross-site DR AND a real DRBD storage section (#287). Each named section is its own
-    peer-level collapsible row, as in the nha board."""
+    peer-level collapsible row, as in the nha board. Every QM-scoped query (the owner tile,
+    the DRBD and Pacemaker resource names) derives from `qm`, the stack's single QM source."""
+    site_a, site_b = _rdqm_instance_cols("rdqm-a.*", qm), _rdqm_instance_cols("rdqm-b.*", qm)
+    pm_a, pm_b = _rdqm_pacemaker_cols("rdqm-a.*", qm), _rdqm_pacemaker_cols("rdqm-b.*", qm)
     panels = [
         _title_banner("rdqm-rhel", y=0),
         _row_header("① Cluster status — running-on · HA · floating IP · integrity", y=2),
-        *rdqm_status_band(ds_uid, y=3),
+        *rdqm_status_band(ds_uid, y=3, qm=qm),
         # ② Site A / Site B are the FIXED node groups (rdqm_a / rdqm_b). LIVE vs RECOVERY is a
         # *role* that swaps on rdqmdr cutover/failback — a compact chip beside each site matrix.
         # The matrix is x=4,w=20 to leave room for the badge at x=0,w=4; _fit_table sets a small
@@ -1399,32 +1429,28 @@ def _rdqm_board(ds_uid: str) -> dict[str, Any]:
         # Each matrix is sized to its three nodes (header + 3 rows), reflowed snug below the
         # previous section — no padded empty rows (#300). The badge matches the matrix height.
         _rdqm_site_badge("rdqm_a", ds_uid, 0, 7),
-        _fit_table(matrix("Site A", _rdqm_instance_cols("rdqm-a.*"), ds_uid, y=7, h=6, x=4, w=20)),
+        _fit_table(matrix("Site A", site_a, ds_uid, y=7, h=6, x=4, w=20)),
         _rdqm_site_badge("rdqm_b", ds_uid, 0, 13),
-        _fit_table(matrix("Site B", _rdqm_instance_cols("rdqm-b.*"), ds_uid, y=13, h=6, x=4, w=20)),
+        _fit_table(matrix("Site B", site_b, ds_uid, y=13, h=6, x=4, w=20)),
         # ③ The pacemaker resource layer rdqmadm wraps, exposed like the PCMK board's compute
         # matrix and placed in the SAME position (above storage) so an RDQM board and an Ubuntu
         # pacemaker board read top-to-bottom the same way — both ride pacemaker + DRBD. This is
         # the layer rdqmstatus is blind to: a QM pacemaker can't start (fail-count → BANNED)
         # shows here even while HA status reads Normal (#287).
         _row_header("③ Pacemaker resources — Site A & Site B", y=19),
-        _fit_table(
-            matrix("Pacemaker — Site A", _rdqm_pacemaker_cols("rdqm-a.*"), ds_uid, y=20, h=6)
-        ),
-        _fit_table(
-            matrix("Pacemaker — Site B", _rdqm_pacemaker_cols("rdqm-b.*"), ds_uid, y=26, h=6)
-        ),
-        # ④ Storage spans all six nodes (site-A HA group + site-B DR group both run qmrdqm), so
+        _fit_table(matrix("Pacemaker — Site A", pm_a, ds_uid, y=20, h=6)),
+        _fit_table(matrix("Pacemaker — Site B", pm_b, ds_uid, y=26, h=6)),
+        # ④ Storage spans all six nodes (site-A HA group + site-B DR group both run the QM), so
         # it carries six rows + header — h=10 fits all six with a small margin; _fit_table's
         # minWidth keeps the horizontal scrollbar away.
-        _row_header("④ Storage — DRBD (qmrdqm)", y=32),
-        _fit_table(matrix("Storage — DRBD", _rdqm_storage_cols(), ds_uid, y=33, h=10)),
+        _row_header(f"④ Storage — DRBD ({_rdqm_resource_base(qm)})", y=32),
+        _fit_table(matrix("Storage — DRBD", _rdqm_storage_cols(qm), ds_uid, y=33, h=10)),
         _row_header("⑤ Cross-site DR (rdqmdr)", y=43),
-        *rdqm_dr_card(ds_uid, y=44),
+        *rdqm_dr_card(ds_uid, y=44, qm=qm),
         _row_header("⟳ Failover timeline", y=47),
-        _rdqm_timeline(ds_uid, y=48),
+        _rdqm_timeline(ds_uid, y=48, qm=qm),
         _row_header("▤ RDQM logs", y=55),
-        _rdqm_log_row("loki", y=56),
+        _rdqm_log_row("loki", y=56, qm=qm),
         _row_header("🖥 Performance", y=64),
         *rdqm_perf_section(ds_uid, y=65),
         _row_header("🌐 Network", y=72),
@@ -1546,11 +1572,12 @@ def render_cluster_dashboard(
 ) -> dict[str, Any]:
     """Assemble the cockpit board for the given arm. PCMK: hero + integrity + ② Compute / ③
     Storage matrices + timeline/logs/perf/net. Native HA dispatches to its own assembly
-    (instances matrices, the §6 integrity reframing)."""
+    (instances matrices, the §6 integrity reframing). The RDQM board takes its QM from the
+    stack's single QM source (topology `short` -> `<short>APP`), never a literal (#1472)."""
     if arm in _NHA_ARM_SPEC:
         return _nativeha_board(ds_uid, arm)
     if arm == "rdqm-rhel":
-        return _rdqm_board(ds_uid)
+        return _rdqm_board(ds_uid, lab_stacks()[arm].qm.qm_app)
     panels = [
         _title_banner(arm, y=0),
         _row_header("① Cluster status — health · owner · quorum · integrity", y=2),

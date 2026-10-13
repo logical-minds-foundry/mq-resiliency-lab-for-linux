@@ -19,7 +19,10 @@ SCAN_DIRS = ["ansible", "src/mqlab", "lab/scripts"]
 SCAN_GLOBS = ["components/*/src"]
 SCAN_FILES = ["lab/topology.yaml"]
 SCAN_SUFFIXES = {".yml", ".yaml", ".j2", ".py", ".sh", ".mqsc", ".json"}
-RETIRED = re.compile(r"\bQM(PCMK|SVC|NATIVE|RDQM)\b")
+# Case-insensitive: RDQM names its Pacemaker/DRBD resources after the QM in lowercase, so a
+# retired name also hides as e.g. `qmrdqm` or `p_drbd_qmrdqm` (#1472 — the case-sensitive
+# guard missed exactly that). `_` is a word character, so match on letters, not \b.
+RETIRED = re.compile(r"(?<![A-Za-z0-9])QM(PCMK|SVC|NATIVE|RDQM)(?![A-Za-z0-9])", re.IGNORECASE)
 ALLOW = {
     Path(__file__).resolve(),  # this file names them by definition
 }
@@ -44,3 +47,11 @@ def _retired_literals() -> list[str]:
 def test_no_retired_qm_name_literals_in_production_code():
     offenders = _retired_literals()
     assert not offenders, "retired QM-name literals remain (#351 Phase 2):\n" + "\n".join(offenders)
+
+
+def test_guard_catches_lowercase_resource_forms():
+    # the #1472 regression: RDQM resource names are the QM lowercased, inside `_`-joined ids
+    for hidden in ("qmrdqm", "p_drbd_qmrdqm", "qmrdqm.dr", "QMRDQM"):
+        assert RETIRED.search(hidden), hidden
+    for fine in ("RDQMAPP", "rdqmapp", "SVCQM", "XQMRDQMX"):
+        assert not RETIRED.search(fine), fine

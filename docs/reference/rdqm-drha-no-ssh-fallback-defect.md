@@ -91,8 +91,8 @@ problem is reached.
 
    ```bash
    # Site A = DR primary (auto-creates a2/a3); site B = DR secondary (auto-creates b2/b3).
-   crtmqm -fs 3072M -sx -rr p -rl <A_WAN_IPs> -ri <B_WAN_IPs> -rp 7001 [-re] QMRDQM   # on rdqm-a1, as mqm
-   crtmqm -fs 3072M -sx -rr s -rl <B_WAN_IPs> -ri <A_WAN_IPs> -rp 7001 [-re] QMRDQM   # on rdqm-b1, as mqm
+   crtmqm -fs 3072M -sx -rr p -rl <A_WAN_IPs> -ri <B_WAN_IPs> -rp 7001 [-re] RDQMAPP   # on rdqm-a1, as mqm
+   crtmqm -fs 3072M -sx -rr s -rl <B_WAN_IPs> -ri <A_WAN_IPs> -rp 7001 [-re] RDQMAPP   # on rdqm-b1, as mqm
    ```
 
    (`-rr p/s` = DR role; `-rl` local-site DR IPs; `-ri` remote-site DR IPs;

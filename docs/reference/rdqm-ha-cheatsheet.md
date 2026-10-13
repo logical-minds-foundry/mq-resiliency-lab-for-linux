@@ -113,7 +113,7 @@ Initialize the replicated-data subsystem on each node:
 Verified order from `lab/scripts/rdqm-qm-create.sh`. All `crtmqm` run **as root**.
 
 ```bash
-QM=QMRDQM
+QM=RDQMAPP
 VIP=10.10.1.100        # floating IP clients connect to
 
 # 1) Secondaries FIRST (on rdqm-a2 and rdqm-a3)
@@ -149,7 +149,7 @@ EOF
 ## 4. Verify
 
 ```bash
-/opt/mqm/bin/rdqmstatus -m QMRDQM
+/opt/mqm/bin/rdqmstatus -m RDQMAPP
 ```
 
 Expect one node `Running / Primary / Synced` and two `Replicated / Secondary /
@@ -160,10 +160,37 @@ Synced`.
 | Action | Command |
 |---|---|
 | HA status (whole group) | `rdqmstatus -n` |
-| HA status (one QM, all nodes) | `rdqmstatus -m QMRDQM` |
-| Is QM up on this node | `dspmq -m QMRDQM` |
+| HA status (one QM, all nodes) | `rdqmstatus -m RDQMAPP` |
+| Is QM up on this node | `dspmq -m RDQMAPP` |
 | Planned move off a node | suspend/resume via `rdqmadm -s` / `rdqmadm -r` |
-| Add / remove floating IP | `rdqmint -m QMRDQM -a -f <ip> -l <iface>` / `-r` |
+| Add / remove floating IP | `rdqmint -m RDQMAPP -a -f <ip> -l <iface>` / `-r` |
+
+### Resource names (for `crm_mon` / `drbdsetup` triage)
+
+RDQM names a queue manager's Pacemaker and DRBD resources after the QM's
+**directory name**. For a plain name, that is the name in lowercase, so
+`RDQMAPP` becomes `rdqmapp`:
+
+| Resource | Name for `RDQMAPP` |
+|---|---|
+| QM primitive (`ocf:ibm:rdqm`) | `rdqmapp` |
+| HA DRBD resource / its Pacemaker primitive | `rdqmapp` / `p_drbd_rdqmapp` (clone `ms_drbd_rdqmapp`) |
+| DR DRBD resource / its Pacemaker primitive | `rdqmapp.dr` / `p_drbd_dr_rdqmapp` (clone `ms_drbd_dr_rdqmapp`) |
+| Floating IP (only when configured) | `p_ip_rdqmapp` |
+| Filesystem / internal | `p_fs_rdqmapp` (mounts `/var/mqm/vols/rdqmapp`) / `p_rdqmx_rdqmapp` |
+
+- **Source (data):** IBM, *RDQM architecture* (MQ 9.2 docs), "Resource names" and
+  the Pacemaker resource list (`qm`, `p_rdqmx_qm`, `p_fs_qm`, `ms_drbd_qm`,
+  `p_drbd_qm`, `p_ip_qm`; TMPQM1 → `tmpqm1`):
+  <https://www.ibm.com/docs/SSFKSJ_9.2.0/com.ibm.mq.tro.doc/q133430_.htm>.
+- **Source (data):** the lab's own captures. Under the earlier QM name `QMRDQM`,
+  `crm_mon` showed `qmrdqm`, `p_drbd_qmrdqm`, `p_drbd_dr_qmrdqm`, `p_ip_qmrdqm`
+  and the other resources above (the collector's test fixtures). Under `RDQMAPP`,
+  DRBD showed `rdqmapp` / `rdqmapp.dr` (`lab-gotchas.md`). The IBM topic does not
+  list the DR names (`.dr`, `p_drbd_dr_`); they come from these captures only.
+- MQ rewrites `.` and `/` in a QM's directory name, so the lowercase rule does not
+  hold for such names. The cockpit collector and board refuse them rather than
+  guess.
 
 ## 6. Gotchas (each cost real time — see `lab-gotchas.md` / Phase-C findings)
 
