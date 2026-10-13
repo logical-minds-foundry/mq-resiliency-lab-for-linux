@@ -20,6 +20,13 @@ No third-party runtime dependencies.
 
 Textfiles land in `/var/lib/node_exporter/textfile/` by default (`--out` overrides).
 
+`lab-rdqm-state` reads the Pacemaker resources of the queue manager named by `--qm`.
+RDQM names those resources after the QM's directory name, which for a plain name is the
+name in lowercase: `<qm>`, `p_drbd_<qm>`, `p_drbd_dr_<qm>` and `p_ip_<qm>`. The
+collector derives these names (`mqro.rdqmstate.rdqm_pm_resources`) instead of
+hard-coding them. A QM name that contains `.` or `/` is refused, because MQ rewrites
+those characters in the directory name.
+
 ## systemd units and configuration keys
 
 The units in `systemd/` are static and install to `/usr/lib/systemd/system/`. Each
