@@ -9,8 +9,10 @@
 #   3. /etc/tlshd.conf points client+server at them; tlshd enabled + started.
 # crtmqm then gets -re (both links) / -reh (HA only) in rdqm-qm-create.sh.
 #
-# tlshd ships with the drbd-utils-9 packages rdqm-install already installs, so no
-# extra package is needed. The cert-minting is isolated in certs.yml (see there).
+# tlshd (the ktls-utils package) is already installed by rdqm-install, so no extra package
+# is needed here: MQSeriesRDQM requires ktls-utils. On RHEL 9 the MQ media's drbd-utils-9
+# dir ships it; on RHEL 10 that dir does not, and dnf pulls it from the offline DVD's
+# BaseOS instead (#1440). The cert-minting is isolated in certs.yml (see there).
 
 - name: mint the replication CA + this node's cert on the controller
   ansible.builtin.include_tasks: certs.yml

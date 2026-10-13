@@ -62,6 +62,7 @@ def test_fleet_has_the_catalog_boxes():
         "rhel/9-x86_64",
         "rhel/10-x86_64",
         "mq-rdqm-rhel9",
+        "mq-rdqm-rhel10",
         "obs-ubuntu26",
         "infra-ubuntu26",
         "mq-client-ubuntu24",
@@ -81,6 +82,7 @@ def test_fleet_omits_v3_only_boxes_on_a_non_v3_host():
     fleet = box._build_fleet(dataclasses.replace(_FACTS, x86_64_v3=False))
     assert "rhel/10-x86_64" not in fleet
     assert "mq-nativeha-rhel10" not in fleet
+    assert "mq-rdqm-rhel10" not in fleet
     assert {"rhel/9-x86_64", "mq-nativeha-rhel9", "mq-rdqm-rhel9"} <= set(fleet)
 
 
@@ -241,6 +243,19 @@ def test_boxes_for_build_family_selects_its_stacks():
         "mq-client-ubuntu24",
         "mq-rdqm-rhel9",
         "mq-nativeha-rhel9",
+    ]
+
+
+def test_boxes_for_build_rhel10_selects_both_rhel_stacks():
+    """rdqm-rhel offers rhel:10 from MQ 10.0.1 (#1440): os: rhel:10 builds its box too."""
+    names = box.boxes_for_build(BuildFile(os=OsRef("rhel", 10)), facts=_FACTS)
+    assert names == [
+        "infra-ubuntu26",
+        "obs-ubuntu26",
+        "san-ubuntu26",
+        "mq-client-ubuntu24",
+        "mq-rdqm-rhel10",
+        "mq-nativeha-rhel10",
     ]
 
 
@@ -1419,6 +1434,7 @@ _RESOLVABLE = {
     "mq-nativeha-rhel9",
     "mq-nativeha-rhel10",
     "mq-rdqm-rhel9",
+    "mq-rdqm-rhel10",
     "rhel/9-x86_64",
     "rhel/10-x86_64",
     "cloud-image/ubuntu-24.04",

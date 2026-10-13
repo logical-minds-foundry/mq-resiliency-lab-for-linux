@@ -31,8 +31,9 @@ os:
         source: "https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getTSROsSupportSummary?deliverableId=FA94B1F6888342969E7F9B505149F032"
   rhel:
     9: { base_box: rhel/9-x86_64, point: "9.6", iso: rhel-9.6-x86_64-dvd.iso, arch: x86_64 }
-    # RHEL 10 (#1286): IBM supports MQ 10.0 + Native HA on it, NOT RDQM (no DRBD kmod), so
-    # only nativeha-rhel-crr offers it. 10.2 = the latest GA minor (2026-05-19). Built for
+    # RHEL 10 (#1286): IBM supports MQ 10.0 + Native HA on it; RDQM joins from MQ 10.0.1,
+    # the first level whose tarball ships RHEL 10 DRBD kmods (#1440), so nativeha-rhel-crr
+    # and rdqm-rhel both offer it. 10.2 = the latest GA minor (2026-05-19). Built for
     # x86-64-v3, so it needs a v3 CPU under KVM.
     # Sources: docs/reference/os-version-support-matrix.md.
     10: { base_box: rhel/10-x86_64, point: "10.2", iso: rhel-10.2-x86_64-dvd.iso, arch: x86_64, requires: [x86-64-v3] }
@@ -61,8 +62,11 @@ stacks:
   # (V3, #1288). rhel:10 requires x86-64-v3, so a default bring-up on a host without it
   # is refused and names os: rhel:9 in a --config build file — never a silent fallback.
   nativeha-rhel-crr: { supported: [rhel:9, rhel:10], default: rhel:10 }
-  # RDQM is RHEL 9 only: IBM ships no DRBD kmod for RHEL 10.
-  rdqm-rhel: { supported: [rhel:9], default: rhel:9 }
+  # RHEL 10 is selectable from MQ 10.0.1 (#1440): its tarball ships RHEL 10 DRBD kmods and a
+  # Pacemaker 3 stack (docs/reference/os-version-support-matrix.md §2.4). The default stays
+  # rhel:9 until a human decides otherwise after the cold-rebuild validation row passes.
+  # rhel:10 requires x86-64-v3, like nativeha-rhel-crr's.
+  rdqm-rhel: { supported: [rhel:9, rhel:10], default: rhel:9 }
 # The ONE pinned guest Python runtime (epic .github#294 spec §5.2): a
 # python-build-standalone CPython install_only build, run by every guest component and
 # by `mqlab component build`'s tests. The contract is the minor (3.14); a patch bump is

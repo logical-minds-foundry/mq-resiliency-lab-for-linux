@@ -1,0 +1,31 @@
+---
+# rdqm-install per-OS-version values for RHEL 10 (#1440, epic .github#315), loaded by
+# ansible/tasks/os-vars.yml. MQ 10.0.1 is the first level whose tarball ships RDQM prereq
+# rpms for el10 (Advanced/RDQM/PreReqs/el10/...); no 10.0.0.x level does
+# (docs/reference/os-version-support-matrix.md §2.4). The directory names below are the real
+# ones in the 10.0.1.0 LinuxX64 tarball. IBM's `modver` helper in the kmod dir picks the
+# kmod-drbd rpm for the running kernel by kernel family (#1408); the kernel release carries
+# the same EL tag, which the known-issue check strips to compare kernel versions.
+rhel_el_tag: el10
+drbd_kmod_dir: el10/kmod-drbd-9
+# Pacemaker 3 (LINBIT 3.0.1, with corosync 3.1.9 and crmsh 4.6.2), not the pacemaker-2 dir
+# of el8/el9. The role installs the whole dir with a glob, so the name is the only change.
+pacemaker_dir: el10/pacemaker-3
+# drbd-utils 9.33.1. Unlike el9, this dir ships no ktls-utils rpm: on RHEL 10 the DVD's
+# BaseOS supplies ktls-utils (tlshd), which MQSeriesRDQM requires, so the step-2 dnf install
+# pulls it in from the offline DVD repo.
+drbd_utils_dir: el10/drbd-utils-9
+# The offline DVD dnf repo's display name; the point release comes from the guest's facts.
+rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
+
+# IBM's "Kernel versions with known compatibility issues" table, RHEL 10 row (#1408,
+# #1440), copied by hand: inclusive kernel ranges that IBM says "are known to require a new
+# kernel module to function correctly with IBM MQ RDQM". A running kernel inside a range
+# gets a visible WARNING at install time, never a failure. As of the date below the table
+# has no RHEL 10 row (RHEL7/8 "None", RHEL9 one range), so the list is empty. The guest is
+# offline and IBM publishes this table only on the HTML support page below (the
+# ibm-mq-rdqm-kmods.json feed has no known-issue field), so the role carries a dated copy.
+# Refresh it from the page when moving the lab to a new kernel or MQ level.
+rdqm_kernel_known_issues: []
+rdqm_kernel_known_issues_source: https://www.ibm.com/support/pages/node/1087143
+rdqm_kernel_known_issues_as_of: "2026-10-13"

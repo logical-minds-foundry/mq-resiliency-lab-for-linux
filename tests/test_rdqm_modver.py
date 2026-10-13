@@ -7,7 +7,8 @@ doc directs, and fails loudly when modver errors or answers with anything unusab
 
 These checks pin that contract statically and run the role's own conditions (through
 Ansible's Templar) against real ``modver -m`` output captured in
-``tests/fixtures/rdqm_modver_m.yaml``:
+``tests/fixtures/rdqm_modver_m.yaml`` (the el9 modver) and
+``tests/fixtures/rdqm_modver_m_el10.yaml`` (the el10 modver, #1440):
 
 - the selection task runs modver in query mode for ``ansible_kernel``, with no
   error-softening, and the old exact-release glob is gone;
@@ -31,7 +32,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ROLE = REPO_ROOT / "ansible" / "roles" / "rdqm-install"
 INSTALL = ROLE / "tasks" / "install.yml"
 RHEL9_VARS = ROLE / "vars" / "RedHat-9.yml"
-FIXTURE = REPO_ROOT / "tests" / "fixtures" / "rdqm_modver_m.yaml"
+RHEL10_VARS = ROLE / "vars" / "RedHat-10.yml"
+FIXTURES = (
+    REPO_ROOT / "tests" / "fixtures" / "rdqm_modver_m.yaml",
+    REPO_ROOT / "tests" / "fixtures" / "rdqm_modver_m_el10.yaml",
+)
 
 MODVER = "ask IBM's modver which drbd kmod fits the running kernel (loud fail)"
 PARSE = "modver named one kmod rpm that this MQ level supports (loud fail)"
@@ -56,14 +61,30 @@ def _task(name: str) -> dict[str, Any]:
     return task
 
 
-def _fixture() -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
+def _fixtures() -> list[dict[str, Any]]:
+    """Every captured modver run, each case tagged with its fixture's media facts."""
+    out = []
+    for path in FIXTURES:
+        data: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for case in data["cases"]:
+            out.append(
+                {
+                    **case,
+                    "mq_version": data["mq_version"],
+                    "kmod_dir": data["kmod_dir"],
+                    "el_tag": data.get("el_tag", "el9"),
+                }
+            )
+    return out
+
+
+def _vars(path: Path) -> dict[str, Any]:
+    data: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8"))
     return data
 
 
 def _rhel9_vars() -> dict[str, Any]:
-    data: dict[str, Any] = yaml.safe_load(RHEL9_VARS.read_text(encoding="utf-8"))
-    return data
+    return _vars(RHEL9_VARS)
 
 
 def _templar(variables: dict[str, Any]) -> Templar:
@@ -93,8 +114,12 @@ def _media() -> str:
     return f"{dest}/MQServer"
 
 
-SUPPORTED = [c for c in _fixture()["cases"] if c["rc"] == 0]
-UNSUPPORTED = [c for c in _fixture()["cases"] if c["rc"] != 0]
+SUPPORTED = [c for c in _fixtures() if c["rc"] == 0]
+UNSUPPORTED = [c for c in _fixtures() if c["rc"] != 0]
+
+
+def _case_id(case: dict[str, Any]) -> str:
+    return f"{case['kmod_dir'].split('/')[0]}:{case['kernel']}"
 
 
 # --- the selection task: IBM's modver, query mode, no fallback --------------------------
@@ -159,27 +184,39 @@ def test_exists_check_names_the_stat() -> None:
 # --- the parse, against real modver -m output -------------------------------------------
 
 
-@pytest.mark.parametrize("case", SUPPORTED, ids=[c["kernel"] for c in SUPPORTED])
+@pytest.mark.parametrize("case", SUPPORTED, ids=[_case_id(c) for c in SUPPORTED])
 def test_parse_accepts_captured_modver_answers(case: dict[str, Any]) -> None:
-    fixture = _fixture()
     conditions = _task(PARSE)["ansible.builtin.assert"]["that"]
-    variables = _parse_vars(case["stdout"], fixture["mq_version"])
+    variables = _parse_vars(case["stdout"], case["mq_version"])
     assert _first_failing(conditions, variables) is None
 
     record = _task(RECORD)["ansible.builtin.set_fact"]
     facts = {
         **variables,
         "ansible_kernel": case["kernel"],
-        "drbd_kmod_dir": fixture["kmod_dir"],
-        "rhel_el_tag": "el9",
+        "drbd_kmod_dir": case["kmod_dir"],
+        "rhel_el_tag": case["el_tag"],
     }
     assert _render(record["rdqm_kmod_rpm"], facts) == (
-        f"Advanced/RDQM/PreReqs/{fixture['kmod_dir']}/{case['stdout'][0]}"
+        f"Advanced/RDQM/PreReqs/{case['kmod_dir']}/{case['stdout'][0]}"
     )
-    assert _render(record["rdqm_kernel_release"], facts) == case["kernel"].split(".el9")[0]
+    release = case["kernel"].split("." + case["el_tag"])[0]
+    assert _render(record["rdqm_kernel_release"], facts) == release
 
 
-@pytest.mark.parametrize("case", UNSUPPORTED, ids=[c["kernel"] for c in UNSUPPORTED])
+@pytest.mark.parametrize("el", ["el9", "el10"])
+def test_fixture_media_facts_match_the_role_vars(el: str) -> None:
+    """Each fixture's kmod dir and EL tag are the ones the role's vars file names."""
+    path = {"el9": RHEL9_VARS, "el10": RHEL10_VARS}[el]
+    role_vars = _vars(path)
+    cases = [c for c in _fixtures() if c["el_tag"] == el]
+    assert cases, f"no captured modver runs for {el}"
+    assert {(c["kmod_dir"], c["el_tag"]) for c in cases} == {
+        (role_vars["drbd_kmod_dir"], role_vars["rhel_el_tag"])
+    }
+
+
+@pytest.mark.parametrize("case", UNSUPPORTED, ids=[_case_id(c) for c in UNSUPPORTED])
 def test_unsupported_kernel_fails_twice_over(case: dict[str, Any]) -> None:
     """modver exits non-zero (the command task fails), and its text would fail the parse."""
     assert case["rc"] != 0
@@ -299,3 +336,32 @@ def test_vendored_known_issue_list_is_sourced_and_ordered() -> None:
     assert data["rdqm_kernel_known_issues_as_of"] == "2026-10-13"
     ranges = data["rdqm_kernel_known_issues"]
     assert ranges == [{"first": "5.14.0-570.12.1", "last": "5.14.0-570.15.1"}]
+
+
+def test_rhel10_vendored_known_issue_list_is_sourced_and_empty() -> None:
+    """IBM's table has no RHEL 10 row as of the copy date (#1440): an empty, dated list."""
+    data = _vars(RHEL10_VARS)
+    assert set(data) >= {
+        "rdqm_kernel_known_issues",
+        "rdqm_kernel_known_issues_source",
+        "rdqm_kernel_known_issues_as_of",
+    }
+    source = _rhel9_vars()["rdqm_kernel_known_issues_source"]
+    assert data["rdqm_kernel_known_issues_source"] == source
+    assert data["rdqm_kernel_known_issues_as_of"] == "2026-10-13"
+    assert data["rdqm_kernel_known_issues"] == []
+
+
+def test_rhel10_ga_kernel_does_not_warn() -> None:
+    """An empty list loops zero times: the RHEL 10.2 GA kernel gets no WARNING."""
+    variables = {"rdqm_kernel_release": "6.12.0-211.7.3", **_vars(RHEL10_VARS)}
+    conditions = _task(WARN)["when"]
+    assert not any(
+        _first_failing(conditions, {**variables, "item": item}) is None
+        for item in variables["rdqm_kernel_known_issues"]
+    )
+
+
+def test_rhel10_vars_carry_the_same_keys_as_rhel9() -> None:
+    """Every value the role reads from RedHat-9.yml has a RedHat-10.yml counterpart."""
+    assert set(_vars(RHEL10_VARS)) == set(_rhel9_vars())

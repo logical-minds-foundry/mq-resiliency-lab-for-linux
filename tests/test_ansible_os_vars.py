@@ -230,3 +230,33 @@ def test_rdqm_prereq_paths_render_identically_on_rhel96() -> None:
     assert modver_path.endswith("/MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/modver")
     prereqs = _named(body, "install MQ + cluster prereqs (step 1 of 2)")
     assert _render(prereqs["ansible.builtin.shell"], ctx) == PREREQS_BEFORE
+
+
+# RHEL 10.2 facts (#1440): rdqm-install on the el10 PreReqs dirs of MQ 10.0.1.
+RHEL102_FACTS = {
+    "ansible_distribution": "RedHat",
+    "ansible_distribution_major_version": "10",
+    "ansible_distribution_version": "10.2",
+}
+
+
+def _rhel102_context(role: str) -> dict[str, Any]:
+    raw = _load(ANSIBLE / "roles" / role / "vars" / "RedHat-10.yml")
+    rendered = {k: _render(v, RHEL102_FACTS) for k, v in raw.items() if isinstance(v, str)}
+    return {**RHEL102_FACTS, **raw, **rendered}
+
+
+def test_rdqm_prereq_paths_render_on_rhel102() -> None:
+    """el10 ships Pacemaker 3 under pacemaker-3 (not pacemaker-2) and its own modver."""
+    body = RHEL_INSTALL_BODIES["rdqm-install"]
+    ctx = {**_rhel102_context("rdqm-install"), "rdqm_kmod_rpm": KMOD_RPM, **_staging_vars()}
+    modver = _named(body, "ask IBM's modver which drbd kmod fits the running kernel (loud fail)")
+    modver_path = _render(modver["ansible.builtin.command"]["argv"][0], ctx)
+    assert modver_path.endswith("/MQServer/Advanced/RDQM/PreReqs/el10/kmod-drbd-9/modver")
+    prereqs = _named(body, "install MQ + cluster prereqs (step 1 of 2)")
+    rendered = _render(prereqs["ansible.builtin.shell"], ctx)
+    assert rendered == PREREQS_BEFORE.replace("el9/pacemaker-2", "el10/pacemaker-3").replace(
+        "el9/drbd-utils-9", "el10/drbd-utils-9"
+    )
+    repo = _named(body, "dnf repos from the DVD")["ansible.builtin.copy"]["content"]
+    assert _render(repo, ctx) == DVD_REPO_BEFORE.replace("RHEL 9.6 DVD", "RHEL 10.2 DVD")
