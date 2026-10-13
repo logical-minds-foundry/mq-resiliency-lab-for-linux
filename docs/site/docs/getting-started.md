@@ -299,8 +299,9 @@ an Ubuntu 26.04 row to the SPCR.
 where `mqlab doctor` reports `x86-64-v3: no`, a plain
 `mqlab bootstrap nativeha-rhel-crr` is refused, and the message tells you to put
 `os: rhel:9` in a build file. The lab never falls back to RHEL 9 on its own.
-`rdqm-rhel` is RHEL 9 only: IBM supports RDQM on RHEL 10 only from MQ 10.0.1, and
-the lab is pinned to MQ 10.0.0.5.
+`rdqm-rhel` is RHEL 9 only for now. IBM supports RDQM on RHEL 10 from MQ 10.0.1,
+the lab's current MQ pin; offering `rhel:10` for `rdqm-rhel` is tracked in
+[#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440).
 
 The sourced support status for every stack and OS is in the
 [OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md).

@@ -296,6 +296,6 @@ def test_vendored_known_issue_list_is_sourced_and_ordered() -> None:
         "www.ibm.com",
         "/support/pages/node/1087143",
     )
-    assert data["rdqm_kernel_known_issues_as_of"] == "2026-10-09"
+    assert data["rdqm_kernel_known_issues_as_of"] == "2026-10-13"
     ranges = data["rdqm_kernel_known_issues"]
     assert ranges == [{"first": "5.14.0-570.12.1", "last": "5.14.0-570.15.1"}]

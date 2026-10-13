@@ -1,30 +1,33 @@
-# Real output of IBM's `modver -m <kernel>` (#1408), captured 2026-10-09 by running the
-# script from the 10.0.0.0 IBM-MQ-Advanced-for-Developers-LinuxX64 tarball
+# Real output of IBM's `modver -m <kernel>` (#1408), re-captured 2026-10-13 (#1409) by
+# running the script from the 10.0.1.0 IBM-MQ-Advanced-for-Developers-LinuxX64 tarball
 # (MQServer/Advanced/RDQM/PreReqs/el9/kmod-drbd-9/modver) against each kernel below.
+# modver is a bash `case` on the kernel-release string; with the kernel given as an
+# argument it reads nothing from the host, so the capture is host-independent.
 # stdout is verbatim, one list item per line; rc is the exit status.
 # tests/test_rdqm_modver.py runs the rdqm-install role's parse against these.
-mq_version: "10.0.0.0"
+mq_version: "10.0.1.0"
 kmod_dir: el9/kmod-drbd-9
 cases:
   # The lab's RHEL 9.6 GA kernel: modver picks the same-release kmod.
   - kernel: 5.14.0-570.12.1.el9_6.x86_64
     rc: 0
     stdout:
-      - kmod-drbd-9.3.1_5.14.0_570.12.1-1.x86_64.rpm
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_5.14.0_570.12.1-1.x86_64.rpm
       - "10.0.0.0"
   # A later 9.6 errata kernel: modver picks the newest kmod at or below it in the family.
   - kernel: 5.14.0-570.40.1.el9_6.x86_64
     rc: 0
     stdout:
-      - kmod-drbd-9.3.1_5.14.0_570.35.1-1.x86_64.rpm
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_5.14.0_570.35.1-1.x86_64.rpm
       - "10.0.0.0"
   # The RHEL 9.8 GA kernel: no same-release kmod ships, modver picks the 687 family's.
   - kernel: 5.14.0-687.5.3.el9_8.x86_64
     rc: 0
     stdout:
-      - kmod-drbd-9.3.1_5.14.0_687.5.1-1.x86_64.rpm
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_5.14.0_687.5.1-1.x86_64.rpm
       - "10.0.0.0"
-  # The RHEL 10.2 GA kernel: outside every family this el9 modver knows.
+  # The RHEL 10.2 GA kernel: outside every family this el9 modver knows (10.0.1.0 ships
+  # it a separate el10/kmod-drbd-9/modver; enabling that is #1440).
   - kernel: 6.12.0-211.7.3.el10_2.x86_64
     rc: 1
     stdout:

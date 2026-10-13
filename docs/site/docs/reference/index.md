@@ -8,9 +8,9 @@ lockstep with the lab. For the narrative walk-through of how these pieces fit
 together, see [Architecture](../architecture/index.md); to drive the running
 lab, see [Operate & Observe](../operate/index.md).
 
-The lab pins IBM **MQ 10.0** (currently `10.0.0.5`, the 10.0 LTS fix pack that
-is also the latest CD level). The version lives in **one authoritative place** —
-the single-source pin file
+The lab pins IBM **MQ 10.0** (currently `10.0.1.0`, the 10.0.1 Continuous
+Delivery (CD) release, generally available from 2026-10-13). The version lives
+in **one authoritative place** — the single-source pin file
 [`lab/mq-version`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version).
 Every consumer reads that pin rather than duplicating the literal:
 `manifest.DEFAULT_MQ_VERSION`, `scripts/fetch-mq.sh`, the Ansible `mq_version`
@@ -19,8 +19,8 @@ default
 and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
 auto-invalidates those baked images — see
 [`docs/development/box-model.md`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)).
-Bump `lab/mq-version` to rebase the whole lab in one edit. Adopting MQ 10.0.1
-(a CD release, generally available from 2026-10-13) is tracked in epic
+Bump `lab/mq-version` to rebase the whole lab in one edit. The move to MQ 10.0.1
+(re-pin, rebake and revalidation) is tracked in epic
 [logical-minds-foundry/.github#315](https://github.com/logical-minds-foundry/.github/issues/315).
 
 OS versions follow the same single-source rule. The OS version catalog,
