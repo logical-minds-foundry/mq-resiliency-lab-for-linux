@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import argparse
 
+from mqrc.mqconn import connect_client
+
 
 def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Induced-denial MQ authorization probe (#630/#617).")
@@ -93,8 +95,7 @@ def probe(args: argparse.Namespace) -> int:
     qmgr = None
     qobj = None
     try:
-        qmgr = ibmmq.QueueManager(None)
-        qmgr.connect_with_options(args.qmgr, cd=cd, sco=sco)
+        qmgr = connect_client(args.qmgr, cd, sco)
         if args.op == "put":
             open_opts = ibmmq.CMQC.MQOO_OUTPUT | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING
             md = ibmmq.MD()

@@ -252,6 +252,7 @@ def _fake_ibmmq(*, put_reason: int = 0, connect_reason: int = 0) -> types.Module
         MQXPT_TCP = 2
 
     class CMQC:
+        MQCNO_CLIENT_BINDING = 0x800
         MQCNO_RECONNECT = 0x01000000
         MQFMT_STRING = b"MQSTR   "
         MQPER_PERSISTENT = 1

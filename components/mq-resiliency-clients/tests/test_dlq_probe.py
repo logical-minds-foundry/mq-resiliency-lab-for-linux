@@ -59,6 +59,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
         """the binding's own error (best-effort teardown must swallow it too)."""
 
     class CMQC:
+        MQCNO_CLIENT_BINDING = 0x800
         MQOO_INPUT_AS_Q_DEF = 0x01
         MQOO_FAIL_IF_QUIESCING = 0x2000
         MQGMO_FAIL_IF_QUIESCING = 0x2000
@@ -79,6 +80,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
 
         def connect_with_options(self, _name, cd=None, sco=None, opts=0) -> None:
             state["connect"] = (_name, cd, sco)
+            state["opts"] = opts
 
         def disconnect(self) -> None:
             pass
@@ -148,6 +150,7 @@ def test_probe_sets_clntconn_channel_type_from_cmqxc(monkeypatch):
     assert not hasattr(fake.CMQC, "MQCHT_CLNTCONN")
     # #1478: ibmmq defines MQXPT_TCP only in CMQXC (cmqxc.h), not CMQC.
     assert state["connect"][1].TransportType == fake.CMQXC.MQXPT_TCP
+    assert state["opts"] == fake.CMQC.MQCNO_CLIENT_BINDING  # client mode forced (#1480)
     assert not hasattr(fake.CMQC, "MQXPT_TCP")
 
 

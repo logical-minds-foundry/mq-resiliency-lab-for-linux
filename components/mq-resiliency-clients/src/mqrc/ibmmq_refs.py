@@ -24,6 +24,10 @@ for the ibmmq surface it touches:
   members against the imported compiled ibmmq (a miss fails the install);
 - ``tests/test_ibmmq_refs.py``, on the dev VM (no MQ client), checks the constant
   references against the constant modules of the ibmmq sdist pinned in ``uv.lock``.
+
+:func:`connect_calls` lists every queue-manager connect in the source, so
+``tests/test_mqconn.py`` can require that the package connects only through
+mqrc.mqconn.connect_client, which forces ``MQCNO_CLIENT_BINDING`` (#1480).
 """
 
 from __future__ import annotations
@@ -130,6 +134,71 @@ def scan(files: list[Path], root: Path | None = None) -> tuple[list[Ref], list[M
             elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 members |= _local_members(node, rel)
     return sorted(refs), sorted(members)
+
+
+# Every ibmmq call that issues an MQCONN(X) (#1480): the QueueManager methods and the
+# module-level ibmmq.connect(). Matched by attribute name alone, whatever the receiver,
+# so a new connect cannot hide behind an alias; a non-MQ ``.connect()`` would be flagged
+# too, which is the loud side to err on.
+CONNECT_METHODS = frozenset({"connect", "connect_with_options", "connect_tcp_client"})
+CLIENT_BINDING = "MQCNO_CLIENT_BINDING"
+
+
+@dataclass(frozen=True, order=True)
+class ConnectCall:
+    """An MQCONN(X) issued at ``where`` (``file.py:line``) by ``how``.
+
+    ``client_binding`` is True only for ``connect_with_options(..., opts=<expr>)``
+    whose ``opts`` expression names ``MQCNO_CLIENT_BINDING``.
+    """
+
+    where: str
+    how: str
+    client_binding: bool
+
+
+def _names_client_binding(node: ast.expr) -> bool:
+    return any(
+        (isinstance(n, ast.Attribute) and n.attr == CLIENT_BINDING)
+        or (isinstance(n, ast.Name) and n.id == CLIENT_BINDING)
+        for n in ast.walk(node)
+    )
+
+
+def _connect_call(node: ast.Call) -> tuple[str, bool] | None:
+    """(how, client_binding) if ``node`` connects to a queue manager, else None.
+
+    Connecting calls: any ``<x>.<method>(...)`` for a method in :data:`CONNECT_METHODS`,
+    and ``ibmmq.QueueManager(...)`` unless its name is a literal None (any other name,
+    including the default ``''``, connects at construction with the default binding).
+    """
+    func = node.func
+    if isinstance(func, ast.Attribute) and func.attr in CONNECT_METHODS:
+        opts = next((kw.value for kw in node.keywords if kw.arg == "opts"), None)
+        bound = func.attr == "connect_with_options" and opts is not None
+        return func.attr, bound and _names_client_binding(opts)
+    if _chain(func) == ("QueueManager",):
+        name = node.args[0] if node.args else next(
+            (kw.value for kw in node.keywords if kw.arg == "name"), None
+        )
+        if not (isinstance(name, ast.Constant) and name.value is None):
+            return "QueueManager", False
+    return None
+
+
+def connect_calls(files: list[Path], root: Path | None = None) -> list[ConnectCall]:
+    """Every queue-manager connect in ``files``, sorted (``where`` relative to ``root``)."""
+    base = root if root is not None else package_dir()
+    found: list[ConnectCall] = []
+    for path in files:
+        tree = ast.parse(path.read_text(), filename=str(path))
+        rel = path.relative_to(base).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                hit = _connect_call(node)
+                if hit is not None:
+                    found.append(ConnectCall(f"{rel}:{node.lineno}", *hit))
+    return sorted(found)
 
 
 def problems(binding: Any, refs: list[Ref], members: list[MemberRef]) -> list[str]:

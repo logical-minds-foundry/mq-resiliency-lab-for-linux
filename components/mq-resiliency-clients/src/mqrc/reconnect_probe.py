@@ -13,6 +13,8 @@ client libs present (unit tests, the component selfcheck).
 import argparse
 import time
 
+from mqrc.mqconn import connect_client
+
 PUTS = 50
 INTERVAL_S = 0.7
 
@@ -27,8 +29,7 @@ def probe(qm, conn, queue_name, puts=PUTS, interval=INTERVAL_S):
         ConnectionName=conn,
         TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
-    qmgr = ibmmq.QueueManager(None)
-    qmgr.connect_with_options(qm, cd=cd, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)
+    qmgr = connect_client(qm, cd, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)
     print("connected", flush=True)
     q = ibmmq.Queue(qmgr, queue_name)
     pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT)

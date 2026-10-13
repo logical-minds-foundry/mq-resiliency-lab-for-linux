@@ -67,6 +67,7 @@ def _fake_ibmmq(failures: list[int]) -> types.ModuleType:
         MQXPT_TCP = 2
 
     class CMQC:
+        MQCNO_CLIENT_BINDING = 0x800
         MQCNO_RECONNECT_Q_MGR = 0x4000000
 
     class QueueManager:
@@ -100,7 +101,7 @@ def test_connect_retry_rides_out_a_failover(monkeypatch):
     qmgr = dr_mqi.connect_retry("PCMKAPP", "vip(1414)", "APP.SVRCONN", lambda: True)
     assert qmgr.qm == "PCMKAPP"
     assert qmgr.cd.ConnectionName == "vip(1414)"
-    assert qmgr.opts == 0x4000000  # MQCNO_RECONNECT_Q_MGR
+    assert qmgr.opts == 0x4000000 | 0x800  # MQCNO_RECONNECT_Q_MGR + CLIENT_BINDING (#1480)
 
 
 def test_connect_retry_raises_a_non_failover_error(monkeypatch):
@@ -124,7 +125,7 @@ def test_connect_without_keyrepo_is_plaintext_but_still_passes_an_sco(monkeypatc
     assert not hasattr(qmgr.cd, "SSLCipherSpec")
     # a valid (empty) SCO, never None: connect_with_options packs it (#442)
     assert vars(qmgr.sco) == {}
-    assert qmgr.opts == 0x4000000  # MQCNO_RECONNECT_Q_MGR kept
+    assert qmgr.opts == 0x4000000 | 0x800  # RECONNECT_Q_MGR kept + CLIENT_BINDING
 
 
 def test_connect_with_keyrepo_and_certlabel_sets_mutual_tls(monkeypatch):

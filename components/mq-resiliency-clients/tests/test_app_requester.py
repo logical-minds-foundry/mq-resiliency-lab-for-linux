@@ -180,6 +180,7 @@ def _fake_ibmmq(state: dict, *, revive_on_connect: bool = True) -> types.ModuleT
         MQXPT_TCP = 2
 
     class CMQC:
+        MQCNO_CLIENT_BINDING = 0x800
         MQCNO_RECONNECT = 0x400000
         MQGMO_WAIT = 1
         MQGMO_FAIL_IF_QUIESCING = 0x2000
@@ -199,6 +200,7 @@ def _fake_ibmmq(state: dict, *, revive_on_connect: bool = True) -> types.ModuleT
 
         def connect_with_options(self, _name, cd=None, sco=None, opts=0) -> None:
             state["connects"] += 1
+            state.setdefault("opts", []).append(opts)
             if revive_on_connect:
                 state["alive"] = True
 
@@ -248,6 +250,7 @@ def test_requester_reconnects_after_a_connection_break(monkeypatch, capsys):
     rc = ar.run(ar._build_args(["--count", "3", "--rate", "0"]))
     out = capsys.readouterr().out
     assert state["connects"] == 2  # initial + exactly one reconnect
+    assert state["opts"] == [0x400000 | 0x800] * 2  # RECONNECT + CLIENT_BINDING (#1480)
     assert out.count("round-trip FAILED") == 1
     assert out.count("ms <- REPLY") == 2
     assert rc == 1  # nonzero exit because a failure was recorded
