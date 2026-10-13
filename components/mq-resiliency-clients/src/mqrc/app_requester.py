@@ -200,7 +200,7 @@ def run(args: argparse.Namespace) -> int:
     cd = ibmmq.CD(
         ChannelName=args.channel,
         ConnectionName=args.conn,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     # One code path for TLS and plaintext: an empty SCO on the plaintext path,
     # TLS just sets its fields (#442).

@@ -53,7 +53,7 @@ def serve(
     cd = ibmmq.CD(
         ChannelName=channel,
         ConnectionName=conn,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     sco = None
     if keyrepo:
