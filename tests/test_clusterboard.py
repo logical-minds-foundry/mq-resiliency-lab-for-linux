@@ -23,6 +23,9 @@ from mqlab.clusterboard import (
 )
 
 DS = "promtest"
+# An RDQM QM whose lowercase matches no literal in the board, so a hard-coded resource name
+# (the `qmrdqm` of #1472) cannot pass a test by coincidence.
+RDQM_QM = "PAYHUB1"
 
 
 def test_matrix_is_a_joined_colourised_table():
@@ -137,7 +140,12 @@ def test_cluster_log_panels_exclude_the_event_stream():
     events are a separate stream and belong on the events panel, not the log panels."""
     from mqlab.clusterboard import _nativeha_log_row, _rdqm_log_row
 
-    for panel in (log_row("loki", y=0), _nativeha_log_row("loki", y=0), _rdqm_log_row("loki", y=0)):
+    panels = (
+        log_row("loki", y=0),
+        _nativeha_log_row("loki", y=0),
+        _rdqm_log_row("loki", y=0, qm=RDQM_QM),
+    )
+    for panel in panels:
         expr = panel["targets"][0]["expr"]
         assert 'unit!="mq-events"' in expr, expr
 
@@ -440,7 +448,7 @@ def test_rdqm_role_mapping_codes_primary_secondary_unknown():
 def test_rdqm_instance_cols_for_a_site():
     from mqlab.clusterboard import _rdqm_instance_cols
 
-    cols = _rdqm_instance_cols("rdqm-a.*")
+    cols = _rdqm_instance_cols("rdqm-a.*", RDQM_QM)
     # a single "Pacemaker" summary cell sits between QM-running and DRBD-in-sync so the
     # drill-down reads left-to-right: a NOT-READY site shows WHY (pacemaker) inline, with the
     # per-resource detail one section down in ③ (#287 feedback).
@@ -459,10 +467,10 @@ def test_rdqm_instance_cols_for_a_site():
     assert cols[4][2] == "up"
     assert "cluster_drbd_disk" in cols[4][1] and 'disk="UpToDate"' in cols[4][1]
     # the per-member columns scope to the site's members; the DRBD column scopes by node +
-    # the HA resource so the DR resource (qmrdqm.dr) doesn't leak into the in-sync cell
+    # the HA resource so the DR resource (payhub1.dr) does not leak into the in-sync cell
     assert 'member=~"rdqm-a.*"' in cols[0][1]
-    assert 'resource="qmrdqm"' in cols[4][1] and 'node=~"rdqm-a.*"' in cols[4][1]
-    assert "qmrdqm.dr" not in cols[4][1]
+    assert 'resource="payhub1"' in cols[4][1] and 'node=~"rdqm-a.*"' in cols[4][1]
+    assert "payhub1.dr" not in cols[4][1]
 
 
 def test_rdqm_qm_running_mapping_is_neutral_for_standby():
@@ -532,7 +540,7 @@ def test_rdqm_board_sections_are_contiguous_no_vertical_gaps():
 
 
 def test_rdqm_status_band_is_one_compact_full_width_row():
-    tiles = rdqm_status_band("promtest", y=3)
+    tiles = rdqm_status_band("promtest", y=3, qm=RDQM_QM)
     assert [t["title"] for t in tiles] == [
         "Running on",
         "HA status",
@@ -545,7 +553,7 @@ def test_rdqm_status_band_is_one_compact_full_width_row():
     assert all(t["gridPos"]["h"] == 3 for t in tiles)
     assert all(t["options"]["text"]["valueSize"] == 22 for t in tiles)
     # running-on is the resolved QM owner; the floating-IP tile is first-class (the single VIP)
-    assert 'cluster_resource_owner{resource="RDQMAPP"}' in tiles[0]["targets"][0]["expr"]
+    assert 'cluster_resource_owner{resource="PAYHUB1"}' in tiles[0]["targets"][0]["expr"]
     assert "cluster_rdqm_floating_ip" in tiles[3]["targets"][0]["expr"]
     # the integrity tile carries the gated hazard expr (no false green on no-data)
     integ = tiles[4]["targets"][0]["expr"]
@@ -559,7 +567,7 @@ def test_rdqm_integrity_is_pcmk_style_drbd_plus_ha_not_normal():
     # PCMK-style DRBD hazards: split-brain (StandAlone), Diskless, dual-primary
     assert "StandAlone" in expr and "Diskless" in expr
     # dual-primary must be counted PER RESOURCE *AND PER SITE*: a DR pair legitimately has one
-    # qmrdqm primary on each side (2 globally), which must NOT read as split-brain (#287)
+    # HA-resource primary on each side (2 globally), which must NOT read as split-brain (#287)
     assert "count by (resource, groups)(cluster_drbd_role" in expr
     # plus the RDQM HA-not-Normal hazard, gated on data present so no-data reads STALE
     assert "cluster_rdqm_ha_status_ok == 0" in expr
@@ -571,16 +579,16 @@ def test_rdqm_integrity_is_pcmk_style_drbd_plus_ha_not_normal():
 def test_rdqm_storage_matrix_is_the_ha_drbd_resource():
     from mqlab.clusterboard import _rdqm_storage_cols
 
-    cols = _rdqm_storage_cols()
+    cols = _rdqm_storage_cols(RDQM_QM)
     assert [c[0] for c in cols] == ["resync %", "out-of-sync"]
-    assert all('resource="qmrdqm"' in expr for _, expr, _ in cols)
+    assert all('resource="payhub1"' in expr for _, expr, _ in cols)
     assert all('node=~"rdqm-.*"' in expr for _, expr, _ in cols)
     assert "cluster_drbd_resync_pct" in cols[0][1]
     assert "cluster_drbd_out_of_sync_bytes" in cols[1][1]
 
 
 def test_rdqm_dr_card_is_status_primary_failover_ready_and_backlog():
-    tiles = rdqm_dr_card("promtest", y=0)
+    tiles = rdqm_dr_card("promtest", y=0, qm=RDQM_QM)
     assert [t["title"] for t in tiles] == [
         "DR status",
         "DR primary",
@@ -602,7 +610,8 @@ def test_rdqm_dr_card_is_status_primary_failover_ready_and_backlog():
     assert any(m.get("options", {}).get("0", {}).get("color") == "green" for m in fr_maps)
     assert any(m["type"] == "special" for m in fr_maps)  # STALE on no-data
     # the backlog tile reads the DR DRBD resource's out-of-sync bytes (no rdqmstatus field)
-    assert 'cluster_drbd_out_of_sync_bytes{resource="qmrdqm.dr"}' in tiles[3]["targets"][0]["expr"]
+    backlog = tiles[3]["targets"][0]["expr"]
+    assert 'cluster_drbd_out_of_sync_bytes{resource="payhub1.dr"}' in backlog
     assert tiles[3]["fieldConfig"]["defaults"]["unit"] == "bytes"
 
 
@@ -627,13 +636,15 @@ def test_rdqm_pm_state_and_failcount_mappings():
 def test_rdqm_pacemaker_cols_expose_the_resource_stack():
     from mqlab.clusterboard import _rdqm_pacemaker_cols
 
-    cols = _rdqm_pacemaker_cols("rdqm-b.*")
+    cols = _rdqm_pacemaker_cols("rdqm-b.*", RDQM_QM)
     assert [c[0] for c in cols] == ["ready", "QM", "DRBD HA", "DR repl", "float-IP", "fail-count"]
     # "ready" = online AND able to run the QM (banned node reads red "blocked", not green up)
     assert "cluster_rdqm_node_ready" in cols[0][1] and cols[0][2] == "node_ready"
     # the QM / DRBD / IP cells read pacemaker resource state; the fail-count cell is the alarm
-    assert 'resource="qmrdqm"' in cols[1][1] and cols[1][2] == "pm_state"
-    assert 'resource="p_drbd_qmrdqm"' in cols[2][1]
+    assert 'resource="payhub1"' in cols[1][1] and cols[1][2] == "pm_state"
+    assert 'resource="p_drbd_payhub1"' in cols[2][1]
+    assert 'resource="p_drbd_dr_payhub1"' in cols[3][1]
+    assert 'resource="p_ip_payhub1"' in cols[4][1]
     assert "cluster_rdqm_failcount" in cols[5][1] and cols[5][2] == "failcount"
     assert all('member=~"rdqm-b.*"' in expr for _, expr, _ in cols)
 
@@ -673,7 +684,7 @@ def test_rdqm_integrity_flags_a_site_that_cannot_run_the_qm():
 def test_rdqm_storage_out_of_sync_tolerates_a_sub_extent_delta():
     from mqlab.clusterboard import _rdqm_storage_cols
 
-    cols = _rdqm_storage_cols()
+    cols = _rdqm_storage_cols(RDQM_QM)
     oos = cols[1]  # ("out-of-sync", expr, kind)
     assert oos[0] == "out-of-sync"
     assert oos[2] == "drbd_oos"  # tolerant mapping, not the hard clean0
@@ -773,3 +784,43 @@ def test_pcmk_and_nativeha_boards_unchanged_by_rdqm_arm():
     nha = render_cluster_dashboard({}, arm="nativeha-rhel-crr")
     assert nha["uid"] == "lab-nativeha-rhel-crr-cluster"
     assert "rdqm" not in json.dumps(nha)  # no rdqm plumbing leaked onto the nha board
+
+
+def test_rdqm_board_derives_every_resource_name_from_the_stack_qm(monkeypatch):
+    # #1472: the board pinned resource="qmrdqm" while the lab QM is RDQMAPP, so the DRBD and
+    # Pacemaker cells read empty. Every QM-scoped query must follow the stack's single QM source.
+    from types import SimpleNamespace
+
+    from mqlab import clusterboard
+
+    stack = SimpleNamespace(qm=SimpleNamespace(qm_app=RDQM_QM))
+    monkeypatch.setattr(clusterboard, "lab_stacks", lambda: {"rdqm-rhel": stack})
+    blob = json.dumps(render_cluster_dashboard({}, arm="rdqm-rhel"), ensure_ascii=False)
+    assert 'cluster_resource_owner{resource=\\"PAYHUB1\\"}' in blob  # the owner tile
+    for res in ("payhub1", "payhub1.dr", "p_drbd_payhub1", "p_drbd_dr_payhub1", "p_ip_payhub1"):
+        assert f'resource=\\"{res}\\"' in blob, res
+    assert "④ Storage — DRBD (payhub1)" in blob
+    assert "AMQERR JSON for PAYHUB1" in blob  # the log-panel note names the same QM
+    # no other QM's resource name survives anywhere on the board
+    for literal in ("qmrdqm", "rdqmapp", "RDQMAPP"):
+        assert literal not in blob, literal
+
+
+def test_rdqm_board_reads_its_qm_from_the_topology():
+    # unpatched, the board takes the rdqm-rhel stack's app QM (topology short -> <short>APP)
+    from mqlab.stacks import lab_stacks
+
+    qm = lab_stacks()["rdqm-rhel"].qm.qm_app
+    blob = json.dumps(render_cluster_dashboard({}, arm="rdqm-rhel"))
+    assert f'cluster_resource_owner{{resource=\\"{qm}\\"}}' in blob
+    assert f'resource=\\"p_drbd_{qm.lower()}\\"' in blob
+
+
+@pytest.mark.parametrize("qm", ["", "RDQM.APP", "RDQM/APP"])
+def test_rdqm_resource_base_refuses_an_underivable_qm(qm):
+    # MQ rewrites `.` and `/` in a QM's directory name (which RDQM names resources after), so
+    # lowercasing would name a resource that does not exist: fail loud, never guess.
+    from mqlab.clusterboard import _rdqm_resource_base
+
+    with pytest.raises(ValueError, match="cannot derive RDQM resource names"):
+        _rdqm_resource_base(qm)

@@ -3,9 +3,44 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from mqro import rdqmstate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rdqmstate"
+
+# The crm_mon/drbdsetup fixtures are real lab captures from when the RDQM queue manager was
+# QMRDQM, so every resource in them is named `qmrdqm`. The lab QM is now RDQMAPP; these helpers
+# re-key a capture to another QM's resource base so a test can prove the collector follows the
+# QM it is given (#1472: a hard-coded `qmrdqm` read empty on the RDQMAPP lab).
+_CAPTURE_BASE = "qmrdqm"
+
+
+def _capture_for(name: str, base: str) -> str:
+    """A fixture capture with its `qmrdqm` resource names re-keyed to `base`."""
+    return (FIXTURES / name).read_text().replace(_CAPTURE_BASE, base)
+
+
+def test_resource_names_derive_from_the_qm_directory_name():
+    # IBM RDQM architecture topic: resources are named after the QM's directory name, which for
+    # a plain name is the name in lowercase (TMPQM1 -> tmpqm1, HAQM1 -> haqm1); the lab's real
+    # DRBD captures show RDQMAPP -> rdqmapp / rdqmapp.dr.
+    assert rdqmstate.rdqm_resource_base("RDQMAPP") == "rdqmapp"
+    assert rdqmstate.rdqm_resource_base("Pay_Hub%1") == "pay_hub%1"
+    assert rdqmstate.rdqm_pm_resources("RDQMAPP") == (
+        "rdqmapp",
+        "p_drbd_rdqmapp",
+        "p_drbd_dr_rdqmapp",
+        "p_ip_rdqmapp",
+    )
+
+
+@pytest.mark.parametrize("qm", ["", "RDQM.APP", "RDQM/APP"])
+def test_resource_base_refuses_a_name_whose_directory_name_is_rewritten(qm):
+    # MQ rewrites `.` and `/` in a QM's directory name, so lowercasing would name a resource
+    # that does not exist; an empty name names nothing. Both fail loud, never guess.
+    with pytest.raises(ValueError, match="cannot derive RDQM resource names"):
+        rdqmstate.rdqm_resource_base(qm)
 
 
 def test_parse_rdqmstatus_extracts_local_block_and_per_member_status():
@@ -276,7 +311,7 @@ def test_probe_merges_stderr_only_when_asked(monkeypatch):
 
 
 def test_parse_crm_banned_site_exposes_stopped_qm_and_infinity_failcount():
-    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon.xml").read_text())
+    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon.xml").read_text(), "QMRDQM")
     assert crm["nodes"]["rdqm-b2"]["online"] is True
     # the QM application stack is Stopped everywhere on the banned site -> no node placement
     assert crm["roles"].get("qmrdqm", {}) == {}
@@ -289,7 +324,7 @@ def test_parse_crm_banned_site_exposes_stopped_qm_and_infinity_failcount():
 
 
 def test_parse_crm_healthy_site_places_qm_and_zero_failcount():
-    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon_healthy.xml").read_text())
+    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon_healthy.xml").read_text(), "QMRDQM")
     assert crm["roles"]["qmrdqm"]["rdqm-a1"] == "Started"  # QM running on a1
     assert crm["roles"]["p_drbd_qmrdqm"]["rdqm-a1"] == "Promoted"
     assert crm["failcount"].get("rdqm-a1", 0) == 0  # fail-count None -> 0
@@ -307,7 +342,8 @@ def test_parse_crm_without_resources_section_is_safe():
     # a degenerate crm_mon (nodes only, no <resources>/<node_history>) must not crash and must
     # fabricate nothing — roles/failcount empty, nodes still read.
     crm = rdqmstate.parse_crm(
-        '<pacemaker-result><nodes><node name="x" online="true"/></nodes></pacemaker-result>'
+        '<pacemaker-result><nodes><node name="x" online="true"/></nodes></pacemaker-result>',
+        "QMRDQM",
     )
     assert crm["nodes"]["x"]["online"] is True
     assert crm["roles"] == {}
@@ -315,7 +351,7 @@ def test_parse_crm_without_resources_section_is_safe():
 
 
 def test_render_pacemaker_metrics_expose_the_banned_qm():
-    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon.xml").read_text())
+    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon.xml").read_text(), "QMRDQM")
     out = rdqmstate.render_rdqm_state_prom(
         node="rdqm-b1", qm="QMRDQM", status=None, drbd=None, crm=crm, now=1, fresh_sources=("crm",)
     )
@@ -338,7 +374,7 @@ def test_render_pacemaker_metrics_expose_the_banned_qm():
 
 
 def test_render_pacemaker_metrics_healthy_site_is_startable():
-    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon_healthy.xml").read_text())
+    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon_healthy.xml").read_text(), "QMRDQM")
     out = rdqmstate.render_rdqm_state_prom(
         node="rdqm-a1", qm="QMRDQM", status=None, drbd=None, crm=crm, now=1, fresh_sources=("crm",)
     )
@@ -356,6 +392,68 @@ def test_render_without_crm_emits_no_pacemaker_metrics():
     )
     assert "cluster_rdqm_pm_" not in out  # crm probe stale -> pacemaker section reads STALE
     assert "cluster_rdqm_failcount" not in out
+
+
+def test_pacemaker_metrics_follow_the_qm_not_a_literal():
+    # the lab QM RDQMAPP: its banned-site capture is keyed rdqmapp / p_drbd_rdqmapp / ... and
+    # the collector must read THOSE resources — a hard-coded `qmrdqm` read all-zero (#1472).
+    crm = rdqmstate.parse_crm(_capture_for("crm_mon.xml", "rdqmapp"), "RDQMAPP")
+    assert crm["failcount"]["rdqm-b1"] == 1000000  # read from the rdqmapp QM primitive
+    assert crm["roles"]["p_drbd_rdqmapp"]["rdqm-b2"] == "Promoted"
+    out = rdqmstate.render_rdqm_state_prom(
+        node="rdqm-b1", qm="RDQMAPP", status=None, drbd=None, crm=crm, now=1, fresh_sources=()
+    )
+    assert (
+        'cluster_rdqm_pm_state{node="rdqm-b1",member="rdqm-b2",resource="p_drbd_rdqmapp"} 2' in out
+    )
+    assert 'cluster_rdqm_qm_startable{node="rdqm-b1",member="rdqm-b1"} 0' in out  # banned
+    assert "qmrdqm" not in out  # no resource name leaks in from anywhere but the QM
+
+
+def test_pacemaker_metrics_ignore_another_qms_resources():
+    # a capture of QMRDQM's resources read for RDQMAPP: nothing matches, so the QM fail-count
+    # is unread (0) and every per-resource state is 0 — another QM's ban is not this QM's.
+    crm = rdqmstate.parse_crm((FIXTURES / "crm_mon.xml").read_text(), "RDQMAPP")
+    assert crm["failcount"] == {}
+    out = rdqmstate.render_rdqm_state_prom(
+        node="rdqm-b1", qm="RDQMAPP", status=None, drbd=None, crm=crm, now=1, fresh_sources=()
+    )
+    drbd_ha = 'cluster_rdqm_pm_state{node="rdqm-b1",member="rdqm-b2",resource="p_drbd_rdqmapp"}'
+    assert f"{drbd_ha} 0" in out
+    assert 'cluster_rdqm_failcount{node="rdqm-b1",member="rdqm-b1"} 0' in out
+
+
+@pytest.mark.parametrize(
+    ("promoted", "unpromoted"),
+    [("Promoted", "Unpromoted"), ("Master", "Slave")],  # Pacemaker 2.1+ vs pre-2.1 role names
+)
+def test_pacemaker_role_names_code_both_vocabularies(promoted, unpromoted):
+    # the healthy capture uses Promoted/Unpromoted; older Pacemaker prints Master/Slave for the
+    # same states. Both must code leader 2 / replica 1 for the DRBD HA primitive.
+    text = (
+        _capture_for("crm_mon_healthy.xml", "rdqmapp")
+        .replace('role="Unpromoted"', f'role="{unpromoted}"')
+        .replace('role="Promoted"', f'role="{promoted}"')
+    )
+    crm = rdqmstate.parse_crm(text, "RDQMAPP")
+    out = rdqmstate.render_rdqm_state_prom(
+        node="rdqm-a1", qm="RDQMAPP", status=None, drbd=None, crm=crm, now=1, fresh_sources=()
+    )
+    leader = 'cluster_rdqm_pm_state{node="rdqm-a1",member="rdqm-a1",resource="p_drbd_rdqmapp"} 2'
+    replica = 'cluster_rdqm_pm_state{node="rdqm-a1",member="rdqm-a2",resource="p_drbd_rdqmapp"} 1'
+    assert leader in out
+    assert replica in out
+    assert 'cluster_rdqm_pm_state{node="rdqm-a1",member="rdqm-a1",resource="rdqmapp"} 2' in out
+
+
+def test_collect_refuses_an_underivable_qm_before_probing(monkeypatch):
+    # a QM name whose resource names can't be derived fails loud before any probe runs
+    def no_probe(*_a, **_k):
+        raise AssertionError("probe must not run")
+
+    monkeypatch.setattr(rdqmstate, "probe", no_probe)
+    with pytest.raises(ValueError, match="cannot derive RDQM resource names"):
+        rdqmstate.collect("rdqm-a1", "RDQM.APP", 1)
 
 
 def test_probe_returns_stdout_then_none_on_failure(monkeypatch):
@@ -387,8 +485,8 @@ def test_probe_returns_stdout_then_none_on_failure(monkeypatch):
 
 def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
     rtext = (FIXTURES / "rdqmstatus_m.txt").read_text()
-    dtext = (FIXTURES / "drbdsetup_status.txt").read_text()
-    crmtext = (FIXTURES / "crm_mon_healthy.xml").read_text()
+    dtext = _capture_for("drbdsetup_status.txt", "rdqmapp")  # the lab QM RDQMAPP (#1472)
+    crmtext = _capture_for("crm_mon_healthy.xml", "rdqmapp")
 
     def fake_probe(cmd, timeout, **_kw):
         # route by command: drbdsetup -> DRBD, crm_mon -> pacemaker XML, else rdqmstatus
@@ -401,12 +499,14 @@ def test_main_writes_textfile_atomically(tmp_path, monkeypatch):
     monkeypatch.setattr(rdqmstate, "probe", fake_probe)
     out = tmp_path / "lab_rdqm_state.prom"
     rdqmstate.main(
-        ["--qm", "QMRDQM", "--node", "rdqm-a1", "--out", str(out), "--now", "1781455000"]
+        ["--qm", "RDQMAPP", "--node", "rdqm-a1", "--out", str(out), "--now", "1781455000"]
     )
     text = out.read_text()
-    assert 'cluster_resource_owner{node="rdqm-a1",resource="QMRDQM",holder="rdqm-a1"} 1' in text
-    assert 'cluster_drbd_role{node="rdqm-a1",resource="qmrdqm",role="Primary"} 1' in text
+    assert 'cluster_resource_owner{node="rdqm-a1",resource="RDQMAPP",holder="rdqm-a1"} 1' in text
+    assert 'cluster_drbd_role{node="rdqm-a1",resource="rdqmapp",role="Primary"} 1' in text
     assert 'cluster_rdqm_qm_startable{node="rdqm-a1",member="rdqm-a1"} 1' in text  # pacemaker
+    # the QM primitive is read under the QM's own resource name: Started on a1 -> 2
+    assert 'cluster_rdqm_pm_state{node="rdqm-a1",member="rdqm-a1",resource="rdqmapp"} 2' in text
     assert 'source="rdqmstatus"' in text
     assert 'source="drbd"' in text
     assert 'source="crm"' in text
