@@ -167,14 +167,16 @@ from ibmmq import CMQC as C
 
 cd = ibmmq.CD(ChannelName="APP.SVRCONN",
               ConnectionName="10.50.0.11(1414),10.50.0.12(1414),10.50.0.13(1414)",
-              TransportType=C.MQXPT_TCP)
+              TransportType=ibmmq.CMQXC.MQXPT_TCP)   # CMQXC, not CMQC (#1478)
 cd.ChannelType   = ibmmq.CMQXC.MQCHT_CLNTCONN
 cd.SSLCipherSpec = "ANY_TLS13_OR_HIGHER"
 sco = ibmmq.SCO(KeyRepository="/home/vagrant/ssl/key")   # -> /home/vagrant/ssl/key.kdb
 sco.CertificateLabel = "app-client"
 
 qmgr = ibmmq.QueueManager(None)
-qmgr.connect_with_options("NHAUAPP", cd=cd, sco=sco)
+# MQCNO_CLIENT_BINDING is required: this guest has the full MQ server install, so
+# ibmmq would otherwise connect in local bindings (2058, or 2046 with RECONNECT; #1480)
+qmgr.connect_with_options("NHAUAPP", cd=cd, sco=sco, opts=C.MQCNO_CLIENT_BINDING)
 
 md = ibmmq.MD()
 # report options:  md.Report = C.MQRO_COA | C.MQRO_COD; md.ReplyToQ/ReplyToQMgr
