@@ -63,8 +63,10 @@ def _fake_ibmmq(failures: list[int]) -> types.ModuleType:
         def __init__(self, reason: int) -> None:
             self.reason = reason
 
+    class CMQXC:
+        MQXPT_TCP = 2
+
     class CMQC:
-        MQXPT_TCP = 1
         MQCNO_RECONNECT_Q_MGR = 0x4000000
 
     class QueueManager:
@@ -79,6 +81,7 @@ def _fake_ibmmq(failures: list[int]) -> types.ModuleType:
     mod = types.ModuleType("ibmmq")
     mod.MQMIError = MQMIError
     mod.CMQC = CMQC
+    mod.CMQXC = CMQXC
     mod.CD = lambda **kw: types.SimpleNamespace(**kw)
     mod.SCO = lambda **kw: types.SimpleNamespace(**kw)
     mod.QueueManager = QueueManager

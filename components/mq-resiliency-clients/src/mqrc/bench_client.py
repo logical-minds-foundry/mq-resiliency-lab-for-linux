@@ -272,7 +272,7 @@ def run(args: argparse.Namespace) -> int:
     cd = ibmmq.CD(
         ChannelName=args.channel,
         ConnectionName=args.conn,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     sco = ibmmq.SCO()
     if args.keyrepo:

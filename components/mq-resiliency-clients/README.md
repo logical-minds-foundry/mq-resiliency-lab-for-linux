@@ -21,6 +21,13 @@ hash-locked sdist against the host's MQ SDK, with the `sdist-build` group
 `import ibmmq`, inside the functions that call the MQI. Tests run **without** the
 extra and use a fake `ibmmq` module, because the dev VM has no MQ SDK.
 
+A fake cannot catch a name the real binding lacks, because the fake is written from
+the same belief as the code (#1478). So `mqrc.ibmmq_refs` reads every `ibmmq.*` name
+and class member the package uses off its own source, and two checks hold it to the
+**real** ibmmq: `tests/test_ibmmq_refs.py` against the sdist pinned in `uv.lock`
+(fetched and hash-verified; set `MQRC_IBMMQ_SDIST` to a local copy; a failed fetch
+fails, never skips), and the selfcheck against the compiled binding on every install.
+
 ## Entry points
 
 | Command | Module | Purpose |
@@ -35,7 +42,7 @@ extra and use a fake `ibmmq` module, because the dev VM has no MQ SDK.
 | `mq-dr-responder` | `mqrc.dr_responder` | SVC-side Watcher responder (Watcher ledger) |
 | `mq-dr-baseline` | `mqrc.dr_baseline` | no-fault self-correctness check (RPO 0) |
 | `mq-dr-forced` | `mqrc.dr_forced` | forced cross-site DR loss attribution (RPO > 0) |
-| `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real ibmmq binding when the `mqi` extra is installed |
+| `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real ibmmq binding when the `mqi` extra is installed, and that it has every name and class member the package uses |
 
 `mq-bench` is a **Native HA** persistent-commit benchmark: it measures the commit cost of
 Native HA replication (async CRR vs strict IRR) by PUTting persistent messages to

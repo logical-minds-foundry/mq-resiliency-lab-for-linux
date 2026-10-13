@@ -25,7 +25,7 @@ def probe(qm, conn, queue_name, puts=PUTS, interval=INTERVAL_S):
     cd = ibmmq.CD(
         ChannelName="APP.SVRCONN",
         ConnectionName=conn,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     qmgr = ibmmq.QueueManager(None)
     qmgr.connect_with_options(qm, cd=cd, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)

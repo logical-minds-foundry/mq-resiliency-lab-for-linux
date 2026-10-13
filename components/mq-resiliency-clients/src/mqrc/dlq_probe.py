@@ -93,7 +93,7 @@ def inspect(args: argparse.Namespace) -> dict | None:
         ChannelName=args.channel,
         ConnectionName=args.conn,
         ChannelType=ibmmq.CMQXC.MQCHT_CLNTCONN,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     cd.SSLCipherSpec = args.cipher
     sco = ibmmq.SCO(KeyRepository=args.keyrepo)

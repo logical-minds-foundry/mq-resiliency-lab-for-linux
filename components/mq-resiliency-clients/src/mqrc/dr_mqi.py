@@ -79,7 +79,7 @@ def connect(qm, conn, channel, keyrepo="", certlabel=""):
     cd = ibmmq.CD(
         ChannelName=channel,
         ConnectionName=conn,
-        TransportType=ibmmq.CMQC.MQXPT_TCP,
+        TransportType=ibmmq.CMQXC.MQXPT_TCP,
     )
     # One code path for TLS and plaintext: an empty SCO on the plaintext path,
     # TLS just sets its fields (#442).

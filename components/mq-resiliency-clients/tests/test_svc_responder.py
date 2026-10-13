@@ -31,8 +31,10 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
             self.reason = reason
             super().__init__(f"MQI Error. Comp: {comp}, Reason {reason}")
 
+    class CMQXC:
+        MQXPT_TCP = 2
+
     class CMQC:
-        MQXPT_TCP = 1
         MQGMO_SYNCPOINT = 0x2
         MQGMO_WAIT = 0x1
         MQGMO_FAIL_IF_QUIESCING = 0x2000
@@ -106,6 +108,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
     mod = types.ModuleType("ibmmq")
     mod.MQMIError = MQMIError
     mod.CMQC = CMQC
+    mod.CMQXC = CMQXC
     mod.CD = mod.MD = mod.OD = mod.GMO = mod.PMO = _Struct
     mod.SCO = SCO
     mod.QueueManager = QueueManager

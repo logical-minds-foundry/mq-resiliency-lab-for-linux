@@ -231,7 +231,7 @@ def test_reason_names_reads_mqrc_constants_only():
     class CMQC:
         MQRC_NOT_AUTHORIZED = 2035
         MQRC_HOST_NOT_AVAILABLE = 2538
-        MQXPT_TCP = 2  # not a reason code
+        MQPER_PERSISTENT = 1  # not a reason code
         MQRC_NOT_AN_INT = "x"
 
     names = bc.reason_names(CMQC)
@@ -248,8 +248,10 @@ def _fake_ibmmq(*, put_reason: int = 0, connect_reason: int = 0) -> types.Module
             self.reason = reason
             super().__init__(f"MQI Error. Comp: {comp}, Reason {reason}")
 
-    class CMQC:
+    class CMQXC:
         MQXPT_TCP = 2
+
+    class CMQC:
         MQCNO_RECONNECT = 0x01000000
         MQFMT_STRING = b"MQSTR   "
         MQPER_PERSISTENT = 1
@@ -290,6 +292,7 @@ def _fake_ibmmq(*, put_reason: int = 0, connect_reason: int = 0) -> types.Module
     for name, obj in {
         "MQMIError": MQMIError,
         "CMQC": CMQC,
+        "CMQXC": CMQXC,
         "CD": _Struct,
         "SCO": _Struct,
         "MD": _Struct,

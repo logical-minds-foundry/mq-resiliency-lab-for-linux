@@ -176,8 +176,10 @@ def _fake_ibmmq(state: dict, *, revive_on_connect: bool = True) -> types.ModuleT
             self.reason = reason
             super().__init__(f"MQI Error. Comp: {comp}, Reason {reason}")
 
+    class CMQXC:
+        MQXPT_TCP = 2
+
     class CMQC:
-        MQXPT_TCP = 1
         MQCNO_RECONNECT = 0x400000
         MQGMO_WAIT = 1
         MQGMO_FAIL_IF_QUIESCING = 0x2000
@@ -225,6 +227,7 @@ def _fake_ibmmq(state: dict, *, revive_on_connect: bool = True) -> types.ModuleT
     for name, obj in {
         "MQMIError": MQMIError,
         "CMQC": CMQC,
+        "CMQXC": CMQXC,
         "CD": _Struct,
         "SCO": _Struct,
         "MD": _Struct,

@@ -59,13 +59,13 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
         """the binding's own error (best-effort teardown must swallow it too)."""
 
     class CMQC:
-        MQXPT_TCP = 1
         MQOO_INPUT_AS_Q_DEF = 0x01
         MQOO_FAIL_IF_QUIESCING = 0x2000
         MQGMO_FAIL_IF_QUIESCING = 0x2000
 
     class CMQXC:
         MQCHT_CLNTCONN = 6
+        MQXPT_TCP = 2
 
     class _Struct:
         def __init__(self, **kw: object) -> None:
@@ -146,6 +146,9 @@ def test_probe_sets_clntconn_channel_type_from_cmqxc(monkeypatch):
     dp.inspect(_args(2051, "TESTQ"))
     assert state["connect"][1].ChannelType == fake.CMQXC.MQCHT_CLNTCONN
     assert not hasattr(fake.CMQC, "MQCHT_CLNTCONN")
+    # #1478: ibmmq defines MQXPT_TCP only in CMQXC (cmqxc.h), not CMQC.
+    assert state["connect"][1].TransportType == fake.CMQXC.MQXPT_TCP
+    assert not hasattr(fake.CMQC, "MQXPT_TCP")
 
 
 def test_inspect_returns_none_on_empty_dlq(monkeypatch):

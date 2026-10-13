@@ -21,6 +21,7 @@ MODULES = (
     "dr_baseline",
     "dr_forced",
     "header",
+    "ibmmq_refs",
     "dr",
     "dr.ledger",
     "selfcheck",
@@ -95,6 +96,42 @@ def test_selfcheck_fails_on_a_binding_version_mismatch(monkeypatch, capsys):
 
 def test_selfcheck_imports_the_real_ibmmq_when_installed(monkeypatch, capsys):
     monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
-    monkeypatch.setitem(sys.modules, "ibmmq", types.ModuleType("ibmmq"))
+    binding = types.ModuleType("ibmmq")
+    monkeypatch.setitem(sys.modules, "ibmmq", binding)
+    seen = []
+
+    def problems(b, refs, members):
+        seen.append((b, refs, members))
+        return []
+
+    monkeypatch.setattr(selfcheck.ibmmq_refs, "problems", problems)
     assert selfcheck.main([]) == 0
-    assert "ok ibmmq 2.1.1" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "ok ibmmq 2.1.1" in out
+    # the API check ran against the imported binding, over the package's own source
+    ((b, refs, members),) = seen
+    assert b is binding
+    assert f"ok ibmmq API: {len(refs)} references, {len(members)} members" in out
+    assert any(r.path == ("CMQXC", "MQXPT_TCP") for r in refs)
+
+
+def test_selfcheck_fails_when_the_binding_lacks_a_used_name(monkeypatch, capsys):
+    # #1478: a binding without a name the clients use fails the install, per reference.
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
+    monkeypatch.setitem(sys.modules, "ibmmq", types.ModuleType("ibmmq"))  # has nothing
+    assert selfcheck.main([]) == 1
+    err = capsys.readouterr().err
+    assert "FAIL ibmmq API: app_requester.py:" in err
+    assert ": ibmmq.CMQXC does not exist" in err
+
+
+def test_selfcheck_fails_when_the_api_check_cannot_run(monkeypatch, capsys):
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
+    monkeypatch.setitem(sys.modules, "ibmmq", types.ModuleType("ibmmq"))
+
+    def problems(*_a):
+        raise RuntimeError("structure would not build")
+
+    monkeypatch.setattr(selfcheck.ibmmq_refs, "problems", problems)
+    assert selfcheck.main([]) == 1
+    assert "FAIL ibmmq API check: RuntimeError" in capsys.readouterr().err

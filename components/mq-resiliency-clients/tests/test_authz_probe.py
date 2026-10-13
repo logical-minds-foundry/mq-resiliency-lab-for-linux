@@ -30,7 +30,6 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
         """the binding's own error (e.g. disconnect() on a never-connected hconn)."""
 
     class CMQC:
-        MQXPT_TCP = 1
         MQOO_OUTPUT = 0x10
         MQOO_FAIL_IF_QUIESCING = 0x2000
         MQOO_INPUT_AS_Q_DEF = 0x01
@@ -41,6 +40,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
 
     class CMQXC:
         MQCHT_CLNTCONN = 6
+        MQXPT_TCP = 2
 
     class _Struct:  # stands in for CD / SCO / MD / PMO
         def __init__(self, **kw: object) -> None:
@@ -143,6 +143,9 @@ def test_probe_sets_clntconn_channel_type_from_cmqxc(monkeypatch):
     ap.probe(_args([]))
     assert state["connect"][1].ChannelType == fake.CMQXC.MQCHT_CLNTCONN
     assert not hasattr(fake.CMQC, "MQCHT_CLNTCONN")
+    # #1478: ibmmq defines MQXPT_TCP only in CMQXC (cmqxc.h), not CMQC.
+    assert state["connect"][1].TransportType == fake.CMQXC.MQXPT_TCP
+    assert not hasattr(fake.CMQC, "MQXPT_TCP")
 
 
 def test_denied_at_connect_returns_reason(monkeypatch):
