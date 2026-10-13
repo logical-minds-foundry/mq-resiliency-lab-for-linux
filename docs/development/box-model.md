@@ -34,7 +34,7 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 | `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes on RHEL 10, the stack default (#1289) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
 | `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (pymqi compiled from sdist at bake; replaces the pre-#294 responder venv, #1227) |
+| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (ibmmq: wheel on x86_64, compiled from sdist at bake on aarch64; replaces the pre-#294 responder venv, #1227) |
 | `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `nha-ubuntu-*` when `nativeha-ubuntu` is built with `os: ubuntu:26` (lab-only; see *Shared nodes* below) | the same bake as `mq-nativeha-ubuntu24`, on 26.04 |
@@ -186,7 +186,7 @@ itself (#1278, spec §4.7.1; it replaced the controller-side SAN deb cache).
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
 `mq-client-ubuntu24` box: its server-set install carries the client and SDK too, so a
 single baked image serves the simulated upstream (server + QM), the application
-client (client + SDK for pymqi), and the probe's exporter (MQ runtime libs; the
+client (client + SDK for the ibmmq binding), and the probe's exporter (MQ runtime libs; the
 `mq_prometheus` binary itself is prebuilt in the Go container, #1065).
 
 ### The RHEL9 flavors (the kernel-pin dilemma)

@@ -3,7 +3,7 @@
 Stdlib-only; installed on the nha nodes as the `lab-loglifecycle-state` console-script
 entry point of mq-resiliency-observability and run by the nativeha-state 5s timer (a
 second ExecStart of lab-nativeha-state.service). It polls the
-filesystem (no MQI, no PyMQI, no compiled deps): `df` for disk used/total, an `ls` of the
+filesystem (no MQI, no MQI binding, no compiled deps): `df` for disk used/total, an `ls` of the
 per-QM `active/` extent dir for the S/R extent split, and reuses nativehastate's
 `dspmq -o nativeha -x` role detection to tag every metric by instance + role (active and
 replica genuinely diverge — spike #808, S3). Pure parse functions turn CLI output into a

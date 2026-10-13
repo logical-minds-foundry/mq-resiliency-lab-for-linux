@@ -14,7 +14,7 @@ This page is the operator's view: what is on a guest, where it lives, and the
 `mqlab component` verbs that build, inspect and reinstall it.
 
 Before #294 the same code ran as loose `clients/*.py` scripts and `/usr/local/bin`
-collector copies on the guests' system Python, with ad-hoc pymqi venvs
+collector copies on the guests' system Python, with ad-hoc client venvs
 (`/home/vagrant/mqvenv`, `/var/mqm/rvenv`) installed from PyPI at provision time.
 All of those are gone; the provisioning roles delete them if they find them.
 
@@ -32,8 +32,9 @@ The `obs` and `infra` boxes bake no component.
 The observability collectors keep the boundary they always had: they shell out to
 the cluster's own command-line tools (`crm_mon`, `drbdsetup`, `dspmq`,
 `rdqmstatus`, `df`/`ls`), never the MQI, and supplement the stock MQ Prometheus
-exporter rather than replace it. Only `mq-resiliency-clients` uses the MQI; its
-pymqi dependency is compiled on the guest against the MQ SDK.
+exporter rather than replace it. Only `mq-resiliency-clients` uses the MQI, through
+`ibmmq` (IBM's MQI binding): x86_64 guests install its wheel; aarch64 guests compile
+its sdist against the MQ SDK.
 
 ## Two quality tiers
 
@@ -117,7 +118,7 @@ it:
    nothing);
 5. stages, under `$(mqlab build path cache)/components/<name>/<version>+<tree>/`,
    the component's wheel, hash-pinned `requirements.txt` (and
-   `build-requirements.txt` for sdist dependencies such as pymqi), every
+   `build-requirements.txt` for sdist dependencies such as ibmmq on aarch64), every
    dependency artifact fetched from `uv.lock` and checked against its hash
    (`deps/`), the static units (`systemd/`), and `BUILD.json`;
 6. points `CURRENT` at the new artifact.
@@ -158,7 +159,8 @@ On each guest the role:
    mismatch refuses with `rebuild its box (mqlab box build <box>)`: the install
    never replaces a running guest's interpreter;
 2. builds a new release under `releases/` with the pinned interpreter, offline and
-   hash-pinned (pymqi compiles here with `gcc` against `/opt/mqm`);
+   hash-pinned (on aarch64, ibmmq compiles here with `gcc` against `/opt/mqm`;
+   x86_64 installs its wheel);
 3. runs `<name>-selfcheck` **in place**. A failure removes the release; nothing
    goes live;
 4. flips `venv` to the new release atomically (`ln -s` + `mv -T`) and points

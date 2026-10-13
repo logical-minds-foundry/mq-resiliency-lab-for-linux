@@ -1,11 +1,11 @@
 """Guard the baked mq-resiliency-clients component on the mq-client box (epic .github#294 T9).
 
 The clients (requester, bench, svc responder, probes, DR flow) used to run from two
-hand-built pymqi venvs: one created on the app host every provision, and the svc
+hand-built client venvs: one created on the app host every provision, and the svc
 responder's, baked by mq-inter-qm's install half (#1227). Both are replaced by the
 mq-resiliency-clients component, baked into the mq-client box (bake-mq-ubuntu.yml) by
-runtime-install then component-install. pymqi compiles from sdist against the MQ SDK, so
-the component MUST follow mq-install in the bake. These guards fail loudly if the bake
+runtime-install then component-install. On aarch64 the ibmmq sdist compiles against the
+MQ SDK, so the component MUST follow mq-install in the bake. These guards fail loudly if the bake
 stops installing the component, installs it before MQ, or brings back the old venv bake.
 """
 
@@ -67,7 +67,7 @@ def test_bake_installs_the_component_after_mq_install() -> None:
     mq_install = _index(tasks, "mq-install")
     runtime = _index(tasks, "runtime-install")
     component = _index(tasks, "component-install")
-    assert mq_install < runtime < component, "pymqi compiles against the SDK; runtime FIRST"
+    assert mq_install < runtime < component, "the ibmmq sdist compile needs the SDK; runtime FIRST"
     assert tasks[component]["vars"] == {"component_name": COMPONENT}
 
 
