@@ -15,7 +15,7 @@ Run on svc-sim:
     mq-dr-responder --seconds 40 --ledger ~/dr-ledgers/svc.jsonl
 
 Installed as the `mq-dr-responder` console script of the mq-resiliency-clients
-component. Echoes the DRv1 body back so the app can match seq/uuid. pymqi is
+component. Echoes the DRv1 body back so the app can match seq/uuid. ibmmq is
 imported lazily inside the MQI functions, so the module imports without the MQ
 client libs present (unit tests, the component selfcheck).
 """
@@ -35,27 +35,27 @@ def _serve(qmgr, args, ledger, deadline):
     """Get/reply/commit loop on one connection. Returns when the deadline is
     reached; raises MQMIError(reason in dr_mqi.RECONNECT) when the connection is
     lost so the caller can rebuild it."""
-    import pymqi
+    import ibmmq
 
-    qin = pymqi.Queue(qmgr, args.in_queue)
-    qout = pymqi.Queue(qmgr, args.out_queue)
+    qin = ibmmq.Queue(qmgr, args.in_queue)
+    qout = ibmmq.Queue(qmgr, args.out_queue)
     # FAIL_IF_QUIESCING: a blocking MQGET-WAIT must notice a controlled endmqm
     # quiesce instead of hanging through it.
-    gmo = pymqi.GMO(
+    gmo = ibmmq.GMO(
         Options=(
-            pymqi.CMQC.MQGMO_SYNCPOINT | pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
+            ibmmq.CMQC.MQGMO_SYNCPOINT | ibmmq.CMQC.MQGMO_WAIT | ibmmq.CMQC.MQGMO_FAIL_IF_QUIESCING
         ),
         WaitInterval=2000,
     )
-    pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING)
-    md_persist = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT)
+    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
+    md_persist = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
 
     last_flush = time.monotonic()
     while time.monotonic() < deadline:
         try:
-            raw = qin.get(None, pymqi.MD(), gmo)
-        except pymqi.MQMIError as e:
-            if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+            raw = qin.get(None, ibmmq.MD(), gmo)
+        except ibmmq.MQMIError as e:
+            if e.reason == ibmmq.CMQC.MQRC_NO_MSG_AVAILABLE:
                 continue
             if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
                 time.sleep(0.2)  # yield to the reconnect thread; no busy-spin
@@ -72,7 +72,7 @@ def _serve(qmgr, args, ledger, deadline):
         try:
             qout.put(reply, md_persist, pmo)
             qmgr.commit()
-        except pymqi.MQMIError as e:
+        except ibmmq.MQMIError as e:
             if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
                 # get+reply rolled back (or in doubt) across failover; the request
                 # is requeued and we re-get it. Record nothing -- a clean commit
@@ -93,7 +93,7 @@ def _serve(qmgr, args, ledger, deadline):
 
 
 def main(argv=None):
-    import pymqi
+    import ibmmq
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "PCMKSVC"))
@@ -104,7 +104,8 @@ def main(argv=None):
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--ledger", required=True)
     # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
-    # sibling .sth supplies the password (pymqi's SCO has none). Omit both -> plaintext.
+    # sibling .sth supplies the password (the clients use the .sth stash;
+    # SCO.KeyRepoPassword adoption is deferred, epic .github#300 §9). Omit both -> plaintext.
     ap.add_argument(
         "--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder/key"
     )
@@ -132,13 +133,13 @@ def main(argv=None):
             try:
                 _serve(qmgr, args, ledger, deadline)
                 break  # deadline reached cleanly inside _serve
-            except pymqi.MQMIError as e:
+            except ibmmq.MQMIError as e:
                 if e.reason not in dr_mqi.RECONNECT:
                     raise
                 # connection lost (controlled endmqm) -> drop it and rebuild
                 try:
                     qmgr.disconnect()
-                except pymqi.MQMIError:
+                except ibmmq.MQMIError:
                     pass
                 qmgr = None
                 time.sleep(0.5)
@@ -146,7 +147,7 @@ def main(argv=None):
         if qmgr is not None:
             try:
                 qmgr.disconnect()
-            except pymqi.MQMIError:
+            except ibmmq.MQMIError:
                 pass
         ledger.write_jsonl(args.ledger)
 

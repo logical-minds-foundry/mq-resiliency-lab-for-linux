@@ -4,7 +4,7 @@ The clients (mq-app-requester, mq-bench, mq-svc-responder, the authz/DLQ probes,
 flow) are the mq-resiliency-clients component, baked into the mq-client box
 (runtime-install, then component-install). The per-run roles mq-client, app-requester,
 bench-client and mq-inter-qm only: assert the component is baked, retire the pre-#294
-payloads (the per-provision pymqi venv, the responder venv, the loose scripts) AND the
+payloads (the per-provision client venv, the responder venv, the loose scripts) AND the
 /etc/systemd/system unit copies (systemd prefers /etc over the component's /usr/lib units,
 so a surviving copy would keep running the old ExecStart, Review Focus 1), render the
 deployer-owned env files and the responder's QM-ordering drop-in, daemon-reload and
@@ -286,7 +286,8 @@ def test_svc_responder_qm_dropin() -> None:
 
 
 def test_mq_client_keeps_compiler_drops_distro_python_dev() -> None:
-    """gcc stays on the running box: a live component install recompiles pymqi (spec 5.8)."""
+    """gcc stays on the running box: a live component install compiles the ibmmq sdist on
+    aarch64 (spec 5.8)."""
     tasks = _tasks("mq-client")
     (apt,) = [t for t in tasks if "apt-get install -y gcc" in str(t.get("ansible.builtin.shell"))]
     script = apt["ansible.builtin.shell"]

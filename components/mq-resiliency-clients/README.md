@@ -14,11 +14,12 @@ epic [logical-minds-foundry/.github#294](https://github.com/logical-minds-foundr
 ## Dependencies
 
 There are no base dependencies. The MQI binding is the **`mqi` extra**
-(`pymqi==1.12.13`). pymqi ships only as an sdist and compiles against the host's MQ
-SDK, so guests install it from the hash-locked sdist with the `sdist-build` group
-(`setuptools`, `wheel`, and `packaging` transitively). Every module imports pymqi
-**lazily**, inside the functions that call the MQI. Tests run **without** the extra
-and use a fake `pymqi` module, because the dev VM has no MQ SDK.
+(`ibmmq==2.1.1`, IBM's maintained binding). x86_64 guests install its hash-locked
+abi3 wheel. Upstream ships no Linux aarch64 wheel, so aarch64 guests compile the
+hash-locked sdist against the host's MQ SDK, with the `sdist-build` group
+(`setuptools`) pre-installed as its build backend. Every module does a **lazy**
+`import ibmmq`, inside the functions that call the MQI. Tests run **without** the
+extra and use a fake `ibmmq` module, because the dev VM has no MQ SDK.
 
 ## Entry points
 
@@ -34,7 +35,7 @@ and use a fake `pymqi` module, because the dev VM has no MQ SDK.
 | `mq-dr-responder` | `mqrc.dr_responder` | SVC-side Watcher responder (Watcher ledger) |
 | `mq-dr-baseline` | `mqrc.dr_baseline` | no-fault self-correctness check (RPO 0) |
 | `mq-dr-forced` | `mqrc.dr_forced` | forced cross-site DR loss attribution (RPO > 0) |
-| `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real pymqi when the `mqi` extra is installed |
+| `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real ibmmq binding when the `mqi` extra is installed |
 
 `mq-bench` is a **Native HA** persistent-commit benchmark: it measures the commit cost of
 Native HA replication (async CRR vs strict IRR) by PUTting persistent messages to

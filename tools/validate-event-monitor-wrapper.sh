@@ -3,7 +3,7 @@
 #
 # Runs ON the lab node where the amqsevt collector is active. It induces the B-matrix against the
 # running MQ.EVENT.MONITOR service and prints PASS/FAIL evidence to stdout, exiting non-zero if any
-# scenario fails. It is deliberately self-contained (no ansible/pymqi) so it can be dropped onto a
+# scenario fails. It is deliberately self-contained (no ansible/MQI binding) so it can be dropped onto a
 # node and run, or invoked from the repo via `ansible <active-node> -b -m script -a ...`.
 #
 # See docs/reference/event-monitor-wrapper-validation.md for how to find the active node per arm,

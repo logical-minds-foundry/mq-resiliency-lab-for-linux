@@ -1,8 +1,8 @@
 """Unit tests for the SVC service responder (#147; first tests, epic .github#294 T8).
 
-The real MQ loop can't run here (no client libs). svc_responder imports pymqi lazily
+The real MQ loop can't run here (no client libs). svc_responder imports ibmmq lazily
 inside serve()/main(), so the module imports without it and we drive main() with a
-fake pymqi -- mirroring tests/test_app_requester.py. The fake records every reply put
+fake ibmmq -- mirroring tests/test_app_requester.py. The fake records every reply put
 (its object descriptor, MQMD and body) plus commits and disconnects, so the
 request/reply correlation contract is asserted without a live queue manager.
 """
@@ -19,8 +19,8 @@ NO_MSG = 2033  # MQRC_NO_MSG_AVAILABLE
 BROKEN = 2009  # MQRC_CONNECTION_BROKEN
 
 
-def _fake_pymqi(state: dict) -> types.ModuleType:
-    """A minimal fake `pymqi` for serve(). `state["requests"]` is the queue of
+def _fake_ibmmq(state: dict) -> types.ModuleType:
+    """A minimal fake `ibmmq` for serve(). `state["requests"]` is the queue of
     (MsgId, ReplyToQ, ReplyToQMgr, body) requests on the in-queue; once drained a GET
     reports MQRC_NO_MSG_AVAILABLE. `state["raise_at_get"]` / `state["raise_at_connect"]`
     hold a reason code to raise there instead."""
@@ -103,7 +103,7 @@ def _fake_pymqi(state: dict) -> types.ModuleType:
         def close(self) -> None:
             pass
 
-    mod = types.ModuleType("pymqi")
+    mod = types.ModuleType("ibmmq")
     mod.MQMIError = MQMIError
     mod.CMQC = CMQC
     mod.CD = mod.MD = mod.OD = mod.GMO = mod.PMO = _Struct
@@ -114,7 +114,7 @@ def _fake_pymqi(state: dict) -> types.ModuleType:
 
 
 def _run(monkeypatch, state: dict, *extra: str) -> int:
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(state))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(state))
     argv = ["--qm", "SVCQM", "--in-queue", "SVC.REQUEST", "--seconds", "0.05", *extra]
     return svc_responder.main(argv)
 
@@ -140,8 +140,8 @@ def test_seconds_expiry_exits_zero_with_no_traffic(monkeypatch):
     name, cd, sco = state["connect"]
     assert (name, cd.ChannelName, cd.ConnectionName) == (
         "SVCQM",
-        b"SVC.SVRCONN",
-        b"localhost(1414)",
+        "SVC.SVRCONN",
+        "localhost(1414)",
     )
     assert sco is None  # no --keyrepo -> plaintext connect
 
@@ -163,14 +163,14 @@ def test_tls_sets_cipher_keyrepo_and_cert_label(monkeypatch):
     state: dict = {"requests": []}
     assert _run(monkeypatch, state, "--keyrepo", "/var/mqm/ssl/k", "--certlabel", "svc") == 0
     _name, cd, sco = state["connect"]
-    assert cd.SSLCipherSpec == b"ANY_TLS13_OR_HIGHER"
-    assert sco.KeyRepository == b"/var/mqm/ssl/k"
-    assert sco.CertificateLabel == b"svc"
+    assert cd.SSLCipherSpec == "ANY_TLS13_OR_HIGHER"
+    assert sco.KeyRepository == "/var/mqm/ssl/k"
+    assert sco.CertificateLabel == "svc"
 
 
 def test_tls_without_cert_label_leaves_the_default(monkeypatch):
     state: dict = {"requests": []}
     assert _run(monkeypatch, state, "--keyrepo", "/var/mqm/ssl/k") == 0
     _name, _cd, sco = state["connect"]
-    assert sco.KeyRepository == b"/var/mqm/ssl/k"
+    assert sco.KeyRepository == "/var/mqm/ssl/k"
     assert not hasattr(sco, "CertificateLabel")

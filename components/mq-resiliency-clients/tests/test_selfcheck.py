@@ -29,14 +29,14 @@ MODULES = (
 _REAL_VERSION = importlib.metadata.version
 
 
-def _pymqi_dist(installed: bool):
-    """A stand-in for importlib.metadata.version that reports (or denies) a pymqi
+def _ibmmq_dist(installed: bool):
+    """A stand-in for importlib.metadata.version that reports (or denies) an ibmmq
     distribution and defers to the real lookup for everything else."""
 
     def version(name: str) -> str:
-        if name == "pymqi":
+        if name == "ibmmq":
             if installed:
-                return "1.12.13"
+                return "2.1.1"
             raise importlib.metadata.PackageNotFoundError(name)
         return _REAL_VERSION(name)
 
@@ -63,22 +63,38 @@ def test_selfcheck_fails_loud_on_import_error(monkeypatch, capsys):
     assert "mqrc.nope" in capsys.readouterr().err
 
 
-def test_selfcheck_skips_pymqi_without_the_mqi_extra(monkeypatch, capsys):
-    monkeypatch.setattr(importlib.metadata, "version", _pymqi_dist(installed=False))
+def test_selfcheck_skips_ibmmq_without_the_mqi_extra(monkeypatch, capsys):
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=False))
     assert selfcheck.main([]) == 0
-    assert "real-binding check skipped" in capsys.readouterr().out
+    assert (
+        "ibmmq not installed (no mqi extra): real-binding check skipped" in capsys.readouterr().out
+    )
 
 
-def test_selfcheck_requires_pymqi_when_installed_with_mqi(monkeypatch, capsys):
-    monkeypatch.setattr(importlib.metadata, "version", _pymqi_dist(installed=True))
-    monkeypatch.setitem(sys.modules, "pymqi", None)  # distribution present, binding broken
+def test_selfcheck_requires_ibmmq_when_installed_with_mqi(monkeypatch, capsys):
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
+    monkeypatch.setitem(sys.modules, "ibmmq", None)  # distribution present, binding broken
     assert selfcheck.main([]) == 1
-    assert "pymqi" in capsys.readouterr().err
+    assert "FAIL ibmmq" in capsys.readouterr().err
 
 
-def test_selfcheck_imports_the_real_pymqi_when_installed(monkeypatch, capsys):
-    monkeypatch.setattr(importlib.metadata, "version", _pymqi_dist(installed=True))
-    monkeypatch.setitem(sys.modules, "pymqi", types.ModuleType("pymqi"))
+def test_selfcheck_fails_on_a_binding_version_mismatch(monkeypatch, capsys):
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
+    monkeypatch.delitem(sys.modules, "ibmmq", raising=False)
+    real_import = importlib.import_module
+
+    def import_module(name, *a, **kw):
+        if name == "ibmmq":
+            raise OSError("Mismatch between C '2.1.0' and Python '2.1.1' package versions")
+        return real_import(name, *a, **kw)
+
+    monkeypatch.setattr(importlib, "import_module", import_module)
+    assert selfcheck.main([]) == 1
+    assert "FAIL ibmmq: OSError" in capsys.readouterr().err
+
+
+def test_selfcheck_imports_the_real_ibmmq_when_installed(monkeypatch, capsys):
+    monkeypatch.setattr(importlib.metadata, "version", _ibmmq_dist(installed=True))
+    monkeypatch.setitem(sys.modules, "ibmmq", types.ModuleType("ibmmq"))
     assert selfcheck.main([]) == 0
-    # the version is the distribution's, never pymqi.__version__ (stale upstream)
-    assert "ok pymqi 1.12.13" in capsys.readouterr().out
+    assert "ok ibmmq 2.1.1" in capsys.readouterr().out

@@ -8,9 +8,9 @@ induced denial, 0 (MQRC_NONE) for a permitted op. The reason code is the whole
 assertion, so the harness is agnostic to whether the OAM refuses at MQCONN (a
 CHLAUTH back-stop block -- N2), at MQOPEN, or at the MQPUT/MQGET itself.
 
-Follows the clients/ pymqi + TLS idiom (app_requester.py / svc_responder.py): an
+Follows the clients/ ibmmq + TLS idiom (app_requester.py / svc_responder.py): an
 MQCD carrying ChannelName / ConnectionName / SSLCipherSpec, and an MQSCO carrying
-the KeyRepository stem -- pymqi finds the sibling `<stem>.sth` stash for the
+the KeyRepository stem -- ibmmq finds the sibling `<stem>.sth` stash for the
 PKCS#12 password automatically (SCO has no password field). --certlabel is
 optional: a keystore dedicated to one entity (the lab's per-entity keystores) has
 a single personal certificate, so MQ selects it without a label; pass one to be
@@ -23,9 +23,9 @@ lacks the context authority (+setid / +setall) is refused 2035 -- proving it
 cannot self-assert (spoof) message identity context; the "ownership" of the
 stamped identity is enforced by the OAM, not trusted from the client.
 
-pymqi is imported lazily inside probe() so the module (and its pure helpers)
+ibmmq is imported lazily inside probe() so the module (and its pure helpers)
 imports without the MQ client libs present -- unit tests drive it with a fake
-pymqi, mirroring clients/app_requester.py.
+ibmmq, mirroring clients/app_requester.py.
 """
 
 from __future__ import annotations
@@ -77,60 +77,60 @@ def probe(args: argparse.Namespace) -> int:
     set-context open option and stamps MQMD.UserIdentifier -- the context authority
     (+setid/+setall) is then part of what the OAM checks.
     """
-    import pymqi
+    import ibmmq
 
-    cd = pymqi.CD(
-        ChannelName=args.channel.encode(),
-        ConnectionName=args.conn.encode(),
-        ChannelType=pymqi.CMQC.MQCHT_CLNTCONN,
-        TransportType=pymqi.CMQC.MQXPT_TCP,
+    cd = ibmmq.CD(
+        ChannelName=args.channel,
+        ConnectionName=args.conn,
+        ChannelType=ibmmq.CMQXC.MQCHT_CLNTCONN,
+        TransportType=ibmmq.CMQC.MQXPT_TCP,
     )
-    cd.SSLCipherSpec = args.cipher.encode()
-    sco = pymqi.SCO(KeyRepository=args.keyrepo.encode())
+    cd.SSLCipherSpec = args.cipher
+    sco = ibmmq.SCO(KeyRepository=args.keyrepo)
     if args.certlabel:
-        sco.CertificateLabel = args.certlabel.encode()
+        sco.CertificateLabel = args.certlabel
 
     qmgr = None
     qobj = None
     try:
-        qmgr = pymqi.QueueManager(None)
+        qmgr = ibmmq.QueueManager(None)
         qmgr.connect_with_options(args.qmgr, cd=cd, sco=sco)
         if args.op == "put":
-            open_opts = pymqi.CMQC.MQOO_OUTPUT | pymqi.CMQC.MQOO_FAIL_IF_QUIESCING
-            md = pymqi.MD()
-            pmo = pymqi.PMO()
+            open_opts = ibmmq.CMQC.MQOO_OUTPUT | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING
+            md = ibmmq.MD()
+            pmo = ibmmq.PMO()
             if args.set_context == "identity":
-                open_opts |= pymqi.CMQC.MQOO_SET_IDENTITY_CONTEXT
-                pmo.Options |= pymqi.CMQC.MQPMO_SET_IDENTITY_CONTEXT
-                md.UserIdentifier = args.as_user.encode()
+                open_opts |= ibmmq.CMQC.MQOO_SET_IDENTITY_CONTEXT
+                pmo.Options |= ibmmq.CMQC.MQPMO_SET_IDENTITY_CONTEXT
+                md.UserIdentifier = args.as_user
             elif args.set_context == "all":
-                open_opts |= pymqi.CMQC.MQOO_SET_ALL_CONTEXT
-                pmo.Options |= pymqi.CMQC.MQPMO_SET_ALL_CONTEXT
-                md.UserIdentifier = args.as_user.encode()
-            qobj = pymqi.Queue(qmgr, args.queue, open_opts)
+                open_opts |= ibmmq.CMQC.MQOO_SET_ALL_CONTEXT
+                pmo.Options |= ibmmq.CMQC.MQPMO_SET_ALL_CONTEXT
+                md.UserIdentifier = args.as_user
+            qobj = ibmmq.Queue(qmgr, args.queue, open_opts)
             qobj.put(b"authz-probe", md, pmo)
         else:
-            qobj = pymqi.Queue(
-                qmgr, args.queue, pymqi.CMQC.MQOO_INPUT_AS_Q_DEF | pymqi.CMQC.MQOO_FAIL_IF_QUIESCING
+            qobj = ibmmq.Queue(
+                qmgr, args.queue, ibmmq.CMQC.MQOO_INPUT_AS_Q_DEF | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING
             )
             qobj.get()
         observed = 0  # MQRC_NONE -- the op was permitted
-    except pymqi.MQMIError as exc:
+    except ibmmq.MQMIError as exc:
         observed = exc.reason
     finally:
         # Best-effort teardown. On an induced denial the connect/open never
-        # succeeded, so close()/disconnect() raise -- MQMIError, or pymqi's own
+        # succeeded, so close()/disconnect() raise -- MQMIError, or the binding's own
         # PYIFError('not connected') when the hconn was never established. Both are
         # expected on the denial path and must NOT mask the observed reason code.
         if qobj is not None:
             try:
                 qobj.close()
-            except pymqi.MQMIError, pymqi.PYIFError:
+            except ibmmq.MQMIError, ibmmq.PYIFError:
                 pass
         if qmgr is not None:
             try:
                 qmgr.disconnect()
-            except pymqi.MQMIError, pymqi.PYIFError:
+            except ibmmq.MQMIError, ibmmq.PYIFError:
                 pass
     return observed
 

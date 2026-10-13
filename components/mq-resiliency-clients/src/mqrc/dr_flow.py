@@ -23,7 +23,7 @@ arm; it defaults to the Pacemaker arm (PCMKAPP) via its VIP FQDNs, e.g.
         --rate 20 --seconds 30 --ledger ~/dr-ledgers/app.jsonl
 
 Installed as the `mq-dr-flow` console script of the mq-resiliency-clients component.
-pymqi is imported lazily inside the MQI functions, so the module imports without
+ibmmq is imported lazily inside the MQI functions, so the module imports without
 the MQ client libs present (unit tests, the component selfcheck).
 """
 
@@ -50,14 +50,14 @@ def _parse_reply(raw):
 
 
 def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
-    import pymqi
+    import ibmmq
 
     deadline = time.monotonic() + seconds
     keep = lambda: not STOP.is_set() and time.monotonic() < deadline
     last_flush = time.monotonic()
-    pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING)
-    expiry_tenths = pymqi.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
-    md = pymqi.MD(Persistence=pymqi.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
+    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
+    expiry_tenths = ibmmq.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
+    md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
     interval = 1.0 / rate
 
     qmgr, q, seq = None, None, 0
@@ -67,7 +67,7 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
             qmgr = c.connect_retry(keep)
             if qmgr is None:
                 break
-            q = pymqi.Queue(qmgr, req_queue)
+            q = ibmmq.Queue(qmgr, req_queue)
         if pending is None:
             seq += 1
             u = uuidlib.uuid4().hex
@@ -80,14 +80,14 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
         try:
             q.put(payload, md, pmo)
             qmgr.commit()
-        except pymqi.MQMIError as e:
+        except ibmmq.MQMIError as e:
             if e.reason in dr_mqi.RECONNECT:
                 # Controlled endmqm disconnected us non-reconnectably: drop the
                 # dead connection and rebuild. `pending` is kept so the SAME
                 # seq/uuid is resent (the broken commit did not land) -- no loss.
                 try:
                     qmgr.disconnect()
-                except pymqi.MQMIError:
+                except ibmmq.MQMIError:
                     pass
                 qmgr, q = None, None
                 time.sleep(0.5)
@@ -104,7 +104,7 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
                 # commit starts fresh, then retry the same seq.
                 try:
                     qmgr.backout()
-                except pymqi.MQMIError:
+                except ibmmq.MQMIError:
                     pass
                 time.sleep(0.5)
                 continue
@@ -125,19 +125,19 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
     if qmgr is not None:
         try:
             qmgr.disconnect()
-        except pymqi.MQMIError:
+        except ibmmq.MQMIError:
             pass
 
 
 def consumer(c, reply_queue, ledger, lock):
-    import pymqi
+    import ibmmq
 
     keep = lambda: not STOP.is_set()
     # FAIL_IF_QUIESCING: the blocking MQGET-WAIT must notice a controlled endmqm
     # quiesce instead of hanging through it.
-    gmo = pymqi.GMO(
+    gmo = ibmmq.GMO(
         Options=(
-            pymqi.CMQC.MQGMO_SYNCPOINT | pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING
+            ibmmq.CMQC.MQGMO_SYNCPOINT | ibmmq.CMQC.MQGMO_WAIT | ibmmq.CMQC.MQGMO_FAIL_IF_QUIESCING
         ),
         WaitInterval=2000,
     )
@@ -147,16 +147,16 @@ def consumer(c, reply_queue, ledger, lock):
             qmgr = c.connect_retry(keep)
             if qmgr is None:
                 break
-            q = pymqi.Queue(qmgr, reply_queue)
+            q = ibmmq.Queue(qmgr, reply_queue)
         try:
-            raw = q.get(None, pymqi.MD(), gmo)
-        except pymqi.MQMIError as e:
-            if e.reason == pymqi.CMQC.MQRC_NO_MSG_AVAILABLE:
+            raw = q.get(None, ibmmq.MD(), gmo)
+        except ibmmq.MQMIError as e:
+            if e.reason == ibmmq.CMQC.MQRC_NO_MSG_AVAILABLE:
                 continue
             if e.reason in dr_mqi.RECONNECT:
                 try:
                     qmgr.disconnect()
-                except pymqi.MQMIError:
+                except ibmmq.MQMIError:
                     pass
                 qmgr, q = None, None
                 time.sleep(0.5)
@@ -168,11 +168,11 @@ def consumer(c, reply_queue, ledger, lock):
         msg = _parse_reply(raw)
         try:
             qmgr.commit()
-        except pymqi.MQMIError as e:
+        except ibmmq.MQMIError as e:
             if e.reason in dr_mqi.RECONNECT:
                 try:
                     qmgr.disconnect()
-                except pymqi.MQMIError:
+                except ibmmq.MQMIError:
                     pass
                 qmgr, q = None, None
                 time.sleep(0.5)
@@ -191,7 +191,7 @@ def consumer(c, reply_queue, ledger, lock):
     if qmgr is not None:
         try:
             qmgr.disconnect()
-        except pymqi.MQMIError:
+        except ibmmq.MQMIError:
             pass
 
 
@@ -230,7 +230,8 @@ def main(argv=None):
     )
     ap.add_argument("--ledger", required=True)
     # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
-    # sibling .sth supplies the password (pymqi's SCO has none). Omit both -> plaintext.
+    # sibling .sth supplies the password (the clients use the .sth stash;
+    # SCO.KeyRepoPassword adoption is deferred, epic .github#300 §9). Omit both -> plaintext.
     ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/key")
     ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     args = ap.parse_args(argv)

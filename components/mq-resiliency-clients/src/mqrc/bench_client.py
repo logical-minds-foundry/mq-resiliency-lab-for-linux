@@ -165,8 +165,8 @@ def results_record(
 
 
 def reason_names(cmqc: object) -> dict[int, str]:
-    """reason code -> MQRC_* name, read off a pymqi CMQC namespace. The caller passes
-    the lazily-imported pymqi.CMQC, so this helper stays pymqi-free."""
+    """reason code -> MQRC_* name, read off an ibmmq.CMQC namespace. The caller passes
+    the lazily-imported ibmmq.CMQC, so this helper stays ibmmq-free."""
     names: dict[int, str] = {}
     for attr in sorted(dir(cmqc)):
         value = getattr(cmqc, attr)
@@ -265,21 +265,21 @@ def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> int:
-    """The warmup + measure loop. Imports pymqi lazily so the module (and its
+    """The warmup + measure loop. Imports ibmmq lazily so the module (and its
     pure helpers) imports without the MQ client libs present (unit tests)."""
-    import pymqi
+    import ibmmq
 
-    cd = pymqi.CD(
-        ChannelName=args.channel.encode(),
-        ConnectionName=args.conn.encode(),
-        TransportType=pymqi.CMQC.MQXPT_TCP,
+    cd = ibmmq.CD(
+        ChannelName=args.channel,
+        ConnectionName=args.conn,
+        TransportType=ibmmq.CMQC.MQXPT_TCP,
     )
-    sco = pymqi.SCO()
+    sco = ibmmq.SCO()
     if args.keyrepo:
-        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
-        sco.KeyRepository = args.keyrepo.encode()
+        cd.SSLCipherSpec = "ANY_TLS13_OR_HIGHER"
+        sco.KeyRepository = args.keyrepo
         if args.certlabel:
-            sco.CertificateLabel = args.certlabel.encode()
+            sco.CertificateLabel = args.certlabel
 
     payload = b"x" * max(1, args.msg_size)
     interval = 1.0 / args.offered_rate if args.offered_rate > 0 else 0.0
@@ -289,16 +289,16 @@ def run(args: argparse.Namespace) -> int:
         """(Re)establish the client connection + PUT handle. MQCNO_RECONNECT is
         kept; the outer loop also tears down and reconnects on a dead-connection
         reason (the Native HA failover crux, reused from app_requester #457)."""
-        qmgr = pymqi.QueueManager(None)
-        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT)
-        return qmgr, pymqi.Queue(qmgr, args.queue)
+        qmgr = ibmmq.QueueManager(None)
+        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
+        return qmgr, ibmmq.Queue(qmgr, args.queue)
 
     def _disconnect(qmgr: object) -> None:
         if qmgr is None:
             return
         try:
             qmgr.disconnect()
-        except pymqi.MQMIError:
+        except ibmmq.MQMIError:
             pass
 
     state: dict[str, object] = {"qmgr": None, "queue": None}
@@ -312,8 +312,8 @@ def run(args: argparse.Namespace) -> int:
         the connection is torn down so the caller reconnects next attempt."""
         if state["qmgr"] is None:
             state["qmgr"], state["queue"] = _connect()
-        put_md = pymqi.MD(Format=pymqi.CMQC.MQFMT_STRING, Persistence=pymqi.CMQC.MQPER_PERSISTENT)
-        pmo = pymqi.PMO(Options=pymqi.CMQC.MQPMO_SYNCPOINT | pymqi.CMQC.MQPMO_FAIL_IF_QUIESCING)
+        put_md = ibmmq.MD(Format=ibmmq.CMQC.MQFMT_STRING, Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
+        pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
         queue = state["queue"]
         qmgr = state["qmgr"]
         queue.put(payload, put_md, pmo)  # type: ignore[union-attr]
@@ -325,9 +325,9 @@ def run(args: argparse.Namespace) -> int:
         qmgr = state["qmgr"]
         if qmgr is None:
             return 0.0
-        q = pymqi.Queue(qmgr, args.queue, pymqi.CMQC.MQOO_INQUIRE)
+        q = ibmmq.Queue(qmgr, args.queue, ibmmq.CMQC.MQOO_INQUIRE)
         try:
-            return float(q.inquire(pymqi.CMQC.MQIA_CURRENT_Q_DEPTH))
+            return float(q.inquire(ibmmq.CMQC.MQIA_CURRENT_Q_DEPTH))
         finally:
             q.close()
 
@@ -347,7 +347,7 @@ def run(args: argparse.Namespace) -> int:
                     stats.record_success(dt)
                     if i % 100 == 0:
                         depths.append(_current_depth())
-            except pymqi.MQMIError as exc:
+            except ibmmq.MQMIError as exc:
                 if record:
                     stats.record_failure()
                     measure_reasons.append(exc.reason)
@@ -371,7 +371,7 @@ def run(args: argparse.Namespace) -> int:
         _disconnect(state["qmgr"])
 
     if not latencies:
-        print(no_commits_message(measure_reasons, reason_names(pymqi.CMQC)), flush=True)
+        print(no_commits_message(measure_reasons, reason_names(ibmmq.CMQC)), flush=True)
         return 1
 
     record = results_record(

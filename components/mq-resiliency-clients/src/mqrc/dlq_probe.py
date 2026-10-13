@@ -8,11 +8,11 @@ manager's single DLQ with the expected reason (2051 MQRC_PUT_INHIBITED for N5;
 destination queue -- and, because the GET removes the message, to drain the test
 message afterwards so the shared arm is left clean.
 
-Follows the clients/ pymqi + TLS idiom (authz_probe.py): an MQCD with
+Follows the clients/ ibmmq + TLS idiom (authz_probe.py): an MQCD with
 ChannelName/ConnectionName/SSLCipherSpec and an MQSCO with the KeyRepository stem
-(the sibling `.sth` supplies the PKCS#12 password). pymqi is imported lazily inside
+(the sibling `.sth` supplies the PKCS#12 password). ibmmq is imported lazily inside
 inspect() so the module (and the pure parse_mqdlh helper) imports without the MQ
-client libs present -- unit tests drive it with a fake pymqi and a synthetic MQDLH.
+client libs present -- unit tests drive it with a fake ibmmq and a synthetic MQDLH.
 
 MQDLH layout (IBM MQ, cmqc.h), numeric fields in the message's own encoding:
 
@@ -87,48 +87,48 @@ def inspect(args: argparse.Namespace) -> dict | None:
     carried no MQDLH. The GET is destructive by design -- inspecting the induced
     dead-letter also cleans it up.
     """
-    import pymqi
+    import ibmmq
 
-    cd = pymqi.CD(
-        ChannelName=args.channel.encode(),
-        ConnectionName=args.conn.encode(),
-        ChannelType=pymqi.CMQC.MQCHT_CLNTCONN,
-        TransportType=pymqi.CMQC.MQXPT_TCP,
+    cd = ibmmq.CD(
+        ChannelName=args.channel,
+        ConnectionName=args.conn,
+        ChannelType=ibmmq.CMQXC.MQCHT_CLNTCONN,
+        TransportType=ibmmq.CMQC.MQXPT_TCP,
     )
-    cd.SSLCipherSpec = args.cipher.encode()
-    sco = pymqi.SCO(KeyRepository=args.keyrepo.encode())
+    cd.SSLCipherSpec = args.cipher
+    sco = ibmmq.SCO(KeyRepository=args.keyrepo)
     if args.certlabel:
-        sco.CertificateLabel = args.certlabel.encode()
+        sco.CertificateLabel = args.certlabel
 
     qmgr = None
     qobj = None
     try:
-        qmgr = pymqi.QueueManager(None)
+        qmgr = ibmmq.QueueManager(None)
         qmgr.connect_with_options(args.qmgr, cd=cd, sco=sco)
-        qobj = pymqi.Queue(
-            qmgr, args.queue, pymqi.CMQC.MQOO_INPUT_AS_Q_DEF | pymqi.CMQC.MQOO_FAIL_IF_QUIESCING
+        qobj = ibmmq.Queue(
+            qmgr, args.queue, ibmmq.CMQC.MQOO_INPUT_AS_Q_DEF | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING
         )
-        md = pymqi.MD()
-        gmo = pymqi.GMO(Options=pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING, WaitInterval=0)
+        md = ibmmq.MD()
+        gmo = ibmmq.GMO(Options=ibmmq.CMQC.MQGMO_FAIL_IF_QUIESCING, WaitInterval=0)
         try:
             body = qobj.get(None, md, gmo)
-        except pymqi.MQMIError as exc:
+        except ibmmq.MQMIError as exc:
             if exc.reason == _MQRC_NO_MSG_AVAILABLE:
                 return None  # DLQ empty -- nothing dead-lettered
             raise  # never swallow an unexpected MQI error
         return parse_mqdlh(body, little_endian=not args.big_endian)
     finally:
-        # Best-effort teardown -- swallow both MQMIError and pymqi's PYIFError
+        # Best-effort teardown -- swallow both MQMIError and the binding's PYIFError
         # ('not connected') so a failed connect/open never masks the result.
         if qobj is not None:
             try:
                 qobj.close()
-            except pymqi.MQMIError, pymqi.PYIFError:
+            except ibmmq.MQMIError, ibmmq.PYIFError:
                 pass
         if qmgr is not None:
             try:
                 qmgr.disconnect()
-            except pymqi.MQMIError, pymqi.PYIFError:
+            except ibmmq.MQMIError, ibmmq.PYIFError:
                 pass
 
 

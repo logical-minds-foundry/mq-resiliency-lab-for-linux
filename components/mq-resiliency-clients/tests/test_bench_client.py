@@ -1,8 +1,8 @@
 """Unit tests for the purpose-built Native HA benchmark client (#1106, epic #227).
 
-The pymqi PUT/commit loop can't run here (no client libs), but the client's
+The ibmmq PUT/commit loop can't run here (no client libs), but the client's
 value-bearing logic is pure: the commit-latency percentile math, the
-depth-trend flag, and the JSONL results record. bench_client imports pymqi
+depth-trend flag, and the JSONL results record. bench_client imports ibmmq
 lazily inside run() and its reused app_requester helpers import lazily too, so
 the module and its pure helpers import without the MQ client libs present.
 """
@@ -238,8 +238,8 @@ def test_reason_names_reads_mqrc_constants_only():
     assert names == {2035: "MQRC_NOT_AUTHORIZED", 2538: "MQRC_HOST_NOT_AVAILABLE"}
 
 
-def _fake_pymqi(*, put_reason: int = 0, connect_reason: int = 0) -> types.ModuleType:
-    """A fake pymqi for driving run(): every put (or every connect) fails with the
+def _fake_ibmmq(*, put_reason: int = 0, connect_reason: int = 0) -> types.ModuleType:
+    """A fake ibmmq for driving run(): every put (or every connect) fails with the
     given MQ reason, so the measure window produces no commits."""
 
     class MQMIError(Exception):
@@ -286,7 +286,7 @@ def _fake_pymqi(*, put_reason: int = 0, connect_reason: int = 0) -> types.Module
             if put_reason:
                 raise MQMIError(2, put_reason)
 
-    m = types.ModuleType("pymqi")
+    m = types.ModuleType("ibmmq")
     for name, obj in {
         "MQMIError": MQMIError,
         "CMQC": CMQC,
@@ -305,7 +305,7 @@ _RUN_ARGS = ["--warmup-seconds", "0", "--count", "3", "--qm", "NHARCAPP"]
 
 
 def test_run_put_2035_reports_not_authorized(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(put_reason=2035))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(put_reason=2035))
     assert bc.main(_RUN_ARGS) == 1
     out = capsys.readouterr().out
     assert "the QM refused every commit" in out
@@ -314,7 +314,7 @@ def test_run_put_2035_reports_not_authorized(monkeypatch, capsys):
 
 
 def test_run_connect_failure_reports_unreachable(monkeypatch, capsys):
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(connect_reason=2538))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(connect_reason=2538))
     assert bc.main(_RUN_ARGS) == 1
     out = capsys.readouterr().out
     assert "QM unreachable the whole window" in out

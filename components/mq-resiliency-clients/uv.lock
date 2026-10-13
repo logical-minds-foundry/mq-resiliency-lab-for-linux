@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 
 [[package]]
@@ -51,6 +51,17 @@ wheels = [
 ]
 
 [[package]]
+name = "ibmmq"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/34/062ed9dcb9a2f4e97d80eeb6107e8e5646394086265f2b6af1c15fd23cd1/ibmmq-2.1.1.tar.gz", hash = "sha256:77de66a2dbe398cf332790f05d31573f940c00c5967a7183b2344f84ebfbbee3", size = 438072, upload-time = "2026-09-03T09:38:43.236Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/4c/9bf1544d1f6577fa29250b8ee451893a1d63459c348a01f49b850d63b548/ibmmq-2.1.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:acb2d19d16e532ad55738a94c45f97e06181bca4b9dc2cf097970f4a67cf2714", size = 396449, upload-time = "2026-09-03T09:38:36.893Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/e6/2738fba658a89ff4f12ef87141cafcb9489c7ccb56f14cde976d8b1974e3/ibmmq-2.1.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:979a014333bfd51878155b29b41ebc51e02ec779efa5ba702f110b08f636b980", size = 438393, upload-time = "2026-09-03T09:38:38.927Z" },
+    { url = "https://files.pythonhosted.org/packages/17/09/c1f756becce639a92d8d6d087147538d24e19c1301380079b40eae04baaa/ibmmq-2.1.1-cp39-abi3-win_amd64.whl", hash = "sha256:db877ab40d4f93d8afdef972ed8fad314acb89817fdbaa8367390604adb33cc6", size = 401239, upload-time = "2026-09-03T09:38:40.985Z" },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -66,7 +77,7 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 mqi = [
-    { name = "pymqi" },
+    { name = "ibmmq" },
 ]
 
 [package.dev-dependencies]
@@ -77,11 +88,10 @@ dev = [
 ]
 sdist-build = [
     { name = "setuptools" },
-    { name = "wheel" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pymqi", marker = "extra == 'mqi'", specifier = "==1.12.13" }]
+requires-dist = [{ name = "ibmmq", marker = "extra == 'mqi'", specifier = "==2.1.1" }]
 provides-extras = ["mqi"]
 
 [package.metadata.requires-dev]
@@ -90,10 +100,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-sdist-build = [
-    { name = "setuptools", specifier = "==84.0.0" },
-    { name = "wheel", specifier = "==0.48.0" },
-]
+sdist-build = [{ name = "setuptools", specifier = "==84.0.0" }]
 
 [[package]]
 name = "packaging"
@@ -121,12 +128,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/49/2e/ced460408999b33da
 wheels = [
     { url = "https://files.pythonhosted.org/packages/71/46/17f022dd3e953bf20a04a028a21ec746d942f8d2af30fa0f124fa0e6a684/pygments-2.21.0-py3-none-any.whl", hash = "sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9", size = 1250147, upload-time = "2026-08-17T08:02:44.912Z" },
 ]
-
-[[package]]
-name = "pymqi"
-version = "1.12.13"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4e/a1/ab26ff7a6fa2a866bd2b50a49d8e3d2942d395ab59dfc1a9f9baf2ed6480/pymqi-1.12.13.tar.gz", hash = "sha256:a74a48d6f0c59180f678a926927b69d8d7e7df0b228f8903c08b95f54627051c", size = 90972, upload-time = "2025-11-18T16:27:39.588Z" }
 
 [[package]]
 name = "pytest"
@@ -190,16 +191,4 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz", hash = "sha256:f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73", size = 1168449, upload-time = "2026-08-08T18:27:58.365Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/95/9c/c510029fc6ef33a6275cd2c5d3cecd6613dfd6aa401d57c54f1c18852ccf/setuptools-84.0.0-py3-none-any.whl", hash = "sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670", size = 818216, upload-time = "2026-08-08T18:27:56.719Z" },
-]
-
-[[package]]
-name = "wheel"
-version = "0.48.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz", hash = "sha256:94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322", size = 66471, upload-time = "2026-08-11T22:02:27.327Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl", hash = "sha256:3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab", size = 33320, upload-time = "2026-08-11T22:02:26.1Z" },
 ]

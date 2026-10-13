@@ -1,11 +1,10 @@
 """Prove this install can import everything on the interpreter it runs on.
 
 Epic .github#294 spec §5.4 rule 4: import every module in the package, assert the
-running interpreter is CPython 3.14, and report versions. When the ``mqi`` extra is
-installed (the ``pymqi`` distribution is present, as on every guest), also import the
-real compiled pymqi binding, so a broken build against the box's MQ SDK fails the
-install instead of the first client run. Versions come from ``importlib.metadata``
-only: ``pymqi.__version__`` is stale (it reports 1.12.11 for distribution 1.12.13).
+running interpreter is CPython 3.14, and report versions. When the mqi extra is
+installed (the ibmmq distribution is present, as on every guest), also import the
+real compiled binding, so a broken build or a missing libmqm_r.so fails the install
+instead of the first client run. Versions come from importlib.metadata.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ import sys
 import mqrc
 
 DIST = "mq-resiliency-clients"
+BINDING = "ibmmq"
 REQUIRED_MINOR = (3, 14)
 
 
@@ -27,7 +27,7 @@ def _modules() -> list[str]:
 
 def _mqi_installed() -> bool:
     try:
-        importlib.metadata.version("pymqi")
+        importlib.metadata.version(BINDING)
     except importlib.metadata.PackageNotFoundError:
         return False
     return True
@@ -51,13 +51,13 @@ def main(argv: list[str] | None = None) -> int:
             failed += 1
     if _mqi_installed():
         try:
-            importlib.import_module("pymqi")
-            print(f"ok pymqi {importlib.metadata.version('pymqi')}")
+            importlib.import_module(BINDING)
+            print(f"ok {BINDING} {importlib.metadata.version(BINDING)}")
         except Exception as exc:  # noqa: BLE001 -- a broken binding is reported, then exit 1
-            print(f"FAIL pymqi: {exc!r}", file=sys.stderr)
+            print(f"FAIL {BINDING}: {exc!r}", file=sys.stderr)
             failed += 1
     else:
-        print("pymqi not installed (no mqi extra): real-binding check skipped")
+        print(f"{BINDING} not installed (no mqi extra): real-binding check skipped")
     print(f"{DIST} {importlib.metadata.version(DIST)} on {sys.version.split()[0]}")
     return 1 if failed else 0
 

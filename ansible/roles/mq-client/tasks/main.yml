@@ -63,9 +63,10 @@
   become: true
 
 # gcc STAYS on the running box (spec 5.8): mqlab component install mq-resiliency-clients
-# recompiles pymqi against the MQ SDK on the guest. The distro python3-venv/python3-dev are
-# gone: the pinned runtime ships its own venv module and headers.
-- name: install client + sdk debs and the pymqi compiler
+# compiles the ibmmq sdist against the MQ SDK on aarch64 guests (no upstream aarch64
+# wheel, .github#302). The distro python3-venv/python3-dev are gone: the pinned runtime
+# ships its own venv module and headers.
+- name: install client + sdk debs and the MQI binding compiler
   ansible.builtin.shell: |
     set -e
     apt-get update
@@ -94,9 +95,9 @@
     creates: /etc/ld.so.conf.d/ibmmq-Installation1.conf
   become: true
 
-# No dual running (spec 8): the pre-#294 per-provision pymqi venv and the loose client
+# No dual running (spec 8): the pre-#294 per-provision client venv and the loose client
 # scripts copied into the home dir are replaced by the component; remove them.
-- name: retire the pre-#294 pymqi venv and loose client scripts
+- name: retire the pre-#294 client venv and loose client scripts
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
