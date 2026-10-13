@@ -17,6 +17,12 @@ pacemaker_dir: el10/pacemaker-3
 drbd_utils_dir: el10/drbd-utils-9
 # The offline DVD dnf repo's display name; the point release comes from the guest's facts.
 rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
+# Base-OS packages the RDQM prereqs need but do not declare (#1484), installed from the DVD
+# before them. The pacemaker-3 dir's crmsh (LINBIT 4.6.2) imports `distutils`, which RHEL
+# 10's python3 (3.12) no longer has. Without the shim python3-setuptools supplies, `crm`
+# cannot start and `rdqmadm -c` times out with AMQ3890E. Reported upstream: .github#337.
+rdqm_os_extra_packages:
+  - python3-setuptools
 
 # IBM's "Kernel versions with known compatibility issues" table, RHEL 10 row (#1408,
 # #1440), copied by hand: inclusive kernel ranges that IBM says "are known to require a new

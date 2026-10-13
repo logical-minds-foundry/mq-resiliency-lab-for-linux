@@ -163,6 +163,17 @@
     - rdqm_kernel_release | replace('-', '.') is version(item.first | replace('-', '.'), '>=')
     - rdqm_kernel_release | replace('-', '.') is version(item.last | replace('-', '.'), '<=')
 
+# Base-OS packages the RDQM prereqs need but do not declare, from the offline DVD repo
+# (#1484). Per-OS list (vars/<Distribution>-<major>.yml), empty where the prereqs are
+# self-sufficient. On RHEL 10 it brings python3-setuptools, whose `distutils` shim the
+# bundled crmsh needs to start at all.
+- name: base-OS packages the RDQM prereqs need but do not declare
+  ansible.builtin.dnf:
+    name: "{{ rdqm_os_extra_packages }}"
+    state: present
+  become: true
+  when: rdqm_os_extra_packages | length > 0
+
 # Two steps, pre-QM (Phase B lesson), with RDQM LAST: its preinst
 # scriptlet requires the MQ server files already on disk and fails when
 # ordered inside the same rpm transaction.
@@ -188,6 +199,16 @@
     dnf install -y Advanced/RDQM/MQSeriesRDQM-*.rpm
   args:
     creates: /opt/mqm/bin/rdqmadm
+  become: true
+
+# rdqmadm drives Pacemaker through crmsh. If `crm` cannot start (on RHEL 10 the bundled
+# crmsh needs the distutils shim, #1484), `rdqmadm -c` only polls it until AMQ3890E, 30 s later
+# and far from the cause. Prove `crm` starts here, so an undeclared dependency fails at
+# install with crmsh's own message.
+- name: "crmsh starts (fail loud: an undeclared dependency surfaces here, not in rdqmadm -c)"
+  ansible.builtin.command:
+    argv: [/usr/sbin/crm, --version]
+  changed_when: false
   become: true
 
 # Remove the staged tarball and its unpacked tree once both dnf steps are done, so
