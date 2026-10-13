@@ -31,6 +31,8 @@ from __future__ import annotations
 import argparse
 import struct
 
+from mqrc.mqconn import connect_client
+
 _MQRC_NO_MSG_AVAILABLE = 2033
 _DLH_STRUC_ID = b"DLH "
 
@@ -103,8 +105,7 @@ def inspect(args: argparse.Namespace) -> dict | None:
     qmgr = None
     qobj = None
     try:
-        qmgr = ibmmq.QueueManager(None)
-        qmgr.connect_with_options(args.qmgr, cd=cd, sco=sco)
+        qmgr = connect_client(args.qmgr, cd, sco)
         qobj = ibmmq.Queue(
             qmgr, args.queue, ibmmq.CMQC.MQOO_INPUT_AS_Q_DEF | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING
         )

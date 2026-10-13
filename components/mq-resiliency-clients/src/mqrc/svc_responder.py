@@ -25,6 +25,8 @@ import argparse
 import sys
 import time
 
+from mqrc.mqconn import connect_client
+
 
 def serve(
     qmgr_name: str,
@@ -61,8 +63,7 @@ def serve(
         sco = ibmmq.SCO(KeyRepository=keyrepo)
         if certlabel:
             sco.CertificateLabel = certlabel
-    qmgr = ibmmq.QueueManager(None)
-    qmgr.connect_with_options(qmgr_name, cd=cd, sco=sco)
+    qmgr = connect_client(qmgr_name, cd, sco)
     qin = ibmmq.Queue(qmgr, in_queue)
     gmo = ibmmq.GMO(
         Options=(

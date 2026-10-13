@@ -27,6 +27,8 @@ import os
 import secrets
 import time
 
+from mqrc.mqconn import connect_client
+
 # Latency histogram bucket edges (ms), cumulative in the Prometheus sense. Sized
 # for a lab round-trip: sub-ms replies up to multi-second queuing under a burst.
 _BUCKETS_MS: tuple[float, ...] = (1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000)
@@ -221,8 +223,7 @@ def run(args: argparse.Namespace) -> int:
         """(Re)establish the client connection + queue handles. MQCNO_RECONNECT is
         kept (transparent MQI reconnect when it engages), but run() no longer relies
         on it alone — see the outer reconnect loop below. (#457)"""
-        qmgr = ibmmq.QueueManager(None)
-        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
+        qmgr = connect_client(args.qm, cd, sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
         return qmgr, ibmmq.Queue(qmgr, args.request_queue), ibmmq.Queue(qmgr, args.reply_queue)
 
     def _disconnect(qmgr: object) -> None:

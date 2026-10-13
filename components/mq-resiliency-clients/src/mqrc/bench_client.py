@@ -45,6 +45,7 @@ from collections import Counter
 from datetime import UTC, datetime
 
 from mqrc import app_requester
+from mqrc.mqconn import connect_client
 
 # Reused app_requester pieces -- re-exported under this module so the reuse is
 # explicit and unit-testable (test_reuses_app_requester_helpers).
@@ -289,8 +290,7 @@ def run(args: argparse.Namespace) -> int:
         """(Re)establish the client connection + PUT handle. MQCNO_RECONNECT is
         kept; the outer loop also tears down and reconnects on a dead-connection
         reason (the Native HA failover crux, reused from app_requester #457)."""
-        qmgr = ibmmq.QueueManager(None)
-        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
+        qmgr = connect_client(args.qm, cd, sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
         return qmgr, ibmmq.Queue(qmgr, args.queue)
 
     def _disconnect(qmgr: object) -> None:

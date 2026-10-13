@@ -35,6 +35,7 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
         MQXPT_TCP = 2
 
     class CMQC:
+        MQCNO_CLIENT_BINDING = 0x800
         MQGMO_SYNCPOINT = 0x2
         MQGMO_WAIT = 0x1
         MQGMO_FAIL_IF_QUIESCING = 0x2000
@@ -64,8 +65,9 @@ def _fake_ibmmq(state: dict) -> types.ModuleType:
         def __init__(self, _name: object) -> None:
             pass
 
-        def connect_with_options(self, name: str, cd: _Struct, sco: object) -> None:
+        def connect_with_options(self, name: str, cd: _Struct, sco: object, opts: int = 0) -> None:
             state["connect"] = (name, cd, sco)
+            state["opts"] = opts
             if "raise_at_connect" in state:
                 raise MQMIError(2, state["raise_at_connect"])
 
@@ -141,6 +143,7 @@ def test_seconds_expiry_exits_zero_with_no_traffic(monkeypatch):
     assert "replies" not in state
     assert state["disconnected"]
     name, cd, sco = state["connect"]
+    assert state["opts"] == 0x800  # MQCNO_CLIENT_BINDING forced (#1480)
     assert (name, cd.ChannelName, cd.ConnectionName) == (
         "SVCQM",
         "SVC.SVRCONN",

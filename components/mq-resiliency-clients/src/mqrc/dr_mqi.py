@@ -46,6 +46,8 @@ and the component selfcheck's module walk run on hosts with no MQ SDK.
 
 import time
 
+from mqrc.mqconn import connect_client
+
 # Connection still usable -- retry the same op on the current handle.
 RETRY_INPLACE = (
     2003,  # MQRC_BACKED_OUT
@@ -89,13 +91,12 @@ def connect(qm, conn, channel, keyrepo="", certlabel=""):
         sco.KeyRepository = keyrepo
         if certlabel:
             sco.CertificateLabel = certlabel
-    qmgr = ibmmq.QueueManager(None)
     # MQCNO_RECONNECT_Q_MGR: auto-reconnect to the SAME QM via its conn name
     # (VIP, or the Native HA multi-instance CONNAME list). This
     # covers ABRUPT breaks (crash/kill/fence) transparently; the explicit
     # rebuild loops below cover the CONTROLLED-endmqm case it does not.
-    qmgr.connect_with_options(qm, cd=cd, sco=sco, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)
-    return qmgr
+    # connect_client adds MQCNO_CLIENT_BINDING (#1480).
+    return connect_client(qm, cd, sco, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)
 
 
 def connect_retry(qm, conn, channel, keep_going, keyrepo="", certlabel=""):
