@@ -22,14 +22,15 @@ The fleet is **generated from the OS version catalog**,
 version by hand. At today's versions the lab builds **eleven boxes locally**: the
 bare `rhel/9-x86_64` base box plus **ten per-role fat boxes** (on an `aarch64` host,
 which cannot run RHEL, the eight Ubuntu fat boxes alone). An x86-64-v3 host with KVM
-builds **thirteen**: it adds the RHEL 10 pair, the bare `rhel/10-x86_64` base box and
-`mq-nativeha-rhel10` (see "RHEL 10" below). Each fat box is a
+builds **fourteen**: it adds the RHEL 10 trio, the bare `rhel/10-x86_64` base box,
+`mq-nativeha-rhel10` and `mq-rdqm-rhel10` (see "RHEL 10" below). Each fat box is a
 **minimal per-role fat box**: it carries only the install surface that role needs,
 nothing more. The taxonomy is **role × OS major × host-arch**:
 
 | Box | Base | Arch | Role(s) that boot it | Bakes |
 |-----|------|------|----------------------|-------|
 | `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default + the guest runtime + `mq-resiliency-observability` |
+| `mq-rdqm-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `rdqm-*` nodes when `rdqm-rhel` runs on RHEL 10 (`os: rhel:10` in a `--config` file; #1440) | the same bake as `mq-rdqm-rhel9` (`bake-mq-rdqm.yml`), on the RHEL 10 base, with MQ 10.0.1's `el10` RDQM set (Pacemaker 3) |
 | `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3`, when the stack runs on RHEL 9 (`os: rhel:9` in a `--config` file; the choice for a host without x86-64-v3) | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes on RHEL 10, the stack default (#1289) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
 | `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
@@ -201,7 +202,9 @@ answer to a kernel-pin problem:
   **by construction**: the box is baked from this exact base, so its kernel and
   its baked `kmod-drbd` are matched from birth — there is no separate kernel pin
   to maintain, and no way for a boot-time update to drift the kernel out from
-  under the module (see §5).
+  under the module (see §5). `mq-rdqm-rhel10` works the same way on the RHEL 10
+  base, with the `el10` `modver` (the 10.2 GA kernel `6.12.0-211.7.3` gets the
+  `_6.12.0_211.7.1` kmod; #1440).
 - **`mq-nativeha-rhel9`** — the fat Native-HA box. Native HA replicates in MQ's
   own raft log, not DRBD, so there is **no kernel module and no pin** — it bakes
   the base MQ product on the stock `rhel/9-x86_64` base (no RDQM/Pacemaker stack, no
@@ -220,14 +223,24 @@ reached PyPI in #1359). Guest-component installs never rely on either; they neve
 consult a package index (see
 [`components/README.md`](../../components/README.md)).
 
-### RHEL 10 (Native HA only; needs x86-64-v3)
+### RHEL 10 (Native HA and RDQM; needs x86-64-v3)
 
-The catalog offers RHEL 10 to **`nativeha-rhel-crr` only** (`supported: [rhel:9,
-rhel:10]`), and it is that stack's **default** since #1289: IBM's MQ 10.0 SPCR lists
-MQ server and Native HA on RHEL 10, and the row passed a live cold full-DR rebuild
-(#1288). IBM supports MQ 10.0 and Native HA on RHEL 10 but **not RDQM** (no DRBD
-kernel module), so `rdqm-rhel` stays RHEL 9 only and no `mq-rdqm-rhel10` box exists.
-The sources are in [`os-version-support-matrix.md`](../reference/os-version-support-matrix.md).
+The catalog offers RHEL 10 to **`nativeha-rhel-crr`** and **`rdqm-rhel`** (both
+`supported: [rhel:9, rhel:10]`).
+
+- `rhel:10` is `nativeha-rhel-crr`'s **default** since #1289: IBM's MQ 10.0 SPCR lists
+  MQ server and Native HA on RHEL 10, and the row passed a live cold full-DR rebuild
+  (#1288).
+- `rdqm-rhel` offers `rhel:10` as **selectable** since #1440; its default stays `rhel:9`.
+  IBM supports RDQM on RHEL 10 from MQ 10.0.1 only, the first level whose tarball ships
+  `el10` DRBD kmods, and the lab pins 10.0.1.0 (#1409). The `el10` set brings
+  **Pacemaker 3** (`el10/pacemaker-3`, where el8/el9 use `pacemaker-2`); `rdqm-install`
+  takes the directory names from `vars/RedHat-10.yml`. The `mq-rdqm-rhel10` box is baked
+  by the same `bake-mq-rdqm.yml` as RHEL 9. Its first bake and cold-rebuild row are
+  tracked in #1442 and #1443.
+
+The sources are in [`os-version-support-matrix.md`](../reference/os-version-support-matrix.md)
+(§2.4 for RDQM).
 
 - **The pin.** `os.rhel.10` pins point release `10.2` and the DVD
   `rhel-10.2-x86_64-dvd.iso`. That filename is **the lab's canonical name** (the
@@ -243,8 +256,8 @@ The sources are in [`os-version-support-matrix.md`](../reference/os-version-supp
   `os: rhel:9` in the `--config` file. Because `rhel:10` is the default, a plain
   `mqlab bootstrap nativeha-rhel-crr` on such a host is refused the same way, before
   any lab I/O. It never falls back to RHEL 9 on its own: put `os: rhel:9` in a build
-  file and run `mqlab bootstrap nativeha-rhel-crr --config <file>`. The fleet leaves
-  both RHEL 10 boxes out, and `mqlab doctor` reports `x86-64-v3: no` with the reason
+  file and run `mqlab bootstrap nativeha-rhel-crr --config <file>`. `os: rhel:10` for
+  `rdqm-rhel` is refused the same way. The fleet leaves every RHEL 10 box out, and `mqlab doctor` reports `x86-64-v3: no` with the reason
   (informational).
 - **The base box.** `mqlab box build rhel/10-x86_64` runs
   `rhel/build-box.sh --major 10 --point 10.2 --iso rhel-10.2-x86_64-dvd.iso`.
@@ -257,7 +270,7 @@ The sources are in [`os-version-support-matrix.md`](../reference/os-version-supp
 - **Staging the DVD.** Put it in `build/state/` (or your DVD archive, §6). Then stage it
   into the libvirt pool with
   `lab/scripts/stage-rhel-iso.sh --iso rhel-10.2-x86_64-dvd.iso`. Then run
-  `mqlab box build rhel/10-x86_64 mq-nativeha-rhel10`.
+  `mqlab box build rhel/10-x86_64 mq-nativeha-rhel10` (add `mq-rdqm-rhel10` for RDQM).
 - **Name resolution.** Unchanged from RHEL 9. NetworkManager still writes
   `/etc/resolv.conf` on a default install. RHEL 10 makes `systemd-resolved` fully
   supported, but it remains opt-in. The `host-resolver` role therefore keeps

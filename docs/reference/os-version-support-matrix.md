@@ -42,7 +42,7 @@
 
 | OS | IBM MQ 10.0 server | Native HA | RDQM |
 |---|---|---|---|
-| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. The 10.0.1.0 tarball ships `el10` kmods, and `modver` maps the RHEL 10.2 GA kernel to one [data, §2.4]. The SPCR has no 10.0.1 row yet. |
+| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. The 10.0.1.0 tarball ships `el10` kmods, and `modver` maps the RHEL 10.2 GA kernel to one [data, §2.4]. The SPCR has no 10.0.1 row yet. In the lab, `rdqm-rhel` offers `rhel:10` as **selectable** (default stays `rhel:9`), from [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440) [§2.4, §4]. |
 | **Ubuntu 26.04 LTS** | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** [data, S-1 footnotes (1)/(3)] |
 
 Source key (full URLs in §8):
@@ -132,9 +132,10 @@ page and feed, and the lab's 10.0.0.5 Developer tarball all still show RHEL 10
 RDQM as unsupported, with no `el10` kmods. 10.0.1 shipped on 2026-10-13 and the
 lab re-pinned to 10.0.1.0 the same day. Its Developer tarball carries an `el10`
 RDQM prereq set, and IBM's `modver` maps the lab's RHEL 10.2 GA kernel to an
-`el10` kmod (checks 1–2 below pass). `rdqm-rhel` still stays on RHEL 9 until
+`el10` kmod (checks 1–2 below pass).
 [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)
-adds and proves `rhel:10`.
+makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
+"Decision (2026-10-13, #1440)" at the end of this section).
 
 **Release and edition**
 
@@ -315,6 +316,86 @@ adds and proves `rhel:10`.
   `supported: [rhel:9]`, default `rhel:9`, until #1440 adds `rhel:10` and
   proves it with a cold-rebuild validation row.
 
+**Decision (2026-10-13, [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)): selectable.**
+
+- **[judgment]** `rdqm-rhel` is now `supported: [rhel:9, rhel:10]`, default
+  `rhel:9`. `rhel:10` needs an x86-64-v3 host, as for `nativeha-rhel-crr`. The
+  default stays on RHEL 9 until a human decides otherwise after the validation
+  row below passes. The generated box is `mq-rdqm-rhel10` (role `mq-rdqm`,
+  bake `bake-mq-rdqm.yml`, the same playbook as RHEL 9).
+- **[data] (local)** `rdqm-install`'s `vars/RedHat-10.yml` uses
+  `el10/kmod-drbd-9`, `el10/pacemaker-3` and `el10/drbd-utils-9` (check 1).
+  Its vendored known-issue list is empty, because the kernel-modules page has
+  no RHEL 10 row in its "known compatibility issues" table (re-fetched
+  2026-10-13: RHEL7 and RHEL8 "None", RHEL9 `5.14.0-570.12.1 -> 5.14.0-570.15.1`).
+  (S-6)
+- **[data] (local) The RHEL 10.2 DVD satisfies the el10 install set offline.**
+  Read-only check on 2026-10-13: the RPM headers of everything the role's two
+  `dnf install` steps hand to dnf (the nine `MQSeries*` server rpms, all of
+  `el10/pacemaker-3/` and `el10/drbd-utils-9/`, the `_6.12.0_211.7.1` kmod
+  and `MQSeriesRDQM`, 31 rpms) were resolved against the DVD's `BaseOS` and
+  `AppStream` repodata (`primary.xml` provides and `filelists.xml` paths,
+  x86_64 and noarch only, 5,630 packages; `.treeinfo` "Red Hat Enterprise
+  Linux 10.2"). Every `Requires` resolves to the install set itself or to the
+  DVD, versioned requires included. The DVD packages this pulls in (248, by
+  transitive closure over their own `Requires`) also resolve with nothing
+  missing. Two results matter for Pacemaker 3:
+  - The kmod's `kernel(<symbol>) = <hash>` kABI requires all match the DVD's
+    `kernel-core-6.12.0-211.7.3.el10_2`.
+  - `el10/drbd-utils-9/` ships no `ktls-utils` rpm (el8 and el9 do), but
+    `MQSeriesRDQM` requires `ktls-utils >= 0.11`. The DVD's BaseOS supplies
+    `ktls-utils-1.2.1-3.el10`, so the step-2 `dnf install` pulls it in.
+    Other DVD packages the bundle needs include `python3-lxml`, `python3-pyyaml`,
+    `python3-dateutil` and `python3-packaging` (crmsh), `perl-TimeDate` and
+    `psmisc` (pacemaker-cli), `net-snmp-libs` and `libxslt` (corosync),
+    `net-tools` and `nfs-utils` (resource-agents), and `selinux-policy`
+    `42.1.18` (drbd-selinux needs `>= 40.13.26`).
+- **[data] (local)** The DVD's AppStream also carries Red Hat builds of
+  `corosynclib` (3.1.10), `libqb`, `pacemaker-libs`, `pacemaker-cluster-libs`
+  and `pacemaker-schemas` (3.0.1-5). The role installs the LINBIT rpms as
+  local files, so dnf takes those (and IBM's pre-install check, below,
+  requires the LINBIT builds). The base box's kickstart installs only
+  `@^minimal-environment`, `openssh-server` and `lvm2`, so none of the Red Hat
+  builds are already present. `pacemaker-libs` conflicts with `sbd`, which the
+  role never installs.
+- **[judgment] Limits of that check.** It is a static resolution, not a dnf
+  transaction: it does not run scriptlets, weigh conflicts beyond the ones
+  listed, or pick between alternative providers the way dnf would. It shows
+  that nothing is missing from the DVD. The bake
+  ([#1442](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1442))
+  is the real dnf transaction.
+- **[data] (local) Pacemaker 3 touch points.** The lab drives RDQM through
+  IBM's own commands (`rdqmadm`, `rdqmstatus`, `rdqmdr`, `crtmqm -sx`). Its only
+  direct Pacemaker calls are `crm_mon --one-shot --output-as=xml` (the RDQM
+  state collector) and `pacemakerd --version` (version gathering). The
+  collector uses the current `--output-as=xml` flag, not the removed
+  `--as-xml`, and the elements it reads (`nodes/node`, `resources//resource`,
+  `node_history`) are still in the 3.0.1 `crm_mon` schemas. Its role map
+  already accepts both `Master`/`Slave` and `Promoted`/`Unpromoted`. The
+  3.0.1 `pacemaker-libs` scriptlet still creates the `haclient` group, which
+  `rdqm-install` adds `mqm` to. On RHEL 10, `MQSeriesRDQM-10.0.1`'s pre-install
+  scriptlet checks for exactly this set: `pacemaker*` 3.0.1, `crmsh` 4.6.2,
+  `corosync` 3.1.9, `libknet1` 1.30, `libqb` 2.0.8, `resource-agents` 4.17.0
+  and `python3-pacemaker` 3.0.1 (in place of el9's `python3-parallax`). It
+  also fails unless each one is a LINBIT build (`linbit` in the rpm version).
+  So the Red Hat builds on the DVD would be refused even if dnf picked them,
+  and the role's local-file install of the LINBIT rpms is what IBM expects.
+  No role or script needed a Pacemaker 3 change beyond `pacemaker_dir`.
+- **[judgment] Still to prove, live.** The `mq-rdqm-rhel10` bake (#1442) and
+  the cold-rebuild row `rdqm-rhel@10` in the MQ 10.0.1 validation matrix
+  ([#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443))
+  are human-operated and have **not run yet**. The row must:
+  - bring up `rdqm-rhel` with `os: rhel:10` from a cold rebuild in one pass;
+  - show the install-time kmod choice in the bake log (the `modver` task
+    output);
+  - prove RDQM HA failover and DR;
+  - capture a live Pacemaker 3 `crm_mon` XML and `rdqmstatus -m` against the
+    collector's fixtures.
+
+  Until then `rdqm-rhel@10` is selectable but unproven. Under the epic's gate
+  policy, a failure there that affects only RDQM or Pacemaker is narrowed or
+  deferred and never blocks Native HA.
+
 ## 3. Ubuntu 26.04 LTS
 
 ### 3.1 MQ 10.0 server and Native HA: unsupported (not listed)
@@ -423,7 +504,7 @@ and the resolver warns when it is selected.
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
-| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`**. `rhel:10` is not in its supported list yet. The 10.0.1.0 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)) is done and the §2.4 media checks pass, so adding it is now [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440). |
+| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`; `rhel:10` is selectable** ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)) on the 10.0.1.0 pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)), which passes the §2.4 media checks. `rhel:10` needs an x86-64-v3 host. The default flips only on a human decision after the cold-rebuild row in [#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443) passes. |
 
 - **[judgment]** For both Ubuntu stacks, T9's "if IBM-supported" condition is
   **not met** today. T9 should re-check S-1 when it runs. If IBM has added an
@@ -611,6 +692,11 @@ a browser to confirm or extend the data above. Nothing here paraphrases them.
      been updated for 10.0.1 (modified 2026-09-10):
      <https://www.ibm.com/support/pages/fix-list-ibm-mq-100x-continuous-delivery>
      (also <https://www.ibm.com/support/pages/node/7276511>).
+7. **#1440 known-issue copy (2026-10-13).** `rdqm-install`'s
+   `vars/RedHat-10.yml` vendors an empty RHEL 10 known-issue list, from a
+   browser user-agent `curl` of the kernel-modules page. Confirm in a browser
+   that its "Kernel versions with known compatibility issues" table still has
+   no RHEL 10 row: <https://www.ibm.com/support/pages/node/1087143>.
 
 ## 8. Sources
 

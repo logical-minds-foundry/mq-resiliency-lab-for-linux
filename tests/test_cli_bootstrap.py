@@ -1539,10 +1539,12 @@ def test_bootstrap_config_refused_before_any_lab_io(monkeypatch, tmp_path, prepa
     monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
     probed: list[str] = []
     monkeypatch.setattr(cli, "_stack_live", lambda name: probed.append(name) or False)
-    cfg = _build_file(tmp_path, "os: rhel:10\n")
+    cfg = _build_file(tmp_path, "os: ubuntu:24\n")
     result = CliRunner().invoke(cli.app, ["bootstrap", "rdqm-rhel", "--config", str(cfg)])
     assert result.exit_code == 2
-    assert "rdqm-rhel supports [rhel:9]; got rhel:10" in result.stderr
+    assert (
+        "rdqm-rhel is a rhel stack and supports [rhel:9, rhel:10]; got ubuntu:24" in result.stderr
+    )
     assert runner.recorded == [] and probed == [] and prepare_lab_calls == []
     assert instances.read_record("rdqm-rhel") is None
 

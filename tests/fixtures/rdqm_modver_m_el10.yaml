@@ -1,0 +1,41 @@
+# Real output of IBM's RHEL 10 `modver -m <kernel>` (#1440), captured 2026-10-13 by running
+# the script from the 10.0.1.0 IBM-MQ-Advanced-for-Developers-LinuxX64 tarball
+# (MQServer/Advanced/RDQM/PreReqs/el10/kmod-drbd-9/modver) against each kernel below.
+# Like the el9 one, it is a bash `case` on the kernel-release string (families 6.12.0-55,
+# -124 and -211); with the kernel given as an argument it reads nothing from the host, so
+# the capture is host-independent. stdout is verbatim, one list item per line; rc is the
+# exit status. tests/test_rdqm_modver.py runs the rdqm-install role's parse against these.
+mq_version: "10.0.1.0"
+kmod_dir: el10/kmod-drbd-9
+el_tag: el10
+cases:
+  # The lab's RHEL 10.2 GA kernel (the DVD's kernel-core): modver picks the 211 family's.
+  - kernel: 6.12.0-211.7.3.el10_2.x86_64
+    rc: 0
+    stdout:
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1-1.x86_64.rpm
+      - "10.0.0.0"
+  # IBM's latest validated RHEL 10 kernel (support page 1087143): the same 211 kmod.
+  - kernel: 6.12.0-211.65.1.el10_2.x86_64
+    rc: 0
+    stdout:
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1-1.x86_64.rpm
+      - "10.0.0.0"
+  # A RHEL 10.1 kernel: the 124 family's kmod.
+  - kernel: 6.12.0-124.8.1.el10_1.x86_64
+    rc: 0
+    stdout:
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_124.8.1-1.x86_64.rpm
+      - "10.0.0.0"
+  # A RHEL 10.0 kernel: the 55 family's kmod.
+  - kernel: 6.12.0-55.9.1.el10_0.x86_64
+    rc: 0
+    stdout:
+      - kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_55.9.1-1.x86_64.rpm
+      - "10.0.0.0"
+  # The RHEL 9.6 GA kernel: outside every family the RHEL 10 modver knows.
+  - kernel: 5.14.0-570.12.1.el9_6.x86_64
+    rc: 1
+    stdout:
+      - Unsupported kernel release.
+      - Please see http://ibm.biz/mqrdqmkernelmods for more information.
