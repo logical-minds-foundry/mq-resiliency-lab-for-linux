@@ -22,4 +22,4 @@ rdqm_kernel_known_issues:
   - first: 5.14.0-570.12.1
     last: 5.14.0-570.15.1
 rdqm_kernel_known_issues_source: https://www.ibm.com/support/pages/node/1087143
-rdqm_kernel_known_issues_as_of: "2026-10-09"
+rdqm_kernel_known_issues_as_of: "2026-10-13"
