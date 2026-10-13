@@ -26,8 +26,9 @@ the slow install work that never varies per run, so a per-run bootstrap can skip
 Box names are **generated** as `<role>-<os><major>` from the OS version catalog,
 [`lab/versions.yaml`](../../lab/versions.yaml) (epic `logical-minds-foundry/.github#280`,
 #1274); the names above are the Phase-1 ones (Ubuntu 24, RHEL 9). On an x86-64-v3 host
-with KVM the fleet also bakes `mq-nativeha-rhel10`: the same `nativeha-rhel` bake on the
-RHEL 10 base box `rhel/10-x86_64` (#1286; RHEL 10 runs Native HA only, never RDQM).
+with KVM the fleet also bakes `mq-nativeha-rhel10` and `mq-rdqm-rhel10`: the same
+`nativeha-rhel` and `mq-rdqm` bakes on the RHEL 10 base box `rhel/10-x86_64` (#1286;
+RDQM on RHEL 10 from MQ 10.0.1, #1440).
 Since #1282 the shared non-MQ boxes run the catalog's `infra:` OS, Ubuntu 26
 (`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`), while `mq-client-ubuntu24` stays on
 the support-gated `infra_mq:` OS. Both Ubuntu stacks also bake a lab-only Ubuntu 26
@@ -166,8 +167,8 @@ because every playbook lives there. `tests/test_ansible_os_vars.py` derives the 
 Roles using it today: `rdqm-install` (EL tag, RDQM PreReqs dirs, DVD repo name),
 `mq-nativeha` and `mq-nativeha-spike` (DVD repo name). `mq-nativeha` ships `RedHat-9.yml`
 and `RedHat-10.yml`, because `nativeha-rhel-crr` supports both majors. `rdqm-install` and
-`mq-nativeha-spike` ship `RedHat-9.yml` only: RDQM is RHEL 9 only, and the spike runs on
-the RDQM slots.
+`mq-nativeha-spike` ship `RedHat-9.yml` and `RedHat-10.yml` as well: `rdqm-rhel` offers
+RHEL 10 from MQ 10.0.1 (#1440), and the spike runs on the RDQM slots.
 
 ## Staging: large artifacts go to `lab_stage_dir`, never `/tmp` (#1417)
 

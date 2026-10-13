@@ -259,7 +259,7 @@ At the current pins:
 | `pcmk-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
 | `nativeha-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
 | `nativeha-rhel-crr` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
-| `rdqm-rhel` | RHEL 9 (9.6) | none |
+| `rdqm-rhel` | RHEL 9 (9.6) | RHEL 10 (10.2; needs an x86-64-v3 host) |
 
 The shared nodes are not selectable. `obs`, the two DNS nodes and the SAN targets
 run no MQ and are on Ubuntu 26.04. The MQ commons (`svc-sim`, `app-client`,
@@ -299,9 +299,10 @@ an Ubuntu 26.04 row to the SPCR.
 where `mqlab doctor` reports `x86-64-v3: no`, a plain
 `mqlab bootstrap nativeha-rhel-crr` is refused, and the message tells you to put
 `os: rhel:9` in a build file. The lab never falls back to RHEL 9 on its own.
-`rdqm-rhel` is RHEL 9 only for now. IBM supports RDQM on RHEL 10 from MQ 10.0.1,
-the lab's current MQ pin; offering `rhel:10` for `rdqm-rhel` is tracked in
-[#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440).
+`rdqm-rhel` defaults to RHEL 9. IBM supports RDQM on RHEL 10 from MQ 10.0.1, the
+lab's current MQ pin, so you can select it with `os: rhel:10` in a build file
+([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)).
+It needs the same x86-64-v3 host as `nativeha-rhel-crr` on RHEL 10.
 
 The sourced support status for every stack and OS is in the
 [OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md).
