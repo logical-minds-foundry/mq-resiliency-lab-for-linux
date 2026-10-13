@@ -1,7 +1,7 @@
 """Unit tests for the app-requester round-trip signal (#429).
 
-The pymqi MQ loop can't run here (no client libs), but the metric logic is pure —
-app_requester imports pymqi lazily inside run(), so the module (and its
+The ibmmq MQ loop can't run here (no client libs), but the metric logic is pure —
+app_requester imports ibmmq lazily inside run(), so the module (and its
 RoundTripStats / render_prom / write_textfile helpers) imports without it.
 """
 
@@ -162,8 +162,8 @@ def test_is_reconnectable_distinguishes_connection_from_message_errors():
     assert not ar._is_reconnectable(2033)  # MQRC_NO_MSG_AVAILABLE
 
 
-def _fake_pymqi(state: dict, *, revive_on_connect: bool = True) -> types.ModuleType:
-    """A minimal fake `pymqi` driving run()'s loop. The connection starts dead;
+def _fake_ibmmq(state: dict, *, revive_on_connect: bool = True) -> types.ModuleType:
+    """A minimal fake `ibmmq` driving run()'s loop. The connection starts dead;
     connect_with_options() revives it (unless `revive_on_connect` is False — a QM
     that stays unreachable); the reply GET breaks the connection on the `break_at`-th
     get (modelling a Native HA failover) and it stays dead until the next connect.
@@ -221,7 +221,7 @@ def _fake_pymqi(state: dict, *, revive_on_connect: bool = True) -> types.ModuleT
                 raise MQMIError(2, 2009)
             return b"REPLY:xxx"
 
-    m = types.ModuleType("pymqi")
+    m = types.ModuleType("ibmmq")
     for name, obj in {
         "MQMIError": MQMIError,
         "CMQC": CMQC,
@@ -241,7 +241,7 @@ def test_requester_reconnects_after_a_connection_break(monkeypatch, capsys):
     # re-establish (a 2nd connect) and the remaining round-trips must succeed —
     # the old code looped the dead handle forever (one connect, all failures). (#457)
     state = {"alive": False, "connects": 0, "gets": 0, "break_at": 1}
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(state))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(state))
     rc = ar.run(ar._build_args(["--count", "3", "--rate", "0"]))
     out = capsys.readouterr().out
     assert state["connects"] == 2  # initial + exactly one reconnect
@@ -256,7 +256,7 @@ def test_requester_retries_when_the_reconnect_itself_fails(monkeypatch, capsys):
     # connection never comes back, so every round-trip fails but the loop stays alive
     # and keeps attempting to reconnect. (#457)
     state = {"alive": False, "connects": 0, "gets": 0, "break_at": -1}
-    monkeypatch.setitem(sys.modules, "pymqi", _fake_pymqi(state, revive_on_connect=False))
+    monkeypatch.setitem(sys.modules, "ibmmq", _fake_ibmmq(state, revive_on_connect=False))
     rc = ar.run(ar._build_args(["--count", "3", "--rate", "0"]))
     out = capsys.readouterr().out
     assert state["connects"] == 3  # one reconnect attempt per iteration, no crash

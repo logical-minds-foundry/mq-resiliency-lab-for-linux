@@ -44,7 +44,7 @@ _TEXTFILE_HELP = (
 # MQ reason codes on which the client CONNECTION is dead/unusable and the workload
 # must re-establish it (vs a per-message failure like 2033 MQRC_NO_MSG_AVAILABLE —
 # a slow/missing reply — that leaves the connection usable). Plain ints so this
-# stays pymqi-free (run() imports pymqi lazily). The #457 crux: on a Native HA
+# stays ibmmq-free (run() imports ibmmq lazily). The #457 crux: on a Native HA
 # failover the requester was reusing a dead hconn forever (MQCNO_RECONNECT did not
 # arm); it now tears down and reconnects on these codes. (#457)
 _RECONNECT_REASONS: frozenset[int] = frozenset(
@@ -185,44 +185,45 @@ def _build_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--textfile", default="", help="node-exporter .prom path; empty disables metrics"
     )
     # TLS (#250): --keyrepo is the keystore *stem*; a sibling .sth supplies the
-    # password (pymqi's SCO has none). Omit both -> plaintext.
+    # password (the clients use the .sth stash; SCO.KeyRepoPassword adoption is
+    # deferred, epic .github#300 §9). Omit both -> plaintext.
     ap.add_argument("--keyrepo", default="", help="keystore stem, e.g. /home/vagrant/ssl/key")
     ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
     return ap.parse_args(argv)
 
 
 def run(args: argparse.Namespace) -> int:
-    """The streaming loop. Imports pymqi lazily so the module (and its pure helpers)
+    """The streaming loop. Imports ibmmq lazily so the module (and its pure helpers)
     imports without the MQ client libs present (unit tests, controller-side)."""
-    import pymqi
+    import ibmmq
 
-    cd = pymqi.CD(
-        ChannelName=args.channel.encode(),
-        ConnectionName=args.conn.encode(),
-        TransportType=pymqi.CMQC.MQXPT_TCP,
+    cd = ibmmq.CD(
+        ChannelName=args.channel,
+        ConnectionName=args.conn,
+        TransportType=ibmmq.CMQC.MQXPT_TCP,
     )
-    # Always a valid SCO: connect_with_options calls sco.pack(), so a None sco crashes
-    # (AttributeError) on the plaintext path (no keyrepo). TLS just sets its fields. (#442)
-    sco = pymqi.SCO()
+    # One code path for TLS and plaintext: an empty SCO on the plaintext path,
+    # TLS just sets its fields (#442).
+    sco = ibmmq.SCO()
     if args.keyrepo:
-        cd.SSLCipherSpec = b"ANY_TLS13_OR_HIGHER"
-        sco.KeyRepository = args.keyrepo.encode()
+        cd.SSLCipherSpec = "ANY_TLS13_OR_HIGHER"
+        sco.KeyRepository = args.keyrepo
         if args.certlabel:
-            sco.CertificateLabel = args.certlabel.encode()
+            sco.CertificateLabel = args.certlabel
 
-    gmo = pymqi.GMO(
-        Options=(pymqi.CMQC.MQGMO_WAIT | pymqi.CMQC.MQGMO_FAIL_IF_QUIESCING),
+    gmo = ibmmq.GMO(
+        Options=(ibmmq.CMQC.MQGMO_WAIT | ibmmq.CMQC.MQGMO_FAIL_IF_QUIESCING),
         WaitInterval=15000,
-        MatchOptions=pymqi.CMQC.MQMO_MATCH_CORREL_ID,
+        MatchOptions=ibmmq.CMQC.MQMO_MATCH_CORREL_ID,
     )
 
     def _connect() -> tuple:
         """(Re)establish the client connection + queue handles. MQCNO_RECONNECT is
         kept (transparent MQI reconnect when it engages), but run() no longer relies
         on it alone — see the outer reconnect loop below. (#457)"""
-        qmgr = pymqi.QueueManager(None)
-        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=pymqi.CMQC.MQCNO_RECONNECT)
-        return qmgr, pymqi.Queue(qmgr, args.request_queue), pymqi.Queue(qmgr, args.reply_queue)
+        qmgr = ibmmq.QueueManager(None)
+        qmgr.connect_with_options(args.qm, cd=cd, sco=sco, opts=ibmmq.CMQC.MQCNO_RECONNECT)
+        return qmgr, ibmmq.Queue(qmgr, args.request_queue), ibmmq.Queue(qmgr, args.reply_queue)
 
     def _disconnect(qmgr: object) -> None:
         """Best-effort teardown — the hconn may already be dead, so a disconnect
@@ -231,7 +232,7 @@ def run(args: argparse.Namespace) -> int:
             return
         try:
             qmgr.disconnect()
-        except pymqi.MQMIError:
+        except ibmmq.MQMIError:
             pass
 
     stats = RoundTripStats()
@@ -247,22 +248,22 @@ def run(args: argparse.Namespace) -> int:
                     # unreachable) is caught below and retried next iteration — the
                     # --rate interval is the backoff.
                     qmgr, qreq, qrep = _connect()
-                put_md = pymqi.MD(
-                    ReplyToQ=args.reply_queue.encode(),
-                    ReplyToQMgr=args.qm.encode(),
-                    Format=pymqi.CMQC.MQFMT_STRING,
-                    Persistence=pymqi.CMQC.MQPER_PERSISTENT,
+                put_md = ibmmq.MD(
+                    ReplyToQ=args.reply_queue,
+                    ReplyToQMgr=args.qm,
+                    Format=ibmmq.CMQC.MQFMT_STRING,
+                    Persistence=ibmmq.CMQC.MQPER_PERSISTENT,
                 )
                 t0 = time.monotonic()
                 qreq.put(payload, put_md)  # MsgId is set on the MD here
-                reply = qrep.get(None, pymqi.MD(CorrelId=put_md.MsgId), gmo)
+                reply = qrep.get(None, ibmmq.MD(CorrelId=put_md.MsgId), gmo)
                 dt = (time.monotonic() - t0) * 1000
                 stats.record_success(dt)
                 print(
                     f"[{i}] round-trip {dt:.0f}ms <- {reply.decode(errors='replace')[:48]}",
                     flush=True,
                 )
-            except pymqi.MQMIError as exc:
+            except ibmmq.MQMIError as exc:
                 # Fail loud (never swallow) but keep streaming: a missed reply is a
                 # data point. If the CONNECTION is dead (not just a missed reply),
                 # tear it down so the next iteration reconnects fresh — MQCNO_RECONNECT
