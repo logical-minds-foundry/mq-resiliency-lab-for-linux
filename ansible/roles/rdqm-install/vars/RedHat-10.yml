@@ -23,6 +23,11 @@ rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
 # cannot start and `rdqmadm -c` times out with AMQ3890E. Reported upstream: .github#337.
 rdqm_os_extra_packages:
   - python3-setuptools
+# SELinux modules (files/<name>.cil) that RDQM's DRBD handlers need (#1486). RHEL 10's policy
+# confines the kernel's usermode helper, so DRBD cannot run IBM's rdqmhandler and every
+# handler exits 255. Loaded only when SELinux is enabled (the lab's kickstart enforces it).
+rdqm_selinux_modules:
+  - rdqm_drbd_helper
 
 # IBM's "Kernel versions with known compatibility issues" table, RHEL 10 row (#1408,
 # #1440), copied by hand: inclusive kernel ranges that IBM says "are known to require a new
