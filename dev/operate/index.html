@@ -1514,7 +1514,11 @@ instance record (<code>build/state/instances/&lt;stack&gt;.json</code>). A later
 different OS is refused until <code>mqlab teardown &lt;stack&gt;</code>, and a running stack with no
 record is refused by every stack command except <code>teardown</code>. See
 <a href="../getting-started/#choose-an-os-version">Getting Started</a> for the rules and the
-IBM-unsupported Ubuntu 26.04 warning.</p>
+IBM-unsupported Ubuntu 26.04 warning. Bootstrap warns separately when the shared MQ
+nodes (<code>svc-sim</code>, <code>app-client</code>, <code>mon-probe</code>: the catalog's <code>infra_mq</code>) run an
+IBM-unsupported OS. Today that is Ubuntu 26.04, so every stack's bootstrap prints
+<code>WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support
+for MQ (…)</code>, RHEL stacks and already-running commons included.</p>
 <p><code>bootstrap</code>, <code>teardown</code> and <code>commons up</code> each print the <strong>environment profile</strong>
 they resolved, for example <code>environment: macos (detected: …)</code>. The profile is
 detected from the platform (Apple Virtualization → <code>macos</code>, Google Compute Engine
