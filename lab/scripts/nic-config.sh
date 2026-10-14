@@ -27,7 +27,11 @@
 #   connection.autoconnect-priority 100 — lab NICs win over any default profile
 #   connection.autoconnect-retries  0   — retry forever; never give up mid-provision
 #   ipv4.method                   manual — pin the static config (no-op; already manual)
-# then claims the device managed and brings the connection up.
+# then claims the device managed and brings the connection up. The hardening itself is
+# fail loud (#1491): a modify NM cannot save, or values that did not stick, fail the
+# step. Under SELinux the profile directories are relabelled first: Vagrant writes each
+# profile under /tmp and moves it into place, so it keeps user_tmp_t, which NM can read
+# but not replace, and every modify used to fail behind a `|| true`.
 #
 # It does NOT assert liveness or fail on a still-missing NIC — that stays the #860
 # nic-assure guard's job, which runs immediately after this step as the fail-loud
@@ -56,6 +60,17 @@ fi
 # profile whose /sbin/ifup apply step was a no-op on RHEL9.
 nmcli connection reload || true
 
+# Give Vagrant's profiles their policy label so NM can replace them (#1491): ifcfg on
+# RHEL 9, keyfiles on RHEL 10. NM_PROFILE_DIRS is overridable for the tests.
+NM_PROFILE_DIRS="${NM_PROFILE_DIRS:-/etc/NetworkManager/system-connections /etc/sysconfig/network-scripts}"
+if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+  for dir in $NM_PROFILE_DIRS; do
+    if [ -d "$dir" ]; then
+      restorecon -R -v "$dir"
+    fi
+  done
+fi
+
 # Resolve an expected lab IP back to the NM connection profile that carries it. Prints
 # "<profile-name>" on the first ethernet connection whose ipv4 addresses include the
 # IP, or nothing if no profile carries it yet (the assure guard will remediate then).
@@ -73,15 +88,23 @@ conn_for_ip() {
 
 # Make NetworkManager authoritatively own + activate one lab-NIC profile.
 harden() {
-  local conn="$1" dev
+  local conn="$1" dev prio retries
   dev="$(nmcli -g connection.interface-name connection show "$conn" 2>/dev/null || true)"
   # Claim the device if the boot race left it "unmanaged"; no-op once managed.
   [ -n "$dev" ] && nmcli device set "$dev" managed yes >/dev/null 2>&1 || true
+  # Fail loud (#1491): a modify NM cannot save fails the step with nmcli's own error.
   nmcli connection modify "$conn" \
     connection.autoconnect yes \
     connection.autoconnect-priority 100 \
     connection.autoconnect-retries 0 \
-    ipv4.method manual >/dev/null 2>&1 || true
+    ipv4.method manual >/dev/null
+  prio="$(nmcli -g connection.autoconnect-priority connection show "$conn")"
+  retries="$(nmcli -g connection.autoconnect-retries connection show "$conn")"
+  if [ "$prio" != 100 ] || [ "$retries" != 0 ]; then
+    echo "nic-config: $conn did not keep its hardening" \
+      "(autoconnect-priority=$prio, autoconnect-retries=$retries)" >&2
+    exit 1
+  fi
   # Deterministic activation now, rather than hoping NM won the boot autoconnect race.
   # Retry a few times while NM settles; tolerate final failure (the guard asserts).
   local i
