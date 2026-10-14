@@ -30,7 +30,7 @@ TOPO = {
 }
 BOXES = node_boxes(TOPO, load_catalog())
 CATALOG = load_catalog()
-RHEL9 = next(e for r, e in CATALOG.oses.items() if r.family == "rhel")
+RDQM_OS = CATALOG.oses[CATALOG.default_os("rdqm-rhel")]
 
 
 def test_resolve_arm_host_ubuntu_is_native_kvm():
@@ -50,7 +50,7 @@ def test_resolve_arm_host_rhel_is_foreign_tcg():
     n = p.resolve(TOPO, ARM_KVM, BOXES)["rdqm-a1"]
     assert (n.arch, n.driver, n.cpu_mode, n.boot_timeout) == (X86_64, "qemu", "maximum", 1800)
     assert n.machine_arch == X86_64 and n.machine_type == "q35" and n.loader is None
-    assert n.dvd == f"{p.LIBVIRT_POOL}/{RHEL9.iso}" and n.extra_disk == 10
+    assert n.dvd == f"{p.LIBVIRT_POOL}/{RDQM_OS.iso}" and n.extra_disk == 10
 
 
 def test_resolve_x86_host_everything_native_kvm():

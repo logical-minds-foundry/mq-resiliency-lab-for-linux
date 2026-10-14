@@ -37,7 +37,7 @@ Native HA peer). Every row below is securable — and secured — on that build.
 > **As of 2026-10:** this matrix was validated on MQ 9.4.5. The lab now pins
 > MQ 10.0.1.0 ([`lab/mq-version`](../../lab/mq-version)), and each stack's OS
 > comes from [`lab/versions.yaml`](../../lab/versions.yaml) (for example,
-> `nativeha-rhel-crr` now defaults to RHEL 10). The MQ 9.4.5 and RHEL 9.6
+> `nativeha-rhel-crr` and `rdqm-rhel` now default to RHEL 10). The MQ 9.4.5 and RHEL 9.6
 > statements below describe the build that proved them; this note does not
 > re-validate them on the current pins.
 

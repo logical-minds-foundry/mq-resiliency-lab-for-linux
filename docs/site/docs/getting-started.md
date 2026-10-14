@@ -85,10 +85,10 @@ before you commit to a bring-up. Two of its lines are informational and never fa
 host. `rhel-stacks` says whether the RHEL arms can run here (they need x86_64).
 `x86-64-v3: yes` or `no` says whether the host counts as x86-64-v3: an x86_64 CPU with
 AVX2 and the rest of the v3 flags, under KVM. RHEL 10 requires it, and RHEL 10 is the
-default OS of the RHEL Native HA stack (`nativeha-rhel-crr`). On a `no` host a plain
-`mqlab bootstrap nativeha-rhel-crr` is refused with that reason; build the stack on
-RHEL 9 instead, with `os: rhel:9` in a build file
-(`mqlab bootstrap nativeha-rhel-crr --config <file>`).
+default OS of both RHEL stacks (`nativeha-rhel-crr` and `rdqm-rhel`). On a `no` host a
+plain `mqlab bootstrap nativeha-rhel-crr` or `mqlab bootstrap rdqm-rhel` is refused with
+that reason; build the stack on RHEL 9 instead, with `os: rhel:9` in a build file
+(`mqlab bootstrap <stack> --config <file>`).
 
 !!! note "After a Python-version bump"
     The pinned Python version lives in `.python-version`. If it changes (or you
@@ -259,7 +259,7 @@ At the current pins:
 | `pcmk-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
 | `nativeha-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
 | `nativeha-rhel-crr` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
-| `rdqm-rhel` | RHEL 9 (9.6) | RHEL 10 (10.2; needs an x86-64-v3 host) |
+| `rdqm-rhel` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
 
 The shared nodes are not selectable. `obs`, the two DNS nodes and the SAN targets
 run no MQ and are on Ubuntu 26.04. The MQ commons (`svc-sim`, `app-client`,
@@ -302,13 +302,16 @@ and carries on. To stay on the Ubuntu release IBM supports, build with
 (§4, §6.1) records the decision and IBM's status.
 
 **RHEL 10 and x86-64-v3.** RHEL 10 is built for the x86-64-v3 CPU level. On a host
-where `mqlab doctor` reports `x86-64-v3: no`, a plain
-`mqlab bootstrap nativeha-rhel-crr` is refused, and the message tells you to put
-`os: rhel:9` in a build file. The lab never falls back to RHEL 9 on its own.
-`rdqm-rhel` defaults to RHEL 9. IBM supports RDQM on RHEL 10 from MQ 10.0.1, the
-lab's current MQ pin, so you can select it with `os: rhel:10` in a build file
-([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)).
-It needs the same x86-64-v3 host as `nativeha-rhel-crr` on RHEL 10.
+where `mqlab doctor` reports `x86-64-v3: no`, a plain `mqlab bootstrap nativeha-rhel-crr`
+or `mqlab bootstrap rdqm-rhel` is refused, and the message tells you to put
+`os: rhel:9` in a build file. The lab never falls back to RHEL 9 on its own. A plain
+`mqlab box build` on such a host builds no RHEL boxes; put `os: rhel:9` in the build
+file to bake both RHEL stacks on RHEL 9. `rdqm-rhel` defaults to RHEL 10 since
+[#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473):
+IBM supports RDQM on RHEL 10 from MQ 10.0.1, the lab's current MQ pin, and the stack
+passed a cold-rebuild validation on it
+([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475)).
+RHEL 9 stays selectable for both RHEL stacks.
 
 The sourced support status for every stack and OS is in the
 [OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md).

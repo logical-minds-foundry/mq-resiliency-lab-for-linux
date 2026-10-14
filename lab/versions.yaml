@@ -72,10 +72,11 @@ stacks:
   # is refused and names os: rhel:9 in a --config build file — never a silent fallback.
   nativeha-rhel-crr: { supported: [rhel:9, rhel:10], default: rhel:10 }
   # RHEL 10 is selectable from MQ 10.0.1 (#1440): its tarball ships RHEL 10 DRBD kmods and a
-  # Pacemaker 3 stack (docs/reference/os-version-support-matrix.md §2.4). The default stays
-  # rhel:9 until a human decides otherwise after the cold-rebuild validation row passes.
-  # rhel:10 requires x86-64-v3, like nativeha-rhel-crr's.
-  rdqm-rhel: { supported: [rhel:9, rhel:10], default: rhel:9 }
+  # Pacemaker 3 stack (docs/reference/os-version-support-matrix.md §2.4). Defaults to rhel:10
+  # (#1473) since its cold-rebuild validation row passed (#1475). rhel:10 requires x86-64-v3,
+  # so, as for nativeha-rhel-crr, a default bring-up on a host without it is refused and
+  # names os: rhel:9 in a --config build file — never a silent fallback.
+  rdqm-rhel: { supported: [rhel:9, rhel:10], default: rhel:10 }
 # The ONE pinned guest Python runtime (epic .github#294 spec §5.2): a
 # python-build-standalone CPython install_only build, run by every guest component and
 # by `mqlab component build`'s tests. The contract is the minor (3.14); a patch bump is

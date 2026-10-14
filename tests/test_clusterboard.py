@@ -194,7 +194,7 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
         ("pcmk-ubuntu", "Ubuntu 26"),
         ("nativeha-ubuntu", "Ubuntu 26"),
         ("nativeha-rhel-crr", "RHEL 10"),
-        ("rdqm-rhel", "RHEL 9"),
+        ("rdqm-rhel", "RHEL 10"),
     ],
 )
 def test_title_banner_os_label_comes_from_the_version_layer(arm, label):

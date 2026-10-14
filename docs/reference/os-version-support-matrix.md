@@ -28,7 +28,10 @@
 > after IBM announced RDQM support for RHEL 10 in MQ 10.0.1. See §2.4.
 > On 2026-10-13 the lab re-pinned to MQ **10.0.1.0**
 > ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)),
-> and §2.4 records the "Verify when 10.0.1 ships" results.
+> and §2.4 records the "Verify when 10.0.1 ships" results. On 2026-10-14
+> `rdqm-rhel`'s default moved to `rhel:10`
+> ([#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473));
+> §2.4 and §4 record the evidence.
 >
 > **Where the open items went (2026-10-11).** Epic #280 closed on what it shipped.
 > The items that wait on IBM moved to the follow-on epic
@@ -45,7 +48,7 @@
 
 | OS | IBM MQ 10.0 server | Native HA | RDQM |
 |---|---|---|---|
-| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. The 10.0.1.0 tarball ships `el10` kmods, and `modver` maps the RHEL 10.2 GA kernel to one [data, §2.4]. The SPCR has no 10.0.1 row yet. In the lab, `rdqm-rhel` offers `rhel:10` as **selectable** (default stays `rhel:9`), from [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440) [§2.4, §4]. |
+| **RHEL 10** (x86-64) | **supported** [data, S-1] | **supported** [data, S-1] | **supported from MQ 10.0.1** (CD, GA 2026-10-13); **not in any 10.0.0.x** [data, S-5; S-1 footnote (7); §2.4]. The 10.0.1.0 tarball ships `el10` kmods, and `modver` maps the RHEL 10.2 GA kernel to one [data, §2.4]. The SPCR has no 10.0.1 row yet. In the lab, `rdqm-rhel` offers `rhel:10` from [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440) and **defaults to it** from [#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473), after the cold-rebuild row passed in [#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475) [§2.4, §4]. |
 | **Ubuntu 26.04 LTS** | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** (not listed) [data, S-1; see §3] | **unsupported** [data, S-1 footnotes (1)/(3)] |
 
 Source key (full URLs in §8):
@@ -137,8 +140,10 @@ lab re-pinned to 10.0.1.0 the same day. Its Developer tarball carries an `el10`
 RDQM prereq set, and IBM's `modver` maps the lab's RHEL 10.2 GA kernel to an
 `el10` kmod (checks 1–2 below pass).
 [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)
-makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
-"Decision (2026-10-13, #1440)" at the end of this section).
+made `rhel:10` selectable for `rdqm-rhel`, and
+[#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)
+made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
+#1473)" at the end of this section).
 
 **Release and edition**
 
@@ -443,7 +448,43 @@ makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
 
   Until then `rdqm-rhel@10` is selectable but unproven. Under the epic's gate
   policy, a failure there that affects only RDQM or Pacemaker is narrowed or
-  deferred and never blocks Native HA.
+  deferred and never blocks Native HA. (The row ran in #1475 and passed; see the
+  decision below.)
+
+**Decision (2026-10-14, [#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)): default.**
+
+- **[data] (local) The row passed.** The MQ 10.0.1 cloud x86_64 validation
+  ([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475))
+  closed `Outcome: SUCCESS`
+  ([result](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475#issuecomment-6172965786)).
+  Its `rdqm-rhel@10` row brought the stack up from a cold rebuild in one pass,
+  `dspmqver` 10.0.1.0, with HA and DR `Normal` and `qm e2e` 20/20. `modver` chose
+  `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1` for the guest's
+  `6.12.0-211.7.3.el10_2` kernel, with no known-issue WARNING. HA failover moved
+  `RDQMAPP` to another node in 16 s and back; DR cutover took 23.6 s and failback
+  18.7 s; SELinux stayed enforcing on all six nodes with no RDQM AVCs
+  ([run 3 detail](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475#issuecomment-6169863814)).
+  The live Pacemaker 3 `crm_mon` XML and `rdqmstatus -m` matched the collector's
+  fixtures. The dashboard attestation was waived (2026-10-13) and step 7 passed
+  on infrastructure evidence.
+- **[data] IBM still supports it.** The kernel-modules page (modified 2026-10-13,
+  re-fetched 2026-10-14 with a browser user-agent `curl`) still has its "RHEL 10
+  kernel versions" table: kernel `6.12.0-211.65.1`, validated IBM MQ version
+  `10.0.1.0`, kmod `kmod-drbd-9.3.3+ptf.28.g6c10a1e64888_6.12.0_211.7.1-1`,
+  minimum MQ `10.0.1.0`. Its "known compatibility issues" table still has no RHEL
+  10 row. (S-6)
+- **[data] Still no SPCR row.** The SPCR deliverable chain, re-fetched on
+  2026-10-14, still lists only `10.0` and `10.0.0.5`. There is no 10.0.1
+  deliverable, so this decision cites no SPCR row. It rests on AD26-0859 (S-5)
+  and the kernel-modules page (S-6). (S-1)
+- **[judgment]** `rdqm-rhel` is now `supported: [rhel:9, rhel:10]`, default
+  `rhel:10`, like `nativeha-rhel-crr`. `rhel:9` stays selectable. `rhel:10` needs an
+  x86-64-v3 host, so on a host without it a default `mqlab bootstrap rdqm-rhel`
+  is refused before any lab I/O and names `os: rhel:9` in a `--config` file; it
+  never falls back silently. A default `mqlab box build` on such a host now builds
+  no RHEL boxes, because both RHEL stacks default to `rhel:10`; a build file naming
+  `os: rhel:9` builds both RHEL 9 stacks. On aarch64 the RHEL stacks are refused
+  anyway, by the arch gate.
 
 ## 3. Ubuntu 26.04 LTS
 
@@ -562,7 +603,7 @@ decision never edits `ibm_support`, which stays IBM's word.
 | `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
 | `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
-| `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`; `rhel:10` is selectable** ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)) on the 10.0.1.0 pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)), which passes the §2.4 media checks. `rhel:10` needs an x86-64-v3 host. The default flips only on a human decision after the cold-rebuild row in [#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443) passes. |
+| `rdqm-rhel` | `rhel:10` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Flipped to `rhel:10`** ([#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)) on the 10.0.1.0 pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)), after the cold-rebuild row passed ([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475#issuecomment-6172965786)). `rhel:10` was made selectable in [#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440); `rhel:9` stays selectable. The support citation is AD26-0859 and the kernel-modules page; the SPCR has no 10.0.1 row yet (§2.4). A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
 
 - **[data]** For both Ubuntu stacks, the "IBM-supported" condition is **not met**:
   re-checked 2026-10-14, the MQ 10.0 and 10.0.0.5 SPCRs still list only Ubuntu
@@ -783,6 +824,13 @@ a browser to confirm or extend the data above. Nothing here paraphrases them.
    browser user-agent `curl` of the kernel-modules page. Confirm in a browser
    that its "Kernel versions with known compatibility issues" table still has
    no RHEL 10 row: <https://www.ibm.com/support/pages/node/1087143>.
+8. **#1473 default flip (2026-10-14).** These were fetched with a browser
+   user-agent `curl`. Confirm in a browser:
+   - the kernel-modules page still lists kernel `6.12.0-211.65.1` / MQ
+     `10.0.1.0` / kmod `…_6.12.0_211.7.1-1` in its "RHEL 10 kernel versions"
+     table, with no RHEL 10 known-issue row:
+     <https://www.ibm.com/support/pages/node/1087143>;
+   - the SPCR still has no 10.0.1 deliverable (item 1's browser view).
 
 ## 8. Sources
 

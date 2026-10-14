@@ -228,7 +228,7 @@ def test_boxes_for_build_default_covers_every_stack():
         "san-ubuntu26",
         "mq-client-ubuntu26",
         "pcmk-ubuntu26",
-        "mq-rdqm-rhel9",
+        "mq-rdqm-rhel10",
         "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu26",
     ]
@@ -267,12 +267,20 @@ def test_boxes_for_build_default_skips_what_the_host_cannot_run():
 
 
 def test_boxes_for_build_default_skips_rhel10_on_a_non_v3_host():
-    """nativeha-rhel-crr defaults to rhel:10 (T11); a host without x86-64-v3 skips that
-    default (nothing asked for it) but still builds the RHEL 9 stack it can run."""
+    """Both RHEL stacks default to rhel:10 (T11, #1473); a host without x86-64-v3 skips
+    those defaults (nothing asked for them) and still builds the non-RHEL boxes."""
     v2 = dataclasses.replace(_FACTS, x86_64_v3=False, x86_64_v3_missing=("avx2",))
     names = box.boxes_for_build(BuildFile(os=None), facts=v2)
-    assert "mq-nativeha-rhel10" not in names
-    assert "mq-rdqm-rhel9" in names
+    assert not [n for n in names if "rhel" in n]
+    assert "mq-nativeha-ubuntu26" in names  # Ubuntu default flipped (#1285)
+
+
+def test_boxes_for_build_rhel9_on_a_non_v3_host_builds_both_rhel_stacks():
+    """The escape hatch on a non-v3 host: a build file naming os: rhel:9 bakes both RHEL
+    stacks' RHEL 9 boxes (#1473)."""
+    v2 = dataclasses.replace(_FACTS, x86_64_v3=False, x86_64_v3_missing=("avx2",))
+    names = box.boxes_for_build(BuildFile(os=OsRef("rhel", 9)), facts=v2)
+    assert {"mq-rdqm-rhel9", "mq-nativeha-rhel9"} <= set(names)
 
 
 def test_boxes_for_build_refuses_an_explicit_request_the_host_cannot_run():
