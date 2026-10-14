@@ -1,0 +1,47 @@
+; rdqm_drbd_helper - let DRBD's kernel-launched helpers run IBM MQ RDQM's handler on
+; RHEL 10 with SELinux enforcing (#1486, epic .github#315).
+;
+; Generic: it names only IBM's own handler binary and stock RHEL policy types. It carries no
+; site, queue manager or path specific to this lab, so it is offered upstream as a fix
+; (.github#337).
+;
+; The defect. RDQM hooks DRBD's handlers (before/after-resync-source/target, disconnected,
+; quorum-lost) as /var/mqm/rdqm/<hook> -> /opt/mqm/bin/rdqmhandler. DRBD runs them through
+; the kernel's usermode helper: the kernel (kernel_t) executes drbdadm, drbdadm runs the
+; handler through /bin/sh. RHEL 10's policy (selinux-policy 42.x) confines that chain. The
+; kernel may not execute drbdadm or sh in place, and bin_t programs it runs land in the
+; confined kernel_generic_helper_t, where rdqmhandler (systemctl, cibadmin, /var/mqm, ...)
+; is denied. So every handler exits 255, RDQM never records its initial synchronization
+; (DR "Waiting for initial connection", rdqmadm -s refused with AMQ6526E), and a handler
+; blocked part-way can hang and wedge DRBD. RHEL 9 with the same enforcing policy and the
+; same drbd-selinux 9.33.1 runs it fine.
+;
+; The fix:
+; - the kernel may run drbdadm and its /bin/sh in place, as on RHEL 9;
+; - rdqmhandler gets its own entrypoint type, and executing it from that chain transitions
+;   into unconfined_service_t, the stock domain for unconfined vendor services.
+; Only IBM's handler leaves confinement. Every other kernel helper stays confined.
+;
+; Proven under full enforcing on a 3+3 RDQM HA/DR stack (RHEL 10.2, MQ 10.0.1.0): every
+; handler exits 0, HA failover and DR cutover/failback work, and no AVC is logged.
+;
+; Install: semodule -i rdqm_drbd_helper.cil && restorecon -v /opt/mqm/bin/rdqmhandler
+
+(type rdqm_handler_exec_t)
+(roletype object_r rdqm_handler_exec_t)
+(typeattributeset file_type (rdqm_handler_exec_t))
+(typeattributeset exec_type (rdqm_handler_exec_t))
+
+(filecon "/opt/mqm/bin/rdqmhandler" file (system_u object_r rdqm_handler_exec_t ((s0) (s0))))
+
+; The kernel's usermode helper runs drbdadm, and drbdadm's /bin/sh, in place.
+(allow kernel_t drbd_exec_t (file (getattr open read map execute execute_no_trans)))
+(allow kernel_t shell_exec_t (file (getattr open read map execute execute_no_trans)))
+
+; Executing IBM's handler from that chain enters unconfined_service_t.
+(allow kernel_t rdqm_handler_exec_t (file (getattr open read map execute)))
+(allow kernel_t unconfined_service_t (process (transition)))
+(allow unconfined_service_t rdqm_handler_exec_t (file (getattr open read map execute entrypoint)))
+(typetransition kernel_t rdqm_handler_exec_t process unconfined_service_t)
+(allow unconfined_service_t kernel_t (process (sigchld)))
+(allow unconfined_service_t kernel_t (fd (use)))

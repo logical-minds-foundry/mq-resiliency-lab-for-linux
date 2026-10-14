@@ -211,6 +211,91 @@
   changed_when: false
   become: true
 
+# SELinux modules RDQM's DRBD handlers need (#1486). Per-OS list (vars/<Distribution>-
+# <major>.yml), empty where the base policy already lets the kernel's usermode helper run
+# IBM's rdqmhandler. On RHEL 10 it is rdqm_drbd_helper (files/rdqm_drbd_helper.cil, header
+# explains the defect): without it every DRBD handler exits 255, so RDQM never records its
+# initial sync. The lab keeps SELinux enforcing; these run only when it is enabled.
+- name: the RDQM SELinux module staging dir
+  ansible.builtin.file:
+    path: /usr/share/selinux/packages/rdqm
+    state: directory
+    mode: "0755"
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
+- name: stage the SELinux modules RDQM's DRBD handlers need
+  ansible.builtin.copy:
+    src: "{{ item }}.cil"
+    dest: "/usr/share/selinux/packages/rdqm/{{ item }}.cil"
+    mode: "0644"
+  loop: "{{ rdqm_selinux_modules }}"
+  register: rdqm_selinux_staged
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
+- name: list the loaded SELinux modules
+  ansible.builtin.command:
+    argv: [semodule, -l]
+  register: rdqm_selinux_loaded
+  changed_when: false
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
+# (Re)load a module when its staged file changed or it is not loaded yet.
+- name: load the SELinux modules RDQM's DRBD handlers need
+  ansible.builtin.command:
+    argv: [semodule, -i, "/usr/share/selinux/packages/rdqm/{{ item.item }}.cil"]
+  loop: "{{ rdqm_selinux_staged.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  # The `when` below already limits this to a module that is new or changed, so a run
+  # that loads one always changes the policy.
+  changed_when: true
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+    - item.changed or item.item not in rdqm_selinux_loaded.stdout_lines
+
+- name: label IBM's RDQM handler with its own entrypoint type
+  ansible.builtin.command:
+    argv: [restorecon, -v, /opt/mqm/bin/rdqmhandler]
+  register: rdqm_handler_restorecon
+  changed_when: "'Relabeled' in rdqm_handler_restorecon.stdout"
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
+- name: read the RDQM handler's SELinux label
+  ansible.builtin.command:
+    argv: [stat, -c, "%C", /opt/mqm/bin/rdqmhandler]
+  register: rdqm_handler_label
+  changed_when: false
+  become: true
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
+- name: the RDQM handler carries rdqm_handler_exec_t (fail loud)
+  ansible.builtin.assert:
+    that:
+      - "':rdqm_handler_exec_t:' in rdqm_handler_label.stdout"
+    fail_msg: >-
+      /opt/mqm/bin/rdqmhandler is labelled {{ rdqm_handler_label.stdout }}, not
+      rdqm_handler_exec_t: the rdqm_drbd_helper SELinux module is not in effect, so DRBD's
+      handlers would exit 255 and RDQM would never record its initial sync (#1486).
+  when:
+    - ansible_selinux.status | default('disabled') == 'enabled'
+    - rdqm_selinux_modules | length > 0
+
 # Remove the staged tarball and its unpacked tree once both dnf steps are done, so
 # neither is carried into the baked image (/var/tmp is not cleaned the way /tmp is).
 - name: remove the staged MQ media

@@ -396,6 +396,37 @@ makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
   `crm --version` succeeds right after the RDQM install, so a missing
   dependency fails there, at install time. The upstream report is tracked in
   [.github#337](https://github.com/logical-minds-foundry/.github/issues/337).
+- **[data] RHEL 10's SELinux policy blocks RDQM's DRBD handlers (#1486).**
+  The lab's single RHEL kickstart has run SELinux **enforcing** on RHEL 9 and
+  10 since it was written. With #1484 in place, `rdqm-rhel@10` provisioned,
+  but RDQM never recorded its initial sync. On both sites `rdqmstatus` showed
+  DR "Waiting for initial connection", and `rdqmadm -s` was refused with
+  AMQ6526E. DRBD itself was healthy throughout: `Connected`, `Established`,
+  `UpToDate`.
+  - **Cause:** DRBD runs RDQM's handlers (`/var/mqm/rdqm/<hook>` →
+    `/opt/mqm/bin/rdqmhandler`) through the kernel's usermode helper, and every
+    one exited 255. The AVCs show that `kernel_t` may not `execute_no_trans`
+    `drbdadm` (`drbd_exec_t`) or `/bin/sh` (`shell_exec_t`). With that allowed,
+    the handler lands in the confined `kernel_generic_helper_t`, where it needs
+    97 allow rules (221 permissions) across its lifecycle.
+  - **Not the DRBD module:** IBM ships the same `drbd-selinux-9.33.1` for el9 and
+    el10, and the two compiled modules reference the same types.
+  - **[judgment]** The change is RHEL 10's base policy (`selinux-policy`
+    42.1.18) confining kernel usermode helpers that RHEL 9's policy let run.
+    This is inferred from RHEL 9 RDQM working under the same enforcing
+    kickstart.
+  - **Hang hazard:** a handler blocked part-way can hang, wedging the DR resource
+    in `Disconnecting`.
+  - **The fix:** `rdqm-install` loads a small, generic CIL module,
+    `files/rdqm_drbd_helper.cil`. It lets the kernel run `drbdadm` and its shell
+    in place, and gives `rdqmhandler` its own entrypoint type,
+    `rdqm_handler_exec_t`. Executing the handler transitions into
+    `unconfined_service_t`, so only IBM's handler leaves confinement.
+  - **Proven under full enforcing:** every handler exits 0; HA failover works
+    (RDQMAPP moved to another node in about 15 s); DR cutover (18.3 s) and
+    failback (18.8 s) work; and no AVC is logged on any of the six nodes.
+  - **Upstream:** the module is offered to IBM through
+    [.github#337](https://github.com/logical-minds-foundry/.github/issues/337).
 - **[judgment] Still to prove, live.** The `mq-rdqm-rhel10` bake (#1442) and
   the cold-rebuild row `rdqm-rhel@10` in the MQ 10.0.1 validation matrix
   ([#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443))

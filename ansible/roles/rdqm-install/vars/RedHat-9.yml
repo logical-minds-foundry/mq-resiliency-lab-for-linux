@@ -13,6 +13,9 @@ rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
 # Base-OS packages the RDQM prereqs need but do not declare (#1484). None on el9: its
 # python3 (3.9) still ships the `distutils` that the pacemaker-2 dir's crmsh imports.
 rdqm_os_extra_packages: []
+# SELinux modules RDQM's DRBD handlers need (#1486). None on el9: its policy lets the
+# kernel's usermode helper run IBM's rdqmhandler under the same enforcing mode.
+rdqm_selinux_modules: []
 
 # IBM's "Kernel versions with known compatibility issues" table, RHEL9 row (#1408), copied
 # by hand: inclusive kernel ranges that IBM says "are known to require a new kernel module
