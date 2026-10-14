@@ -648,6 +648,77 @@ def test_infra_mq_refuses_ibm_unsupported(tmp_path):
     )
 
 
+# --- Catalog.infra_mq_warning (#1508) -------------------------------------------------
+
+_INFRA_MQ_WARNING_26 = (
+    f"WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support "
+    f"for MQ ({_SPCR_MQ10}); a lab default by recorded decision "
+    f"({_DECISION_1285}, decided 2026-10-14)"
+)
+
+
+@pytest.mark.parametrize(
+    ("stack", "os_ref"),
+    [
+        ("nativeha-ubuntu", OsRef("ubuntu", 24)),
+        ("pcmk-ubuntu", OsRef("ubuntu", 24)),
+        ("nativeha-rhel-crr", OsRef("rhel", 10)),
+        ("rdqm-rhel", OsRef("rhel", 9)),
+    ],
+)
+def test_infra_mq_warns_for_a_supported_os_stack(stack, os_ref):
+    """A stack on an IBM-supported OS prints no stack warning, but the committed
+    infra_mq (ubuntu:26 by #1285's decision) still warns: the shared MQ nodes run MQ on
+    an IBM-unsupported OS under every stack (#1508)."""
+    cat = load_catalog()
+    ref = cat.stack_os(stack, BuildFile(os=os_ref), X86)
+    assert cat.support_warning(ref) is None
+    assert cat.infra_mq_warning() == _INFRA_MQ_WARNING_26
+
+
+def test_infra_mq_and_stack_both_warn_when_both_unsupported():
+    """An Ubuntu stack on its 26 default and infra_mq on 26: both warnings (#1508)."""
+    cat = load_catalog()
+    assert cat.support_warning(cat.stack_os("pcmk-ubuntu", None, X86)) == _WARNING_26
+    assert cat.infra_mq_warning() == _INFRA_MQ_WARNING_26
+
+
+def test_infra_mq_on_a_supported_os_does_not_warn(tmp_path):
+    """infra_mq on ubuntu:24 (supported) prints no infra_mq warning, even when a stack
+    may still pick the unsupported 26 (which keeps its own warning)."""
+    cat = load_catalog(_write(tmp_path, _with_ubuntu26(unsupported=True)))
+    assert cat.infra_mq == OsRef("ubuntu", 24)
+    assert cat.infra_mq_warning() is None
+    assert cat.support_warning(OsRef("ubuntu", 26)) is not None
+
+
+def test_infra_mq_warning_retires_once_ibm_lists_the_os(tmp_path):
+    """No separate revert (#1508): when IBM lists 26.04, os.ubuntu.26.ibm_support goes
+    supported, the stale-decision check forces lab_default_decision out, and the
+    warning disappears by itself with infra_mq still on 26."""
+    data = copy.deepcopy(_committed())
+    entry = data["os"]["ubuntu"][26]
+    entry["ibm_support"] = {"status": "supported", "source": _SPCR_MQ10}
+    with pytest.raises(VersionError, match="lab_default_decision"):
+        load_catalog(_write(tmp_path, data))  # the decision must go with the flip
+    del entry["lab_default_decision"]
+    cat = load_catalog(_write(tmp_path, data))
+    assert cat.infra_mq == OsRef("ubuntu", 26)
+    assert cat.infra_mq_warning() is None
+
+
+def test_infra_mq_warning_without_a_recorded_decision():
+    """The loader never yields an unsupported infra_mq without a decision (the gate
+    refuses it), but the warning itself does not invent one: no decision, no suffix."""
+    cat = load_catalog()
+    bare = replace(cat.oses[cat.infra_mq], lab_default_decision=None)
+    cat = replace(cat, oses={**cat.oses, cat.infra_mq: bare})
+    assert cat.infra_mq_warning() == (
+        f"WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not "
+        f"support for MQ ({_SPCR_MQ10})"
+    )
+
+
 def test_infra_not_gated():
     """`infra` runs no MQ, so an IBM-unsupported infra OS loads (the committed catalog
     puts infra on the unsupported 26), with no warning path involved (#285)."""

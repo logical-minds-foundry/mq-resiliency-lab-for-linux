@@ -2374,7 +2374,8 @@ def _reconcile_instance(stack_name: str, config: Path | None) -> InstanceRecord:
     record. Any VersionError exits 2 with the version layer's message. Liveness (one
     read-only `virsh list`) is probed only when no record exists — the one case it
     decides — so a bad request or a record conflict is refused before any virsh call.
-    An IBM-unsupported (lab-only) OS is allowed with the catalog's warning on stderr."""
+    An IBM-unsupported (lab-only) OS is allowed with the catalog's warning on stderr, and
+    an IBM-unsupported ``infra_mq`` (the shared MQ nodes) adds its own warning (#1508)."""
     try:
         catalog = load_catalog()
         existing = instances.read_record(stack_name)
@@ -2387,6 +2388,12 @@ def _reconcile_instance(stack_name: str, config: Path | None) -> InstanceRecord:
         warning = catalog.support_warning(requested)
         if warning is not None:
             typer.echo(warning, err=True)
+        # Every bootstrap brings up (or reuses) the shared MQ nodes, whatever the stack's
+        # own OS, and this stack's MQ estate includes them either way — so warn on every
+        # bootstrap, already-running commons included (#1508).
+        infra_mq_warning = catalog.infra_mq_warning()
+        if infra_mq_warning is not None:
+            typer.echo(infra_mq_warning, err=True)
         live = existing is None and _stack_live(stack_name)
         record = instances.reconcile(
             stack_name,

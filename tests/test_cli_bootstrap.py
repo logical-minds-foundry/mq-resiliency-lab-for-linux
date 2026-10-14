@@ -1677,11 +1677,66 @@ def test_bootstrap_warns_on_the_ibm_unsupported_default(monkeypatch, tmp_path):
 
 
 def test_bootstrap_supported_os_prints_no_warning(monkeypatch, tmp_path):
+    """Stack OS and infra_mq both supported (ubuntu:24): no warning at all."""
     _resume_harness(monkeypatch, tmp_path)
+    _catalog_24_26(monkeypatch, tmp_path, unsupported_26=True)
     cfg = _build_file(tmp_path, "os: ubuntu:24\n")
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "WARNING" not in result.stderr
+
+
+_INFRA_MQ_WARNING = (
+    "WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support for MQ ("
+)
+_DECISION_SUFFIX = (
+    "a lab default by recorded decision "
+    "(logical-minds-foundry/mq-resiliency-lab-for-linux#1285, decided 2026-10-14)"
+)
+
+
+def test_bootstrap_supported_stack_os_warns_for_infra_mq_only(monkeypatch, tmp_path):
+    """A stack on a supported OS (ubuntu:24) under the committed infra_mq (ubuntu:26 by
+    #1285's decision): exactly one warning, the infra_mq one (#1508)."""
+    _resume_harness(monkeypatch, tmp_path)
+    cfg = _build_file(tmp_path, "os: ubuntu:24\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING")]
+    [only] = warnings
+    assert only.startswith(_INFRA_MQ_WARNING)
+    assert only.endswith(f"; {_DECISION_SUFFIX}")
+
+
+def test_bootstrap_unsupported_stack_os_and_infra_mq_warn_once_each(monkeypatch, tmp_path):
+    """The default Ubuntu stack (26) and infra_mq (26): the stack warning, then the
+    infra_mq one, each printed once (#1508)."""
+    _resume_harness(monkeypatch, tmp_path)
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    warnings = [line for line in result.stderr.splitlines() if line.startswith("WARNING")]
+    assert len(warnings) == 2
+    assert warnings[0].startswith("WARNING: IBM does not support MQ on ubuntu:26 (")
+    assert warnings[1].startswith(_INFRA_MQ_WARNING)
+
+
+def test_bootstrap_warns_for_infra_mq_with_commons_already_running(monkeypatch, tmp_path):
+    """Already-running commons still warn (#1508): the warning reports the MQ estate the
+    stack runs in, not whether this run boots the shared nodes — so it prints even when
+    every phase is satisfied and the run has nothing to do."""
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_stack_live", lambda name: False)
+    monkeypatch.setattr(
+        cli,
+        "_probe_all",
+        lambda deps, stack: _states(net=True, vms=True, provision=True, observe=True),
+    )
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(RecordingRunner(results=[])))
+    _stub_ensure(monkeypatch)
+    cfg = _build_file(tmp_path, "os: ubuntu:24\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
+    assert result.exit_code == 0, result.output
+    assert result.stderr.count(_INFRA_MQ_WARNING) == 1
 
 
 def test_bootstrap_host_gate_refuses_rhel_on_aarch64(monkeypatch, prepare_lab_calls):

@@ -638,6 +638,14 @@ decision never edits `ibm_support`, which stays IBM's word.
   **Superseded** (#1285, 2026-10-14): `infra_mq:` is now `ubuntu:26` under the same
   recorded lab decision as the Ubuntu stack defaults, so the MQ commons run 26.04
   (box `mq-client-ubuntu26`) with the IBM-unsupported warning.
+  That warning is printed by every bootstrap, on every stack
+  ([#1508](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1508)):
+  `WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support
+  for MQ (<SPCR>); a lab default by recorded decision (<ref>, decided <date>)`.
+  It prints for a stack on a supported OS (RHEL, or Ubuntu 24.04 by `--config`) and
+  when the commons are already running, because the stack's MQ runs through those
+  nodes either way. It needs no separate revert: when IBM lists 26.04 and the entry
+  flips to `supported`, the decision is removed with it and the warning stops.
 - **[data] (side observation, outside this epic's scope)** The MQ 10.0 SPCR lists
   only `x86-64`, `IBM Z and IBM LinuxONE` and `POWER System - Little Endian`
   hardware for its Linux rows. There is no ARM64 row. The lab's arm64 (Apple

@@ -119,9 +119,17 @@ MQ. So today:
   (`WARNING: IBM does not support MQ on ubuntu:26 (<SPCR>); it is selectable for lab
   use only, and is a lab default by recorded decision (<ref>, decided <date>)`) and
   proceeds.
+- Every bootstrap, on every stack (RHEL included), also prints a warning for
+  `infra_mq` while it is IBM-unsupported (`Catalog.infra_mq_warning`, #1508):
+  `WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support
+  for MQ (<SPCR>); a lab default by recorded decision (<ref>, decided <date>)`. It
+  prints even when the commons are already running, because the stack runs its MQ
+  through them either way. It needs no revert: once `ibm_support` flips to
+  `supported` and the decision is removed, it is gone.
 - Both Ubuntu stacks list `supported: [ubuntu:24, ubuntu:26]`. A build file with
   `os: ubuntu:24` (`mqlab bootstrap <stack> --config <file>`) builds the stack on
-  24.04, the IBM-listed Ubuntu, with no warning.
+  24.04, the IBM-listed Ubuntu, with no stack warning (the `infra_mq` warning
+  remains).
 
 When an "Ubuntu 26.04 LTS" row appears in the SPCR, the same change flips
 `ibm_support` to `supported` and removes `lab_default_decision` (matrix §6.1).
