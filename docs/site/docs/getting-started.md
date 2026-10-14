@@ -256,14 +256,15 @@ At the current pins:
 
 | stack | default | also selectable |
 |-------|---------|-----------------|
-| `pcmk-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
-| `nativeha-ubuntu` | Ubuntu 24.04 | Ubuntu 26.04 (lab-only) |
+| `pcmk-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
+| `nativeha-ubuntu` | Ubuntu 26.04 (IBM-unsupported; warns) | Ubuntu 24.04 |
 | `nativeha-rhel-crr` | RHEL 10 (10.2; needs an x86-64-v3 host) | RHEL 9 (9.6) |
 | `rdqm-rhel` | RHEL 9 (9.6) | RHEL 10 (10.2; needs an x86-64-v3 host) |
 
 The shared nodes are not selectable. `obs`, the two DNS nodes and the SAN targets
 run no MQ and are on Ubuntu 26.04. The MQ commons (`svc-sim`, `app-client`,
-`mon-probe`) run MQ, so they stay on Ubuntu 24.04, the Ubuntu release IBM supports.
+`mon-probe`) run MQ, and are on Ubuntu 26.04 too, by the same lab decision as the
+Ubuntu defaults (below).
 
 A plain `mqlab bootstrap <stack>` uses the default. To pick another supported
 version, write a **build file** and pass it with `--config`. There is no
@@ -289,11 +290,16 @@ OS for its whole life:
 - A version the stack does not list is refused, and the message names the versions
   it supports.
 
-**Lab-only versions.** IBM's MQ 10.0 support matrix (the SPCR) does not list Ubuntu
-26.04. You can still build either Ubuntu stack on it. Bootstrap prints
+**Ubuntu 26.04 is ahead of IBM.** IBM's MQ 10.0 support matrix (the SPCR) does not
+list Ubuntu 26.04. The lab makes it the Ubuntu default anyway, by a decision
+recorded in the catalog: the lab exists to run at the leading edge, and to find and
+report problems there before others hit them. Bootstrap prints
 `WARNING: IBM does not support MQ on ubuntu:26 (<SPCR link>); it is selectable for
-lab use only` and carries on. The Ubuntu defaults move to 26.04 only when IBM adds
-an Ubuntu 26.04 row to the SPCR.
+lab use only, and is a lab default by recorded decision (<issue>, decided <date>)`
+and carries on. To stay on the Ubuntu release IBM supports, build with
+`os: ubuntu:24` in a `--config` file; that prints no warning. The
+[OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md)
+(§4, §6.1) records the decision and IBM's status.
 
 **RHEL 10 and x86-64-v3.** RHEL 10 is built for the x86-64-v3 CPU level. On a host
 where `mqlab doctor` reports `x86-64-v3: no`, a plain

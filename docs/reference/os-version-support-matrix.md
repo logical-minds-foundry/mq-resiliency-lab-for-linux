@@ -17,7 +17,8 @@
 >
 > Convention: each claim is tagged **[data]** (what a cited source actually says)
 > or **[judgment]** (our reasoning on top). Support statuses are load-bearing:
-> they gate stack defaults (spec §4.1). Verify them against the linked sources
+> they gate stack defaults (spec §4.1) unless the catalog records a lab decision
+> to go ahead of IBM (§4). Verify them against the linked sources
 > before relying on them.
 >
 > Retrieved: 2026-10-03. The IBM SPCR data below carries IBM's own
@@ -34,9 +35,11 @@
 > [logical-minds-foundry/.github#315](https://github.com/logical-minds-foundry/.github/issues/315):
 > the MQ 10.0.1 re-pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)),
 > `rdqm-rhel` on RHEL 10 ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)),
-> and plan task T9, the SPCR-gated move of the Ubuntu stack defaults and `infra_mq`
+> and plan task T9, the move of the Ubuntu stack defaults and `infra_mq`
 > to Ubuntu 26 ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285)).
-> Where this document says "T9", read #1285.
+> Where this document says "T9", read #1285. On 2026-10-14 #1285 dropped its SPCR
+> gate: the lab moved those defaults to Ubuntu 26 ahead of IBM, by a recorded
+> decision, while still recording IBM's status (§4, §6.1).
 
 ## 1. The matrix
 
@@ -455,7 +458,8 @@ makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
   IBM's authoritative, enumerated list of supported operating systems for the
   product, and the data was fetched five months after 26.04 GA. An absent OS is
   not a supported OS. It is still an absence, though, not a negative statement:
-  IBM may add a 26.04 row in a later SPCR revision. Re-check S-1 before T9.
+  IBM may add a 26.04 row in a later SPCR revision. Re-check S-1 per §6.1, and
+  record there when it appears.
 - **[data]** For reference, the Ubuntu 24.04 LTS row lists `MQ Queue Manager` and
   `Native HA` as supported on x86-64, IBM Z and POWER LE (`osMinimum: "Base"`). (S-1)
 
@@ -540,23 +544,46 @@ The lab's Ubuntu cluster/SAN roles install these packages:
 
 ## 4. Defaults decision (spec §4.1)
 
-Rule (spec §4.1): **a stack's default may point at a version only if that version
-is cited as IBM-`supported`.** An unsupported version still ships as
-selectable lab-only. It carries `ibm_support: { status: unsupported, source: <url> }`,
-and the resolver warns when it is selected.
+Rule (spec §4.1, amended by [#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285)
+on 2026-10-14): **a stack's default (and `infra_mq`) may point at a version only if
+that version is cited as IBM-`supported`, or if the catalog records an explicit lab
+decision to go ahead of IBM.** An unsupported version carries
+`ibm_support: { status: unsupported, source: <url> }`, and the resolver warns
+whenever it is selected, default or not. The decision is a second field on the same
+catalog entry,
+`lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" }`, naming
+the date and the issue that records the human's call. `load_catalog` refuses an
+unsupported default or `infra_mq` without one, so an *accidental* unsupported default
+still fails loud. It also refuses a decision on a supported entry as stale. The
+decision never edits `ibm_support`, which stays IBM's word.
 
 | Stack | Spec goal default | Gating cell | Decision |
 |---|---|---|---|
-| `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
-| `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default stays `ubuntu:24`.** `ubuntu:26` ships lab-only with `ibm_support: unsupported`. T9 does not flip. |
+| `nativeha-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × Native HA = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
+| `pcmk-ubuntu` | `ubuntu:26` | Ubuntu 26.04 × MQ server = unsupported (not listed) | **Default `ubuntu:26` by lab decision** ([#1285](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1285), 2026-10-14), ahead of IBM. `ibm_support` stays `unsupported` and bootstrap warns. `ubuntu:24` stays selectable. |
 | `nativeha-rhel-crr` | `rhel:10` | RHEL 10 × Native HA = supported | **Flipped to `rhel:10`** (T11, [#1289](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1289)) after V3 proved the build ([#1288](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1288): cold full-DR bootstrap in one pass). Pin point `10.2`. A host without x86-64-v3 is refused and pointed at `os: rhel:9`. |
 | `rdqm-rhel` | `rhel:9` | RHEL 10 × RDQM = unsupported in 10.0.0.x; supported from 10.0.1 (§2.4) | **Stays `rhel:9`; `rhel:10` is selectable** ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440)) on the 10.0.1.0 pin ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)), which passes the §2.4 media checks. `rhel:10` needs an x86-64-v3 host. The default flips only on a human decision after the cold-rebuild row in [#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443) passes. |
 
-- **[judgment]** For both Ubuntu stacks, T9's "if IBM-supported" condition is
-  **not met** today. T9 should re-check S-1 when it runs. If IBM has added an
-  Ubuntu 26.04 row that lists the MQ Queue Manager (and Native HA, for
-  `nativeha-ubuntu`), the flip becomes permitted. Cite the new row when that
-  happens. §6.1 gives the rule and the method for checking.
+- **[data]** For both Ubuntu stacks, the "IBM-supported" condition is **not met**:
+  re-checked 2026-10-14, the MQ 10.0 and 10.0.0.5 SPCRs still list only Ubuntu
+  24.04 LTS, and the deliverable chain has no 10.0.1 entry yet (§6.1).
+- **[judgment] Why the lab flips anyway** (human decision, #1285, 2026-10-14). The
+  lab's purpose is the leading edge. The MQ 10.0.1 / RHEL 10 work surfaced several
+  real defects worth reporting to IBM and the MQ community
+  ([#1478](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1478),
+  [#1480](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1480),
+  [#1483](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1483),
+  [#1484](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1484),
+  [#1486](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1486),
+  [#1488](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1488)).
+  Running Ubuntu 26.04 by default ahead of IBM's support statement is how the lab
+  finds and reports the equivalent issues there. Both 24 and 26 stay maintained and
+  tested. A 26-only problem is documented, and work it blocks falls back to
+  `ubuntu:24` through a `--config` build file.
+- **[judgment]** The decision does not make 26.04 IBM-supported. The lab's Ubuntu
+  defaults run MQ on an OS IBM does not list, and bootstrap says so every time. When
+  IBM adds the row, §6.1 records it, the entry flips to `supported`, and the
+  `lab_default_decision` field is removed in the same change.
 - **[judgment] (flag for the epic)** §4.1 gates *stack* defaults only.
   `infra: ubuntu:26` (spec goal 2) moves the shared Ubuntu MQ commons
   (`svc-sim`, `app-client`, `mon-probe`) to 26.04. Those nodes run the MQ server
@@ -566,8 +593,10 @@ and the resolver warns when it is selected.
   **Resolved** ([.github#285](https://github.com/logical-minds-foundry/.github/issues/285)):
   the catalog splits the shared nodes. `infra:` (`ubuntu:26`) covers only the
   nodes that run no MQ (`infra`, `obs`, `san`). A separate `infra_mq:` key covers
-  the MQ commons, stays `ubuntu:24`, and is support-gated like a stack default,
-  so MQ never runs on 26.04 by default.
+  the MQ commons and is support-gated like a stack default.
+  **Superseded** (#1285, 2026-10-14): `infra_mq:` is now `ubuntu:26` under the same
+  recorded lab decision as the Ubuntu stack defaults, so the MQ commons run 26.04
+  (box `mq-client-ubuntu26`) with the IBM-unsupported warning.
 - **[data] (side observation, outside this epic's scope)** The MQ 10.0 SPCR lists
   only `x86-64`, `IBM Z and IBM LinuxONE` and `POWER System - Little Endian`
   hardware for its Linux rows. There is no ARM64 row. The lab's arm64 (Apple
@@ -642,12 +671,18 @@ The summary combines the claims below. Each is tagged on its own.
 
 ### 6.1 The rule for our gate
 
-- **[judgment] Rule.** For the spec §4.1 defaults gate, a new Ubuntu version
-  counts as IBM-`supported` only when a **"Ubuntu \<ver\> LTS" row appears in
+- **[judgment] Rule.** A new Ubuntu version counts as IBM-`supported` (its catalog
+  `ibm_support.status`) only when a **"Ubuntu \<ver\> LTS" row appears in
   the SPCR for an IBM MQ 10.0.x deliverable** and that row lists the components
   the stack needs (`MQ Queue Manager`, plus `Native HA` for `nativeha-ubuntu`).
   Announcements, Ansible fixes or roadmap talk do not count. Cite the
   deliverable ID and its `lastModified` when the row appears.
+- **[judgment] What the rule gates (amended 2026-10-14, #1285).** The rule decides
+  what the catalog *records* as IBM's status, and so whether bootstrap warns. It no
+  longer decides when the lab's defaults move: a default or `infra_mq` may lead IBM
+  through a recorded `lab_default_decision` (§4). Without one, the catalog still
+  refuses an unsupported default. This section stays the place to record when IBM
+  lists 26.04.
 - **Method (checkable).** Two public SPCR JSON endpoints, fetched with a browser
   user-agent as in S-1 (§8):
   1. `getDeliverableChain?deliverableId=<id>` names the deliverable and lists its
@@ -666,6 +701,10 @@ The summary combines the claims below. Each is tagged on its own.
   2026-10-01) adds SLES 16 at product minimum 10.0.0.5, and Ubuntu is still
   24.04 only
   (<https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getTSROsSupportSummary?deliverableId=9CA6A0D6BAD147BEBB45A74CAF2CC1B5>).
+- **[data] Status on 2026-10-14** (re-checked for #1285). Unchanged: the
+  `getDeliverableChain` for `FA94B1F6888342969E7F9B505149F032` lists only the 10.0
+  and 10.0.0.5 deliverables (no 10.0.1), and both SPCRs above, with the same
+  `lastModified` values, list "Ubuntu 24.04 LTS" as their only Ubuntu row.
 - **[data]** The "System Requirements for IBM MQ 10.0" page (modified
   2026-06-16) says nothing about Ubuntu 26.04 or planned support
   (<https://www.ibm.com/support/pages/system-requirements-ibm-mq-100>).
@@ -712,7 +751,8 @@ Neither `WebFetch` nor `tools/ibm_doc_cache.py` can retrieve these. Open each in
 a browser to confirm or extend the data above. Nothing here paraphrases them.
 
 1. **SPCR, browser view** (the human-readable rendering of S-1; confirm the RHEL 10
-   and Ubuntu rows match §2–§3):
+   and Ubuntu rows match §2–§3, and that Ubuntu is still 24.04 only, as the
+   2026-10-14 browser user-agent `curl` re-check in §6.1 found):
    <https://www.ibm.com/software/reports/compatibility/clarity-reports/report/html/softwareReqsForProduct?deliverableId=FA94B1F6888342969E7F9B505149F032&osPlatforms=Linux&duComponentIds=S008>
 2. **System Requirements for IBM MQ 10.0** (IBM Support page):
    <https://www.ibm.com/support/pages/system-requirements-ibm-mq-100>
