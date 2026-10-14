@@ -380,7 +380,22 @@ makes `rhel:10` selectable for `rdqm-rhel`; the default stays `rhel:9` (see
   also fails unless each one is a LINBIT build (`linbit` in the rpm version).
   So the Red Hat builds on the DVD would be refused even if dnf picked them,
   and the role's local-file install of the LINBIT rpms is what IBM expects.
-  No role or script needed a Pacemaker 3 change beyond `pacemaker_dir`.
+  Statically, no role or script needed a Pacemaker 3 change beyond
+  `pacemaker_dir`. The first live run found one more change, described next.
+- **[data] crmsh needs an undeclared `distutils` on RHEL 10 (#1484).** The
+  first live `rdqm-rhel@10` provision (validation #1475, 2026-10-13) failed in
+  `rdqmadm -c`, with AMQ3890E then AMQ3875E. `RDQM.0.LOG` showed it polling
+  `crm status bynode`, and every call failed with
+  `No module named 'distutils'`. The bundled
+  `crmsh-4.6.2.linbit-1.0.117.721d6d2a.el10` imports `distutils` (in
+  `crmsh/utils.py` and `crmsh/ra.py`), which RHEL 10's python3 (3.12) no
+  longer has, and the rpm declares no dependency that provides it.
+  Corosync, Pacemaker and the `modver`-chosen DRBD kmod were all healthy.
+  `rdqm-install` now installs `python3-setuptools` (its `distutils` shim) from
+  the DVD on el10 through `rdqm_os_extra_packages`. It also checks that
+  `crm --version` succeeds right after the RDQM install, so a missing
+  dependency fails there, at install time. The upstream report is tracked in
+  [.github#337](https://github.com/logical-minds-foundry/.github/issues/337).
 - **[judgment] Still to prove, live.** The `mq-rdqm-rhel10` bake (#1442) and
   the cold-rebuild row `rdqm-rhel@10` in the MQ 10.0.1 validation matrix
   ([#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443))
