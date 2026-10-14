@@ -57,7 +57,7 @@ def test_fleet_builders_cover_base_and_fat_boxes():
         "mq-rdqm-rhel9",
         "obs-ubuntu26",
         "infra-ubuntu26",
-        "mq-client-ubuntu24",
+        "mq-client-ubuntu26",
         "mq-nativeha-rhel9",
         "mq-nativeha-ubuntu24",
         "pcmk-ubuntu24",
@@ -154,7 +154,7 @@ def test_build_steps_ubuntu_fat_box_tracks_host_arch_under_kvm(monkeypatch, tmp_
     # mq-client bakes mq-resiliency-clients (epic .github#294) and tmp_path is no git
     # repo: stub the component source identity (its own seam, test_box_components).
     monkeypatch.setattr(box, "_component_tree", lambda name: "f" * 40)
-    argv = box._build_steps([("mq-client-ubuntu24", False)], _ARM)[0].command.argv
+    argv = box._build_steps([("mq-client-ubuntu26", False)], _ARM)[0].command.argv
     assert argv[argv.index("--arch") + 1] == "aarch64"
     assert argv[argv.index("--domain-type") + 1] == "kvm"
     assert argv[argv.index("--dvd") + 1] == "none"
@@ -722,14 +722,14 @@ def test_manifest_hash_stable_on_no_op_and_unbaked_role(tmp_path):
 # box at `hash: match` / REUSE, so a bootstrap silently cloned the old-version #
 # box). The fix folds the pin CONTENT into the digest, but ONLY for the        #
 # MQ-bearing boxes (those that bake an MQ install: mq-nativeha-rhel9,          #
-# mq-nativeha-ubuntu24, mq-client-ubuntu24, mq-rdqm-rhel9); the MQ-version-           #
+# mq-nativeha-ubuntu24, mq-client-ubuntu26, mq-rdqm-rhel9); the MQ-version-           #
 # independent commons boxes (obs/infra, pcmk) must stay REUSE across          #
 # a pin bump so a version change doesn't spuriously rebake them.               #
 # --------------------------------------------------------------------------- #
 def _fake_bake_repo_with_pin(tmp_path: Path) -> Path:
     """Extend the minimal bake repo with a lab/mq-version pin and a second bake
     playbook for an MQ-bearing box. `infra-ubuntu26` (-> infra) is a commons
-    box; `mq-client-ubuntu24` (-> mq-ubuntu) is MQ-bearing. Both hash cleanly against
+    box; `mq-client-ubuntu26` (-> mq-ubuntu) is MQ-bearing. Both hash cleanly against
     this tree so a single pin edit can be checked against both at once."""
     root = _fake_bake_repo(tmp_path)
     (root / "lab").mkdir(parents=True, exist_ok=True)
@@ -751,10 +751,10 @@ def test_manifest_hash_flips_on_pin_change_for_mq_bearing_box(tmp_path):
     # (a) Acceptance: bumping lab/mq-version flips an MQ-bearing box's digest, so
     # build-fatbox.sh sees CURRENT_HASH != stored and decides BUILD (not REUSE).
     root = _fake_bake_repo_with_pin(tmp_path)
-    before = _hash_in(root, "mq-client-ubuntu24")
+    before = _hash_in(root, "mq-client-ubuntu26")
     assert len(before) == 64
     (root / "lab" / "mq-version").write_text("10.0.0.0\n")
-    assert _hash_in(root, "mq-client-ubuntu24") != before  # pin bump forces a rebake
+    assert _hash_in(root, "mq-client-ubuntu26") != before  # pin bump forces a rebake
 
 
 def test_manifest_hash_stable_on_pin_change_for_commons_box(tmp_path):
@@ -772,7 +772,7 @@ def test_manifest_hash_pin_is_box_scoped_not_global(tmp_path):
     # only one of them moves when the pin moves (above). Here we also assert the
     # MQ-bearing digest is deterministic at a fixed pin (no spurious churn).
     root = _fake_bake_repo_with_pin(tmp_path)
-    assert _hash_in(root, "mq-client-ubuntu24") == _hash_in(root, "mq-client-ubuntu24")
+    assert _hash_in(root, "mq-client-ubuntu26") == _hash_in(root, "mq-client-ubuntu26")
 
 
 # --------------------------------------------------------------------------- #

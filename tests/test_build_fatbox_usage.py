@@ -27,7 +27,7 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _args_with_arch(value: str | None) -> list[str]:
-    args = fatbox_args("mq-client-ubuntu24")
+    args = fatbox_args("mq-client-ubuntu26")
     i = args.index("--arch")
     if value is None:
         return args[:i] + args[i + 2 :]

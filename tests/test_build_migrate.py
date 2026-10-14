@@ -14,10 +14,10 @@ from pathlib import Path
 
 from mqlab import box
 
-_LEGACY_BOX = "mq-client-ubuntu24.box"
-_LEGACY_HASH = "mq-client-ubuntu24.manifest-hash"
-_NEW_BOX = "mq-client-ubuntu24-x86_64.box"
-_NEW_HASH = "mq-client-ubuntu24-x86_64.manifest-hash"
+_LEGACY_BOX = "mq-client-ubuntu26.box"
+_LEGACY_HASH = "mq-client-ubuntu26.manifest-hash"
+_NEW_BOX = "mq-client-ubuntu26-x86_64.box"
+_NEW_HASH = "mq-client-ubuntu26-x86_64.manifest-hash"
 
 
 def test_migrate_renames_legacy_box_and_hash(tmp_path):

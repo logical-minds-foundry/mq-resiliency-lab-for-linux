@@ -257,4 +257,4 @@ def test_render_combines_records_across_stacks(catalog_24_26):  # Review Focus 1
     )
     # The shared nodes get the shared boxes: non-MQ on infra, mq-client on infra_mq (#285).
     assert nb["obs"].name == "obs-ubuntu26"
-    assert nb["svc-sim"].name == "mq-client-ubuntu24"
+    assert nb["svc-sim"].name == "mq-client-ubuntu26"

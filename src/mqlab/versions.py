@@ -36,7 +36,8 @@ FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 # - INFRA_ROLES run no MQ (the infra/obs commons and the SAN targets' baked `san` box,
 #   spec §4.7.1). They boot ``catalog.infra``, which is NOT support-gated.
 # - INFRA_MQ_ROLES run MQ (svc-sim, app-client, mon-probe). They boot
-#   ``catalog.infra_mq``, which is support-gated like a stack default.
+#   ``catalog.infra_mq``, which is support-gated like a stack default (an IBM-unsupported
+#   OS only with a recorded ``lab_default_decision``, #1285).
 INFRA_ROLES = ("infra", "obs", "san")
 INFRA_MQ_ROLES = ("mq-client",)
 SHARED_ROLES = INFRA_ROLES + INFRA_MQ_ROLES
@@ -48,7 +49,16 @@ HOST_ARCHES = ("aarch64", "x86_64")
 
 _REF_RE = re.compile(r"([a-z]+):([0-9]+)")
 _TOP_KEYS = ("os", "roles", "infra", "infra_mq", "stacks", "runtime")
-_OS_KEYS = ("base_box", "base_box_version", "point", "iso", "arch", "requires", "ibm_support")
+_OS_KEYS = (
+    "base_box",
+    "base_box_version",
+    "point",
+    "iso",
+    "arch",
+    "requires",
+    "ibm_support",
+    "lab_default_decision",
+)
 _ROLE_KEYS = ("bake", "mq_bearing", "components")
 _RUNTIME_KEYS = ("python",)
 _PYTHON_KEYS = ("version", "pbs_release", "sha256")
@@ -58,6 +68,9 @@ _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _PBS_DOWNLOADS = "https://github.com/astral-sh/python-build-standalone/releases/download"
 _STACK_KEYS = ("supported", "default")
 _SUPPORT_KEYS = ("status", "source")
+_DECISION_KEYS = ("decided", "ref")
+_DECIDED_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_ISSUE_REF_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+")
 _BUILD_KEYS = ("os",)
 
 _CATALOG_FIX = "fix lab/versions.yaml"
@@ -110,6 +123,18 @@ class OsEntry:
     arch_pin: str | None
     requires: tuple[str, ...]
     ibm_unsupported_source: str | None
+    lab_default_decision: LabDefaultDecision | None = None
+
+
+@dataclass(frozen=True)
+class LabDefaultDecision:
+    """A recorded lab decision that lets a stack default / ``infra_mq`` point at an
+    IBM-unsupported OS anyway (#1285). It never changes the IBM facts: the entry stays
+    ``ibm_support.status: unsupported`` and still warns; it only lifts the support gate,
+    so an *accidental* unsupported default (no decision recorded) is still refused."""
+
+    decided: str  # ISO date the human made the call, e.g. "2026-10-14"
+    ref: str  # the issue recording it, <owner>/<repo>#<N>
 
 
 @dataclass(frozen=True)
@@ -273,14 +298,22 @@ class Catalog:
         return ref
 
     def support_warning(self, ref: OsRef) -> str | None:
-        """The warning to print when ``ref`` is IBM-unsupported (lab-only), else None."""
-        source = self._entry(ref).ibm_unsupported_source
+        """The warning to print when ``ref`` is IBM-unsupported, else None (#1282, #1285)."""
+        entry = self._entry(ref)
+        source = entry.ibm_unsupported_source
         if source is None:
             return None
-        return (
+        warning = (
             f"WARNING: IBM does not support MQ on {ref} ({source}); it is selectable for "
             "lab use only"
         )
+        decision = entry.lab_default_decision
+        if decision is not None:
+            warning += (
+                f", and is a lab default by recorded decision ({decision.ref}, decided "
+                f"{decision.decided})"
+            )
+        return warning
 
     def all_boxes(
         self, facts: HostFacts | None, stack_roles: dict[str, set[str]]
@@ -496,6 +529,55 @@ def _ibm_unsupported_source(raw: Any, where: str) -> str | None:
     return _required(support, "source", where)
 
 
+def _lab_default_decision(
+    raw: Any, where: str, unsupported_source: str | None
+) -> LabDefaultDecision | None:
+    """Parse ``lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" }``.
+
+    Only meaningful on an IBM-unsupported entry: on any other entry it would be a stale
+    or misleading record (e.g. left behind once IBM lists the OS), so it is refused.
+    """
+    if raw is None:
+        return None
+    where = f"{where}.lab_default_decision"
+    spec = _mapping(raw, where)
+    _check_keys(spec, _DECISION_KEYS, where, _CATALOG_FIX)
+    if unsupported_source is None:
+        raise VersionError(
+            f"{where}: only an entry with ibm_support.status: unsupported may record a lab "
+            f"default decision (a supported entry needs none) — remove it — {_CATALOG_FIX}"
+        )
+    decided = _required(spec, "decided", where)
+    if _DECIDED_RE.fullmatch(decided) is None:
+        raise VersionError(
+            f'{where}: decided must be a quoted ISO date (e.g. "2026-10-14"); got '
+            f"{decided!r} — {_CATALOG_FIX}"
+        )
+    ref = _required(spec, "ref", where)
+    if _ISSUE_REF_RE.fullmatch(ref) is None:
+        raise VersionError(
+            f"{where}: ref must name the issue recording the decision as <owner>/<repo>#<N>; "
+            f"got {ref!r} — {_CATALOG_FIX}"
+        )
+    return LabDefaultDecision(decided=decided, ref=ref)
+
+
+def _gate_default(entry: OsEntry, key: str) -> None:
+    """The support gate for a stack default or ``infra_mq``: refuse an IBM-unsupported
+    entry unless the catalog records a lab decision to use it anyway (#1285)."""
+    source = entry.ibm_unsupported_source
+    if source is None or entry.lab_default_decision is not None:
+        return
+    ref = entry.ref
+    raise VersionError(
+        f"{key} {ref} is IBM-unsupported ({source}); {key} may point at an "
+        f"IBM-unsupported version only by a recorded lab decision — point {key} at a "
+        f"supported version, or record the decision as os.{ref.family}.{ref.major}."
+        'lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" } '
+        "in lab/versions.yaml"
+    )
+
+
 def _os_entry(ref: OsRef, raw: Any) -> OsEntry:
     where = f"os.{ref.family}.{ref.major}"
     spec = _mapping(raw, where)
@@ -515,6 +597,7 @@ def _os_entry(ref: OsRef, raw: Any) -> OsEntry:
             f"{where}: unknown host requirement {', '.join(unknown)} (this mqlab cannot "
             f"gate it) — {_CATALOG_FIX}"
         )
+    unsupported_source = _ibm_unsupported_source(spec.get("ibm_support"), where)
     return OsEntry(
         ref=ref,
         base_box=_required(spec, "base_box", where),
@@ -523,7 +606,10 @@ def _os_entry(ref: OsRef, raw: Any) -> OsEntry:
         iso=_required(spec, "iso", where) if rhel else _string(spec, "iso", where),
         arch_pin=arch,
         requires=tuple(requires),
-        ibm_unsupported_source=_ibm_unsupported_source(spec.get("ibm_support"), where),
+        ibm_unsupported_source=unsupported_source,
+        lab_default_decision=_lab_default_decision(
+            spec.get("lab_default_decision"), where, unsupported_source
+        ),
     )
 
 
@@ -651,13 +737,7 @@ def _stacks(raw: Any, oses: dict[OsRef, OsEntry]) -> dict[str, dict[str, Any]]:
             raise VersionError(
                 f"{where}: default {default} is not in its supported list — {_CATALOG_FIX}"
             )
-        source = oses[default].ibm_unsupported_source
-        if source is not None:
-            raise VersionError(
-                f"default {default} for {stack} is IBM-unsupported ({source}); a stack "
-                f"default must be IBM-supported — point stacks.{stack}.default at a "
-                "supported version in lab/versions.yaml"
-            )
+        _gate_default(oses[default], f"stacks.{stack}.default")
         out[str(stack)] = {"supported": supported, "default": default}
     return out
 
@@ -674,15 +754,10 @@ def load_catalog(path: Path | None = None) -> Catalog:
     roles = _roles(data["roles"])
     infra = _known(_ref(data["infra"], "infra"), oses, "infra")
     infra_mq = _known(_ref(data["infra_mq"], "infra_mq"), oses, "infra_mq")
-    source = oses[infra_mq].ibm_unsupported_source
-    if source is not None:
-        # The support gate, applied to the shared nodes that run MQ exactly as to a stack
-        # default (spec §4.1, #285). `infra` runs no MQ, so it is deliberately not gated.
-        raise VersionError(
-            f"infra_mq {infra_mq} is IBM-unsupported ({source}); the shared nodes that run "
-            "MQ must be on an IBM-supported version — point infra_mq at a supported "
-            "version in lab/versions.yaml"
-        )
+    # The support gate, applied to the shared nodes that run MQ exactly as to a stack
+    # default (spec §4.1, #285; recorded-decision escape #1285). `infra` runs no MQ, so it
+    # is deliberately not gated.
+    _gate_default(oses[infra_mq], "infra_mq")
     catalog = Catalog(
         oses=oses,
         roles=roles,

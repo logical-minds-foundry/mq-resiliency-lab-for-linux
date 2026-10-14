@@ -7,28 +7,36 @@
 #   os:     per-family, per-major facts the bake/provision steps need. Keys:
 #             base_box (required), base_box_version, point, iso (point+iso required
 #             for rhel), arch (host-arch pin; absent = tracks the host), requires,
-#             ibm_support: { status: supported|unsupported, source: <citation url> }.
+#             ibm_support: { status: supported|unsupported, source: <citation url> },
+#             lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" }.
 #   roles:  box role -> { bake: { <family>: <ansible/bake-<stem>.yml stem> }, mq_bearing }.
 #   infra:  the OS of the shared nodes that run NO MQ (roles infra, obs, san). Not
 #           selectable, and not support-gated (no MQ runs there).
 #   infra_mq: the OS of the shared nodes that RUN MQ (role mq-client: svc-sim,
 #           app-client, mon-probe). Not selectable; support-gated like a stack default
 #           (spec §2/§4.1, correction .github#285).
-#   stacks: per-stack supported majors and default. A default (and infra_mq) must never
-#           point at an entry with ibm_support.status: unsupported (the support gate).
+#   stacks: per-stack supported majors and default.
+#   The support gate: a default (and infra_mq) may point at an entry with
+#           ibm_support.status: unsupported ONLY when that entry records a
+#           lab_default_decision (the human's dated call + the issue recording it). An
+#           unsupported default without one is refused, so it is never accidental. The
+#           decision never edits ibm_support (that stays IBM's word), and bootstrap still
+#           warns on the entry. A decision on a supported entry is refused as stale.
 os:
   ubuntu:
     24: { base_box: cloud-image/ubuntu-24.04, base_box_version: "20260926.0.0" }
     # Pin from the T0b live spike (docs/reports/2026-10-os-axis-spike.md §1; libvirt amd64
     # + arm64). IBM's MQ 10.0 SPCR lists no Ubuntu 26.04 row
-    # (docs/reference/os-version-support-matrix.md §3.1, §6.1), so 26 is lab-only: it is
-    # selectable with a warning, and neither a stack default nor infra_mq may point at it.
+    # (docs/reference/os-version-support-matrix.md §3.1, §6.1), so 26 stays IBM-unsupported
+    # and warns on bootstrap. The lab makes it the Ubuntu default anyway, ahead of IBM, by
+    # the recorded decision below (#1285; matrix §4): the leading edge is the lab's point.
     26:
       base_box: cloud-image/ubuntu-26.04
       base_box_version: "20260927.0.0"
       ibm_support:
         status: unsupported
         source: "https://www.ibm.com/software/reports/compatibility/clarity-reports/report/json/getTSROsSupportSummary?deliverableId=FA94B1F6888342969E7F9B505149F032"
+      lab_default_decision: { decided: "2026-10-14", ref: "logical-minds-foundry/mq-resiliency-lab-for-linux#1285" }
   rhel:
     9: { base_box: rhel/9-x86_64, point: "9.6", iso: rhel-9.6-x86_64-dvd.iso, arch: x86_64 }
     # RHEL 10 (#1286): IBM supports MQ 10.0 + Native HA on it; RDQM joins from MQ 10.0.1,
@@ -51,12 +59,13 @@ roles:
   pcmk: { bake: { ubuntu: pcmk-ubuntu }, components: [mq-resiliency-observability] }
   mq-rdqm: { bake: { rhel: mq-rdqm }, mq_bearing: true, components: [mq-resiliency-observability] }
 infra: ubuntu:26
-# Stays on the IBM-listed Ubuntu until an "Ubuntu 26.04 LTS" SPCR row appears (T9, #285).
-infra_mq: ubuntu:24
+# On 26 ahead of IBM's SPCR, by os.ubuntu.26's recorded lab_default_decision (#1285).
+infra_mq: ubuntu:26
 stacks:
-  # 26 is selectable (lab-only, warned); the defaults flip only with an SPCR 26.04 row (T9).
-  nativeha-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:24 }
-  pcmk-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:24 }
+  # Default 26 ahead of IBM's SPCR, by os.ubuntu.26's recorded lab_default_decision
+  # (#1285); 24 stays selectable via a --config build file.
+  nativeha-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:26 }
+  pcmk-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:26 }
   # Defaults to rhel:10 (T11, #1289): IBM's MQ 10.0 SPCR lists MQ server + Native HA on
   # RHEL 10 (docs/reference/os-version-support-matrix.md), and the row was validated live
   # (V3, #1288). rhel:10 requires x86-64-v3, so a default bring-up on a host without it

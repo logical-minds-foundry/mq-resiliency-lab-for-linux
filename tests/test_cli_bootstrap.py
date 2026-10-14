@@ -1491,8 +1491,8 @@ U26 = OsRef("ubuntu", 26)
 
 
 def _catalog_24_26(monkeypatch, tmp_path, *, unsupported_26=False):
-    """Resolve the CLI's catalog against the committed one plus ubuntu:26, offered to
-    pcmk-ubuntu (default still ubuntu:24)."""
+    """Resolve the CLI's catalog against the committed one with a bare ubuntu:26 (no
+    lab decision), offered to pcmk-ubuntu; the Ubuntu defaults and infra_mq on 24."""
     data = yaml.safe_load(REAL_CATALOG.read_text())
     entry: dict[str, object] = {"base_box": "cloud-image/ubuntu-26.04"}
     if unsupported_26:
@@ -1502,6 +1502,8 @@ def _catalog_24_26(monkeypatch, tmp_path, *, unsupported_26=False):
         "supported": ["ubuntu:24", "ubuntu:26"],
         "default": "ubuntu:24",
     }
+    data["stacks"]["nativeha-ubuntu"]["default"] = "ubuntu:24"
+    data["infra_mq"] = "ubuntu:24"
     path = tmp_path / "versions-24-26.yaml"
     path.write_text(yaml.safe_dump(data))
     monkeypatch.setattr(versions, "versions_catalog_path", lambda: path)
@@ -1569,8 +1571,8 @@ def test_first_bootstrap_writes_the_record_before_the_render(monkeypatch, tmp_pa
     assert result.exit_code == 0, result.output
     [rec] = seen  # the record existed when _prepare_lab rendered
     assert rec is not None
-    assert (rec.stack, rec.os, rec.build_file) == ("pcmk-ubuntu", U24, None)
-    assert "pcmk-ubuntu: OS ubuntu:24 (instance record " in result.output
+    assert (rec.stack, rec.os, rec.build_file) == ("pcmk-ubuntu", U26, None)
+    assert "pcmk-ubuntu: OS ubuntu:26 (instance record " in result.output
 
 
 def test_first_bootstrap_with_config_records_the_selected_os(monkeypatch, tmp_path):
@@ -1660,9 +1662,24 @@ def test_bootstrap_warns_on_an_ibm_unsupported_os(monkeypatch, tmp_path):
     ) in result.stderr
 
 
-def test_bootstrap_supported_os_prints_no_warning(monkeypatch, tmp_path):
+def test_bootstrap_warns_on_the_ibm_unsupported_default(monkeypatch, tmp_path):
+    """The committed Ubuntu default is ubuntu:26 by a recorded lab decision (#1285); IBM
+    still does not list it, so a default bootstrap still prints the warning, naming the
+    decision."""
     _resume_harness(monkeypatch, tmp_path)
     result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu"])
+    assert result.exit_code == 0, result.output
+    assert result.stderr.startswith("WARNING: IBM does not support MQ on ubuntu:26 (")
+    assert (
+        "it is selectable for lab use only, and is a lab default by recorded decision "
+        "(logical-minds-foundry/mq-resiliency-lab-for-linux#1285, decided 2026-10-14)"
+    ) in result.stderr
+
+
+def test_bootstrap_supported_os_prints_no_warning(monkeypatch, tmp_path):
+    _resume_harness(monkeypatch, tmp_path)
+    cfg = _build_file(tmp_path, "os: ubuntu:24\n")
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "WARNING" not in result.stderr
 
