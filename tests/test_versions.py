@@ -136,12 +136,12 @@ def test_committed_catalog():
         "rdqm-rhel": [OsRef("rhel", 9), OsRef("rhel", 10)],
     }
     # Ubuntu defaults stay on 24 until an SPCR "Ubuntu 26.04 LTS" row appears (T9);
-    # nativeha-rhel-crr defaults to RHEL 10 (IBM-supported, validated live in V3, T11).
+    # nativeha-rhel-crr (T11) and rdqm-rhel (#1473) default to RHEL 10, each validated live.
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
         "nativeha-ubuntu": OsRef("ubuntu", 24),
         "pcmk-ubuntu": OsRef("ubuntu", 24),
         "nativeha-rhel-crr": OsRef("rhel", 10),
-        "rdqm-rhel": OsRef("rhel", 9),
+        "rdqm-rhel": OsRef("rhel", 10),
     }
     rhel9 = cat.oses[OsRef("rhel", 9)]
     assert (rhel9.base_box, rhel9.point, rhel9.iso, rhel9.arch_pin) == (
@@ -302,7 +302,7 @@ def test_box_unknown_os():
 
 
 def test_stack_default_when_no_build_file():
-    assert load_catalog().stack_os("rdqm-rhel", None, X86) == OsRef("rhel", 9)
+    assert load_catalog().stack_os("rdqm-rhel", None, X86) == OsRef("rhel", 10)
 
 
 def test_stack_default_when_build_file_omits_os():
@@ -447,9 +447,39 @@ def test_rdqm_offers_rhel10_on_a_v3_host():
     assert load_catalog().stack_os("rdqm-rhel", RHEL10, X86) == OsRef("rhel", 10)
 
 
-def test_rdqm_default_stays_rhel9():
-    """The default flips only on a human decision after the cold-rebuild row (#1440)."""
-    assert load_catalog().stack_os("rdqm-rhel", None, X86) == OsRef("rhel", 9)
+def test_rdqm_defaults_to_rhel10():
+    """#1473: the default flipped to RHEL 10 once its cold-rebuild row passed (#1475), and
+    it carries no IBM-unsupported warning."""
+    cat = load_catalog()
+    assert cat.stack_os("rdqm-rhel", None, X86) == OsRef("rhel", 10)
+    assert cat.support_warning(cat.default_os("rdqm-rhel")) is None
+
+
+def test_rdqm_default_refused_without_v3_points_to_rhel9():
+    """A DEFAULT rdqm-rhel bring-up on a non-v3 x86 host fails loudly and names os: rhel:9
+    via a build file — never a silent fallback to RHEL 9 (#1473)."""
+    with pytest.raises(VersionError) as exc:
+        load_catalog().stack_os("rdqm-rhel", None, X86_V2)
+    assert str(exc.value) == (
+        "rhel:10 needs an x86-64-v3 CPU; this host's CPU lacks avx2, bmi1, bmi2, fma — "
+        "use os: rhel:9 in your --config file (mqlab bootstrap rdqm-rhel --config <file>)"
+    )
+
+
+def test_rdqm_default_refused_under_tcg_points_to_rhel9():
+    with pytest.raises(VersionError, match=r"not measured under TCG.*use os: rhel:9"):
+        load_catalog().stack_os("rdqm-rhel", None, X86_TCG)
+
+
+def test_rdqm_rhel9_still_selectable_on_a_non_v3_host():
+    """The escape hatch the rdqm-rhel refusal names actually works."""
+    cat = load_catalog()
+    assert cat.stack_os("rdqm-rhel", BuildFile(os=OsRef("rhel", 9)), X86_V2) == OsRef("rhel", 9)
+
+
+def test_rdqm_default_refused_on_aarch64_by_the_arch_gate():
+    with pytest.raises(VersionError, match="RHEL needs an x86_64 host; this host is aarch64"):
+        load_catalog().stack_os("rdqm-rhel", None, ARM)
 
 
 def test_rdqm_rhel10_refused_without_v3_names_rhel9():
@@ -860,7 +890,7 @@ def test_node_boxes_defaults(no_records):
     nb = node_boxes(topology.load(), load_catalog())
     assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu24"
     assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel10"  # default flipped (T11)
-    assert nb["rdqm-a1"].name == "mq-rdqm-rhel9"
+    assert nb["rdqm-a1"].name == "mq-rdqm-rhel10"  # default flipped (#1473)
     assert nb["pcmk-a1"].name == "pcmk-ubuntu24"
     assert nb["infra-svc"].name == "infra-ubuntu26"
     assert nb["svc-sim"].name == "mq-client-ubuntu24"
@@ -1010,4 +1040,4 @@ def test_catalog_without_the_san_role_fails_loud(tmp_path):
 
 
 def test_stack_ref_is_the_default_without_a_record(no_records):
-    assert versions.stack_ref("rdqm-rhel", load_catalog()) == OsRef("rhel", 9)
+    assert versions.stack_ref("rdqm-rhel", load_catalog()) == OsRef("rhel", 10)

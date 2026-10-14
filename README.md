@@ -57,9 +57,9 @@ Almost everything is fetched automatically — IBM **MQ Advanced for Developers*
 - **libvirt / QEMU / Vagrant** — the virtualization stack the guests run on.
 - **gpg** — to verify the signed release below.
 - **A RHEL subscription** — only for the RHEL-based arms (RDQM, Native HA on
-  RHEL). The canonical `pcmk-ubuntu` arm needs nothing extra. The RHEL Native HA
-  arm defaults to RHEL 10, which needs an x86-64-v3 CPU (`mqlab doctor` says
-  whether yours is one); without it, build that arm on RHEL 9 instead.
+  RHEL). The canonical `pcmk-ubuntu` arm needs nothing extra. Both RHEL arms
+  default to RHEL 10, which needs an x86-64-v3 CPU (`mqlab doctor` says
+  whether yours is one); without it, build them on RHEL 9 instead.
 
 Each stack's default and selectable OS versions (Ubuntu 24.04/26.04, RHEL 9/10)
 live in one catalog, [`lab/versions.yaml`](lab/versions.yaml); the site's
