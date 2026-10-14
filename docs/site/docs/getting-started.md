@@ -296,8 +296,17 @@ recorded in the catalog: the lab exists to run at the leading edge, and to find 
 report problems there before others hit them. Bootstrap prints
 `WARNING: IBM does not support MQ on ubuntu:26 (<SPCR link>); it is selectable for
 lab use only, and is a lab default by recorded decision (<issue>, decided <date>)`
-and carries on. To stay on the Ubuntu release IBM supports, build with
-`os: ubuntu:24` in a `--config` file; that prints no warning. The
+and carries on. To build the stack itself on the Ubuntu release IBM supports, use
+`os: ubuntu:24` in a `--config` file; that drops the stack warning.
+
+The shared MQ nodes (`svc-sim`, `app-client`, `mon-probe`, the catalog's `infra_mq`)
+also run Ubuntu 26.04 by the same decision, under every stack, RHEL included. So
+every bootstrap also prints
+`WARNING: the shared MQ nodes (infra_mq) run ubuntu:26, which IBM does not support
+for MQ (<SPCR link>); a lab default by recorded decision (<issue>, decided <date>)`,
+even when the commons are already running: the stack's MQ traffic runs through those
+nodes either way. A `--config` file cannot change this; it goes away by itself when
+IBM lists Ubuntu 26.04. The
 [OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md)
 (§4, §6.1) records the decision and IBM's status.
 

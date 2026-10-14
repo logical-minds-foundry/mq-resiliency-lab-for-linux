@@ -309,10 +309,31 @@ class Catalog:
         )
         decision = entry.lab_default_decision
         if decision is not None:
-            warning += (
-                f", and is a lab default by recorded decision ({decision.ref}, decided "
-                f"{decision.decided})"
-            )
+            warning += f", and is {_decision_note(decision)}"
+        return warning
+
+    def infra_mq_warning(self) -> str | None:
+        """The warning to print when the shared MQ nodes' OS (``infra_mq``: the
+        INFRA_MQ_ROLES boxes, i.e. svc-sim, app-client, mon-probe) is IBM-unsupported,
+        else None (#1508).
+
+        Every stack's bootstrap brings these nodes up (or reuses them), whatever the
+        stack's own OS, so this is independent of support_warning on the stack OS. It
+        retires itself: once IBM lists the OS, ``ibm_support`` flips to supported, the
+        stale-decision check forces the ``lab_default_decision`` out, and this is None.
+        """
+        ref = self.infra_mq
+        entry = self._entry(ref)
+        source = entry.ibm_unsupported_source
+        if source is None:
+            return None
+        warning = (
+            f"WARNING: the shared MQ nodes (infra_mq) run {ref}, which IBM does not "
+            f"support for MQ ({source})"
+        )
+        decision = entry.lab_default_decision
+        if decision is not None:
+            warning += f"; {_decision_note(decision)}"
         return warning
 
     def all_boxes(
@@ -527,6 +548,11 @@ def _ibm_unsupported_source(raw: Any, where: str) -> str | None:
         _string(support, "source", where)  # optional citation, but type-checked
         return None
     return _required(support, "source", where)
+
+
+def _decision_note(decision: LabDefaultDecision) -> str:
+    """The recorded-decision clause both support warnings share (#1285, #1508)."""
+    return f"a lab default by recorded decision ({decision.ref}, decided {decision.decided})"
 
 
 def _lab_default_decision(
