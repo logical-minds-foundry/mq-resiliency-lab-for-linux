@@ -29,8 +29,8 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 
 | Box | Base | Arch | Role(s) that boot it | Bakes |
 |-----|------|------|----------------------|-------|
-| `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3` | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default + the guest runtime + `mq-resiliency-observability` |
-| `mq-rdqm-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `rdqm-*` nodes when `rdqm-rhel` runs on RHEL 10 (`os: rhel:10` in a `--config` file; #1440) | the same bake as `mq-rdqm-rhel9` (`bake-mq-rdqm.yml`), on the RHEL 10 base, with MQ 10.0.1's `el10` RDQM set (Pacemaker 3) |
+| `mq-rdqm-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `rdqm-a1..3`, `rdqm-b1..3`, when `rdqm-rhel` runs on RHEL 9 (`os: rhel:9` in a `--config` file; the choice for a host without x86-64-v3) | MQ product + RDQM stack (DRBD/Pacemaker, kernel-matched `kmod-drbd`) + node-exporter + alloy + the journald diagnostic default + the guest runtime + `mq-resiliency-observability` |
+| `mq-rdqm-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `rdqm-*` nodes on RHEL 10, the stack default (#1473; selectable since #1440) | the same bake as `mq-rdqm-rhel9` (`bake-mq-rdqm.yml`), on the RHEL 10 base, with MQ 10.0.1's `el10` RDQM set (Pacemaker 3) |
 | `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3`, when the stack runs on RHEL 9 (`os: rhel:9` in a `--config` file; the choice for a host without x86-64-v3) | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes on RHEL 10, the stack default (#1289) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
 | `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
@@ -231,13 +231,13 @@ The catalog offers RHEL 10 to **`nativeha-rhel-crr`** and **`rdqm-rhel`** (both
 - `rhel:10` is `nativeha-rhel-crr`'s **default** since #1289: IBM's MQ 10.0 SPCR lists
   MQ server and Native HA on RHEL 10, and the row passed a live cold full-DR rebuild
   (#1288).
-- `rdqm-rhel` offers `rhel:10` as **selectable** since #1440; its default stays `rhel:9`.
-  IBM supports RDQM on RHEL 10 from MQ 10.0.1 only, the first level whose tarball ships
+- `rhel:10` is `rdqm-rhel`'s **default** since #1473 (selectable since #1440). IBM
+  supports RDQM on RHEL 10 from MQ 10.0.1 only, the first level whose tarball ships
   `el10` DRBD kmods, and the lab pins 10.0.1.0 (#1409). The `el10` set brings
   **Pacemaker 3** (`el10/pacemaker-3`, where el8/el9 use `pacemaker-2`); `rdqm-install`
   takes the directory names from `vars/RedHat-10.yml`. The `mq-rdqm-rhel10` box is baked
-  by the same `bake-mq-rdqm.yml` as RHEL 9. Its first bake and cold-rebuild row are
-  tracked in #1442 and #1443.
+  by the same `bake-mq-rdqm.yml` as RHEL 9. The row passed a cold rebuild in the MQ
+  10.0.1 validation (#1475), which is what flipped the default.
 
 The sources are in [`os-version-support-matrix.md`](../reference/os-version-support-matrix.md)
 (§2.4 for RDQM).
@@ -253,12 +253,14 @@ The sources are in [`os-version-support-matrix.md`](../reference/os-version-supp
   host's flags. Without KVM the guest is emulated (TCG, `cpu_mode: maximum`), and what
   it sees was never measured, so it counts as absent. On a host that lacks it,
   `Catalog.stack_os` refuses `os: rhel:10`, naming the missing flags and suggesting
-  `os: rhel:9` in the `--config` file. Because `rhel:10` is the default, a plain
-  `mqlab bootstrap nativeha-rhel-crr` on such a host is refused the same way, before
-  any lab I/O. It never falls back to RHEL 9 on its own: put `os: rhel:9` in a build
-  file and run `mqlab bootstrap nativeha-rhel-crr --config <file>`. `os: rhel:10` for
-  `rdqm-rhel` is refused the same way. The fleet leaves every RHEL 10 box out, and `mqlab doctor` reports `x86-64-v3: no` with the reason
-  (informational).
+  `os: rhel:9` in the `--config` file. Because `rhel:10` is the default of both RHEL
+  stacks, a plain `mqlab bootstrap nativeha-rhel-crr` or `mqlab bootstrap rdqm-rhel` on
+  such a host is refused the same way, before any lab I/O. It never falls back to RHEL 9
+  on its own: put `os: rhel:9` in a build file and run
+  `mqlab bootstrap <stack> --config <file>`. The fleet leaves every RHEL 10 box out, a
+  plain `mqlab box build` skips both RHEL stacks' defaults (so it builds no RHEL boxes;
+  a build file naming `os: rhel:9` builds both on RHEL 9), and `mqlab doctor` reports
+  `x86-64-v3: no` with the reason (informational).
 - **The base box.** `mqlab box build rhel/10-x86_64` runs
   `rhel/build-box.sh --major 10 --point 10.2 --iso rhel-10.2-x86_64-dvd.iso`.
   It uses the same q35, legacy-BIOS build domain as RHEL 9 (`build-domain.xml.tpl`).

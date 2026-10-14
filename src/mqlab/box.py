@@ -195,7 +195,8 @@ def boxes_for_build(
     on the OS Catalog.stack_os resolves
     — so an unsupported or host-incompatible request fails loudly there. A stack left
     at its default is skipped only when this host cannot run that default (RHEL on
-    aarch64), since nothing asked for it."""
+    aarch64, or a RHEL 10 default on a host without x86-64-v3), since nothing asked
+    for it; such a host names ``os: rhel:9`` in a build file to bake the RHEL 9 boxes."""
     catalog = catalog if catalog is not None else load_catalog()
     roles = stack_roles if stack_roles is not None else _topology_stack_roles(catalog)
     names = [catalog.box(role, catalog.shared_os(role)).name for role in SHARED_ROLES]

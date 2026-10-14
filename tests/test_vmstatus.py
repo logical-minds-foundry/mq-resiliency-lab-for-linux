@@ -40,7 +40,7 @@ def test_vm_status_core_renders_full_fleet_and_tees(monkeypatch, tmp_path):
     assert "topology.yaml" in out  # the other source named on the table (#88)
     assert "rdqm-a1" in out  # full fleet — incl the defined-but-not-instantiated RHEL node
     assert "not created" in out
-    assert "mq-rdqm-rhel9" in out  # the Box column: the generated box name
+    assert "mq-rdqm-rhel10" in out  # the Box column: the generated box name
     assert "rdqm-rhel" in out  # config-driven Stack(s) column, from topology.yaml stacks (#90)
     body = transcript.path.read_text(encoding="utf-8")
     assert "lab_pcmk-b1      running" in body  # raw rows teed to the transcript

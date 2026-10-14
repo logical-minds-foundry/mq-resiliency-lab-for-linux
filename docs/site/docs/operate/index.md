@@ -15,7 +15,7 @@ The four stack names are:
 
 | Stack | Mechanism | OS | App queue manager |
 |---|---|---|---|
-| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 9 (RHEL 10 selectable) | `RDQMAPP` |
+| `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 10 (RHEL 9 selectable) | `RDQMAPP` |
 | `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 24.04 (26.04 lab-only) | `PCMKAPP` |
 | `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARCAPP` |
 | `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 24.04 (26.04 lab-only) | `NHAUAPP` |
