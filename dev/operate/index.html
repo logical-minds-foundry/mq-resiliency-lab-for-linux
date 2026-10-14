@@ -1472,7 +1472,7 @@ The four stack names are:</p>
 <tr>
 <td><code>pcmk-ubuntu</code></td>
 <td>Pacemaker/SAN (shared-storage HA)</td>
-<td>Ubuntu 24.04 (26.04 lab-only)</td>
+<td>Ubuntu 26.04, IBM-unsupported (24.04 selectable)</td>
 <td><code>PCMKAPP</code></td>
 </tr>
 <tr>
@@ -1484,7 +1484,7 @@ The four stack names are:</p>
 <tr>
 <td><code>nativeha-ubuntu</code></td>
 <td>Native HA (log-replicated HA)</td>
-<td>Ubuntu 24.04 (26.04 lab-only)</td>
+<td>Ubuntu 26.04, IBM-unsupported (24.04 selectable)</td>
 <td><code>NHAUAPP</code></td>
 </tr>
 </tbody>
@@ -1514,7 +1514,7 @@ instance record (<code>build/state/instances/&lt;stack&gt;.json</code>). A later
 different OS is refused until <code>mqlab teardown &lt;stack&gt;</code>, and a running stack with no
 record is refused by every stack command except <code>teardown</code>. See
 <a href="../getting-started/#choose-an-os-version">Getting Started</a> for the rules and the
-lab-only Ubuntu 26.04 warning.</p>
+IBM-unsupported Ubuntu 26.04 warning.</p>
 <p><code>bootstrap</code>, <code>teardown</code> and <code>commons up</code> each print the <strong>environment profile</strong>
 they resolved, for example <code>environment: macos (detected: …)</code>. The profile is
 detected from the platform (Apple Virtualization → <code>macos</code>, Google Compute Engine
