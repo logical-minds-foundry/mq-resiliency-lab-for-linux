@@ -47,10 +47,10 @@ Data Center B). Queue-manager names derive from each stack's `short` token
 
 | Stack | Mechanism | OS | `short` | Site-A groups | Site-B groups | QM VIP (A / B) |
 |---|---|---|---|---|---|---|
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 24.04 (26.04 lab-only) | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
+| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `PCMK` | `san_a`, `pcmk_a` | `san_b`, `pcmk_b` | `10.10.1.200` / `10.10.2.200` |
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 10 (RHEL 9 selectable) | `RDQM` | `rdqm_a` | `rdqm_b` | `10.10.1.100` / `10.10.2.100` |
 | `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARC` | `nha_rhel_crr_a` | `nha_rhel_crr_b` | per-instance (no VIP) |
-| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 24.04 (26.04 lab-only) | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
+| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `NHAU` | `nha_ubuntu_a` | `nha_ubuntu_b` | per-instance (no VIP) |
 
 The OS column shows each stack's default first. Defaults and selectable versions
 come from the OS version catalog,

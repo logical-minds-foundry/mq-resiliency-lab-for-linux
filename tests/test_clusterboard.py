@@ -191,8 +191,8 @@ def test_board_has_uid_hero_integrity_and_the_two_matrices():
 @pytest.mark.parametrize(
     ("arm", "label"),
     [
-        ("pcmk-ubuntu", "Ubuntu 24"),
-        ("nativeha-ubuntu", "Ubuntu 24"),
+        ("pcmk-ubuntu", "Ubuntu 26"),
+        ("nativeha-ubuntu", "Ubuntu 26"),
         ("nativeha-rhel-crr", "RHEL 10"),
         ("rdqm-rhel", "RHEL 10"),
     ],

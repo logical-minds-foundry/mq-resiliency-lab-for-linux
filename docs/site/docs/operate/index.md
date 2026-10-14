@@ -16,9 +16,9 @@ The four stack names are:
 | Stack | Mechanism | OS | App queue manager |
 |---|---|---|---|
 | `rdqm-rhel` | RDQM (replicated-storage HA) | RHEL 10 (RHEL 9 selectable) | `RDQMAPP` |
-| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 24.04 (26.04 lab-only) | `PCMKAPP` |
+| `pcmk-ubuntu` | Pacemaker/SAN (shared-storage HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `PCMKAPP` |
 | `nativeha-rhel-crr` | Native HA (log-replicated HA) | RHEL 10 (RHEL 9 selectable) | `NHARCAPP` |
-| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 24.04 (26.04 lab-only) | `NHAUAPP` |
+| `nativeha-ubuntu` | Native HA (log-replicated HA) | Ubuntu 26.04, IBM-unsupported (24.04 selectable) | `NHAUAPP` |
 
 Queue-manager names are derived from each stack's short token — no literal is
 hardcoded (`{short}APP` / `{short}SVC`).
@@ -50,7 +50,7 @@ instance record (`build/state/instances/<stack>.json`). A later request for a
 different OS is refused until `mqlab teardown <stack>`, and a running stack with no
 record is refused by every stack command except `teardown`. See
 [Getting Started](../getting-started.md#choose-an-os-version) for the rules and the
-lab-only Ubuntu 26.04 warning.
+IBM-unsupported Ubuntu 26.04 warning.
 
 `bootstrap`, `teardown` and `commons up` each print the **environment profile**
 they resolved, for example `environment: macos (detected: …)`. The profile is

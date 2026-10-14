@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import datetime
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
@@ -74,17 +75,29 @@ def _fake_components(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *names: st
     return comps
 
 
-def _with_ubuntu26(*, unsupported: bool, default: str = "ubuntu:24") -> dict[str, Any]:
-    """The committed catalog plus an ubuntu:26 entry offered to nativeha-ubuntu."""
+_DECISION = {"decided": "2026-10-14", "ref": "example-org/example-repo#1285"}
+_DECIDE = ("os", "ubuntu", 26, "lab_default_decision")
+
+
+def _with_ubuntu26(
+    *, unsupported: bool, default: str = "ubuntu:24", decided: bool = False
+) -> dict[str, Any]:
+    """The committed catalog with ubuntu:26 replaced by a bare entry (no recorded lab
+    decision unless ``decided``) offered to nativeha-ubuntu, whose default is ``default``;
+    pcmk-ubuntu and infra_mq sit on 24 so only nativeha-ubuntu's default is under test."""
     data = copy.deepcopy(_committed())
     entry: dict[str, Any] = {"base_box": "cloud-image/ubuntu-26.04"}
     if unsupported:
         entry["ibm_support"] = {"status": "unsupported", "source": "https://example.invalid"}
+    if decided:
+        entry["lab_default_decision"] = dict(_DECISION)
     data["os"]["ubuntu"][26] = entry
     data["stacks"]["nativeha-ubuntu"] = {
         "supported": ["ubuntu:24", "ubuntu:26"],
         "default": default,
     }
+    data["stacks"]["pcmk-ubuntu"]["default"] = "ubuntu:24"
+    data["infra_mq"] = "ubuntu:24"
     return data
 
 
@@ -119,10 +132,19 @@ _SPCR_MQ10 = (
 )
 
 
+_DECISION_1285 = "logical-minds-foundry/mq-resiliency-lab-for-linux#1285"
+_WARNING_26 = (
+    f"WARNING: IBM does not support MQ on ubuntu:26 ({_SPCR_MQ10}); it is selectable "
+    "for lab use only, and is a lab default by recorded decision "
+    f"({_DECISION_1285}, decided 2026-10-14)"
+)
+
+
 def test_committed_catalog():
     cat = load_catalog()
-    # Shared nodes split by whether they run MQ (#285): non-MQ on 26, MQ on IBM-listed 24.
-    assert (cat.infra, cat.infra_mq) == (OsRef("ubuntu", 26), OsRef("ubuntu", 24))
+    # Shared nodes split by whether they run MQ (#285); both on 26 now, infra_mq by the
+    # recorded lab decision on os.ubuntu.26 (#1285).
+    assert (cat.infra, cat.infra_mq) == (OsRef("ubuntu", 26), OsRef("ubuntu", 26))
     assert set(cat.oses) == {
         OsRef("ubuntu", 24),
         OsRef("ubuntu", 26),
@@ -135,11 +157,11 @@ def test_committed_catalog():
         "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
         "rdqm-rhel": [OsRef("rhel", 9), OsRef("rhel", 10)],
     }
-    # Ubuntu defaults stay on 24 until an SPCR "Ubuntu 26.04 LTS" row appears (T9);
+    # Ubuntu defaults on 26 ahead of IBM, by the recorded lab decision (#1285);
     # nativeha-rhel-crr (T11) and rdqm-rhel (#1473) default to RHEL 10, each validated live.
     assert {s: spec["default"] for s, spec in cat.stacks.items()} == {
-        "nativeha-ubuntu": OsRef("ubuntu", 24),
-        "pcmk-ubuntu": OsRef("ubuntu", 24),
+        "nativeha-ubuntu": OsRef("ubuntu", 26),
+        "pcmk-ubuntu": OsRef("ubuntu", 26),
         "nativeha-rhel-crr": OsRef("rhel", 10),
         "rdqm-rhel": OsRef("rhel", 10),
     }
@@ -167,6 +189,7 @@ def test_committed_catalog():
     assert ubuntu24.arch_pin is None
     assert ubuntu24.requires == ()
     assert ubuntu24.ibm_unsupported_source is None
+    assert ubuntu24.lab_default_decision is None
     ubuntu26 = cat.oses[OsRef("ubuntu", 26)]
     assert (ubuntu26.base_box, ubuntu26.base_box_version, ubuntu26.arch_pin) == (
         "cloud-image/ubuntu-26.04",
@@ -175,7 +198,11 @@ def test_committed_catalog():
     )
     assert ubuntu26.requires == ()
     # Exact match against the cited SPCR (never a URL-substring check, which CodeQL flags).
+    # IBM's word stays recorded truthfully; the lab's decision sits beside it (#1285).
     assert ubuntu26.ibm_unsupported_source == _SPCR_MQ10
+    assert ubuntu26.lab_default_decision == versions.LabDefaultDecision(
+        decided="2026-10-14", ref=_DECISION_1285
+    )
 
 
 def test_committed_runtime_pin():
@@ -306,7 +333,7 @@ def test_stack_default_when_no_build_file():
 
 
 def test_stack_default_when_build_file_omits_os():
-    assert load_catalog().stack_os("pcmk-ubuntu", BuildFile(os=None), ARM) == OsRef("ubuntu", 24)
+    assert load_catalog().stack_os("pcmk-ubuntu", BuildFile(os=None), ARM) == OsRef("ubuntu", 26)
 
 
 def test_stack_takes_build_file_os(tmp_path):
@@ -319,22 +346,30 @@ def test_stack_takes_build_file_os(tmp_path):
 @pytest.mark.parametrize("facts", [X86, ARM])
 def test_ubuntu26_selectable_on_both_ubuntu_stacks(stack, facts):
     """The committed catalog offers ubuntu:26 to both Ubuntu stacks, on either host arch,
-    as lab-only: it resolves, and it carries the IBM-unsupported warning (#1282)."""
+    as IBM-unsupported: it resolves, and it carries the IBM-unsupported warning (#1282)."""
     cat = load_catalog()
     ref = cat.stack_os(stack, BuildFile(os=OsRef("ubuntu", 26)), facts)
     assert ref == OsRef("ubuntu", 26)
-    assert cat.support_warning(ref) == (
-        f"WARNING: IBM does not support MQ on ubuntu:26 ({_SPCR_MQ10}); it is selectable "
-        "for lab use only"
-    )
+    assert cat.support_warning(ref) == _WARNING_26
 
 
 @pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
-def test_ubuntu_stack_default_still_24(stack):
-    """No SPCR 26.04 row yet, so the default stays on 24 (T9 flips it) (#1282)."""
+def test_ubuntu_stack_default_is_26_and_still_warns(stack):
+    """The Ubuntu defaults are on 26 ahead of IBM's SPCR by a recorded lab decision
+    (#1285); IBM still does not list 26.04, so the default still warns."""
     cat = load_catalog()
-    assert cat.stack_os(stack, None, X86) == OsRef("ubuntu", 24)
-    assert cat.support_warning(cat.default_os(stack)) is None
+    assert cat.stack_os(stack, None, X86) == OsRef("ubuntu", 26)
+    assert cat.support_warning(cat.default_os(stack)) == _WARNING_26
+
+
+@pytest.mark.parametrize("stack", ["nativeha-ubuntu", "pcmk-ubuntu"])
+@pytest.mark.parametrize("facts", [X86, ARM])
+def test_ubuntu24_stays_selectable(stack, facts):
+    """24 stays selectable on both Ubuntu stacks after the flip, with no warning (#1285)."""
+    cat = load_catalog()
+    ref = cat.stack_os(stack, BuildFile(os=OsRef("ubuntu", 24)), facts)
+    assert ref == OsRef("ubuntu", 24)
+    assert cat.support_warning(ref) is None
 
 
 def test_stack_rejects_unsupported_version(tmp_path):
@@ -527,18 +562,62 @@ def test_default_must_not_be_ibm_unsupported(tmp_path):
         "status": "unsupported",
         "source": "https://example.invalid",
     }
-    # Move infra_mq off 24 (onto a supported 26) so the STACK default gate is what trips.
-    del data["os"]["ubuntu"][26]["ibm_support"]
-    data["infra_mq"] = "ubuntu:26"
-    with pytest.raises(
-        VersionError, match="default ubuntu:24 for nativeha-ubuntu is IBM-unsupported"
-    ):
+    # Point a stack default (and nothing else) at the now-unsupported, undecided 24.
+    data["stacks"]["nativeha-ubuntu"]["default"] = "ubuntu:24"
+    with pytest.raises(VersionError) as exc:
         load_catalog(_write(tmp_path, data))
+    assert str(exc.value) == (
+        "stacks.nativeha-ubuntu.default ubuntu:24 is IBM-unsupported (https://example.invalid); "
+        "stacks.nativeha-ubuntu.default may point at an IBM-unsupported version only by a "
+        "recorded lab decision — point stacks.nativeha-ubuntu.default at a supported version, "
+        'or record the decision as os.ubuntu.24.lab_default_decision: { decided: "<YYYY-MM-DD>", '
+        'ref: "<owner>/<repo>#<N>" } in lab/versions.yaml'
+    )
 
 
 def test_unsupported_default_via_new_entry_refused(tmp_path):
-    with pytest.raises(VersionError, match="default ubuntu:26 for nativeha-ubuntu"):
+    """An accidental unsupported default (no recorded decision) is still refused (#1285)."""
+    with pytest.raises(
+        VersionError, match="stacks.nativeha-ubuntu.default ubuntu:26 is IBM-unsupported"
+    ):
         load_catalog(_write(tmp_path, _with_ubuntu26(unsupported=True, default="ubuntu:26")))
+
+
+def test_unsupported_default_accepted_with_a_recorded_decision(tmp_path):
+    """A recorded lab decision lets a stack default point at an IBM-unsupported entry,
+    without touching IBM's status: the default still warns, naming the decision (#1285)."""
+    data = _with_ubuntu26(unsupported=True, default="ubuntu:26", decided=True)
+    cat = load_catalog(_write(tmp_path, data))
+    ref = cat.stack_os("nativeha-ubuntu", None, X86)
+    assert ref == OsRef("ubuntu", 26)
+    assert cat.oses[ref].ibm_unsupported_source == "https://example.invalid"
+    assert cat.support_warning(ref) == (
+        "WARNING: IBM does not support MQ on ubuntu:26 (https://example.invalid); "
+        "it is selectable for lab use only, and is a lab default by recorded decision "
+        "(example-org/example-repo#1285, decided 2026-10-14)"
+    )
+
+
+def test_infra_mq_accepted_with_a_recorded_decision(tmp_path):
+    """infra_mq is gated like a stack default, so the same decision lifts it (#1285)."""
+    data = _with_ubuntu26(unsupported=True, decided=True)
+    data["infra_mq"] = "ubuntu:26"
+    cat = load_catalog(_write(tmp_path, data))
+    assert cat.box("mq-client", cat.shared_os("mq-client")).name == "mq-client-ubuntu26"
+    assert cat.support_warning(cat.infra_mq) is not None
+
+
+def test_decision_on_a_supported_entry_is_refused(tmp_path):
+    """Once IBM lists the OS the decision is stale and must go with the status flip."""
+    data = copy.deepcopy(_committed())
+    del data["os"]["ubuntu"][26]["ibm_support"]
+    with pytest.raises(VersionError) as exc:
+        load_catalog(_write(tmp_path, data))
+    assert str(exc.value) == (
+        "os.ubuntu.26.lab_default_decision: only an entry with ibm_support.status: "
+        "unsupported may record a lab default decision (a supported entry needs none) — "
+        "remove it — fix lab/versions.yaml"
+    )
 
 
 def test_unsupported_entry_is_selectable_with_warning(tmp_path):
@@ -554,15 +633,18 @@ def test_unsupported_entry_is_selectable_with_warning(tmp_path):
 
 
 def test_infra_mq_refuses_ibm_unsupported(tmp_path):
-    """The shared nodes that run MQ are gated like a stack default (#285)."""
-    data = copy.deepcopy(_committed())
-    data["infra_mq"] = "ubuntu:26"  # committed 26 carries ibm_support: unsupported
+    """The shared nodes that run MQ are gated like a stack default (#285): without a
+    recorded lab decision, an IBM-unsupported infra_mq is refused (#1285)."""
+    data = _with_ubuntu26(unsupported=True)
+    data["infra_mq"] = "ubuntu:26"
     with pytest.raises(VersionError) as exc:
         load_catalog(_write(tmp_path, data))
     assert str(exc.value) == (
-        f"infra_mq ubuntu:26 is IBM-unsupported ({_SPCR_MQ10}); the shared nodes that run "
-        "MQ must be on an IBM-supported version — point infra_mq at a supported version "
-        "in lab/versions.yaml"
+        "infra_mq ubuntu:26 is IBM-unsupported (https://example.invalid); infra_mq may "
+        "point at an IBM-unsupported version only by a recorded lab decision — point "
+        "infra_mq at a supported version, or record the decision as "
+        'os.ubuntu.26.lab_default_decision: { decided: "<YYYY-MM-DD>", '
+        'ref: "<owner>/<repo>#<N>" } in lab/versions.yaml'
     )
 
 
@@ -575,9 +657,8 @@ def test_infra_not_gated():
 
 
 def test_infra_mq_may_flip_once_supported(tmp_path):
-    """T9's flip: once 26 is IBM-supported, infra_mq may point at it."""
-    data = copy.deepcopy(_committed())
-    del data["os"]["ubuntu"][26]["ibm_support"]
+    """Once 26 is IBM-supported, infra_mq may point at it with no decision recorded."""
+    data = _with_ubuntu26(unsupported=False)
     data["infra_mq"] = "ubuntu:26"
     cat = load_catalog(_write(tmp_path, data))
     assert cat.box("mq-client", cat.shared_os("mq-client")).name == "mq-client-ubuntu26"
@@ -602,14 +683,14 @@ _STACK_ROLES = {
 
 
 def test_all_boxes_on_x86():
-    """Shared boxes first (non-MQ on infra = 26, mq-client on infra_mq = 24, #285), then
+    """Shared boxes first (non-MQ on infra, mq-client on infra_mq; both 26, #1285), then
     every supported major of every stack."""
     names = [b.name for b in load_catalog().all_boxes(X86, _STACK_ROLES)]
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
         "san-ubuntu26",
-        "mq-client-ubuntu24",
+        "mq-client-ubuntu26",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
@@ -627,7 +708,7 @@ def test_all_boxes_skips_rhel_on_aarch64():
         "infra-ubuntu26",
         "obs-ubuntu26",
         "san-ubuntu26",
-        "mq-client-ubuntu24",
+        "mq-client-ubuntu26",
         "mq-nativeha-ubuntu24",
         "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
@@ -639,7 +720,7 @@ def test_mq_client_resolves_from_infra_mq(tmp_path):
     """The MQ-bearing shared role follows infra_mq, the rest follow infra (#285): moving
     infra alone never moves mq-client."""
     cat = load_catalog()
-    assert cat.shared_os("mq-client") == cat.infra_mq == OsRef("ubuntu", 24)
+    assert cat.shared_os("mq-client") == cat.infra_mq == OsRef("ubuntu", 26)
     assert {cat.shared_os(r) for r in INFRA_ROLES} == {cat.infra} == {OsRef("ubuntu", 26)}
     assert INFRA_MQ_ROLES == ("mq-client",)
     assert set(SHARED_ROLES) == {*INFRA_ROLES, *INFRA_MQ_ROLES}
@@ -648,7 +729,7 @@ def test_mq_client_resolves_from_infra_mq(tmp_path):
     moved = load_catalog(_write(tmp_path, data))
     assert (moved.shared_os("obs"), moved.shared_os("mq-client")) == (
         OsRef("ubuntu", 24),
-        OsRef("ubuntu", 24),
+        OsRef("ubuntu", 26),
     )
 
 
@@ -766,6 +847,20 @@ def test_catalog_not_a_mapping(tmp_path):
             {"status": "supported", "source": 1},
             "'source' must be a string",
         ),
+        # os.<family>.<major>.lab_default_decision (#1285):
+        (_DECIDE, "yes", "lab_default_decision must be a mapping"),
+        (_DECIDE, {**_DECISION, "why": "x"}, "lab_default_decision: unknown key 'why'"),
+        (_DECIDE, {"ref": _DECISION["ref"]}, "lab_default_decision: missing required 'decided'"),
+        (_DECIDE, {"decided": "2026-10-14"}, "lab_default_decision: missing required 'ref'"),
+        (
+            _DECIDE,
+            {**_DECISION, "decided": datetime.date(2026, 10, 14)},  # unquoted YAML date
+            r"'decided' must be a string \(quote it\)",
+        ),
+        (_DECIDE, {**_DECISION, "decided": "14 Oct 2026"}, "decided must be a quoted ISO date"),
+        (_DECIDE, {**_DECISION, "ref": "#1285"}, r"ref must name the issue .* got '#1285'"),
+        (_DECIDE, {**_DECISION, "ref": 1285}, "'ref' must be a string"),
+        (_DECIDE, dict(_DECISION), None),  # any well-formed decision loads
         # roles:
         (("roles",), [], "roles must be a mapping"),
         (("roles", "obs"), "obs", "roles.obs must be a mapping"),
@@ -801,7 +896,7 @@ def test_catalog_not_a_mapping(tmp_path):
         (("stacks", "rdqm-rhel", "default"), _DELETE, r"default: expected <family>:<major>"),
         (
             ("stacks", "nativeha-ubuntu", "supported"),
-            ["ubuntu:24"],
+            ["ubuntu:26"],
             None,
         ),
     ],
@@ -888,12 +983,12 @@ def test_osref_label():
 
 def test_node_boxes_defaults(no_records):
     nb = node_boxes(topology.load(), load_catalog())
-    assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu24"
+    assert nb["nha-ubuntu-a1"].name == "mq-nativeha-ubuntu26"
     assert nb["nha-rhel-crr-a1"].name == "mq-nativeha-rhel10"  # default flipped (T11)
     assert nb["rdqm-a1"].name == "mq-rdqm-rhel10"  # default flipped (#1473)
-    assert nb["pcmk-a1"].name == "pcmk-ubuntu24"
+    assert nb["pcmk-a1"].name == "pcmk-ubuntu26"
     assert nb["infra-svc"].name == "infra-ubuntu26"
-    assert nb["svc-sim"].name == "mq-client-ubuntu24"
+    assert nb["svc-sim"].name == "mq-client-ubuntu26"
 
 
 def test_node_boxes_covers_every_topology_node(no_records):
@@ -1005,7 +1100,7 @@ def test_stack_role_node_in_two_stacks_fails_loud(no_records):
 def test_node_listed_twice_in_one_stack_is_owned_once(no_records):
     topo = _topo({"n1": {"box": "pcmk"}}, {"pcmk-ubuntu": ("ubuntu", ["n1", "n1"])})
     topo["stacks"]["pcmk-ubuntu"]["groups"].append("g_pcmk-ubuntu")
-    assert node_boxes(topo, load_catalog())["n1"].name == "pcmk-ubuntu24"
+    assert node_boxes(topo, load_catalog())["n1"].name == "pcmk-ubuntu26"
 
 
 def test_stack_os_family_must_match_the_catalog(no_records):

@@ -45,7 +45,7 @@ search + aggregation, and host-durable snapshot/restore. It is the operational
 ## Step 1 — cold rebuild (L1, L2)
 
 ```bash
-uv run mqlab box build obs-ubuntu26 mq-client-ubuntu24 infra-ubuntu26
+uv run mqlab box build obs-ubuntu26 mq-client-ubuntu26 infra-ubuntu26
 uv run mqlab commons up
 ```
 
@@ -53,7 +53,7 @@ The explicit `mqlab box build` is here so the L1 bake is its own observable step
 `mqlab commons up` does not depend on it: before any `vagrant up` it runs the
 same box ensure as the bootstrap vms phase (#1008). That ensure reuses each
 commons box (`obs-ubuntu26`, which now carries the log-search stack too;
-`mq-client-ubuntu24` for svc/app/probe; `infra-ubuntu26` for the DNS pair) from
+`mq-client-ubuntu26` for svc/app/probe; `infra-ubuntu26` for the DNS pair) from
 the cache and registers it with Vagrant, or bakes it when no cached image exists.
 A cold lab with the boxes baked but not registered therefore comes up in one
 pass. Before #1008, that state failed with `Couldn't open file lab/<box>`.

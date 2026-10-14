@@ -30,10 +30,12 @@ with KVM the fleet also bakes `mq-nativeha-rhel10` and `mq-rdqm-rhel10`: the sam
 `nativeha-rhel` and `mq-rdqm` bakes on the RHEL 10 base box `rhel/10-x86_64` (#1286;
 RDQM on RHEL 10 from MQ 10.0.1, #1440).
 Since #1282 the shared non-MQ boxes run the catalog's `infra:` OS, Ubuntu 26
-(`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`), while `mq-client-ubuntu24` stays on
-the support-gated `infra_mq:` OS. Both Ubuntu stacks also bake a lab-only Ubuntu 26
-variant (`mq-nativeha-ubuntu26`, `pcmk-ubuntu26`) from the same playbooks; see
-[`box-model.md`](box-model.md#shared-nodes-infra-and-infra_mq-ubuntu-26-is-lab-only).
+(`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`). Since #1285 the support-gated
+`infra_mq:` OS is Ubuntu 26 too, by a recorded lab decision ahead of IBM, so the MQ
+commons bake `mq-client-ubuntu26`, and both Ubuntu stacks default to their Ubuntu 26
+variant (`mq-nativeha-ubuntu26`, `pcmk-ubuntu26`), with the 24 variants still
+selectable, all from the same playbooks; see
+[`box-model.md`](box-model.md#shared-nodes-infra-and-infra_mq-the-ubuntu-26-support-gate).
 The sections below name the 24 boxes; a playbook bakes every major its role runs on,
 and the only per-major differences are the role `vars/Ubuntu-<major>.yml` files noted
 in the tables. The catalog's `roles:` block

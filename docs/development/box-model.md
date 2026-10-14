@@ -35,11 +35,11 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 | `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes on RHEL 10, the stack default (#1289) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
 | `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
-| `mq-client-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (ibmmq: wheel on x86_64, compiled from sdist at bake on aarch64; replaces the pre-#294 responder venv, #1227) |
-| `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
-| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
-| `mq-nativeha-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `nha-ubuntu-*` when `nativeha-ubuntu` is built with `os: ubuntu:26` (lab-only; see *Shared nodes* below) | the same bake as `mq-nativeha-ubuntu24`, on 26.04 |
-| `pcmk-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `pcmk-*` when `pcmk-ubuntu` is built with `os: ubuntu:26` (lab-only; see *Shared nodes* below) | the same bake as `pcmk-ubuntu24`, on 26.04 (pacemaker 3.0 / pcs 0.12) |
+| `mq-client-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe), on the `infra_mq:` OS (`ubuntu:26` by lab decision, #1285; it replaced `mq-client-ubuntu24`) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (ibmmq: wheel on x86_64, compiled from sdist at bake on aarch64; replaces the pre-#294 responder venv, #1227) |
+| `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` when `nativeha-ubuntu` is built with `os: ubuntu:24` (the IBM-listed Ubuntu) | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+| `pcmk-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | the Pacemaker cluster nodes — `pcmk-a1..3`, `pcmk-b1..3` — when `pcmk-ubuntu` is built with `os: ubuntu:24` (the IBM-listed Ubuntu) | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
+| `mq-nativeha-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `nha-ubuntu-*` on the stack default, `ubuntu:26` (IBM-unsupported; default by lab decision, #1285; see *Shared nodes* below) | the same bake as `mq-nativeha-ubuntu24`, on 26.04 |
+| `pcmk-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `pcmk-*` on the stack default, `ubuntu:26` (IBM-unsupported; default by lab decision, #1285; see *Shared nodes* below) | the same bake as `pcmk-ubuntu24`, on 26.04 (pacemaker 3.0 / pcs 0.12) |
 | `san-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | the SAN targets — `san-a`, `san-b` | the install halves of `drbd-san` (`drbd-utils` + the kernel-modules package with the in-tree DRBD module: `linux-modules-<kver>` on 26.04, which has no `linux-modules-extra`) and `iscsi-target` (`targetcli-fb`), **no** MQ, **no** DRBD resource or iSCSI target (both per-run; #1278, spec §4.7.1) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 
 "The guest runtime" is the pinned python-build-standalone CPython at
@@ -91,7 +91,7 @@ mechanics. The rendered `build/work/lab/topology.resolved.yaml` carries each nod
 carries a Vagrant `box_version` pin; the catalog's `base_box_version` pins the
 upstream base box at bake time instead (folded into the manifest hash as the OS pin).
 
-### Shared nodes: `infra` and `infra_mq`; Ubuntu 26 is lab-only
+### Shared nodes: `infra` and `infra_mq`; the Ubuntu 26 support gate
 
 Shared (commons) nodes are never selectable. They split by **whether they run MQ**
 (spec §2, correction `logical-minds-foundry/.github#285`):
@@ -99,26 +99,32 @@ Shared (commons) nodes are never selectable. They split by **whether they run MQ
 | Catalog key | Roles | Nodes | OS today | Support-gated? |
 |-------------|-------|-------|----------|----------------|
 | `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no MQ runs there |
-| `infra_mq:` | `mq-client` | `svc-sim`, `app-client`, `mon-probe` | `ubuntu:24` | yes, like a stack default |
+| `infra_mq:` | `mq-client` | `svc-sim`, `app-client`, `mon-probe` | `ubuntu:26` (by lab decision, #1285) | yes, like a stack default |
 
 **The support gate.** IBM's MQ 10.0 SPCR lists no Ubuntu 26.04 row
 ([`os-version-support-matrix.md`](../reference/os-version-support-matrix.md) §3.1),
 so the catalog marks `ubuntu: 26` with `ibm_support: { status: unsupported, source:
 <the SPCR> }`. `load_catalog` refuses a stack `default:` **or** an `infra_mq:` that
-points at such an entry. `infra:` is not gated, because nothing on those nodes runs
+points at such an entry, **unless** the entry also records a lab decision to go ahead
+of IBM: `lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" }`
+(matrix §4). The decision never edits `ibm_support`, and a decision on a supported
+entry is refused as stale. `infra:` is not gated, because nothing on those nodes runs
 MQ. So today:
 
 - `infra:` is `ubuntu:26`: the non-MQ shared nodes and the SAN targets run 26.04.
-- `infra_mq:` stays `ubuntu:24`, the IBM-listed Ubuntu, as do both Ubuntu stack
-  defaults.
-- Both Ubuntu stacks list `supported: [ubuntu:24, ubuntu:26]`. A build file with
-  `os: ubuntu:26` (`mqlab bootstrap <stack> --config <file>`) builds the stack on
-  26.04 as **lab-only**: bootstrap prints the catalog's warning
+- `infra_mq:` and both Ubuntu stack defaults are `ubuntu:26`, ahead of IBM, by the
+  decision `os.ubuntu.26` records (#1285, 2026-10-14). The MQ commons boot
+  `mq-client-ubuntu26`.
+- Bootstrap still prints the catalog's warning for 26, default or not
   (`WARNING: IBM does not support MQ on ubuntu:26 (<SPCR>); it is selectable for lab
-  use only`) and proceeds.
+  use only, and is a lab default by recorded decision (<ref>, decided <date>)`) and
+  proceeds.
+- Both Ubuntu stacks list `supported: [ubuntu:24, ubuntu:26]`. A build file with
+  `os: ubuntu:24` (`mqlab bootstrap <stack> --config <file>`) builds the stack on
+  24.04, the IBM-listed Ubuntu, with no warning.
 
-When an "Ubuntu 26.04 LTS" row appears in the SPCR, plan task T9 drops the marker and
-moves both stack defaults and `infra_mq:` to 26 together.
+When an "Ubuntu 26.04 LTS" row appears in the SPCR, the same change flips
+`ibm_support` to `supported` and removes `lab_default_decision` (matrix §6.1).
 
 **What differs on 26.04.** The live T0b spike
 ([`2026-10-os-axis-spike.md`](../reports/2026-10-os-axis-spike.md)) pinned the base
@@ -185,7 +191,7 @@ targets (`san-a`/`san-b`) carry no MQ payload; they boot the host-resolved
 itself (#1278, spec §4.7.1; it replaced the controller-side SAN deb cache).
 
 The three shared Ubuntu MQ commons (svc / app / probe) all boot the **one**
-`mq-client-ubuntu24` box: its server-set install carries the client and SDK too, so a
+`mq-client-ubuntu26` box: its server-set install carries the client and SDK too, so a
 single baked image serves the simulated upstream (server + QM), the application
 client (client + SDK for the ibmmq binding), and the probe's exporter (MQ runtime libs; the
 `mq_prometheus` binary itself is prebuilt in the Go container, #1065).
@@ -561,7 +567,7 @@ retired-names pass keeps them, and nothing else removes them. `mqlab box gc
 - each shared role on its shared OS: `infra`, `obs` and `san` on `infra`, and
   `mq-client` on `infra_mq`;
 - every stack's roles on every OS the stack **supports**, not only its default (so
-  `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` are protected while the defaults are 24);
+  `mq-nativeha-ubuntu24` and `pcmk-ubuntu24` stay protected now the defaults are 26);
 - every catalog OS's base box (`rhel/9-x86_64`, `rhel/10-x86_64`, the cloud images).
 
 This is `Catalog.all_boxes` with the host filter dropped. It is deliberately not
@@ -616,7 +622,7 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   see [`box-bake-manifest.md`](box-bake-manifest.md#the-bakeconfigure-line). The
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
-  For the **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-client-ubuntu24`,
+  For the **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-client-ubuntu26`,
   `mq-nativeha-rhel9`, `mq-nativeha-ubuntu24` — the roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
