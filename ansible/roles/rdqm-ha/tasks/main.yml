@@ -17,7 +17,12 @@
     group: mqm
   become: true
 
+# throttle: 1 (#1488) - rdqmadm -c's cluster lock (the rdqm-lock attribute) is a query,
+# an update and a read-back that only checks the attribute exists, so two nodes starting
+# together both "hold" it and both skip the cluster-wide setup (stonith-enabled=false
+# among it); crtmqm then fails with AMQ3817E. One node at a time never overlaps.
 - name: initialize the replicated data subsystem (idempotent)
+  throttle: 1
   ansible.builtin.shell: |
     if /opt/mqm/bin/rdqmstatus -n >/dev/null 2>&1; then
       echo already-configured
@@ -27,3 +32,30 @@
   register: rdqmadm_out
   changed_when: "'already-configured' not in rdqmadm_out.stdout"
   become: true
+
+# Fail loud if RDQM's cluster-wide setup was skipped. The property is cluster-wide, so
+# every node must read false here, not just the one that ran the setup. --default: an
+# absent property reads "unset" (rc 0) so the assert names it; other errors still fail.
+- name: read the site cluster's stonith-enabled property
+  ansible.builtin.command:
+    argv:
+      - crm_attribute
+      - --type
+      - crm_config
+      - --name
+      - stonith-enabled
+      - --query
+      - --quiet
+      - --default
+      - unset
+  register: rdqm_stonith_enabled
+  changed_when: false
+  become: true
+
+- name: "RDQM's cluster-wide setup ran: stonith-enabled is false (fail loud)"
+  ansible.builtin.assert:
+    that: rdqm_stonith_enabled.stdout | trim == 'false'
+    fail_msg: >-
+      stonith-enabled is '{{ rdqm_stonith_enabled.stdout | trim }}', not 'false':
+      rdqmadm -c did not complete RDQM's cluster-wide setup on this site, and crtmqm
+      would fail with AMQ3817E (#1488).
