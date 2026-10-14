@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1507",
+  "branch": "feature/1507-otel-rnd-report",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-14T19:28:17Z",
+  "updated_at": "2026-10-14T19:28:17Z",
+  "git": {
+    "base_sha": "29f1fd6fd6d0b3065d5148d55e833ef3256b837f",
+    "head_sha": "30953c2c843fb590cae3d22376c9bf78052599b8"
+  },
+  "pr_metadata": {
+    "title": "docs(reports): record the OpenTelemetry R&D for the lab and defer the decision",
+    "summary": "Record the docs-only OpenTelemetry R&D as docs/reports/2026-10-14-otel-rnd.md and defer the adoption decision; no spikes or follow-up issues are filed.",
+    "notes": "Docs-only change. vrg-validate passed locally. Browser-verify items are listed in the report (section 10).\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
