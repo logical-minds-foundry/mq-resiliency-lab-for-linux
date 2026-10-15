@@ -1,0 +1,64 @@
+---
+# BAKE (epic .github#310 T3, #1423): the install half of the drbd9 role, baked into the
+# pdrbd box by bake-pdrbd-ubuntu.yml (`tasks_from: install`). It builds LINBIT's DRBD 9
+# kernel module with DKMS against THIS image's kernel and PROVES it loads as 9.x, so a
+# node never compiles a kernel module at boot. No per-instance state: the volume group
+# needs the instance's own fresh disk, so it stays in the configure half (main.yml).
+#
+# On an un-baked host main.yml runs this file first (package_facts skip-if-baked guard),
+# which is also exactly what the bake runs.
+
+- name: LINBIT DRBD 9 PPA (ppa:linbit/linbit-drbd9-stack)
+  ansible.builtin.apt_repository:
+    repo: ppa:linbit/linbit-drbd9-stack
+    state: present
+    update_cache: true
+  become: true
+
+# Headers + dkms land BEFORE drbd-dkms, so its postinst builds the module against the
+# running kernel in the same pass (not later, from a header package's trigger).
+- name: kernel headers + DKMS for the running kernel ({{ ansible_kernel }})
+  ansible.builtin.apt:
+    name:
+      - "linux-headers-{{ ansible_kernel }}"
+      - dkms
+      - lvm2
+    state: present
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+
+- name: DRBD 9 userland + DKMS module (LINBIT drbd-dkms, drbd-utils)
+  ansible.builtin.apt:
+    name:
+      - drbd-dkms
+      - drbd-utils
+    state: present
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+
+# depmod searches updates/ (where DKMS installs) before kernel/, so modprobe picks the
+# DKMS-built module over any in-kernel 8.4. A failed DKMS build leaves no module and
+# modprobe fails here, loud.
+- name: load the module (fail loud if DKMS did not produce one)
+  ansible.builtin.command: modprobe drbd
+  changed_when: true
+  become: true
+
+- name: read the loaded module version
+  ansible.builtin.slurp:
+    src: /sys/module/drbd/version
+  register: drbd9_bake_ver
+
+- name: assert the built module is DRBD 9 (not the in-kernel 8.4)
+  ansible.builtin.assert:
+    that: "(drbd9_bake_ver.content | b64decode | trim) is match('^9[.]')"
+    fail_msg: >-
+      loaded drbd module for kernel {{ ansible_kernel }} is
+      '{{ drbd9_bake_ver.content | b64decode | trim }}', expected 9.x from LINBIT's
+      drbd-dkms — check the DKMS build (dkms status drbd; /var/lib/dkms/drbd/*/build/make.log)
+    success_msg: "drbd {{ drbd9_bake_ver.content | b64decode | trim }} loaded for kernel {{ ansible_kernel }}"
+
+- name: unload so the image is captured clean
+  ansible.builtin.command: rmmod drbd
+  changed_when: true
+  become: true

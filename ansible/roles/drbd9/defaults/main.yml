@@ -1,0 +1,9 @@
+---
+# drbd9 (epic .github#310, #1423): LINBIT DRBD 9 for the pacemaker-drbd arm. RDQM ships
+# DRBD 9 (kmod-drbd-9); the Ubuntu/mainline in-kernel module is 8.4.11 (2-node, no
+# quorum), so the in-kernel module is never used here.
+#
+# The per-run configure half puts an LVM volume group on this instance's extra disk;
+# each queue manager's DRBD backing LV is carved from it (pdrbd-qm, epic Task 5).
+drbd9_vg: drbdpool
+drbd9_disk: /dev/vdb
