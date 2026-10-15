@@ -71,9 +71,15 @@ numbered versus lettered so the hierarchy is obvious at a glance.
 
 Every guide opens with:
 
-- **MQ version** — pinned (currently 9.4)
+- **MQ version** — the lab's pinned MQ level (see
+  [Pinning to the lab's MQ level](#pinning-to-the-labs-mq-level); currently
+  **10.0.x**)
 - **Status** — Draft or Active
-- **Last validated in lab** — a date; the freshness signal
+- **Last validated in lab** — a date *and the MQ level it was validated on*; the
+  freshness signal
+- **IBM Docs re-checked** — the date the guide's IBM Docs citations were last
+  resolved and compared at the pinned level (needed whenever the pin moves ahead
+  of the last live validation)
 - **Related guides** — links across the section
 
 ### Body — the how-to (numbered)
@@ -94,7 +100,8 @@ A guide uses only the appendices it needs, from this menu:
 - **B: Alternatives and tradeoffs** — the evidence behind the section 3 ranking
 - **C: Complete configuration examples** — the exhaustive stanza / MQSC blocks
 - **D: Troubleshooting** — symptom → cause → fix
-- **E: References** — pinned IBM Docs topics (9.4)
+- **E: References** — IBM Docs topics at the pinned MQ level (currently 10.0.x),
+  one link per topic
 
 ## Ranking alternatives
 
@@ -105,9 +112,44 @@ is theirs to own. State the compromise plainly ("simpler to operate, but no
 cross-site failover"), never bury it. This keeps a guide honest and useful to a
 reader whose constraints differ from ours.
 
+## Pinning to the lab's MQ level
+
+Guides describe the MQ level the lab runs by default. That level has one
+authoritative source, the
+[`lab/mq-version`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version)
+pin file (currently `10.0.1.0`, so guides pin to **MQ 10.0.x**). An older level
+can still be built by changing that pin, but the documented default is 10.0, and
+guides are written for it. Never hard-code a level in this standard or the
+template; follow the pin.
+
+- **Cite version-pinned IBM Docs links.** Use the
+  `https://www.ibm.com/docs/en/ibm-mq/<level>?topic=<slug>` form with the pinned
+  level (today `10.0.x`), one link per topic. Do not write "search these titles";
+  a reader should be one click from the exact page.
+- **Resolve every link before citing it.** IBM Docs block the usual web fetchers,
+  so resolve and cache each topic with `python3 tools/ibm_doc_cache.py <url>`.
+  Topic slugs can differ between levels. If the `?topic=` form does not resolve,
+  cite the legacy content path (for example
+  `https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/Native_HA_overview.html`)
+  and say so.
+- **Label data and judgment.** What an IBM topic says is data: quote it or
+  paraphrase it closely and link it. What the guide recommends on top of it is
+  judgment. A claim proven only in the lab carries the MQ level it was observed
+  on.
+- **When the pin moves to a new level, re-pin every guide.** Re-resolve each
+  citation at the new level, compare it with the old one, update the text where
+  the product changed, and note each change in the guide with both versions
+  quoted. If a topic has no equivalent at the new level, say so in the guide and
+  name the replacement; never leave a silent old-level link. Claims that only a
+  live check can confirm stay marked as validated on the old level until the next
+  lab bring-up re-validates them. The 9.4 → 10.0.x re-pin
+  ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
+  is the worked example.
+
 ## House style
 
-- Pin every product reference to **MQ 9.4**.
+- Pin every product reference to the lab's pinned MQ level (currently
+  **MQ 10.0.x**; see [above](#pinning-to-the-labs-mq-level)).
 - Prefer tables for option and parameter enumeration.
 - One idea per stanza block; annotate with inline `#` comments where MQ allows.
 - Keep the front-matter *last validated in lab* date current whenever you touch a
