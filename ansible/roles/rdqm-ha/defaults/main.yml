@@ -1,0 +1,20 @@
+---
+# rdqm-ha role defaults.
+#
+# rdqm_heartbeat_token_ms: the RDQM HA heartbeat timeout, corosync's totem `token` (#1515).
+#
+# Data: IBM MQ 10.0 "Changing the heartbeat timeout for HA RDQM" (cached by
+# tools/ibm_doc_cache.py; https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/heartbeat_timeout.html):
+# the default is 3 seconds; "The recommended values for VM configurations is 10 seconds.
+# The recommended value for Cloud installations is 30 seconds." The token may be 3000 to
+# 120000 ms. A timeout raised by more than four times its current value must be applied on
+# every node within the current timeout.
+#
+# Judgment: 10 s (the VM value) on every host, the cloud x86_64 host included. Every RDQM
+# node in this lab is a VM. On the cloud host they are libvirt guests on one cloud VM, and
+# their heartbeat runs over a libvirt bridge inside that VM, never over the cloud provider's
+# network. What can delay a heartbeat here is the guest being descheduled on a busy host,
+# which is the VM case. 30 s would also triple the failure-detection time that the lab's
+# failover drills measure, and 3000 -> 30000 is a 10x step, past IBM's four-times limit.
+# Override with -e rdqm_heartbeat_token_ms=<ms> if a host shows spurious failovers at 10 s.
+rdqm_heartbeat_token_ms: 10000
