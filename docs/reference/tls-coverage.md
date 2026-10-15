@@ -40,6 +40,12 @@ Native HA peer). Every row below is securable — and secured — on that build.
 > `nativeha-rhel-crr` and `rdqm-rhel` now default to RHEL 10). The MQ 9.4.5 and RHEL 9.6
 > statements below describe the build that proved them; this note does not
 > re-validate them on the current pins.
+>
+> **Strength, not just coverage:** this matrix says whether each path is
+> encrypted. For how strongly, including post-quantum key exchange (available
+> on MQ channels since 10.0 and on Native HA replication since 10.0.1, and not
+> yet enabled anywhere in the lab), see
+> [`mq-10.0.1-adoption.md`](mq-10.0.1-adoption.md) §4.
 
 ## 2. Coverage matrix
 

@@ -1,0 +1,6 @@
+---
+# Seconds each step may take: the restart itself, then the wait for dspmq to show the
+# queue manager back. Exceeding it fails the run. `mqlab qm reload --timeout` sets it.
+qm_reload_timeout: 300
+# Seconds between dspmq polls while waiting for the queue manager to come back.
+qm_reload_poll_delay: 5
