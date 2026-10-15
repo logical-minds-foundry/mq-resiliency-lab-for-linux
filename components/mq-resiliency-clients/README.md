@@ -57,8 +57,8 @@ adds `MQCNO_CLIENT_BINDING` to the caller's connect options (#1480).
 | `mq-authz-probe` | `mqrc.authz_probe` | induced-denial authorization probe |
 | `mq-dlq-probe` | `mqrc.dlq_probe` | dead-letter queue inspector |
 | `mq-reconnect-probe` | `mqrc.reconnect_probe` | does client auto-reconnect ride a QM restart? |
-| `mq-dr-flow` | `mqrc.dr_flow` | app-side DR flow generator (app ledger) |
-| `mq-dr-responder` | `mqrc.dr_responder` | SVC-side Watcher responder (Watcher ledger) |
+| `mq-dr-flow` | `mqrc.dr_flow` | app-side DR flow generator (app ledger); takes only its own replies, matched on a per-run CorrelId, and exits non-zero if either thread fails |
+| `mq-dr-responder` | `mqrc.dr_responder` | SVC-side Watcher responder (Watcher ledger); copies the request CorrelId onto the reply and dead-letters a message with no DRv1 body |
 | `mq-dr-baseline` | `mqrc.dr_baseline` | no-fault self-correctness check (RPO 0) |
 | `mq-dr-forced` | `mqrc.dr_forced` | forced cross-site DR loss attribution (RPO > 0) |
 | `mq-resiliency-clients-selfcheck` | `mqrc.selfcheck` | import every module, assert CPython 3.14, prove the real ibmmq binding when the `mqi` extra is installed, and that it has every name and class member the package uses |
