@@ -47,6 +47,14 @@ adds `MQCNO_CLIENT_BINDING` to the caller's connect options (#1480).
   [#1545](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1545)
   checks whether upstream has fixed it, and removes the flag if so.
 
+## Putting messages: a fresh MQMD per put
+
+`MsgId` is an input/output field on MQPUT: the queue manager writes the MsgId it
+generates back into the MD you pass. A client that reuses one MD across a put loop
+therefore resends that MsgId on every later put, and all of its messages share one
+MsgId (#1549). Every put site builds a fresh `ibmmq.MD(...)` and also sets
+`MQPMO_NEW_MSG_ID`; follow the same pattern in a new client.
+
 ## Entry points
 
 | Command | Module | Purpose |
@@ -56,7 +64,7 @@ adds `MQCNO_CLIENT_BINDING` to the caller's connect options (#1480).
 | `mq-svc-responder` | `mqrc.svc_responder` | counterparty responder: reply with the request's correlation id |
 | `mq-authz-probe` | `mqrc.authz_probe` | induced-denial authorization probe |
 | `mq-dlq-probe` | `mqrc.dlq_probe` | dead-letter queue inspector |
-| `mq-reconnect-probe` | `mqrc.reconnect_probe` | does client auto-reconnect ride a QM restart? |
+| `mq-reconnect-probe` | `mqrc.reconnect_probe` | does client auto-reconnect ride a QM restart? It connects over plaintext `APP.SVRCONN`, which the lab's TLS-only channels refuse, so it is not run against the current stacks |
 | `mq-dr-flow` | `mqrc.dr_flow` | app-side DR flow generator (app ledger); takes only its own replies, matched on a per-run CorrelId, and exits non-zero if either thread fails |
 | `mq-dr-responder` | `mqrc.dr_responder` | SVC-side Watcher responder (Watcher ledger); copies the request CorrelId onto the reply and dead-letters a message with no DRv1 body |
 | `mq-dr-baseline` | `mqrc.dr_baseline` | no-fault self-correctness check (RPO 0) |

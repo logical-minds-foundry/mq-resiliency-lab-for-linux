@@ -34,7 +34,8 @@ the cluster's own command-line tools (`crm_mon`, `drbdsetup`, `dspmq`,
 `rdqmstatus`, `df`/`ls`), never the MQI, and supplement the stock MQ Prometheus
 exporter rather than replace it. Only `mq-resiliency-clients` uses the MQI, through
 `ibmmq` (IBM's MQI binding): x86_64 guests install its wheel; aarch64 guests compile
-its sdist against the MQ SDK.
+its sdist against the MQ SDK, because upstream ships no Linux aarch64 wheel (requested in
+[.github#302](https://github.com/logical-minds-foundry/.github/issues/302)).
 
 ## Two quality tiers
 
