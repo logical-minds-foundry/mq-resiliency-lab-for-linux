@@ -1,6 +1,12 @@
 # IBM MQ instrumentation event monitoring — events as JSON via `amqsevt`
 
-- **MQ version:** 9.4 (`amqsevt` with JSON output on MQ for Multiplatforms)
+- **MQ version:** 10.0.x (`amqsevt` with JSON output on MQ for Multiplatforms) —
+  re-pinned from 9.4 on 2026-10-15
+  ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
+- **IBM Docs re-checked:** 2026-10-15 against 10.0.x. One 10.0 difference is
+  folded in: `AUTHOREV` now covers successful as well as failed authorization
+  checks, scoped by the new `AUTHEVSC` attribute (Appendix A). The validation
+  record below is from MQ 9.4.5 and has not yet been re-run on 10.0.1.
 - **Status:** Adopted — the shared `mq-event-monitor` role configures this on
   **every** queue manager across every stack (a de-facto standard, not a
   single-QM proof of concept)
@@ -74,7 +80,7 @@ onto your host's log stream; where it goes next is yours.
 
 Version floor: instrumentation events are core to MQ; the `amqsevt` sample and
 its `-o json` output are documented for **MQ for Multiplatforms**. Content is
-pinned to **9.4**. Enabling event classes takes effect immediately; the collector
+pinned to **10.0.x**. Enabling event classes takes effect immediately; the collector
 is a normal queue-manager service.
 
 ## 3. Recommendation
@@ -143,7 +149,10 @@ that runs `amqsevt -o json_compact` against this queue manager. With no `-q`,
 manager; **`-o json_compact` emits one JSON object per line**. Use `json_compact`,
 not the pretty `-o json`: line-oriented pipelines (`logger`/journald, syslog, a
 file tailer) treat every line as a separate record, so a multi-line pretty event is
-split into fragments; one-object-per-line keeps each event a single record. Run the
+split into fragments; one-object-per-line keeps each event a single record. (Data
+note: IBM's *amqsevt* topic, at both 9.4 and 10.0.x, lists only `text` and `json`
+for `-o`. `json_compact` is accepted by the shipped sample and was observed in
+the lab on MQ 9.4.5; it is to verify on the next 10.0.1 bring-up.) Run the
 collector under a small **supervising wrapper**, started via `setsid` so the wrapper
 leads its own process group, and stop that whole group with a negative-PID `kill`:
 
@@ -176,7 +185,8 @@ properties are why it exists rather than putting `amqsevt` inline:
   restarts. A restart that races the previous run's not-yet-released handle hits
   `MQRC_OBJECT_IN_USE` (2042) — the event queues are opened for *exclusive* input — so
   the wrapper **retries on a short delay** until the queue manager reaps the stale
-  handle (about a ~30 s housekeeping sweep on current builds). This crash-restart is
+  handle (about a ~30 s housekeeping sweep, observed on MQ 9.4.5; to verify on
+  10.0.1). This crash-restart is
   the whole reason to run under a wrapper rather than a bare `exec`.
 - **Line-delimited output** (`-o json_compact`) so each event is one line — one
   record to journald/syslog/a file reader — and `stdbuf -oL` keeps it flushed
@@ -250,11 +260,12 @@ properties are why it exists rather than putting `amqsevt` inline:
 
 Every queue-manager event-control attribute. All are `ENABLED`/`DISABLED` except
 `CMDEV`, which also takes `NODISPLAY`. The set below is confirmed against the
-IBM MQ 9.4 *ALTER QMGR* reference; the platform column reflects its footnotes.
+IBM MQ 10.0.x *ALTER QMGR* reference (re-checked 2026-10-15; it was first
+confirmed against 9.4); the platform column reflects its footnotes.
 
 | Attribute | Events | Platform |
 |---|---|---|
-| `AUTHOREV`  | Authorization (not-authorized) events | Multiplatforms |
+| `AUTHOREV`  | Authorization events. By default only *Not Authorized* events; the scope is set by `AUTHEVSC` (below) | Multiplatforms |
 | `CHADEV`    | Channel auto-definition events | Multiplatforms |
 | `CHLEV`     | Channel start/stop/error events | All |
 | `CMDEV`     | Command events (`ENABLED` / `NODISPLAY` / `DISABLED`) | All |
@@ -267,6 +278,30 @@ IBM MQ 9.4 *ALTER QMGR* reference; the platform column reflects its footnotes.
 | `SSLEV`     | TLS (certificate / handshake) events | All |
 | `STRSTPEV`  | Queue-manager start/stop events | All |
 | `BRIDGEEV`  | IMS-bridge events | **z/OS only** — exclude on Multiplatforms |
+
+**9.4 → 10.0 change: `AUTHOREV` scope and `AUTHEVSC` (data).** The 9.4 *ALTER
+QMGR* topic says: *"For Long Term Support and Continuous Delivery before IBM MQ
+9.4.3, AUTHOREV applies to unsuccessful authorization events only. From IBM MQ
+9.4.3, AUTHOREV applies to successful and unsuccessful authorization events"*
+([9.4.x](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-alter-qmgr-alter-queue-manager-settings)).
+The 10.0 topic says: *"From IBM MQ 10.0.0, AUTHOREV applies to successful and
+unsuccessful authorization events"*, and documents the scope attribute
+`AUTHEVSC`: *"FAILURES Only Not Authorized authorization events are generated.
+This is the queue manager's initial default value. ALLCONNS All Not Authorized
+and Authorized Connection events are generated. ALLCHECKS … all Not Authorized
+and Authorized events, including connection events, are generated, which means
+that a larger number of entries are generated"*
+([10.0.x](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings)).
+IBM lists this for 10.0 LTS as *"Extended authority events for positive
+authentication"*
+([What's new in IBM MQ 10.0.0 for Multiplatforms](https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html)).
+*Judgment:* leave `AUTHEVSC` at its default `FAILURES`. The enable command in
+section 4 is unchanged and still yields failure-only events, which is the signal
+worth acting on. Use `ALLCONNS` only when you need an audit trail of successful
+connections, and size the event stream for it. `ALLCHECKS` reports every
+successful authority check and is far noisier. `AUTHEVSC` is not supported on
+z/OS. *To verify on the next 10.0.1 bring-up:* `DISPLAY QMGR AUTHEVSC` reads
+`FAILURES` on a lab queue manager.
 
 Per-queue attributes for performance events: `QDPMAXEV` (queue full), `QDPHIEV` /
 `QDPLOEV` with `QDEPTHHI` / `QDEPTHLO` (depth high/low), and `QSVCIEV` with
@@ -300,8 +335,34 @@ Work the surfaces in order; the first one that is empty is your fault domain.
 
 ## Appendix E: References
 
-Search these topic titles in the IBM MQ 9.4 documentation at
-<https://www.ibm.com/docs/en/ibm-mq/9.4>: *Sample program to monitor
-instrumentation events (amqsevt)*, *ALTER QMGR*, *ALTER queues*, *DEFINE SERVICE*,
-*Replaceable inserts on service definitions*, *Event types*, and *Instrumentation
-events*.
+IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):
+
+- *Sample program to monitor instrumentation events on Multiplatforms*
+  (`amqsevt`) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-sample-program-monitor-instrumentation-events-multiplatforms>.
+  Same as 9.4. It documents `-o text` and `-o json` only (see the data note in
+  section 4, step 3).
+- *ALTER QMGR (alter queue manager settings)* (the event-class attributes) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings>.
+  Differs from 9.4 on `AUTHOREV` / `AUTHEVSC` (Appendix A).
+- *ALTER queues (alter queue settings)* (the per-queue performance-event
+  thresholds) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings>.
+  The thresholds this guide uses are unchanged from 9.4.
+- *DEFINE SERVICE (create a new service definition) on Multiplatforms* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-define-service-create-new-service-definition-multiplatforms>.
+  Same as 9.4.
+- *Using replaceable inserts on service definitions* (`+QMNAME+`,
+  `+MQ_SERVER_PID+`) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=services-using-replaceable-inserts-service-definitions>.
+  Same as 9.4.
+- *Event types* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=events-event-types>. Same as
+  9.4.
+- *Instrumentation events* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=monitoring-instrumentation-events>.
+  Same as 9.4.
+- *What's new in IBM MQ 10.0.0 for Multiplatforms* ("Extended authority events
+  for positive authentication") —
+  <https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html>
