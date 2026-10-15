@@ -192,6 +192,10 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
   point-of-no-return / back-out, and DR failover→failback validation.
 - **[MQ TLS coverage](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/tls-coverage.md)**
   — the lab-wide no-plaintext invariant, every path and its TLS state.
+- **[MQ 10.0.1 adoption review](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mq-10.0.1-adoption.md)**
+  — everything new or changed in 10.0.1 with an adopt/demo/skip verdict, the
+  per-hop TLS and post-quantum key-exchange targets, and proposed follow-on
+  work (sourced, data vs judgment).
 - **[mqweb endpoint verification](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md)**
   — acceptance that every stack's REST endpoint is live.
 - **[Event-monitor wrapper validation](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/event-monitor-wrapper-validation.md)**

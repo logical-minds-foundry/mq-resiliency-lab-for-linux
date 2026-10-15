@@ -1,0 +1,108 @@
+---
+# Native HA: `systemctl reload mqmonitor@<QM>` on the active instance (#1514).
+#
+# IBM (10.0.x, "Monitoring, restarting, and ending queue manager instances"): "You can use
+# the reload option with systemctl to end and restart a queue manager under the control
+# of the mqmonitor service while instructing clients that use reconnect options to start
+# reconnecting. (This is the equivalent of using the endmqm -r command)". The 10.0.1
+# sample unit runs `mqmonitor.py --reload`, i.e. `endmqm -r -tp 29 -w` then `strmqm -x`.
+# A raw endmqm is wrong here: IBM says the monitor restarts any QM ended behind its back.
+#
+# Ending the active instance makes the remaining instances elect a new Active (IBM endmqm
+# reference, Native HA table), and this one usually comes back as a Replica, so "back"
+# means the group has settled: full quorum, every instance in sync, and an Active found by
+# the shared detector (tasks/nativeha-find-active.yml, the one place that parses it, #891).
+
+- name: "check mqmonitor@{{ qm_name }} has IBM's reload action (ExecReload, MQ 10.0.1+)"
+  ansible.builtin.command:
+    argv: [systemctl, show, --property=CanReload, --value, "mqmonitor@{{ qm_name }}"]
+  register: _qm_canreload
+  changed_when: false
+
+- name: "assert mqmonitor@{{ qm_name }} can reload"
+  ansible.builtin.assert:
+    that: _qm_canreload.stdout | trim == 'yes'
+    fail_msg: >-
+      mqmonitor@{{ qm_name }} on {{ inventory_hostname }} has no reload action
+      (CanReload={{ _qm_canreload.stdout | trim }}). IBM added ExecReload
+      (mqmonitor.py --reload, the endmqm -r equivalent) to the mqmonitor@.service sample
+      in MQ 10.0.1; this node's MQ predates it. Nothing was restarted.
+
+- name: "systemctl reload mqmonitor@{{ qm_name }} (IBM: the endmqm -r equivalent)"
+  ansible.builtin.systemd:
+    name: "mqmonitor@{{ qm_name }}"
+    state: reloaded
+  timeout: "{{ qm_reload_timeout | int }}"
+
+# mqmonitor.py prints "Failed to stop <QM>: ..." and still exits 0 when endmqm fails (for
+# example, when ending the instance would break quorum), so systemctl's success proves
+# nothing. Its own journal lines (SyslogIdentifier=mqmonitor) are the evidence.
+- name: "read mqmonitor's verdict on ending {{ qm_name }}"
+  block:
+    - name: "confirm mqmonitor ended {{ qm_name }} (it reports a failed stop but exits 0)"
+      ansible.builtin.command:
+        argv: [journalctl, -t, mqmonitor, --since, "@{{ _qm_reload_t0.stdout }}", -o, cat, --no-pager]
+      register: _qm_reload_journal
+      changed_when: false
+      # Retried briefly: journald may lag the reload's exit by a moment.
+      until: _qm_reload_journal.stdout is search('^(Stopped|Failed to stop) ' ~ (qm_name | regex_escape) ~ '(:|$)', multiline=True)
+      retries: 15
+      delay: 2
+  rescue:
+    - name: "fail: no mqmonitor verdict for {{ qm_name }}"
+      ansible.builtin.fail:
+        msg: >-
+          mqmonitor logged neither "Stopped {{ qm_name }}" nor "Failed to stop {{ qm_name }}"
+          on {{ inventory_hostname }} within 30s of the reload, so there is no evidence the
+          instance was ended. Its journal since the reload:
+          {{ _qm_reload_journal.stdout | default('(not read)') }}
+
+- name: "assert mqmonitor stopped {{ qm_name }} cleanly"
+  ansible.builtin.assert:
+    that:
+      - _qm_reload_journal.stdout is search('^Stopped ' ~ (qm_name | regex_escape) ~ '$', multiline=True)
+      - _qm_reload_journal.stdout is not search('^Failed to stop ', multiline=True)
+    fail_msg: >-
+      mqmonitor did not end {{ qm_name }} on {{ inventory_hostname }}; its journal says:
+      {{ _qm_reload_journal.stdout }}
+
+- name: "wait for the {{ qm_name }} Native HA group to settle"
+  block:
+    - name: "poll dspmq -o nativeha -x: full quorum, every instance in sync"
+      ansible.builtin.command:
+        argv: [su, "-", mqm, "-c", "/opt/mqm/bin/dspmq -m {{ qm_name }} -o nativeha -x"]
+      register: _qm_ha
+      changed_when: false
+      # Backslash-free regexes ([(] not \(): an `until` conditional applies string-escape
+      # processing that a template does not, so a \1 or \b would silently change meaning.
+      # Settled = one QUORUM(n/n) with both sides equal, at least one instance line, and
+      # no instance line missing INSYNC(yes).
+      until: >-
+        (_qm_ha.stdout | regex_findall('QUORUM[(]([0-9]+)/([0-9]+)[)]') | map('unique') | map('length') | list) == [1]
+        and (_qm_ha.stdout | regex_findall('(?m)^ +INSTANCE[(].*$') | length > 0)
+        and (_qm_ha.stdout | regex_findall('(?m)^ +INSTANCE[(].*$') | reject('search', 'INSYNC[(]yes[)]') | list | length == 0)
+      retries: "{{ ((qm_reload_timeout | int) / (qm_reload_poll_delay | int)) | round(0, 'ceil') | int }}"
+      delay: "{{ qm_reload_poll_delay | int }}"
+
+    # The group this instance belongs to (site A's Live group, or site B's after a cutover).
+    - name: "find the {{ qm_name }} Active with the shared detector (#891)"
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/nativeha-find-active.yml"
+      vars:
+        nha_group: "{{ qm_hosts.split(':') | select('in', group_names) | first }}"
+        nha_qm: "{{ qm_name }}"
+        nha_find_retries: "{{ ((qm_reload_timeout | int) / (qm_reload_poll_delay | int)) | round(0, 'ceil') | int }}"
+        nha_find_delay: "{{ qm_reload_poll_delay | int }}"
+  rescue:
+    - name: "fail: {{ qm_name }} did not come back in time"
+      ansible.builtin.fail:
+        msg: >-
+          {{ qm_name }} was restarted on {{ inventory_hostname }} but its Native HA group
+          did not settle (full quorum, every instance in sync, an Active elected) within
+          {{ qm_reload_timeout }}s. Failed step: {{ ansible_failed_task.name }}.
+          Last dspmq -o nativeha -x:
+          {{ _nha_dspmq.stdout | default(_qm_ha.stdout | default('(no output)')) }}
+          Check it with: mqlab qm status {{ qm_stack }}
+
+- name: "record which instance is Active now"
+  ansible.builtin.set_fact:
+    qm_reload_summary: "Active instance now: {{ active_host }}."
