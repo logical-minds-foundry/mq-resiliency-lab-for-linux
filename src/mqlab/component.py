@@ -489,7 +489,12 @@ def resolve_artifact(
 
 
 def install_command(name: str, hosts: list[str], vars_file: Path) -> Command:
-    """The ``ansible-playbook component-install.yml`` run for ``mqlab component install``."""
+    """The ``ansible-playbook component-install.yml`` run for ``mqlab component install``.
+
+    A missing inventory leaves the play no hosts, so it never runs its --limit assert and
+    ansible-playbook exits 0 having installed nothing (#1520). The env makes an unparsed
+    inventory, or a --limit host it lacks, fail the run before any play starts.
+    """
     return Command(
         [
             "ansible-playbook",
@@ -506,6 +511,7 @@ def install_command(name: str, hosts: list[str], vars_file: Path) -> Command:
             f"@{vars_file}",
         ],
         cwd=repo_root() / "ansible",
+        env={"ANSIBLE_INVENTORY_UNPARSED_FAILED": "True", "ANSIBLE_HOST_PATTERN_MISMATCH": "error"},
     )
 
 
