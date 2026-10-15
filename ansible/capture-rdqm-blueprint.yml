@@ -1,0 +1,239 @@
+---
+# Read-only capture of what RDQM GENERATES on a live HA/DR group (epic .github#310 T1, #1422).
+# The capture is the blueprint the pacemaker-drbd arm is built to. It changes NOTHING on the
+# nodes, reads NO secret material (keystores, corosync authkey), and redacts DRBD
+# shared-secret values at capture time (never captured-then-scrubbed). Any failing command
+# fails the run on EVERY host (any_errors_fatal) before anything is written: an incomplete
+# blueprint is worse than none. Run by the operator with the rdqm-rhel stack up (both sites)
+# and its app QM running:
+#   cd ansible && ansible-playbook capture-rdqm-blueprint.yml \
+#     -e qm_name=RDQMAPP \
+#     -e blueprint_out="$(mqlab build path state)/rdqm-blueprint/$(date -u +%Y%m%dT%H%M%SZ)"
+# Output: <blueprint_out>/<host>/<item>.txt for every node in rdqm_a and rdqm_b.
+- name: Capture the RDQM blueprint (read-only)
+  hosts: rdqm_a:rdqm_b
+  become: true
+  gather_facts: false
+  any_errors_fatal: true
+  vars:
+    # GNU sed -E: replace any DRBD shared-secret value (quoted or bare) with "REDACTED".
+    drbd_secret_redact_sed: 's/(shared-secret[[:space:]]+)("[^"]*"|[^;[:space:]]+)/\1"REDACTED"/'
+  tasks:
+    - name: preflight - blueprint_out (absolute) and qm_name are set
+      ansible.builtin.assert:
+        that:
+          - blueprint_out is defined and blueprint_out | length > 0
+          - blueprint_out is abs
+          - qm_name is defined and qm_name | length > 0
+        fail_msg: "pass -e blueprint_out=<absolute dir> -e qm_name=<RDQM QM, e.g. RDQMAPP>"
+
+    - name: preflight - look for blueprint_out on the controller
+      ansible.builtin.stat:
+        path: "{{ blueprint_out }}"
+      register: cap_out_stat
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: preflight - blueprint_out does not exist yet (never merge into an older capture)
+      ansible.builtin.assert:
+        that: not cap_out_stat.stat.exists
+        fail_msg: >-
+          {{ blueprint_out }} already exists; a capture is only trustworthy as a whole —
+          pass a fresh directory (the timestamped default in the header does this)
+
+    - name: preflight - RDQM reports the QM on this node
+      ansible.builtin.command: /opt/mqm/bin/rdqmstatus -m {{ qm_name }}
+      register: cap_rdqmstatus_qm
+      changed_when: false
+
+    - name: preflight - RDQM reports HA status Normal on this node
+      ansible.builtin.assert:
+        that: cap_rdqmstatus_qm.stdout is regex('(?m)^HA status:\s+Normal\s*$')
+        fail_msg: >-
+          RDQM is not healthy on {{ inventory_hostname }} (rdqmstatus -m {{ qm_name }}
+          does not report "HA status: Normal"); capture only a healthy group:
+          {{ cap_rdqmstatus_qm.stdout }}
+
+    - name: preflight - a cluster CLI is present (pcs or crm)
+      ansible.builtin.shell: |
+        set -e
+        if command -v pcs >/dev/null; then echo pcs
+        elif command -v crm >/dev/null; then echo crm
+        else echo "neither pcs nor crm on PATH" >&2; exit 1; fi
+      register: cap_cli
+      changed_when: false
+
+    - name: drbd version (userland + loaded kernel module)
+      ansible.builtin.shell: |
+        set -e
+        drbdadm --version
+        echo "### /sys/module/drbd/version"
+        cat /sys/module/drbd/version
+      register: cap_drbd_version
+      changed_when: false
+
+    - name: drbd config files (drbd.conf + every /etc/drbd.d file; shared-secret redacted)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        {
+          echo "### /etc/drbd.conf"
+          cat /etc/drbd.conf
+          echo "### ls -l /etc/drbd.d/"
+          ls -l /etc/drbd.d/
+          for f in /etc/drbd.d/*; do
+            [ -f "$f" ] || continue
+            echo "### $f"
+            cat "$f"
+          done
+        } | sed -E {{ drbd_secret_redact_sed | quote }}
+      args:
+        executable: /bin/bash
+      register: cap_drbd_conf
+      changed_when: false
+
+    - name: drbd effective config (shared-secret redacted at capture)
+      ansible.builtin.shell: |
+        set -o pipefail
+        drbdadm dump all | sed -E {{ drbd_secret_redact_sed | quote }}
+      args:
+        executable: /bin/bash
+      register: cap_drbd_dump
+      changed_when: false
+
+    - name: drbd live status
+      ansible.builtin.command: drbdadm status all
+      register: cap_drbd_status
+      changed_when: false
+
+    - name: installed HA/DR packages (drbd, kmod-drbd, pacemaker, corosync, RDQM, MQ)
+      ansible.builtin.shell: |
+        set -o pipefail
+        rpm -qa | grep -Ei 'drbd|pacemaker|corosync|pcs|crmsh|resource-agents|rdqm|MQSeries' | sort
+      args:
+        executable: /bin/bash
+      register: cap_packages
+      changed_when: false
+
+    - name: pacemaker configuration (text, not CIB XML)
+      ansible.builtin.command: "{{ 'pcs config' if cap_cli.stdout == 'pcs' else 'crm configure show' }}"
+      register: cap_pcmk_config
+      changed_when: false
+
+    - name: pacemaker status
+      ansible.builtin.command: crm_mon -1 -r -A
+      register: cap_pcmk_status
+      changed_when: false
+
+    - name: OCF resource agents available (providers + agents; flags IBM-proprietary ones)
+      ansible.builtin.shell: |
+        set -o pipefail
+        find /usr/lib/ocf/resource.d -maxdepth 2 | sort
+      args:
+        executable: /bin/bash
+      register: cap_ocf_agents
+      changed_when: false
+
+    - name: corosync config (authkey is a separate file and is never read)
+      ansible.builtin.command: cat /etc/corosync/corosync.conf
+      register: cap_corosync_conf
+      changed_when: false
+
+    - name: quorum state
+      ansible.builtin.command: corosync-quorumtool -s
+      register: cap_quorum
+      changed_when: false
+
+    - name: volume groups
+      ansible.builtin.command: vgs -o vg_name,pv_count,lv_count,vg_size,vg_free
+      register: cap_vgs
+      changed_when: false
+
+    - name: logical volumes (QM LV and any snapshot LV)
+      ansible.builtin.command: lvs -a -o lv_name,vg_name,lv_size,lv_attr,origin,devices
+      register: cap_lvs
+      changed_when: false
+
+    - name: mounts under /var/mqm/vols (fstype + options; empty on a non-owner node is valid)
+      ansible.builtin.shell: |
+        set -o pipefail
+        findmnt -l -n -o TARGET,SOURCE,FSTYPE,OPTIONS | awk '$1 ~ "^/var/mqm/vols"'
+      args:
+        executable: /bin/bash
+      register: cap_mounts
+      changed_when: false
+
+    - name: block devices + filesystems
+      ansible.builtin.command: lsblk -f
+      register: cap_lsblk
+      changed_when: false
+
+    - name: rdqm.ini
+      ansible.builtin.command: cat /var/mqm/rdqm.ini
+      register: cap_rdqm_ini
+      changed_when: false
+
+    - name: rdqmstatus (group view)
+      ansible.builtin.command: /opt/mqm/bin/rdqmstatus
+      register: cap_rdqmstatus_group
+      changed_when: false
+
+    - name: installed systemd units (HA/DR/MQ)
+      ansible.builtin.shell: |
+        set -o pipefail
+        systemctl list-unit-files --no-legend | grep -Ei 'rdqm|drbd|pacemaker|corosync|pcsd|mq' | sort
+      args:
+        executable: /bin/bash
+      register: cap_units
+      changed_when: false
+
+    - name: mqs.ini
+      ansible.builtin.command: cat /var/mqm/mqs.ini
+      register: cap_mqs_ini
+      changed_when: false
+
+    - name: dspmqinf (QM data/log paths)
+      ansible.builtin.command: su mqm -c '/opt/mqm/bin/dspmqinf -o command {{ qm_name }}'
+      register: cap_dspmqinf
+      changed_when: false
+
+    # Controller-side writes: reached only once EVERY host has passed every preflight and
+    # every capture command (any_errors_fatal), so a failed run leaves nothing on disk.
+    - name: create the per-host capture directory on the controller
+      ansible.builtin.file:
+        path: "{{ blueprint_out }}/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+
+    - name: write the capture on the controller
+      ansible.builtin.copy:
+        dest: "{{ blueprint_out }}/{{ inventory_hostname }}/{{ item.key }}.txt"
+        content: "{{ item.value.stdout }}\n"
+        mode: "0644"
+      delegate_to: localhost
+      become: false
+      loop:
+        - { key: drbd-version, value: "{{ cap_drbd_version }}" }
+        - { key: drbd-conf, value: "{{ cap_drbd_conf }}" }
+        - { key: drbd-dump, value: "{{ cap_drbd_dump }}" }
+        - { key: drbd-status, value: "{{ cap_drbd_status }}" }
+        - { key: packages, value: "{{ cap_packages }}" }
+        - { key: pcmk-config, value: "{{ cap_pcmk_config }}" }
+        - { key: pcmk-status, value: "{{ cap_pcmk_status }}" }
+        - { key: ocf-agents, value: "{{ cap_ocf_agents }}" }
+        - { key: corosync-conf, value: "{{ cap_corosync_conf }}" }
+        - { key: quorum, value: "{{ cap_quorum }}" }
+        - { key: vgs, value: "{{ cap_vgs }}" }
+        - { key: lvs, value: "{{ cap_lvs }}" }
+        - { key: mounts, value: "{{ cap_mounts }}" }
+        - { key: lsblk, value: "{{ cap_lsblk }}" }
+        - { key: rdqm-ini, value: "{{ cap_rdqm_ini }}" }
+        - { key: rdqmstatus-qm, value: "{{ cap_rdqmstatus_qm }}" }
+        - { key: rdqmstatus-group, value: "{{ cap_rdqmstatus_group }}" }
+        - { key: units, value: "{{ cap_units }}" }
+        - { key: mqs-ini, value: "{{ cap_mqs_ini }}" }
+        - { key: dspmqinf, value: "{{ cap_dspmqinf }}" }
+      loop_control:
+        label: "{{ item.key }}"
