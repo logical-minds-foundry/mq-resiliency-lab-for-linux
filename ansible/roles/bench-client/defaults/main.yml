@@ -8,8 +8,13 @@
 # overrides --qm per mode (NHARCAPP | NHARIAPP).
 #
 # NATIVE HA ONLY (#1380): mq-bench is a Native HA persistent-commit benchmark. It PUTs
-# to APP.REPLY, which only the Native HA arms define for the app-client identity; on
-# RDQM the same wrapper failed every commit with 2035. So the wrapper is rendered only
+# to BENCH.COMMIT (#1512), its own queue, which only the Native HA arms define
+# (site-nativeha.yml, site-nativeha-ubuntu.yml; the Ubuntu arm also grants mqapp
+# +put +inq on it through authz_bench_grants). It used to PUT to APP.REPLY, which
+# nativeha-ubuntu's least-privilege posture leaves get-only for mqapp, so every commit
+# failed with 2035 there. Nothing drains BENCH.COMMIT (MAXDEPTH 999999999); clear it
+# with runmqsc `CLEAR QLOCAL(BENCH.COMMIT)` between long sweeps. On RDQM the same
+# wrapper failed every commit with 2035. So the wrapper is rendered only
 # when the provisioning stack declares itself Native HA: its importer of
 # site-distributed-shared.yml passes `app_qm_nativeha: true` (site-nativeha.yml,
 # site-nativeha-ubuntu.yml). Any other stack (RDQM, Pacemaker) leaves an existing
@@ -21,7 +26,7 @@ bench_client_qm: "{{ our_qm }}"
 bench_client_conn: "{{ app_conn }}"
 bench_client_tls: "{{ app_tls | default(true) }}"
 bench_client_channel: APP.SVRCONN
-bench_client_queue: APP.REPLY
+bench_client_queue: BENCH.COMMIT
 # The app-client keystore stem + label placed by the mq-client role (#250).
 bench_client_keyrepo: /home/vagrant/ssl/key
 bench_client_certlabel: app-client
