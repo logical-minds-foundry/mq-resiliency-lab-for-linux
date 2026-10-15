@@ -16,6 +16,8 @@
 - [RDQM DR cold-create: crtmqm mkfs I/O error on the DR device](#rdqm-dr-cold-create-crtmqm-mkfs-io-error-on-the-dr-device)
 - [RDQM bake: kmod WARNING or "Unsupported kernel release"](#rdqm-bake-kmod-warning-or-unsupported-kernel-release)
 - [Bake fails "No space left on device" unpacking into /tmp](#bake-fails-no-space-left-on-device-unpacking-into-tmp)
+- [RDQM crtmqm fails AMQ3817E: "no STONITH resources have been defined"](#rdqm-crtmqm-fails-amq3817e-no-stonith-resources-have-been-defined)
+- [nic-config fails: a lab NIC "did not keep its hardening"](#nic-config-fails-a-lab-nic-did-not-keep-its-hardening)
 
 ## Vagrant leaves orphaned extra-disk volumes
 
@@ -259,6 +261,12 @@ than the kernel. Use an MQ level (or IBM's Fix Central kmod bundle) whose `modve
 that kernel family, or bake from a supported RHEL point release. When IBM's table
 changes, refresh `rdqm_kernel_known_issues` and its `_as_of` date in the vars file.
 
+**RHEL 10.** `mq-rdqm-rhel10` uses the same mechanism with the `el10` media, which
+only MQ 10.0.1 and later ship. Its dated table copy
+(`ansible/roles/rdqm-install/vars/RedHat-10.yml`, as of 2026-10-13) is empty, because
+IBM's known-issue table has no RHEL 10 row. On MQ 10.0.0.x, a RHEL 10 bake has no
+`el10` kmods to pick from.
+
 ## Bake fails "No space left on device" unpacking into /tmp
 
 **Symptom.** An Ubuntu 26.04 bake (first seen on `obs-ubuntu26`) fails at a download
@@ -279,3 +287,48 @@ If this error comes back, a new task is staging in `/tmp`. `tests/test_stage_off
 should already have failed on it; move the task to `{{ lab_stage_dir }}`, not onto the
 allow-list. See
 [box-bake-manifest.md](../development/box-bake-manifest.md#staging-large-artifacts-go-to-lab_stage_dir-never-tmp-1417).
+
+## RDQM crtmqm fails AMQ3817E: "no STONITH resources have been defined"
+
+**Symptom.** An RDQM provision fails at "create the RDQM queue manager". `crtmqm` on
+one site reports AMQ3817E (`crm configure load update ... failed`, with "Resource
+start-up disabled since no STONITH resources have been defined"), then AMQ3813E. The
+failure is intermittent: the same row can pass on a re-run. It is not OS-specific
+(first seen on `rdqm-rhel@9` in #1475).
+
+**Cause.** RDQM does a site's cluster-wide setup, `stonith-enabled=false` included,
+in whichever `rdqmadm -c` holds the `rdqm-lock` cluster attribute. From
+`RDQM.0.LOG`, the lock is a query, an update, then a read-back that only checks the
+attribute exists. Two nodes that start `rdqmadm -c` within milliseconds both "hold" it,
+and both skip the setup (#1488). The role used to run the step on all three nodes at
+once. Check with
+`crm_attribute --type crm_config --name stonith-enabled --query` on each node: a site
+that hit this has no value set (rc 105).
+
+**Fix.** Since #1488 the `rdqm-ha` role runs `rdqmadm -c` with `throttle: 1`, one node
+at a time, and then fails loud unless every node reads `stonith-enabled` as `false`. If
+the new check fails, RDQM's own setup was skipped: tear the stack down and bootstrap
+again. Do not set the property by hand and carry on. When you run RDQM by hand, run
+`rdqmadm -c` on one node at a time (see the
+[RDQM cheat sheet](rdqm-ha-cheatsheet.md#2-form-the-rdqm-ha-group-all-3-nodes)).
+
+## nic-config fails: a lab NIC "did not keep its hardening"
+
+**Symptom.** Provisioning fails in `lab/scripts/nic-config.sh` with nmcli's own error
+from `nmcli connection modify`, or with
+`nic-config: <conn> did not keep its hardening (autoconnect-priority=…, autoconnect-retries=…)`.
+Before #1491 the same fault was silent. On `rdqm-rhel@10` nodes, the journal showed
+NetworkManager `failed rename ... Permission denied` lines, with a matching
+`avc: denied { unlink }`, and the profiles kept `autoconnect-priority -100`.
+
+**Cause.** Vagrant writes the lab NIC profiles during `vagrant up`, and on the nodes
+seen they carried the SELinux label `user_tmp_t`, not NetworkManager's own
+`NetworkManager_etc_rw_t`. Under enforcing, NetworkManager cannot replace a
+`user_tmp_t` file, so every `nmcli connection modify` failed. The old script ran the
+modify with `|| true`, so the #866 hardening was missing with nothing reported.
+(Judgment: the label fits a file written under `/tmp` and moved into place.)
+
+**Fix.** Since #1491 `nic-config.sh` runs `restorecon` on the NetworkManager profile
+directories before it hardens anything, when SELinux is enabled. It lets a failed modify
+fail the step, and reads back `autoconnect-priority` and `autoconnect-retries`. If it
+fails anyway, check the profiles' labels with `ls -Z` and the journal for AVCs.

@@ -47,7 +47,8 @@ walkthrough.
 ### Prerequisites
 
 Almost everything is fetched automatically — IBM **MQ Advanced for Developers**
-(the no-charge edition) is pulled by the tooling. You provide:
+(the no-charge edition) is pulled by the tooling, at the level pinned in
+[`lab/mq-version`](lab/mq-version) (currently `10.0.1.0`). You provide:
 
 - **An x86-64 Linux host with root/sudo** and nested virtualization — the lab
   creates nested libvirt/QEMU/Vagrant guests and wants a beefy box (roughly

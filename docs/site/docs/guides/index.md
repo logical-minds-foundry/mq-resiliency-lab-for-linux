@@ -4,6 +4,12 @@ Generic, product-level how-to guides for configuring IBM MQ — prose backed by
 declarative configuration, pinned to **MQ 9.4**. Each guide is self-contained and
 written to be applied on any IBM MQ installation, independent of this lab.
 
+!!! note "MQ version"
+    The guides were written and validated against MQ 9.4, and their IBM Docs
+    citations point at 9.4. The lab itself now runs MQ 10.0.1 (see
+    [Reference](../reference/index.md)). The guides have not been re-checked against
+    10.0.x, so treat the version each one states as the version it was proven on.
+
 New here? Read the **[authoring standard](guide-standard.md)** first — it defines
 the format every guide follows: the two-layer structure (a short how-to up front,
 supporting depth in appendices), the scan-safe content boundary, and how

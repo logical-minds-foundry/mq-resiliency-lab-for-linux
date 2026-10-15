@@ -28,6 +28,25 @@ and class member the package uses off its own source, and two checks hold it to 
 (fetched and hash-verified; set `MQRC_IBMMQ_SDIST` to a local copy; a failed fetch
 fails, never skips), and the selfcheck against the compiled binding on every install.
 
+## Client connections (a temporary workaround)
+
+Every client connects through one helper, `mqrc.mqconn.connect_client`, which always
+adds `MQCNO_CLIENT_BINDING` to the caller's connect options (#1480).
+`tests/test_mqconn.py` fails if any module connects another way.
+
+- **[data]** ibmmq 2.1.1's `connect_with_options()` packs the MQCNO before it adds
+  the automatic client binding for a supplied CD, so the flag never reaches MQCONNX.
+  On a guest with the full MQ server install (`svc-sim`, `app-client`, `mon-probe`),
+  the MQI then defaults to local bindings and the connect fails: 2058, or 2046 with
+  `MQCNO_RECONNECT`. Setting `MQ_CONNECT_MODE=CLIENT` did not force client mode on the
+  lab guests. The reasoning and the code references are in `src/mqrc/mqconn.py`.
+- Reported upstream as
+  [ibm-messaging/mq-mqi-python#29](https://github.com/ibm-messaging/mq-mqi-python/issues/29).
+- **[judgment]** The forced flag is a workaround, not a design choice. At the next
+  MQ upgrade,
+  [#1545](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1545)
+  checks whether upstream has fixed it, and removes the flag if so.
+
 ## Entry points
 
 | Command | Module | Purpose |

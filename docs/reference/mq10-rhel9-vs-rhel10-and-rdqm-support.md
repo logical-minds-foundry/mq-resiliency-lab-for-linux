@@ -20,6 +20,26 @@
 > Sources: IBM MQ 10.0 documentation and system requirements, the IBM MQ RDQM
 > kernel-modules list, and Red Hat's RHEL 10 documentation and lifecycle policy,
 > all cited inline and dated (as of 2026-09-15).
+>
+> **Superseded on RDQM (update, 2026-10-15).** This note describes MQ 10.0.0.x.
+> Its RDQM-on-RHEL-10 findings (§1, §3, §7) no longer describe the lab:
+>
+> - **[data]** IBM announced RDQM support for RHEL 10 in MQ 10.0.1 (AD26-0859),
+>   and the kernel-modules page now has a RHEL 10 table with minimum MQ 10.0.1.0.
+>   No 10.0.0.x level gains it.
+> - **[data] (lab)** The lab pins MQ 10.0.1.0
+>   ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)).
+>   `rdqm-rhel` offers RHEL 10
+>   ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440))
+>   and defaults to it
+>   ([#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)),
+>   after cold-rebuild validations on the cloud x86_64 host
+>   ([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475),
+>   [#1497](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497)).
+>
+> The current, sourced status is in
+> [`os-version-support-matrix.md`](os-version-support-matrix.md) §2.4. The
+> body below is kept as the 2026-09-15 record.
 
 ## 1. Bottom line
 
@@ -167,4 +187,7 @@ This is the crux of "can MQ 10 take advantage of RHEL 10's features?"
   (Base, 10.1, 10.2) as supported for the MQ queue manager and Native HA, and RDQM
   as unsupported. See [`os-version-support-matrix.md`](os-version-support-matrix.md).*
 - Confirm whether IBM later publishes a **RHEL 10 RDQM kernel module** — re-check
-  the kernel-modules list periodically. See §3.
+  the kernel-modules list periodically. See §3. *Answered 2026-10-13 (#1405, #1409):
+  IBM published `el10` kmods with MQ 10.0.1.0, and `modver` picks one for the
+  lab's RHEL 10.2 GA kernel. See [`os-version-support-matrix.md`](os-version-support-matrix.md)
+  §2.4.*
