@@ -1,8 +1,24 @@
 # Guides
 
 Generic, product-level how-to guides for configuring IBM MQ — prose backed by
-declarative configuration, pinned to **MQ 9.4**. Each guide is self-contained and
-written to be applied on any IBM MQ installation, independent of this lab.
+declarative configuration, pinned to **MQ 10.0.x**. Each guide is self-contained
+and written to be applied on any IBM MQ installation, independent of this lab.
+
+!!! note "MQ version: re-pinned from 9.4 to 10.0.x"
+    The guides follow the lab's pinned MQ level,
+    [`lab/mq-version`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version)
+    (currently `10.0.1.0`). On 2026-10-15
+    ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
+    every guide, the authoring standard and the template were re-pinned from 9.4
+    to 10.0.x. Each IBM Docs citation now links the 10.0.x topic, and each was
+    compared with its 9.4 counterpart. Where 10.0 differs, the guide says so and
+    quotes both versions.
+
+    This was a documentation re-check, not a lab re-run. Each guide's *Last
+    validated in lab* line still names the MQ level it was proven on (9.4.x).
+    Claims that only a live queue manager can confirm are marked to verify on the
+    next 10.0.1 bring-up. MQ 10.0 is the documented default. An older level can
+    still be built by changing `lab/mq-version`.
 
 !!! note "MQ version"
     The guides were written and validated against MQ 9.4, and their IBM Docs

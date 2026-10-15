@@ -7,9 +7,10 @@ Numbered sections = the 2–3 page how-to. Lettered appendices = supporting dept
 Delete any appendix you don't need, and delete these comments, when done.
 -->
 
-- **MQ version:** 9.4
+- **MQ version:** &lt;the lab's pinned level, from `lab/mq-version` — currently 10.0.x&gt;
 - **Status:** Draft
-- **Last validated in lab:** &lt;YYYY-MM-DD&gt;
+- **Last validated in lab:** &lt;YYYY-MM-DD&gt; on MQ &lt;V.R.M.F&gt;
+- **IBM Docs re-checked:** &lt;YYYY-MM-DD&gt; against &lt;pinned level, e.g. 10.0.x&gt;
 - **Related guides:** &lt;links, or "none yet"&gt;
 
 ---
@@ -65,4 +66,9 @@ Symptom → cause → fix.
 
 ## Appendix E: References
 
-Pinned IBM Docs 9.4 topics.
+IBM Docs topics at the lab's pinned MQ level (currently 10.0.x), one link per
+topic, each resolved with `tools/ibm_doc_cache.py` before you cite it:
+
+- *&lt;Topic title&gt;* —
+  `https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=<slug>` (what it is
+  authoritative for)
