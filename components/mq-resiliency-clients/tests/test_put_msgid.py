@@ -140,6 +140,7 @@ def test_dr_flow_producer_puts_each_request_with_a_fresh_md(monkeypatch, tmp_pat
             qmgr.commit = commit
             return qmgr
 
+    run_id = dr_flow.new_run_correl_id()
     try:
         dr_flow.producer(
             _Conn(),
@@ -147,6 +148,7 @@ def test_dr_flow_producer_puts_each_request_with_a_fresh_md(monkeypatch, tmp_pat
             60.0,
             5.0,
             "DR.REQUEST",
+            run_id,
             Ledger(),
             threading.Lock(),
             str(tmp_path / "app.jsonl"),
@@ -155,8 +157,9 @@ def test_dr_flow_producer_puts_each_request_with_a_fresh_md(monkeypatch, tmp_pat
         dr_flow.STOP.clear()  # module-global: don't leak a set STOP into other tests
     _assert_fresh_descriptors(puts, fake)
     assert all(put["md"].Expiry == 50 for put in puts)  # expiry kept, in tenths
-    # No correlation option here: #1550 sets a per-run CorrelId on these requests.
+    # No correlation option here: every request carries the per-run CorrelId (#1550).
     assert not any(put["options"] & fake.CMQC.MQPMO_NEW_CORREL_ID for put in puts)
+    assert all(put["correlid_in"] == run_id for put in puts)
 
 
 def test_dr_responder_puts_each_reply_with_a_fresh_md(monkeypatch, tmp_path):

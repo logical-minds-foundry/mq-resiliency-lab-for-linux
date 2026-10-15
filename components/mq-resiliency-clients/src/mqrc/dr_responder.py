@@ -15,20 +15,34 @@ Run on svc-sim:
     mq-dr-responder --seconds 40 --ledger ~/dr-ledgers/svc.jsonl
 
 Installed as the `mq-dr-responder` console script of the mq-resiliency-clients
-component. Echoes the DRv1 body back so the app can match seq/uuid. ibmmq is
-imported lazily inside the MQI functions, so the module imports without the MQ
-client libs present (unit tests, the component selfcheck).
+component. Echoes the DRv1 body back so the app can match seq/uuid, and copies the
+request's CorrelId (mq-dr-flow's per-run id) onto the reply so mq-dr-flow takes only
+its own replies off a shared reply queue (#1550).
+
+A message on the input queue with no DRv1 body is not ours to answer (#1550): it is
+moved, in the same unit of work, to the queue manager's dead-letter queue behind an
+MQDLH (reason MQFB_APPL_FIRST, an application-defined rejection) and logged, so it
+neither wedges the loop nor is silently dropped -- the mq-svc-responder pattern
+(#1513, shared via mqrc.deadletter). A queue manager with no DEADQ is an error: the
+unit of work is backed out and the process exits non-zero (fail loud).
+
+ibmmq is imported lazily inside the MQI functions, so the module imports without
+the MQ client libs present (unit tests, the component selfcheck).
 """
 
 import argparse
 import os
 import pathlib
+import sys
 import time
 
 from mqrc import dr_mqi
+from mqrc.deadletter import NoDeadLetterQueueError, dead_letter
 from mqrc.dr.ledger import Event, Ledger, LedgerEntry
-from mqrc.dr.wire import parse_body
+from mqrc.dr.wire import NotDRv1Error, split_framed
 from mqrc.header import pack_header
+
+WHO = "dr-responder"
 
 
 def _serve(qmgr, args, ledger, deadline):
@@ -59,8 +73,11 @@ def _serve(qmgr, args, ledger, deadline):
 
     last_flush = time.monotonic()
     while time.monotonic() < deadline:
+        # Fresh MD per get: a GET fills the MD, and a reused, populated one would
+        # then match only that same MsgId/CorrelId.
+        req_md = ibmmq.MD()
         try:
-            raw = qin.get(None, ibmmq.MD(), gmo)
+            raw = qin.get(None, req_md, gmo)
         except ibmmq.MQMIError as e:
             if e.reason == ibmmq.CMQC.MQRC_NO_MSG_AVAILABLE:
                 continue
@@ -68,18 +85,40 @@ def _serve(qmgr, args, ledger, deadline):
                 time.sleep(0.2)  # yield to the reconnect thread; no busy-spin
                 continue
             raise  # dr_mqi.RECONNECT or unexpected -> caller rebuilds / fails loud
-        idx = raw.find(b"DRv1|")
-        msg = parse_body(raw[idx:])
+        try:
+            body, msg = split_framed(raw)
+        except NotDRv1Error as exc:
+            # Not a DR message: dead-letter it in this unit of work, keep serving.
+            try:
+                dead_letter(
+                    qmgr,
+                    args.qm,
+                    args.in_queue,
+                    req_md,
+                    raw,
+                    reason=ibmmq.CMQC.MQFB_APPL_FIRST,
+                    who=WHO,
+                    why=str(exc),
+                )
+                qmgr.commit()
+            except ibmmq.MQMIError as e:
+                if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
+                    time.sleep(0.2)  # rolled back (or in doubt): re-get and retry it
+                    continue
+                raise
+            continue
         reply = (
             pack_header(
                 password="pw", sender="SVC", receiver="APP01", session_date=msg.session_date
             ).encode()
-            + raw[idx:]  # echo the DRv1 body so the app can match seq/uuid
+            + body  # echo the DRv1 body so the app can match seq/uuid
         )
         try:
             # A fresh MD per reply: MQPUT writes the generated MsgId back into the
             # descriptor, so a reused MD would resend it on every later reply (#1549).
-            reply_md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
+            # The request's CorrelId (mq-dr-flow's run id) is copied so the app's
+            # consumer can take only its own run's replies (#1550).
+            reply_md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT, CorrelId=req_md.CorrelId)
             qout.put(reply, reply_md, pmo)
             qmgr.commit()
         except ibmmq.MQMIError as e:
@@ -102,33 +141,15 @@ def _serve(qmgr, args, ledger, deadline):
             last_flush = time.monotonic()
 
 
-def main(argv=None):
+def _run(args, ledger, deadline):
+    """Serve until the deadline, rebuilding the connection whenever a controlled
+    endmqm disconnects us non-reconnectably. On any other error the open unit of
+    work is backed out before the disconnect -- a normal MQDISC would COMMIT it and
+    consume the message the error interrupted -- and the error is re-raised."""
     import ibmmq
 
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "PCMKSVC"))
-    ap.add_argument("--conn", default="localhost(1414)")
-    ap.add_argument("--channel", default="SVC.SVRCONN")
-    ap.add_argument("--in-queue", default="SVC.REQUEST")
-    ap.add_argument("--out-queue", default="APP.REPLY")
-    ap.add_argument("--seconds", type=float, default=40.0)
-    ap.add_argument("--ledger", required=True)
-    # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
-    # sibling .sth supplies the password (the clients use the .sth stash;
-    # SCO.KeyRepoPassword adoption is deferred, epic .github#300 §9). Omit both -> plaintext.
-    ap.add_argument(
-        "--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder/key"
-    )
-    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
-    args = ap.parse_args(argv)
-    pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
-
-    ledger = Ledger()
-    deadline = time.monotonic() + args.seconds
     qmgr = None
     try:
-        # Outer reconnect loop: rebuild the connection whenever a controlled
-        # endmqm disconnects us non-reconnectably, until the deadline.
         while time.monotonic() < deadline:
             qmgr = dr_mqi.connect_retry(
                 args.qm,
@@ -153,6 +174,13 @@ def main(argv=None):
                     pass
                 qmgr = None
                 time.sleep(0.5)
+    except BaseException:
+        if qmgr is not None:
+            try:
+                qmgr.backout()
+            except ibmmq.MQMIError as exc:  # logged; the original error is re-raised
+                print(f"{WHO}: backout failed: {exc} (reason {exc.reason})", file=sys.stderr)
+        raise
     finally:
         if qmgr is not None:
             try:
@@ -160,6 +188,33 @@ def main(argv=None):
             except ibmmq.MQMIError:
                 pass
         ledger.write_jsonl(args.ledger)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--qm", default=os.environ.get("MQLAB_QM_SVC", "PCMKSVC"))
+    ap.add_argument("--conn", default="localhost(1414)")
+    ap.add_argument("--channel", default="SVC.SVRCONN")
+    ap.add_argument("--in-queue", default="SVC.REQUEST")
+    ap.add_argument("--out-queue", default="APP.REPLY")
+    ap.add_argument("--seconds", type=float, default=40.0)
+    ap.add_argument("--ledger", required=True)
+    # TLS (#1377, mirrors app_requester #250): --keyrepo is the keystore *stem*; a
+    # sibling .sth supplies the password (the clients use the .sth stash;
+    # SCO.KeyRepoPassword adoption is deferred, epic .github#300 §9). Omit both -> plaintext.
+    ap.add_argument(
+        "--keyrepo", default="", help="keystore stem, e.g. /var/mqm/ssl/svc-responder/key"
+    )
+    ap.add_argument("--certlabel", default="", help="client cert label (the entity CN)")
+    args = ap.parse_args(argv)
+    pathlib.Path(args.ledger).parent.mkdir(parents=True, exist_ok=True)
+
+    ledger = Ledger()
+    try:
+        _run(args, ledger, time.monotonic() + args.seconds)
+    except NoDeadLetterQueueError as exc:  # logged, non-zero, unit of work backed out
+        print(f"{WHO}: {exc}", file=sys.stderr)
+        return 1
 
     received = len(ledger.svc_receive_counts())
     print(f"responder done: {received} received -> {args.ledger}")
