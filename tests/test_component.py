@@ -634,6 +634,11 @@ def test_install_runs_the_component_install_play(lab, tools, tarballs):
         f"@{lab / 'build/work/components/install-vars.json'}",
     ]
     assert play.cwd == lab / "ansible"
+    # No matched host must fail the run, not exit 0 having installed nothing (#1520).
+    assert play.env == {
+        "ANSIBLE_INVENTORY_UNPARSED_FAILED": "True",
+        "ANSIBLE_HOST_PATTERN_MISMATCH": "error",
+    }
     assert _vars(component.install_vars_path())["component_artifacts"] == {"demo": str(art.path)}
     assert tarballs == []  # the running guest's runtime is never reinstalled
     assert f"installing demo {art.path.name} on app-client, svc-sim" in lines
