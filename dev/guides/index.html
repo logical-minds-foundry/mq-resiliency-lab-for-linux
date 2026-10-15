@@ -1309,14 +1309,23 @@
 
 <h1 id="guides">Guides<a class="headerlink" href="#guides" title="Permanent link">&para;</a></h1>
 <p>Generic, product-level how-to guides for configuring IBM MQ — prose backed by
-declarative configuration, pinned to <strong>MQ 9.4</strong>. Each guide is self-contained and
-written to be applied on any IBM MQ installation, independent of this lab.</p>
+declarative configuration, pinned to <strong>MQ 10.0.x</strong>. Each guide is self-contained
+and written to be applied on any IBM MQ installation, independent of this lab.</p>
 <div class="admonition note">
-<p class="admonition-title">MQ version</p>
-<p>The guides were written and validated against MQ 9.4, and their IBM Docs
-citations point at 9.4. The lab itself now runs MQ 10.0.1 (see
-<a href="../reference/">Reference</a>). The guides have not been re-checked against
-10.0.x, so treat the version each one states as the version it was proven on.</p>
+<p class="admonition-title">MQ version: re-pinned from 9.4 to 10.0.x</p>
+<p>The guides follow the lab's pinned MQ level,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version"><code>lab/mq-version</code></a>
+(currently <code>10.0.1.0</code>). On 2026-10-15
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)
+every guide, the authoring standard and the template were re-pinned from 9.4
+to 10.0.x. Each IBM Docs citation now links the 10.0.x topic, and each was
+compared with its 9.4 counterpart. Where 10.0 differs, the guide says so and
+quotes both versions.</p>
+<p>This was a documentation re-check, not a lab re-run. Each guide's <em>Last
+validated in lab</em> line still names the MQ level it was proven on (9.4.x).
+Claims that only a live queue manager can confirm are marked to verify on the
+next 10.0.1 bring-up. MQ 10.0 is the documented default. An older level can
+still be built by changing <code>lab/mq-version</code>.</p>
 </div>
 <p>New here? Read the <strong><a href="guide-standard/">authoring standard</a></strong> first — it defines
 the format every guide follows: the two-layer structure (a short how-to up front,

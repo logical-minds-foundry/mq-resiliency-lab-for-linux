@@ -1754,9 +1754,16 @@
 
 <h1 id="ibm-mq-authorization-map-an-authenticated-tls-client-to-a-least-privilege-identity">IBM MQ authorization — map an authenticated TLS client to a least-privilege identity<a class="headerlink" href="#ibm-mq-authorization-map-an-authenticated-tls-client-to-a-least-privilege-identity" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>MQ version:</strong> 9.4 (Multiplatforms, OS-based OAM authorization)</li>
+<li><strong>MQ version:</strong> 10.0.x (Multiplatforms, OS-based OAM authorization) —
+  re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
 <li><strong>Status:</strong> Draft — pending review</li>
-<li><strong>Last validated in lab:</strong> 2026-07-31</li>
+<li><strong>Last validated in lab:</strong> 2026-07-31 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. The CHLAUTH, <code>setmqaut</code>,
+  context-authority, <code>PUTAUT</code>/<code>USEDLQ</code>, dead-letter and <code>CONNAUTH</code> topics read
+  the same as 9.4 for everything this guide uses. Two 10.0 user-identity changes
+  are noted in section 6 (long identities and stricter user-ID validation).</li>
 <li><strong>Related guides:</strong> <a href="../mq-event-monitoring-guide/">Instrumentation event monitoring</a>
   — the authority-event class surfaces the <code>MQRC 2035</code> failures this guide's
   grants prevent; <a href="../mq-tcp-config-guide/">TCP configuration</a> — the transport
@@ -1779,7 +1786,7 @@ least-privilege, certificate-mapped identities — especially in an HA/DR estate
 where the OS accounts behind those identities must be consistent across every
 node a queue manager can run on.</p>
 <h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
-<p>In scope, pinned to <strong>MQ 9.4 Multiplatforms</strong> with the default OS-based Object
+<p>In scope, pinned to <strong>MQ 10.0.x Multiplatforms</strong> with the default OS-based Object
 Authority Manager (OAM):</p>
 <ul>
 <li>CHLAUTH <code>SSLPEERMAP</code> identity mapping (<code>USERSRC(MAP)</code> + <code>MCAUSER</code>) and the
@@ -1959,7 +1966,29 @@ is never a window in which an unmapped identity is admitted, and so
   and their groups must be present on every failover node. This is substrate
   consistency the queue manager cannot enforce for you.</li>
 <li><strong>12-character identities.</strong> An identity adopted for authorization is truncated
-  to 12 characters. Keep <code>MCAUSER</code> service-account names within that.</li>
+  to 12 characters. Keep <code>MCAUSER</code> service-account names within that. MQ 10.0
+  does not change this for the pattern in this guide. IBM's 10.0 <em>User identities</em>
+  topic says: <em>"From IBM MQ 10.0.0, a longer identity (up to 1024 characters) can
+  be adopted for connections that are authenticated through IDPWOS password or
+  token authentication"</em>, must be switched on in <code>qm.ini</code> (<code>AllowLongUID</code>), and
+  even then <em>"only a truncated form (11 characters suffixed with a '+'
+  character) is stored in the MQMD"</em>. It lists <em>"an MCAUSER supplied on a channel
+  definition"</em> among the ways a 12-character identity is established, and it
+  warns that long identities are <em>"not appropriate for … queue manager to queue
+  manager channels that use PUTAUT(CTX)"</em>
+  (<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authentication-user-identities-in-mq">10.0.x</a>).
+  (The 9.4 topic has the same text with "From IBM MQ 9.4.3".) <em>Judgment:</em> an
+  <code>SSLPEERMAP</code> → <code>MCAUSER</code> mapping is still a 12-character identity, so keep
+  service-account names at 12 characters or fewer.</li>
+<li><strong>New in 10.0: stricter user-ID validation.</strong> <em>"From IBM MQ 10.0.0, IBM MQ
+  performs more careful validation of the strings representing user identities
+  when connecting to a queue manager"</em>, and if the OAM <em>"detects any authority
+  records referring to unsuitable user identities at startup, a warning message
+  AMQ5793 is reported once for each such record found"</em> (same topic). For OS
+  (IDPWOS) and LDAP authentication, IBM adds that <em>"you are unlikely to encounter
+  problems in existing deployments"</em>. <em>To verify on the next 10.0.1 bring-up:</em>
+  no <code>AMQ5793</code> warnings appear for the lab's service-account authority
+  records.</li>
 <li><strong><code>MCAUSER('mqm')</code> and <code>CHLAUTH(DISABLED)</code> are retired,</strong> not merely
   discouraged. Any channel left on either undoes the whole model.</li>
 </ul>
@@ -2109,7 +2138,8 @@ client ID are all rated <em>weak — no authentication</em>; only TLS mutual aut
 strong factor (the cert) select the identity, and <code>USERSRC(NOACCESS)</code> — not a
 "junk" <code>MCAUSER</code> — is the correct default-deny primitive.</p>
 <h3 id="b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty">B.2 Dead-letter queue scope — QM-wide vs per-counterparty<a class="headerlink" href="#b2-dead-letter-queue-scope-qm-wide-vs-per-counterparty" title="Permanent link">&para;</a></h3>
-<p>There is <strong>no per-channel or per-remote-queue-manager DLQ in MQ 9.4.</strong> <code>DEADQ</code> is
+<p>There is <strong>no per-channel or per-remote-queue-manager DLQ in MQ 10.0.x</strong> (nor in
+9.4; re-checked 2026-10-15). <code>DEADQ</code> is
 a queue-manager attribute (one DLQ per queue manager); <code>USEDLQ(YES|NO)</code> is only a
 per-channel boolean over that single queue — it controls <em>whether</em> a channel
 dead-letters, never <em>which</em> queue.</p>
@@ -2229,20 +2259,57 @@ authorization, does <strong>not</strong> relax the OS-account requirement.</p>
 </tbody>
 </table>
 <h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
-<p>IBM MQ 9.4 documentation:</p>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):</p>
 <ul>
-<li><em>SET CHLAUTH</em> and <em>Channel authentication records</em> — the <code>SSLPEERMAP</code> /
-  <code>ADDRESSMAP</code> rule types, <code>USERSRC</code>, and rule precedence.
-  <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=commands-set-chlauth">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=commands-set-chlauth</a></li>
+<li><em>SET CHLAUTH (create or modify a channel authentication record)</em> — the
+  <code>SSLPEERMAP</code> / <code>ADDRESSMAP</code> rule types, <code>USERSRC</code>, <code>SSLCERTI</code>.
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-set-chlauth-create-modify-channel-authentication-record">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-set-chlauth-create-modify-channel-authentication-record</a>.
+  The only 10.0 change is the z/OS maximum length of <code>ADDRESS</code>, which is out of
+  scope here. (The earlier <code>commands-set-chlauth</code> slug is replaced by this one.)</li>
+<li><em>Channel authentication records</em> (rule precedence; CHLAUTH maps, it does not
+  authenticate) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mechanisms-channel-authentication-records">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mechanisms-channel-authentication-records</a>.
+  Same as 9.4.</li>
 <li><em>setmqaut (grant or revoke authority)</em> — authority keywords and the <code>-g</code> group
-  form. <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-setmqaut-grant-revoke-authority">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-setmqaut-grant-revoke-authority</a></li>
-<li><em>PUTAUT (channel attribute)</em> and <em>Context authority</em> — the <code>DEF</code>/<code>CTX</code> open
-  behaviour and the "queue <strong>and</strong> queue-manager object" set-all-context rule.
-  Search these topic titles at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>.</li>
-<li><em>Using a dead-letter queue</em> — <code>DEADQ</code> (queue-manager) vs <code>USEDLQ</code> (per-channel
-  boolean), and <code>runmqdlq</code> rules-table handling.</li>
-<li><em>Connection authentication (CONNAUTH)</em> — <code>CHCKCLNT</code>, <code>ADOPTCTX</code>, and disabling
-  the check. Search at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>.</li>
+  form.
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-setmqaut-grant-revoke-authority">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-setmqaut-grant-revoke-authority</a>.
+  Same as 9.4.</li>
+<li><em>Authorizations for context</em> — <em>"To use setid or setall authority,
+  authorizations must be granted on both the appropriate queue object and also on
+  the queue manager object."</em>
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authority-authorizations-context">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authority-authorizations-context</a>.
+  Same as 9.4.</li>
+<li><em>Context authority on AIX, Linux, and Windows</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=windows-context-authority-aix-linux">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=windows-context-authority-aix-linux</a>.
+  Same as 9.4.</li>
+<li><em>Channel attributes for MQSC keywords (N-R)</em> (<code>PUTAUT</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-n-r">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-n-r</a>.
+  Same as 9.4.</li>
+<li><em>Channel attributes for MQSC keywords (T-Z)</em> (<code>USEDLQ</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-t-z">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-t-z</a>.
+  Same as 9.4.</li>
+<li><em>ALTER QMGR (alter queue manager settings)</em> (<code>DEADQ</code>, <code>CHLAUTH</code>, <code>CONNAUTH</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings</a>.
+  The attributes this guide uses are unchanged from 9.4.</li>
+<li><em>Using the dead-letter (undelivered message) queue</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=errors-using-dead-letter-undelivered-message-queue">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=errors-using-dead-letter-undelivered-message-queue</a>.
+  Same as 9.4.</li>
+<li><em>runmqdlq (run dead-letter queue handler)</em> and <em>DLQ rules (patterns and
+  actions)</em> (per-counterparty routing downstream of the DLQ) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-runmqdlq-run-dead-letter-queue-handler">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-runmqdlq-run-dead-letter-queue-handler</a>,
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=table-dlq-rules-patterns-actions">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=table-dlq-rules-patterns-actions</a>.
+  Same as 9.4.</li>
+<li><em>Connection authentication</em> and <em>Connection authentication: Configuration</em>
+  (<code>CHCKCLNT</code>, <code>ADOPTCTX</code>, disabling the check) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mechanisms-connection-authentication">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mechanisms-connection-authentication</a>,
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authentication-connection-configuration">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authentication-connection-configuration</a>.
+  Same as 9.4.</li>
+<li><em>User identities in IBM MQ</em> (12-character adopted identities, long identities,
+  stricter user-ID validation) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authentication-user-identities-in-mq">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=authentication-user-identities-in-mq</a>.
+  The 10.0 topic changes the "from" level of the long-identity and validation
+  features from 9.4.3 to 10.0.0 (section 6).</li>
 </ul>
 
 

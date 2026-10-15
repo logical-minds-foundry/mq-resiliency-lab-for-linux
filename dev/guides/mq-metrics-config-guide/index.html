@@ -1576,9 +1576,15 @@
 
 <h1 id="ibm-mq-metrics-monitoring-configuration-enable-data-for-a-collector">IBM MQ metrics &amp; monitoring configuration — enable data for a collector<a class="headerlink" href="#ibm-mq-metrics-monitoring-configuration-enable-data-for-a-collector" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>MQ version:</strong> 9.4 (Multiplatforms)</li>
+<li><strong>MQ version:</strong> 10.0.x (Multiplatforms) — re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
 <li><strong>Status:</strong> Active</li>
-<li><strong>Last validated in lab:</strong> 2026-07-02</li>
+<li><strong>Last validated in lab:</strong> 2026-07-02 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. The <code>MON*</code>, <code>STAT*</code>,
+  <code>ACCT*</code> and <code>MAXHANDS</code> text in <em>ALTER QMGR</em> is unchanged from 9.4 (the 10.0
+  page's edits are to other attributes), and the monitoring topics read the same,
+  so no guide text changed.</li>
 <li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>;
   <a href="../nativeha-log-lifecycle-guide/">Native HA log lifecycle (runbook)</a> — the
   log-health band that reads this lab's out-of-band <code>mqlab_log_*</code> collector metrics
@@ -1602,7 +1608,7 @@ settings, and <code>MAXHANDS</code> headroom for a collector that opens many que
 <p>Out of scope: deploying or configuring the collector itself (the exporter, the
 Prometheus scrape job). MQ's job is only to <em>emit</em> the data; the collector
 attaches its own scrape-side labels (queue-manager name, object name) — MQ does
-not. Attributes here are pinned to <strong>MQ 9.4 Multiplatforms</strong>; z/OS has different
+not. Attributes here are pinned to <strong>MQ 10.0.x Multiplatforms</strong>; z/OS has different
 class-switch semantics and ignores granularity.</p>
 <h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
 <p>Enable a <strong>coherent baseline at the queue manager and let objects inherit it</strong>:</p>
@@ -1825,15 +1831,26 @@ single hot queue to a higher granularity:</p>
 </tbody>
 </table>
 <h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
-<p>IBM MQ 9.4 documentation:</p>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):</p>
 <ul>
 <li><em>ALTER QMGR (alter queue manager settings)</em> —
-  <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-alter-qmgr-alter-queue-manager-settings">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-alter-qmgr-alter-queue-manager-settings</a>
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings</a>
   (authoritative value domains for <code>MONQ</code>, <code>MONCHL</code>, <code>STATMQI</code>, <code>STATQ</code>,
-  <code>STATCHL</code>, <code>STATINT</code>, <code>MAXHANDS</code>, and the <code>ACCT*</code> attributes).</li>
-<li>Search these topic titles at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>:
-  <em>Monitoring your queue manager network</em>, <em>Structure of statistics and accounting
-  messages</em>, and <em>Real-time monitoring</em>.</li>
+  <code>STATCHL</code>, <code>STATINT</code>, <code>MAXHANDS</code>, and the <code>ACCT*</code> attributes). The text for
+  those attributes is unchanged from 9.4 apart from line wrapping.</li>
+<li><em>ALTER queues (alter queue settings)</em> (object-level <code>MONQ</code> / <code>STATQ</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings</a></li>
+<li><em>Monitoring your IBM MQ network</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=performance-monitoring-your-mq-network">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=performance-monitoring-your-mq-network</a></li>
+<li><em>Real-time monitoring</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-real-time-monitoring">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-real-time-monitoring</a></li>
+<li><em>Accounting and statistics messages</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-accounting-statistics-messages">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-accounting-statistics-messages</a></li>
+<li><em>Accounting and statistics message format</em> (replaces the earlier pointer to a
+  topic titled "Structure of statistics and accounting messages"; no topic
+  has that title in the 9.4 table of contents, and this is the closest match) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-accounting-statistics-message-format">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-accounting-statistics-message-format</a></li>
 </ul>
 
 

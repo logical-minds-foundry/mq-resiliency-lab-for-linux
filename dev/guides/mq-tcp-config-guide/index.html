@@ -1666,9 +1666,14 @@
 
 <h1 id="ibm-mq-tcp-configuration-tuning-the-tcp-stanza-for-ha-and-performance">IBM MQ TCP configuration — tuning the TCP stanza for HA and performance<a class="headerlink" href="#ibm-mq-tcp-configuration-tuning-the-tcp-stanza-for-ha-and-performance" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>MQ version:</strong> 9.4 (Multiplatforms)</li>
+<li><strong>MQ version:</strong> 10.0.x (Multiplatforms) — re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
 <li><strong>Status:</strong> Draft — pending review</li>
-<li><strong>Last validated in lab:</strong> 2026-07-02 (config live in lab; guide pending review)</li>
+<li><strong>Last validated in lab:</strong> 2026-07-02 on MQ 9.4.5 (config live in lab; guide
+  pending review). Not yet re-validated live on 10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. Two 10.0 changes are
+  folded in: the client socket-buffer default (A.1) and the new MQTT buffer
+  attributes in the <code>qm.ini</code> <code>TCP</code> stanza (A.1).</li>
 <li><strong>Related guides:</strong> <a href="../mq-json-logging-guide/">JSON diagnostic logging</a>,
   <a href="../mq-metrics-config-guide/">Metrics &amp; monitoring configuration</a></li>
 </ul>
@@ -1684,7 +1689,7 @@ high availability.</p>
 <h2 id="2-scope-version-floor">2. Scope &amp; version floor<a class="headerlink" href="#2-scope-version-floor" title="Permanent link">&para;</a></h2>
 <p>In scope: the <code>qm.ini</code> / <code>mqclient.ini</code> <code>TCP</code> stanza attributes, and the
 <strong>OS-level TCP keepalive settings they depend on</strong> — because the two only work as
-a pair (section 3). Pinned to <strong>MQ 9.4 Multiplatforms</strong>.</p>
+a pair (section 3). Pinned to <strong>MQ 10.0.x Multiplatforms</strong>.</p>
 <p>Out of scope: TLS, ciphers, and certificate configuration — that is the Security
 guide's job; this guide covers the transport, not its encryption. Lab-specific
 values.</p>
@@ -1721,7 +1726,9 @@ connection is detected.</p>
   setup lives in the Security guide.</li>
 <li><strong>Socket buffers (<code>SndBuffSize</code> / <code>RcvBuffSize</code>)</strong> — leave at <code>0</code> (OS-managed)
   unless you have a <em>measured</em> reason to fix them. IBM warns that wrong values
-  hurt TCP performance.</li>
+  hurt TCP performance. On the client side (<code>ClntSndBuffSize</code> /
+  <code>ClntRcvBuffSize</code> in <code>mqclient.ini</code>), MQ 10.0 changed the default: leave them
+  unset unless you have measurements (see A.1).</li>
 </ul>
 <h2 id="4-how-to-configure-it">4. How to configure it<a class="headerlink" href="#4-how-to-configure-it" title="Permanent link">&para;</a></h2>
 <ol>
@@ -1810,9 +1817,19 @@ the client connects; sysctl changes apply when reloaded.</p>
 <td>Seconds MQ waits (over <code>select()</code>) for a nonblocking socket to become ready before connecting; <code>0</code> = rely on the 20-attempt retry.</td>
 </tr>
 <tr>
-<td><code>SndBuffSize</code> / <code>RcvBuffSize</code></td>
+<td><code>SndBuffSize</code> / <code>RcvBuffSize</code> (<code>qm.ini</code>)</td>
 <td><code>0</code> (OS-managed, default) / bytes</td>
 <td>TCP send/receive buffer sizes passed to the OS; MQ's fallback is 32768. Change with great care.</td>
+</tr>
+<tr>
+<td><code>ClntSndBuffSize</code> / <code>ClntRcvBuffSize</code> (<code>mqclient.ini</code>)</td>
+<td>not set (default) / <code>0</code> / bytes</td>
+<td>Client-end buffer sizes. <strong>Changed in MQ 10.0</strong> (see the note below the table): when not set, the client keeps the OS size if it is at least 32768 bytes and requests 32768 otherwise; <code>0</code> leaves sizing to the OS.</td>
+</tr>
+<tr>
+<td><code>MqttSndBuffSize</code> / <code>MqttRcvBuffSize</code> (<code>qm.ini</code>)</td>
+<td><code>0</code> (OS-managed, default) / bytes</td>
+<td><strong>New in the 10.0 topic.</strong> Buffer sizes for MQTT channels only. Not relevant unless you run MQ Telemetry.</td>
 </tr>
 <tr>
 <td><code>SecureCommsOnly</code></td>
@@ -1826,6 +1843,25 @@ the client connects; sysctl changes apply when reloaded.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>9.4 → 10.0 change: client socket-buffer default (data).</strong> The 9.4 client
+topic says of <code>ClntSndBuffSize</code> and <code>ClntRcvBuffSize</code>: <em>"If no value is set, then
+the IBM MQ default, 32768, is used. If the value is set as zero, the operating
+system defaults are used."</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=mqclientini-tcp-stanza-client-configuration-file">9.4.x</a>).
+The 10.0 topic replaces that with: <em>"When creating a TCP/IP connection, the
+client queries the network layer for the current … buffer size … 32768 bytes or
+larger: the client lets the network layer manage the buffer size dynamically …
+less than 32768 bytes: the client requests the network layer to set the buffer
+size to 32768 bytes"</em>, and adds <em>"In previous releases, C clients had the same
+default value and behavior. Other clients had a default value of 32768 bytes."</em>
+(<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file">10.0.x</a>).
+IBM's 10.0.0 change list states the aim: <em>"From IBM MQ 10.0.0, the behavior is
+the same for all clients"</em>, which <em>"generally results in greater throughput of
+messages"</em> (<a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html">What's changed in IBM MQ 10.0.0</a>).
+<em>Judgment:</em> the change mostly affects Java, JMS and .NET clients, which used to
+pin 32 KB. It strengthens this guide's existing advice to leave buffers unset or
+at <code>0</code> unless you have measurements. The <code>qm.ini</code> <code>SndBuffSize</code>/<code>RcvBuffSize</code>
+text is unchanged between 9.4 and 10.0.</p>
 <h3 id="a2-os-keepalive-timers-linux-sysctl">A.2 OS keepalive timers (Linux sysctl)<a class="headerlink" href="#a2-os-keepalive-timers-linux-sysctl" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1924,15 +1960,29 @@ pay off with measured evidence on a specific network path.</p>
 </tbody>
 </table>
 <h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
-<p>IBM MQ 9.4 documentation:</p>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared
+with its 9.4 counterpart, and the differences are noted in A.1):</p>
 <ul>
 <li><em>TCP stanza of the qm.ini file</em> —
-  <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=qmini-tcp-stanza-file">https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=qmini-tcp-stanza-file</a>
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-tcp-stanza-file">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-tcp-stanza-file</a>
   (authoritative for <code>Port</code>, <code>KeepAlive</code>, <code>ListenerBacklog</code>, <code>Connect_Timeout</code>,
-  <code>SndBuffSize</code>/<code>RcvBuffSize</code>, <code>SecureCommsOnly</code>).</li>
-<li>Search these topic titles at <a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>:
-  <em>Channel attributes — Keepalive Interval (KAINT)</em> and <em>Heartbeat interval
-  (HBINT)</em>, for the per-channel keepalive/heartbeat levers.</li>
+  <code>SndBuffSize</code>/<code>RcvBuffSize</code>, <code>SecureCommsOnly</code>). Same as 9.4 for every
+  attribute this guide uses; 10.0 adds <code>MqttSndBuffSize</code>/<code>MqttRcvBuffSize</code>.</li>
+<li><em>TCP stanza of the client configuration file</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=mqclientini-tcp-stanza-client-configuration-file</a>
+  (<code>KeepAlive</code>, <code>Connect_Timeout</code>, <code>ClntSndBuffSize</code>/<code>ClntRcvBuffSize</code>). The
+  client buffer default changed in 10.0 (A.1).</li>
+<li><em>Channel attributes for MQSC keywords (D-L)</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-d-l">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=attributes-channel-mqsc-keywords-d-l</a>
+  (<code>HBINT</code> heartbeat interval and <code>KAINT</code> keepalive interval, the per-channel
+  levers). Same as 9.4.</li>
+<li><em>Using the TCP/IP SO_KEEPALIVE option</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=linux-using-tcpip-so-keepalive-option">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=linux-using-tcpip-so-keepalive-option</a>
+  (<code>KeepAlive=yes</code> in <code>qm.ini</code>; the wait and retry timing is a kernel
+  tunable). Same as 9.4.</li>
+<li><em>What's changed in IBM MQ 10.0.0</em> —
+  <a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html">https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_changed.html</a>
+  ("Change to default TCP buffer size for IBM MQ clients").</li>
 <li>Your operating system's TCP keepalive documentation (<code>tcp_keepalive_time</code>,
   <code>tcp_keepalive_intvl</code>, <code>tcp_keepalive_probes</code> on Linux).</li>
 </ul>

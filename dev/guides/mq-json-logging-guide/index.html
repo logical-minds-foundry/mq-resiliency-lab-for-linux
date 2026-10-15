@@ -1666,9 +1666,15 @@
 
 <h1 id="ibm-mq-json-diagnostic-logging-emit-error-logs-as-json">IBM MQ JSON diagnostic logging — emit error logs as JSON<a class="headerlink" href="#ibm-mq-json-diagnostic-logging-emit-error-logs-as-json" title="Permanent link">&para;</a></h1>
 <ul>
-<li><strong>MQ version:</strong> 9.4 (stanza-based services available from 9.1.0)</li>
+<li><strong>MQ version:</strong> 10.0.x (stanza-based services available from 9.1.0) —
+  re-pinned from 9.4 on 2026-10-15
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)</li>
 <li><strong>Status:</strong> Active</li>
-<li><strong>Last validated in lab:</strong> 2026-07-06</li>
+<li><strong>Last validated in lab:</strong> 2026-07-06 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.</li>
+<li><strong>IBM Docs re-checked:</strong> 2026-10-15 against 10.0.x. Every cited topic reads
+  the same as its 9.4 counterpart, so no existing claim changed. One 10.0
+  addition (remote error-log access) is noted in section 6.</li>
 <li><strong>Related guides:</strong> <a href="../mq-event-monitoring-guide/">Instrumentation event monitoring</a>
   — the complementary <em>event</em> stream (what the queue manager did) to this <em>log</em>
   stream (why);
@@ -1692,7 +1698,7 @@ is a separate concern and a planned guide; this one assumes you already have, or
 will add, whatever transports your logs.</p>
 <p>Version floor: the stanza-based diagnostic message services (<code>Service=File</code> or
 <code>Service=Syslog</code>, <code>Format=json</code>) are available from <strong>MQ 9.1.0</strong>. Content here is
-pinned to <strong>9.4</strong>. Configuration changes take effect on <strong>queue-manager restart</strong>.</p>
+pinned to <strong>10.0.x</strong>. Configuration changes take effect on <strong>queue-manager restart</strong>.</p>
 <h2 id="3-recommendation">3. Recommendation<a class="headerlink" href="#3-recommendation" title="Permanent link">&para;</a></h2>
 <p>Two output styles exist. Pick per environment; they can coexist across a fleet.</p>
 <ol>
@@ -1810,6 +1816,14 @@ name is invisible to log consumers.
   stop-gap; it is undocumented in current MQ and superseded by these stanzas.</li>
 <li><strong>Client filtering is limited.</strong> <code>ExcludeMessage</code> / <code>SuppressMessage</code> are not
   honoured in <code>mqclient.ini</code>; the client surface is severity-filtered only.</li>
+<li><strong>New in 10.0: remote error-log access is raw text, not JSON.</strong> From MQ
+  10.0.0, IBM adds a PCF command, <code>MQCMD_INQUIRE_ERROR_LOG</code>, through which
+  <em>"authorized clients can retrieve the contents of the logs as a series of PCF
+  reply messages. Log data is returned as raw text, chunked into 1MB sized
+  messages"</em>
+  (<a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html">What's new in IBM MQ 10.0.0 for Multiplatforms</a>).
+  <em>Judgment:</em> it is useful for ad-hoc remote reads, but it returns text, not one
+  JSON object per line, so it does not replace the stanzas in this guide.</li>
 </ul>
 <h3 id="how-qmini-gets-written-and-who-owns-it">How <code>qm.ini</code> gets written — and who owns it<a class="headerlink" href="#how-qmini-gets-written-and-who-owns-it" title="Permanent link">&para;</a></h3>
 <p>There are two supported ways to get a stanza into <code>qm.ini</code>, and one behaviour to
@@ -1819,13 +1833,13 @@ be aware of:</p>
   <code>mqs.ini</code>; <code>crtmqm</code> writes the <code>DiagnosticMessages</code> stanza into <code>qm.ini</code> for
   you. MQ owns that copy — you never touch <code>qm.ini</code> for logging.</li>
 <li><strong>Direct edit.</strong> Editing <code>qm.ini</code> with a text editor (or an automation tool) is
-  an <a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms">IBM-supported mechanism</a>;
+  an <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms">IBM-supported mechanism</a>;
   changes take effect on the next queue-manager restart.</li>
 <li><strong>AutoConfig is the one thing that rebuilds <code>qm.ini</code>.</strong> If — and only if — you
   create the queue manager with <code>crtmqm -ii</code> (or add an <code>AutoConfig</code> stanza with
   <code>IniConfig</code>), MQ <strong>discards and rebuilds <code>qm.ini</code> on every start</strong> from a
   cached override file, and <em>"any manual changes to the <code>qm.ini</code> file are lost"</em>
-  (<a href="https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=qmini-automatic-configuration-startup">IBM: automatic configuration of <code>qm.ini</code> at startup</a>).
+  (<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-automatic-configuration-startup">IBM: automatic configuration of <code>qm.ini</code> at startup</a>).
   AutoConfig is IBM-scoped to uniform clusters; <strong>the lab does not use it</strong>, so no
   rebuild happens and hand-placed stanzas persist. If you <em>do</em> adopt AutoConfig,
   put your overrides in the <code>IniConfig</code> file, not in <code>qm.ini</code> directly.</li>
@@ -2028,10 +2042,29 @@ Restart the mqweb server to apply.</p>
   layer, not in MQ.</li>
 </ul>
 <h2 id="appendix-e-references">Appendix E: References<a class="headerlink" href="#appendix-e-references" title="Permanent link">&para;</a></h2>
-<p>Search these topic titles in the IBM MQ 9.4 documentation at
-<a href="https://www.ibm.com/docs/en/ibm-mq/9.4">https://www.ibm.com/docs/en/ibm-mq/9.4</a>: <em>Diagnostic message logging</em>,
-<em>Diagnostic message services</em>, <em>Diagnostic message service stanzas</em>, <em>JSON format
-diagnostic messages</em>, and <em>QMErrorLog stanza</em>.</p>
+<p>IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic reads the same as
+its 9.4 counterpart):</p>
+<ul>
+<li><em>Diagnostic message logging</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-diagnostic-message-logging">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-diagnostic-message-logging</a></li>
+<li><em>Diagnostic message services</em> (<code>File</code> / <code>Syslog</code>, <code>Format</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=stanzas-diagnostic-message-services">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=stanzas-diagnostic-message-services</a></li>
+<li><em>Diagnostic message service stanzas</em> (<code>DiagnosticMessages</code>,
+  <code>DiagnosticMessagesTemplate</code>, <code>DiagnosticSystemMessages</code>, <code>ExcludeMessage</code> /
+  <code>SuppressMessage</code>) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-diagnostic-message-service-stanzas">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-diagnostic-message-service-stanzas</a></li>
+<li><em>JSON format diagnostic messages</em> (the record fields in A.2) —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=codes-json-format-diagnostic-messages">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=codes-json-format-diagnostic-messages</a></li>
+<li><em>QMErrorLog stanza</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-qmerrorlog-stanza">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-qmerrorlog-stanza</a></li>
+<li><em>Changing IBM MQ configuration information in .ini files on Multiplatforms</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms</a></li>
+<li><em>Automatic configuration of qm.ini at startup</em> —
+  <a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-automatic-configuration-startup">https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-automatic-configuration-startup</a></li>
+<li><em>What's new in IBM MQ 10.0.0 for Multiplatforms</em> ("Accessing error logs
+  programmatically") —
+  <a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html">https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html</a></li>
+</ul>
 
 
 

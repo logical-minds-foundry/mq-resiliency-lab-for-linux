@@ -1108,6 +1108,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pinning-to-the-labs-mq-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning to the lab's MQ level
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#house-style" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1549,6 +1560,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pinning-to-the-labs-mq-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pinning to the lab's MQ level
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#house-style" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1638,9 +1660,15 @@ numbered versus lettered so the hierarchy is obvious at a glance.</p>
 <h3 id="front-matter">Front matter<a class="headerlink" href="#front-matter" title="Permanent link">&para;</a></h3>
 <p>Every guide opens with:</p>
 <ul>
-<li><strong>MQ version</strong> — pinned (currently 9.4)</li>
+<li><strong>MQ version</strong> — the lab's pinned MQ level (see
+  <a href="#pinning-to-the-labs-mq-level">Pinning to the lab's MQ level</a>; currently
+  <strong>10.0.x</strong>)</li>
 <li><strong>Status</strong> — Draft or Active</li>
-<li><strong>Last validated in lab</strong> — a date; the freshness signal</li>
+<li><strong>Last validated in lab</strong> — a date <em>and the MQ level it was validated on</em>; the
+  freshness signal</li>
+<li><strong>IBM Docs re-checked</strong> — the date the guide's IBM Docs citations were last
+  resolved and compared at the pinned level (needed whenever the pin moves ahead
+  of the last live validation)</li>
 <li><strong>Related guides</strong> — links across the section</li>
 </ul>
 <h3 id="body-the-how-to-numbered">Body — the how-to (numbered)<a class="headerlink" href="#body-the-how-to-numbered" title="Permanent link">&para;</a></h3>
@@ -1660,7 +1688,8 @@ numbered versus lettered so the hierarchy is obvious at a glance.</p>
 <li><strong>B: Alternatives and tradeoffs</strong> — the evidence behind the section 3 ranking</li>
 <li><strong>C: Complete configuration examples</strong> — the exhaustive stanza / MQSC blocks</li>
 <li><strong>D: Troubleshooting</strong> — symptom → cause → fix</li>
-<li><strong>E: References</strong> — pinned IBM Docs topics (9.4)</li>
+<li><strong>E: References</strong> — IBM Docs topics at the pinned MQ level (currently 10.0.x),
+  one link per topic</li>
 </ul>
 <h2 id="ranking-alternatives">Ranking alternatives<a class="headerlink" href="#ranking-alternatives" title="Permanent link">&para;</a></h2>
 <p>When a task has more than one viable approach, present them <strong>strongest → weakest
@@ -1669,9 +1698,43 @@ option and supply the evidence; do not decide the tradeoff for the reader — th
 is theirs to own. State the compromise plainly ("simpler to operate, but no
 cross-site failover"), never bury it. This keeps a guide honest and useful to a
 reader whose constraints differ from ours.</p>
+<h2 id="pinning-to-the-labs-mq-level">Pinning to the lab's MQ level<a class="headerlink" href="#pinning-to-the-labs-mq-level" title="Permanent link">&para;</a></h2>
+<p>Guides describe the MQ level the lab runs by default. That level has one
+authoritative source, the
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/mq-version"><code>lab/mq-version</code></a>
+pin file (currently <code>10.0.1.0</code>, so guides pin to <strong>MQ 10.0.x</strong>). An older level
+can still be built by changing that pin, but the documented default is 10.0, and
+guides are written for it. Never hard-code a level in this standard or the
+template; follow the pin.</p>
+<ul>
+<li><strong>Cite version-pinned IBM Docs links.</strong> Use the
+  <code>https://www.ibm.com/docs/en/ibm-mq/&lt;level&gt;?topic=&lt;slug&gt;</code> form with the pinned
+  level (today <code>10.0.x</code>), one link per topic. Do not write "search these titles";
+  a reader should be one click from the exact page.</li>
+<li><strong>Resolve every link before citing it.</strong> IBM Docs block the usual web fetchers,
+  so resolve and cache each topic with <code>python3 tools/ibm_doc_cache.py &lt;url&gt;</code>.
+  Topic slugs can differ between levels. If the <code>?topic=</code> form does not resolve,
+  cite the legacy content path (for example
+  <code>https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/Native_HA_overview.html</code>)
+  and say so.</li>
+<li><strong>Label data and judgment.</strong> What an IBM topic says is data: quote it or
+  paraphrase it closely and link it. What the guide recommends on top of it is
+  judgment. A claim proven only in the lab carries the MQ level it was observed
+  on.</li>
+<li><strong>When the pin moves to a new level, re-pin every guide.</strong> Re-resolve each
+  citation at the new level, compare it with the old one, update the text where
+  the product changed, and note each change in the guide with both versions
+  quoted. If a topic has no equivalent at the new level, say so in the guide and
+  name the replacement; never leave a silent old-level link. Claims that only a
+  live check can confirm stay marked as validated on the old level until the next
+  lab bring-up re-validates them. The 9.4 → 10.0.x re-pin
+  (<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555">#1555</a>)
+  is the worked example.</li>
+</ul>
 <h2 id="house-style">House style<a class="headerlink" href="#house-style" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Pin every product reference to <strong>MQ 9.4</strong>.</li>
+<li>Pin every product reference to the lab's pinned MQ level (currently
+  <strong>MQ 10.0.x</strong>; see <a href="#pinning-to-the-labs-mq-level">above</a>).</li>
 <li>Prefer tables for option and parameter enumeration.</li>
 <li>One idea per stanza block; annotate with inline <code>#</code> comments where MQ allows.</li>
 <li>Keep the front-matter <em>last validated in lab</em> date current whenever you touch a
