@@ -20,8 +20,14 @@ and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
 auto-invalidates those baked images — see
 [`docs/development/box-model.md`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md)).
 Bump `lab/mq-version` to rebase the whole lab in one edit. The move to MQ 10.0.1
-(re-pin, rebake and revalidation) is tracked in epic
+(re-pin, rebake and revalidation) was delivered by epic
 [logical-minds-foundry/.github#315](https://github.com/logical-minds-foundry/.github/issues/315).
+Every stack passed a cold-rebuild validation on `10.0.1.0` on both hosts
+([#1474](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1474),
+[#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475)),
+and again after the defaults moved to Ubuntu 26 and RHEL 10
+([#1496](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1496),
+[#1497](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497)).
 
 OS versions follow the same single-source rule. The OS version catalog,
 [`lab/versions.yaml`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml),
@@ -150,7 +156,7 @@ Command groups:
 
 | Group | Subcommands | Purpose |
 |---|---|---|
-| `mqlab qm` | `create` · `destroy` · `up` · `down` · `status` · `e2e` | MQ queue-manager per-stack HA lifecycle (stack-dispatched). `status` on a Native HA CRR stack reports both sites; `e2e` sends a bounded request/reply burst and exits non-zero unless every request round-trips |
+| `mqlab qm` | `create` · `destroy` · `up` · `down` · `status` · `reload` · `e2e` | MQ queue-manager per-stack HA lifecycle (stack-dispatched). `status` on a Native HA CRR stack reports both sites; `reload` restarts the active QM and tells its clients to reconnect (`endmqm -r`; Native HA and RDQM, Pacemaker refuses; see [Failover drills](../operate/index.md#failover-drills)); `e2e` sends a bounded request/reply burst and exits non-zero unless every request round-trips |
 | `mqlab dr` | `cutover` · `failback` | Cross-site DR: cut a stack's live QM over to its DR peer (`cutover`, A→B) and back (`failback`, B→A) |
 | `mqlab vm` | `inventory` · `roster` · `ssh` | Guest VM maps (Ansible inventory / salt-ssh roster) + interactive shell |
 | `mqlab obs` | `targets` · `dashboard` · `net-state` · `reach-peers` · `open` | Observability renders (Prometheus targets, Grafana dashboard) + reach the Watcher |
