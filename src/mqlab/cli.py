@@ -1973,6 +1973,116 @@ def qm_status(stack: str) -> None:
     _qm_dispatch(stack, "qm-status")
 
 
+# --- qm reload: restart the active QM, telling reconnectable clients to reconnect (#1514) --
+# IBM's `endmqm -r` semantics, through the per-mechanism IBM-documented path. The stack's
+# `qm-reload` verb is either a playbook (site-qm-reload.yml: locate the one Running
+# instance, restart it, wait for dspmq to show it back, report the elapsed time) or a
+# `refuse` reason for an arm where no honest reconnect-restart exists (Pacemaker).
+_QM_RELOAD = "qm-reload"
+
+_ReloadTimeout = Annotated[
+    int,
+    typer.Option(
+        "--timeout",
+        min=1,
+        help="seconds each step may take (the restart, then the wait for Running); "
+        "exceeding it is an error",
+    ),
+]
+
+
+def _qm_reload_hosts(deps: Deps, stack: Stack, cluster: str) -> str:
+    """The ansible host pattern the active QM is searched in: cluster group + running DR groups.
+
+    The active instance may be on site B after a DR cutover, so the DR groups are searched
+    too, but only when their guests are running (`bootstrap --no-dr` leaves them down); a
+    skipped DR group is noted, never silent. The cluster group itself must be running.
+    """
+    domains = _probe_states(deps)
+    down = [h for h in group_hosts(cluster) if classify(domains, h) != RUNNING]
+    if down:
+        note = f"{', '.join(down)}: not running — run mqlab bootstrap {stack.name} first"
+        deps.renderer.note(note)
+        deps.transcript.write(note)
+        raise typer.Exit(code=3)
+    groups = [cluster]
+    for dr_group in stack.dr_groups:
+        hosts = group_hosts(dr_group)
+        if hosts and all(classify(domains, h) == RUNNING for h in hosts):
+            groups.append(dr_group)
+            continue
+        note = f"{dr_group}: not running — not searched for the active {stack.qm.qm_app}"
+        deps.renderer.note(note)
+        deps.transcript.write(note)
+    return ":".join(groups)
+
+
+def _qm_reload_run(stack_name: str, timeout: int) -> None:
+    stack = _stack_qm_or_exit(stack_name)
+    impl = stack.verbs.get(_QM_RELOAD)
+    if not impl:
+        typer.echo(f"stack {stack_name} does not implement verb {_QM_RELOAD!r}", err=True)
+        raise typer.Exit(code=2)
+    [(kind, value)] = impl.items()
+    if kind == "refuse":
+        typer.echo(f"mqlab qm reload {stack_name}: refused — {value}", err=True)
+        raise typer.Exit(code=2)
+    if kind != "playbook":
+        typer.echo(f"mqlab qm reload {stack_name}: unsupported verb kind {kind!r}", err=True)
+        raise typer.Exit(code=2)
+    cluster = stack.cluster_group or ""
+    if not cluster or not group_hosts(cluster):
+        typer.echo(
+            f"mqlab qm reload {stack_name}: cluster group {stack.cluster_group!r} "
+            "has no hosts in the topology",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    _require_record_if_live(stack.name)  # a live stack with no OS record is refused (#280)
+    deps = build_deps(_QM_RELOAD, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        hosts = _qm_reload_hosts(deps, stack, cluster)
+        _render_inventory(deps)
+        step = CommandStep(
+            f"{stack.name} {_QM_RELOAD}",
+            Command(
+                [
+                    "ansible-playbook",
+                    str(value),
+                    "-e",
+                    f"qm_stack={stack.name}",
+                    "-e",
+                    f"qm_name={stack.qm.qm_app}",
+                    "-e",
+                    f"qm_mechanism={stack.mechanism}",
+                    "-e",
+                    f"qm_hosts={hosts}",
+                    "-e",
+                    f"qm_reload_timeout={timeout}",
+                ],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@qm_app.command("reload")
+def qm_reload(stack: str, timeout: _ReloadTimeout = 300) -> None:
+    """Restart the active QM with client reconnect (the endmqm -r equivalent)."""
+    _qm_reload_run(stack, timeout)
+
+
 _E2eCount = Annotated[
     int, typer.Option("--count", min=1, help="requests to send; every one must round-trip")
 ]

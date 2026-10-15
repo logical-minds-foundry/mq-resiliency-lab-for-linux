@@ -354,6 +354,15 @@ stacks:
       qm-up:      { pcs: "resource enable mq_group" }
       qm-down:    { pcs: "resource disable mq_group" }
       qm-status:  { pcs: "status resources" }
+      # No honest reconnect-restart on this arm (#1514): refused, never faked.
+      qm-reload:
+        refuse: >-
+          Pacemaker owns this queue manager through its mq_qm systemd resource, whose
+          stop is `endmqm -w` (no -r), so a Pacemaker restart never tells clients to
+          reconnect; an `endmqm -r` behind Pacemaker's back is a resource failure that
+          Pacemaker recovers, not a planned restart. IBM documents no reconnect-restart
+          for a Pacemaker-managed queue manager outside RDQM. The verb runs on the rdqm
+          and native-ha stacks.
   rdqm-rhel:
     mechanism: rdqm
     os_family: rhel
@@ -370,6 +379,7 @@ stacks:
       qm-status: { cmd: "/opt/mqm/bin/rdqmstatus -m {qm}" }
       qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
+      qm-reload: { playbook: site-qm-reload.yml }   # endmqm -r + strmqm on the primary (#1514)
   nativeha-rhel-crr:
     mechanism: native-ha
     os_family: rhel
@@ -386,6 +396,7 @@ stacks:
       qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
       qm-up:       { cmd: "systemctl start mqmonitor@{qm}" }
       qm-down:     { cmd: "systemctl stop mqmonitor@{qm}" }
+      qm-reload:   { playbook: site-qm-reload.yml }   # systemctl reload mqmonitor@ (#1514)
       dr-cutover:  { playbook: site-nativeha-switchover.yml }
       dr-failback: { playbook: site-nativeha-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
@@ -410,6 +421,7 @@ stacks:
       qm-status:   { cmd: "su - mqm -c '/opt/mqm/bin/dspmq -m {qm} -o nativeha -x'" }
       qm-up:       { cmd: "systemctl start mqmonitor@{qm}" }
       qm-down:     { cmd: "systemctl stop mqmonitor@{qm}" }
+      qm-reload:   { playbook: site-qm-reload.yml }   # systemctl reload mqmonitor@ (#1514)
       dr-cutover:  { playbook: site-nativeha-ubuntu-switchover.yml }
       dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }

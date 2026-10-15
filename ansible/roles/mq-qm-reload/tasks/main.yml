@@ -1,0 +1,35 @@
+---
+# Reconnect-restart the queue manager on THIS node, which site-qm-reload.yml has already
+# established as the one running the active instance (#1514). Dispatches on the stack's
+# HA mechanism to the IBM-documented path for it; any other mechanism is refused here as
+# a backstop (the CLI's topology verb is the primary gate).
+- name: "assert {{ qm_mechanism }} has an IBM-documented reconnect-restart"
+  ansible.builtin.assert:
+    that:
+      - qm_mechanism in ['native-ha', 'rdqm']
+      - qm_name | length > 0
+    fail_msg: >-
+      No reconnect-restart path for mechanism {{ qm_mechanism | default('(unset)') }};
+      only native-ha and rdqm have one.
+
+- name: "record the start time on {{ inventory_hostname }}"
+  ansible.builtin.command:
+    argv: [date, "+%s"]
+  register: _qm_reload_t0
+  changed_when: false
+
+- name: "reconnect-restart {{ qm_name }} ({{ qm_mechanism }})"
+  ansible.builtin.include_tasks: "{{ qm_mechanism }}.yml"
+
+- name: "record the end time on {{ inventory_hostname }}"
+  ansible.builtin.command:
+    argv: [date, "+%s"]
+  register: _qm_reload_t1
+  changed_when: false
+
+- name: "report the reconnect-restart of {{ qm_name }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ qm_name }} reconnect-restarted on {{ inventory_hostname }} ({{ qm_mechanism }});
+      back in {{ (_qm_reload_t1.stdout | int) - (_qm_reload_t0.stdout | int) }}s.
+      {{ qm_reload_summary }}
