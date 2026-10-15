@@ -300,6 +300,9 @@
     # record directly, so we assert the record itself (not the effective authority on one
     # queue, which cannot distinguish a specific grant from the namespace one). '**' is
     # single-quoted so the mqm login shell does not glob it.
+    # #1511: MQ 10.0.1 dmpmqaut writes its records to STDERR (rc 0, empty stdout), while
+    # dspmqaut still uses stdout, so the evidence is read from both streams (ev_mon_ns_text)
+    # and stays independent of which one IBM writes to. A non-zero rc still fails the task.
     - name: evidence -- mqmon +dsp +inq on the queue namespace (** generic profile)
       ansible.builtin.command:
         cmd: "su - mqm -c \"/opt/mqm/bin/dmpmqaut -m {{ qm }} -t queue -n '**' -g mqmon\""
@@ -307,6 +310,11 @@
       run_once: true
       delegate_to: "{{ active_host }}"
       register: ev_mon_ns
+
+    - name: evidence -- the dmpmqaut record from stdout and stderr (#1511)
+      ansible.builtin.set_fact:
+        ev_mon_ns_text: "{{ (ev_mon_ns.stdout | default('')) ~ '\n' ~ (ev_mon_ns.stderr | default('')) }}"
+      run_once: true
 
     - name: report the captured authorization evidence
       ansible.builtin.debug:
@@ -319,7 +327,7 @@
           - "APP.REPLY mqmon : {{ ev_mon.stdout | default('') }}"
           - "CMDQ mqmon : {{ ev_mon_cmdq.stdout | default('') }}"
           - "ADMIN.TOPIC mqmon : {{ ev_mon_topic.stdout | default('') }}"
-          - "QUEUE ** mqmon : {{ ev_mon_ns.stdout | default('') }}"
+          - "QUEUE ** mqmon : {{ ev_mon_ns_text }}"
       run_once: true
 
     - name: assert the CHLAUTH posture + the #844/N5 DLQ grant + the #936 mqmon exporter grants
@@ -336,9 +344,10 @@
           - "'sub' in (ev_mon_topic.stdout | default(''))"
           # #943: the queue-namespace grant (PROFILE('**') OBJTYPE(QUEUE) +dsp +inq) — the
           # coverage gate proven live (§3). Read-only: dsp+inq, no put/get in the record.
-          - "'**' in (ev_mon_ns.stdout | default(''))"
-          - "'dsp' in (ev_mon_ns.stdout | default(''))"
-          - "'inq' in (ev_mon_ns.stdout | default(''))"
+          # #1511: both streams (10.0.1 dmpmqaut writes the record to stderr).
+          - "'**' in ev_mon_ns_text"
+          - "'dsp' in ev_mon_ns_text"
+          - "'inq' in ev_mon_ns_text"
         fail_msg: "authorization evidence FAILED -- see the report task above."
         success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936) + dsp/inq on the queue namespace PROFILE('**') (#943)."
       run_once: true
