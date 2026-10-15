@@ -35,11 +35,18 @@ SOFTENERS = ("ignore_errors", "failed_when", "rescue")
 
 
 def _load() -> ModuleType:
+    # No bytecode: a __pycache__/*.pyc under ansible/roles/ breaks the tests that read
+    # every role file as text (test_host_obs.py hit it in CI).
     spec = importlib.util.spec_from_file_location("rdqm_corosync_heartbeat", MODULE_PATH)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    saved = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = saved
     return module
 
 
