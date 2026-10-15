@@ -4,6 +4,15 @@
 > group** across 3 nodes. RDQM bundles and manages the DRBD + Pacemaker stack
 > itself — you configure RDQM, not DRBD/Pacemaker directly.
 >
+> **Versions (2026-10-15).** The commands were first written for MQ 9.4.5 on
+> RHEL 9.6, and the paths below are the RHEL 9 (`el9`) ones. The lab now pins MQ
+> **10.0.1.0**, and `rdqm-rhel` defaults to **RHEL 10.2** (#1473; RHEL 9.6 stays
+> selectable). RDQM on RHEL 10 needs MQ 10.0.1 or later. On RHEL 10, use the `el10`
+> media directories: `el10/kmod-drbd-9`, `el10/pacemaker-3` and `el10/drbd-utils-9`
+> in place of `el9/kmod-drbd-9`, `el9/pacemaker-2` and `el9/drbd-utils-9`. Also see
+> gotcha 7 (§6). Sources: `ansible/roles/rdqm-install/vars/RedHat-{9,10}.yml` and
+> [`os-version-support-matrix.md`](os-version-support-matrix.md) §2.4.
+>
 > Lab IPs below are placeholders — **substitute your site's addresses.**
 >
 > Sources: `ansible/roles/rdqm-install`, `ansible/roles/rdqm-ha`,
@@ -18,7 +27,7 @@
 
 | Item | Requirement |
 |---|---|
-| OS | RHEL 9.6 x86_64 |
+| OS | RHEL 10.2 x86_64 (the lab default; needs MQ 10.0.1+ and an x86-64-v3 CPU) or RHEL 9.6 x86_64 |
 | Spare disk | e.g. `/dev/vdb` ≥ 10 GB, **unpartitioned**, for the `drbdpool` VG |
 | Replication NIC | A dedicated subnet/interface per node (the `HA_Replication` address) |
 | Data NIC | Subnet that carries the QM listener (port 1414) + floating IP |
@@ -101,12 +110,22 @@ Node:
   HA_Replication=172.16.1.33
 ```
 
-Initialize the replicated-data subsystem on each node:
+Initialize the replicated-data subsystem on each node, **one node at a time**:
 
 ```bash
 /opt/mqm/bin/rdqmadm -c
 /opt/mqm/bin/rdqmstatus -n     # verify all 3 nodes online
+crm_attribute --type crm_config --name stonith-enabled --query --quiet   # must print false
 ```
+
+Never run `rdqmadm -c` on a site's nodes in parallel (#1488). Its cluster lock
+(the `rdqm-lock` attribute) is not atomic. Two nodes that start together can both
+"hold" it, and both then skip the site's cluster-wide setup, `stonith-enabled=false`
+included. `crtmqm` then fails with AMQ3817E ("no STONITH resources have been
+defined"). The `rdqm-ha` role runs the step with `throttle: 1`, then fails loud
+unless every node reads `stonith-enabled` as `false`. The lock behaviour is inferred
+from `RDQM.0.LOG` (judgment); IBM's procedure says to run the command on each
+server, and does not say whether the runs may overlap.
 
 ### Heartbeat timeout: 10 s (IBM's VM value)
 
@@ -240,6 +259,14 @@ RDQM names a queue manager's Pacemaker and DRBD resources after the QM's
 5. **HA-only cannot be converted in place to HA/DR** — if you'll ever need
    cross-site DR, create the QM with the DR flags from the start (HA-only →
    HA/DR means delete + recreate, losing QM contents).
+6. **`rdqmadm -c` one node at a time** — parallel runs can skip the site's
+   cluster setup, and `crtmqm` fails with AMQ3817E (#1488; see §2).
+7. **RHEL 10 (MQ 10.0.1+) needs two extra steps.** IBM's bundled crmsh imports
+   `distutils`, which RHEL 10's Python no longer has, so install
+   `python3-setuptools` from the DVD (#1484). Under SELinux enforcing, RHEL 10's
+   policy blocks the DRBD handlers RDQM uses, so DR stays at "Waiting for initial
+   connection"; the lab loads a small CIL module for it (#1486). Both are described in
+   [`os-version-support-matrix.md`](os-version-support-matrix.md) §2.4.
 
 ## 7. Optional: HA/DR (3+3, two sites)
 

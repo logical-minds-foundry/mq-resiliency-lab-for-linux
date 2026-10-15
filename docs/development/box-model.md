@@ -191,8 +191,9 @@ migrate a host:
 **Host-resolved vs. arch-pinned.** The eight Ubuntu fat boxes are **host-resolved**:
 each builds natively for whatever architecture the host runs — `aarch64` on an
 Apple-silicon host, `x86_64` on an x86 host — so the guest arch is never pinned.
-The two RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`) are **`x86_64`-only**;
-building either on an ARM host is **refused**, not emulated (design D11) — their
+The four RHEL fat boxes (`mq-rdqm-rhel9`, `mq-nativeha-rhel9`, `mq-rdqm-rhel10`,
+`mq-nativeha-rhel10`) are **`x86_64`-only**;
+building any of them on an ARM host is **refused**, not emulated (design D11) — their
 RHEL DVD and MQ's LinuxX64 tarball are x86_64 artifacts. The Pacemaker arm's SAN
 targets (`san-a`/`san-b`) carry no MQ payload; they boot the host-resolved
 `san-ubuntu26` box, which bakes their DRBD + LIO install halves on the target OS
@@ -630,8 +631,9 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   see [`box-bake-manifest.md`](box-bake-manifest.md#the-bakeconfigure-line). The
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
-  For the **MQ-bearing** boxes (`mq-rdqm-rhel9`, `mq-client-ubuntu26`,
-  `mq-nativeha-rhel9`, `mq-nativeha-ubuntu24` — the roles flagged `mq_bearing: true`
+  For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client` and
+  `mq-nativeha` roles, for example `mq-rdqm-rhel10`, `mq-client-ubuntu26`,
+  `mq-nativeha-rhel10` and `mq-nativeha-ubuntu26` — the roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to

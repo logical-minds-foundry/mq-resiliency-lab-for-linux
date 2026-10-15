@@ -175,7 +175,8 @@ sco.CertificateLabel = "app-client"
 
 qmgr = ibmmq.QueueManager(None)
 # MQCNO_CLIENT_BINDING is required: this guest has the full MQ server install, so
-# ibmmq would otherwise connect in local bindings (2058, or 2046 with RECONNECT; #1480)
+# ibmmq would otherwise connect in local bindings (2058, or 2046 with RECONNECT; #1480).
+# A temporary workaround for upstream ibm-messaging/mq-mqi-python#29; #1545 retires it.
 qmgr.connect_with_options("NHAUAPP", cd=cd, sco=sco, opts=C.MQCNO_CLIENT_BINDING)
 
 md = ibmmq.MD()

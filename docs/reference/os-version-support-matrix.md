@@ -370,7 +370,9 @@ made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
   transaction: it does not run scriptlets, weigh conflicts beyond the ones
   listed, or pick between alternative providers the way dnf would. It shows
   that nothing is missing from the DVD. The bake
-  ([#1442](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1442))
+  ([#1442](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1442),
+  superseded by the per-host validation
+  [#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475))
   is the real dnf transaction.
 - **[data] (local) Pacemaker 3 touch points.** The lab drives RDQM through
   IBM's own commands (`rdqmadm`, `rdqmstatus`, `rdqmdr`, `crtmqm -sx`). Its only
@@ -438,7 +440,8 @@ made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
 - **[judgment] Still to prove, live.** The `mq-rdqm-rhel10` bake (#1442) and
   the cold-rebuild row `rdqm-rhel@10` in the MQ 10.0.1 validation matrix
   ([#1443](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1443))
-  are human-operated and have **not run yet**. The row must:
+  are human-operated and have **not run yet**. (Both were later superseded by the
+  per-host validations #1474 and #1475; the row ran in #1475.) The row must:
   - bring up `rdqm-rhel` with `os: rhel:10` from a cold rebuild in one pass;
   - show the install-time kmod choice in the bake log (the `modver` task
     output);
@@ -467,6 +470,15 @@ made it the default once the cold-rebuild row passed (see "Decision (2026-10-14,
   The live Pacemaker 3 `crm_mon` XML and `rdqmstatus -m` matched the collector's
   fixtures. The dashboard attestation was waived (2026-10-13) and step 7 passed
   on infrastructure evidence.
+- **[data] (local) Re-validated as the default.** After the flip, the cloud x86_64
+  validation of the new defaults
+  ([#1497](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497))
+  closed `Outcome: SUCCESS`
+  ([result](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497#issuecomment-6176636760)).
+  Its `rdqm-rhel@10` row, with no build file, came up from a cold rebuild in one
+  pass, recorded `os: rhel:10`, showed HA and DR `Normal`, passed `qm e2e` 20/20,
+  and carried the QM-derived resource names from #1472 (`rdqmapp`, `rdqmapp.dr`).
+  The `rdqm-rhel@9` row, from a build file, passed the same steps.
 - **[data] IBM still supports it.** The kernel-modules page (modified 2026-10-13,
   re-fetched 2026-10-14 with a browser user-agent `curl`) still has its "RHEL 10
   kernel versions" table: kernel `6.12.0-211.65.1`, validated IBM MQ version

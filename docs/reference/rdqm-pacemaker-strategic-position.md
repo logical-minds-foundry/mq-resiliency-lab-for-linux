@@ -24,6 +24,23 @@
 > `python3 tools/ibm_doc_cache.py` (cite `content.txt`, with the `source_url`
 > in `meta.json`, under `build/cache/refs/ibm-docs/`). IBM Support pages, the
 > kmod JSON and the SPCR JSON were fetched with a browser user-agent.
+>
+> **Update (2026-10-15).** MQ 10.0.1 shipped on 2026-10-13, after this note was
+> written. Its RHEL 10 RDQM statements (§3.3, §8) are now settled:
+>
+> - **[data] (lab)** The 10.0.1.0 tarball ships `el10` kmods, and `modver` picks
+>   one for the lab's RHEL 10.2 GA kernel
+>   ([#1409](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1409)).
+> - **[data] (lab)** `rdqm-rhel` offers RHEL 10
+>   ([#1440](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1440))
+>   and defaults to it
+>   ([#1473](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1473)).
+>   It passed cold-rebuild validations
+>   ([#1475](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475),
+>   [#1497](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497)).
+>
+> The decision in §1 is unchanged. The current support cells are in
+> [`os-version-support-matrix.md`](os-version-support-matrix.md) §2.4.
 
 ## 1. Decision (recorded 2026-10-09)
 
@@ -419,7 +436,8 @@ options:
 ## 8. Open items
 
 - Verify the 10.0.1 Developer tarball's `el10/` kmods and the `modver` pick for
-  the RHEL 10.2 GA kernel, then update the support matrix (#1405).
+  the RHEL 10.2 GA kernel, then update the support matrix (#1405). *Done
+  2026-10-13 (#1405, #1409); see the update at the top of this note.*
 - Re-decide the RHEL 9.6 → 9.8 re-pin now that `modver` selects the kmod
   (#1396, #1408).
 - Record this outcome in the #280 retrospective §5
