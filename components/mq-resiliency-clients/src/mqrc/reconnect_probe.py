@@ -32,9 +32,20 @@ def probe(qm, conn, queue_name, puts=PUTS, interval=INTERVAL_S):
     qmgr = connect_client(qm, cd, opts=ibmmq.CMQC.MQCNO_RECONNECT_Q_MGR)
     print("connected", flush=True)
     q = ibmmq.Queue(qmgr, queue_name)
-    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT)
-    md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
+    # NEW_MSG_ID + NEW_CORREL_ID: every probe put gets its own QM-generated ids,
+    # even if a descriptor were ever reused (#1549). The probe correlates nothing,
+    # so a generated CorrelId is safe and keeps each put distinct on both keys.
+    pmo = ibmmq.PMO(
+        Options=(
+            ibmmq.CMQC.MQPMO_SYNCPOINT
+            | ibmmq.CMQC.MQPMO_NEW_MSG_ID
+            | ibmmq.CMQC.MQPMO_NEW_CORREL_ID
+        )
+    )
     for i in range(puts):
+        # A fresh MD per put: MQPUT writes the generated ids back into the
+        # descriptor, so a reused MD would resend them on every later put.
+        md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
         try:
             q.put(b"reconnect-probe", md, pmo)
             qmgr.commit()
