@@ -1,0 +1,52 @@
+---
+# RDQM: `endmqm -r` then `strmqm` on the RDQM's primary node (#1514).
+#
+# IBM (10.0.x, "Starting, stopping, and displaying the state of a DR/HA RDQM"): "You must
+# run the commands to start and stop a queue manager on the primary node for that queue
+# manager." To stop: "endmqm qmname ... Pacemaker ceases to manage the RDQM, and then the
+# RDQM is ended. All other endmqm parameters can be used when stopping an RDQM." To
+# start: "strmqm qmname ... The RDQM is started, and Pacemaker starts managing the RDQM."
+# The commands run as mqm, which the lab adds to haclient (IBM: "a user that belongs to
+# both the mqm and haclient groups").
+#
+# The endmqm flags are the ones IBM's own 10.0.1 Native HA reload uses (mqmonitor.py
+# qmstop with client_reconn): -r tells reconnectable clients to reconnect (IBM endmqm
+# reference), -tp 29 bounds the wait for applications to disconnect, -w returns only once
+# the queue manager has ended.
+
+- name: "endmqm -r {{ qm_name }} on its primary node (clients told to reconnect)"
+  ansible.builtin.command:
+    argv: [su, "-", mqm, "-c", "/opt/mqm/bin/endmqm -r -tp 29 -w {{ qm_name }}"]
+  changed_when: true
+  timeout: "{{ qm_reload_timeout | int }}"
+
+- name: "start {{ qm_name }} again, then wait for it to report Running"
+  block:
+    - name: "strmqm {{ qm_name }} on the same primary node (Pacemaker resumes managing it)"
+      ansible.builtin.command:
+        argv: [su, "-", mqm, "-c", "/opt/mqm/bin/strmqm {{ qm_name }}"]
+      changed_when: true
+      timeout: "{{ qm_reload_timeout | int }}"
+
+    - name: "poll dspmq until {{ qm_name }} is Running on {{ inventory_hostname }}"
+      ansible.builtin.command:
+        argv: [su, "-", mqm, "-c", "/opt/mqm/bin/dspmq -n -m {{ qm_name }}"]
+      register: _qm_rdqm_state
+      changed_when: false
+      until: "'STATUS(RUNNING)' in _qm_rdqm_state.stdout"
+      retries: "{{ ((qm_reload_timeout | int) / (qm_reload_poll_delay | int)) | round(0, 'ceil') | int }}"
+      delay: "{{ qm_reload_poll_delay | int }}"
+  rescue:
+    - name: "fail: {{ qm_name }} was ended but is not Running again"
+      ansible.builtin.fail:
+        msg: >-
+          {{ qm_name }} was ended on {{ inventory_hostname }} but did not report
+          STATUS(RUNNING) within {{ qm_reload_timeout }}s, and Pacemaker does not manage an
+          RDQM that endmqm stopped. Failed step: {{ ansible_failed_task.name }}.
+          Last dspmq: {{ _qm_rdqm_state.stdout | default('(not reached)') }}
+          Start it on this primary node (IBM: strmqm runs on the primary):
+          su - mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}'; then check mqlab qm status {{ qm_stack }}
+
+- name: "record the RDQM outcome"
+  ansible.builtin.set_fact:
+    qm_reload_summary: "{{ _qm_rdqm_state.stdout | trim }}"

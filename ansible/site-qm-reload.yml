@@ -1,0 +1,72 @@
+# Reconnect-restart of a stack's active queue manager (#1514): `mqlab qm reload <stack>`.
+#
+# End the active QM telling reconnectable clients to reconnect (IBM's `endmqm -r`
+# semantics), start it again, and fail loud unless dspmq shows it back within
+# qm_reload_timeout seconds. The elapsed time is reported. Per-mechanism, IBM-documented
+# paths only (role mq-qm-reload):
+#   native-ha: `systemctl reload mqmonitor@<QM>` on the active instance
+#   rdqm:      `endmqm -r` then `strmqm` on the RDQM's primary node
+# The Pacemaker arm has no honest equivalent; its topology verb refuses instead.
+#
+# The CLI passes every input (nothing here defaults a stack's identity):
+#   -e qm_stack=<stack> -e qm_name=<QM> -e qm_mechanism=<native-ha|rdqm>
+#   -e qm_hosts=<group[:group...]>   # cluster group + running DR groups
+#   -e qm_reload_timeout=<seconds>
+
+- name: Require the CLI-supplied inputs (a missing qm_hosts would otherwise match no host)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert every input is set
+      ansible.builtin.assert:
+        that:
+          - qm_stack | default('') | length > 0
+          - qm_name | default('') | length > 0
+          - qm_mechanism | default('') | length > 0
+          - qm_hosts | default('') | length > 0
+        fail_msg: >-
+          site-qm-reload.yml needs -e qm_stack= -e qm_name= -e qm_mechanism= -e qm_hosts=;
+          run it through: mqlab qm reload <stack>
+
+- name: Locate the one Running instance of the queue manager
+  # The default only keeps a bare syntax check parseable; the play above has already
+  # failed the run when qm_hosts is unset.
+  hosts: "{{ qm_hosts | default('qm_hosts_unset') }}"
+  become: true
+  gather_facts: false
+  any_errors_fatal: true   # an unreachable node must stop the run, not shrink the search
+  tasks:
+    - name: "read this node's {{ qm_name }} status (dspmq -n: untranslated)"
+      ansible.builtin.command:
+        argv: [su, "-", mqm, "-c", "/opt/mqm/bin/dspmq -n -m {{ qm_name }}"]
+      register: _qm_state
+      changed_when: false
+
+    - name: "mark whether THIS node runs the active {{ qm_name }}"
+      ansible.builtin.set_fact:
+        # 'STATUS(RUNNING)' (closing paren) is only the active/primary instance; a Native HA
+        # replica reads STATUS(REPLICA), an RDQM standby STATUS(RUNNING ELSEWHERE).
+        qm_reload_is_active: "{{ ('STATUS(RUNNING)' in _qm_state.stdout) | bool }}"
+
+    - name: "assert exactly one node runs {{ qm_name }}"
+      ansible.builtin.assert:
+        that:
+          - "ansible_play_hosts | map('extract', hostvars, 'qm_reload_is_active') | select('equalto', true) | list | length == 1"
+        fail_msg: >-
+          Expected exactly one node with {{ qm_name }} STATUS(RUNNING) across {{ qm_hosts }},
+          found
+          {{ ansible_play_hosts | map('extract', hostvars, 'qm_reload_is_active') | select('equalto', true) | list | length }}.
+          Nothing was restarted. Check it with: mqlab qm status {{ qm_stack }}
+
+    - name: Group the active node for the restart play
+      ansible.builtin.group_by:
+        key: qm_reload_active
+      when: qm_reload_is_active | bool
+
+- name: Reconnect-restart the active queue manager
+  hosts: qm_reload_active
+  become: true
+  gather_facts: false
+  roles:
+    - mq-qm-reload
