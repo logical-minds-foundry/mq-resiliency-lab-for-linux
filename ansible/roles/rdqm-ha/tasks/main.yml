@@ -59,3 +59,130 @@
       stonith-enabled is '{{ rdqm_stonith_enabled.stdout | trim }}', not 'false':
       rdqmadm -c did not complete RDQM's cluster-wide setup on this site, and crtmqm
       would fail with AMQ3817E (#1488).
+
+# RDQM HA heartbeat timeout (#1515), set as IBM's MQ 10.0 topic "Changing the heartbeat
+# timeout for HA RDQM" says
+# (https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/heartbeat_timeout.html):
+#   crm maintenance on -> edit corosync.conf on each node (token, and on each heartbeat
+#   link knet_ping_timeout = token/2, knet_ping_interval = token/20, knet_pong_count = 2)
+#   -> systemctl restart corosync on each node -> check totem.token with corosync-cmapctl
+#   -> crm maintenance off.
+# Runs after rdqmadm -c, which writes corosync.conf, and before any queue manager exists.
+# Idempotent: the maintenance window and the restart run only when a node's file changed
+# or a node's running token is not the target, so re-provisioning a done site changes
+# nothing. The value, and why the cloud host uses it too, are in defaults/main.yml.
+- name: read the running corosync heartbeat timeout (before)
+  ansible.builtin.command:
+    argv: [corosync-cmapctl, totem.token]
+  register: rdqm_hb_before
+  changed_when: false
+  become: true
+
+# A totem.token absent from cmap means corosync runs IBM's documented 3 s default.
+- name: note this node's running heartbeat timeout
+  ansible.builtin.set_fact:
+    rdqm_hb_running_ms: >-
+      {{ rdqm_hb_before.stdout
+         | regex_search('(?m)^totem\.token \(\w+\) = (\d+)$', '\1')
+         | default(['3000'], true) | first | int }}
+
+- name: "the heartbeat timeout is within IBM's limits (fail loud)"
+  ansible.builtin.assert:
+    that:
+      - rdqm_heartbeat_token_ms | int >= 3000
+      - rdqm_heartbeat_token_ms | int <= 120000
+      - rdqm_heartbeat_token_ms | int <= 4 * (rdqm_hb_running_ms | int)
+    fail_msg: >-
+      rdqm_heartbeat_token_ms={{ rdqm_heartbeat_token_ms }} is outside IBM's 3000-120000 ms
+      range, or more than four times the running {{ rdqm_hb_running_ms }} ms. IBM says to
+      raise the timeout in steps of less than four times the current value, so set a
+      smaller value first (#1515).
+
+- name: set the heartbeat timeout in corosync.conf (IBM's token and knet values)
+  rdqm_corosync_heartbeat:
+    token: "{{ rdqm_heartbeat_token_ms | int }}"
+  register: rdqm_hb_conf
+  become: true
+
+- name: note whether this node's corosync needs restarting
+  ansible.builtin.set_fact:
+    rdqm_hb_restart: >-
+      {{ rdqm_hb_conf.changed
+         or (rdqm_hb_running_ms | int) != (rdqm_heartbeat_token_ms | int) }}
+
+- name: apply the heartbeat timeout across the site in Pacemaker maintenance mode
+  when: >-
+    ansible_play_hosts | map('extract', hostvars, 'rdqm_hb_restart')
+    | map('bool') | select | list | length > 0
+  become: true
+  block:
+    - name: crm maintenance on
+      ansible.builtin.command:
+        argv: [crm, maintenance, "on"]
+      run_once: true
+      changed_when: true
+
+    # Every node of the site at once, after every node's file is edited (the task above).
+    # The step from 3 s is less than four times, so IBM's "within the current timeout"
+    # rule for larger steps does not apply.
+    - name: systemctl restart corosync
+      ansible.builtin.systemd_service:
+        name: corosync
+        state: restarted
+
+    # Restarting corosync restarts Pacemaker too. Wait, bounded, until this node's
+    # Pacemaker answers again and still reports maintenance mode, before leaving it.
+    - name: wait for Pacemaker to report maintenance mode after the restart
+      ansible.builtin.command:
+        argv: [crm_attribute, --type, crm_config, --name, maintenance-mode, --query, --quiet]
+      register: rdqm_hb_maintenance
+      changed_when: false
+      until: rdqm_hb_maintenance.rc == 0 and rdqm_hb_maintenance.stdout | trim == 'true'
+      retries: 30
+      delay: 5
+
+    - name: crm maintenance off
+      ansible.builtin.command:
+        argv: [crm, maintenance, "off"]
+      run_once: true
+      changed_when: true
+
+# IBM's check (corosync-cmapctl, totem.token in ms), read on every node; the knet values
+# on each heartbeat link are checked the same way.
+- name: read the running corosync heartbeat timeout (after)
+  ansible.builtin.command:
+    argv: [corosync-cmapctl, totem.token]
+  register: rdqm_hb_after
+  changed_when: false
+  become: true
+
+- name: "corosync runs the configured heartbeat timeout (fail loud)"
+  ansible.builtin.assert:
+    that: >-
+      rdqm_hb_after.stdout is search('(?m)^totem\.token \(\w+\) = '
+      ~ (rdqm_heartbeat_token_ms | int) ~ '$')
+    fail_msg: >-
+      corosync on {{ inventory_hostname }} does not run the configured heartbeat timeout
+      of {{ rdqm_heartbeat_token_ms }} ms; corosync-cmapctl reports
+      '{{ rdqm_hb_after.stdout }}'. Check /etc/corosync/corosync.conf and
+      `systemctl status corosync` on this node (#1515).
+
+- name: read the running corosync heartbeat link settings
+  ansible.builtin.command:
+    argv: [corosync-cmapctl, totem.interface.]
+  register: rdqm_hb_links
+  changed_when: false
+  become: true
+
+- name: "corosync runs IBM's knet values on each heartbeat link (fail loud)"
+  ansible.builtin.assert:
+    that: >-
+      rdqm_hb_links.stdout is search('(?m)^totem\.interface\.' ~ item.0 ~ '\.'
+      ~ item.1 ~ ' \(\w+\) = ' ~ rdqm_hb_conf[item.1] ~ '$')
+    fail_msg: >-
+      corosync on {{ inventory_hostname }} does not run {{ item.1 }} =
+      {{ rdqm_hb_conf[item.1] }} on heartbeat link {{ item.0 }}; corosync-cmapctl reports
+      '{{ rdqm_hb_links.stdout }}' (#1515).
+  loop: >-
+    {{ rdqm_hb_conf.links
+       | product(['knet_ping_timeout', 'knet_ping_interval', 'knet_pong_count']) | list }}

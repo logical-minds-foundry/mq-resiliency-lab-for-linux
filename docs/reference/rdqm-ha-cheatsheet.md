@@ -108,6 +108,40 @@ Initialize the replicated-data subsystem on each node:
 /opt/mqm/bin/rdqmstatus -n     # verify all 3 nodes online
 ```
 
+### Heartbeat timeout: 10 s (IBM's VM value)
+
+IBM's default RDQM heartbeat timeout is 3 s. IBM recommends 10 s for VM configurations
+and 30 s for cloud installations (data:
+[Changing the heartbeat timeout for HA RDQM, MQ 10.0](https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/heartbeat_timeout.html)).
+The lab uses 10 s on every host (#1515). This is our judgment: every RDQM node is a VM,
+and on the cloud x86_64 host the heartbeat runs over a libvirt bridge inside one cloud
+VM, never over the provider's network. The reasoning is in
+`ansible/roles/rdqm-ha/defaults/main.yml` (`rdqm_heartbeat_token_ms`). A longer timeout
+also means a failed node takes longer to fail over.
+
+The `rdqm-ha` role applies it once `rdqmadm -c` has run, following IBM's procedure:
+
+```bash
+crm maintenance on                       # once, on one node of the site
+# on each node, in /etc/corosync/corosync.conf's totem { } section:
+#   token: 10000
+#   interface {                          # one block per heartbeat link
+#       linknumber: 0
+#       knet_ping_timeout: 5000          # token / 2
+#       knet_ping_interval: 500          # token / 20
+#       knet_pong_count: 2
+#   }
+systemctl restart corosync               # on each node, after every node is edited
+corosync-cmapctl totem.token             # IBM's check: totem.token (u32) = 10000
+crm maintenance off
+```
+
+The role skips the maintenance window when every node already runs 10 s. It fails the
+run if a node's running `totem.token` or `totem.interface.<link>.knet_*` values are not
+the configured ones after the restart. IBM says to raise the timeout in steps of less
+than four times the current value (3 s to 10 s is one such step), and the role refuses a
+larger step.
+
 ## 3. Create the replicated queue manager — secondaries first, then primary
 
 Verified order from `lab/scripts/rdqm-qm-create.sh`. All `crtmqm` run **as root**.
