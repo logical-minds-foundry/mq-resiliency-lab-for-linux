@@ -179,7 +179,7 @@ qmgr = ibmmq.QueueManager(None)
 # A temporary workaround for upstream ibm-messaging/mq-mqi-python#29; #1545 retires it.
 qmgr.connect_with_options("NHAUAPP", cd=cd, sco=sco, opts=C.MQCNO_CLIENT_BINDING)
 
-md = ibmmq.MD()
+md = ibmmq.MD()   # a fresh MD per put: MQPUT writes the generated MsgId back into it (#1549)
 # report options:  md.Report = C.MQRO_COA | C.MQRO_COD; md.ReplyToQ/ReplyToQMgr
 # grouped (v2):     md.Version = C.MQMD_VERSION_2; md.GroupId/MsgSeqNumber/MsgFlags
 # named properties: md.Format = C.MQFMT_RF_HEADER_2 and prepend an MQRFH2 <usr> folder
