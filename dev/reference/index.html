@@ -1491,8 +1491,14 @@ and the box-bake manifest-hash for MQ-bearing boxes (so bumping the pin
 auto-invalidates those baked images — see
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/box-model.md"><code>docs/development/box-model.md</code></a>).
 Bump <code>lab/mq-version</code> to rebase the whole lab in one edit. The move to MQ 10.0.1
-(re-pin, rebake and revalidation) is tracked in epic
-<a href="https://github.com/logical-minds-foundry/.github/issues/315">logical-minds-foundry/.github#315</a>.</p>
+(re-pin, rebake and revalidation) was delivered by epic
+<a href="https://github.com/logical-minds-foundry/.github/issues/315">logical-minds-foundry/.github#315</a>.
+Every stack passed a cold-rebuild validation on <code>10.0.1.0</code> on both hosts
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1474">#1474</a>,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1475">#1475</a>),
+and again after the defaults moved to Ubuntu 26 and RHEL 10
+(<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1496">#1496</a>,
+<a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1497">#1497</a>).</p>
 <p>OS versions follow the same single-source rule. The OS version catalog,
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/lab/versions.yaml"><code>lab/versions.yaml</code></a>,
 holds every OS version token: each stack's supported and default OS majors, the
@@ -1754,8 +1760,8 @@ commands:</p>
 <tbody>
 <tr>
 <td><code>mqlab qm</code></td>
-<td><code>create</code> · <code>destroy</code> · <code>up</code> · <code>down</code> · <code>status</code> · <code>e2e</code></td>
-<td>MQ queue-manager per-stack HA lifecycle (stack-dispatched). <code>status</code> on a Native HA CRR stack reports both sites; <code>e2e</code> sends a bounded request/reply burst and exits non-zero unless every request round-trips</td>
+<td><code>create</code> · <code>destroy</code> · <code>up</code> · <code>down</code> · <code>status</code> · <code>reload</code> · <code>e2e</code></td>
+<td>MQ queue-manager per-stack HA lifecycle (stack-dispatched). <code>status</code> on a Native HA CRR stack reports both sites; <code>reload</code> restarts the active QM and tells its clients to reconnect (<code>endmqm -r</code>; Native HA and RDQM, Pacemaker refuses; see <a href="../operate/#failover-drills">Failover drills</a>); <code>e2e</code> sends a bounded request/reply burst and exits non-zero unless every request round-trips</td>
 </tr>
 <tr>
 <td><code>mqlab dr</code></td>
