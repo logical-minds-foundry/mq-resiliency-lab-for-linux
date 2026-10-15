@@ -98,7 +98,8 @@
         msg: >-
           {{ qm_name }} was restarted on {{ inventory_hostname }} but its Native HA group
           did not settle (full quorum, every instance in sync, an Active elected) within
-          {{ qm_reload_timeout }}s. Failed step: {{ ansible_failed_task.name }}.
+          {{ qm_reload_timeout }}s. Failed step: {{ ansible_failed_task.name }}:
+          {{ ansible_failed_result.msg | default('') }}
           Last dspmq -o nativeha -x:
           {{ _nha_dspmq.stdout | default(_qm_ha.stdout | default('(no output)')) }}
           Check it with: mqlab qm status {{ qm_stack }}
