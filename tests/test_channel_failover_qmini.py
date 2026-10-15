@@ -47,7 +47,9 @@ def _index(name_part: str) -> int:
 
 
 def _render(template: str, item: dict[str, str]) -> str:
-    env = jinja2.Environment(autoescape=False)  # noqa: S701 -- regex text, not HTML
+    # Escaping cannot alter these plain identifiers (no &<>"'), and keeps CodeQL's
+    # Jinja2WithoutEscaping rule satisfied.
+    env = jinja2.Environment(autoescape=True)
     return env.from_string(template).render(item=item)
 
 
