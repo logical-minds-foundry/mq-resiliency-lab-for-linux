@@ -41,6 +41,14 @@ authz_grants:
   - { group: mqsvc, object_type: queue, object: "APP.REPLY",       authorities: "+put +setall" }
   - { group: mqsvc, object_type: queue, object: "{{ mqsvc_dlq }}", authorities: "+put +setall" }
 
+# mq-bench (#1512): the Native HA persistent-commit benchmark PUTs to its OWN queue,
+# BENCH.COMMIT, as the app-client identity (mqapp), and inquires its depth. A separate
+# list, not authz_grants: only the Native HA arms define BENCH.COMMIT (site-nativeha*.yml),
+# and setmqaut on a queue that does not exist fails, so the pcmk/rdqm arms that apply
+# authz_grants must not see it. APP.REPLY's posture (mqapp get-only) is unchanged.
+authz_bench_grants:
+  - { group: mqapp, object_type: queue, object: "BENCH.COMMIT", authorities: "+put +inq" }
+
 # mqmon (mq_prometheus exporter) least-privilege security profile — the §5 grant table
 # of the Phase-0 observability doc (#943 / .github#173), expressed as MQSC SET AUTHREC
 # (NOT setmqaut) and rendered into authz.mqsc.j2 so the authority travels co-located with
