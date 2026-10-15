@@ -1608,6 +1608,7 @@ controlled, stack-dispatched lever is <code>mqlab qm</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>status<span class="w"> </span>&lt;stack&gt;<span class="w">    </span><span class="c1"># HA resource / instance state</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>down<span class="w"> </span>&lt;stack&gt;<span class="w">      </span><span class="c1"># stop the active QM, HA intact — the controlled-failover trigger</span>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>up<span class="w"> </span>&lt;stack&gt;<span class="w">        </span><span class="c1"># bring it back</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>mqlab<span class="w"> </span>qm<span class="w"> </span>reload<span class="w"> </span>&lt;stack&gt;<span class="w">    </span><span class="c1"># restart the active QM, telling clients to reconnect (endmqm -r)</span>
 </code></pre></div>
 <p>What each verb runs is per-mechanism (all from the stack's topology <code>verbs:</code>):
 Pacemaker disables/enables the <code>mq_group</code> resource (<code>pcs</code>), RDQM runs
@@ -1619,6 +1620,55 @@ with its own quorum and instance sync. If site B is not running (<code>bootstrap
 --no-dr</code>), its query is skipped with a note instead of failing. RDQM and Pacemaker
 <code>qm status</code> runs on site A only; for RDQM, <code>rdqmstatus</code> there already shows the DR
 relationship.</p>
+<p><code>qm reload</code> is a planned restart with client reconnect: IBM's <code>endmqm -r</code>
+semantics, so reconnectable clients start reconnecting instead of being dropped.
+It pairs with the always-on requester to show clients riding through a planned
+restart. It runs the <code>site-qm-reload.yml</code> playbook, which finds the one node whose
+<code>dspmq -n</code> reads <code>STATUS(RUNNING)</code> (site A, or site B after a DR cutover; a DR
+site that is not running is skipped with a note). It then uses IBM's documented
+path for the arm:</p>
+<table>
+<thead>
+<tr>
+<th>Stack</th>
+<th>What runs on the active node</th>
+<th>IBM source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Native HA</td>
+<td><code>systemctl reload mqmonitor@&lt;QM&gt;</code> (MQ 10.0.1+), then waits until <code>dspmq -o nativeha -x</code> shows full quorum, one Active, and every instance in sync</td>
+<td><a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/monitoring_nativeHA.html">Monitoring, restarting, and ending queue manager instances</a>: "the equivalent of using the endmqm -r command"</td>
+</tr>
+<tr>
+<td>RDQM</td>
+<td><code>endmqm -r -tp 29 -w &lt;QM&gt;</code>, then <code>strmqm &lt;QM&gt;</code>, on the RDQM's primary node; waits until <code>dspmq</code> shows <code>STATUS(RUNNING)</code></td>
+<td><a href="https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/q133988_.html">Starting, stopping, and displaying the state of a DR/HA RDQM</a>: "All other endmqm parameters can be used when stopping an RDQM"</td>
+</tr>
+<tr>
+<td>Pacemaker</td>
+<td>refused, with the reason</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>-r</code> meaning comes from the
+<a href="https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-endmqm-end-queue-manager">endmqm reference</a>.
+The RDQM flags <code>-r -tp 29 -w</code> are the same ones IBM's own 10.0.1 <code>mqmonitor.py</code>
+reload uses. On Native HA, ending the active instance makes the group elect a new
+Active (endmqm reference), so the restarted instance usually comes back as a
+Replica. The playbook reports which instance is Active afterwards.
+<code>mqmonitor.py</code> reports a failed <code>endmqm</code> in its log but still exits 0, so the
+playbook also reads the <code>mqmonitor</code> journal and fails unless it says the
+instance stopped.</p>
+<p>Pacemaker is refused because it manages the queue manager through a systemd
+resource whose stop is <code>endmqm -w</code>, with no <code>-r</code>. A Pacemaker restart therefore
+never tells clients to reconnect. An <code>endmqm -r</code> run behind Pacemaker's back is
+a resource failure that Pacemaker recovers, not a planned restart.</p>
+<p>Each step (the restart, then the wait for the queue manager) is bounded by
+<code>--timeout</code> seconds (default 300). The run fails non-zero if a step goes past it,
+and the playbook reports how long the queue manager took to come back.</p>
 <p>For harder, host-side drills that a clean <code>qm down</code> cannot express, the lab ships
 fault scripts (run on the host, not through <code>mqlab</code>):</p>
 <ul>
