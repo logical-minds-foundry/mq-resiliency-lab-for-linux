@@ -1,8 +1,14 @@
 # IBM MQ JSON diagnostic logging — emit error logs as JSON
 
-- **MQ version:** 9.4 (stanza-based services available from 9.1.0)
+- **MQ version:** 10.0.x (stanza-based services available from 9.1.0) —
+  re-pinned from 9.4 on 2026-10-15
+  ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
 - **Status:** Active
-- **Last validated in lab:** 2026-07-06
+- **Last validated in lab:** 2026-07-06 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.
+- **IBM Docs re-checked:** 2026-10-15 against 10.0.x. Every cited topic reads
+  the same as its 9.4 counterpart, so no existing claim changed. One 10.0
+  addition (remote error-log access) is noted in section 6.
 - **Related guides:** [Instrumentation event monitoring](mq-event-monitoring-guide.md)
   — the complementary *event* stream (what the queue manager did) to this *log*
   stream (why);
@@ -32,7 +38,7 @@ will add, whatever transports your logs.
 
 Version floor: the stanza-based diagnostic message services (`Service=File` or
 `Service=Syslog`, `Format=json`) are available from **MQ 9.1.0**. Content here is
-pinned to **9.4**. Configuration changes take effect on **queue-manager restart**.
+pinned to **10.0.x**. Configuration changes take effect on **queue-manager restart**.
 
 ## 3. Recommendation
 
@@ -156,6 +162,14 @@ manager or to retrofit one created before the template existed.**
   stop-gap; it is undocumented in current MQ and superseded by these stanzas.
 - **Client filtering is limited.** `ExcludeMessage` / `SuppressMessage` are not
   honoured in `mqclient.ini`; the client surface is severity-filtered only.
+- **New in 10.0: remote error-log access is raw text, not JSON.** From MQ
+  10.0.0, IBM adds a PCF command, `MQCMD_INQUIRE_ERROR_LOG`, through which
+  *"authorized clients can retrieve the contents of the logs as a series of PCF
+  reply messages. Log data is returned as raw text, chunked into 1MB sized
+  messages"*
+  ([What's new in IBM MQ 10.0.0 for Multiplatforms](https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html)).
+  *Judgment:* it is useful for ad-hoc remote reads, but it returns text, not one
+  JSON object per line, so it does not replace the stanzas in this guide.
 
 ### How `qm.ini` gets written — and who owns it
 
@@ -166,13 +180,13 @@ be aware of:
   `mqs.ini`; `crtmqm` writes the `DiagnosticMessages` stanza into `qm.ini` for
   you. MQ owns that copy — you never touch `qm.ini` for logging.
 - **Direct edit.** Editing `qm.ini` with a text editor (or an automation tool) is
-  an [IBM-supported mechanism](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms);
+  an [IBM-supported mechanism](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms);
   changes take effect on the next queue-manager restart.
 - **AutoConfig is the one thing that rebuilds `qm.ini`.** If — and only if — you
   create the queue manager with `crtmqm -ii` (or add an `AutoConfig` stanza with
   `IniConfig`), MQ **discards and rebuilds `qm.ini` on every start** from a
   cached override file, and *"any manual changes to the `qm.ini` file are lost"*
-  ([IBM: automatic configuration of `qm.ini` at startup](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=qmini-automatic-configuration-startup)).
+  ([IBM: automatic configuration of `qm.ini` at startup](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-automatic-configuration-startup)).
   AutoConfig is IBM-scoped to uniform clusters; **the lab does not use it**, so no
   rebuild happens and hand-placed stanzas persist. If you *do* adopt AutoConfig,
   put your overrides in the `IniConfig` file, not in `qm.ini` directly.
@@ -311,7 +325,25 @@ Notes:
 
 ## Appendix E: References
 
-Search these topic titles in the IBM MQ 9.4 documentation at
-<https://www.ibm.com/docs/en/ibm-mq/9.4>: *Diagnostic message logging*,
-*Diagnostic message services*, *Diagnostic message service stanzas*, *JSON format
-diagnostic messages*, and *QMErrorLog stanza*.
+IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic reads the same as
+its 9.4 counterpart):
+
+- *Diagnostic message logging* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-diagnostic-message-logging>
+- *Diagnostic message services* (`File` / `Syslog`, `Format`) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=stanzas-diagnostic-message-services>
+- *Diagnostic message service stanzas* (`DiagnosticMessages`,
+  `DiagnosticMessagesTemplate`, `DiagnosticSystemMessages`, `ExcludeMessage` /
+  `SuppressMessage`) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-diagnostic-message-service-stanzas>
+- *JSON format diagnostic messages* (the record fields in A.2) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=codes-json-format-diagnostic-messages>
+- *QMErrorLog stanza* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logging-qmerrorlog-stanza>
+- *Changing IBM MQ configuration information in .ini files on Multiplatforms* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=configuring-changing-mq-configuration-information-in-ini-files-multiplatforms>
+- *Automatic configuration of qm.ini at startup* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=qmini-automatic-configuration-startup>
+- *What's new in IBM MQ 10.0.0 for Multiplatforms* ("Accessing error logs
+  programmatically") —
+  <https://www.ibm.com/docs/en/SSYHRD_10.0.0/overview/mq1000_new_multibaseadv.html>

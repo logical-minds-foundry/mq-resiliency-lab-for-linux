@@ -248,7 +248,7 @@ def test_blank_reply_to_is_dead_lettered_and_serving_continues(monkeypatch, caps
     assert state["events"] == ["commit", "commit", "disconnect"]
     err = capsys.readouterr().err
     assert "dead-lettered message " + b"DGRAM-1".hex() in err
-    assert "MQRC 2027" in err
+    assert "blank ReplyToQ (MQDLH reason 2027)" in err
 
 
 def test_no_deadq_fails_loud_and_backs_out(monkeypatch, capsys):

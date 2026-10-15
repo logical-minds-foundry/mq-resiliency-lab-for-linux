@@ -1,8 +1,14 @@
 # IBM MQ metrics &amp; monitoring configuration — enable data for a collector
 
-- **MQ version:** 9.4 (Multiplatforms)
+- **MQ version:** 10.0.x (Multiplatforms) — re-pinned from 9.4 on 2026-10-15
+  ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
 - **Status:** Active
-- **Last validated in lab:** 2026-07-02
+- **Last validated in lab:** 2026-07-02 on MQ 9.4.5. Not yet re-validated live on
+  10.0.1.
+- **IBM Docs re-checked:** 2026-10-15 against 10.0.x. The `MON*`, `STAT*`,
+  `ACCT*` and `MAXHANDS` text in *ALTER QMGR* is unchanged from 9.4 (the 10.0
+  page's edits are to other attributes), and the monitoring topics read the same,
+  so no guide text changed.
 - **Related guides:** [JSON diagnostic logging](mq-json-logging-guide.md);
   [Native HA log lifecycle (runbook)](nativeha-log-lifecycle-guide.md) — the
   log-health band that reads this lab's out-of-band `mqlab_log_*` collector metrics
@@ -31,7 +37,7 @@ settings, and `MAXHANDS` headroom for a collector that opens many queue handles.
 Out of scope: deploying or configuring the collector itself (the exporter, the
 Prometheus scrape job). MQ's job is only to *emit* the data; the collector
 attaches its own scrape-side labels (queue-manager name, object name) — MQ does
-not. Attributes here are pinned to **MQ 9.4 Multiplatforms**; z/OS has different
+not. Attributes here are pinned to **MQ 10.0.x Multiplatforms**; z/OS has different
 class-switch semantics and ignores granularity.
 
 ## 3. Recommendation
@@ -218,12 +224,23 @@ DISPLAY QMGR MONQ MONCHL STATMQI STATQ STATCHL STATINT MAXHANDS
 
 ## Appendix E: References
 
-IBM MQ 9.4 documentation:
+IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):
 
 - *ALTER QMGR (alter queue manager settings)* —
-  <https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-alter-qmgr-alter-queue-manager-settings>
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-qmgr-alter-queue-manager-settings>
   (authoritative value domains for `MONQ`, `MONCHL`, `STATMQI`, `STATQ`,
-  `STATCHL`, `STATINT`, `MAXHANDS`, and the `ACCT*` attributes).
-- Search these topic titles at <https://www.ibm.com/docs/en/ibm-mq/9.4>:
-  *Monitoring your queue manager network*, *Structure of statistics and accounting
-  messages*, and *Real-time monitoring*.
+  `STATCHL`, `STATINT`, `MAXHANDS`, and the `ACCT*` attributes). The text for
+  those attributes is unchanged from 9.4 apart from line wrapping.
+- *ALTER queues (alter queue settings)* (object-level `MONQ` / `STATQ`) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-alter-queues-alter-queue-settings>
+- *Monitoring your IBM MQ network* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=performance-monitoring-your-mq-network>
+- *Real-time monitoring* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-real-time-monitoring>
+- *Accounting and statistics messages* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=network-accounting-statistics-messages>
+- *Accounting and statistics message format* (replaces the earlier pointer to a
+  topic titled "Structure of statistics and accounting messages"; no topic
+  has that title in the 9.4 table of contents, and this is the closest match) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-accounting-statistics-message-format>

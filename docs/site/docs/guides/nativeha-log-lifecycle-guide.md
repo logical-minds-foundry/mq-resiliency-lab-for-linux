@@ -1,7 +1,13 @@
 # Native HA log lifecycle — the operator's runbook
 
-- **MQ version:** 9.4
+- **MQ version:** 10.0.x — re-pinned from 9.4 on 2026-10-15
+  ([#1555](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1555))
 - **Status:** Active
+- **IBM Docs re-checked:** 2026-10-15 against 10.0.x. The logging,
+  log-management, media-image, logger-event and backup topics read the same as
+  9.4. The Native HA version floor (section 2) is restated from IBM's 10.0
+  release notes. The live specifics below were verified on MQ 9.4.5 and are to
+  verify on the next 10.0.1 bring-up.
 - **Last validated in lab:** 2026-08-10 — verified against a live `native-ha`
   arm (queue manager `NHARCAPP`, MQ 9.4.5, RHEL 9.6) during the log-lifecycle
   spike (#808). The verified specifics — log type, extent naming, watermarks,
@@ -44,9 +50,20 @@ Out of scope: enabling the logger-event feed itself (that is the
 and dashboard mechanics (the lab wiring is noted where relevant but is not the
 subject); and disaster-recovery topology beyond the single Native HA group.
 
-Version floor: replicated logging and Native HA are MQ **9.4** on MQ for
-Multiplatforms. Automatic log management and automatic media images predate 9.4
-but are what a Native HA queue manager uses by default.
+Version floor: Native HA, and the replicated logging it runs on, is available on
+Linux as well as in IBM's container deployments. IBM's 10.0 *Native HA* topic
+says a Linux node *"can be a single container (CRI-O, Docker, Podman,
+containerd), a Virtual Machine, or a bare-metal server"*
+([10.0.0](https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/Native_HA_overview.html)).
+IBM's 10.0.0 release notes list *"Native High Availability and Cross Region
+Replication on Linux"* among the capabilities that *"first appeared in IBM MQ
+9.4.x Continuous Delivery releases and are new for Long Term Support at IBM MQ
+10.0.0"*, under Advanced entitlement only
+([What's new in IBM MQ 10.0.0 for Multiplatforms, Advanced entitlement only](https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=wncim1-whats-new-in-mq-1000-multiplatforms-advanced-entitlement-only)).
+*Judgment:* on Linux the floor is therefore a 9.4.x CD release, and 10.0.0 is the
+first LTS release that includes it. This guide is pinned to **10.0.x**.
+Automatic log management and automatic media images predate Native HA but are
+what a Native HA queue manager uses by default.
 
 ## 3. The three log types — and why Native HA uses replicated
 
@@ -324,11 +341,44 @@ Read the band top to bottom; the first row that is wrong is your fault domain.
 - **Lab spike (verified specifics):**
   `docs/reports/2026-08-10-nativeha-log-lifecycle-spike.md` (#808) — the live-arm
   evidence for every claim here: log type, extent naming, watermarks, logger-event
-  fields, and the reclaim-health behaviour.
+  fields, and the reclaim-health behaviour. Run on MQ 9.4.5; to re-verify on the
+  next 10.0.1 bring-up.
 - **Epic:** `logical-minds-foundry/.github#145` — Native HA log-lifecycle
   observability (the collector, the cockpit band, and this runbook).
-- **IBM MQ 9.4 documentation** — search these topic titles at
-  <https://www.ibm.com/docs/en/ibm-mq/9.4>: *Types of logging*, *Managing logs*,
-  *Automatic media images*, *Recording media images*, *Logger event generation*,
-  *Backing up and restoring IBM MQ queue manager data* (backup queue managers),
-  and *Native HA*.
+
+IBM MQ 10.0.x documentation (re-checked 2026-10-15; each topic was compared with
+its 9.4 counterpart):
+
+- *Types of logging* (circular, linear, replicated; *"A replicated log is
+  equivalent to a linear log with automatic log management and automatic
+  media images enabled"*) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=lost-types-logging>. Same
+  as 9.4.
+- *Managing logs* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=lost-managing-logs>. Same
+  as 9.4.
+- *Automatic media imaging* (cited earlier as "Automatic media images") —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=logs-automatic-media-imaging>.
+  Same as 9.4.
+- *rcdmqimg (record media image)* — replaces the earlier pointer to a topic
+  titled "Recording media images"; no topic has that title in the 9.4 table
+  of contents, and this is the closest match —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=reference-rcdmqimg-record-media-image>.
+  Same as 9.4.
+- *Logger event generation* —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=events-logger-event-generation>.
+  Same as 9.4.
+- *Backing up and restoring IBM MQ queue manager data* (backup queue
+  managers) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=restart-backing-up-restoring-mq-queue-manager-data>.
+  Same as 9.4.
+- *Native HA* —
+  <https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/Native_HA_overview.html>.
+  This topic's `?topic=` link does not resolve at 10.0.x (the 9.4 slugs
+  `availability-native-ha` and `configurations-native-ha` both fail), so the
+  legacy content path is cited instead. Against 9.4 it changes only the
+  system-requirements link, one sub-topic title ("Enabling and disabling TLS
+  encryption") and its parent topic.
+- *What's new in IBM MQ 10.0.0 for Multiplatforms, Advanced entitlement
+  only* (the Native HA on Linux floor) —
+  <https://www.ibm.com/docs/en/ibm-mq/10.0.x?topic=wncim1-whats-new-in-mq-1000-multiplatforms-advanced-entitlement-only>

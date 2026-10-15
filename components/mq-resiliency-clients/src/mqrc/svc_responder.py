@@ -33,8 +33,8 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from typing import Any
 
+from mqrc.deadletter import NoDeadLetterQueueError, dead_letter, mqchar
 from mqrc.mqconn import connect_client
 
 
@@ -97,9 +97,18 @@ def serve(
                 if exc.reason == ibmmq.CMQC.MQRC_NO_MSG_AVAILABLE:
                     continue
                 raise  # fail loud -- never swallow an MQI error
-            if not _mqchar(req_md.ReplyToQ):
+            if not mqchar(req_md.ReplyToQ):
                 # Unanswerable (#1513): dead-letter it in this unit of work, keep serving.
-                _dead_letter(qmgr, qmgr_name, in_queue, req_md, body)
+                dead_letter(
+                    qmgr,
+                    qmgr_name,
+                    in_queue,
+                    req_md,
+                    body,
+                    reason=ibmmq.CMQC.MQRC_MISSING_REPLY_TO_Q,
+                    who="svc-responder",
+                    why="blank ReplyToQ",
+                )
                 qmgr.commit()
                 continue
             reply_md = ibmmq.MD(
@@ -126,67 +135,6 @@ def serve(
         raise
     finally:
         qmgr.disconnect()
-
-
-class NoDeadLetterQueueError(Exception):
-    """The queue manager has no DEADQ, so an unanswerable message cannot be moved aside."""
-
-
-def _mqchar(value: bytes | str) -> str:
-    """An MQCHAR field as text, without its blank / NUL padding."""
-    if isinstance(value, bytes):
-        value = value.decode("ascii", "replace")
-    return value.strip(" \x00")
-
-
-def _dead_letter(qmgr: Any, qmgr_name: str, in_queue: str, req_md: Any, body: bytes) -> None:
-    """Move a message with a blank ReplyToQ to the queue manager's dead-letter queue,
-    behind an MQDLH (reason MQRC_MISSING_REPLY_TO_Q), under the caller's syncpoint.
-
-    The MQDLH carries the original Encoding / CodedCharSetId / Format and DestQName =
-    the queue it was read from; the dead-letter MQMD keeps its MsgId and CorrelId so it
-    can be traced back. Raises NoDeadLetterQueueError when the queue manager has no DEADQ.
-    """
-    import ibmmq
-
-    dlq = _mqchar(qmgr.inquire(ibmmq.CMQC.MQCA_DEAD_LETTER_Q_NAME))
-    if not dlq:
-        raise NoDeadLetterQueueError(
-            f"{qmgr_name} has no DEADQ: cannot dead-letter a message with a blank ReplyToQ"
-        )
-    now = time.gmtime()
-    dlh = ibmmq.DLH(
-        Reason=ibmmq.CMQC.MQRC_MISSING_REPLY_TO_Q,
-        DestQName=in_queue,
-        DestQMgrName=qmgr_name,
-        Encoding=req_md.Encoding,
-        CodedCharSetId=req_md.CodedCharSetId,
-        Format=req_md.Format,
-        PutApplType=ibmmq.CMQC.MQAT_UNIX,
-        PutApplName="mq-svc-responder",
-        PutDate=time.strftime("%Y%m%d", now),
-        PutTime=time.strftime("%H%M%S00", now),
-    )
-    dl_md = ibmmq.MD(
-        MsgId=req_md.MsgId,
-        CorrelId=req_md.CorrelId,
-        MsgType=req_md.MsgType,
-        Persistence=req_md.Persistence,
-        Priority=req_md.Priority,
-        Format=ibmmq.CMQC.MQFMT_DEAD_LETTER_HEADER,
-    )
-    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
-    qdl = ibmmq.Queue(qmgr)
-    qdl.open(ibmmq.OD(ObjectName=dlq), ibmmq.CMQC.MQOO_OUTPUT | ibmmq.CMQC.MQOO_FAIL_IF_QUIESCING)
-    qdl.put(dlh.pack() + body, dl_md, pmo)
-    qdl.close()
-    msg_id = req_md.MsgId
-    print(
-        f"svc-responder: dead-lettered message {bytes(msg_id).hex()} from {in_queue} to {dlq}: "
-        f"blank ReplyToQ (MQRC {ibmmq.CMQC.MQRC_MISSING_REPLY_TO_Q})",
-        file=sys.stderr,
-        flush=True,
-    )
 
 
 def main(argv: list[str] | None = None) -> int:
