@@ -55,9 +55,16 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
     deadline = time.monotonic() + seconds
     keep = lambda: not STOP.is_set() and time.monotonic() < deadline
     last_flush = time.monotonic()
-    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
+    # NEW_MSG_ID: the QM generates a unique MsgId for every put, even if a
+    # descriptor were ever reused (#1549).
+    pmo = ibmmq.PMO(
+        Options=(
+            ibmmq.CMQC.MQPMO_SYNCPOINT
+            | ibmmq.CMQC.MQPMO_NEW_MSG_ID
+            | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING
+        )
+    )
     expiry_tenths = ibmmq.CMQC.MQEI_UNLIMITED if expiry is None else int(expiry * 10)
-    md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
     interval = 1.0 / rate
 
     qmgr, q, seq = None, None, 0
@@ -78,6 +85,9 @@ def producer(c, rate, seconds, expiry, req_queue, ledger, lock, ledger_path):
             pending = (seq, u, header + body)
         pseq, puuid, payload = pending
         try:
+            # A fresh MD per put: MQPUT writes the generated MsgId back into the
+            # descriptor, so a reused MD would resend it on every later put (#1549).
+            md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT, Expiry=expiry_tenths)
             q.put(payload, md, pmo)
             qmgr.commit()
         except ibmmq.MQMIError as e:

@@ -47,8 +47,15 @@ def _serve(qmgr, args, ledger, deadline):
         ),
         WaitInterval=2000,
     )
-    pmo = ibmmq.PMO(Options=ibmmq.CMQC.MQPMO_SYNCPOINT | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING)
-    md_persist = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
+    # NEW_MSG_ID: the QM generates a unique MsgId for every reply, even if a
+    # descriptor were ever reused (#1549).
+    pmo = ibmmq.PMO(
+        Options=(
+            ibmmq.CMQC.MQPMO_SYNCPOINT
+            | ibmmq.CMQC.MQPMO_NEW_MSG_ID
+            | ibmmq.CMQC.MQPMO_FAIL_IF_QUIESCING
+        )
+    )
 
     last_flush = time.monotonic()
     while time.monotonic() < deadline:
@@ -70,7 +77,10 @@ def _serve(qmgr, args, ledger, deadline):
             + raw[idx:]  # echo the DRv1 body so the app can match seq/uuid
         )
         try:
-            qout.put(reply, md_persist, pmo)
+            # A fresh MD per reply: MQPUT writes the generated MsgId back into the
+            # descriptor, so a reused MD would resend it on every later reply (#1549).
+            reply_md = ibmmq.MD(Persistence=ibmmq.CMQC.MQPER_PERSISTENT)
+            qout.put(reply, reply_md, pmo)
             qmgr.commit()
         except ibmmq.MQMIError as e:
             if e.reason in dr_mqi.RETRY_INPLACE or e.reason == dr_mqi.CALL_INTERRUPTED:
