@@ -76,13 +76,9 @@ def _run(
     (fake / "su").write_text(FAKE_SU)
     (fake / "su").chmod(0o755)
 
-    (tmp_path / "inventory.ini").write_text(
-        f"[{GROUP}]\n"
-        + "".join(
-            f"{h} ansible_connection=local ansible_python_interpreter={sys.executable}\n"
-            for h in HOSTS
-        )
-    )
+    host_vars = f"ansible_connection=local ansible_python_interpreter={sys.executable}"
+    lines = [f"[{GROUP}]", *(f"{h} {host_vars}" for h in HOSTS)]
+    (tmp_path / "inventory.ini").write_text("\n".join(lines) + "\n")
     (tmp_path / "play.yml").write_text(
         f"""- hosts: {GROUP}
   gather_facts: false
@@ -123,7 +119,8 @@ def _calls(fake: Path) -> list[str]:
 
 
 def _recorded(tmp_path: Path) -> dict[str, str]:
-    return {h: (tmp_path / f"active.{h}").read_text() for h in HOSTS if (tmp_path / f"active.{h}").exists()}
+    files = {h: tmp_path / f"active.{h}" for h in HOSTS}
+    return {h: f.read_text() for h, f in files.items() if f.exists()}
 
 
 def test_an_active_on_the_first_poll_is_broadcast_to_every_host(tmp_path: Path) -> None:
