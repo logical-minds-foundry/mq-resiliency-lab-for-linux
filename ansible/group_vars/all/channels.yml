@@ -1,0 +1,12 @@
+---
+# Heartbeat interval for the inter-QM channel pairs, <APPQM>.SVCQM and SVCQM.<APPQM>, set
+# on BOTH ends of each pair because MQ uses the larger of the two (#1557). The receive
+# timeout that ends a channel to a silent partner is 2 x HBINT below 60 s
+# ("Checking that the other end of the channel is still available", IBM MQ 10.0).
+#
+# 10 s, measured on rdqm-rhel (#1557): after the HA Primary was frozen (no TCP reset),
+# SVCQM's reply sender stayed bound to the dead node for its timeout. That was 6 minutes
+# at the default HBINT(300) and about 98 s at HBINT(30). At HBINT(10) it was back on the
+# new active within about 40 s, and e2e x20 run straight after the failover got 19/20.
+# 2 x 10 s matches the HA layer's own detection time (corosync token 10 s + consensus).
+inter_qm_hbint: 10

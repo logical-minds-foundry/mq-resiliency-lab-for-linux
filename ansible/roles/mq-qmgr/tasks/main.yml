@@ -12,6 +12,36 @@
   become: true
   become_user: mqm
 
+# Channel failover hardening (#1557). This QM receives a sender from every stack's HA app
+# QM. After an UNPLANNED failover (a hung node sends no TCP reset) the new active's sender
+# arrives from another address while the old receiver instance still looks alive: with
+# MQ's defaults (AdoptNewMCA=NO, AdoptNewMCACheck=NAME,ADDRESS,QM) it is refused with
+# AMQ9514E until the 360 s receive timeout. IBM's suggested settings are KeepAlive=Yes and
+# AdoptNewMCA=ALL; ADDRESS is dropped from the check because it can never match after a
+# move to another host, and the channels' mutual TLS + SSLPEER is the protection IBM names
+# for that (qm.ini Channels stanza and "Checking that the other end of the channel is still
+# available", IBM MQ 9.4/10.0). qm.ini changes take effect at the next QM start.
+- name: "{{ qmgr_name }} qm.ini has the Channels and TCP stanzas crtmqm writes"
+  ansible.builtin.command: grep -c -E '^(Channels|TCP):' /var/mqm/qmgrs/{{ qmgr_name }}/qm.ini
+  register: _mq_qmgr_stanzas
+  changed_when: false
+  failed_when: _mq_qmgr_stanzas.stdout | trim != '2'
+  become: true
+
+- name: "{{ qmgr_name }} qm.ini channel failover settings (#1557)"
+  ansible.builtin.lineinfile:
+    path: "/var/mqm/qmgrs/{{ qmgr_name }}/qm.ini"
+    regexp: "^\\s*{{ item.key }}\\s*="
+    line: "   {{ item.key }}={{ item.value }}"
+    insertafter: "^{{ item.stanza }}:"
+    firstmatch: true
+  loop: "{{ mq_qmgr_qmini_settings }}"
+  loop_control:
+    label: "{{ item.stanza }}: {{ item.key }}={{ item.value }}"
+  register: _mq_qmgr_qmini
+  become: true
+  become_user: mqm
+
 - name: qm systemd unit
   ansible.builtin.template:
     src: qm.service.j2
@@ -30,12 +60,24 @@
     name: mqweb
   when: mqweb_enabled | default(false)
 
+# Restarted when a qm.ini setting changed: MQ reads qm.ini only at queue manager start.
 - name: enable + start the queue-manager service
   ansible.builtin.systemd:
     name: "mq-{{ qmgr_name }}.service"
     enabled: true
-    state: started
+    state: "{{ 'restarted' if _mq_qmgr_qmini is changed else 'started' }}"
     daemon_reload: true
+  become: true
+
+- name: "{{ qmgr_name }} qm.ini holds exactly one of each failover setting"
+  ansible.builtin.command: >-
+    grep -c -E '^\s*{{ item.key }}={{ item.value }}\s*$' /var/mqm/qmgrs/{{ qmgr_name }}/qm.ini
+  loop: "{{ mq_qmgr_qmini_settings }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  register: _mq_qmgr_qmini_check
+  changed_when: false
+  failed_when: _mq_qmgr_qmini_check.stdout | trim != '1'
   become: true
 
 - name: relax channel security (LAB ONLY - spec 1 puts security out of scope)
