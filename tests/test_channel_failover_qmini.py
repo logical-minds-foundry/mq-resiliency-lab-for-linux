@@ -66,7 +66,8 @@ def test_each_regexp_matches_only_its_own_key() -> None:
     lines = [f"   {s['key']}={s['value']}" for s in _settings()]
     for setting in _settings():
         pattern = re.compile(_render(edit["regexp"], setting))
-        assert [ln for ln in lines if pattern.search(ln)] == [f"   {setting['key']}={setting['value']}"]
+        own = f"   {setting['key']}={setting['value']}"
+        assert [ln for ln in lines if pattern.search(ln)] == [own]
 
 
 def test_each_setting_lands_in_its_stanza() -> None:
@@ -123,5 +124,6 @@ def test_every_inter_qm_sdr_and_rcvr_sets_the_shared_hbint() -> None:
         "roles/rdqm-app-tls/templates/app-tls.mqsc.j2",
     }
     assert len(lines) == 10  # an SDR and a RCVR at each of the five sites
-    missing = [f"{path}: {line.strip()[:80]}" for path, line in lines if "HBINT({{ inter_qm_hbint }})" not in line]
+    hbint = "HBINT({{ inter_qm_hbint }})"
+    missing = [f"{path}: {line.strip()[:80]}" for path, line in lines if hbint not in line]
     assert missing == []
