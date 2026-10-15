@@ -1,1 +1,8 @@
 ---
+# qm.ini settings for channel failover (#1557); see tasks/main.yml for the IBM sources.
+# Each goes into the named stanza, which crtmqm always writes. AdoptNewMCACheck drops
+# ADDRESS: after an HA failover the sender's source address is a different node's.
+mq_qmgr_qmini_settings:
+  - { stanza: Channels, key: AdoptNewMCA, value: ALL }
+  - { stanza: Channels, key: AdoptNewMCACheck, value: "NAME,QM" }
+  - { stanza: TCP, key: KeepAlive, value: "Yes" }

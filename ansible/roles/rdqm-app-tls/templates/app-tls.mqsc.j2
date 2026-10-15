@@ -18,7 +18,9 @@ ALTER CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) SSLCIPH({{ tls_cipher }}) SSLCAUTH(R
 DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('mqm') SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
 * Inter-QM link to the SVC counterparty (O=svc-org): SDR + RCVR to mutual TLS, so our
 * side stops being both plaintext and mismatched against the TLS-expecting SVC peer (#410).
-ALTER CHANNEL({{ chl_to_svc }}) CHLTYPE(SDR) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}')
-ALTER CHANNEL({{ chl_to_app }}) CHLTYPE(RCVR) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}')
+* HBINT on both ends of each pair (MQ uses the larger) bounds how long a channel stays
+* bound to a dead partner after an unplanned failover (#1557, group_vars/all/channels.yml).
+ALTER CHANNEL({{ chl_to_svc }}) CHLTYPE(SDR) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') HBINT({{ inter_qm_hbint }})
+ALTER CHANNEL({{ chl_to_app }}) CHLTYPE(RCVR) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') HBINT({{ inter_qm_hbint }})
 * Reload the keystore so the new certs take effect on the next channel start.
 REFRESH SECURITY TYPE(SSL)

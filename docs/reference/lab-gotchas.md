@@ -332,3 +332,34 @@ modify with `|| true`, so the #866 hardening was missing with nothing reported.
 directories before it hardens anything, when SELinux is enabled. It lets a failed modify
 fail the step, and reads back `autoconnect-priority` and `autoconnect-retries`. If it
 fails anyway, check the profiles' labels with `ls -Z` and the journal for AVCs.
+
+## Channels to SVCQM stall for minutes after an unplanned HA failover
+
+**Symptom.** After an app QM fails over because its node hung (in the lab: `virsh
+suspend` on the HA Primary), the QM runs on the new node within about 27 s, but every
+app round-trip fails with `MQRC_NO_MSG_AVAILABLE` (2033) for about 6 minutes. SVCQM's
+`AMQERR01.LOG` shows `AMQ9514E: Channel '<APPQM>.SVCQM' is in use` every ~25 s, and later
+`AMQ9259E … select() [TIMEOUT] 360 seconds`. `SVCQM.<APPQM>` stays `RUNNING` to the dead
+node while replies pile up on its transmission queue. A planned move or a process kill
+does not show this, because it resets the TCP connections.
+
+**Cause.** A hung node sends no TCP reset, so SVCQM keeps both channel instances to the
+dead node until the receive timeout ends them: HBINT + 60 s, or 360 s at the default
+HBINT(300) (2 × HBINT below 60 s). Meanwhile:
+- The new active's sender comes from another node's address. With MQ's defaults
+  (`AdoptNewMCA=NO`, `AdoptNewMCACheck=NAME,ADDRESS,QM`) it cannot take over the stale
+  receiver, so it is refused.
+- The reply sender only times out once it is waiting on its partner, so it recovers about
+  2 × HBINT after the first reply it tries to send.
+
+**Fix (#1557).**
+- The `mq-qmgr` role sets SVCQM's qm.ini to `AdoptNewMCA=ALL`, `AdoptNewMCACheck=NAME,QM`
+  and `KeepAlive=Yes`, and restarts the QM when they change. That is IBM's suggested set,
+  with `ADDRESS` dropped because it cannot match after a move to another host. The
+  channels' mutual TLS and `SSLPEER` are the protection IBM names for that.
+- Every inter-QM `SDR` and `RCVR` sets `HBINT(10)` (`inter_qm_hbint`) on both ends, since
+  MQ uses the larger value.
+
+Measured on `rdqm-rhel@10`: the new sender adopted the stale receiver about 1 s after the
+QM restart. The reply sender was back on the new node about 40 s after the freeze, and
+e2e x20 run straight after the failover got 19/20, with only the first request lost.
