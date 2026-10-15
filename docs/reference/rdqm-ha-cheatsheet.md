@@ -136,7 +136,10 @@ The lab uses 10 s on every host (#1515). This is our judgment: every RDQM node i
 and on the cloud x86_64 host the heartbeat runs over a libvirt bridge inside one cloud
 VM, never over the provider's network. The reasoning is in
 `ansible/roles/rdqm-ha/defaults/main.yml` (`rdqm_heartbeat_token_ms`). A longer timeout
-also means a failed node takes longer to fail over.
+also means a failed node takes longer to fail over. The cold-rebuild validation of the
+10 s value on `rdqm-rhel@10` and `@9` is
+[#1546](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/1546)
+(open as of 2026-10-15).
 
 The `rdqm-ha` role applies it once `rdqmadm -c` has run, following IBM's procedure:
 
