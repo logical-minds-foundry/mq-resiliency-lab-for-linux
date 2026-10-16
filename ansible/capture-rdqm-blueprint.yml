@@ -9,7 +9,9 @@
 #   cd ansible && ansible-playbook capture-rdqm-blueprint.yml \
 #     -e qm_name=RDQMAPP \
 #     -e blueprint_out="$(mqlab build path state)/rdqm-blueprint/$(date -u +%Y%m%dT%H%M%SZ)"
-# Output: <blueprint_out>/<host>/<item>.txt for every node in rdqm_a and rdqm_b.
+# Output: <blueprint_out>/<host>/<item>.txt for every node in rdqm_a and rdqm_b. Both output
+# streams are kept (some tools, rdqmstatus among them, report on stderr), and an item that
+# comes out empty fails the run (#1600).
 - name: Capture the RDQM blueprint (read-only)
   hosts: rdqm_a:rdqm_b
   become: true
@@ -18,6 +20,29 @@
   vars:
     # GNU sed -E: replace any DRBD shared-secret value (quoted or bare) with "REDACTED".
     drbd_secret_redact_sed: 's/(shared-secret[[:space:]]+)("[^"]*"|[^;[:space:]]+)/\1"REDACTED"/'
+    # Every capture item: <blueprint_out>/<host>/<key>.txt from the registered result. One
+    # list, shared by the non-empty check and the write, so neither can miss an item.
+    cap_items:
+      - { key: drbd-version, value: "{{ cap_drbd_version }}" }
+      - { key: drbd-conf, value: "{{ cap_drbd_conf }}" }
+      - { key: drbd-dump, value: "{{ cap_drbd_dump }}" }
+      - { key: drbd-status, value: "{{ cap_drbd_status }}" }
+      - { key: packages, value: "{{ cap_packages }}" }
+      - { key: pcmk-config, value: "{{ cap_pcmk_config }}" }
+      - { key: pcmk-status, value: "{{ cap_pcmk_status }}" }
+      - { key: ocf-agents, value: "{{ cap_ocf_agents }}" }
+      - { key: corosync-conf, value: "{{ cap_corosync_conf }}" }
+      - { key: quorum, value: "{{ cap_quorum }}" }
+      - { key: vgs, value: "{{ cap_vgs }}" }
+      - { key: lvs, value: "{{ cap_lvs }}" }
+      - { key: mounts, value: "{{ cap_mounts }}" }
+      - { key: lsblk, value: "{{ cap_lsblk }}" }
+      - { key: rdqm-ini, value: "{{ cap_rdqm_ini }}" }
+      - { key: rdqmstatus-qm, value: "{{ cap_rdqmstatus_qm }}" }
+      - { key: rdqmstatus-group, value: "{{ cap_rdqmstatus_group }}" }
+      - { key: units, value: "{{ cap_units }}" }
+      - { key: mqs-ini, value: "{{ cap_mqs_ini }}" }
+      - { key: dspmqinf, value: "{{ cap_dspmqinf }}" }
   tasks:
     - name: preflight - blueprint_out (absolute) and qm_name are set
       ansible.builtin.assert:
@@ -42,18 +67,20 @@
           {{ blueprint_out }} already exists; a capture is only trustworthy as a whole —
           pass a fresh directory (the timestamped default in the header does this)
 
+    # rdqmstatus writes its whole report to STDERR (stdout is empty, rc 0 — observed live on
+    # rdqm-rhel, #1600), so it is folded into stdout here: the report IS the data.
     - name: preflight - RDQM reports the QM on this node
-      ansible.builtin.command: /opt/mqm/bin/rdqmstatus -m {{ qm_name }}
+      ansible.builtin.shell: /opt/mqm/bin/rdqmstatus -m {{ qm_name | quote }} 2>&1
       register: cap_rdqmstatus_qm
       changed_when: false
 
     - name: preflight - RDQM reports HA status Normal on this node
       ansible.builtin.assert:
-        that: cap_rdqmstatus_qm.stdout is regex('(?m)^HA status:\s+Normal\s*$')
+        that: (cap_rdqmstatus_qm.stdout ~ '\n' ~ cap_rdqmstatus_qm.stderr) is regex('(?m)^HA status:\s+Normal\s*$')
         fail_msg: >-
           RDQM is not healthy on {{ inventory_hostname }} (rdqmstatus -m {{ qm_name }}
-          does not report "HA status: Normal"); capture only a healthy group:
-          {{ cap_rdqmstatus_qm.stdout }}
+          does not report "HA status: Normal"); capture only a healthy group.
+          stdout: {{ cap_rdqmstatus_qm.stdout }} stderr: {{ cap_rdqmstatus_qm.stderr }}
 
     - name: preflight - a cluster CLI is present (pcs or crm)
       ansible.builtin.shell: |
@@ -73,6 +100,8 @@
       register: cap_drbd_version
       changed_when: false
 
+    # The two DRBD config items fold stderr in BEFORE the redaction sed, so a diagnostic on
+    # stderr can never carry an unredacted shared-secret past it into the capture.
     - name: drbd config files (drbd.conf + every /etc/drbd.d file; shared-secret redacted)
       ansible.builtin.shell: |
         set -euo pipefail
@@ -86,7 +115,7 @@
             echo "### $f"
             cat "$f"
           done
-        } | sed -E {{ drbd_secret_redact_sed | quote }}
+        } 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }}
       args:
         executable: /bin/bash
       register: cap_drbd_conf
@@ -95,7 +124,7 @@
     - name: drbd effective config (shared-secret redacted at capture)
       ansible.builtin.shell: |
         set -o pipefail
-        drbdadm dump all | sed -E {{ drbd_secret_redact_sed | quote }}
+        drbdadm dump all 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }}
       args:
         executable: /bin/bash
       register: cap_drbd_dump
@@ -154,10 +183,14 @@
       register: cap_lvs
       changed_when: false
 
-    - name: mounts under /var/mqm/vols (fstype + options; empty on a non-owner node is valid)
+    # No mount on a non-owner node is valid, so it is said explicitly: an empty capture file
+    # always means data went missing (the non-empty check below fails the run on one).
+    - name: mounts under /var/mqm/vols (fstype + options; none on a non-owner node is valid)
       ansible.builtin.shell: |
         set -o pipefail
-        findmnt -l -n -o TARGET,SOURCE,FSTYPE,OPTIONS | awk '$1 ~ "^/var/mqm/vols"'
+        findmnt -l -n -o TARGET,SOURCE,FSTYPE,OPTIONS |
+          awk '$1 ~ "^/var/mqm/vols" { print; n++ }
+               END { if (!n) print "(no filesystem mounted under /var/mqm/vols on this node)" }'
       args:
         executable: /bin/bash
       register: cap_mounts
@@ -173,8 +206,8 @@
       register: cap_rdqm_ini
       changed_when: false
 
-    - name: rdqmstatus (group view)
-      ansible.builtin.command: /opt/mqm/bin/rdqmstatus
+    - name: rdqmstatus (group view; the report is on stderr, folded in)
+      ansible.builtin.shell: /opt/mqm/bin/rdqmstatus 2>&1
       register: cap_rdqmstatus_group
       changed_when: false
 
@@ -197,8 +230,23 @@
       register: cap_dspmqinf
       changed_when: false
 
-    # Controller-side writes: reached only once EVERY host has passed every preflight and
-    # every capture command (any_errors_fatal), so a failed run leaves nothing on disk.
+    # An empty item is data gone missing (e.g. a tool that reports on the stream not
+    # captured, #1600), never a valid capture: fail the run on EVERY host before any write.
+    - name: check - every capture item is non-empty (stdout + stderr)
+      ansible.builtin.assert:
+        that: (item.value.stdout ~ item.value.stderr) | trim | length > 0
+        fail_msg: >-
+          capture item {{ item.key }} is empty on {{ inventory_hostname }} (rc
+          {{ item.value.rc }}, no output on stdout or stderr); the blueprint would be
+          silently incomplete
+        quiet: true
+      loop: "{{ cap_items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    # Controller-side writes: reached only once EVERY host has passed every preflight, every
+    # capture command and the non-empty check (any_errors_fatal), so a failed run leaves
+    # nothing on disk.
     - name: create the per-host capture directory on the controller
       ansible.builtin.file:
         path: "{{ blueprint_out }}/{{ inventory_hostname }}"
@@ -207,33 +255,16 @@
       delegate_to: localhost
       become: false
 
+    # Both streams are saved: stdout, then any stderr under a "### stderr" marker. A tool
+    # whose data is on stderr is folded into stdout at its task (rdqmstatus); this keeps any
+    # other tool's stderr from being silently dropped.
     - name: write the capture on the controller
       ansible.builtin.copy:
         dest: "{{ blueprint_out }}/{{ inventory_hostname }}/{{ item.key }}.txt"
-        content: "{{ item.value.stdout }}\n"
+        content: "{{ item.value.stdout }}{{ ('\\n### stderr\\n' ~ item.value.stderr) if item.value.stderr | length > 0 else '' }}\n"
         mode: "0644"
       delegate_to: localhost
       become: false
-      loop:
-        - { key: drbd-version, value: "{{ cap_drbd_version }}" }
-        - { key: drbd-conf, value: "{{ cap_drbd_conf }}" }
-        - { key: drbd-dump, value: "{{ cap_drbd_dump }}" }
-        - { key: drbd-status, value: "{{ cap_drbd_status }}" }
-        - { key: packages, value: "{{ cap_packages }}" }
-        - { key: pcmk-config, value: "{{ cap_pcmk_config }}" }
-        - { key: pcmk-status, value: "{{ cap_pcmk_status }}" }
-        - { key: ocf-agents, value: "{{ cap_ocf_agents }}" }
-        - { key: corosync-conf, value: "{{ cap_corosync_conf }}" }
-        - { key: quorum, value: "{{ cap_quorum }}" }
-        - { key: vgs, value: "{{ cap_vgs }}" }
-        - { key: lvs, value: "{{ cap_lvs }}" }
-        - { key: mounts, value: "{{ cap_mounts }}" }
-        - { key: lsblk, value: "{{ cap_lsblk }}" }
-        - { key: rdqm-ini, value: "{{ cap_rdqm_ini }}" }
-        - { key: rdqmstatus-qm, value: "{{ cap_rdqmstatus_qm }}" }
-        - { key: rdqmstatus-group, value: "{{ cap_rdqmstatus_group }}" }
-        - { key: units, value: "{{ cap_units }}" }
-        - { key: mqs-ini, value: "{{ cap_mqs_ini }}" }
-        - { key: dspmqinf, value: "{{ cap_dspmqinf }}" }
+      loop: "{{ cap_items }}"
       loop_control:
         label: "{{ item.key }}"

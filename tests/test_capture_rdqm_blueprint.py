@@ -8,6 +8,7 @@ import pathlib
 import re
 import subprocess
 
+import jinja2
 import yaml
 
 PLAYBOOK = pathlib.Path("ansible/capture-rdqm-blueprint.yml")
@@ -145,13 +146,117 @@ def test_capture_preflight_checks_rdqm_health_and_fresh_output():
     assert "does not exist" in names  # never merge into an older capture tree
 
 
-def test_capture_writes_every_item_once():
+def _copy_task() -> dict:
     [write] = [
         t for t in _capture_play()["tasks"] if _is_write(t) and _module(t) == "ansible.builtin.copy"
     ]
-    keys = [item["key"] for item in write["loop"]]
+    return write
+
+
+def _nonempty_check() -> dict:
+    [check] = [t for t in _capture_play()["tasks"] if t["name"].startswith("check - every capture")]
+    return check
+
+
+def test_capture_writes_every_item_once():
+    items = _capture_play()["vars"]["cap_items"]
+    keys = [item["key"] for item in items]
     assert sorted(keys) == sorted(_ITEMS)
+    assert len(keys) == len(set(keys))
+    assert _copy_task()["loop"] == "{{ cap_items }}"
     registered = {t.get("register") for t in _capture_play()["tasks"]}
-    for item in write["loop"]:
+    for item in items:
         reg = item["value"].strip("{} ")
         assert reg in registered, f"{item['key']}: {reg} is never registered"
+
+
+# --- #1600: rdqmstatus reports on stderr; no item may silently lose a stream or come out empty.
+
+
+def _task_by_register(reg: str) -> dict:
+    [task] = [t for t in _capture_play()["tasks"] if t.get("register") == reg]
+    return task
+
+
+def test_rdqmstatus_items_fold_stderr_into_the_capture():
+    # rdqmstatus prints its whole report on stderr with an empty stdout (rc 0) — observed on
+    # the live rdqm-rhel arm. Both rdqmstatus items must carry that report as their data.
+    for reg in ("cap_rdqmstatus_qm", "cap_rdqmstatus_group"):
+        task = _task_by_register(reg)
+        assert _module(task) == "ansible.builtin.shell", reg
+        assert _body(task).rstrip().endswith("2>&1"), reg
+
+
+def test_ha_status_preflight_reads_both_streams():
+    [check] = [t for t in _capture_play()["tasks"] if "HA status Normal" in t["name"]]
+    that = check["ansible.builtin.assert"]["that"]
+    assert "cap_rdqmstatus_qm.stdout" in that and "cap_rdqmstatus_qm.stderr" in that
+    msg = check["ansible.builtin.assert"]["fail_msg"]
+    assert "cap_rdqmstatus_qm.stdout" in msg and "cap_rdqmstatus_qm.stderr" in msg
+
+
+def test_drbd_config_items_redact_stderr_too():
+    # stderr is folded in BEFORE the redaction sed, so no stream can bypass it.
+    for reg in ("cap_drbd_dump", "cap_drbd_conf"):
+        body = _body(_task_by_register(reg))
+        assert re.search(r"2>&1\s*\|\s*sed -E \{\{ drbd_secret_redact_sed", body), reg
+
+
+def _render(template: str, stdout: str, stderr: str) -> str:
+    item = {"key": "x", "value": {"stdout": stdout, "stderr": stderr, "rc": 0}}
+    # Plain-text capture files, not HTML: select_autoescape leaves these sample values intact.
+    env = jinja2.Environment(keep_trailing_newline=True, autoescape=jinja2.select_autoescape())
+    return env.from_string(template).render(item=item)
+
+
+def test_write_keeps_stderr_alongside_stdout():
+    content = _copy_task()["ansible.builtin.copy"]["content"]
+    assert _render(content, "data", "") == "data\n"
+    assert _render(content, "data", "warn") == "data\n### stderr\nwarn\n"
+
+
+def test_nonempty_check_rejects_empty_and_whitespace_items():
+    that = _nonempty_check()["ansible.builtin.assert"]["that"]
+    tmpl = "{{ " + that + " }}"
+    assert _render(tmpl, "data", "") == "True"
+    assert _render(tmpl, "", "report on stderr") == "True"
+    assert _render(tmpl, "", "") == "False"
+    assert _render(tmpl, " \n", "\n") == "False"
+
+
+def test_nonempty_check_covers_every_item_on_both_streams_before_any_write():
+    check = _nonempty_check()
+    assert check["loop"] == "{{ cap_items }}"
+    that = check["ansible.builtin.assert"]["that"]
+    assert "item.value.stdout" in that and "item.value.stderr" in that
+    assert "length > 0" in that
+    tasks = _capture_play()["tasks"]
+    pos = tasks.index(check)
+    first_write = next(i for i, t in enumerate(tasks) if _is_write(t))
+    captures = [i for i, t in enumerate(tasks) if str(t.get("register", "")).startswith("cap_")]
+    last_capture = max(captures)
+    assert last_capture < pos < first_write
+
+
+def test_mounts_item_is_never_empty_on_a_non_owner_node():
+    # No /var/mqm/vols mount is valid on a non-owner node; the item says so explicitly so the
+    # non-empty check can treat every empty file as missing data.
+    body = _body(_task_by_register("cap_mounts"))
+    assert "END" in body and "no filesystem mounted under /var/mqm/vols" in body
+
+
+def test_mounts_awk_reports_none_when_nothing_matches():
+    body = _body(_task_by_register("cap_mounts"))
+    match = re.search(r"awk '(.*?)'", body, re.DOTALL)
+    assert match, body
+    awk_prog = match.group(1)
+    sample = "/ /dev/sda1 xfs rw\n/boot /dev/sda2 xfs rw\n"
+    none = subprocess.run(
+        ["awk", awk_prog], input=sample, capture_output=True, text=True, check=True
+    )
+    assert none.stdout.strip() == "(no filesystem mounted under /var/mqm/vols on this node)"
+    owned = sample + "/var/mqm/vols/rdqmapp /dev/drbd100 ext4 rw\n"
+    some = subprocess.run(
+        ["awk", awk_prog], input=owned, capture_output=True, text=True, check=True
+    )
+    assert some.stdout == "/var/mqm/vols/rdqmapp /dev/drbd100 ext4 rw\n"
