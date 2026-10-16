@@ -23,7 +23,8 @@
       - mqweb_aes_passphrase | length > 0
     fail_msg: >-
       MQWEB_STATE_DIR / MQWEB_AES_PASSPHRASE unset — run provisioning through
-      `mqlab bootstrap <stack>`, which exports both (epic .github#341 spec §2.2).
+      `mqlab bootstrap <stack>` or `mqlab qm create <stack>`, which export both
+      (epic .github#341 spec §2.2; `mqlab vm provision-env <stack>` prints them).
   no_log: true
 
 - name: ensure the controller mqweb state dir exists (0700)

@@ -41,9 +41,7 @@
 - hosts: nha_ubuntu_b
   serial: 1
   roles:
-    - role: mqweb
-      # per-node mqweb retired — infeasible at 2-vCPU scale (#1154); client-mode pending (#266/#1171)
-      when: mqweb_enabled | default(false)
+    - mqweb
 
 # 2. TLS (lab-pki .p12) on every instance of both groups.
 - hosts: nha_ubuntu_a:nha_ubuntu_b

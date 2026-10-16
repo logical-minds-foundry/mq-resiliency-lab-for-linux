@@ -1,9 +1,8 @@
 # mqweb endpoint verification runbook (epic #39, task #539)
 
-> **Status (2026-10): not runnable on a default bootstrap.** Per-node mqweb is off by
-> default (`mqweb_enabled: false`, #1171, #1188), so no endpoint below answers unless
-> you enable it first. Kept as the acceptance procedure for when mqweb is brought back
-> (undecided; ad-hoc backlog, `.github#266`).
+> **Status (2026-10): pending rewrite.** mqweb runs on every QM node by default again
+> (#1502, epic `.github#341`). The roles, logins and discovery below predate that epic;
+> its live-lab acceptance task (#1505) rewrites this runbook.
 
 Acceptance for epic #39: every stack's **published mqweb REST endpoint** is
 reachable and server-authenticated on its **data-plane** address, on **both

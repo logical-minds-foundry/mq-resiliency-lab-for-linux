@@ -49,16 +49,13 @@
     mode: "0644"
   become: true
 
-# REST API on this QM — via the shared mqweb role (de-duped from this role's former
-# inline mqweb steps). Gated on `mqweb_enabled` (default off): per-node mqweb was retired
-# on 2-vCPU nested-virt (#1171 gated the 8 HA/DR stack plays' `roles: [mqweb]`), but this
-# `mq-qmgr` include stayed ungated so svc-sim's SVCQM still ran a per-node mqweb. With the
-# flag off, no node runs per-node mqweb; the role stays in place so `mqweb_enabled: true`
-# brings it back (#1188).
-- name: enable the admin REST API (mqweb)
+# MQ Console + admin REST API on this QM — via the shared mqweb role. mqweb runs on
+# every QM node, ungated, exactly as on the HA/DR stack plays (epic .github#341 spec
+# §2.1, #1502; replaces the #1171/#1188 off-by-default gate). Like them, it needs the
+# stack's mqweb_aes_passphrase secret and MQWEB_STATE_DIR in the provision env.
+- name: enable the MQ Console and admin REST API (mqweb)
   ansible.builtin.include_role:
     name: mqweb
-  when: mqweb_enabled | default(false)
 
 # Restarted when a qm.ini setting changed: MQ reads qm.ini only at queue manager start.
 - name: enable + start the queue-manager service

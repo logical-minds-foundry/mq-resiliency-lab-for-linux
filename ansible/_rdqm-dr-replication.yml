@@ -38,9 +38,7 @@
 - hosts: rdqm_b
   serial: 1
   roles:
-    - role: mqweb
-      # per-node mqweb retired — infeasible at 2-vCPU scale (#1154); client-mode pending (#266/#1171)
-      when: mqweb_enabled | default(false)
+    - mqweb
 
 - hosts: rdqm_b
   vars:

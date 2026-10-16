@@ -36,8 +36,7 @@ floating IP) — only the CONNAME *to* the VIP becomes a name.
 
 ## mqweb admin REST/Console endpoint — data-plane infrastructure (#39)
 
-> Per-node mqweb is **off by default** (`mqweb_enabled: false`, #1171). The names and
-> addresses below are where its endpoints live when it is enabled.
+> mqweb runs on every QM node by default (#1502; it was off by default from #1171).
 
 The `mqweb` admin REST/Console endpoint (`9443/HTTPS`, one per QM node) is a
 **data-plane infrastructure** surface — the control surface co-located with the QM,

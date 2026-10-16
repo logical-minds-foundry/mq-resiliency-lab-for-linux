@@ -111,10 +111,9 @@ detects the environment (Apple Virtualization → `macos`, Google Compute Engine
 ## REST endpoints
 
 Each queue manager's admin REST API / Console (Liberty `mqweb`, HTTPS on
-**`9443`**) is a published endpoint derived from the topology. Per-node mqweb is
-**off by default** (`mqweb_enabled: false`, #1171), so these addresses only answer
-when it has been enabled; the rendered map still describes where they would be.
-Render the current map (both sites) to `build/work/rest/endpoints.json` with:
+**`9443`**) is a published endpoint derived from the topology. mqweb runs on every
+QM node by default (#1502). Render the current map (both sites) to
+`build/work/rest/endpoints.json` with:
 
 ```bash
 mqlab rest render

@@ -275,7 +275,12 @@ def test_caller_scan_finds_the_known_callers():
     # Guards the scan itself: a regex that silently stopped matching would make the
     # coverage test below vacuous.
     scan = _scan_callers()
-    assert "lab/scripts/dr-provision.sh" in scan.literals["pcmk_hacluster_password"]
+    # No in-repo shell caller remains (dr-provision.sh sources its stack's secrets
+    # through `mqlab vm provision-env` since #1502), so pin the shell form directly.
+    shell_call = 'export X="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"'
+    assert [m.group(1) for r in _INVOCATION_RES if (m := r.search(shell_call))] == [
+        "pcmk_hacluster_password"
+    ]
     assert (
         "ansible/roles/opensearch-dashboards/tasks/configure.yml"
         in scan.literals["opensearch_admin_password"]

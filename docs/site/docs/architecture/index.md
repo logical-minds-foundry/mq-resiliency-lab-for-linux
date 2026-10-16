@@ -115,16 +115,14 @@ both an Ubuntu arm (`NHAUAPP`) and a RHEL arm (`NHARCAPP`).
 
 ## The admin plane — mqweb (data-plane infrastructure)
 
-> **Status: off by default.** Per-node mqweb is gated by `mqweb_enabled`
-> (`ansible/group_vars/all/admin.yml`, default `false`; #1171, #1188), so a default
-> bootstrap starts no mqweb anywhere. It was turned off after mqweb failed to cold-start
-> reliably on the 2-vCPU QM nodes under macOS/arm64 nested virtualization. Those failures
-> predate the huge-page fix for arm64 page-fault cost (#1240, #1241), so they may not
-> recur. The role is kept; set `mqweb_enabled: true` to run it deliberately. Whether and
-> how mqweb comes back is undecided (tracked in the ad-hoc backlog, `.github#266`). The
-> rest of this section describes the design when it is enabled.
+> **Status: on by default.** mqweb runs on every QM node, including svc-sim's SVCQM
+> (epic `.github#341`, #1502). It was gated off in #1171/#1188 after failing to
+> cold-start on the 2-vCPU nodes under macOS/arm64; the #1499 spike re-measured it as
+> affordable (`docs/reference/mqweb-spike-findings.md`). Every provision path exports
+> the stack's `mqweb_aes_passphrase` secret and `MQWEB_STATE_DIR`, which the role
+> requires.
 
-When enabled, each queue manager runs **mqweb** — the MQ administrative REST API and
+Each queue manager runs **mqweb** — the MQ administrative REST API and
 Console (WebSphere Liberty, `9443/HTTPS`) — as a stateless per-node service. It is
 **data-plane infrastructure**: the control surface co-located with the queue
 manager it fronts, part of what the lab *instruments*, **not** part of the
