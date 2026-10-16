@@ -39,10 +39,19 @@ def test_every_stack_group_is_defined():
 
 
 def test_pcmk_stack_declares_hacluster_and_mqweb_secrets():
-    # the QM-bearing pcmk stack carries the cluster secret AND mqweb_admin_password
-    # (REST on every QM — design §1; mqweb is enabled at provision where it's injected)
+    # the QM-bearing pcmk stack carries the cluster secret AND mqweb_aes_passphrase, the
+    # IBM S16 AES-key passphrase that replaced mqweb_admin_password (epic .github#341
+    # spec §2.2, #1500); mqweb is provisioned where it is injected
     pcmk = lab_stacks()["pcmk-ubuntu"]
-    assert pcmk.secrets == ["pcmk_hacluster_password", "mqweb_admin_password"]
+    assert pcmk.secrets == ["pcmk_hacluster_password", "mqweb_aes_passphrase"]
+
+
+def test_every_stack_carries_the_mqweb_aes_passphrase_not_the_retired_admin_secret():
+    # #1500: every QM-bearing stack runs mqweb, whose registry is encoded with the AES key
+    # made from this passphrase; the old plaintext admin password is retired everywhere.
+    for name, stack in lab_stacks().items():
+        assert "mqweb_aes_passphrase" in stack.secrets, name
+        assert "mqweb_admin_password" not in stack.secrets, name
 
 
 def test_real_topology_renders_scrape_targets():
@@ -130,7 +139,7 @@ def test_rdqm_stack_composed():
     assert s.qm.qm_svc == "SVCQM"  # single shared counterparty (#446)
     assert s.qm.req_queue == "RDQM.SVC.REQUEST"
     assert s.qm.svc_conn == "10.60.0.50"
-    assert "mqweb_admin_password" in s.secrets
+    assert "mqweb_aes_passphrase" in s.secrets
 
 
 def test_rdqm_rhel_declares_its_dr_groups():

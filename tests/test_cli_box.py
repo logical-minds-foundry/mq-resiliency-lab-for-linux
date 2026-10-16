@@ -128,7 +128,8 @@ def test_fleet_skips_rhel_on_an_arm_host():
 def test_fleet_specs_carry_the_catalog_inputs():
     spec = box.FLEET["mq-client-ubuntu26"]
     assert (spec.role, spec.bake_stem, spec.mq_bearing) == ("mq-client", "mq-ubuntu", True)
-    assert box.FLEET["pcmk-ubuntu24"].mq_bearing is False  # pcmk is deliberately not
+    assert box.FLEET["pcmk-ubuntu24"].mq_bearing is True  # pcmk bakes MQ (#1572)
+    assert box.FLEET["san-ubuntu26"].mq_bearing is False  # no MQ payload
     assert box.FLEET["rhel/9-x86_64"].role is None
 
 

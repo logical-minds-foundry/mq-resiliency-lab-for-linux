@@ -2905,6 +2905,10 @@ def _bootstrap_run(
         if any(phase.name == "provision" for phase in selected):
             for secret in stack.secrets:
                 os.environ[secret.upper()] = _source_secret(deps, secret)
+            # mqweb encode-once store (epic .github#341 spec §2.2, #1500): the mqweb role
+            # persists the server's AES key and each securityUtility-encoded password
+            # here, so a re-provision renders mqwebuser.xml byte-identically.
+            os.environ["MQWEB_STATE_DIR"] = str(state("mqweb"))
         # Once-per-run prereq kinds already ensured this run (#1248): provision and
         # observe both declare `pki`, and the second play is redundant within a run.
         ensured: set[str] = set()

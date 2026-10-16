@@ -1,9 +1,3 @@
-# MQWeb admin: username is a fixed lab constant; the password is an auto-generated
-# lab secret (lab-secret.sh mqweb_admin_password), injected by `mqlab vm provision`
-# as MQWEB_ADMIN_PASSWORD. Never committed.
-mqweb_admin_user: mqadmin
-mqweb_admin_password: "{{ lookup('env', 'MQWEB_ADMIN_PASSWORD') }}"
-
 # Per-node mqweb is gated OFF by default (#1171, #1188). A per-node Liberty/mqweb
 # cold-start failed on the 2-vCPU QM nodes under macOS/arm64 (VAL-A evidence, #1154 — a
 # node never reached `started` and another thrashed off SSH under setmqweb). Those runs
