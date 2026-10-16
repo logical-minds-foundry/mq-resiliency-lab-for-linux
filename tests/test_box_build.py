@@ -692,8 +692,8 @@ def test_manifest_hash_flips_on_baked_role_task_change(tmp_path):
 
 def test_manifest_hash_flips_on_transitively_included_role(tmp_path):
     # A role reached only through a NESTED include_role (baked-role -> nested-role)
-    # must also enter the digest - the mq-exporter->mq-install / rdqm-install->
-    # mq-diag-logging shape a direct-only parse would miss.
+    # must also enter the digest - the rdqm-install->mq-diag-logging shape a
+    # direct-only parse would miss.
     root = _fake_bake_repo(tmp_path)
     before = _hash_in(root)
     _append(_role_task(root, "nested-role"), "\n# nested change\n")

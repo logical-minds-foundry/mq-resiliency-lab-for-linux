@@ -80,8 +80,8 @@
 
     # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
     # toolchain — exactly the work worth baking once (mon-probe paid ~2.8 min/run). The
-    # build half installs full MQ (idempotent no-op now — cmqc.h is present from mq-install
-    # above), fetches + builds mq_prometheus into /usr/local/bin, and — with mq_exporter_tls
+    # build half asserts the MQ runtime from mq-install above is present (it installs no MQ
+    # itself, #1584), fetches + builds mq_prometheus into /usr/local/bin, and — with mq_exporter_tls
     # false — drops NO keystore. The per-instance exporter units + CCDT/keystore stay
     # per-run (site-obs.yml instance loop). The per-run build's `creates:` guard on the
     # baked /usr/local/bin/mq_prometheus makes it skip the rebuild.

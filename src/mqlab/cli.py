@@ -214,14 +214,15 @@ def _commons_mq_boxes() -> set[BoxEntry]:
     MQ exporters). Resolved through the version layer (the infra OS, host-arch tracking).
 
     Excludes the infrastructure-only commons groups (_non_mq_commons_hosts, #634):
-    infra is a DNS/core-services box that runs no MQ, so it needs no MQ tarball. The
-    vms phase still boots those VMs (via _commons_members); only the media enum skips
-    them.
+    infra is a DNS/core-services box that runs no MQ, so it needs no MQ tarball. Also
+    excludes any commons box the catalog does not flag MQ-bearing: obs carries no MQ
+    (#1584), so it needs no MQ tarball either. The vms phase still boots those VMs (via
+    _commons_members); only the media enum skips them.
     """
     boxes = _lab_node_boxes()
     excluded = _non_mq_commons_hosts()
     mq_hosts = [h for h in _commons_members() if h in boxes and h not in excluded]
-    return {boxes[h] for h in mq_hosts}
+    return {boxes[h] for h in mq_hosts if boxes[h].mq_bearing}
 
 
 def _untimed(_label: str, fn: Callable[[], None]) -> None:
@@ -291,7 +292,7 @@ def _stack_mq_boxes(stack: Stack) -> set[BoxEntry]:
         (the per-stack SVC counterparty QM + the requester app). These run the infra
         Ubuntu, so on a cold cache — no prior `commons up` to leave the tarball behind
         in the shared build/cache — it is absent unless we fetch it here too (#407).
-    obs/probe also land in _commons_mq_boxes; they resolve to the same Ubuntu tarball,
+    The probe also lands in _commons_mq_boxes; it resolves to the same Ubuntu tarball,
     so the union adds exactly the one Ubuntu tarball svc/app need.
     """
     members = stack_members(stack.name) or []

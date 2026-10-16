@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import copy
 import datetime
+import re
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
-from mqlab import instances, topology, versions
+from mqlab import instances, mqexporter, topology, versions
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.instances import InstanceRecord
 from mqlab.paths import versions_catalog_path
@@ -26,9 +28,6 @@ from mqlab.versions import (
     node_boxes,
     stack_roles,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 X86 = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
 ARM = HostFacts(arch=AARCH64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=False)
@@ -316,44 +315,144 @@ def test_pcmk_is_mq_bearing_because_it_bakes_mq():
     assert load_catalog().box("pcmk", OsRef("ubuntu", 24)).mq_bearing is True
 
 
-def _includes_role(node: Any, role: str) -> bool:
-    """True if a parsed playbook includes or imports ``role`` anywhere, by an
-    ``include_role``/``import_role`` ``name:`` or a ``roles:`` entry."""
+def test_obs_carries_no_mq_and_is_not_mq_bearing():
+    """obs runs no MQ (#1584): mq_prometheus runs only on mon-probe, which boots the
+    mq-client box. Its bake reaches neither mq-install nor mq-exporter at any depth, so
+    the catalog must not flag it MQ-bearing; an MQ pin bump leaves obs at REUSE."""
+    cat = load_catalog()
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    assert not _bake_reaches(ansible, "obs", "mq-install")
+    assert not _bake_reaches(ansible, "obs", "mq-exporter")
+    assert cat.box("obs", cat.infra).mq_bearing is False
+
+
+def test_exporter_roles_are_the_roles_whose_bake_installs_mq_prometheus():
+    """mqexporter.EXPORTER_ROLES (which boxes need the prebuilt binary staged) matches
+    the bakes that actually reach the mq-exporter role, so dropping it from a bake (obs,
+    #1584) cannot leave a stale binary prerequisite behind, or vice versa."""
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    bakes = {role for role, stem in _bake_stems() if _bake_reaches(ansible, stem, "mq-exporter")}
+    assert bakes == set(mqexporter.EXPORTER_ROLES)
+
+
+_JINJA = re.compile(r"\{\{\s*(.*?)\s*\}\}")
+
+
+def _role_entry(ansible: Path, name: Any, tasks_from: Any = "main") -> Path:
+    """The tasks file Ansible runs for role ``name`` (+ ``tasks_from``).
+
+    Fails loudly on a name it cannot resolve (templated, or no such role or file) and on
+    a role with meta dependencies, which this walker does not follow: an unfollowed edge
+    would let an ``mq-install`` hide behind it, the very miss this guard exists to catch.
+    """
+    if not isinstance(name, str) or "{{" in name:
+        raise AssertionError(f"cannot resolve role name {name!r} statically")
+    role_dir = ansible / "roles" / name
+    if (role_dir / "meta" / "main.yml").exists():
+        raise AssertionError(f"role {name!r} has meta/main.yml; the walker must follow it")
+    stem = str(tasks_from).removesuffix(".yml").removesuffix(".yaml")
+    for candidate in (role_dir / "tasks" / f"{stem}.yml", role_dir / "tasks" / f"{stem}.yaml"):
+        if candidate.is_file():
+            return candidate
+    raise AssertionError(f"role {name!r} has no tasks/{stem}.yml under {ansible}")
+
+
+def _task_files(ref: str, here: Path, ansible: Path) -> list[Path]:
+    """The files an ``include_tasks``/``import_tasks`` path names.
+
+    Ansible resolves a relative path against the including file's directory.
+    ``{{ playbook_dir }}`` is the ansible/ tree; any other template becomes a wildcard,
+    which over-includes (safe). A path that matches nothing fails loudly, never skipped.
+    """
+    pattern = _JINJA.sub(lambda m: str(ansible) if m[1] == "playbook_dir" else "*", ref)
+    full = here / pattern  # an absolute pattern ({{ playbook_dir }}) replaces here
+    found = sorted(p.resolve() for p in Path(full.anchor).glob(str(full.relative_to(full.anchor))))
+    if not found:
+        raise AssertionError(f"include {ref!r} in {here} matches no file")
+    return found
+
+
+def _reaches_role(  # noqa: PLR0913 - one recursive walker, its state passed explicitly
+    node: Any, role: str, here: Path, ansible: Path, seen: set[Path], *, follow: bool = True
+) -> bool:
+    """True if parsed Ansible YAML reaches ``role``.
+
+    A direct hit is an ``include_role``/``import_role`` ``name:`` or a ``roles:`` entry.
+    With ``follow`` it also walks, recursively, the task file each other role runs
+    (``tasks_from`` or ``main``) and every ``include_tasks``/``import_tasks`` file
+    (#1584: obs used to reach mq-install only through mq-exporter's build tasks, which
+    the direct-include check of #1572 missed).
+    """
     if isinstance(node, list):
-        return any(_includes_role(item, role) for item in node)
+        return any(_reaches_role(i, role, here, ansible, seen, follow=follow) for i in node)
     if not isinstance(node, dict):
         return False
     for key, value in node.items():
         action = str(key).rsplit(".", 1)[-1]
-        if action in ("include_role", "import_role"):
-            if isinstance(value, dict) and value.get("name") == role:
+        nested: list[Path] = []
+        if action in ("include_role", "import_role") and isinstance(value, dict):
+            if value.get("name") == role:
                 return True
+            if follow:
+                nested = [_role_entry(ansible, value.get("name"), value.get("tasks_from", "main"))]
         elif action == "roles" and isinstance(value, list):
-            names = [v.get("role") if isinstance(v, dict) else v for v in value]
-            if role in names:
+            for entry in value:
+                name = entry.get("role", entry.get("name")) if isinstance(entry, dict) else entry
+                if name == role:
+                    return True
+                if follow:
+                    nested.append(_role_entry(ansible, name))
+        elif action in ("include_tasks", "import_tasks") and follow:
+            ref = value.get("file") if isinstance(value, dict) else value
+            if not isinstance(ref, str):
+                raise AssertionError(f"cannot resolve {action} {value!r} in {here}")
+            nested = _task_files(ref, here, ansible)
+        for path in nested:
+            if path in seen:
+                continue
+            seen.add(path)
+            parsed = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if _reaches_role(parsed, role, path.parent, ansible, seen):
                 return True
-        if _includes_role(value, role):
+        if _reaches_role(value, role, here, ansible, seen, follow=follow):
             return True
     return False
 
 
-def test_every_role_whose_bake_includes_mq_install_is_mq_bearing():
-    """A bake playbook that includes mq-install bakes MQ, so its role must be MQ-bearing
-    or an MQ pin bump silently REUSEs a box on the old MQ (#1087). pcmk slipped through
-    this way (#1572)."""
+def _bake_reaches(ansible: Path, stem: str, role: str, *, follow: bool = True) -> bool:
+    """True if ansible/bake-<stem>.yml reaches ``role`` (at any depth with ``follow``)."""
+    parsed = yaml.safe_load((ansible / f"bake-{stem}.yml").read_text(encoding="utf-8"))
+    return _reaches_role(parsed, role, ansible, ansible, set(), follow=follow)
+
+
+def _bake_stems() -> list[tuple[str, str]]:
+    return [(r, s) for r, spec in load_catalog().roles.items() for s in spec["bake"].values()]
+
+
+def test_every_role_whose_bake_reaches_mq_install_is_mq_bearing():
+    """A bake playbook that reaches mq-install at any depth bakes MQ, so its role must be
+    MQ-bearing or an MQ pin bump silently REUSEs a box on the old MQ (#1087). pcmk
+    slipped through with a direct include (#1572), and obs used to bake MQ through
+    mq-exporter's build tasks (#1584)."""
     cat = load_catalog()
     ansible = versions_catalog_path().parent.parent / "ansible"
-    bakes_mq = {
-        role
-        for role, spec in cat.roles.items()
-        for stem in spec["bake"].values()
-        if _includes_role(
-            yaml.safe_load((ansible / f"bake-{stem}.yml").read_text(encoding="utf-8")),
-            "mq-install",
-        )
-    }
+    bakes_mq = {role for role, stem in _bake_stems() if _bake_reaches(ansible, stem, "mq-install")}
     assert {"pcmk", "pdrbd", "mq-client"} <= bakes_mq  # the guard sees real includes
     assert sorted(r for r in bakes_mq if not cat.roles[r]["mq_bearing"]) == []
+
+
+def test_every_bake_that_reaches_mq_install_names_it_directly():
+    """What a box carries is declared in its bake playbook (#1584): a bake that reaches
+    mq-install through another role also includes it directly, so MQ is never baked as
+    a hidden side effect of some other role's tasks."""
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    hidden = sorted(
+        stem
+        for _, stem in _bake_stems()
+        if _bake_reaches(ansible, stem, "mq-install")
+        and not _bake_reaches(ansible, stem, "mq-install", follow=False)
+    )
+    assert hidden == []
 
 
 @pytest.mark.parametrize(
@@ -364,14 +463,111 @@ def test_every_role_whose_bake_includes_mq_install_is_mq_bearing():
         ({"include_role": "mq-install"}, False),
         ({"roles": ["mq-install"]}, True),
         ({"roles": [{"role": "mq-install"}]}, True),
+        ({"roles": [{"name": "mq-install"}]}, True),
         ({"roles": ["other"]}, False),
         ({"roles": "mq-install"}, False),
         ([{"tasks": [{"block": [{"include_role": {"name": "mq-install"}}]}]}], True),
         ("mq-install", False),
     ],
 )
-def test_includes_role_matcher(node, expected):
-    assert _includes_role(node, "mq-install") is expected
+def test_reaches_role_direct(node, expected, tmp_path):
+    _role(tmp_path, "other", {"main.yml": "- debug: {}\n"})
+    assert _reaches_role(node, "mq-install", tmp_path, tmp_path, set()) is expected
+
+
+def _role(ansible: Path, name: str, files: dict[str, str]) -> None:
+    tasks = ansible / "roles" / name / "tasks"
+    tasks.mkdir(parents=True, exist_ok=True)
+    for file, body in files.items():
+        (tasks / file).write_text(body)
+
+
+_INSTALL = "- ansible.builtin.include_role:\n    name: mq-install\n"
+_NOOP = "- debug: {}\n"
+
+
+@pytest.mark.parametrize(
+    ("playbook", "roles", "expected"),
+    [
+        # The shape #1584 found (bake-obs, before it was removed): include_role mq-exporter
+        # tasks_from: build -> include_role mq-install.
+        (
+            "- include_role: {name: exporter, tasks_from: build}\n",
+            {"exporter": {"build.yml": _INSTALL, "main.yml": _NOOP}},
+            True,
+        ),
+        # The same role through its default entry point does not reach it.
+        (
+            "- include_role: {name: exporter}\n",
+            {"exporter": {"build.yml": _INSTALL, "main.yml": _NOOP}},
+            False,
+        ),
+        # A play's roles: entry -> main.yml -> include_tasks build.yml -> mq-install.
+        (
+            "- hosts: bake\n  roles: [exporter]\n",
+            {"exporter": {"main.yml": "- include_tasks: build.yml\n", "build.yml": _INSTALL}},
+            True,
+        ),
+        # Two hops: import_role -> import_tasks {file:} -> include_role tasks_from -> it.
+        (
+            "- ansible.builtin.import_role: {name: outer}\n",
+            {
+                "outer": {
+                    "main.yml": "- import_tasks: {file: step.yml}\n",
+                    "step.yml": "- include_role: {name: inner, tasks_from: go.yml}\n",
+                },
+                "inner": {"go.yml": _INSTALL},
+            },
+            True,
+        ),
+        # A shared task file outside roles/, by a templated relative path.
+        (
+            "- include_role: {name: outer}\n",
+            {"outer": {"main.yml": '- include_tasks: "../../../tasks/{{ x }}.yml"\n'}},
+            True,
+        ),
+        # {{ playbook_dir }} resolves to the ansible/ tree.
+        (
+            "- include_role: {name: outer}\n",
+            {"outer": {"main.yml": '- include_tasks: "{{ playbook_dir }}/tasks/shared.yml"\n'}},
+            True,
+        ),
+        # A cycle terminates (seen-set) without a false positive.
+        (
+            "- include_role: {name: loop}\n",
+            {"loop": {"main.yml": "- include_tasks: main.yml\n"}},
+            False,
+        ),
+    ],
+)
+def test_reaches_role_follows_indirect_includes(tmp_path, playbook, roles, expected):
+    for name, files in roles.items():
+        _role(tmp_path, name, files)
+    (tmp_path / "tasks").mkdir()
+    (tmp_path / "tasks" / "shared.yml").write_text(_INSTALL)
+    (tmp_path / "bake-x.yml").write_text(playbook)
+    assert _bake_reaches(tmp_path, "x", "mq-install") is expected
+    # The direct-only check (#1572's original guard) never sees an indirect include.
+    assert _bake_reaches(tmp_path, "x", "mq-install", follow=False) is False
+
+
+@pytest.mark.parametrize(
+    ("playbook", "error"),
+    [
+        ('- include_role: {name: "{{ r }}"}\n', "cannot resolve role name"),
+        ("- include_role: {name: absent}\n", "has no tasks/main.yml"),
+        ("- include_tasks: nowhere.yml\n", "matches no file"),
+        ("- include_tasks: {apply: {}}\n", "cannot resolve include_tasks"),
+        ("- include_role: {name: withmeta}\n", "has meta/main.yml"),
+    ],
+)
+def test_reaches_role_fails_loud_on_an_unfollowable_edge(tmp_path, playbook, error):
+    _role(tmp_path, "withmeta", {"main.yml": _NOOP})
+    (tmp_path / "roles" / "withmeta" / "meta").mkdir()
+    (tmp_path / "roles" / "withmeta" / "meta" / "main.yml").write_text("dependencies: []\n")
+    (tmp_path / "bake-x.yml").write_text(playbook)
+    with pytest.raises(AssertionError, match=error):
+        _bake_reaches(tmp_path, "x", "mq-install")
 
 
 def test_box_unknown_family_for_role():

@@ -4,14 +4,17 @@
 #
 # ADDITIVE FOUNDATION: installs only the image-bakeable software for the unified
 # observability box — the Grafana/Prometheus/Loki metrics stack, the log-search stack
-# (OpenSearch/Dashboards/Data Prepper, folded in for #267), the fleet agents' binaries,
-# and the (slow, cgo) mq_prometheus exporter build. It
-# drops NO topology-rendered scrape targets or dashboards and bakes NO admin-password
+# (OpenSearch/Dashboards/Data Prepper, folded in for #267) and the fleet agents'
+# binaries. It drops NO topology-rendered scrape targets or dashboards and bakes NO admin-password
 # secret; those stay in the per-run (configure) path (site-obs.yml et al.), which this
 # playbook does not touch. Run against a single `bake` host:
 #   ansible-playbook -i inventory/bake-host.ini bake-obs.yml
 #
-# Full proof (MQ media for the exporter's cgo SDK) rides the actual box build later.
+# The box carries NO IBM MQ and is not MQ-bearing (#1584). The mq_prometheus exporter
+# runs only on mon-probe (site-obs.yml, hosts: probe), which boots the mq-client box;
+# that box's bake (bake-mq-ubuntu.yml) installs MQ and mq_prometheus. #627 had added
+# the exporter build here too, before #660 moved mon-probe onto the MQ fat box, and the
+# obs copy (with the MQ install it pulled in) was never used. Keep MQ off this box.
 #
 # See docs/development/box-bake-manifest.md for the authoritative classification.
 
@@ -30,9 +33,6 @@
   hosts: bake
   become: true
   vars:
-    # Skip the per-run TLS ops keystore (pki-distribute) inside the mq-exporter build;
-    # the exporter binary + MQ SDK are baked, the keystore is dropped per-run.
-    mq_exporter_tls: false
     # Bake the grafana rendering env drop-in so the obs box can render dashboards to
     # PNG/PDF server-side (#877); the grafana-image-renderer service is baked below.
     grafana_rendering: true
@@ -82,27 +82,14 @@
         name: grafana-image-renderer
         tasks_from: install
 
-    # Reclaim the apt cache before the space-hungry cgo mq_prometheus build (#885). The
-    # install-half roles above leave their .debs in /var/cache/apt/archives; #884's Chrome
-    # (~0.5 GiB of package + cached .deb) tipped the size-constrained bake box over, so the
-    # next task's Go build ran /tmp out of space ("no space left on device") and failed the
-    # whole obs bake — blocking every arm, since all arms consume the baked obs box. Cleaning
-    # here frees every install-half .deb, restoring more headroom than the pre-#884 baseline
-    # that baked clean across 40 arm builds. Placed at bake scope (not in the renderer role)
-    # so it reclaims the other install halves' caches too, right before the build that needs it.
-    - name: reclaim the apt cache before the mq_prometheus build (#885)
+    # Reclaim the apt cache (#885). The install-half roles above leave their .debs in
+    # /var/cache/apt/archives; #884's Chrome (~0.5 GiB of package + cached .deb) once tipped
+    # the size-constrained bake box over ("no space left on device"), failing the whole obs
+    # bake. It was added for the since-removed mq_prometheus build (#1584), and is kept: it
+    # frees disk for the tarball-heavy log stack below and keeps the .debs out of the image.
+    - name: reclaim the apt cache before the log-stack installs (#885)
       ansible.builtin.apt:
         clean: true
-
-    # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
-    # toolchain — exactly the work worth baking once. This is Ubuntu-only (it pulls
-    # the full MQ via the Ubuntu-deb mq-install role and apt golang), so it lives on
-    # the obs/probe box, NOT the RHEL rdqm box (verified #602). The per-instance
-    # exporter units + TLS CCDT/keystore stay per-run (site-obs.yml instance loop).
-    - name: build mq_prometheus (+ MQ SDK for the cgo build)
-      ansible.builtin.include_role:
-        name: mq-exporter
-        tasks_from: build
 
     # --- Consolidation (epic .github#267): the log-search tier is folded onto the obs
     # box so one instrumentation machine runs the whole observability platform (metrics
@@ -110,8 +97,8 @@
     # metrics stack above): binaries/packages + static config + inert units baked; NO
     # enable/start, NO secrets, NO per-run renders — those stay in the configure path
     # (site-obs.yml, into which the log-stack configure was folded, #1179). Placed AFTER the
-    # cgo mq_prometheus build so the #885 apt-clean headroom protects that space-hungry build;
-    # the log stack installs from tarballs (its own bundled JDKs), not apt. The merged
+    # #885 apt clean; the log stack installs from tarballs (its own bundled JDKs), not apt.
+    # The merged
     # footprint fits the 18 G build disk with ~9 G headroom (box-fit gate, #1178). The
     # standalone bake-logsearch.yml was retired with the logsearch box (#1179).
     - name: opensearch (install half — binary + static opensearch.yml + unit, no start)

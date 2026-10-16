@@ -15,7 +15,7 @@
 #     the hash flips the moment #602 lands the playbook;
 #   * the TRANSITIVE bake ROLES the playbook pulls in (#649) - every file under
 #     each role the bake include_role/import_role reaches, directly or through a
-#     nested include (e.g. mq-exporter -> mq-install; rdqm-install ->
+#     nested include (e.g. mq-exporter -> pki-distribute; rdqm-install ->
 #     mq-diag-logging). The bake playbooks are thin: the real bake work
 #     (tasks/install.yml, configure.yml, main.yml, templates/, defaults/,
 #     handlers/, vars/, meta/) lives in those roles. Digesting only the playbook
@@ -40,9 +40,9 @@
 #     MQ-bearing box at REUSE, so a bootstrap silently cloned the old-version box
 #     and, via the skip-if-baked guard, came up on the old MQ). Folding the pin
 #     content in flips those boxes to BUILD on a bump. The MQ-version-independent
-#     commons boxes (obs/infra) DELIBERATELY exclude it, so a version bump never
-#     spuriously rebakes them. pcmk is NOT a commons box: its bake installs MQ
-#     via mq-install, so it is MQ-bearing like pdrbd (#1572).
+#     commons boxes (obs/infra/san, which carry no MQ, #1584) DELIBERATELY exclude it,
+#     so a version bump never spuriously rebakes them. pcmk is NOT a commons box: its
+#     bake installs MQ via mq-install, so it is MQ-bearing like pdrbd (#1572).
 #
 #   * the OS PIN (epic .github#280) - the base box plus its point release or box-version
 #     pin (e.g. <base_box>@<pin>), passed as --os-pin. A re-pin (a new point release, a

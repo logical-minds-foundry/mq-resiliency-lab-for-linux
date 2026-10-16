@@ -1,10 +1,10 @@
 """Build & cache the mq_prometheus exporter binary in the Go container (#1065).
 
 Fallout of the epic-198 cold-boot work: the `obs` and `mq-ubuntu` fat-box bakes
-compiled `mq_prometheus` *inside the build guest* — installing `golang-go` and
-running a cgo `go build`. When upstream `mq-metric-samples` moved its `go.mod` to
-a newer Go, the build auto-downloaded the entire Go toolchain into the guest and
-overflowed its disk, failing every bake.
+(only `mq-ubuntu` since #1584) compiled `mq_prometheus` *inside the build guest* —
+installing `golang-go` and running a cgo `go build`. When upstream `mq-metric-samples`
+moved its `go.mod` to a newer Go, the build auto-downloaded the entire Go toolchain
+into the guest and overflowed its disk, failing every bake.
 
 Instead we build the binary **once, on the host, in `ghcr.io/vergil-project/dev-go`**
 (which already ships the required Go — nothing auto-downloads), against the MQ SDK
@@ -40,10 +40,11 @@ BINARY_STEM = "mq_prometheus"
 # Apple Silicon, x86_64 in the cloud — never a fixed amd64 (#1100; the #1065 x86-only
 # build broke arm64 bakes with `exec format error`).
 _DOCKER_PLATFORM = {"x64": "linux/amd64", "arm64": "linux/arm64"}
-# The box ROLES whose bake installs mq_prometheus: obs (the observability probe) and
-# the mq-client commons (mon-probe). Only these need the prebuilt binary present. Keyed by
-# role, not box name, so it holds on every OS major (epic .github#280).
-EXPORTER_ROLES = frozenset({"obs", "mq-client"})
+# The box ROLES whose bake installs mq_prometheus: the mq-client commons box, which
+# mon-probe (the only node that runs the exporter) boots. obs no longer bakes it (#1584).
+# Only these need the prebuilt binary present. Keyed by role, not box name, so it holds
+# on every OS major (epic .github#280). tests/test_versions.py checks it against the bakes.
+EXPORTER_ROLES = frozenset({"mq-client"})
 _BUILD_SCRIPT = "lab/scripts/build-mq-exporter-binary.sh"
 
 

@@ -47,6 +47,8 @@ os:
     10: { base_box: rhel/10-x86_64, point: "10.2", iso: rhel-10.2-x86_64-dvd.iso, arch: x86_64, requires: [x86-64-v3] }
 roles:
   infra: { bake: { ubuntu: infra } }
+  # No MQ (#1584): mq_prometheus runs only on mon-probe (an mq-client box), so the obs bake
+  # installs neither it nor MQ. Not MQ-bearing; tests/test_versions.py pins that.
   obs: { bake: { ubuntu: obs } }
   # The SAN targets (san-a/san-b): DRBD + LIO install half, no MQ payload (spec §4.7.1).
   san: { bake: { ubuntu: san }, components: [mq-resiliency-observability] }
