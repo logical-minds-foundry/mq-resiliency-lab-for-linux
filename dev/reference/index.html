@@ -1713,8 +1713,13 @@ Render the current map (both sites) to <code>build/work/rest/endpoints.json</cod
 </tr>
 </tbody>
 </table>
-<p>The administrative REST credentials (the <code>MQWEB_ADMIN_*</code> login) are
-runtime-injected, never committed. For the acceptance procedure that proves each
+<p>The MQ Console and the REST API both require a login; there is no anonymous
+access. Each node's mqweb registry has one sample user per IBM role: <code>mqadmin</code>
+(<code>MQWebAdmin</code>), <code>mqreadonly</code> (<code>MQWebAdminRO</code>) and <code>mqoperator</code> (<code>MQWebUser</code>). In
+this lab only, each password equals its username. Every password in
+<code>mqwebuser.xml</code> is AES-encoded with <code>securityUtility</code>, using one server key made
+from the runtime-injected lab secret <code>mqweb_aes_passphrase</code>, which is never
+committed. For the acceptance procedure that proves each
 endpoint is live, see the
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md">mqweb endpoint verification runbook</a>.</p>
 <h2 id="mqlab-cli-verb-map"><code>mqlab</code> CLI verb map<a class="headerlink" href="#mqlab-cli-verb-map" title="Permanent link">&para;</a></h2>
