@@ -21,6 +21,7 @@ from mqlab.watcherboard import (
     _SUPPORT_COLS,
     _UTIL,
     DASHBOARD_UID,
+    _owner_resource,
     build_watcher,
     lab_watcher_dashboard,
     watcher_dashboard_path,
@@ -414,3 +415,11 @@ def test_both_native_ha_stacks_are_distinguishable_in_real_topology():
     # to an ambiguous "nati…"; the column-2 name now tells them apart.
     blob = _bold_texts(json.loads(lab_watcher_dashboard())["panels"])
     assert "**nativeha-rhel-crr**" in blob and "**nativeha-ubuntu**" in blob
+
+
+def test_owner_resource_is_mq_qm_for_both_pacemaker_mechanisms():
+    # Both Pacemaker arms own the QM as the pacemaker resource id, so the new
+    # pcmk-drbd-ubuntu stack tiles never silently read "No data" (epic .github#310).
+    assert _owner_resource("pacemaker-san", "PCMK") == "mq_qm"
+    assert _owner_resource("pacemaker-drbd", "PDRBD") == "mq_qm"
+    assert _owner_resource("rdqm", "RDQM") == "RDQMAPP"

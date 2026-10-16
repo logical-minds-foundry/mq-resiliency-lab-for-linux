@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 # is "<mechanism label> (<OS label>)", e.g. "Native HA (RHEL)".
 _MECH_LABEL = {
     "pacemaker-san": "PCMK",
+    "pacemaker-drbd": "PCMK-DRBD",
     "rdqm": "RDQM",
     "native-ha": "Native HA",
 }

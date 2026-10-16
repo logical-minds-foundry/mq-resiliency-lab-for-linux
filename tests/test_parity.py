@@ -43,6 +43,7 @@ def test_matrix_covers_exactly_the_declared_arms() -> None:
         "rdqm-rhel",
         "nativeha-rhel-crr",
         "nativeha-ubuntu",
+        "pcmk-drbd-ubuntu",
     }
 
 
@@ -51,3 +52,10 @@ def test_parity_command_prints_matrix() -> None:
     assert result.exit_code == 0
     assert "pcmk-ubuntu" in result.stdout
     assert "not_yet" in result.stdout
+
+
+def test_pdrbd_row_declares_every_verb_not_yet() -> None:
+    # pcmk-drbd-ubuntu (epic .github#310) starts NOT_YET; Task 9 sets it from drill evidence.
+    row = MATRIX["pcmk-drbd-ubuntu"]
+    assert set(row) == set(VERBS)
+    assert set(row.values()) == {Support.NOT_YET}

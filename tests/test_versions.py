@@ -156,6 +156,7 @@ def test_committed_catalog():
         "pcmk-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
         "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
         "rdqm-rhel": [OsRef("rhel", 9), OsRef("rhel", 10)],
+        "pcmk-drbd-ubuntu": [OsRef("ubuntu", 24)],
     }
     # Ubuntu defaults on 26 ahead of IBM, by the recorded lab decision (#1285);
     # nativeha-rhel-crr (T11) and rdqm-rhel (#1473) default to RHEL 10, each validated live.
@@ -164,8 +165,10 @@ def test_committed_catalog():
         "pcmk-ubuntu": OsRef("ubuntu", 26),
         "nativeha-rhel-crr": OsRef("rhel", 10),
         "rdqm-rhel": OsRef("rhel", 10),
+        # 24 only until LINBIT's DRBD 9 PPA is proven on 26 (epic .github#310).
+        "pcmk-drbd-ubuntu": OsRef("ubuntu", 24),
     }
-    rhel9 = cat.oses[OsRef("rhel", 9)]
+    rhel9 =cat.oses[OsRef("rhel", 9)]
     assert (rhel9.base_box, rhel9.point, rhel9.iso, rhel9.arch_pin) == (
         "rhel/9-x86_64",
         "9.6",
@@ -1196,6 +1199,7 @@ def test_stack_roles_from_node_box_roles():
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
+        "pcmk-drbd-ubuntu": {"pdrbd"},
     }
 
 

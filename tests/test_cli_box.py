@@ -73,6 +73,7 @@ def test_fleet_has_the_catalog_boxes():
         "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
         "pcmk-ubuntu26",
+        "pdrbd-ubuntu24",
     }
 
 
@@ -120,6 +121,7 @@ def test_fleet_skips_rhel_on_an_arm_host():
         "mq-nativeha-ubuntu26",
         "pcmk-ubuntu24",
         "pcmk-ubuntu26",
+        "pdrbd-ubuntu24",
     }
 
 
@@ -196,6 +198,7 @@ def test_topology_stack_roles_derive_from_node_box_roles():
         "rdqm-rhel": {"mq-rdqm"},
         "nativeha-rhel-crr": {"mq-nativeha"},
         "nativeha-ubuntu": {"mq-nativeha"},
+        "pcmk-drbd-ubuntu": {"pdrbd"},  # shared-nothing: no SAN role (epic .github#310)
     }
 
 
@@ -231,6 +234,7 @@ def test_boxes_for_build_default_covers_every_stack():
         "mq-rdqm-rhel10",
         "mq-nativeha-rhel10",
         "mq-nativeha-ubuntu26",
+        "pdrbd-ubuntu24",
     ]
 
 
@@ -294,10 +298,14 @@ def test_boxes_for_build_refuses_an_unsupported_major():
         box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 28)), facts=_FACTS)
 
 
-def test_boxes_for_build_ubuntu26_builds_both_ubuntu_stacks_on_26():
-    """A build file naming ubuntu:26 (IBM-unsupported) bakes both Ubuntu stacks on 26,
-    beside the shared boxes (mq-client on infra_mq) (#1282)."""
-    names = box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS)
+def test_boxes_for_build_ubuntu26_builds_the_26_capable_ubuntu_stacks_on_26():
+    """A build file naming ubuntu:26 (IBM-unsupported) bakes pcmk-ubuntu and
+    nativeha-ubuntu on 26, beside the shared boxes (mq-client on infra_mq) (#1282).
+    pcmk-drbd-ubuntu (24 only, epic .github#310) is left out of the catalog here so this
+    pins the 26-capable stacks; the next test pins the refusal it causes."""
+    roles = box._topology_stack_roles(load_catalog())
+    del roles["pcmk-drbd-ubuntu"]
+    names = box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS, stack_roles=roles)
     assert names == [
         "infra-ubuntu26",
         "obs-ubuntu26",
@@ -306,6 +314,15 @@ def test_boxes_for_build_ubuntu26_builds_both_ubuntu_stacks_on_26():
         "pcmk-ubuntu26",
         "mq-nativeha-ubuntu26",
     ]
+
+
+def test_boxes_for_build_ubuntu26_refuses_naming_the_24_only_stack():
+    """A build file's os: covers every stack of that family, so ubuntu:26 asks for
+    pcmk-drbd-ubuntu on 26, which it does not support (LINBIT's DRBD 9 PPA is proven on
+    24 only, epic .github#310). That is a loud refusal naming the stack and the fix, never
+    a silent skip (the same contract as rhel:10 before #1440)."""
+    with pytest.raises(VersionError, match=r"pcmk-drbd-ubuntu supports \[ubuntu:24\]"):
+        box.boxes_for_build(BuildFile(os=OsRef("ubuntu", 26)), facts=_FACTS)
 
 
 def test_boxes_for_build_ubuntu24_stays_selectable():
@@ -319,6 +336,7 @@ def test_boxes_for_build_ubuntu24_stays_selectable():
         "mq-client-ubuntu26",
         "pcmk-ubuntu24",
         "mq-nativeha-ubuntu24",
+        "pdrbd-ubuntu24",
     ]
 
 
@@ -1453,6 +1471,7 @@ _RESOLVABLE = {
     "mq-nativeha-ubuntu26",
     "pcmk-ubuntu24",
     "pcmk-ubuntu26",
+    "pdrbd-ubuntu24",
     "mq-nativeha-rhel9",
     "mq-nativeha-rhel10",
     "mq-rdqm-rhel9",

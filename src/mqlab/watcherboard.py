@@ -364,11 +364,14 @@ def _support_rows(topo: dict[str, Any], y: int = 0) -> list[dict[str, Any]]:
     return panels
 
 
+_PACEMAKER_MECHANISMS = ("pacemaker-san", "pacemaker-drbd")
+
+
 def _owner_resource(mechanism: str, short: str) -> str:
-    """The `cluster_resource_owner` resource label for a stack. Pacemaker owns the QM via
-    the pacemaker resource id (mq_qm); the other mechanisms own by the short-derived QM
-    name (#351)."""
-    if mechanism == "pacemaker-san":
+    """The `cluster_resource_owner` resource label for a stack. Pacemaker arms own the QM
+    via the pacemaker resource id (mq_qm); the other mechanisms own by the short-derived
+    QM name (#351)."""
+    if mechanism in _PACEMAKER_MECHANISMS:
         return "mq_qm"
     return f"{short}APP"
 
