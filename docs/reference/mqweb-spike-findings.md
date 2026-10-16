@@ -11,9 +11,10 @@
 >    instance?
 > 3. Which REST API version should the lab use?
 >
-> **Status: partial.** This document holds the **cloud x86** half only. The
-> **macOS/arm64** half and the Console screenshots are still to come; they are marked
-> **PENDING** below. The verdict is provisional until both halves are in.
+> **Status: gate decided on cloud x86.** This document holds the **cloud x86** half and
+> the Console browser checks (§4.5). By the human's decision (2026-10-16, recorded in
+> `.github#358`), the **macOS/arm64** half is deferred to the epic's end-of-epic
+> validation (T6/T7). Its rows stay **PENDING** here and are filled there.
 >
 > Convention: **[data]** is something measured on the lab or quoted from a source.
 > **[judgment]** is our reasoning on top of it.
@@ -23,12 +24,13 @@
 | Spec §3 question | Cloud x86 answer | macOS/arm64 answer |
 |---|---|---|
 | 1. Per-node cost; one-pass rebuild? | Cold start about 21 s per node at bootstrap; warm restart 6–8 s; Java RSS about 165–175 MB steady. The bootstrap completed in **one pass** (29 min 22 s). | PENDING |
-| 2. Replica and CRR behaviour | mqweb runs and answers on every instance. The **named** query `GET /admin/qmgr/NHARCAPP` fails on every non-active instance with HTTP 500 (MQRC 2543). The **collection** query `GET /admin/qmgr` reports `replica` or `recoveryGroupLeader` there. The Console is served on every instance. | PENDING |
+| 2. Replica and CRR behaviour | mqweb runs and answers on every instance. The **named** query `GET /admin/qmgr/NHARCAPP` fails on every non-active instance with HTTP 500 (MQRC 2543). The **collection** query `GET /admin/qmgr` reports `replica` or `recoveryGroupLeader` there. The Console is served and accepts a login on every instance, but only the active instance can open the queue manager (§4.5). | PENDING |
 | 3. REST version | `v1`, `v2` and `v3` all answer identically on 10.0.1.0; `v4` is 404. **`REST_API_VERSION=v3`**. | PENDING (confirmation only) |
 
-**Provisional verdict (cloud x86): PAUSE.** The named surprise is that a named-QM REST
-GET on a replica returns an error, not `"state":"replica"`. See §6. The cost and
-one-pass criteria pass.
+**Verdict: PASS on cloud x86, after a PAUSE that the human resolved.** The named surprise
+was that a named-QM REST GET on a replica returns an error, not `"state":"replica"`.
+The fix the human accepted is to probe with the collection query; `.github#358` amends
+the spec and plan for it. See §6. The cost and one-pass criteria pass.
 
 ## 2. Method
 
@@ -237,11 +239,51 @@ Other observations [data]:
   rendered `mqwebuser.xml` on the node does contain it. Even so, an unauthenticated
   `GET /ibmmq/console/` returns 401 on 10.0.1.0, and only `login.html` is public. Over
   `curl`, the "Console loads with no login" behaviour (#255, #258) does not show on
-  10.0.1.0. Whether a browser is sent to the login page or gets in anonymously is a
-  human-verify item. [judgment] This does not affect the epic, because Task 2 removes
-  `EVERYONE` and `mqweb_console_anonymous` anyway.
-- **Native HA / replication status view** on the active instance, and what a replica
-  shows after login: **PENDING human verification** in a browser (§7).
+  10.0.1.0. A browser behaves the same way (§4.5).
+- What a browser sees after login: §4.5.
+
+### 4.5 Console in a browser [data]
+
+Checked twice on 2026-10-16:
+
+- **By the human:** Safari on macOS, through an IAP SSH tunnel and a relay to the active
+  instance.
+- **Headless:** Chromium (Playwright) on the dev VM, logged in as `mqadmin` on each of
+  `a2`, `a1` and `b1`.
+
+The screenshots are in the temp bucket under `$(mqlab build path temp)/mqweb-console-spike/`.
+
+- **Anonymous access does not work, and it hides the login page.** With
+  `mqweb_console_anonymous: true`, a browser opening `/ibmmq/console/` gets the raw JSON
+  `{"message": "MQWB2010E: User is not authenticated."}`. It is not redirected to the
+  login page. The only way in is to open `/ibmmq/console/login.html` directly. After
+  that, login as `mqadmin` succeeds.
+  - [judgment] On 10.0.1.0 the `EVERYONE` grant is worse than ignored: it seems to
+    suppress the Console's normal unauthenticated redirect.
+  - Task 2 retires it. Task 7 should confirm that a plain `/ibmmq/console/` visit then
+    reaches the login page.
+
+| View | Active (`a2`) | Replica (`a1`) | Recovery leader (`b1`) |
+|---|---|---|---|
+| Home, "Your queue managers" | 1, counted as Running | 1, counted as **Running** | 1, counted as **Running** |
+| Manage → Local queue managers, status | `Running` | `Replica` | `Recovery group leader` |
+| Open `NHARCAPP` | Overview loads: CPU, memory, storage, queues, channels, connections, message rates | **Row does not open**; the view stays on the list | **Row does not open**; the view stays on the list |
+| Queue-manager tabs | Overview, Queues, Events, Applications, MQ network | none | none |
+
+- **Only the active instance's Console can administer the queue manager.** On a
+  replica or the recovery-group leader, the Console lists the queue manager with its
+  Native HA role but cannot open it. This is the browser counterpart of the REST
+  reason-2543 behaviour in §4.2.
+- **The home page misleads on non-active instances.** It counts the queue manager as
+  Running on a replica and on the recovery-group leader. Only the Manage list shows the
+  real role.
+  - [judgment] A human pointed at a replica's Console would see "1 Running" and then be
+    unable to open it. This is the strongest argument for `console open` following the
+    active instance rather than using a fixed node.
+- **No Native HA or replication status view** on the active instance's queue-manager
+  page in 10.0.1.0. The tabs are as listed in the table. `View configuration` was not
+  explored. The Native HA role is visible only as the status column of the Local queue
+  managers list.
 
 ## 5. REST version (spec §3 Q3)
 
@@ -265,14 +307,19 @@ Plan PASS criteria, against the cloud x86 data:
 | Bootstrap one-pass | **Met.** Exit 0, no re-run, no phase retries | PENDING |
 | Replica states as expected | **Not met as specified.** The named-QM GET errors on replicas (§4.2). The states are as expected only on the collection query | PENDING |
 
-**PROVISIONAL VERDICT (cloud x86): PAUSE: a named-QM REST GET
+**Spike result (cloud x86): PAUSE: a named-QM REST GET
 (`/admin/qmgr/<QM>`) on a non-active Native HA instance returns HTTP 500 `MQWB0004E`
 (MQRC 2543 `MQRC_STANDBY_Q_MGR`), not `"state":"replica"`.**
+
+**Final gate verdict: PASS on cloud x86.** On 2026-10-16 the human accepted the
+resolution below, which `.github#358` writes into the spec and plan. The human also
+deferred the macOS/arm64 half to T6/T7 and accepted the small risk that arm64 differs.
+Tasks 2 and 3 may start.
 
 [judgment] This is the kind of surprise spec §3 says pauses the epic: it breaks the plan's
 Task 5 `qm_state` and `resolve_live` as written. It does not argue against per-node
 mqweb itself. Every cost and reliability figure on cloud x86 is comfortably inside the
-criteria. The proposed resolution, which needs a human decision before Task 2 starts:
+criteria. The resolution:
 
 1. Amend spec §2.3 to name the **collection** query
    (`GET /ibmmq/rest/v3/admin/qmgr?attributes=*`) as the probe's source of `state`.
@@ -286,20 +333,15 @@ criteria. The proposed resolution, which needs a human decision before Task 2 st
 No new IBM deviation (spec §8) came out of the cloud half. The figures support D3
 as written for cloud x86. D3's macOS risk is still open until the arm64 half runs.
 
-## 7. Remaining for a human
+## 7. Remaining work
 
-- [ ] **macOS/arm64 half.** A cold `mqlab bootstrap nativeha-rhel-crr` with
-      `mqweb_enabled: true` (same scratch-edit method). Then fill §3.3 and the
-      macOS column of §1 and §6: the one-pass result, gate waits, and `ready_s` /
-      `rss_kb` for each of the six nodes. Re-run the §4.2 REST table to confirm it
-      matches.
-- [ ] **Console screenshots** into the temp bucket (`mqlab build path temp`). One of
-      the active instance and one of a replica, after login, then describe them in
-      §4.4:
-  - does the Native HA / replication status view render on the active instance?
-  - what does the replica show (an error, read-only, or a "standby" banner)?
-  - does a browser land on the login page or load anonymously, given the 401 in §4.4?
-- [ ] **Final verdict.** Replace the provisional verdict with the combined one, then
-      amend spec §3 (answers) and §8 (any new deviation) in `.github`.
+- [ ] **macOS/arm64 half, deferred to T6/T7.**
+  - Do a cold `mqlab bootstrap nativeha-rhel-crr` with mqweb on.
+  - Fill §3.3 and the macOS column of §1 and §6: the one-pass result, gate waits, and
+    `ready_s` / `rss_kb` for each of the six nodes.
+  - Re-run the §4.2 REST table and the §4.5 Console table to confirm they match.
+  - If arm64 differs materially, the epic pauses.
+- [x] **Console in a browser** (§4.5).
+- [x] **Final verdict** (§6). The spec §3/§8 amendments are in `.github#358`.
 
 The cloud lab used for these figures was left running with mqweb on.
