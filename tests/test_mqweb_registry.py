@@ -36,10 +36,11 @@ def _defaults() -> dict:
 
 
 def _render(**overrides: object) -> str:
-    env = jinja2.Environment(  # noqa: S701 - XML config, not HTML
+    env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(TEMPLATE.parent)),
         undefined=jinja2.StrictUndefined,
         trim_blocks=True,
+        autoescape=True,  # no-op for these markup-free fixture values; satisfies CodeQL
     )
     # Ansible's `bool` filter, which the template uses on its toggles.
     env.filters["bool"] = lambda v: v if isinstance(v, bool) else str(v).lower() in _TRUTHY

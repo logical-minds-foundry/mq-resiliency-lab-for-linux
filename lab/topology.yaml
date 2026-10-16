@@ -485,7 +485,7 @@ stacks:
     groups: [pdrbd_a, pdrbd_b]
     dr_groups: [pdrbd_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-pdrbd.yml
-    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    secrets: [pcmk_hacluster_password, mqweb_aes_passphrase]
     qm: { vip: 10.10.1.170, vip_b: 10.10.2.170 }
     alloc: { exporter_app_port: 9165, app_unit: app-pdrbd, svc_port: 1414 }
     verbs:
