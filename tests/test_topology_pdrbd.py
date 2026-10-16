@@ -87,5 +87,5 @@ def test_pdrbd_vips_and_alloc_are_unique_across_stacks():
 
 def test_pdrbd_os_catalog_entry():
     cat = load_catalog()
-    assert cat.stacks["pcmk-drbd-ubuntu"]["supported"] == [OsRef("ubuntu", 24)]
-    assert cat.stacks["pcmk-drbd-ubuntu"]["default"] == OsRef("ubuntu", 24)
+    assert cat.stacks["pcmk-drbd-ubuntu"]["supported"] == [OsRef("ubuntu", 24), OsRef("ubuntu", 26)]
+    assert cat.stacks["pcmk-drbd-ubuntu"]["default"] == OsRef("ubuntu", 26)
