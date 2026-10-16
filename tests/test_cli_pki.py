@@ -16,7 +16,7 @@ from mqlab.transcript import Transcript, transcript_path
 from tests.fakes import RecordingRunner, ScriptedResult
 
 # Non-QM entity CNs that must always be present in the rendered output.
-_FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "pymqrest", "svc-responder"}
+_FIXED_CNS = {"app-client", "mq_prometheus", "mqweb", "svc-responder"}
 
 # The app-org QM CNs derived from each stack's #351 short token (<short>APP), and
 # the single shared svc-org counterparty CN (SVCQM) every stack talks to (#446).

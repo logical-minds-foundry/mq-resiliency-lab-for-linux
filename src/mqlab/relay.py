@@ -89,7 +89,7 @@ def parse_relays(listing: str) -> list[Relay]:
             )
             raise RelayError(msg)
         relays.append(Relay(unit=unit, port=int(match["port"]), target=match["target"]))
-    return relays
+    return sorted(relays, key=lambda r: r.port)
 
 
 def list_relay_units() -> str:
@@ -105,14 +105,24 @@ def list_relay_units() -> str:
     return done.stdout
 
 
+def relays_to(target: str) -> list[Relay]:
+    """The installed relay unit(s) whose forward target is ``target``, sorted by port.
+
+    An empty list means no such relay is installed; the caller decides whether that is
+    fatal (it is for Grafana, and for the MQ Console on a local Lima VM).
+    """
+    relays = [r for r in parse_relays(list_relay_units()) if r.target == target]
+    return sorted(relays, key=lambda r: r.port)
+
+
 def grafana_relays() -> list[Relay]:
     """The installed relay unit(s) forwarding to the obs Grafana, sorted by port.
 
     Raises RelayError, naming the remedy, when none is installed — the caller must
     fail loud rather than skip the heal and leave a broken forward unnoticed.
     """
-    relays = [r for r in parse_relays(list_relay_units()) if r.target == GRAFANA_BACKEND]
+    relays = relays_to(GRAFANA_BACKEND)
     if not relays:
         msg = f"no vergil port-forward relay to Grafana ({GRAFANA_BACKEND}) is installed; "
         raise RelayError(msg + RELAY_REMEDY)
-    return sorted(relays, key=lambda r: r.port)
+    return relays

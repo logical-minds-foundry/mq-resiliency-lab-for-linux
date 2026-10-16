@@ -331,6 +331,59 @@ versus async CRR. It is deliberately separate from the always-on
 `mq-app-requester` cockpit stream (which is "good-enough noise", not a
 measurement tool).
 
+## Using the MQ Console
+
+mqweb (the MQ Console and the admin REST API) runs on every queue manager node. To
+open a stack's Console from your workstation, run on the dev VM:
+
+```bash
+mqlab console open <stack>            # e.g. nativeha-rhel-crr; site A
+mqlab console open <stack> --site b   # the DR site's endpoints
+```
+
+The verb finds the stack's live mqweb and forwards the dev VM's
+`127.0.0.1:19443` to it. It then prints the URL, the logins, and how to reach the
+forward from your workstation. Access takes two hops:
+
+1. **Workstation → dev VM.** The `vergil.toml` record `9443|127.0.0.1:19443`
+   makes vergil-vm install a relay on the VM's port `9443`, declared and reached
+   exactly like the Grafana relay on `3000`. (The `anonymous` profile uses
+   `9444`, beside Grafana's `3001`.) The verb prints both URLs:
+    - **Local Lima VM.** Lima forwards the port to your Mac. Browse
+      `https://localhost:9443/ibmmq/console/login.html`.
+    - **Cloud VM.** Browse the VM's external IP, shown by `vrg-vm list`, on the
+      same port: `https://<external-ip>:9443/ibmmq/console/login.html`. The
+      cloud VM's firewall currently admits only `tcp:3000`, so this port answers
+      only once vergil-vm adds a firewall rule for it. See
+      "Reaching lab services from your workstation" on this page (#1592).
+2. **Dev VM → live instance.** A socat forwarder (`mqlab-console-forward`)
+   carries `127.0.0.1:19443` to the live instance's `:9443`. TLS passes straight
+   through. For a VIP stack the live instance is the VIP. For Native HA, which has
+   no VIP, `console open` asks each instance the list query
+   `GET /ibmmq/rest/v3/admin/qmgr?attributes=*` as `mqreadonly` and picks the one
+   reporting `running`. If none is running, as on the CRR recovery site before a
+   switchover, it fails and names every instance's answer.
+
+Log in with one of the three lab users. In this lab only, each password equals
+its username:
+
+| Login | IBM role | Can do |
+|---|---|---|
+| `mqadmin` / `mqadmin` | `MQWebAdmin` | Full administration |
+| `mqreadonly` / `mqreadonly` | `MQWebAdminRO` | Read-only administration |
+| `mqoperator` / `mqoperator` | `MQWebUser` | What the `mqoperator` MQ authority allows |
+
+Two behaviours are expected:
+
+- **The browser warns once about the certificate.** Accept and continue. The
+  mqweb certificate names `mqweb`, not `localhost`, and it chains to the lab's
+  private CA. The workstation deliberately does not trust that CA: the lab builds
+  no trust link between the ephemeral lab and the host, and removing a one-time
+  click-through is not worth that complexity.
+- **Re-run `mqlab console open` after a failover or a DR cutover.** The forward
+  points at one instance and does not follow the queue manager. A re-run finds the
+  new live instance and replaces the forwarder.
+
 ## The Watcher
 
 The **Watcher** is the management/observability plane — the `net-mgmt` side of the

@@ -112,19 +112,21 @@ detects the environment (Apple Virtualization → `macos`, Google Compute Engine
 
 Each queue manager's admin REST API / Console (Liberty `mqweb`, HTTPS on
 **`9443`**) is a published endpoint derived from the topology. mqweb runs on every
-QM node by default (#1502). Render the current map (both sites) to
-`build/work/rest/endpoints.json` with:
-
-```bash
-mqlab rest render
-```
-
-Each record is `{stack, kind, endpoints}`, where `kind` is one of:
+QM node by default (#1502). The derivation is an internal library
+(`mqlab.mqweb_endpoints`) behind `mqlab console open` (see
+[Using the MQ Console](../operate/index.md#using-the-mq-console)). Each stack has
+one of three endpoint kinds:
 
 - **`vip`** — the stack's floating HA VIP (`pcmk-ubuntu`, `rdqm-rhel`); one URL
   per site.
 - **`active-instance`** — every instance's URL (Native HA stacks, which have no
-  VIP); the client resolves the active one.
+  VIP). The client finds the live one with the "follow the active" state probe:
+  ask each candidate the list query `GET /ibmmq/rest/v3/admin/qmgr?attributes=*`
+  and use the one whose record for the queue manager says `state: running`. The
+  per-QM query `GET …/admin/qmgr/<QM>` is never used to find it: it answers
+  HTTP 500 (reason 2543) on every healthy replica. `mqlab.mqweb_probe` is the
+  lab's reference implementation, and the lab recommends the same algorithm to
+  REST API applications.
 - **`counterparty`** — the shared `svc-sim` endpoint on `net-ext`.
 
 | Stack | Kind | Site-A endpoint(s) | Site-B endpoint(s) |
@@ -167,7 +169,7 @@ Command groups:
 | `mqlab dr` | `cutover` · `failback` | Cross-site DR: cut a stack's live QM over to its DR peer (`cutover`, A→B) and back (`failback`, B→A) |
 | `mqlab vm` | `inventory` · `roster` · `ssh` | Guest VM maps (Ansible inventory / salt-ssh roster) + interactive shell |
 | `mqlab obs` | `targets` · `dashboard` · `net-state` · `reach-peers` · `open` | Observability renders (Prometheus targets, Grafana dashboard) + reach the Watcher |
-| `mqlab rest` | `render` | Render the published mqweb REST endpoints (both sites) |
+| `mqlab console` | `open` | Forward this VM to a stack's live mqweb and print the MQ Console URL and logins |
 | `mqlab dns` | `render` | Render BIND zone files + `named.conf` + host resolver facts |
 | `mqlab pki` | `ensure` · `issue` · `list` | Lab PKI / TLS certificate provider (org CAs, entity certs, keystores) |
 | `mqlab commons` | `up` · `status` · `down` | Shared commons VMs (obs, including its log-search tier, + probe + svc + app + infra) independently of any stack |
