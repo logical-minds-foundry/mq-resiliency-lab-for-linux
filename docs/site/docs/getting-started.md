@@ -468,8 +468,9 @@ Health** board (`lab-fleet-node`) still renders a tile per node, at `/d/lab-flee
 **data-plane infrastructure** co-located with each queue manager — reached at the
 QM's data-plane VIP (Pacemaker / RDQM) or the active instance's node IP (Native HA,
 which has no VIP) — **not** on the management / Watcher plane.
-`mqlab console open <stack>` finds a stack's live mqweb and prints the MQ Console URL and logins (see
-[Using the MQ Console](operate/index.md#using-the-mq-console)). mqweb runs on
+`mqlab console open <stack>` finds a stack's live mqweb and prints the MQ Console
+URL and logins (see [Using the MQ Console](operate/index.md#using-the-mq-console)).
+mqweb runs on
 every QM node by default (#1502); see the architecture page's admin-plane section.
 
 Because `bootstrap` already made every node a scrape target, a fault is something

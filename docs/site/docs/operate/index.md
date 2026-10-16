@@ -355,7 +355,7 @@ forward from your workstation. Access takes two hops:
       same port: `https://<external-ip>:9443/ibmmq/console/login.html`. The
       cloud VM's firewall currently admits only `tcp:3000`, so this port answers
       only once vergil-vm adds a firewall rule for it. See
-      "Reaching lab services from your workstation" on this page (#1592).
+      [Reaching lab services from your workstation](#reaching-lab-services-from-your-workstation).
 2. **Dev VM → live instance.** A socat forwarder (`mqlab-console-forward`)
    carries `127.0.0.1:19443` to the live instance's `:9443`. TLS passes straight
    through. For a VIP stack the live instance is the VIP. For Native HA, which has
