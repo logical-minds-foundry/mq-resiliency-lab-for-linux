@@ -1381,6 +1381,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#reaching-lab-services-from-your-workstation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reaching lab services from your workstation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mqlab-logsearch-verbs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1801,10 +1812,67 @@ relay that vergil-vm installs from the VM profile's <code>port_forwards</code> i
 forwards <code>3001</code>. <code>mqlab obs open</code> and <code>mqlab obs relay-heal</code> therefore discover the
 relay from the installed units (<code>systemctl list-units --all
 'vergil-portforward-*.service'</code>) rather than assuming <code>:3000</code>, and fail loud with
-the remedy if no relay to Grafana (<code>10.50.0.2:3000</code>) is installed.</p>
+the remedy if no relay to Grafana (<code>10.50.0.2:3000</code>) is installed. How the
+workstation reaches that port on a local or a cloud dev VM is described in
+<a href="#reaching-lab-services-from-your-workstation">Reaching lab services from your workstation</a>.</p>
 <p>The render verbs are pure topology→file projections; the observe phase of
 <code>mqlab commons up</code> runs them and hands the output to <code>site-obs.yml</code>, so a normal
 bring-up leaves the boards current without a manual render.</p>
+<h3 id="reaching-lab-services-from-your-workstation">Reaching lab services from your workstation<a class="headerlink" href="#reaching-lab-services-from-your-workstation" title="Permanent link">&para;</a></h3>
+<p>This section is the lab's single description of how a browser on your workstation
+reaches a lab service. Other pages link here.</p>
+<p>Lab services run on nested guests, such as Grafana on the <code>obs</code> guest at
+<code>10.50.0.2:3000</code>. The workstation cannot address those guests directly. A
+<code>port_forwards</code> record <code>"&lt;vm-port&gt;|&lt;host:port&gt;"</code> in the VM profile in
+<code>vergil.toml</code> makes vergil-vm install a relay unit,
+<code>vergil-portforward-&lt;vm-port&gt;.service</code>, on the dev VM. The relay is a <code>socat</code> that
+listens on the dev VM's <code>0.0.0.0:&lt;vm-port&gt;</code> and forwards to <code>&lt;host:port&gt;</code> inside the
+lab. The relay is the same on both backends. Only the last hop to the workstation
+differs:</p>
+<table>
+<thead>
+<tr>
+<th>Dev VM</th>
+<th>Browse</th>
+<th>Where the address comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local Lima VM</td>
+<td><code>localhost:&lt;vm-port&gt;</code></td>
+<td>Lima forwards the VM's <code>0.0.0.0</code> listeners to the Mac</td>
+</tr>
+<tr>
+<td>Cloud (GCP) VM</td>
+<td><code>&lt;external-ip&gt;:&lt;vm-port&gt;</code></td>
+<td>the <strong>EXTERNAL IP</strong> column of <code>vrg-vm list</code></td>
+</tr>
+</tbody>
+</table>
+<p>The cloud dev VM has a public IP. You do not need a <code>gcloud</code> IAP tunnel, an
+<code>ssh -L</code> forward or a relay of your own to reach a forwarded port. Open
+<code>http://&lt;external-ip&gt;:3000/d/lab-watcher</code> for Grafana, the same way you would open
+<code>localhost:3000</code> on a Lima VM. Three limits apply on the cloud VM:</p>
+<ul>
+<li><strong>The cloud firewall must admit the port.</strong> vergil-vm's GCP module creates one
+  ingress rule for browsing, <code>&lt;vm&gt;-browse</code>. It allows <code>tcp:3000</code> from any source
+  and no other port. A <code>port_forwards</code> port other than <code>3000</code> works on a Lima VM
+  but is blocked on the cloud VM until that rule admits it. Opening more ports is
+  vergil-vm work, tracked here as
+  <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/345">#345</a>.</li>
+<li><strong>The IP is ephemeral.</strong> GCP can assign a new external IP when the VM is
+  recreated or restarted. Read it from <code>vrg-vm list</code> each time. Never write it into
+  the repo.</li>
+<li><strong>SSH is separate.</strong> The VM's port <code>22</code> admits only Google's IAP address range,
+  so <code>vrg-vm session</code> and file transfers such as <code>scripts/push-rhel-iso.sh</code> go over
+  IAP-tunnelled SSH. That is a rule for SSH only. It does not mean the VM has no
+  public IP, and it does not affect browsing a forwarded port.</li>
+</ul>
+<p>Sources: vergil-vm <code>templates/provision/80-port-forwards.sh</code> (the relay unit),
+vergil-vm <code>opentofu/modules/gcp/vm/main.tf</code> (the <code>browse</code> and <code>ssh</code> firewall rules
+and the external IP), and the vergil-vm v2.1.36 release (vergil-vm #261), which
+added the external IP.</p>
 <h3 id="mqlab-logsearch-verbs"><code>mqlab logsearch</code> verbs<a class="headerlink" href="#mqlab-logsearch-verbs" title="Permanent link">&para;</a></h3>
 <p>The <strong>log-search</strong> tier (single-node OpenSearch + Dashboards + Data Prepper; see
 <a href="../architecture/#the-log-search-tier-full-text-over-the-log-corpus-logsearch">Architecture</a>)

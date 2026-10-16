@@ -2043,6 +2043,10 @@ commons up</code>. A few renders and the front door are exposed directly:</p>
 (<code>3000</code> for <code>vergil-user</code>, <code>3001</code> for <code>anonymous</code>):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http://localhost:3000/d/lab-watcher   (vergil-user; anonymous — no login)
 </code></pre></div>
+<p>On a cloud (GCP) dev VM, browse the VM's external IP on the same port instead:
+<code>http://&lt;external-ip&gt;:3000/d/lab-watcher</code>, with the IP taken from <code>vrg-vm list</code>. No
+tunnel is needed. See
+<a href="../operate/#reaching-lab-services-from-your-workstation">Reaching lab services from your workstation</a>.</p>
 <p><code>mqlab obs open</code> prints the exact URLs for this VM, read from the installed
 port-forward relay. If a grafana restart wedged the forward, <code>mqlab obs relay-heal</code>
 re-heals it.</p>
