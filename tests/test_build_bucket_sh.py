@@ -23,6 +23,7 @@ import pytest
 _REPO = Path(__file__).resolve().parents[1]
 HELPER = _REPO / "lab" / "scripts" / "_build-bucket.sh"
 LAB_SECRET = _REPO / "lab" / "scripts" / "lab-secret.sh"
+SECRET_NAMES = _REPO / "lab" / "secret-names"
 
 
 def _env(tmp_path: Path, **extra: str) -> dict[str, str]:
@@ -117,11 +118,12 @@ def test_unknown_bucket_is_a_usage_error(tmp_path: Path):
 
 
 def _fake_checkout(tmp_path: Path) -> Path:
-    """A worktree-shaped copy of lab/scripts with NO build/ beside it."""
+    """A worktree-shaped copy of lab/scripts (+ the #1570 name registry), NO build/ beside it."""
     scripts = tmp_path / "repo" / ".worktrees" / "wt" / "lab" / "scripts"
     scripts.mkdir(parents=True)
     for src in (HELPER, LAB_SECRET):
         shutil.copy2(src, scripts / src.name)
+    shutil.copy2(SECRET_NAMES, scripts.parent / SECRET_NAMES.name)
     return scripts.parents[1]
 
 
@@ -140,22 +142,22 @@ def test_lab_secret_writes_into_the_shared_state_bucket(tmp_path: Path):
     state = tmp_path / "repo" / "build" / "state"
     state.mkdir(parents=True)
     env = _env(tmp_path, MQLAB_STATE_DIR=str(state))
-    first = _secret(checkout, "demo_password", env)
+    first = _secret(checkout, "pcmk_hacluster_password", env)
     assert first.returncode == 0, first.stderr
-    stored = state / "secrets" / "demo_password"
+    stored = state / "secrets" / "pcmk_hacluster_password"
     assert stored.read_text() == first.stdout
     assert len(first.stdout.strip()) == 32
     assert stat.S_IMODE((state / "secrets").stat().st_mode) == 0o700
     assert stat.S_IMODE(stored.stat().st_mode) == 0o600
     # Idempotent: the same value forever after.
-    assert _secret(checkout, "demo_password", env).stdout == first.stdout
+    assert _secret(checkout, "pcmk_hacluster_password", env).stdout == first.stdout
     # And nothing was created beside the script (the #1569 fork).
     assert not (checkout / "build").exists()
 
 
 def test_lab_secret_refuses_without_a_resolvable_bucket(tmp_path: Path):
     checkout = _fake_checkout(tmp_path)
-    result = _secret(checkout, "demo_password", _env(tmp_path))
+    result = _secret(checkout, "pcmk_hacluster_password", _env(tmp_path))
     assert result.returncode == 1
     assert "MQLAB_STATE_DIR is unset" in result.stderr
     assert result.stdout == ""
@@ -165,7 +167,8 @@ def test_lab_secret_refuses_without_a_resolvable_bucket(tmp_path: Path):
 def test_lab_secret_refuses_a_missing_state_bucket(tmp_path: Path):
     checkout = _fake_checkout(tmp_path)
     absent = tmp_path / "repo" / "build" / "state"
-    result = _secret(checkout, "demo_password", _env(tmp_path, MQLAB_STATE_DIR=str(absent)))
+    env = _env(tmp_path, MQLAB_STATE_DIR=str(absent))
+    result = _secret(checkout, "pcmk_hacluster_password", env)
     assert result.returncode == 1
     assert "does not exist" in result.stderr
     assert not absent.exists()

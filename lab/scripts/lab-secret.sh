@@ -15,9 +15,35 @@
 # with no human in the loop.
 #
 # Usage: lab-secret.sh <name>     # prints the value, creating+saving if absent
+#
+# NAME GUARD (#1570): because any accepted name becomes a real secret file, the
+# script takes exactly one argument and no options, and mints only names listed
+# in the lab/secret-names registry. An option-like argument (`--help`, `-h`, ...)
+# or a wrong argument count prints usage and exits 2; an unregistered name (a
+# caller typo, `get`, ...) exits 1. Both happen before anything is written.
 set -euo pipefail
-NAME="${1:?usage: lab-secret.sh <name>}"
-case "$NAME" in *[!a-z0-9_-]*) echo "bad secret name: $NAME" >&2; exit 1 ;; esac
+usage() {
+  cat >&2 <<'EOF'
+usage: lab-secret.sh <name>
+  Print the persisted lab secret <name>, generating and saving it on first use.
+  <name> must be registered in lab/secret-names. Takes no options.
+EOF
+}
+if [ "$#" -ne 1 ]; then usage; exit 2; fi
+NAME="$1"
+case "$NAME" in
+  -*) usage; exit 2 ;;
+  '' | *[!a-z0-9_-]*) echo "lab-secret.sh: bad secret name: '$NAME'" >&2; exit 1 ;;
+esac
+REGISTRY="$(cd "$(dirname "$0")/.." && pwd)/secret-names"
+if [ ! -r "$REGISTRY" ]; then
+  echo "lab-secret.sh: secret-name registry not readable: $REGISTRY" >&2
+  exit 1
+fi
+if ! grep -qxF -e "$NAME" "$REGISTRY"; then
+  echo "lab-secret.sh: unknown secret name '$NAME': not registered in lab/secret-names ($REGISTRY). Refusing to mint it; register it there if it is a new lab secret." >&2
+  exit 1
+fi
 
 # The shared state bucket, via the one authority (#1569) — never derived from this
 # script's own location, which forked the lab's secrets in an unwired worktree.
