@@ -39,6 +39,7 @@ from mqlab.stacks import lab_stacks
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = REPO / "lab" / "scripts" / "lab-secret.sh"
+BUCKET_HELPER = REPO / "lab" / "scripts" / "_build-bucket.sh"
 REGISTRY = REPO / "lab" / "secret-names"
 PKI_PREFIX = "pki-keyrpwd-"
 
@@ -113,6 +114,7 @@ def sandbox(tmp_path: Path) -> Sandbox:
     scripts.mkdir(parents=True)
     script = scripts / "lab-secret.sh"
     shutil.copy2(SCRIPT, script)
+    shutil.copy2(BUCKET_HELPER, scripts / BUCKET_HELPER.name)
     shutil.copy2(REGISTRY, tmp_path / "lab" / "secret-names")
     stub_bin = tmp_path / "stub-bin"
     stub_bin.mkdir()
@@ -123,7 +125,9 @@ def sandbox(tmp_path: Path) -> Sandbox:
         'echo "stub mqlab: unexpected args: $*" >&2; exit 97\n'
     )
     stub.chmod(0o755)
-    env = {**os.environ, "PATH": f"{stub_bin}{os.pathsep}{os.environ['PATH']}"}
+    # No inherited MQLAB_<BUCKET>_DIR, so the bucket resolves through the stub (#1569).
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MQLAB_")}
+    env["PATH"] = f"{stub_bin}{os.pathsep}{os.environ['PATH']}"
     return Sandbox(root=tmp_path, script=script, env=env)
 
 
@@ -193,6 +197,8 @@ def test_missing_registry_fails_loudly_and_writes_nothing(sandbox):
 
 
 def test_every_registered_name_is_minted_once_and_reused(sandbox):
+    # The state bucket must already exist; lab-secret.sh never creates it (#1569).
+    (sandbox.root / "build" / "state").mkdir(parents=True)
     for name in registry_names():
         first = sandbox.run(name)
         assert first.returncode == 0, (name, first.stderr)
