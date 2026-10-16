@@ -130,8 +130,9 @@ management/observability ("Watcher") plane that observes it. Clients reach it at
 the queue manager's **data-plane** address — the floating VIP for the Pacemaker
 and RDQM arms (each site, `vip` / `vip_b`), or the **active instance's node IP**
 for the Native HA arms (which have no VIP; the active member is resolved at
-runtime). The topology-derived source of truth for every queue manager's REST
-endpoint is `mqlab rest render`.
+runtime with the "follow the active" state probe). The topology-derived endpoints
+are an internal library behind `mqlab console open`, which forwards the dev VM to
+a stack's live mqweb for the MQ Console.
 
 ## The event feed — MQ instrumentation events (every queue manager)
 

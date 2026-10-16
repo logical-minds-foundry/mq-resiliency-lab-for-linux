@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 
 [[package]]
@@ -720,7 +720,6 @@ source = { editable = "." }
 dependencies = [
     { name = "ansible-core" },
     { name = "cryptography" },
-    { name = "pymqrest" },
     { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
@@ -748,7 +747,6 @@ docs = [
 requires-dist = [
     { name = "ansible-core", specifier = ">=2.16" },
     { name = "cryptography", specifier = ">=42" },
-    { name = "pymqrest", specifier = ">=1.2,<2" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "rich", specifier = ">=13" },
     { name = "typer", specifier = ">=0.12" },
@@ -1015,18 +1013,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9e/26/d1015444da4d952a1ca487a236b522eb979766f0295a0bd0c5fc089989a9/pymdown_extensions-10.21.3.tar.gz", hash = "sha256:72cfcf55f07aea0d4af2c4f11dd4e52466ddfb1bb819673146398e0bd3a77354", size = 854140, upload-time = "2026-05-13T12:57:32.267Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/85/545a951eecc270fcd688288c600017e2050a1aacb56c711d208586d3e470/pymdown_extensions-10.21.3-py3-none-any.whl", hash = "sha256:d7a5d08014fc571e80ca21dd6f854e31f94c489800350564d55d15b3c41e76b6", size = 269002, upload-time = "2026-05-13T12:57:30.296Z" },
-]
-
-[[package]]
-name = "pymqrest"
-version = "1.2.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/dd/c387011474e0a65ffdf02dfa3dfb6f2269552ed1fc31f9c06fa5672195b8/pymqrest-1.2.2.tar.gz", hash = "sha256:7043f21373d4080f69a107170cc8ab4381706a69e8b2f7dc271921502b69aeec", size = 56027, upload-time = "2026-03-02T15:04:24.907Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c2/de/eeaecc0f039a378a6bb4f8e2d3f468d454f4ee040d04fced6c743e85641c/pymqrest-1.2.2-py3-none-any.whl", hash = "sha256:a545332167d00349e8a8df6879dee647a8b4e57f63cfbc3655398a0fe8f7b64a", size = 56397, upload-time = "2026-03-02T15:04:23.447Z" },
 ]
 
 [[package]]

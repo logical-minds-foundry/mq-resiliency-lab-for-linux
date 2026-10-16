@@ -54,8 +54,9 @@ published address is on the data plane:
 mqweb binds `httpHost=*` (so it also answers on `net-mgmt`), but the address the lab
 **publishes and uses** is the data-plane one above. Enforcing this at the network
 layer — refusing `9443` on mgmt — is deferred to the firewall / plane-enforcement
-follow-on epic. The topology-derived source of truth for these endpoints is
-`mqlab rest render` (epic #39, task #537).
+follow-on epic. The topology-derived source of truth for these endpoints is the
+internal library `mqlab.mqweb_endpoints` (epic #39, task #537), used by
+`mqlab console open` (epic logical-minds-foundry/.github#341).
 
 ## Stay literal IP (with reason)
 

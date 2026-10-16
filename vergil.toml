@@ -53,6 +53,7 @@ packages = [
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
   "libarchive-tools",  # bsdtar — vagrant box unpacking
+  "socat",  # `mqlab console open` forwarder (.github#341); vergil-vm base also ships it for its relays
   "ruby-dev", "libvirt-dev", "pkg-config", "build-essential",  # vagrant gem + vagrant-libvirt build deps (build-essential = gcc/g++/make/libc6-dev; the cloud base ships no libc6-dev)
 ]
 vagrant_plugins = ["vagrant-libvirt"]
@@ -63,7 +64,15 @@ vagrant_plugins = ["vagrant-libvirt"]
 # "<vm-port>|<host:port>". mqlab discovers the unit and port from what is installed
 # (`mqlab obs relay-heal`, #1450), so another vm-port works too. Takes effect on the
 # next `vrg-vm rebuild`.
-port_forwards = ["3000|10.50.0.2:3000"]
+#
+# "9443|127.0.0.1:19443" is hop 1 to the MQ Console (epic .github#341 spec §2.3): the
+# relay listens on the VM's 0.0.0.0:9443 and forwards to 127.0.0.1:19443, where
+# `mqlab console open <stack>` runs a socat forwarder to the live mqweb (hop 2). The
+# relay is static; the forwarder is re-pointed on every `console open`. On the local
+# Lima instance the workstation browses localhost:9443. On the cloud instance it is
+# <external-ip>:9443 (from `vrg-vm list`), but the vergil-vm GCP firewall currently
+# admits only tcp:3000, so 9443 needs a vergil-vm firewall rule before it answers there.
+port_forwards = ["3000|10.50.0.2:3000", "9443|127.0.0.1:19443"]
 
 # --- Post-build hook: RHEL DVD auto-stage (PLACEHOLDER — INERT, NOT YET ACTIVE) ---
 # Intent: at the END of every `vrg-vm create`/`rebuild`, run the host-side RHEL DVD
@@ -136,6 +145,7 @@ packages = [
   "libvirt-daemon-system", "libvirt-clients", "bridge-utils",
   "dnsmasq-base", "genisoimage",
   "libarchive-tools",  # bsdtar — vagrant box unpacking
+  "socat",  # `mqlab console open` forwarder (.github#341); vergil-vm base also ships it for its relays
   "ruby-dev", "libvirt-dev", "pkg-config", "build-essential",  # vagrant gem + vagrant-libvirt build deps (build-essential = gcc/g++/make/libc6-dev; the cloud base ships no libc6-dev)
 ]
 vagrant_plugins = ["vagrant-libvirt"]
@@ -144,8 +154,9 @@ vagrant_plugins = ["vagrant-libvirt"]
 # PARALLEL with it, so it must use a distinct workstation port. The record is
 # "<vm-port>|<host:port>" and Lima forwards <vm-port> to the same workstation port,
 # so the vm-port becomes 3001. The target stays the obs node's Grafana (10.50.0.2:3000),
-# which is internal to the lab and unchanged.
-port_forwards = ["3001|10.50.0.2:3000"]
+# which is internal to the lab and unchanged. The MQ Console forward moves the same
+# way: workstation port 9444 (vergil-user has 9443), to the same in-VM forwarder.
+port_forwards = ["3001|10.50.0.2:3000", "9444|127.0.0.1:19443"]
 
 # Off-platform lifecycle-validation profile (vergil-vm#199 / vergil-tooling#1706).
 # Deliberately tiny: smallest box that runs Claude Code, NO nested virt, NO lab

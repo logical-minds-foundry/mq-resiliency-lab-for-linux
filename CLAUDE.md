@@ -52,8 +52,11 @@ branch, and **both are protected** — no direct commits.
 
 Secrets never enter git: no MQ entitlement/license artifacts, no credentials,
 no keystores. `.gitignore` covers `*.env`, `secrets/`, `licenses/`.
-Administrative REST API (`pymqrest`) credentials — the `MQWEB_ADMIN_*` mqweb
-login — are runtime-injected, never committed.
+The mqweb (MQ Console and admin REST API) secret is `mqweb_aes_passphrase`, from
+which each node's AES key for the encoded `mqwebuser.xml` passwords is made. It is
+runtime-injected, never committed. The three mqweb logins (`mqadmin`,
+`mqreadonly`, `mqoperator`) use password = username by lab convention; they are
+lab-only sample logins, not secrets.
 
 ## External documentation (IBM Docs)
 

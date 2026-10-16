@@ -794,23 +794,116 @@ def dns_render() -> None:
     typer.echo(f"rendered {len(files) + 1} DNS files -> {out_dir}")
 
 
-rest_app = typer.Typer(help="Canonical published mqweb REST endpoints (#39)", no_args_is_help=True)
-app.add_typer(rest_app, name="rest")
+console_app = typer.Typer(
+    help="Human access to the live MQ Console (.github#341)", no_args_is_help=True
+)
+app.add_typer(console_app, name="console")
 
 
-@rest_app.command("render")
-def rest_render() -> None:
-    """Render mqweb REST endpoints (both sites) to build/work/rest/endpoints.json (#39)."""
-    from mqlab.rest import lab_rest_endpoints
+def _console_qm(stack: str) -> str:
+    """The queue manager behind a Console target. Stacks carry their app QM; svc-sim is not
+    a stack, and its QM is the shared counterparty SVCQM (#446). One derivation only."""
+    stacks = lab_stacks()
+    if stack in stacks:
+        return stacks[stack].qm.qm_app
+    return next(iter(stacks.values())).qm.qm_svc
 
-    out_dir = work("rest")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    recs = lab_rest_endpoints()
-    (out_dir / "endpoints.json").write_text(json.dumps(recs, indent=2, sort_keys=True) + "\n")
-    for rec in recs:
-        for site, urls in rec["endpoints"].items():
-            typer.echo(f"{rec['stack']:<16} {rec['kind']:<16} {site:<7} {' '.join(urls)}")
-    typer.echo(f"rendered {len(recs)} REST surfaces -> {out_dir}")
+
+def _console_access() -> str:
+    """How the workstation reaches this VM's Console forward (hop 1), or exit 1 loud.
+
+    Hop 1 is the vergil relay to the forwarder, discovered from the installed units like
+    Grafana's (#1450). Without it the workstation cannot reach the Console, so its
+    absence fails the verb rather than printing a dead URL."""
+    from mqlab import console
+
+    try:
+        relays = relay.relays_to(console.FORWARD_BACKEND)
+    except RelayError as exc:
+        typer.echo(f"mqlab console open: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if not relays:
+        typer.echo(
+            f"mqlab console open: no vergil port-forward relay to {console.FORWARD_BACKEND} "
+            f"is installed on this VM; {console.RELAY_REMEDY}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    return console.workstation_access(relays[0])
+
+
+@console_app.command("open")
+def console_open(
+    stack: Annotated[str, typer.Argument(help="stack name, e.g. nativeha-rhel-crr, or svc-sim")],
+    site: Annotated[
+        str, typer.Option("--site", help="site whose mqweb endpoints to try: a or b")
+    ] = "a",
+) -> None:
+    """Find STACK's live mqweb and forward this VM's 127.0.0.1:19443 to it (spec §2.3).
+
+    The live instance is found with the "follow the active" state probe (mqlab.mqweb_probe),
+    logged in as mqreadonly. Re-run after a failover or a DR cutover: the forward points at
+    one instance and does not follow the queue manager.
+    """
+    import getpass
+    import subprocess
+
+    from mqlab import console, mqweb_probe
+    from mqlab.mqweb_endpoints import lab_mqweb_endpoints
+
+    recs = {r["stack"]: r for r in lab_mqweb_endpoints()}
+    if stack not in recs:
+        typer.echo(f"unknown stack {stack!r}; known: {', '.join(sorted(recs))}", err=True)
+        raise typer.Exit(code=2)
+    urls = recs[stack]["endpoints"].get(f"site-{site}")
+    if not urls:
+        typer.echo(f"{stack}: no site-{site} mqweb endpoints in topology", err=True)
+        raise typer.Exit(code=2)
+    qm = _console_qm(stack)
+    # The mqweb certificate is the app-org `mqweb` entity on every QM node (#250).
+    cafile = state("secrets", "pki", "ca", "app-org", "ca.crt")
+    if not cafile.is_file():
+        # Checked up front: a missing CA would otherwise read as "unreachable" on every
+        # candidate, hiding the real cause.
+        typer.echo(
+            f"mqlab console open: the lab app-org CA {cafile} is missing; the lab PKI is "
+            "made by `mqlab pki ensure`",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        live = mqweb_probe.resolve_live(
+            urls,
+            qm,
+            state_fn=lambda u, q: mqweb_probe.qm_state(
+                u,
+                q,
+                user=mqweb_probe.PROBE_USER,
+                password=mqweb_probe.PROBE_PASSWORD,
+                cafile=cafile,
+            ),
+        )
+    except mqweb_probe.ProbeError as exc:
+        typer.echo(f"mqlab console open: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    user = getpass.getuser()
+    access = _console_access()
+    # Replace any previous forwarder (Review Focus 5). An absent unit makes `stop` exit
+    # non-zero, which is fine; any other stop failure leaves the unit in place, and the
+    # checked systemd-run below then fails loud on the existing unit name.
+    for argv, check in ((console.stop_argv(), False), (console.forward_argv(live, user), True)):
+        typer.echo(f"$ {shlex.join(argv)}")
+        try:
+            subprocess.run(argv, check=check)  # noqa: S603 - fixed argv, no shell
+        except subprocess.CalledProcessError as exc:
+            typer.echo(f"mqlab console open: starting the forwarder failed: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+    try:
+        console.wait_listening()
+    except console.ConsoleError as exc:
+        typer.echo(f"mqlab console open: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(console.banner(stack, qm, live, access, site))
 
 
 def _render_reach_peers() -> Path:
@@ -867,7 +960,6 @@ _FIXED_PKI_ENTITIES: list[dict[str, Any]] = [
         "trust": ["svc-org"],
     },
     {"cn": "mqweb", "org": "app-org", "ou": "ops", "kind": "personal", "trust": []},
-    {"cn": "pymqrest", "org": "app-org", "ou": "ops", "kind": "trust_only", "trust": []},
     # Co-located SVC responder presents O=svc-org (#250 / SVC.SVRCONN).
     {
         "cn": "svc-responder",
