@@ -90,6 +90,18 @@ def bucket_path(bucket: str, repo: Path, *, run: Callable[[list[str]], str] = _g
     return repo / "build" / bucket
 
 
+# bucket -> the env var an mqlab verb exports for its children (#1569). Shell scripts,
+# playbooks and the Vagrantfile read these (falling back to `mqlab build path <bucket>`)
+# instead of deriving build/<bucket> from their own location, which in a worktree whose
+# shared-bucket symlinks were not yet wired silently forked the live-lab state.
+BUCKET_ENV = {bucket: f"MQLAB_{bucket.upper()}_DIR" for bucket in BUCKETS}
+
+
+def bucket_env(repo: Path, *, run: Callable[[list[str]], str] = _git) -> dict[str, str]:
+    """MQLAB_<BUCKET>_DIR -> the bucket's absolute path, as `mqlab build path` prints it."""
+    return {BUCKET_ENV[bucket]: str(bucket_path(bucket, repo, run=run)) for bucket in BUCKETS}
+
+
 def _make_bucket(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     (path / ".gitkeep").touch()

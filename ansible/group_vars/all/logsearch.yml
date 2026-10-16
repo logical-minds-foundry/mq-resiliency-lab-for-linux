@@ -24,7 +24,7 @@
 # `errors='ignore'` returns None (NOT '') for a missing file, and `None | length`
 # raises "NoneType has no len()", so coerce to '' with `default('', true)` before the
 # length guard — that keeps the guard behaving as intended: empty -> fan-out OFF (#953).
-_logsearch_fanout_json: "{{ lookup('file', playbook_dir ~ '/../build/work/logsearch/fanout.json', errors='ignore') | default('', true) }}"
+_logsearch_fanout_json: "{{ lookup('file', mqlab_work_dir ~ '/logsearch/fanout.json', errors='ignore') | default('', true) }}"
 _logsearch_fanout: "{{ (_logsearch_fanout_json | from_json) if (_logsearch_fanout_json | length > 0) else {} }}"
 
 alloy_fanout_opensearch: "{{ _logsearch_fanout.enabled | default(false) | bool }}"

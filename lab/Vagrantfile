@@ -7,7 +7,23 @@
 # boots a locally-baked (unversioned) box, so no box_version pin is applied.
 require "yaml"
 
-resolved = File.join(__dir__, "..", "build", "work", "lab", "topology.resolved.yaml")
+# The local work bucket comes from the one authority (#1569), never from this file's
+# location: MQLAB_WORK_DIR (every mqlab verb exports it to vagrant), else
+# `mqlab build path work`. Either failure stops vagrant with the reason.
+work_dir = ENV.fetch("MQLAB_WORK_DIR", "")
+if work_dir.empty?
+  begin
+    work_dir = IO.popen(["mqlab", "build", "path", "work"], &:read).to_s.strip
+  rescue Errno::ENOENT
+    raise "cannot resolve the build/work bucket: MQLAB_WORK_DIR is unset and mqlab is " \
+          "not on PATH.\nDrive vagrant through mqlab (`mqlab vm ...`), or export " \
+          "MQLAB_WORK_DIR=\"$(uv run mqlab build path work)\"."
+  end
+  unless $?.success? && !work_dir.empty?
+    raise "cannot resolve the build/work bucket: `mqlab build path work` failed"
+  end
+end
+resolved = File.join(work_dir, "lab", "topology.resolved.yaml")
 unless File.exist?(resolved)
   raise "resolved topology missing: #{resolved}\n" \
         "Run `mqlab vm up` / `mqlab vm create` (or `mqlab vm render`) first — they " \

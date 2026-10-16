@@ -20,9 +20,8 @@
 
 - name: copy MQ tar to node
   ansible.builtin.copy:
-    # mq_media_dir defaults to <playbook_dir>/../build/cache/mq (the per-run path); the
-    # fat-box bake overrides it to the host-durable main-worktree cache (#605), since a
-    # bake runs this worktree's playbook whose build/ is empty.
+    # mq_media_dir defaults to the shared cache bucket's mq/ (mqlab_cache_dir, #1569);
+    # the fat-box bake passes the same host-durable main-worktree cache explicitly (#605).
     src: "{{ mq_media_dir }}/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
     dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"

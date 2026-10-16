@@ -78,7 +78,7 @@
 
 - name: deploy the rendered dashboards, preserving the per-stack folder tree (#59)
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/grafana/dashboards/"
+    src: "{{ mqlab_work_dir }}/grafana/dashboards/"
     dest: /var/lib/grafana/dashboards/
     owner: grafana
     group: grafana

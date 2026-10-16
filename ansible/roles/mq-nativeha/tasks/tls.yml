@@ -33,7 +33,7 @@
 
 - name: deploy the lab-pki .p12 keystore
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/state/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
+    src: "{{ mqlab_state_dir }}/secrets/pki/entities/{{ ks_cn }}/{{ ks_cn }}.p12"
     dest: "/var/mqm/qmgrs/{{ qm_name }}/ssl/key.p12"   # MQ-convention name; matches the QM-default SSLKEYR stem (#409)
     owner: mqm
     group: mqm

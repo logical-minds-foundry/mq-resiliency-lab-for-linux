@@ -2,4 +2,4 @@
 # DNS artifacts rendered by `mqlab dns render` on the control node — this role
 # reads hostfacts.json (host -> resolver/self_ip/fqdn). The render step and role
 # application are wired into provisioning by B5 (#478).
-host_resolver_src: "{{ playbook_dir }}/../build/work/dns"
+host_resolver_src: "{{ mqlab_work_dir }}/dns"

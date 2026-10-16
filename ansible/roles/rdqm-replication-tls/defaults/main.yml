@@ -7,7 +7,7 @@
 
 # Controller-side store for the replication CA + per-node key/cert (gitignored,
 # same build/state/secrets tree as lab-pki; re-generatable).
-rdqm_repl_ca_dir: "{{ playbook_dir }}/../build/state/secrets/pki/rdqm-repl"
+rdqm_repl_ca_dir: "{{ mqlab_state_dir }}/secrets/pki/rdqm-repl"
 
 # Default group DNS name in each cert's SAN. Using IBM's default (encrypted.remote)
 # means crtmqm needs no -san option.

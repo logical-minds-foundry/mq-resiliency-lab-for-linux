@@ -62,8 +62,8 @@ mq_exporter_monitored_channels: "*,SYSTEM.*"
 mq_exporter_ref: v6.0.0
 
 # Where the prebuilt mq_prometheus binary is copied from (#1065). Defaults to the
-# per-run path (playbook's sibling build/cache/mq-exporter/<mq_version>); the obs /
-# mq-ubuntu fat-box bake overrides it (-e mq_exporter_media_dir=<main-worktree>/build/
-# cache/mq-exporter/<pin>) so the bake reads from the host-durable cache. Mirrors
+# shared cache bucket's mq-exporter/<mq_version> (mqlab_cache_dir, #1569); the obs /
+# mq-ubuntu fat-box bake passes it explicitly (-e mq_exporter_media_dir=<main-worktree>/
+# build/cache/mq-exporter/<pin>). Mirrors
 # mq_media_dir. Keyed by the MQ pin (#1407): the binary is built against that level's SDK.
-mq_exporter_media_dir: "{{ playbook_dir }}/../build/cache/mq-exporter/{{ mq_version }}"
+mq_exporter_media_dir: "{{ mqlab_cache_dir }}/mq-exporter/{{ mq_version }}"

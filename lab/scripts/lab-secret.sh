@@ -19,7 +19,12 @@ set -euo pipefail
 NAME="${1:?usage: lab-secret.sh <name>}"
 case "$NAME" in *[!a-z0-9_-]*) echo "bad secret name: $NAME" >&2; exit 1 ;; esac
 
-DIR="$(cd "$(dirname "$0")/../.." && pwd)/build/state/secrets"
+# The shared state bucket, via the one authority (#1569) — never derived from this
+# script's own location, which forked the lab's secrets in an unwired worktree.
+# shellcheck source=lab/scripts/_build-bucket.sh
+. "$(dirname "$0")/_build-bucket.sh"
+STATE="$(mqlab_bucket state)"
+DIR="$STATE/secrets"
 mkdir -p "$DIR"; chmod 700 "$DIR"
 F="$DIR/$NAME"
 if [ ! -s "$F" ]; then

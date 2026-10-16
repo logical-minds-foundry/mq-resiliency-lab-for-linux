@@ -304,9 +304,9 @@
   gather_facts: false
   tags: [n2]
   vars:
-    # In-repo default (cold-rebuild-safe: playbook_dir is <repo>/ansible). Override
-    # with -e authz_pki_ca_dir=... when running from a worktree.
-    authz_pki_ca_dir: "{{ playbook_dir }}/../build/state/secrets/pki/ca/app-org"
+    # The shared state bucket's PKI CA (mqlab_state_dir, #1569) — the same tree from
+    # the main checkout or any worktree. Override with -e authz_pki_ca_dir=... if needed.
+    authz_pki_ca_dir: "{{ mqlab_state_dir }}/secrets/pki/ca/app-org"
     rogue_dir: /tmp/authz-n2-rogue
     rogue_pw: "n2-rogue-pw"
   tasks:

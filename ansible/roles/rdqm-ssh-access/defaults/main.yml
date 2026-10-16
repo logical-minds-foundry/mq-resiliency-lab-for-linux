@@ -7,7 +7,7 @@
 
 # Controller-side store for the shared mqm SSH keypair (gitignored, same
 # build/state/secrets tree as the replication PKI; re-generatable).
-rdqm_ssh_key_dir: "{{ playbook_dir }}/../build/state/secrets/rdqm-ssh"
+rdqm_ssh_key_dir: "{{ mqlab_state_dir }}/secrets/rdqm-ssh"
 rdqm_ssh_key_bits: 4096
 
 # IBM requires mqm's home to be a standard home. /var/mqm is group-writable AND
