@@ -897,6 +897,8 @@ vrg-commit --type feat --scope obs --message "launch sim apps under systemd-run 
 
 Point the operator at Grafana Explore for true websocket tailing (the dashboard panels refresh on the 10s interval).
 
+> **Correction (2026-10-16, #1592).** This plan is a historical record. Its `-L 3000:10.50.0.2:3000` tunnel assertion and the "→ tunnel →" step in Task 11 describe the access route of the time. No tunnel is needed today. A local Lima VM is browsed at `localhost:<port>`, and the cloud dev VM, which has a public IP, at `<external-ip>:<port>` (IP from `vrg-vm list`). See [Reaching lab services from your workstation](../site/docs/operate/index.md#reaching-lab-services-from-your-workstation).
+
 **Files:**
 - Modify: `src/mqlab/cli.py` (the `obs_open` command, ~line 335)
 - Test: `tests/test_cli_obs.py` (`test_obs_open_prints_url_and_tunnel`)

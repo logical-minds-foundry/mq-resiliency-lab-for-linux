@@ -248,6 +248,13 @@ Checked twice on 2026-10-16:
 
 - **By the human:** Safari on macOS, through an IAP SSH tunnel and a relay to the active
   instance.
+
+  > **Correction (2026-10-16, #1592).** This records the route used for the check. It is
+  > not the access model. The cloud dev VM has a public IP, and a `port_forwards` port is
+  > browsed at `<external-ip>:<port>` with no tunnel; see
+  > [Reaching lab services from your workstation](../site/docs/operate/index.md#reaching-lab-services-from-your-workstation).
+  > A tunnel was needed for `:9443` here only because vergil-vm's cloud firewall admits
+  > `tcp:3000` alone.
 - **Headless:** Chromium (Playwright) on the dev VM, logged in as `mqadmin` on each of
   `a2`, `a1` and `b1`.
 

@@ -436,6 +436,11 @@ mqlab obs dashboard  # render the Grafana dashboards (Watcher + per-stack cockpi
 http://localhost:3000/d/lab-watcher   (vergil-user; anonymous — no login)
 ```
 
+On a cloud (GCP) dev VM, browse the VM's external IP on the same port instead:
+`http://<external-ip>:3000/d/lab-watcher`, with the IP taken from `vrg-vm list`. No
+tunnel is needed. See
+[Reaching lab services from your workstation](operate/index.md#reaching-lab-services-from-your-workstation).
+
 `mqlab obs open` prints the exact URLs for this VM, read from the installed
 port-forward relay. If a grafana restart wedged the forward, `mqlab obs relay-heal`
 re-heals it.
