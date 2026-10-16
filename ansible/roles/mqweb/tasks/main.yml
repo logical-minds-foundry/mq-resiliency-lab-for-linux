@@ -40,6 +40,16 @@
   ansible.builtin.include_tasks: encode.yml
 
 # IBM's three roles, one sample user each, no anonymous access (epic .github#341 spec §2.2).
+#
+# This template is the ONLY writer of mqwebuser.xml (#1598). It also binds mqweb to all
+# interfaces via `<variable name="httpHost" value="*"/>`, the mqwebuser.xml form of
+# `setmqweb properties -k httpHost -v "*"` (IBM MQ "Configuring the HTTP host name").
+# Rendering it here, before mqweb's first start below, meets #741: Liberty reads httpHost
+# at startup, so it must be set before mqweb starts. Do NOT add a `setmqweb properties`
+# call (or lineinfile/xml/replace) on this file: setmqweb re-serializes the whole XML
+# (whitespace, attribute order), so this template would then differ on every
+# re-provision, report changed, and fire the TLS restart below on every node (#1598).
+# tests/test_mqweb_single_writer.py guards this.
 - name: mqweb basic registry (IBM roles, encoded passwords, no anonymous access)
   ansible.builtin.template:
     src: mqwebuser.xml.j2
@@ -57,20 +67,6 @@
     enabled: true
     daemon_reload: true
   become: true
-
-# Set mqweb (Liberty) properties BEFORE starting it (#741): Liberty reads its config
-# at startup, so httpHost must be set first to take effect. Setting it while mqweb is
-# stopped is also instant — running setmqweb *during* the slow startup made it contend
-# for ~12 min and drop the SSH connection, which surfaced (confusingly) as an
-# ansible-core result-deserialization error. The default-guarded `changed_when` plus
-# `failed_when: false` keep this non-fatal even if the result is ever malformed.
-- name: bind mqweb to all interfaces
-  ansible.builtin.command: "/opt/mqm/bin/setmqweb properties -k httpHost -v '*'"
-  become: true
-  become_user: mqm
-  register: setmqweb
-  changed_when: "'MQWB' not in (setmqweb.stderr | default(''))"
-  failed_when: false
 
 # Was mqweb already running BEFORE this play? On a first bootstrap it is not, so the
 # fresh start below already loads the just-rendered TLS keystore + mqwebuser.xml (both
