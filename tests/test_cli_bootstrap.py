@@ -1536,6 +1536,7 @@ def _catalog_24_26(monkeypatch, tmp_path, *, unsupported_26=False):
         "default": "ubuntu:24",
     }
     data["stacks"]["nativeha-ubuntu"]["default"] = "ubuntu:24"
+    data["stacks"]["pcmk-drbd-ubuntu"]["default"] = "ubuntu:24"
     data["infra_mq"] = "ubuntu:24"
     path = tmp_path / "versions-24-26.yaml"
     path.write_text(yaml.safe_dump(data))
