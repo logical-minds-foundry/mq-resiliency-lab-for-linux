@@ -29,7 +29,7 @@ Box names are **generated** as `<role>-<os><major>` from the OS version catalog,
 with KVM the fleet also bakes `mq-nativeha-rhel10` and `mq-rdqm-rhel10`: the same
 `nativeha-rhel` and `mq-rdqm` bakes on the RHEL 10 base box `rhel/10-x86_64` (#1286;
 RDQM on RHEL 10 from MQ 10.0.1, #1440).
-Since #1282 the shared non-MQ boxes run the catalog's `infra:` OS, Ubuntu 26
+Since #1282 the shared boxes that run no queue manager use the catalog's `infra:` OS, Ubuntu 26
 (`obs-ubuntu26`, `infra-ubuntu26`, `san-ubuntu26`). Since #1285 the support-gated
 `infra_mq:` OS is Ubuntu 26 too, by a recorded lab decision ahead of IBM, so the MQ
 commons bake `mq-client-ubuntu26`, and both Ubuntu stacks default to their Ubuntu 26
@@ -76,7 +76,7 @@ while editing a per-run configure role leaves every fat box at REUSE.
 | Box role | Bake stem (Ubuntu / RHEL) | MQ-bearing | Guest components |
 |----------|---------------------------|------------|------------------|
 | `infra` | `infra` / — | no | — |
-| `obs` | `obs` / — | no | — |
+| `obs` | `obs` / — | yes | — |
 | `san` | `san` / — | no | `mq-resiliency-observability` |
 | `mq-client` | `mq-ubuntu` / — | yes | `mq-resiliency-clients` |
 | `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes | `mq-resiliency-observability` |
@@ -339,14 +339,22 @@ box bakes the **whole** observability platform: the metrics stack
 binaries/packages + static config + inert units are baked; service enable+start and every
 per-run render stay in `site-obs.yml`.
 
+The box is **MQ-bearing** (#1584). The baked `mq_prometheus` links the MQ runtime
+(`libmqm_r`), so the bake installs MQ with an explicit `mq-install` step.
+`mq-install`'s skip-if-baked guard keys on the presence of `cmqc.h`, not on its
+version, so the `lab/mq-version` pin is part of this box's manifest hash and a pin
+bump rebakes it (#1087). Before #1584 the MQ install was hidden inside the
+`mq-exporter` build tasks, so the box baked MQ without being MQ-bearing.
+
 | Role | In bake | Notes |
 |------|---------|-------|
+| `mq-install` | ✅ full | The Ubuntu MQ product via the deb path, for the runtime libs `mq_prometheus` links. Runs no QM. Declared explicitly ahead of the exporter (#1584). |
 | `node-exporter` | ✅ full | All-install. |
 | `alloy` | ✅ install half | As above. On obs, alloy also carries the fleet-wide OpenSearch fan-out, gated per-run by `group_vars/all/logsearch.yml`. |
 | `loki` | ✅ full | All-install (loki binary + logcli + static config). |
 | `prometheus` | ✅ install half | Binary + **static** `prometheus.yml` + recording rules + unit baked; the topology-rendered `targets/{node,ibmmq}.json` (`mqlab obs targets` → `build/work/…`) stay per-run. |
 | `grafana` | ✅ install half | Package + **static** datasource + dashboard-provider + service baked; the rendered dashboard tree (`build/work/grafana/dashboards/`) and the **admin-password secret** env drop-in stay per-run. Its OpenSearch datasource now points at `localhost` (co-located, #1179). The drop-in dir `grafana-server.service.d` is baked empty, and the configure half re-creates it before writing either drop-in, so it never depends on the baked one (#1265). |
-| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). **Ubuntu-only** (pulls MQ via the Ubuntu-deb `mq-install` for the runtime libs) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container against the MQ SDK, copied in — #1065; no in-guest Go toolchain). It asserts the MQ runtime (`libmqm_r`) is already present rather than installing MQ itself (#1584), so it follows `mq-install` above. **Ubuntu-only** (the MQ runtime comes from the Ubuntu-deb `mq-install`) → it lives here, on the obs/probe box, not the RHEL rdqm box. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `opensearch` | ✅ install half | sysctl + user + binary + data/repo dirs + static `opensearch.yml` + inert unit baked; service enable+start + `logs` index template (`number_of_replicas:0`) + snapshot repo + restore-on-bring-up stay per-run. |
 | `opensearch-dashboards` | ✅ install half | User + binary + static config + security-plugin removal + inert unit baked; service enable+start + `/api/status` wait + the default `logs-*` index pattern stay per-run. |
 | `data-prepper` | ✅ install half | JDK-bundled binary + data dir + OpenSearch-sink DLQ dir + static config + pipeline templates + inert unit baked, plus the DLQ logrotate rule and its inert hourly rotate timer (#1239; see [`data-prepper-dlq.md`](../reference/data-prepper-dlq.md)); the Alloy→OTLP→Data-Prepper→OpenSearch connector's service enable+start + readiness wait, and the DLQ rotate timer enable, stay per-run (#939, #1239). Its OpenSearch sink is `localhost:9200` (co-located). |
@@ -371,7 +379,7 @@ their ~15–20 min of per-run installs.
 | `mq-install` | ✅ full | The Ubuntu MQ product via the deb path — the **server set includes client + SDK + samples**, so one install serves svc (server + QM), app (client + SDK for the ibmmq binding), and the exporter's cgo SDK. No QM created. |
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
 | `component-install` (`mq-resiliency-clients`) | ✅ full, units inert | The clients component (#1356): requester, bench, svc responder, probes and DR clients for `svc-sim`, `app-client` and `mon-probe`. A release venv under `/opt/logical-minds-foundry/mq-resiliency-clients/`, `INSTALLED.json`, and its static units in `/usr/lib/systemd/system/`, left inert. Must follow `mq-install`: on aarch64, ibmmq compiles from its hash-pinned sdist against the MQ SDK with `gcc` (x86_64 installs the hash-pinned wheel). The per-run roles (`app-requester`, `mq-inter-qm`, `bench-client`) render the env files under `/etc/opt/logical-minds-foundry/mq-resiliency-clients/` and enable the units. This replaces the pre-#294 svc-responder venv bake (`mq-inter-qm` `tasks_from: install`, `/var/mqm/rvenv`, #1227), which `mq-inter-qm` now deletes if it finds it. |
-| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container, copied in — #1065; no in-guest Go toolchain, which used to auto-download a full Go toolchain and overflow this guest). Its `mq-install` include (runtime libs) is an idempotent no-op here. Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
+| `mq-exporter` (`build`) | ✅ build entry | Installs the **prebuilt** `mq_prometheus` (built once in the Go container, copied in — #1065; no in-guest Go toolchain, which used to auto-download a full Go toolchain and overflow this guest). It asserts the MQ runtime from `mq-install` above is present; it no longer installs MQ itself (#1584). Per-instance units + TLS CCDT/keystore stay per-run (`instance` entry, gated by `mq_exporter_tls`). |
 | `node-exporter` | ✅ full | All-install (static config), left **enabled** (#642 benign exception). |
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 

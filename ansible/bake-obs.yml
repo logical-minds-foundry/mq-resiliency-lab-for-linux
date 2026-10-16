@@ -11,7 +11,8 @@
 # playbook does not touch. Run against a single `bake` host:
 #   ansible-playbook -i inventory/bake-host.ini bake-obs.yml
 #
-# Full proof (MQ media for the exporter's cgo SDK) rides the actual box build later.
+# The box carries IBM MQ (an explicit mq-install step, for the exporter's runtime libs),
+# so it is MQ-bearing: an MQ pin bump rebakes it (#1584).
 #
 # See docs/development/box-bake-manifest.md for the authoritative classification.
 
@@ -94,12 +95,20 @@
       ansible.builtin.apt:
         clean: true
 
-    # The mq_prometheus exporter: the slow cgo build against the MQ SDK plus its Go
-    # toolchain — exactly the work worth baking once. This is Ubuntu-only (it pulls
-    # the full MQ via the Ubuntu-deb mq-install role and apt golang), so it lives on
-    # the obs/probe box, NOT the RHEL rdqm box (verified #602). The per-instance
-    # exporter units + TLS CCDT/keystore stay per-run (site-obs.yml instance loop).
-    - name: build mq_prometheus (+ MQ SDK for the cgo build)
+    # IBM MQ, declared here rather than hidden in the exporter build (#1584): the
+    # mq_prometheus binary links the MQ server binding libmqm_r at run time, so the box
+    # carries the MQ runtime. That makes obs MQ-bearing (lab/versions.yaml roles.obs), so
+    # the lab/mq-version pin is in its manifest hash and a pin bump rebakes it: mq-install's
+    # skip-if-baked guard keys on cmqc.h's presence, not its version (#1087). Ubuntu-deb
+    # role, so the exporter lives on this Ubuntu box, NOT the RHEL rdqm box (#602).
+    - name: install IBM MQ (the runtime libs mq_prometheus links)
+      ansible.builtin.include_role:
+        name: mq-install
+
+    # The mq_prometheus exporter: the binary is prebuilt once on the host against the MQ
+    # SDK (#1065) and copied in. The build entry asserts the MQ runtime above is present.
+    # The per-instance exporter units + TLS CCDT/keystore stay per-run (site-obs.yml).
+    - name: install the prebuilt mq_prometheus (needs the MQ runtime above)
       ansible.builtin.include_role:
         name: mq-exporter
         tasks_from: build

@@ -98,7 +98,7 @@ Shared (commons) nodes are never selectable. They split by **whether they run MQ
 
 | Catalog key | Roles | Nodes | OS today | Support-gated? |
 |-------------|-------|-------|----------|----------------|
-| `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no MQ runs there |
+| `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no queue manager runs there (`obs` carries only the MQ runtime its exporter links, #1584) |
 | `infra_mq:` | `mq-client` | `svc-sim`, `app-client`, `mon-probe` | `ubuntu:26` (by lab decision, #1285) | yes, like a stack default |
 
 **The support gate.** IBM's MQ 10.0 SPCR lists no Ubuntu 26.04 row
@@ -632,13 +632,14 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
   For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client`,
-  `mq-nativeha`, `pcmk` and `pdrbd` roles, for example `mq-rdqm-rhel10`,
-  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` — the roles flagged `mq_bearing: true`
+  `mq-nativeha`, `pcmk`, `pdrbd` and `obs` roles, for example `mq-rdqm-rhel10`,
+  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26`, `pcmk-ubuntu26` and `obs-ubuntu26` — the
+  roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
-  BUILD on the next bootstrap while the non-MQ boxes (`obs-ubuntu26`,
-  `infra-ubuntu26` and `san-ubuntu26`) stay REUSE — a
+  BUILD on the next bootstrap while the non-MQ boxes (`infra-ubuntu26` and
+  `san-ubuntu26`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
   For a box that bakes **guest components** (`roles.<role>.components`), the hash
   also folds in the pinned guest runtime (`--runtime-pin <version>+<pbs_release>`)

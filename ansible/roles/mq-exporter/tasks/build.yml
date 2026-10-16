@@ -4,11 +4,29 @@
 # slow cgo build for every exporter. Every step here is idempotent (`creates:` /
 # idempotent modules), so a second run is a no-op.
 # The exporter binary links the MQ server binding libmqm_r dynamically at runtime
-# (the unit sets LD_LIBRARY_PATH=/opt/mqm/lib64), so the node still needs the MQ
-# runtime. (The cgo *build* moved out of the guest — see below, #1065.)
-- name: install MQ (the runtime libs the exporter links at run time)
-  ansible.builtin.include_role:
-    name: mq-install
+# (the unit sets LD_LIBRARY_PATH=/opt/mqm/lib64), so the node needs the MQ runtime.
+# (The cgo *build* moved out of the guest — see below, #1065.)
+#
+# MQ is a PRECONDITION here, not something this file installs (#1584). Installing it
+# here hid an MQ payload inside the exporter build, so bake-obs.yml baked MQ without
+# declaring it and obs was not MQ-bearing: an MQ pin bump REUSEd the stale box (#1087).
+# Every caller already has MQ: bake-obs.yml and bake-mq-ubuntu.yml run mq-install first,
+# and site-obs.yml runs this on mon-probe, which boots the baked MQ-bearing mq-client box.
+# A caller that forgets fails here, loudly, instead of silently installing MQ.
+- name: check for the MQ runtime the exporter links (libmqm_r)
+  ansible.builtin.stat:
+    path: /opt/mqm/lib64/libmqm_r.so
+  register: mq_exporter_libmqm
+
+- name: assert the MQ runtime is installed (mq-install must run before this, #1584)
+  ansible.builtin.assert:
+    that: mq_exporter_libmqm.stat.exists
+    fail_msg: >-
+      /opt/mqm/lib64/libmqm_r.so is missing on {{ inventory_hostname }}: mq_prometheus
+      links the MQ runtime, and the mq-exporter build no longer installs MQ (#1584).
+      Run the mq-install role before mq-exporter's build tasks (a bake playbook names it
+      explicitly), or boot this node from an MQ-bearing box.
+    quiet: true
 
 - name: ensure the exporter config directory (#944)
   ansible.builtin.file:

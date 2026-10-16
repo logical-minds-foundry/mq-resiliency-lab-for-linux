@@ -10,8 +10,9 @@
 #             ibm_support: { status: supported|unsupported, source: <citation url> },
 #             lab_default_decision: { decided: "<YYYY-MM-DD>", ref: "<owner>/<repo>#<N>" }.
 #   roles:  box role -> { bake: { <family>: <ansible/bake-<stem>.yml stem> }, mq_bearing }.
-#   infra:  the OS of the shared nodes that run NO MQ (roles infra, obs, san). Not
-#           selectable, and not support-gated (no MQ runs there).
+#   infra:  the OS of the shared nodes that run NO queue manager (roles infra, obs, san).
+#           Not selectable, and not support-gated (no QM runs there). obs carries the
+#           MQ runtime its exporter links, so it is MQ-bearing (#1584), but runs no QM.
 #   infra_mq: the OS of the shared nodes that RUN MQ (role mq-client: svc-sim,
 #           app-client, mon-probe). Not selectable; support-gated like a stack default
 #           (spec §2/§4.1, correction .github#285).
@@ -47,7 +48,10 @@ os:
     10: { base_box: rhel/10-x86_64, point: "10.2", iso: rhel-10.2-x86_64-dvd.iso, arch: x86_64, requires: [x86-64-v3] }
 roles:
   infra: { bake: { ubuntu: infra } }
-  obs: { bake: { ubuntu: obs } }
+  # MQ-bearing (#1584): bake-obs.yml installs MQ via mq-install (the runtime libs the
+  # mq_prometheus exporter links), whose skip-if-baked guard keys on presence only, so an
+  # MQ pin bump must rebake it or the box keeps the old MQ runtime (#1087).
+  obs: { bake: { ubuntu: obs }, mq_bearing: true }
   # The SAN targets (san-a/san-b): DRBD + LIO install half, no MQ payload (spec §4.7.1).
   san: { bake: { ubuntu: san }, components: [mq-resiliency-observability] }
   mq-client: { bake: { ubuntu: mq-ubuntu }, mq_bearing: true, components: [mq-resiliency-clients] }
