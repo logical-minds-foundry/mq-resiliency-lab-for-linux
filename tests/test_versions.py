@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import datetime
-import glob
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -354,7 +353,8 @@ def _task_files(ref: str, here: Path, ansible: Path) -> list[Path]:
     which over-includes (safe). A path that matches nothing fails loudly, never skipped.
     """
     pattern = _JINJA.sub(lambda m: str(ansible) if m[1] == "playbook_dir" else "*", ref)
-    found = sorted(Path(p).resolve() for p in glob.glob(str(here / pattern)))
+    full = here / pattern  # an absolute pattern ({{ playbook_dir }}) replaces here
+    found = sorted(p.resolve() for p in Path(full.anchor).glob(str(full.relative_to(full.anchor))))
     if not found:
         raise AssertionError(f"include {ref!r} in {here} matches no file")
     return found
