@@ -55,6 +55,17 @@
 
 - import_playbook: _nativeha-cluster-ha.yml
 
+# mqoperator OS account on EVERY instance, both sites (epic .github#341 spec §2.2; #1501):
+# the MQWebUser role maps to an identical OS user ID (IBM S10), so it must exist wherever the
+# QM can run — the Live group and the CRR Recovery group. The role declares every
+# authz_accounts principal; this arm applies no other OAM grants today, so only mqoperator
+# is used here. Under `bootstrap --no-dr` (#188) site B is absent, so drop nha_rhel_crr_b
+# (as the pcmk/rdqm/nativeha-ubuntu accounts plays do); the default keeps both sites.
+- name: authz accounts on every Native HA instance (Live + Recovery) (#1501)
+  hosts: "nha_rhel_crr_a{{ ':nha_rhel_crr_b' if (dr_enabled | default(true) | bool) else '' }}"
+  become: true
+  roles: [mq-authz-accounts]
+
 # Folded qm-create (#350 Task 2 step 2): our-side inter-QM + app MQSC on the ACTIVE
 # Native HA instance. runmqsc must run on the active instance; Native HA then
 # replicates the objects to all instances via raft. Mirrors the RDQM arm's our-side
@@ -112,6 +123,21 @@
         nha_qm: "{{ qm_name }}"
         nha_label: event monitoring
         nha_event_monitor: true
+
+    # mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
+    # arm-agnostic SET AUTHREC set, once on the Active; raft replicates the OAM records to
+    # every instance, and the Recovery group inherits them by CRR. Default ok_rcs [0]: every
+    # line is a SET AUTHREC, so rc 10 is a refused grant and must fail loud, not pass.
+    - name: mqoperator grants on the active instance (once; raft-replicated) (#1501)
+      ansible.builtin.include_tasks: tasks/nativeha-on-active.yml
+      vars:
+        nha_group: nha_rhel_crr_a
+        nha_qm: "{{ qm_name }}"
+        nha_label: mqoperator grants
+        nha_steps:
+          - label: runmqsc mqoperator grants
+            cmd: /opt/mqm/bin/runmqsc {{ qm_name }}
+            stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2') }}"
 
 # HA-site (Live group) TLS keystore — apply it here ONLY when the DR half is skipped
 # (`bootstrap --no-dr`, dr_enabled=false). Site-A TLS is otherwise deployed inside

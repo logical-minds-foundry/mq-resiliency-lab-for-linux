@@ -131,6 +131,18 @@
         mode: "0640"
       run_once: true
 
+    # mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
+    # arm-agnostic SET AUTHREC set, applied below while the QM runs for the setmqaut grants.
+    # The records live on the LUN, so they follow the QM on failover.
+    - name: render the mqoperator grants MQSC
+      ansible.builtin.template:
+        src: mqoperator.mqsc.j2
+        dest: /var/mqm/mqoperator.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      run_once: true
+
     - name: apply the authorization MQSC
       ansible.builtin.shell: |
         su mqm -c '/opt/mqm/bin/strmqm {{ qm_name }}' || true
@@ -164,6 +176,18 @@
       register: setmqaut_res
       changed_when: true
       failed_when: setmqaut_res.rc != 0
+
+    # The QM is running (started for the setmqaut grants above). rc 0 only: every line is a
+    # SET AUTHREC, so any non-zero rc (10 = a command failed) is a refused grant, not a
+    # re-provision no-op, and must fail loud rather than leave mqoperator half-granted.
+    - name: apply the mqoperator grants MQSC (MQWebUser, #1501)
+      ansible.builtin.shell: su mqm -c '/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/mqoperator.mqsc'
+      args:
+        executable: /bin/bash
+      run_once: true
+      register: mqoperator_mqsc
+      changed_when: true
+      failed_when: mqoperator_mqsc.rc != 0
 
     - name: refresh the authorization service
       ansible.builtin.shell: |

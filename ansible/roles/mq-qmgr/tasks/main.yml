@@ -106,6 +106,24 @@
   changed_when: "'AMQ8626' not in lsr.stdout"
   failed_when: lsr.rc not in [0, 10]
 
+# mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
+# arm-agnostic SET AUTHREC set every HA arm applies, rendered from the pcmk role's template
+# and fed to runmqsc on stdin. The mqoperator OS account comes from mq-authz-accounts
+# (site-distributed-shared.yml). rc 0 only: every line is a SET AUTHREC, so rc 10 is a
+# refused grant, not a re-provision no-op, and must fail loud.
+- name: mqoperator grants (MQWebUser, #1501)
+  ansible.builtin.command:
+    cmd: /opt/mqm/bin/runmqsc {{ qmgr_name }}
+    stdin: >-
+      {{ lookup('ansible.builtin.template',
+                role_path ~ '/../mq-pcmk-qmgr/templates/mqoperator.mqsc.j2',
+                template_vars={'qm_name': qmgr_name}) }}
+  become: true
+  become_user: mqm
+  register: mqop
+  changed_when: true
+  failed_when: mqop.rc != 0
+
 # Enable the resource-monitoring + statistics the mq_prometheus exporter needs
 # ($SYS publications are sparse without it); MAXHANDS headroom for its per-queue
 # handles. Exporter-ready when an instance is pointed at this QM (#172).

@@ -417,6 +417,34 @@
       failed_when: setmqaut_res.rc != 0
       when: rdqm_is_active
 
+    # mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
+    # arm-agnostic SET AUTHREC set from the pcmk role's template, on the active node; RDQM
+    # replicates the OAM records to the DR peer with the rest of the QM over DRBD.
+    - name: render the mqoperator grants MQSC on the active node
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2"
+        dest: /var/mqm/mqoperator.mqsc
+        owner: mqm
+        group: mqm
+        mode: "0640"
+      when: rdqm_is_active
+
+    # rc 0 only: every line is a SET AUTHREC, so rc 10 is a refused grant, not a no-op. The
+    # retry covers the same AMQ8146E admin-interface startup window as the authz apply above
+    # (#435/#888); a real refusal still fails loud once the bound is spent.
+    - name: apply the mqoperator grants MQSC on the active node (MQWebUser, #1501)
+      ansible.builtin.shell: |
+        su - mqm -c "/opt/mqm/bin/runmqsc {{ qm_name }} < /var/mqm/mqoperator.mqsc"
+      args:
+        executable: /bin/bash
+      register: mqoperator_mqsc
+      changed_when: true
+      failed_when: mqoperator_mqsc.rc != 0
+      until: mqoperator_mqsc.rc == 0
+      retries: 30
+      delay: 5
+      when: rdqm_is_active
+
     - name: refresh the authorization service on the active node
       ansible.builtin.shell: |
         set -o pipefail

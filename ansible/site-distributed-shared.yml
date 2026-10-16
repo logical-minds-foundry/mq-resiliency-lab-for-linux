@@ -26,6 +26,15 @@
 - hosts: svc
   roles: [mq-install]
 
+# mqoperator OS account on the SVC host before its QM (epic .github#341 spec §2.2; #1501):
+# MQWebUser maps to an identical OS user ID (IBM S10), and mq-qmgr applies the mqoperator
+# grants to {{ qm_svc }}. A play of its own because the role creates users and groups (it
+# needs become at play level) while the mq-qmgr play escalates per task, not at play level.
+- name: authz accounts on the SVC host (#1501)
+  hosts: svc
+  become: true
+  roles: [mq-authz-accounts]
+
 - hosts: svc
   vars:
     qmgr_name: "{{ qm_svc }}"  # per-stack svc QM name, threaded from QmConfig (#351)

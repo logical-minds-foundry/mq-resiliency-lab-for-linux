@@ -12,7 +12,8 @@ What this pins (structure only; the behaviour is proven by the cold-rebuild gate
 - The two Native HA provision playbooks never name ``active_host`` themselves: no
   ``delegate_to`` or ``when`` pinned to a detection made earlier in the play.
 - Each of them applies its MQSC and the event-monitor role through the runner, and the
-  Ubuntu arm also its authorization posture (authz MQSC, setmqaut grants, REFRESH).
+  Ubuntu arm also its authorization posture (authz MQSC, setmqaut grants, mqoperator
+  grants, REFRESH); the RHEL arm applies its mqoperator grants as a unit of their own.
 - Active detection lives in ONE task file: no other playbook parses ``ROLE(Active)``.
 """
 
@@ -30,7 +31,11 @@ DETECT = "tasks/nativeha-find-active.yml"
 INCLUDE_TASKS = ("ansible.builtin.include_tasks", "include_tasks")
 
 PROVISION = {
-    "site-nativeha.yml": ("nha_rhel_crr_a", {"our-side + app MQSC", "event monitoring"}),
+    # mqoperator grants (#1501): the MQWebUser SET AUTHREC set, its own unit on this arm.
+    "site-nativeha.yml": (
+        "nha_rhel_crr_a",
+        {"our-side + app MQSC", "event monitoring", "mqoperator grants"},
+    ),
     "site-nativeha-ubuntu.yml": (
         "nha_ubuntu_a",
         {"our-side + app MQSC", "authorization posture", "event monitoring"},
