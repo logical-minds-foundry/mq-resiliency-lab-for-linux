@@ -83,7 +83,8 @@ def _with_ubuntu26(
 ) -> dict[str, Any]:
     """The committed catalog with ubuntu:26 replaced by a bare entry (no recorded lab
     decision unless ``decided``) offered to nativeha-ubuntu, whose default is ``default``;
-    pcmk-ubuntu and infra_mq sit on 24 so only nativeha-ubuntu's default is under test."""
+    pcmk-ubuntu, pcmk-drbd-ubuntu and infra_mq sit on 24 so only nativeha-ubuntu's
+    default is under test."""
     data = copy.deepcopy(_committed())
     entry: dict[str, Any] = {"base_box": "cloud-image/ubuntu-26.04"}
     if unsupported:
@@ -96,6 +97,7 @@ def _with_ubuntu26(
         "default": default,
     }
     data["stacks"]["pcmk-ubuntu"]["default"] = "ubuntu:24"
+    data["stacks"]["pcmk-drbd-ubuntu"]["default"] = "ubuntu:24"
     data["infra_mq"] = "ubuntu:24"
     return data
 
@@ -155,7 +157,7 @@ def test_committed_catalog():
         "pcmk-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
         "nativeha-rhel-crr": [OsRef("rhel", 9), OsRef("rhel", 10)],
         "rdqm-rhel": [OsRef("rhel", 9), OsRef("rhel", 10)],
-        "pcmk-drbd-ubuntu": [OsRef("ubuntu", 24)],
+        "pcmk-drbd-ubuntu": [OsRef("ubuntu", 24), OsRef("ubuntu", 26)],
     }
     # Ubuntu defaults on 26 ahead of IBM, by the recorded lab decision (#1285);
     # nativeha-rhel-crr (T11) and rdqm-rhel (#1473) default to RHEL 10, each validated live.
@@ -164,8 +166,7 @@ def test_committed_catalog():
         "pcmk-ubuntu": OsRef("ubuntu", 26),
         "nativeha-rhel-crr": OsRef("rhel", 10),
         "rdqm-rhel": OsRef("rhel", 10),
-        # 24 only until LINBIT's DRBD 9 PPA is proven on 26 (epic .github#310).
-        "pcmk-drbd-ubuntu": OsRef("ubuntu", 24),
+        "pcmk-drbd-ubuntu": OsRef("ubuntu", 26),
     }
     rhel9 = cat.oses[OsRef("rhel", 9)]
     assert (rhel9.base_box, rhel9.point, rhel9.iso, rhel9.arch_pin) == (

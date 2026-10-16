@@ -72,8 +72,7 @@ stacks:
   # (#1285); 24 stays selectable via a --config build file.
   nativeha-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:26 }
   pcmk-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:26 }
-  # Ubuntu 24.04 only until LINBIT's drbd9 PPA is proven on 26.04 (epic .github#310).
-  pcmk-drbd-ubuntu: { supported: [ubuntu:24], default: ubuntu:24 }
+  pcmk-drbd-ubuntu: { supported: [ubuntu:24, ubuntu:26], default: ubuntu:26 }
   # Defaults to rhel:10 (T11, #1289): IBM's MQ 10.0 SPCR lists MQ server + Native HA on
   # RHEL 10 (docs/reference/os-version-support-matrix.md), and the row was validated live
   # (V3, #1288). rhel:10 requires x86-64-v3, so a default bring-up on a host without it
