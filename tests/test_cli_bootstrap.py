@@ -20,7 +20,7 @@ import yaml
 from rich.console import Console
 from typer.testing import CliRunner
 
-from mqlab import cli, instances, versions
+from mqlab import cli, instances, paths, versions
 from mqlab import perfrun as cli_perfrun
 from mqlab.cli import _gate_stack_host_arch as _real_gate  # captured before the autouse stub
 from mqlab.cli import _host_facts as _real_host_facts  # captured before the autouse stub
@@ -393,6 +393,40 @@ def test_provision_injects_stack_secrets(monkeypatch, tmp_path):
     for name in sourced:  # exported under the uppercased name with the sourced value
         assert os.environ[name.upper()] == f"v-{name}"
         monkeypatch.delenv(name.upper(), raising=False)
+
+
+def test_provision_exports_the_mqweb_state_dir(monkeypatch, tmp_path):
+    # mqweb encode-once store (epic .github#341 spec §2.2, #1500): the mqweb role reads
+    # MQWEB_STATE_DIR to persist the AES key and the encoded passwords, so a re-provision
+    # renders mqwebuser.xml byte-identically. It must be the shared state bucket's
+    # mqweb dir, resolved through mqlab.paths — never a hardcoded build/ path.
+    _seed(monkeypatch, tmp_path)
+    # setenv (not delenv) so monkeypatch restores the variable's absence afterwards.
+    monkeypatch.setenv("MQWEB_STATE_DIR", "stale-sentinel")
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: f"v-{name}")
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(4)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "provision"])
+    assert result.exit_code == 0
+    assert os.environ["MQWEB_STATE_DIR"] == str(paths.state("mqweb"))
+    assert os.environ["MQWEB_STATE_DIR"] == str(tmp_path / "build" / "state" / "mqweb")
+    for name in ("pcmk_hacluster_password", "mqweb_admin_password"):
+        monkeypatch.delenv(name.upper(), raising=False)
+
+
+def test_non_provision_phase_exports_no_mqweb_state_dir(monkeypatch, tmp_path):
+    _seed(monkeypatch, tmp_path)
+    monkeypatch.setenv("MQWEB_STATE_DIR", "untouched")
+    monkeypatch.setattr(cli, "_source_secret", lambda deps, name: "x")
+    monkeypatch.setattr(cli, "_ensure_prereqs_for_stack", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_probe_all", lambda deps, stack: _states())
+    runner = RecordingRunner(results=[ScriptedResult([]) for _ in range(16)])
+    monkeypatch.setattr(cli, "build_deps", lambda v, t: _deps(runner))
+    result = CliRunner().invoke(cli.app, ["bootstrap", "pcmk-ubuntu", "--only", "observe"])
+    assert result.exit_code == 0
+    assert os.environ["MQWEB_STATE_DIR"] == "untouched"
 
 
 def test_non_provision_phase_sources_no_secrets(monkeypatch, tmp_path):

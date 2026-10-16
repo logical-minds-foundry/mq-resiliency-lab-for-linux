@@ -389,7 +389,7 @@ stacks:
     # cross-site DRBD mirror keeps running under --no-dr, traded for that simplicity.
     dr_groups: [pcmk_b]
     provision: ansible/site-pcmk.yml
-    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    secrets: [pcmk_hacluster_password, mqweb_aes_passphrase]
     qm: { vip: 10.10.1.200, vip_b: 10.10.2.200, vip_ext: 10.60.0.10, vip_ext_b: 10.60.0.20 }
     alloc: { exporter_app_port: 9157, app_unit: app-pcmk, svc_port: 1414 }
     verbs:
@@ -415,7 +415,7 @@ stacks:
     groups: [rdqm_a, rdqm_b]
     dr_groups: [rdqm_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-rdqm.yml
-    secrets: [mqweb_admin_password]
+    secrets: [mqweb_aes_passphrase]
     qm: { vip: 10.10.1.100, vip_b: 10.10.2.100 }
     alloc: { exporter_app_port: 9159, app_unit: app-rdqm, svc_port: 1414 }
     verbs:
@@ -435,7 +435,7 @@ stacks:
     groups: [nha_rhel_crr_a, nha_rhel_crr_b]
     dr_groups: [nha_rhel_crr_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-nativeha.yml
-    secrets: [mqweb_admin_password]
+    secrets: [mqweb_aes_passphrase]
     qm: {}
     alloc: { exporter_app_port: 9161, app_unit: app-nhar-crr, svc_port: 1414 }
     verbs:
@@ -460,7 +460,7 @@ stacks:
     groups: [nha_ubuntu_a, nha_ubuntu_b]
     dr_groups: [nha_ubuntu_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
     provision: ansible/site-nativeha-ubuntu.yml
-    secrets: [mqweb_admin_password]
+    secrets: [mqweb_aes_passphrase]
     qm: {}
     alloc: { exporter_app_port: 9163, app_unit: app-nhau, svc_port: 1414 }
     verbs:

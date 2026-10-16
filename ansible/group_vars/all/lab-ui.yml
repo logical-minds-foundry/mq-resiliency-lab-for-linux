@@ -1,12 +1,11 @@
-# Lab web-UI convenience (#255/#258). The human-facing browser UIs are opened
-# login-free for this disposable, isolated lab — pure convenience, no real data.
+# Lab web-UI convenience (#255/#258). Grafana is opened login-free for this
+# disposable, isolated lab — pure convenience, no real data. The role defaults it to
+# false (secure); this lab-wide file opts in. LAB ONLY — never carry it to a real
+# deployment.
 #
-# IMPORTANT: this opens ONLY the human UIs. The mqweb REST API stays AUTHENTICATED
-# (it is the tooling/code surface — mqlab, pymqrest, the instrumentation that drives
-# the queue managers — part of what we instrument about the 3+3). The roles default
-# both of these to false (secure); this lab-wide file opts in. LAB ONLY — never carry
-# these to a real deployment.
-mqweb_console_anonymous: true   # MQ Console (browser) loads with no login; REST unchanged
+# The MQ Console is NOT anonymous: anonymous Console access is retired (epic
+# .github#341 spec §2.2, #1500). The Console and the REST API both require a login,
+# one sample user per IBM role (ansible/roles/mqweb/defaults/main.yml `mqweb_users`).
 grafana_anonymous: true         # Grafana grants anonymous Admin + hides the login form
 
 # Shared auth token between Grafana and its co-located grafana-image-renderer (#935).

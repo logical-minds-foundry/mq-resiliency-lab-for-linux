@@ -534,8 +534,8 @@ all three drive the baked `mq-resiliency-clients` component and install no clien
 code — `mq-event-monitor`, `mq-diag-logging` per-QM `qmini`); the SAN/iSCSI substrate
 (`iscsi-initiator`, plus the DRBD resource and iSCSI target configuration halves of
 `drbd-san` and `iscsi-target`, whose install halves are baked into `san-ubuntu26`); and
-`mqweb` (per-QM REST config +
-injected `mqweb_admin_password`, so it is configure even though the mqweb *server*
+`mqweb` (per-QM REST config, the registry encoded with the AES key made from the
+injected `mqweb_aes_passphrase`, so it is configure even though the mqweb *server*
 binary is installed by `rdqm-install`).
 
 > **Note on `mq-nativeha`:** only its *formation* half (`crtmqm` / peer-set /
