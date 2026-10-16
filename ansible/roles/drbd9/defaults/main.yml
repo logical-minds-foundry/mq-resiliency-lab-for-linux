@@ -7,3 +7,12 @@
 # each queue manager's DRBD backing LV is carved from it (pdrbd-qm, epic Task 5).
 drbd9_vg: drbdpool
 drbd9_disk: /dev/vdb
+
+# LINBIT's DRBD 9 PPA (#1589), added as a deb822 source signed by a key shipped in the
+# role (files/linbit-drbd9-stack.asc) — never via the PPA shortcut's keyserver fetch.
+# The fingerprint is Launchpad's own record for the PPA (`signing_key_fingerprint` at
+# https://api.launchpad.net/1.0/~linbit/+archive/ubuntu/linbit-drbd9-stack), and the
+# install half asserts the shipped key matches it before the repository is added.
+drbd9_linbit_ppa_uri: https://ppa.launchpadcontent.net/linbit/linbit-drbd9-stack/ubuntu
+drbd9_linbit_keyring: /etc/apt/keyrings/linbit-drbd9-stack.asc
+drbd9_linbit_key_fingerprint: CC1B5A793C04BB3905AD837734893610CEAA9512
