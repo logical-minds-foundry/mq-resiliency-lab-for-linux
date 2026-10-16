@@ -829,12 +829,11 @@ def _seed_infra(monkeypatch, tmp_path):
 
 def test_commons_mq_boxes_excludes_infra(monkeypatch, tmp_path):
     """The infra commons group is infrastructure-only (DNS/core services): its infra
-    box is excluded from the MQ-media enumeration, while the MQ-bearing commons
-    (obs/svc/app/probe) boxes are still included."""
+    box is excluded from the MQ-media enumeration, and so is the obs box, which carries
+    no MQ (#1584). The MQ-bearing commons (svc/app/probe) box is still included."""
     _seed_infra(monkeypatch, tmp_path)
     roles = {b.role for b in cli._commons_mq_boxes()}
-    assert "infra" not in roles
-    assert {"obs", "mq-client"} <= roles
+    assert roles == {"mq-client"}
 
 
 def test_stack_mq_boxes_excludes_infra(monkeypatch, tmp_path):

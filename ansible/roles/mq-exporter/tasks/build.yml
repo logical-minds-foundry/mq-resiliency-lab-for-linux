@@ -8,11 +8,11 @@
 # (The cgo *build* moved out of the guest — see below, #1065.)
 #
 # MQ is a PRECONDITION here, not something this file installs (#1584). Installing it
-# here hid an MQ payload inside the exporter build, so bake-obs.yml baked MQ without
-# declaring it and obs was not MQ-bearing: an MQ pin bump REUSEd the stale box (#1087).
-# Every caller already has MQ: bake-obs.yml and bake-mq-ubuntu.yml run mq-install first,
-# and site-obs.yml runs this on mon-probe, which boots the baked MQ-bearing mq-client box.
-# A caller that forgets fails here, loudly, instead of silently installing MQ.
+# here hid an MQ payload inside the exporter build: bake-obs.yml baked MQ that way,
+# undeclared and unused, until #1584 removed the exporter from the obs box. Every caller
+# has MQ: bake-mq-ubuntu.yml runs mq-install first, and site-obs.yml runs this on
+# mon-probe, which boots the baked MQ-bearing mq-client box. A caller that forgets fails
+# here, loudly, instead of silently installing MQ.
 - name: check for the MQ runtime the exporter links (libmqm_r)
   ansible.builtin.stat:
     path: /opt/mqm/lib64/libmqm_r.so
@@ -44,7 +44,7 @@
 # mq-metric-samples go.mod auto-downloaded the entire Go toolchain and overflowed the
 # fatbox build guest's disk. We just copy the prebuilt binary from the host-durable
 # cache (`mq_exporter_media_dir`, the fat-box bake overrides it — mirrors mq_media_dir).
-# Skip-if-baked (#648/#659): the obs/mq-ubuntu fat box already carries it, so gate the
+# Skip-if-baked (#648/#659): the mq-ubuntu (mq-client) fat box already carries it, so gate the
 # copy on the installed marker (a live run's worktree build/ cache may be empty).
 - name: check for an already-installed mq_prometheus (baked)
   ansible.builtin.stat:

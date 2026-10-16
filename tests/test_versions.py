@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
-from mqlab import instances, topology, versions
+from mqlab import instances, mqexporter, topology, versions
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.instances import InstanceRecord
 from mqlab.paths import versions_catalog_path
@@ -315,12 +315,24 @@ def test_pcmk_is_mq_bearing_because_it_bakes_mq():
     assert load_catalog().box("pcmk", OsRef("ubuntu", 24)).mq_bearing is True
 
 
-def test_obs_is_mq_bearing_because_it_bakes_mq():
-    """bake-obs.yml installs MQ (the runtime libmqm_r the baked mq_prometheus links), and
-    mq-install's skip-if-baked guard keys on the presence of cmqc.h, not its version. So
-    the lab/mq-version pin must be in the obs box's manifest hash: otherwise a pin bump
-    REUSEs the stale box and it keeps the old MQ runtime (#1087, #1584)."""
-    assert load_catalog().box("obs", OsRef("ubuntu", 26)).mq_bearing is True
+def test_obs_carries_no_mq_and_is_not_mq_bearing():
+    """obs runs no MQ (#1584): mq_prometheus runs only on mon-probe, which boots the
+    mq-client box. Its bake reaches neither mq-install nor mq-exporter at any depth, so
+    the catalog must not flag it MQ-bearing; an MQ pin bump leaves obs at REUSE."""
+    cat = load_catalog()
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    assert not _bake_reaches(ansible, "obs", "mq-install")
+    assert not _bake_reaches(ansible, "obs", "mq-exporter")
+    assert cat.box("obs", cat.infra).mq_bearing is False
+
+
+def test_exporter_roles_are_the_roles_whose_bake_installs_mq_prometheus():
+    """mqexporter.EXPORTER_ROLES (which boxes need the prebuilt binary staged) matches
+    the bakes that actually reach the mq-exporter role, so dropping it from a bake (obs,
+    #1584) cannot leave a stale binary prerequisite behind, or vice versa."""
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    bakes = {role for role, stem in _bake_stems() if _bake_reaches(ansible, stem, "mq-exporter")}
+    assert bakes == set(mqexporter.EXPORTER_ROLES)
 
 
 _JINJA = re.compile(r"\{\{\s*(.*?)\s*\}\}")
@@ -368,8 +380,8 @@ def _reaches_role(  # noqa: PLR0913 - one recursive walker, its state passed exp
     A direct hit is an ``include_role``/``import_role`` ``name:`` or a ``roles:`` entry.
     With ``follow`` it also walks, recursively, the task file each other role runs
     (``tasks_from`` or ``main``) and every ``include_tasks``/``import_tasks`` file
-    (#1584: obs reached mq-install only through mq-exporter's build tasks, which the
-    direct-include check of #1572 missed).
+    (#1584: obs used to reach mq-install only through mq-exporter's build tasks, which
+    the direct-include check of #1572 missed).
     """
     if isinstance(node, list):
         return any(_reaches_role(i, role, here, ansible, seen, follow=follow) for i in node)
@@ -420,12 +432,12 @@ def _bake_stems() -> list[tuple[str, str]]:
 def test_every_role_whose_bake_reaches_mq_install_is_mq_bearing():
     """A bake playbook that reaches mq-install at any depth bakes MQ, so its role must be
     MQ-bearing or an MQ pin bump silently REUSEs a box on the old MQ (#1087). pcmk
-    slipped through with a direct include (#1572), obs through mq-exporter's build
-    tasks (#1584)."""
+    slipped through with a direct include (#1572), and obs used to bake MQ through
+    mq-exporter's build tasks (#1584)."""
     cat = load_catalog()
     ansible = versions_catalog_path().parent.parent / "ansible"
     bakes_mq = {role for role, stem in _bake_stems() if _bake_reaches(ansible, stem, "mq-install")}
-    assert {"obs", "pcmk", "pdrbd", "mq-client"} <= bakes_mq  # the guard sees real includes
+    assert {"pcmk", "pdrbd", "mq-client"} <= bakes_mq  # the guard sees real includes
     assert sorted(r for r in bakes_mq if not cat.roles[r]["mq_bearing"]) == []
 
 
@@ -477,8 +489,8 @@ _NOOP = "- debug: {}\n"
 @pytest.mark.parametrize(
     ("playbook", "roles", "expected"),
     [
-        # #1584's exact shape: bake-obs -> include_role mq-exporter tasks_from: build ->
-        # include_role mq-install.
+        # The shape #1584 found (bake-obs, before it was removed): include_role mq-exporter
+        # tasks_from: build -> include_role mq-install.
         (
             "- include_role: {name: exporter, tasks_from: build}\n",
             {"exporter": {"build.yml": _INSTALL, "main.yml": _NOOP}},

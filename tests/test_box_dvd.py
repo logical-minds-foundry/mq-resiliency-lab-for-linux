@@ -151,7 +151,7 @@ def test_build_boxes_skips_dvd_on_rhel_reuse_decision(monkeypatch):
 
 
 def test_build_boxes_ensures_exporter_binary_for_exporter_box(monkeypatch, tmp_path):
-    # An obs/mq-ubuntu bake needs the prebuilt mq_prometheus, so build_boxes ensures
+    # The mq-ubuntu (mq-client) bake needs the prebuilt mq_prometheus, so build_boxes ensures
     # it (in the Go container) before baking — #1065.
     verified: list = []
     _stub_build_env(monkeypatch, verified)
@@ -162,8 +162,8 @@ def test_build_boxes_ensures_exporter_binary_for_exporter_box(monkeypatch, tmp_p
         "ensure_mq_exporter_binary",
         lambda root, ver: ensured.append((root, ver)),
     )
-    obs = next(n for n, s in x86_fleet().items() if s.role == "obs")
-    box.build_boxes([obs], force=True)
+    client = next(n for n, s in x86_fleet().items() if s.role == "mq-client")
+    box.build_boxes([client], force=True)
     # Built against the lab/mq-version pin's SDK (#1407), never a stray cached level.
     assert ensured == [(tmp_path, box.DEFAULT_MQ_VERSION)]
 

@@ -30,13 +30,14 @@ _OTHER_VER = "1.2.3.5"
 
 def test_needs_exporter_binary_true_for_exporter_roles():
     # Keyed by box ROLE (#1274), so it holds on every OS major; None is a base OS box.
-    assert mqexporter.needs_exporter_binary(["obs"])
+    assert mqexporter.needs_exporter_binary(["mq-client"])
     assert mqexporter.needs_exporter_binary([None, "mq-client"])
 
 
 def test_needs_exporter_binary_false_otherwise():
     assert not mqexporter.needs_exporter_binary([])
     assert not mqexporter.needs_exporter_binary(["pcmk", "infra", None])
+    assert not mqexporter.needs_exporter_binary(["obs"])  # obs carries no exporter (#1584)
 
 
 def test_exporter_binary_path_is_under_cache_mq_exporter_keyed_by_mq_version(tmp_path):

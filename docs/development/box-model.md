@@ -33,7 +33,7 @@ nothing more. The taxonomy is **role × OS major × host-arch**:
 | `mq-rdqm-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `rdqm-*` nodes on RHEL 10, the stack default (#1473; selectable since #1440) | the same bake as `mq-rdqm-rhel9` (`bake-mq-rdqm.yml`), on the RHEL 10 base, with MQ 10.0.1's `el10` RDQM set (Pacemaker 3) |
 | `mq-nativeha-rhel9` | `rhel/9-x86_64` (locally built) | `x86_64` (pinned) | `nha-rhel-crr-a1..3`, `nha-rhel-crr-b1..3`, when the stack runs on RHEL 9 (`os: rhel:9` in a `--config` file; the choice for a host without x86-64-v3) | base MQ product (**no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
 | `mq-nativeha-rhel10` | `rhel/10-x86_64` (locally built) | `x86_64` (pinned; needs x86-64-v3) | the same `nha-rhel-crr-*` nodes on RHEL 10, the stack default (#1289) | the same bake as `mq-nativeha-rhel9` (`bake-nativeha-rhel.yml`), on the RHEL 10 base |
-| `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (built in the Go container, copied in; #1065) + MQ runtime, **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
+| `obs-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `obs` | Prometheus + Grafana + Loki + node-exporter + alloy, **no** MQ (the `mq_prometheus` exporter runs on `mon-probe`, from the `mq-client` box; #1584), **plus** the log-search stack — OpenSearch + OpenSearch Dashboards + Data Prepper — consolidated onto obs (#1178/#1179, epic .github#267) |
 | `infra-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | `infra-client`, `infra-svc` | BIND9 + `/etc/bind/zones` scaffolding + node-exporter + alloy |
 | `mq-client-ubuntu26` | `cloud-image/ubuntu-26.04` | host-resolved | the MQ commons — `svc-sim` (svc), `app-client` (app), `mon-probe` (probe), on the `infra_mq:` OS (`ubuntu:26` by lab decision, #1285; it replaced `mq-client-ubuntu24`) | Ubuntu MQ product (server + client + SDK + samples) + node-exporter + alloy + the prebuilt `mq_prometheus` exporter (copied in; #1065) + `acl` + the guest runtime + `mq-resiliency-clients` (ibmmq: wheel on x86_64, compiled from sdist at bake on aarch64; replaces the pre-#294 responder venv, #1227) |
 | `mq-nativeha-ubuntu24` | `cloud-image/ubuntu-24.04` | host-resolved | `nha-ubuntu-a1..3`, `nha-ubuntu-b1..3` when `nativeha-ubuntu` is built with `os: ubuntu:24` (the IBM-listed Ubuntu) | base Ubuntu MQ product (server + client + SDK + samples debs, **no** RDQM/DRBD — Native HA replicates in the raft log, so **no kernel pin**) + node-exporter + alloy + the guest runtime + `mq-resiliency-observability` |
@@ -98,7 +98,7 @@ Shared (commons) nodes are never selectable. They split by **whether they run MQ
 
 | Catalog key | Roles | Nodes | OS today | Support-gated? |
 |-------------|-------|-------|----------|----------------|
-| `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no queue manager runs there (`obs` carries only the MQ runtime its exporter links, #1584) |
+| `infra:` | `infra`, `obs`, `san` | `infra-client`, `infra-svc`, `obs`, `san-a`, `san-b` | `ubuntu:26` | no: no MQ runs there |
 | `infra_mq:` | `mq-client` | `svc-sim`, `app-client`, `mon-probe` | `ubuntu:26` (by lab decision, #1285) | yes, like a stack default |
 
 **The support gate.** IBM's MQ 10.0 SPCR lists no Ubuntu 26.04 row
@@ -632,14 +632,13 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
   For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client`,
-  `mq-nativeha`, `pcmk`, `pdrbd` and `obs` roles, for example `mq-rdqm-rhel10`,
-  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26`, `pcmk-ubuntu26` and `obs-ubuntu26` — the
-  roles flagged `mq_bearing: true`
+  `mq-nativeha`, `pcmk` and `pdrbd` roles, for example `mq-rdqm-rhel10`,
+  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` — the roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
-  BUILD on the next bootstrap while the non-MQ boxes (`infra-ubuntu26` and
-  `san-ubuntu26`) stay REUSE — a
+  BUILD on the next bootstrap while the non-MQ boxes (`obs-ubuntu26`,
+  `infra-ubuntu26` and `san-ubuntu26`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
   For a box that bakes **guest components** (`roles.<role>.components`), the hash
   also folds in the pinned guest runtime (`--runtime-pin <version>+<pbs_release>`)

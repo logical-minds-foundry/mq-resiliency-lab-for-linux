@@ -339,7 +339,7 @@ virsh -c qemu:///system undefine "$BUILD_DOM" --nvram 2>/dev/null || true
 sudo rm -f "$IMG"
 sudo cp "$BASE_IMG" "$IMG"
 # Grow the transient build disk past the base cloud image's ~8.7G so the heaviest bakes
-# — obs (full MQ for the exporter SDK + MQ web/liberty + prometheus/grafana/loki + the
+# — obs (at the time: full MQ for the exporter SDK + MQ web/liberty + prometheus/grafana/loki + the
 # prebuilt exporter) and mq-ubuntu — stop overflowing mid-install (#1144: "No space left
 # on device" writing mq_wlp.tar.gz, /dev/vda1 100% at 8.7G with ~2G of staged tarballs in
 # /tmp). Resize to an ABSOLUTE 18G, which MUST stay under the box's declared
@@ -377,10 +377,10 @@ if [ "$BASE_KIND" = rhel ]; then
   BAKE_EXTRA_VARS=(-e "mq_media_dir=$MAIN_ROOT/build/cache/mq")
 fi
 
-# The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — obs for the
-# mq_prometheus cgo build's SDK, mq-ubuntu for the svc/app/probe commons, and the HA arms
-# (nativeha-ubuntu, pcmk-ubuntu, pdrbd-ubuntu) for their cluster nodes' server. (infra is
-# BIND9 — no MQ.)
+# The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — mq-ubuntu for
+# the svc/app/probe commons, and the HA arms (nativeha-ubuntu, pcmk-ubuntu, pdrbd-ubuntu)
+# for their cluster nodes' server. (infra is BIND9 and obs the observability stack — no
+# MQ; obs dropped its unused MQ + mq_prometheus in #1584.)
 # Like rdqm-install, mq-install reads its tarball from mq_media_dir; point it at the
 # host-durable main-worktree cache (the worktree's build/ is empty). The deb tarball is
 # arch-specific, so the pre-flight matches the --arch this bake builds for — ARM64 on
@@ -399,7 +399,7 @@ mq_pin() {
   printf '%s' "$pin"
 }
 case "$BAKE" in
-  obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)
+  mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)
     MQ_PIN="$(mq_pin)"
     case "$ARCH" in
       aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;
@@ -412,13 +412,13 @@ case "$BAKE" in
     ;;
 esac
 
-# The obs + mq-ubuntu bakes install a PREBUILT mq_prometheus (#1065): built once in the
-# Go container by `mqlab` (build_boxes ensures it before this bake), copied in by the
-# mq-exporter role — no in-guest Go toolchain (which auto-downloaded a full toolchain
-# and overflowed this guest's disk). Point mq_exporter_media_dir at the host-durable
+# The mq-ubuntu bake installs a PREBUILT mq_prometheus (#1065; obs no longer does, #1584):
+# built once in the Go container by `mqlab` (build_boxes ensures it before this bake),
+# copied in by the mq-exporter role — no in-guest Go toolchain (which auto-downloaded a
+# full toolchain and overflowed this guest's disk). Point mq_exporter_media_dir at the host-durable
 # cache and fail loud if the artifact is absent.
 case "$BAKE" in
-  obs | mq-ubuntu)
+  mq-ubuntu)
     # Arch-suffixed artifact (#1100/#1112): the host builds mq_prometheus for its own
     # arch (aarch64 -> arm64, x86_64 -> x64), matching mqexporter.binary_name().
     case "$ARCH" in aarch64) EXPORTER_SUFFIX=arm64 ;; *) EXPORTER_SUFFIX=x64 ;; esac

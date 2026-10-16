@@ -33,10 +33,8 @@ if TYPE_CHECKING:
 FAMILIES = {"ubuntu": "Ubuntu", "rhel": "RHEL"}
 # Shared (commons) roles never take a stack's OS. They split by whether the box runs MQ
 # (spec §2, correction .github#285):
-# - INFRA_ROLES run no queue manager (the infra/obs commons and the SAN targets' baked
-#   `san` box, spec §4.7.1). They boot ``catalog.infra``, which is NOT support-gated.
-#   obs does carry the MQ runtime its mq_prometheus exporter links, so its box is
-#   MQ-bearing (rebaked on an MQ pin bump, #1584), but it runs no QM.
+# - INFRA_ROLES run no MQ (the infra/obs commons and the SAN targets' baked `san` box,
+#   spec §4.7.1). They boot ``catalog.infra``, which is NOT support-gated.
 # - INFRA_MQ_ROLES run MQ (svc-sim, app-client, mon-probe). They boot
 #   ``catalog.infra_mq``, which is support-gated like a stack default (an IBM-unsupported
 #   OS only with a recorded ``lab_default_decision``, #1285).
