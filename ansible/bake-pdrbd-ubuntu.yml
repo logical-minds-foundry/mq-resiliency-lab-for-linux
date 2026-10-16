@@ -1,0 +1,147 @@
+---
+# Bake the pdrbd box image (epic .github#310 T3, #1423). The shared-nothing peer of
+# bake-pcmk-ubuntu.yml: it bakes the per-run-invariant install work the six cluster nodes of
+# the pcmk-drbd-ubuntu stack (the RDQM-faithful open-source arm: Corosync/Pacemaker + LINBIT
+# DRBD 9 on Ubuntu) otherwise pay EVERY bootstrap on the bare Ubuntu cloud-image base
+# (lab/versions.yaml) — base IBM MQ (server + client + SDK + samples debs, NO RDQM) + LINBIT
+# DRBD 9 (drbd-dkms + drbd-utils) + acl + node-exporter + alloy.
+#
+# DRBD 9, NEVER the in-kernel 8.4 (spec D2): the drbd9 role's install half adds
+# ppa:linbit/linbit-drbd9-stack, builds the drbd-dkms module against THIS image's kernel
+# and PROVES it loads as 9.x before the image is captured, so a node never compiles a
+# kernel module at boot. The per-run drbd9 configure half re-proves it against the kernel
+# the node actually booted and fails loud on a drift, naming the fix (rebuild this box).
+#
+# ADDITIVE FOUNDATION: installs only image-bakeable software. It creates NO queue managers,
+# forms NO Pacemaker cluster, configures NO STONITH/fencing, creates NO volume group or DRBD
+# resource, and holds NO secrets/keystores — all of that stays in the per-run (configure)
+# path (the drbd9 configure half + pdrbd-qm), which this playbook does NOT touch. Run
+# against a single `bake` host:
+#   ansible-playbook -i inventory/bake-host.ini bake-pdrbd-ubuntu.yml
+#
+# The Ubuntu MQ media for the deb install rides the actual box build
+# (build-fatbox.sh --box <the pdrbd box>), which stages the host-arch developer tarball into
+# the shared cache the install role reads. See docs/development/box-bake-manifest.md for
+# the authoritative per-role bake-vs-configure classification.
+
+# In-guest apt auto-updates are permanently OFF in every baked Ubuntu box (#1225): the
+# weekly cold rebuild + box staleness gate is the update path, so nothing may grab the dpkg
+# lock on first boot. Its own play, FIRST, so the bake's own apt work never races it either.
+- name: Disable apt auto-updates for good (weekly cold rebuild is the update path, #1225)
+  hosts: bake
+  become: true
+  tasks:
+    - name: mask apt-daily / apt-daily-upgrade / unattended-upgrades + zero APT::Periodic
+      ansible.builtin.include_role:
+        name: apt-autoupdate-off
+
+- name: Bake pdrbd-ubuntu (MQ + DRBD 9 install adapters only; no QMs, no cluster, no secrets)
+  hosts: bake
+  become: true
+  vars:
+    # No TLS keystore work at bake — pki / per-QM TLS is a per-run/secret concern
+    # (mirrors bake-pcmk-ubuntu.yml / bake-nativeha-ubuntu.yml).
+    mq_exporter_tls: false
+  tasks:
+    # `acl` for unprivileged become — the per-run provision prerequisite, hoisted to bake
+    # (coupling-free, apt on Ubuntu). Baked (not fetched per-run over a rate-limited
+    # parallel-boot DNS burst) — the #659 acl-stall kill.
+    - name: acl package (unprivileged become prereq)
+      ansible.builtin.apt:
+        name: acl
+        state: present
+
+    # THE big install: base IBM MQ (server + client + SDK + samples, NO RDQM) via the
+    # install-only mq-install role, as bake-pcmk-ubuntu.yml does. The role is purely product
+    # install (unpack debs, licence, setmqinst, ulimits); crtmqm / resource-group / cluster
+    # formation is per-run (pdrbd-qm), NOT here. mq-install carries the stat-of-cmqc.h
+    # skip-if-baked guard (#648/#659), which keys on presence only — so this box is
+    # MQ-bearing in lab/versions.yaml and an MQ pin bump rebakes it (#1087).
+    - name: base IBM MQ (cluster-node install adapter — install body only)
+      ansible.builtin.include_role:
+        name: mq-install
+
+    # DRBD 9 (LINBIT drbd-dkms) built against THIS image's kernel and proven to load as
+    # 9.x; the per-run drbd9 configure half re-checks it against the booted kernel.
+    - name: DRBD 9 module + userland (install half only)
+      ansible.builtin.include_role:
+        name: drbd9
+        tasks_from: install
+
+    # PHASED-STARTUP (#642): node-exporter is baked WHOLE and left ENABLED — a definitively
+    # benign exception (static host-metrics exporter, no per-run config, races nothing,
+    # cannot boot in a broken pre-config state). Like bake-nativeha-ubuntu.yml there is NO
+    # rdqm.service benign exception — the Pacemaker arm has no RDQM reboot daemon. alloy is
+    # baked INERT — only its install half (binary + unit); it needs a per-run config.alloy
+    # rendered in the observe phase, so its enable+start is deferred.
+    - name: entropy daemon (feed the RNG pool so JVM SecureRandom never blocks — #1190)
+      ansible.builtin.include_role:
+        name: entropy
+
+    - name: node metrics agent (node-exporter, full role — static config, enabled)
+      ansible.builtin.include_role:
+        name: node-exporter
+
+    - name: log shipper binary (alloy install half only)
+      ansible.builtin.include_role:
+        name: alloy
+        tasks_from: install
+
+    # Guest components (epic .github#294 spec §5.7, §5.8): this box's catalog entry
+    # (lab/versions.yaml roles.<role>.components) bakes mq-resiliency-observability. The
+    # pinned runtime goes down FIRST (component-install's precondition checks it), then the
+    # component itself: venv, INSTALLED.json and the static units in /usr/lib/systemd/system,
+    # left INERT (component_start_units defaults false). The per-run collector role renders
+    # its env file and enables the timer. runtime_python + component_artifacts arrive via
+    # build-fatbox.sh's `-e @<install-vars.json>` (mqlab box build <box> writes it).
+    - name: pinned guest runtime (/opt/vergil/cpython-<minor>, epic .github#294)
+      ansible.builtin.include_role:
+        name: runtime-install
+
+    - name: observability component (baked; units installed inert)
+      ansible.builtin.include_role:
+        name: component-install
+      vars:
+        component_name: mq-resiliency-observability
+
+# The per-login dynamic MOTD is OFF in every baked Ubuntu box (#1229): pam_motd ran
+# /etc/update-motd.d (50-landscape-sysinfo at ~90% CPU per login) on every SSH session.
+# Its own play, LAST, so it is independent of the install work above.
+- name: Disable the per-login dynamic MOTD (pam_motd / update-motd.d, #1229)
+  hosts: bake
+  become: true
+  tasks:
+    - name: comment out pam_motd in /etc/pam.d/{sshd,login} + mask motd-news.timer
+      ansible.builtin.include_role:
+        name: motd-off
+
+# cloud-init and snapd come off the boot path of every baked Ubuntu box (#1250): cloud-init
+# keeps only what a clone needs (mgmt-NIC netplan re-render + root growth), and snapd goes
+# when no snap is installed. Its own play, after all the install work (only the #1265 guard
+# play follows; it installs nothing), so the snapd guard sees every snap the bake installed.
+- name: Trim cloud-init + snapd off the boot path (#1250)
+  hosts: bake
+  become: true
+  tasks:
+    - name: cloud-init = netplan re-render + growpart/resizefs only; mask config/final stages
+      ansible.builtin.include_role:
+        name: cloud-init-trim
+
+    - name: purge snapd (no snaps in this box) and pin it out
+      ansible.builtin.include_role:
+        name: snapd-off
+
+# Guard the finished image (#1265): every directory this box's per-run configure halves
+# write into must still exist after the whole bake. #1265 lost obs's empty
+# grafana-server.service.d to the snapd purge above and only found out in a later
+# bootstrap's observe phase. Its own play, LAST, so it checks what is actually packaged.
+- name: Guard the baked image (per-run configure dirs survived the bake, #1265)
+  hosts: bake
+  become: true
+  tasks:
+    - name: assert the per-run configure halves' directories are in the image
+      ansible.builtin.include_role:
+        name: bake-dirs-guard
+      vars:
+        bake_dirs_guard_required:
+          - /etc/alloy  # alloy configure: config.alloy

@@ -81,6 +81,7 @@ while editing a per-run configure role leaves every fat box at REUSE.
 | `mq-client` | `mq-ubuntu` / — | yes | `mq-resiliency-clients` |
 | `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes | `mq-resiliency-observability` |
 | `pcmk` | `pcmk-ubuntu` / — | no | `mq-resiliency-observability` |
+| `pdrbd` | `pdrbd-ubuntu` / — | yes | `mq-resiliency-observability` |
 | `mq-rdqm` | — / `mq-rdqm` | yes | `mq-resiliency-observability` |
 
 The last column is `roles.<role>.components` in `lab/versions.yaml` (epic
@@ -106,7 +107,7 @@ This document is the classification. The **bake playbooks**
 (`ansible/bake-mq-rdqm.yml`, `ansible/bake-obs.yml`, `ansible/bake-infra.yml`,
 `ansible/bake-mq-ubuntu.yml`, `ansible/bake-nativeha-rhel.yml`,
 `ansible/bake-nativeha-ubuntu.yml`, `ansible/bake-pcmk-ubuntu.yml`,
-`ansible/bake-san.yml`) and the single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
+`ansible/bake-pdrbd-ubuntu.yml`, `ansible/bake-san.yml`) and the single-host inventory (`ansible/inventory/bake-host.ini`) are the mechanism.
 
 > **Scope of #602 (this task): additive only.** The bake playbooks are a new
 > foundation. They do **not** change any normal bootstrap behavior — the per-run
@@ -448,6 +449,24 @@ or x86), guest arch not pinned.
 | `alloy` | ✅ install half | Binary + unit baked (inert); `config.alloy` + start stay per-run. |
 | `runtime-install` | ✅ full | The pinned guest CPython (`/opt/vergil/cpython-<minor>/`, epic `.github#294`), from the sha256-verified tarball `mqlab box build` stages. Never Ansible's interpreter. |
 | `component-install` (`mq-resiliency-observability`) | ✅ full, units inert | The collector component: venv, `INSTALLED.json` and its static units in `/usr/lib/systemd/system/`, left inert. The per-run collector role (`cluster-state`) renders its env file under `/etc/opt/logical-minds-foundry/mq-resiliency-observability/` and enables the timer. |
+
+### `pdrbd-ubuntu24` → `ansible/bake-pdrbd-ubuntu.yml` (#1423, epic .github#310)
+
+The shared-nothing peer of the `pcmk` box, for the six cluster nodes of the
+`pcmk-drbd-ubuntu` stack: the open-source rebuild of RDQM's architecture from
+Corosync/Pacemaker and LINBIT DRBD 9. It bakes the `pcmk` box's set plus the
+**install half** of `drbd9`. The `drbd9` install half adds
+`ppa:linbit/linbit-drbd9-stack` and builds `drbd-dkms` against the image's own kernel.
+It then loads the module and asserts `/sys/module/drbd/version` is `9.x` before the
+image is captured, so a node never compiles a kernel module at boot. The in-kernel
+DRBD is 8.4.11 (two nodes, no quorum), so it is never used. The box is **MQ-bearing**,
+unlike `pcmk`: `mq-install`'s skip-if-baked guard keys on presence only, so an MQ
+pin bump has to rebake it (#1087). Host-resolved.
+
+| Role | In bake | Notes |
+|------|---------|-------|
+| `acl`, `mq-install`, `entropy`, `node-exporter`, `alloy`, `runtime-install`, `component-install` | as `pcmk-ubuntu24` | Same set and same split as the `pcmk` box above. |
+| `drbd9` | ✅ install half | LINBIT PPA, `linux-headers-<running kernel>` + `dkms` + `lvm2`, then `drbd-dkms` + `drbd-utils`. Proven at bake with `modprobe drbd` and a `9.x` assert, then unloaded. The **configure half** (`main.yml`) stays per-run. It checks `modinfo -k $(uname -r)` against the booted kernel **before** `modprobe`. If the node booted a kernel other than the baked one, it fails loud and names the fix: rebuild the `pdrbd` box. It then asserts the *loaded* module is `9.x`, and creates the `drbdpool` VG on the instance's extra disk (`/dev/vdb`). |
 
 ### `san-ubuntu26` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
 
