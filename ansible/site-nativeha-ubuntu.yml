@@ -131,6 +131,9 @@
     # controller and fed to runmqsc on stdin, so no file is left pinned to one instance.
     # authz_bench_grants (#1512): this arm also defines BENCH.COMMIT for mq-bench, so it
     # applies the bench grant on top of the shared set.
+    # mqoperator (MQWebUser, epic .github#341 spec §2.2, IBM S15; #1501): the shared SET
+    # AUTHREC set rides in the same unit, before REFRESH SECURITY. Default ok_rcs [0]: every
+    # line is a SET AUTHREC, so rc 10 is a refused grant and must fail loud, not pass.
     - name: compose the setmqaut grant steps (one per authz_grants + authz_bench_grants entry)
       tags: [authz]
       ansible.builtin.set_fact:
@@ -160,6 +163,10 @@
                'stdin': lookup('ansible.builtin.template',
                                playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/authz.mqsc.j2')}]
              + _authz_grant_steps
+             + [{'label': 'runmqsc mqoperator grants (MQWebUser, #1501)',
+                 'cmd': '/opt/mqm/bin/runmqsc ' ~ qm_name,
+                 'stdin': lookup('ansible.builtin.template',
+                                 playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2')}]
              + [{'label': 'runmqsc REFRESH SECURITY TYPE(AUTHSERV)',
                  'cmd': '/opt/mqm/bin/runmqsc ' ~ qm_name,
                  'stdin': 'REFRESH SECURITY TYPE(AUTHSERV)'}] }}

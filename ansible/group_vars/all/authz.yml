@@ -9,6 +9,9 @@ authz_accounts:
   - { name: mqapp, group: mqapp }
   - { name: mqmon, group: mqmon }
   - { name: mqsvc, group: mqsvc }
+  # MQ Console/REST MQWebUser login (epic .github#341 spec §2.2): mqweb authorizes its
+  # requests AS this OS user (IBM S8), which must exist with the identical name (S10).
+  - { name: mqoperator, group: mqoperator }
 
 # DN→account maps. channel is a literal for SVRCONNs; the inter-QM receiver is the
 # chl_to_app VARIABLE (resolved by the template).
@@ -75,6 +78,27 @@ authz_mqmon_grants:
   - { objtype: QUEUE, profile: "SYSTEM.ADMIN.COMMAND.QUEUE", authadd: "PUT" }
   - { objtype: QUEUE, profile: "SYSTEM.DEFAULT.MODEL.QUEUE", authadd: "DSP, INQ, GET" }
   - { objtype: QUEUE, profile: "**",                         authadd: "DSP, INQ" }
+
+# mqoperator — the MQ Console/REST MQWebUser sample login (epic .github#341 spec §2.2). Under
+# MQWebUser, mqweb authorizes every request AS THIS USER (IBM S8), so these OAM grants are the
+# tier's real boundary: a write is refused by the QUEUE MANAGER even if mqweb is misconfigured.
+# The first four entries are IBM's documented MINIMUM for MQWebUser users (S15, "Authorizing
+# users to administer remote queue managers in the IBM MQ Console", SSYHRD_10.0.0); the rest
+# is display-only object access. +put on the command queue is safe: the command server
+# authorizes each command as the message's user, so an ALTER from mqoperator is refused by
+# OAM. S15 is written for remote queue managers and IBM documents no separate local-mode
+# minimum (spec §2.2), so the list is applied as written; the live-lab acceptance task proves
+# it. Rendered by roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2 and applied on every QM
+# (#1501). Unlike authz_grants these are MQSC SET AUTHREC, not setmqaut (repo rule).
+authz_mqoperator_grants:
+  - { objtype: QMGR, authadd: "CONNECT, DSP" }
+  - { objtype: TOPIC, profile: "SYSTEM.ADMIN.TOPIC", authadd: "SUB, DSP" }
+  - { objtype: QUEUE, profile: "SYSTEM.REST.REPLY.QUEUE", authadd: "PUT, GET, BROWSE, INQ" }
+  - { objtype: QUEUE, profile: "SYSTEM.ADMIN.COMMAND.QUEUE", authadd: "PUT" }
+  - { objtype: QUEUE, profile: "**", authadd: "DSP, INQ, BROWSE" }
+  - { objtype: CHANNEL, profile: "**", authadd: "DSP" }
+  - { objtype: TOPIC, profile: "**", authadd: "DSP" }
+  - { objtype: NAMELIST, profile: "**", authadd: "DSP" }
 
 # DLQ the receiver MCA falls back to. FINAL/minimal (#614): a per-channel /
 # per-remote-QM DLQ is NOT an MQ 9.4 feature — DEADQ is a queue-manager-level
