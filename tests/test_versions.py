@@ -168,7 +168,7 @@ def test_committed_catalog():
         # 24 only until LINBIT's DRBD 9 PPA is proven on 26 (epic .github#310).
         "pcmk-drbd-ubuntu": OsRef("ubuntu", 24),
     }
-    rhel9 =cat.oses[OsRef("rhel", 9)]
+    rhel9 = cat.oses[OsRef("rhel", 9)]
     assert (rhel9.base_box, rhel9.point, rhel9.iso, rhel9.arch_pin) == (
         "rhel/9-x86_64",
         "9.6",
