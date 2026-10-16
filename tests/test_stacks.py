@@ -428,3 +428,8 @@ def test_ubuntu_stack_is_supported_on_either_arch(monkeypatch, tmp_path):
     for name in ("pcmk-ubuntu", "nativeha-ubuntu"):
         assert rhel_stack_unsupported_reason(stacks[name], ARM) is None
         assert rhel_stack_unsupported_reason(stacks[name], X86) is None
+
+
+def test_dashboard_folder_for_pacemaker_drbd():
+    # The pcmk-drbd-ubuntu arm (epic .github#310) folders apart from the SAN arm.
+    assert dashboard_folder_for("pacemaker-drbd", "ubuntu") == "PCMK-DRBD (Ubuntu)"

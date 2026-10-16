@@ -42,6 +42,9 @@ MATRIX: dict[str, dict[str, Support]] = {
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
     "nativeha-rhel-crr": dict.fromkeys(VERBS, Support.SUPPORTED),
     "nativeha-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
+    # pcmk-drbd-ubuntu (epic .github#310) starts NOT_YET; Task 9 sets each verb from
+    # the recorded drill evidence.
+    "pcmk-drbd-ubuntu": dict.fromkeys(VERBS, Support.NOT_YET),
 }
 
 

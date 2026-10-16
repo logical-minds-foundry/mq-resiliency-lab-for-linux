@@ -291,6 +291,48 @@ nodes:
     memory: 2048
     nics: { net-mgmt: 10.50.0.16, net-data-b: 10.10.2.13, net-hb-b: 172.16.2.13, net-wan: 10.99.0.16 }
 
+  # --- pacemaker-drbd arm (epic .github#310): the RDQM-faithful open-source arm. Six
+  # Ubuntu cluster nodes, SHARED-NOTHING like RDQM: each has a local extra disk for the
+  # drbdpool VG (one LV per QM, DRBD 9 replicated); no SAN, no net-san-*. Host octets
+  # .7x (site A) / .8x (site B) — clear of every other arm so it can coexist. They boot
+  # the baked pdrbd box (MQ + LINBIT DRBD 9); host-arch resolution stays at the box layer.
+  pdrbd-a1:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.71, net-data-a: 10.10.1.71, net-hb-a: 172.16.1.71, net-wan: 10.99.0.71, net-ext: 10.60.0.71 }
+  pdrbd-a2:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.72, net-data-a: 10.10.1.72, net-hb-a: 172.16.1.72, net-wan: 10.99.0.72, net-ext: 10.60.0.72 }
+  pdrbd-a3:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.73, net-data-a: 10.10.1.73, net-hb-a: 172.16.1.73, net-wan: 10.99.0.73, net-ext: 10.60.0.73 }
+  pdrbd-b1:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81 }
+  pdrbd-b2:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82 }
+  pdrbd-b3:
+    box: pdrbd
+    cpus: 2
+    memory: 2048
+    extra_disk: 10
+    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83 }
+
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
 # playbooks target them; setups (below) compose them. Convention: underscores name
@@ -306,6 +348,8 @@ groups:
   nha_rhel_crr_b: [nha-rhel-crr-b1, nha-rhel-crr-b2, nha-rhel-crr-b3]
   nha_ubuntu_a: [nha-ubuntu-a1, nha-ubuntu-a2, nha-ubuntu-a3]
   nha_ubuntu_b: [nha-ubuntu-b1, nha-ubuntu-b2, nha-ubuntu-b3]
+  pdrbd_a: [pdrbd-a1, pdrbd-a2, pdrbd-a3]
+  pdrbd_b: [pdrbd-b1, pdrbd-b2, pdrbd-b3]
   svc:   [svc-sim]
   app:    [app-client]
   # obs_box (not "obs") so the group name never collides with the host named obs
@@ -427,6 +471,32 @@ stacks:
       qm-reload:   { playbook: site-qm-reload.yml }   # systemctl reload mqmonitor@ (#1514)
       dr-cutover:  { playbook: site-nativeha-ubuntu-switchover.yml }
       dr-failback: { playbook: site-nativeha-ubuntu-switchover.yml }
+      diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
+  # pcmk-drbd-ubuntu (epic .github#310): RDQM rebuilt from upstream Corosync/Pacemaker/
+  # DRBD 9. Built to RDQM's captured config (docs/reference/rdqm-blueprint/); deviations
+  # in docs/reference/rdqm-vs-vanilla-deviations.md. Like RDQM: one floating IP per site
+  # (no vip_ext), operator-driven DR (no Booth). The verbs' playbooks land in Tasks 5-6
+  # (#1427, #1428); the stack is not bootstrappable until Task 5.
+  pcmk-drbd-ubuntu:
+    mechanism: pacemaker-drbd
+    os_family: ubuntu
+    short: PDRBD
+    cluster_group: pdrbd_a
+    groups: [pdrbd_a, pdrbd_b]
+    dr_groups: [pdrbd_b]     # DR site — skipped by `bootstrap --no-dr` (#188)
+    provision: ansible/site-pdrbd.yml
+    secrets: [pcmk_hacluster_password, mqweb_admin_password]
+    qm: { vip: 10.10.1.170, vip_b: 10.10.2.170 }
+    alloc: { exporter_app_port: 9165, app_unit: app-pdrbd, svc_port: 1414 }
+    verbs:
+      qm-create:   { playbook: site-pdrbd.yml }
+      qm-destroy:  { playbook: site-pdrbd-qm-down.yml }
+      qm-up:       { pcs: "resource enable mq_group" }
+      qm-down:     { pcs: "resource disable mq_group" }
+      qm-status:   { cmd: "pcs status resources && drbdadm status all" }
+      # `mqlab dr` dispatches on these (#1424); rpo0: the playbook seeds + verifies RPO-0.
+      dr-cutover:  { playbook: site-pdrbd-dr-switch.yml, rpo0: true }
+      dr-failback: { playbook: site-pdrbd-dr-switch.yml, rpo0: true }
       diagnostics: { cmd: "su - mqm -c '/opt/mqm/bin/runmqras -qmlist {qm}'" }
 
 # svc: — the single shared Business-B counterparty (#446). One SVCQM on svc-sim;
