@@ -1,9 +1,9 @@
 """Build & cache the mq_prometheus exporter binary in the Go container (#1065).
 
 Fallout of the epic-198 cold-boot work: the `obs` and `mq-ubuntu` fat-box bakes
-(only `mq-ubuntu` since #1584) compiled `mq_prometheus` *inside the build guest* — installing `golang-go` and
-running a cgo `go build`. When upstream `mq-metric-samples` moved its `go.mod` to
-a newer Go, the build auto-downloaded the entire Go toolchain into the guest and
+(only `mq-ubuntu` since #1584) compiled `mq_prometheus` *inside the build guest* —
+installing `golang-go` and running a cgo `go build`. When upstream `mq-metric-samples`
+moved its `go.mod` to a newer Go, the build auto-downloaded the entire Go toolchain into the guest and
 overflowed its disk, failing every bake.
 
 Instead we build the binary **once, on the host, in `ghcr.io/vergil-project/dev-go`**

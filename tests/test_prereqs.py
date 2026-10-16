@@ -54,9 +54,10 @@ def test_ensure_prereqs_for_commons_runs_mq_then_galaxy_then_pki(monkeypatch, tm
 
     cli._ensure_prereqs_for_commons()
 
-    # MQ tarball ensured for the commons boxes (their shared OSes) at the repo-default version
+    # MQ tarball ensured for the MQ-bearing commons box (its shared OS) at the repo-default
+    # version; obs carries no MQ (#1584), so it drives no tarball ensure.
     cat = load_catalog()
-    commons = {cat.box("obs", cat.infra).name, cat.box("mq-client", cat.infra_mq).name}
+    commons = {cat.box("mq-client", cat.infra_mq).name}
     assert ensured == [(commons, cli.DEFAULT_MQ_VERSION)]
     argvs = [c.argv for c in runner.recorded]
     # galaxy collections installed before the PKI play (which needs community.crypto)

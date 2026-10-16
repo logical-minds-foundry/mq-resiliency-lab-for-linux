@@ -69,7 +69,7 @@ def test_pdrbd_is_mq_bearing_because_it_bakes_mq() -> None:
 
 def test_build_fatbox_stages_mq_media_for_pdrbd() -> None:
     text = (REPO_ROOT / "lab" / "boxes" / "build-fatbox.sh").read_text(encoding="utf-8")
-    assert "obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)" in text
+    assert "  mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)" in text
 
 
 # --- the bake playbook ---------------------------------------------------------------------
