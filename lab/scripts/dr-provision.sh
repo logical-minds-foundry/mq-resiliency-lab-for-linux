@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lab/scripts/dr-provision.sh — provision the DR-ready Pacemaker arm (both
 # sites, DRBD async under the SAN). Reproducible and hands-off: it auto-sources
-# the persisted, auto-generated cluster secret (no env var to remember or lose —
+# the stack's persisted, auto-generated secrets (no env var to remember or lose —
 # the bug that stalled the first DR build), renders the static inventory from
 # topology, then runs the cross-site DR playbook. Idempotent.
 #
@@ -10,7 +10,12 @@
 # (`. .venv/bin/activate`) or under `uv run`, never with a venv mqlab by path (#1252).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-export PCMK_HACLUSTER_PASSWORD="$("$HERE/lab-secret.sh" pcmk_hacluster_password)"
+# The provision env `mqlab bootstrap pcmk-ubuntu` exports, from the same code: every
+# stack secret (PCMK_HACLUSTER_PASSWORD, MQWEB_AES_PASSPHRASE) and MQWEB_STATE_DIR,
+# which the mqweb role on every QM node requires (#1502). Captured first, so a
+# failure stops the script here (set -e) instead of being masked by eval.
+provision_env="$(cd "$HERE/../.." && mqlab vm provision-env pcmk-ubuntu)"
+eval "$provision_env"
 ( cd "$HERE/../.." && mqlab vm inventory )   # renders build/work/inventory.ini from topology
 cd "$HERE/../../ansible"
 # #350 Task 2: the DR-ready Pacemaker provision is now the consolidated full-HADR

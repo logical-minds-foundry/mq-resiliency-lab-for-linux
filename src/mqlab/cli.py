@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -1671,6 +1672,24 @@ def _source_secret(deps: Deps, name: str) -> str:
     return "\n".join(captured).strip()
 
 
+def _stack_provision_env(deps: Deps, stack: Stack) -> dict[str, str]:
+    """The environment a stack's provision playbook needs, sourced once per run.
+
+    Each of the stack's `secrets:` is exported under its uppercased name (#373): the
+    roles read e.g. PCMK_HACLUSTER_PASSWORD and MQWEB_AES_PASSPHRASE via
+    lookup('env', ...). MQWEB_STATE_DIR is the mqweb encode-once store (epic
+    .github#341 spec §2.2, #1500): the mqweb role persists the server's AES key and each
+    securityUtility-encoded password there, so a re-provision renders mqwebuser.xml
+    byte-identically. mqweb runs on every QM node (#1502), so every path that runs a
+    stack's provision playbook — `bootstrap`, `qm create`, lab/scripts/dr-provision.sh
+    via `vm provision-env` — takes its env from here; the mqweb role fails loudly
+    without it.
+    """
+    env = {secret.upper(): _source_secret(deps, secret) for secret in stack.secrets}
+    env["MQWEB_STATE_DIR"] = str(state("mqweb"))
+    return env
+
+
 def _execute_stateful(
     verb: str,
     items: list[str],
@@ -1747,6 +1766,31 @@ def vm_roster() -> None:
         deps.transcript.close()
 
 
+@vm_app.command("provision-env")
+def vm_provision_env(
+    stack_name: Annotated[str, typer.Argument(help="stack whose provision env to print")],
+) -> None:
+    """Print a stack's provision env (its secrets + MQWEB_STATE_DIR) as shell exports.
+
+    For a script that runs a stack's provision playbook outside `mqlab bootstrap` (e.g.
+    lab/scripts/dr-provision.sh): capture the output, then `eval` it. Only the export
+    lines go to stdout; the sourcing trace goes to stderr and the transcript. Any
+    failure exits non-zero with nothing on stdout (#1502).
+    """
+    stack = lab_stacks().get(stack_name)
+    if stack is None:
+        typer.echo(f"no stack named {stack_name!r} — see mqlab status", err=True)
+        raise typer.Exit(code=2)
+    deps = build_deps("vm-provision-env", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    deps.renderer = Renderer(Console(stderr=True))
+    try:
+        env = _stack_provision_env(deps, stack)
+    finally:
+        deps.transcript.close()
+    for name, value in env.items():
+        typer.echo(f"export {name}={shlex.quote(value)}")
+
+
 @vm_app.command("ssh")
 def vm_ssh(guest: str) -> None:
     """Open an interactive shell on one guest (vagrant ssh)."""
@@ -1795,6 +1839,10 @@ def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
             deps.transcript.write(note)
             raise typer.Exit(code=3)
         _render_inventory(deps)
+        # qm-create runs the stack's provision playbook, which runs mqweb on every QM
+        # node (#1502): it needs the same secrets + MQWEB_STATE_DIR bootstrap exports.
+        # Passed on this one subprocess (Command.env), not leaked into os.environ.
+        env = _stack_provision_env(deps, stack) if verb == "qm-create" else None
         step = CommandStep(
             f"{stack.name} {verb}",
             Command(
@@ -1821,6 +1869,7 @@ def _qm_playbook(stack: Stack, playbook: str, verb: str) -> None:
                     *(["-e", f"svc_conn={qm.svc_conn}"] if qm.svc_conn else []),
                 ],  # noqa: S607
                 cwd=repo_root() / "ansible",
+                env=env,
             ),
         )
         run_steps(
@@ -2904,12 +2953,7 @@ def _bootstrap_run(
         # os.environ.update(_vagrant_env()). The #350 cutover dropped this with the old
         # `vm provision`; without it the hacluster password is empty and chpasswd fails.
         if any(phase.name == "provision" for phase in selected):
-            for secret in stack.secrets:
-                os.environ[secret.upper()] = _source_secret(deps, secret)
-            # mqweb encode-once store (epic .github#341 spec §2.2, #1500): the mqweb role
-            # persists the server's AES key and each securityUtility-encoded password
-            # here, so a re-provision renders mqwebuser.xml byte-identically.
-            os.environ["MQWEB_STATE_DIR"] = str(state("mqweb"))
+            os.environ.update(_stack_provision_env(deps, stack))
         # Once-per-run prereq kinds already ensured this run (#1248): provision and
         # observe both declare `pki`, and the second play is redundant within a run.
         ensured: set[str] = set()

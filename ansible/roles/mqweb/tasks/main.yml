@@ -4,7 +4,8 @@
 # own lifecycle, so it serves a systemd-managed SVC QM (mq-qmgr) and a
 # cluster-managed app QM (mq-pcmk-qmgr / RDQM) alike. Requires MQWEB_AES_PASSPHRASE
 # (the lab secret mqweb_aes_passphrase) and MQWEB_STATE_DIR, both exported by `mqlab
-# bootstrap` at provision time and never committed (epic .github#341 spec §2.2).
+# bootstrap`, `mqlab qm create` and lab/scripts/dr-provision.sh (one shared env, #1502)
+# at provision time and never committed (epic .github#341 spec §2.2).
 - name: mqweb systemd unit
   ansible.builtin.template:
     src: mqweb.service.j2
