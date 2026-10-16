@@ -148,6 +148,33 @@ def test_bucket_path_rejects_unknown_bucket():
         b.bucket_path("nope", Path("/repo"), run=_git({}))
 
 
+def test_bucket_env_exports_every_bucket_from_the_authority():
+    # #1569: shell/Ansible/Ruby consumers read MQLAB_<BUCKET>_DIR, so the exported values
+    # must be exactly what bucket_path resolves — shared buckets in MAIN, local ones here.
+    run = _git(
+        {
+            "rev-parse --git-dir": "/repo/.git/worktrees/wt",
+            "rev-parse --git-common-dir": "/repo/.git",
+        }
+    )
+    wt = Path("/repo/.worktrees/wt")
+    assert b.bucket_env(wt, run=run) == {
+        "MQLAB_CACHE_DIR": "/repo/build/cache",
+        "MQLAB_STATE_DIR": "/repo/build/state",
+        "MQLAB_WORK_DIR": str(wt / "build" / "work"),
+        "MQLAB_TEMP_DIR": str(wt / "build" / "temp"),
+    }
+
+
+def test_bucket_env_names_match_bucket_env_map():
+    assert b.BUCKET_ENV == {
+        "cache": "MQLAB_CACHE_DIR",
+        "state": "MQLAB_STATE_DIR",
+        "work": "MQLAB_WORK_DIR",
+        "temp": "MQLAB_TEMP_DIR",
+    }
+
+
 def _real_git(repo: Path, main: Path):
     """Runner reporting `repo` as a worktree whose common-dir lives in `main`."""
 

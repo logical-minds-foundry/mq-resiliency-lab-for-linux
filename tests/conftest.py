@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from mqlab import cli, instances, perfrun, relay, topology, versions
@@ -75,6 +77,47 @@ def _neutralize_reconcile_box_meta(monkeypatch):
     and its pure planner are tested directly via the import captured before this
     stub (mirrors the _neutralize_ensure_local_boxes pattern)."""
     monkeypatch.setattr(cli, "_reconcile_box_meta", lambda guests, *, step: None)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_build_root(request, monkeypatch, tmp_path_factory):
+    """Point mqlab.paths.build_root at a throwaway dir in every test (#1569).
+
+    Tests build real Transcripts (transcript_path -> build/state/runs/), and the suite
+    runs in a container that mounts only the checkout, where a worktree's state/ symlink
+    to the main checkout cannot resolve. Unredirected, that mkdir created a REAL
+    build/state in the worktree — a forked state bucket that `mqlab build ensure` then
+    refuses to wire. Every bucket helper (state/cache/work/temp_dir) resolves through
+    paths.build_root, so redirecting the checkout's own build/ keeps the suite out of it.
+    A test that points MQLAB_REPO_ROOT at its own tmp tree keeps that tree's build/; a
+    test of the real layout opts out with @pytest.mark.real_build_root."""
+    if request.node.get_closest_marker("real_build_root"):
+        return
+    from mqlab import paths
+
+    real_build_root = paths.build_root
+    checkout_build = (Path(__file__).resolve().parents[1] / "build").resolve()
+    isolated = tmp_path_factory.mktemp("build-root") / "build"
+
+    def build_root() -> Path:
+        actual = real_build_root()
+        return isolated if actual.resolve() == checkout_build else actual
+
+    monkeypatch.setattr(paths, "build_root", build_root)
+
+
+@pytest.fixture(autouse=True)
+def _clear_bucket_env(monkeypatch):
+    """Keep the suite hermetic against the bucket env (#1569): an mqlab verb exports
+    MQLAB_<BUCKET>_DIR, so a developer shell (or a test that runs the real
+    cli._build_ensure) must not leak those into other tests. setenv-then-delenv
+    registers the original value, so monkeypatch restores it (or removes a value a
+    test set) on teardown."""
+    from mqlab.buildenv import BUCKET_ENV
+
+    for var in BUCKET_ENV.values():
+        monkeypatch.setenv(var, "")
+        monkeypatch.delenv(var)
 
 
 @pytest.fixture(autouse=True)

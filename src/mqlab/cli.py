@@ -456,9 +456,13 @@ def _build_bucket_path(bucket: str) -> Path:
 
 
 def _build_ensure() -> None:
-    """Wire build/; on failure print buildenv's diagnosis (git's own stderr, #1261) and exit 1."""
+    """Wire build/; on failure print buildenv's diagnosis (git's own stderr, #1261) and exit 1.
+
+    Then export MQLAB_<BUCKET>_DIR (#1569) so every script, playbook and Vagrantfile this
+    verb spawns resolves buckets through the one authority, never from its own path."""
     try:
         buildenv.ensure(repo_root())
+        os.environ.update(buildenv.bucket_env(repo_root()))
     except BuildEnvError as exc:
         typer.echo(f"mqlab: cannot wire build/: {exc}", err=True)
         raise typer.Exit(code=1) from exc

@@ -118,6 +118,6 @@
       loop: "{{ groups['all'] | difference(['localhost']) }}"
     - name: write build/work/versions.json
       ansible.builtin.copy:
-        dest: "{{ playbook_dir }}/../build/work/versions.json"
+        dest: "{{ mqlab_work_dir }}/versions.json"
         content: "{{ all_versions | to_nice_json }}\n"
         mode: "0644"

@@ -125,3 +125,40 @@ nothing. `--dry-run` prints the same plan (`PLAN` lines) without acting on it.
   stale: vagrant reads `state/vagrant`. `migrate` reports it as a `STALE` line,
   with its path and the command to remove it by hand. It never deletes the
   legacy copy.
+
+## How non-Python consumers find a bucket
+
+A script, playbook or Vagrantfile must never build a `build/<bucket>` path from its
+own location — not `$(dirname "$0")/../../build/state`, not
+`{{ playbook_dir }}/../build/state`, not `File.join(__dir__, "..", "build", ...)`.
+Such a path names the running checkout's `build/`. In a worktree whose shared-bucket
+symlinks are not wired yet, that is a fresh local directory. A write there forks the
+live-lab state: for example, a secret is regenerated that the running cluster does not
+know (#1569).
+
+Every consumer resolves buckets through the one authority instead:
+
+- **mqlab exports the paths.** After wiring `build/`, every lab verb exports
+  `MQLAB_CACHE_DIR`, `MQLAB_STATE_DIR`, `MQLAB_WORK_DIR` and `MQLAB_TEMP_DIR`
+  (`buildenv.bucket_env`, the same code behind `mqlab build path`). Every command the
+  verb spawns inherits them.
+- **Shell** sources `lab/scripts/_build-bucket.sh` and calls `mqlab_bucket <bucket>`.
+  It reads `MQLAB_<BUCKET>_DIR`, or else runs `mqlab build path <bucket>`. It fails
+  loudly when neither works, when the path is relative, or when the bucket does not
+  exist yet. It never creates a bucket; `mqlab build ensure` does that.
+- **Ansible** uses `mqlab_cache_dir`, `mqlab_state_dir`, `mqlab_work_dir` and
+  `mqlab_temp_dir` from `ansible/group_vars/all/buckets.yml`. Each one is the env var,
+  or else a `pipe` lookup of `mqlab build path <bucket>`. `ansible-playbook` lives in
+  the mqlab venv, so `mqlab` is on `PATH` wherever a play can run.
+- **The Vagrantfile** reads `MQLAB_WORK_DIR`, or else runs `mqlab build path work`.
+
+`tests/test_no_location_derived_build_paths.py` enforces this. It fails on any
+`build/` path joined onto a location in `lab/`, `ansible/`, `scripts/` or `tools/`.
+A few files are exempt, and each exemption is listed with its reason. Most of them
+resolve the main checkout through `git rev-parse --git-common-dir`, which is the same
+algorithm `buildenv` uses, not the script's own location.
+
+The test suite never touches the checkout's own `build/`. `tests/conftest.py` points
+`mqlab.paths.build_root` at a temporary directory. Before that, test transcripts
+created a real `build/state/runs/` in each worktree where the suite ran, and the
+`mqlab build ensure` that followed refused to wire that worktree.

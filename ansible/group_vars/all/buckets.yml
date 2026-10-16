@@ -1,0 +1,18 @@
+---
+# The build/ bucket paths every play, role and controller-side lookup uses (#1569).
+#
+# Never derive a build/<bucket> path from `playbook_dir` or a repo root: in a git worktree
+# whose shared-bucket symlinks are not wired yet, `{{ playbook_dir }}/../build/state` is a
+# fresh worktree-local directory, so a write there forks the live-lab state (secrets, PKI,
+# fence key) away from the one shared bucket. Resolve through the single authority:
+#   1. MQLAB_<BUCKET>_DIR, which every mqlab verb exports to the commands it spawns;
+#   2. else `mqlab build path <bucket>` (the same buildenv code). ansible-playbook lives in
+#      the mqlab venv, so mqlab is on PATH wherever a play can run at all.
+# Neither path falls back silently: a missing mqlab fails the pipe lookup, and the play
+# stops at the first task that needs the bucket.
+# shared buckets (the MAIN checkout's, from any worktree): cache/ and state/
+mqlab_cache_dir: "{{ lookup('ansible.builtin.env', 'MQLAB_CACHE_DIR') or lookup('ansible.builtin.pipe', 'mqlab build path cache') }}"
+mqlab_state_dir: "{{ lookup('ansible.builtin.env', 'MQLAB_STATE_DIR') or lookup('ansible.builtin.pipe', 'mqlab build path state') }}"
+# local buckets (this checkout's own renders): work/ and temp/
+mqlab_work_dir: "{{ lookup('ansible.builtin.env', 'MQLAB_WORK_DIR') or lookup('ansible.builtin.pipe', 'mqlab build path work') }}"
+mqlab_temp_dir: "{{ lookup('ansible.builtin.env', 'MQLAB_TEMP_DIR') or lookup('ansible.builtin.pipe', 'mqlab build path temp') }}"

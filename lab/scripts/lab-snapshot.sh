@@ -21,12 +21,14 @@ if [ "${#DOMAINS[@]}" -eq 0 ]; then
   DOMAINS=(lab_rdqm-a1 lab_rdqm-a2 lab_rdqm-a3 lab_svc-sim lab_app-client)
 fi
 
-SCRIPT_ABS=$(cd "$(dirname "$0")" && pwd)
-case "$SCRIPT_ABS" in
-  */.worktrees/*) MAIN_ROOT="${SCRIPT_ABS%%/.worktrees/*}" ;;
-  *)              MAIN_ROOT="${SCRIPT_ABS%/lab/scripts}" ;;
-esac
-SNAP_ROOT="${SNAP_ROOT:-$MAIN_ROOT/build/state/snapshots}"
+# Goldens live in the shared state bucket, resolved through the one authority (#1569)
+# rather than from this script's path; SNAP_ROOT overrides it.
+# shellcheck source=lab/scripts/_build-bucket.sh
+. "$(dirname "$0")/_build-bucket.sh"
+if [ -z "${SNAP_ROOT:-}" ]; then
+  STATE="$(mqlab_bucket state)"
+  SNAP_ROOT="$STATE/snapshots"
+fi
 DEST="$SNAP_ROOT/$KEY"
 echo ">> snapshot key '$KEY' -> $DEST"
 echo ">> domains: ${DOMAINS[*]}"

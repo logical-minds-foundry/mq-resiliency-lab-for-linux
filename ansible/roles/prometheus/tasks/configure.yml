@@ -16,7 +16,7 @@
 
 - name: deploy the topology-rendered node targets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/prometheus/targets/node.json"
+    src: "{{ mqlab_work_dir }}/prometheus/targets/node.json"
     dest: /etc/prometheus/targets/node.json
     owner: prometheus
     group: prometheus
@@ -27,7 +27,7 @@
 # rendered per-stack from topology (mqlab obs targets).
 - name: deploy the topology-rendered ibmmq targets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../build/work/prometheus/targets/ibmmq.json"
+    src: "{{ mqlab_work_dir }}/prometheus/targets/ibmmq.json"
     dest: /etc/prometheus/targets/ibmmq.json
     owner: prometheus
     group: prometheus

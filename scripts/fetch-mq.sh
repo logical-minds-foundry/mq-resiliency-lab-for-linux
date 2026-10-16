@@ -14,7 +14,12 @@ PIN="$ROOT/lab/mq-version"
 }
 VER="$(tr -d '[:space:]' <"$PIN")"
 BASE="https://public.dhe.ibm.com/ibmdl/export/pub/software/websphere/messaging/mqadv"
-DEST="$ROOT/build/cache/mq"
+# The shared cache bucket, via the one authority (#1569), not this script's location.
+# (SC1091: the validation gate lints scripts/ without -x, so it cannot follow the source.)
+# shellcheck source=lab/scripts/_build-bucket.sh disable=SC1091
+. "$ROOT/lab/scripts/_build-bucket.sh"
+CACHE="$(mqlab_bucket cache)"
+DEST="$CACHE/mq"
 mkdir -p "$DEST"
 
 # The Ubuntu suffix tracks the host arch (= the native Ubuntu guest arch); LinuxX64

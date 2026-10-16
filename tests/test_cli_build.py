@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 
 import pytest
@@ -145,8 +146,43 @@ def test_build_ensure_seam(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     seen = {}
     monkeypatch.setattr(cli.buildenv, "ensure", lambda repo: seen.setdefault("repo", repo))
+    monkeypatch.setattr(cli.buildenv, "bucket_env", lambda repo: {})
     _real_build_ensure()  # the autouse stub neutralises cli._build_ensure; use the real one
     assert seen["repo"] == tmp_path
+
+
+def test_build_ensure_exports_the_bucket_env_to_children(monkeypatch, tmp_path):
+    # #1569: every lab verb wires build/ and then exports MQLAB_<BUCKET>_DIR, so the
+    # scripts, playbooks and Vagrantfile it spawns resolve buckets through the one
+    # authority instead of from their own location (which forked state per worktree).
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli.buildenv, "ensure", lambda repo: None)
+    exported = {"MQLAB_STATE_DIR": "/main/build/state", "MQLAB_WORK_DIR": "/wt/build/work"}
+    seen = {}
+
+    def fake_env(repo):
+        seen["repo"] = repo
+        return exported
+
+    monkeypatch.setattr(cli.buildenv, "bucket_env", fake_env)
+    _real_build_ensure()
+    assert seen["repo"] == tmp_path
+    assert os.environ["MQLAB_STATE_DIR"] == "/main/build/state"
+    assert os.environ["MQLAB_WORK_DIR"] == "/wt/build/work"
+
+
+def test_build_ensure_failure_exports_nothing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
+    monkeypatch.setattr(cli.buildenv, "ensure", lambda repo: None)
+
+    def boom(repo):
+        raise BuildEnvError("git failed")
+
+    monkeypatch.setattr(cli.buildenv, "bucket_env", boom)
+    with pytest.raises(typer.Exit) as exc:
+        _real_build_ensure()
+    assert exc.value.exit_code == 1
+    assert "MQLAB_STATE_DIR" not in os.environ
 
 
 def test_build_ensure_seam_prints_git_stderr_and_exits_one(monkeypatch, tmp_path, capsys):

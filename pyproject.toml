@@ -66,6 +66,9 @@ warn_unused_configs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "real_build_root: use the real mqlab.paths.build_root (opt out of the #1569 isolation)",
+]
 
 [tool.coverage.report]
 exclude_lines = [
