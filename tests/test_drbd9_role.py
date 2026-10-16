@@ -12,6 +12,8 @@ bake's copies of those plays are pinned here directly until then.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,10 @@ def _tasks(name: str) -> list[dict[str, Any]]:
 def _task(tasks: list[dict[str, Any]], prefix: str) -> dict[str, Any]:
     (task,) = [t for t in tasks if t["name"].startswith(prefix)]
     return task
+
+
+def _defaults() -> dict[str, Any]:
+    return yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
 
 
 def _plays() -> list[dict[str, Any]]:
@@ -99,9 +105,90 @@ def test_bake_playbook_keeps_every_ubuntu_bake_invariant() -> None:
 
 
 def test_drbd9_install_uses_linbit_ppa_and_dkms() -> None:
-    text = (ROLE / "tasks" / "install.yml").read_text(encoding="utf-8")
-    assert "ppa:linbit/linbit-drbd9-stack" in text
-    assert "drbd-dkms" in text
+    task = _task(_tasks("install.yml"), "LINBIT DRBD 9 PPA repository")
+    assert _defaults()["drbd9_linbit_ppa_uri"] == (
+        "https://ppa.launchpadcontent.net/linbit/linbit-drbd9-stack/ubuntu"
+    )
+    assert "drbd-dkms" in (ROLE / "tasks" / "install.yml").read_text(encoding="utf-8")
+    assert task["ansible.builtin.deb822_repository"]["uris"] == "{{ drbd9_linbit_ppa_uri }}"
+
+
+def test_drbd9_install_never_uses_the_ppa_keyserver_path() -> None:
+    """#1589: `apt_repository` with a `ppa:` spec fetches the key over hkp from a
+    keyserver, which returned no key on the 26.04 image. Neither may come back."""
+    tasks = _tasks("install.yml")
+    assert not any("ansible.builtin.apt_repository" in t for t in tasks)
+    for path in (ROLE / "tasks" / "install.yml", ROLE / "defaults" / "main.yml"):
+        text = path.read_text(encoding="utf-8")
+        assert "ppa:" not in text, path
+        assert "hkp://" not in text, path
+        assert "--keyserver" not in text, path
+        assert "--recv-keys" not in text, path
+
+
+def test_drbd9_repo_is_deb822_signed_by_the_pinned_key_for_this_release() -> None:
+    """Version-neutral: the suite is the target's own codename, never a literal."""
+    repo = _task(_tasks("install.yml"), "LINBIT DRBD 9 PPA repository")[
+        "ansible.builtin.deb822_repository"
+    ]
+    assert repo["suites"] == ["{{ ansible_distribution_release }}"]
+    assert repo["components"] == ["main"]
+    assert repo["types"] == ["deb"]
+    assert repo["signed_by"] == "{{ drbd9_linbit_keyring }}"
+    assert repo["state"] == "present"
+
+
+def test_drbd9_shipped_key_is_copied_and_fingerprint_asserted_before_the_repo() -> None:
+    tasks = _tasks("install.yml")
+    copy = _task(tasks, "LINBIT DRBD 9 PPA signing key")
+    assert copy["ansible.builtin.copy"]["src"] == "linbit-drbd9-stack.asc"
+    assert copy["ansible.builtin.copy"]["dest"] == "{{ drbd9_linbit_keyring }}"
+    read = _task(tasks, "read the LINBIT key's fingerprint")
+    argv = read["ansible.builtin.command"]["argv"]
+    assert argv[0] == "gpg"
+    assert {"--show-keys", "--with-colons", "--homedir"} <= set(argv)
+    assert argv[-1] == "{{ drbd9_linbit_keyring }}"
+    check = _task(tasks, "assert the LINBIT key is the pinned fingerprint")
+    assert check["ansible.builtin.assert"]["that"] == (
+        "drbd9_linbit_fprs == [drbd9_linbit_key_fingerprint]"
+    )
+    repo = _task(tasks, "LINBIT DRBD 9 PPA repository")
+    order = [tasks.index(t) for t in (copy, read, check, repo)]
+    assert order == sorted(order), "the key must be verified BEFORE the repo is added"
+
+
+def test_drbd9_apt_cache_refreshed_after_repo_before_drbd_dkms() -> None:
+    tasks = _tasks("install.yml")
+    repo = _task(tasks, "LINBIT DRBD 9 PPA repository")
+    refresh = _task(tasks, "refresh the apt cache")
+    module = _task(tasks, "DRBD 9 userland + DKMS module")
+    assert refresh["ansible.builtin.apt"]["update_cache"] is True
+    assert tasks.index(repo) < tasks.index(refresh) < tasks.index(module)
+
+
+def _v4_fingerprint(armored: str) -> str:
+    """The OpenPGP v4 fingerprint (RFC 4880 §12.2) of the first key in ``armored``:
+    SHA-1 over 0x99, the two-octet body length, and the public-key packet body."""
+    lines = armored.strip().splitlines()
+    body = lines[lines.index("") + 1 :]
+    data = base64.b64decode("".join(ln for ln in body if not ln.startswith(("=", "-----"))))
+    assert data[0] == 0xC6, "expected a new-format public-key packet (tag 6)"
+    assert 192 <= data[1] < 224, "expected a two-octet packet length"
+    length = ((data[1] - 192) << 8) + data[2] + 192
+    packet = data[3 : 3 + length]
+    assert packet[0] == 4, "expected a v4 key"
+    return hashlib.sha1(b"\x99" + length.to_bytes(2, "big") + packet).hexdigest().upper()  # noqa: S324
+
+
+def test_drbd9_shipped_key_matches_the_pinned_launchpad_fingerprint() -> None:
+    """Launchpad's `signing_key_fingerprint` for ~linbit/+archive/ubuntu/linbit-drbd9-stack
+    (https://api.launchpad.net/1.0/~linbit/+archive/ubuntu/linbit-drbd9-stack)."""
+    pinned = _defaults()["drbd9_linbit_key_fingerprint"]
+    assert pinned == "CC1B5A793C04BB3905AD837734893610CEAA9512"
+    key = (ROLE / "files" / "linbit-drbd9-stack.asc").read_text(encoding="utf-8")
+    assert key.startswith("-----BEGIN PGP PUBLIC KEY BLOCK-----\n")
+    assert "PRIVATE" not in key
+    assert _v4_fingerprint(key) == pinned
 
 
 def test_drbd9_install_builds_against_the_running_kernels_headers_first() -> None:
@@ -167,8 +254,15 @@ def test_drbd9_vg_creation_is_probe_guarded_and_never_prompts() -> None:
 
 
 def test_drbd9_defaults() -> None:
-    defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text(encoding="utf-8"))
-    assert defaults == {"drbd9_vg": "drbdpool", "drbd9_disk": "/dev/vdb"}
+    assert _defaults() == {
+        "drbd9_vg": "drbdpool",
+        "drbd9_disk": "/dev/vdb",
+        "drbd9_linbit_ppa_uri": (
+            "https://ppa.launchpadcontent.net/linbit/linbit-drbd9-stack/ubuntu"
+        ),
+        "drbd9_linbit_keyring": "/etc/apt/keyrings/linbit-drbd9-stack.asc",
+        "drbd9_linbit_key_fingerprint": "CC1B5A793C04BB3905AD837734893610CEAA9512",
+    }
 
 
 def test_no_drbd9_task_swallows_errors() -> None:

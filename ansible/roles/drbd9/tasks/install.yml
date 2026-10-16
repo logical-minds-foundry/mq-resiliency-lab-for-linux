@@ -8,11 +8,91 @@
 # On an un-baked host main.yml runs this file first (package_facts skip-if-baked guard),
 # which is also exactly what the bake runs.
 
-- name: LINBIT DRBD 9 PPA (ppa:linbit/linbit-drbd9-stack)
-  ansible.builtin.apt_repository:
-    repo: ppa:linbit/linbit-drbd9-stack
+# LINBIT's DRBD 9 PPA (linbit/linbit-drbd9-stack), added WITHOUT apt_repository's PPA
+# shortcut (#1589). That shortcut fetches the signing key from an hkp keyserver (port 80) with gpg;
+# on the 26.04 image that fetch returned no key, so the bake failed. The key is instead
+# shipped in the role (files/linbit-drbd9-stack.asc, the armored PUBLIC key, taken once
+# from keyserver.ubuntu.com over HTTPS) rather than fetched at bake time: no keyserver,
+# no network key fetch, nothing that can differ between images. The pinned fingerprint
+# (defaults/main.yml) is Launchpad's own record for the PPA, and is asserted against the
+# installed key BEFORE the repository is added, failing loud on any mismatch.
+- name: apt keyrings directory
+  ansible.builtin.file:
+    path: "{{ drbd9_linbit_keyring | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: LINBIT DRBD 9 PPA signing key (shipped in the role, not fetched)
+  ansible.builtin.copy:
+    src: linbit-drbd9-stack.asc
+    dest: "{{ drbd9_linbit_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# A throwaway GNUPGHOME, so reading the key leaves no ~/.gnupg behind in the image.
+- name: scratch GNUPGHOME for reading the LINBIT key
+  ansible.builtin.tempfile:
+    state: directory
+    suffix: .drbd9-gpg
+  register: drbd9_gpg_home
+  become: true
+
+- name: read the LINBIT key's fingerprint(s)
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --no-tty
+      - --homedir
+      - "{{ drbd9_gpg_home.path }}"
+      - --show-keys
+      - --with-colons
+      - "{{ drbd9_linbit_keyring }}"
+  register: drbd9_linbit_key
+  changed_when: false
+  become: true
+
+- name: remove the scratch GNUPGHOME
+  ansible.builtin.file:
+    path: "{{ drbd9_gpg_home.path }}"
+    state: absent
+  become: true
+
+# Exactly one key, and it is the pinned one: a stray or extra key fails here too.
+- name: assert the LINBIT key is the pinned fingerprint
+  ansible.builtin.assert:
+    that: drbd9_linbit_fprs == [drbd9_linbit_key_fingerprint]
+    fail_msg: >-
+      {{ drbd9_linbit_keyring }} has fingerprint(s) {{ drbd9_linbit_fprs }}, expected exactly
+      [{{ drbd9_linbit_key_fingerprint }}] (Launchpad's signing_key_fingerprint for
+      ~linbit/+archive/ubuntu/linbit-drbd9-stack) — refusing to trust this repository
+    success_msg: "LINBIT PPA key {{ drbd9_linbit_key_fingerprint }} verified"
+  vars:
+    drbd9_linbit_fprs: >-
+      {{ drbd9_linbit_key.stdout_lines | select('match', '^fpr:')
+         | map('split', ':') | map(attribute='9') | list }}
+
+- name: LINBIT DRBD 9 PPA repository (deb822, signed by the pinned key)
+  ansible.builtin.deb822_repository:
+    name: linbit-drbd9-stack
+    types: [deb]
+    uris: "{{ drbd9_linbit_ppa_uri }}"
+    suites: ["{{ ansible_distribution_release }}"]
+    components: [main]
+    signed_by: "{{ drbd9_linbit_keyring }}"
     state: present
+  become: true
+
+# deb822_repository does not refresh the cache; drbd-dkms below must see the new repo.
+- name: refresh the apt cache (LINBIT repository now present)
+  ansible.builtin.apt:
     update_cache: true
+    lock_timeout: "{{ apt_lock_timeout }}"
   become: true
 
 # Headers + dkms land BEFORE drbd-dkms, so its postinst builds the module against the
