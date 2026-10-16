@@ -121,6 +121,10 @@ start-channels → e2e chain with a single reusable verb (e.g.
   must be threaded to both the playbook and `mqlab.apply`. Standardize on
   `build/mqweb.env` (gitignored) written by the bring-up verb and sourced by every
   downstream step.
+  *Superseded (#1500, epic .github#341):* there is no `mqweb.env` and no generated
+  mqweb admin password any more. The human logins are fixed lab conventions, one per
+  IBM role (`mqadmin`, `mqreadonly`, `mqoperator`, each password = username, lab
+  only). `mqlab console open` (epic .github#341 Task 5) prints them.
 - **`inventory.sh` emits `[fog]` warning noise** (`Unrecognized arguments:
   libvirt_ip_command`) — cosmetic, but worth silencing so real warnings stand out.
 - **Channel-start should be declarative.** Step 6 hand-runs `runmqsc START

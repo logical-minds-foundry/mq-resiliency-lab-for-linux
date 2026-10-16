@@ -142,10 +142,10 @@ def sandbox(tmp_path: Path) -> Sandbox:
         ["-x"],
         ["--"],
         ["-"],
-        ["--mqweb_admin_password"],
+        ["--mqweb_aes_passphrase"],
         [],
-        ["get", "mqweb_admin_password"],
-        ["mqweb_admin_password", "extra"],
+        ["get", "mqweb_aes_passphrase"],
+        ["mqweb_aes_passphrase", "extra"],
     ],
 )
 def test_option_like_or_wrong_arity_prints_usage_and_writes_nothing(sandbox, args):
@@ -163,7 +163,7 @@ def test_option_like_or_wrong_arity_prints_usage_and_writes_nothing(sandbox, arg
     "name",
     [
         "get",  # the stray file the #1499 spike left behind
-        "mqweb_admin_pasword",  # a caller typo must not mint a fresh secret
+        "mqweb_aes_pasphrase",  # a caller typo must not mint a fresh secret
         "pki-keyrpwd-nosuchqm",  # the pki family is the registered CNs only
         "pki-keyrpwd-",
         "pki-keyrpwd-PCMKAPP",  # callers lowercase the CN
@@ -180,14 +180,14 @@ def test_unregistered_or_malformed_name_fails_loudly_and_writes_nothing(sandbox,
 
 
 def test_unregistered_name_error_points_at_the_registry(sandbox):
-    result = sandbox.run("mqweb_admin_pasword")
-    assert "unknown secret name 'mqweb_admin_pasword'" in result.stderr
+    result = sandbox.run("mqweb_aes_pasphrase")
+    assert "unknown secret name 'mqweb_aes_pasphrase'" in result.stderr
     assert "lab/secret-names" in result.stderr
 
 
 def test_missing_registry_fails_loudly_and_writes_nothing(sandbox):
     (sandbox.root / "lab" / "secret-names").unlink()
-    result = sandbox.run("mqweb_admin_password")
+    result = sandbox.run("mqweb_aes_passphrase")
     assert result.returncode == 1
     assert "registry" in result.stderr
     assert sandbox.wrote_nothing()

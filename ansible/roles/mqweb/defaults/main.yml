@@ -3,11 +3,31 @@
 # instead of Liberty's default self-signed cert. The keystore lands in the server's
 # resources/security dir and is referenced by mqwebuser.xml.
 mqweb_tls: true
+mqweb_server_dir: /var/mqm/web/installations/Installation1/servers/mqweb
 mqweb_security_dir: /var/mqm/web/installations/Installation1/servers/mqweb/resources/security
-# Console-only anonymous access (#255/#258). Default false (secure): the MQ Console
-# requires login like the REST API. The lab opts in via group_vars/all to open ONLY
-# the console — the REST API stays authenticated regardless. LAB ONLY.
-mqweb_console_anonymous: false
 # JSON diagnostic logging for the mqweb (Liberty) server (#282): single-line JSON
 # to messages.log, tailed into Loki as unit=ibm-mqweb.
 mqweb_json_logging: true
+
+# Human sample users, one per IBM role (epic .github#341 spec §2.2; IBM S8). No anonymous
+# access: the MQ Console and the REST API both require a login. Lab credential
+# convention: each human login's password equals its username. Encoded once with
+# securityUtility (tasks/encode.yml) and persisted, so a re-render is byte-identical.
+# LAB ONLY: never carry password = username to a real deployment (spec §8 D2).
+# Names are at most 12 characters and must match an OS user ID for MQWebUser (IBM S8, S10).
+mqweb_users:
+  - { name: mqadmin, role: MQWebAdmin }
+  - { name: mqreadonly, role: MQWebAdminRO }
+  - { name: mqoperator, role: MQWebUser }
+
+# IBM S16: one AES key per mqweb server; every mqwebuser.xml password is encoded with it.
+# securityUtility ships in MQ_INSTALLATION_PATH/web/bin (S16). It is a Liberty script
+# that needs JAVA_HOME (or java on PATH): MQ's own *mqweb commands get it from
+# crtmqenv, but securityUtility does not, so the tasks point it at MQ's bundled JRE.
+mqweb_security_utility: /opt/mqm/web/bin/securityUtility
+mqweb_java_home: /opt/mqm/java/jre64
+# Real lab secret (lab-secret.sh mqweb_aes_passphrase), injected by mqlab; never committed.
+mqweb_aes_passphrase: "{{ lookup('env', 'MQWEB_AES_PASSPHRASE') }}"
+# Controller-side store for aes-key.xml and the encoded strings (set by mqlab to
+# state("mqweb"), the shared state bucket; never a hardcoded bucket path).
+mqweb_state_dir: "{{ lookup('env', 'MQWEB_STATE_DIR') }}"

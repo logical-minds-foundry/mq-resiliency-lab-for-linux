@@ -136,8 +136,13 @@ Each record is `{stack, kind, endpoints}`, where `kind` is one of:
 | `nativeha-ubuntu` | `active-instance` | `10.10.1.11-13:9443` | `10.10.2.11-13:9443` |
 | `svc-sim` | `counterparty` | `https://10.60.0.50:9443` | — |
 
-The administrative REST credentials (the `MQWEB_ADMIN_*` login) are
-runtime-injected, never committed. For the acceptance procedure that proves each
+The MQ Console and the REST API both require a login; there is no anonymous
+access. Each node's mqweb registry has one sample user per IBM role: `mqadmin`
+(`MQWebAdmin`), `mqreadonly` (`MQWebAdminRO`) and `mqoperator` (`MQWebUser`). In
+this lab only, each password equals its username. Every password in
+`mqwebuser.xml` is AES-encoded with `securityUtility`, using one server key made
+from the runtime-injected lab secret `mqweb_aes_passphrase`, which is never
+committed. For the acceptance procedure that proves each
 endpoint is live, see the
 [mqweb endpoint verification runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md).
 

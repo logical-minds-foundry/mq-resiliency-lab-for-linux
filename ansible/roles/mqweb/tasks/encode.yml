@@ -1,0 +1,235 @@
+# IBM S16 (MQ 10.0.x "Securing your mqweb server configuration passwords by using the
+# securityUtility command"), followed to the letter (epic .github#341 spec §2.2):
+#   - ONE AES key per mqweb server, made with `securityUtility generateAESKey
+#     --createConfigFile=<file> --key=<strongPassphrase>`, protected by file permissions,
+#     and included from mqwebuser.xml;
+#   - EVERY password in mqwebuser.xml (the three human users AND the keystore's) encoded
+#     with `securityUtility encode --encoding=aes --aesConfigFile=<file> <password>`.
+#
+# The key is generated once (on the first QM node this lab provisions) and copied to every
+# QM node, so an encoded string decodes wherever the QM runs. securityUtility's aes output
+# differs on every call for the same input, so each password is encoded once and the
+# string persisted on the controller under state("mqweb"): every render inserts the SAME
+# strings and mqwebuser.xml stays byte-identical, so a re-provision never restarts mqweb
+# (Review Focus 1). Nothing here is ever logged. Missing inputs fail loud.
+#
+# `run_once` runs once per `serial: 1` batch; the controller-side `stat` guards make every
+# later batch (and every later play: the site-B DR plays, svc-sim) a no-op, so the key is
+# generated once and each password encoded once per lab.
+- name: require the controller state dir and the AES passphrase (exported by mqlab)
+  ansible.builtin.assert:
+    that:
+      - mqweb_state_dir | length > 0
+      - mqweb_aes_passphrase | length > 0
+    fail_msg: >-
+      MQWEB_STATE_DIR / MQWEB_AES_PASSPHRASE unset — run provisioning through
+      `mqlab bootstrap <stack>`, which exports both (epic .github#341 spec §2.2).
+  no_log: true
+
+- name: ensure the controller mqweb state dir exists (0700)
+  ansible.builtin.file:
+    path: "{{ mqweb_state_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: is the server's AES key already generated (controller state)
+  ansible.builtin.stat:
+    path: "{{ mqweb_state_dir }}/aes-key.xml"
+  register: mqweb_key_stat
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+- name: note whether this run generates the key
+  ansible.builtin.set_fact:
+    mqweb_key_is_new: "{{ not mqweb_key_stat.stat.exists }}"
+
+# generateAESKey refuses to overwrite an existing --createConfigFile ("file exists and will
+# not be overwritten"). A key left on the node by an earlier lab whose controller state was
+# wiped is stale: remove it so the key is always generated from the current lab secret.
+- name: remove a stale node-local key before generating (no controller copy exists)
+  ansible.builtin.file:
+    path: "{{ mqweb_server_dir }}/aes-key.xml"
+    state: absent
+  when: mqweb_key_is_new | bool
+  run_once: true
+  become: true
+
+- name: generate the server's AES key ONCE (securityUtility generateAESKey, IBM S16)
+  ansible.builtin.command:
+    argv:
+      - "{{ mqweb_security_utility }}"
+      - generateAESKey
+      - "--createConfigFile={{ mqweb_server_dir }}/aes-key.xml"
+      - "--key={{ mqweb_aes_passphrase }}"
+  environment:
+    JAVA_HOME: "{{ mqweb_java_home }}"
+  changed_when: true
+  when: mqweb_key_is_new | bool
+  run_once: true
+  become: true
+  become_user: mqm
+  no_log: true
+
+- name: read the newly generated key back
+  ansible.builtin.slurp:
+    src: "{{ mqweb_server_dir }}/aes-key.xml"
+  register: mqweb_key_new
+  when: mqweb_key_is_new | bool
+  run_once: true
+  become: true
+  no_log: true
+
+- name: the generated file carries the AES key variable (fail loud otherwise)
+  ansible.builtin.assert:
+    that:
+      - "'wlp.aes.encryption.key' in (mqweb_key_new.content | b64decode)"
+    fail_msg: >-
+      securityUtility generateAESKey wrote {{ mqweb_server_dir }}/aes-key.xml without a
+      wlp.aes.encryption.key variable on {{ inventory_hostname }}.
+  when: mqweb_key_is_new | bool
+  run_once: true
+  no_log: true
+
+- name: persist the key on the controller (0600)
+  ansible.builtin.copy:
+    content: "{{ mqweb_key_new.content | b64decode }}"
+    dest: "{{ mqweb_state_dir }}/aes-key.xml"
+    mode: "0600"
+  when: mqweb_key_is_new | bool
+  delegate_to: localhost
+  run_once: true
+  become: false
+  no_log: true
+
+- name: place the same key on THIS node (mqm, 0600)
+  ansible.builtin.copy:
+    src: "{{ mqweb_state_dir }}/aes-key.xml"
+    dest: "{{ mqweb_server_dir }}/aes-key.xml"
+    owner: mqm
+    group: mqm
+    mode: "0600"
+  become: true
+  no_log: true
+
+- name: which encoded user passwords already exist (controller state)
+  ansible.builtin.stat:
+    path: "{{ mqweb_state_dir }}/{{ item.name }}.enc"
+  loop: "{{ mqweb_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: mqweb_enc_stat
+  delegate_to: localhost
+  run_once: true
+  become: false
+
+# A string encoded with a previous key would not decode, so a newly generated key
+# re-encodes every password, not only the missing ones.
+- name: encode user passwords not yet encoded (password = username, lab convention; IBM S16)
+  ansible.builtin.command:
+    argv:
+      - "{{ mqweb_security_utility }}"
+      - encode
+      - --encoding=aes
+      - "--aesConfigFile={{ mqweb_server_dir }}/aes-key.xml"
+      - "{{ item.item.name }}"
+  environment:
+    JAVA_HOME: "{{ mqweb_java_home }}"
+  loop: "{{ mqweb_enc_stat.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: mqweb_key_is_new | bool or not item.stat.exists
+  register: mqweb_enc_new
+  changed_when: true
+  failed_when: >-
+    mqweb_enc_new.rc != 0 or
+    (mqweb_enc_new.stdout | trim) is not match('^[{]aes[}][A-Za-z0-9+/=]+$')
+  run_once: true
+  become: true
+  become_user: mqm
+  no_log: true
+
+- name: persist newly encoded user passwords on the controller (0600)
+  ansible.builtin.copy:
+    content: "{{ item.stdout | trim }}\n"
+    dest: "{{ mqweb_state_dir }}/{{ item.item.item.name }}.enc"
+    mode: "0600"
+  loop: "{{ mqweb_enc_new.results | selectattr('stdout', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.item.name }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+  no_log: true
+
+# The keystore password changes only when pki-distribute re-issues the store. Re-encode
+# exactly then (comparing the SHA-256 of the current plaintext with the one recorded),
+# or when there is no recorded encoding, or when the key itself is new.
+- name: which keystore-password records exist (controller state)
+  ansible.builtin.stat:
+    path: "{{ mqweb_state_dir }}/{{ item }}"
+  loop: [keystore.enc, keystore.sha256]
+  register: mqweb_keystore_stat
+  delegate_to: localhost
+  run_once: true
+  become: false
+  when: mqweb_tls | bool
+
+- name: decide whether the keystore password needs encoding
+  ansible.builtin.set_fact:
+    mqweb_keystore_sha: "{{ mqweb_keyrpwd | hash('sha256') }}"
+    mqweb_keystore_stale: >-
+      {{ (mqweb_key_is_new | bool)
+         or not (mqweb_keystore_stat.results | map(attribute='stat.exists') | min)
+         or (lookup('ansible.builtin.file', mqweb_state_dir ~ '/keystore.sha256') | trim)
+            != (mqweb_keyrpwd | hash('sha256')) }}
+  no_log: true
+  when: mqweb_tls | bool
+
+- name: encode the keystore password (IBM S16 — every password in the file)
+  ansible.builtin.command:
+    argv:
+      - "{{ mqweb_security_utility }}"
+      - encode
+      - --encoding=aes
+      - "--aesConfigFile={{ mqweb_server_dir }}/aes-key.xml"
+      - "{{ mqweb_keyrpwd }}"
+  environment:
+    JAVA_HOME: "{{ mqweb_java_home }}"
+  register: mqweb_keystore_enc
+  changed_when: true
+  failed_when: >-
+    mqweb_keystore_enc.rc != 0 or
+    (mqweb_keystore_enc.stdout | trim) is not match('^[{]aes[}][A-Za-z0-9+/=]+$')
+  run_once: true
+  become: true
+  become_user: mqm
+  no_log: true
+  when: mqweb_tls | bool and mqweb_keystore_stale | bool
+
+- name: persist the encoded keystore password and its source hash (0600)
+  ansible.builtin.copy:
+    content: "{{ item.content }}\n"
+    dest: "{{ mqweb_state_dir }}/{{ item.name }}"
+    mode: "0600"
+  loop:
+    - { name: keystore.enc, content: "{{ mqweb_keystore_enc.stdout | default('') | trim }}" }
+    - { name: keystore.sha256, content: "{{ mqweb_keystore_sha | default('') }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  run_once: true
+  become: false
+  no_log: true
+  when: mqweb_tls | bool and mqweb_keystore_stale | bool
+
+- name: load the encoded passwords for the registry render
+  ansible.builtin.set_fact:
+    mqweb_encoded_passwords: >-
+      {{ mqweb_encoded_passwords | default({}) | combine({item:
+         lookup('ansible.builtin.file', mqweb_state_dir ~ '/' ~ item ~ '.enc')}) }}
+  loop: "{{ (mqweb_users | map(attribute='name') | list) + (['keystore'] if mqweb_tls | bool else []) }}"
+  no_log: true
