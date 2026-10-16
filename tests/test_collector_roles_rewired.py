@@ -47,7 +47,14 @@ OLD_PAYLOADS = {
     "rdqm-state": {"/usr/local/lib/lab-rdqm-state"},
 }
 # The bakes of every box role whose catalog entry lists the component (spec §5.8).
-OBSERVABILITY_BAKES = {"pcmk-ubuntu", "san", "nativeha-ubuntu", "nativeha-rhel", "mq-rdqm"}
+OBSERVABILITY_BAKES = {
+    "pcmk-ubuntu",
+    "pdrbd-ubuntu",
+    "san",
+    "nativeha-ubuntu",
+    "nativeha-rhel",
+    "mq-rdqm",
+}
 
 
 def _tasks(role: str) -> list[dict[str, Any]]:

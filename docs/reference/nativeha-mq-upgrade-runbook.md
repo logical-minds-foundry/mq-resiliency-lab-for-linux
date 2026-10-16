@@ -661,12 +661,13 @@ evidence.
 > role change with container `oc`/`kubectl` commands; on the VM arm the underlying
 > mechanism is this direct `qm.ini` edit.
 >
-> The `mqlab dr cutover` / `mqlab dr failback` verbs do **not** drive the
-> native-HA arm today: those verbs are **rdqm-only** (`src/mqlab/cli.py` refuses
-> a non-rdqm stack — *"only the rdqm mechanism has an rdqm-dr-cutover flow"*).
-> Native-HA `mqlab dr` wrappers over the playbook above are future/aspirational,
+> Do **not** use `mqlab dr cutover` / `mqlab dr failback` for the native-HA arm.
+> Those verbs dispatch on each stack's declared `dr-cutover` / `dr-failback`
+> verb, and the native-HA stacks declare this switchover playbook, but `mqlab dr`
+> passes `-e dr_direction=a2b|b2a` while the playbook reads `-e target_live=a|b`.
+> That path is not validated for native HA. Native-HA `mqlab dr` support is
 > tracked by the DR-commands automation epic (`vergil-project/.github#38`); until
-> they land, use the playbook directly.
+> it lands, run the playbook directly.
 
 ### 6.1 Functional sanity check on the active 10.0 queue manager
 

@@ -380,6 +380,9 @@ stacks:
       qm-up:     { cmd: "su mqm -c '/opt/mqm/bin/strmqm {qm}'" }
       qm-down:   { cmd: "su mqm -c '/opt/mqm/bin/endmqm -w {qm}'" }
       qm-reload: { playbook: site-qm-reload.yml }   # endmqm -r + strmqm on the primary (#1514)
+      # `mqlab dr` dispatches on these (#1424); rpo0: the script seeds + verifies RPO-0.
+      dr-cutover:  { script: rdqm-dr-cutover.sh, rpo0: true }
+      dr-failback: { script: rdqm-dr-cutover.sh, rpo0: true }
   nativeha-rhel-crr:
     mechanism: native-ha
     os_family: rhel

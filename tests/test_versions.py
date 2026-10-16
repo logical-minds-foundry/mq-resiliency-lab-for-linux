@@ -245,6 +245,7 @@ def test_committed_roles_bake_their_components():
         "mq-client": ("mq-resiliency-clients",),
         "mq-nativeha": obs,
         "pcmk": obs,
+        "pdrbd": obs,
         "mq-rdqm": obs,
     }
     assert cat.box("pcmk", OsRef("ubuntu", 24)).components == obs

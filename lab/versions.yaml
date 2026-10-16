@@ -57,6 +57,9 @@ roles:
     components: [mq-resiliency-observability]
   # pcmk is deliberately not MQ-bearing, matching lab/boxes/_manifest-hash.sh.
   pcmk: { bake: { ubuntu: pcmk-ubuntu }, components: [mq-resiliency-observability] }
+  # pacemaker-drbd cluster nodes (epic .github#310, #1423): MQ + LINBIT DRBD 9 (drbd-dkms).
+  # MQ-bearing: it bakes MQ via mq-install, so an MQ pin bump must rebake it (#1087).
+  pdrbd: { bake: { ubuntu: pdrbd-ubuntu }, mq_bearing: true, components: [mq-resiliency-observability] }
   mq-rdqm: { bake: { rhel: mq-rdqm }, mq_bearing: true, components: [mq-resiliency-observability] }
 infra: ubuntu:26
 # On 26 ahead of IBM's SPCR, by os.ubuntu.26's recorded lab_default_decision (#1285).

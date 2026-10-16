@@ -239,18 +239,36 @@ mqlab dr failback <stack>   # site B → A (b2a)
 mqlab dr cutover  <stack> --rpo0-drill   # seed a persistent message, assert it survives the cut
 ```
 
+`mqlab dr cutover|failback <stack> [--rpo0-drill]` runs the stack's **own**
+declared DR verb — the `dr-cutover` / `dr-failback` entry under the stack's
+`verbs:` in `lab/topology.yaml`. A verb names exactly one implementation:
+
+- `script: <name>` — a `lab/scripts/` entry, run as
+  `bash <script> <a2b|b2a> <QM>` (with `RPO0_DRILL=1` in its environment when
+  drilling). `rdqm-rhel` declares `rdqm-dr-cutover.sh` this way.
+- `playbook: <name>` — an `ansible/` playbook, run as
+  `ansible-playbook <playbook> -e dr_direction=<a2b|b2a> -e qm_name=<QM> -e rpo0_drill=<true|false>`.
+
+A stack that declares no DR verb is refused with a clean error (exit 2).
+
 `--rpo0-drill` proves **RPO-0** (no message loss): it seeds a persistent message
 before the cut and asserts it is present at the peer afterward — the survival
-assertion behind the DR framing.
+assertion behind the DR framing. It is accepted **only** for a stack whose DR
+verb declares `rpo0: true` (it implements the seed and the verify). On any other
+stack `mqlab dr` refuses with exit 2 and runs nothing — it never cuts over
+without the check you asked for. Today that is `rdqm-rhel` and, once its DR
+playbook lands, `pcmk-drbd-ubuntu`.
 
 !!! note "Per-arm DR coverage as-built"
-    `mqlab dr cutover|failback` currently drives the **RDQM** cross-site flow and
-    refuses other mechanisms with a clean error. The other arms cut over through
-    their own as-built flows: the **Native HA** arms run their switchover playbook
-    (`ansible/site-nativeha-switchover.yml` / `…-ubuntu-switchover.yml`, the
-    topology `dr-cutover` / `dr-failback` verbs), and the **Pacemaker/SAN** arm
-    uses `lab/scripts/pcmk-dr-cutover.sh`. Run `mqlab parity` to print the
-    cross-arm capability matrix.
+    The **Pacemaker/SAN** arm (`pcmk-ubuntu`) declares no DR verb, so
+    `mqlab dr` refuses it; it cuts over through `lab/scripts/pcmk-dr-cutover.sh`.
+    The **Native HA** arms declare their switchover playbook
+    (`ansible/site-nativeha-switchover.yml` / `…-ubuntu-switchover.yml`) as their
+    DR verbs, but that playbook takes `-e target_live=a|b` rather than the
+    `dr_direction` that `mqlab dr` passes, and the `mqlab dr` path is not
+    validated for those arms: run the switchover playbook directly as before
+    (`-e target_live=b` to cut over, `-e target_live=a` to fail back). Run
+    `mqlab parity` to print the cross-arm capability matrix.
 
 ## Inject WAN latency (`mqlab netem`)
 
