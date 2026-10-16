@@ -1693,18 +1693,35 @@ verb is <code>mqlab dr</code>:</p>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>mqlab<span class="w"> </span>dr<span class="w"> </span>failback<span class="w"> </span>&lt;stack&gt;<span class="w">   </span><span class="c1"># site B → A (b2a)</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>mqlab<span class="w"> </span>dr<span class="w"> </span>cutover<span class="w">  </span>&lt;stack&gt;<span class="w"> </span>--rpo0-drill<span class="w">   </span><span class="c1"># seed a persistent message, assert it survives the cut</span>
 </code></pre></div>
+<p><code>mqlab dr cutover|failback &lt;stack&gt; [--rpo0-drill]</code> runs the stack's <strong>own</strong>
+declared DR verb — the <code>dr-cutover</code> / <code>dr-failback</code> entry under the stack's
+<code>verbs:</code> in <code>lab/topology.yaml</code>. A verb names exactly one implementation:</p>
+<ul>
+<li><code>script: &lt;name&gt;</code> — a <code>lab/scripts/</code> entry, run as
+  <code>bash &lt;script&gt; &lt;a2b|b2a&gt; &lt;QM&gt;</code> (with <code>RPO0_DRILL=1</code> in its environment when
+  drilling). <code>rdqm-rhel</code> declares <code>rdqm-dr-cutover.sh</code> this way.</li>
+<li><code>playbook: &lt;name&gt;</code> — an <code>ansible/</code> playbook, run as
+  <code>ansible-playbook &lt;playbook&gt; -e dr_direction=&lt;a2b|b2a&gt; -e qm_name=&lt;QM&gt; -e rpo0_drill=&lt;true|false&gt;</code>.</li>
+</ul>
+<p>A stack that declares no DR verb is refused with a clean error (exit 2).</p>
 <p><code>--rpo0-drill</code> proves <strong>RPO-0</strong> (no message loss): it seeds a persistent message
 before the cut and asserts it is present at the peer afterward — the survival
-assertion behind the DR framing.</p>
+assertion behind the DR framing. It is accepted <strong>only</strong> for a stack whose DR
+verb declares <code>rpo0: true</code> (it implements the seed and the verify). On any other
+stack <code>mqlab dr</code> refuses with exit 2 and runs nothing — it never cuts over
+without the check you asked for. Today that is <code>rdqm-rhel</code> and, once its DR
+playbook lands, <code>pcmk-drbd-ubuntu</code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Per-arm DR coverage as-built</p>
-<p><code>mqlab dr cutover|failback</code> currently drives the <strong>RDQM</strong> cross-site flow and
-refuses other mechanisms with a clean error. The other arms cut over through
-their own as-built flows: the <strong>Native HA</strong> arms run their switchover playbook
-(<code>ansible/site-nativeha-switchover.yml</code> / <code>…-ubuntu-switchover.yml</code>, the
-topology <code>dr-cutover</code> / <code>dr-failback</code> verbs), and the <strong>Pacemaker/SAN</strong> arm
-uses <code>lab/scripts/pcmk-dr-cutover.sh</code>. Run <code>mqlab parity</code> to print the
-cross-arm capability matrix.</p>
+<p>The <strong>Pacemaker/SAN</strong> arm (<code>pcmk-ubuntu</code>) declares no DR verb, so
+<code>mqlab dr</code> refuses it; it cuts over through <code>lab/scripts/pcmk-dr-cutover.sh</code>.
+The <strong>Native HA</strong> arms declare their switchover playbook
+(<code>ansible/site-nativeha-switchover.yml</code> / <code>…-ubuntu-switchover.yml</code>) as their
+DR verbs, but that playbook takes <code>-e target_live=a|b</code> rather than the
+<code>dr_direction</code> that <code>mqlab dr</code> passes, and the <code>mqlab dr</code> path is not
+validated for those arms: run the switchover playbook directly as before
+(<code>-e target_live=b</code> to cut over, <code>-e target_live=a</code> to fail back). Run
+<code>mqlab parity</code> to print the cross-arm capability matrix.</p>
 </div>
 <h2 id="inject-wan-latency-mqlab-netem">Inject WAN latency (<code>mqlab netem</code>)<a class="headerlink" href="#inject-wan-latency-mqlab-netem" title="Permanent link">&para;</a></h2>
 <p>The cross-region plane (<code>virbr-wan</code>) carries the CRR/DR replication traffic. To
