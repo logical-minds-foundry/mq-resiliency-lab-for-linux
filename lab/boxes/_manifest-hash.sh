@@ -40,8 +40,9 @@
 #     MQ-bearing box at REUSE, so a bootstrap silently cloned the old-version box
 #     and, via the skip-if-baked guard, came up on the old MQ). Folding the pin
 #     content in flips those boxes to BUILD on a bump. The MQ-version-independent
-#     commons boxes (obs/infra, pcmk) DELIBERATELY exclude it, so a
-#     version bump never spuriously rebakes them.
+#     commons boxes (obs/infra) DELIBERATELY exclude it, so a version bump never
+#     spuriously rebakes them. pcmk is NOT a commons box: its bake installs MQ
+#     via mq-install, so it is MQ-bearing like pdrbd (#1572).
 #
 #   * the OS PIN (epic .github#280) - the base box plus its point release or box-version
 #     pin (e.g. <base_box>@<pin>), passed as --os-pin. A re-pin (a new point release, a
