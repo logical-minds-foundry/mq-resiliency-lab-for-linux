@@ -27,7 +27,7 @@ From the host (macOS), in this repo:
 catalog change pushes just the new DVD. Each `<file>` is a DVD filename the lab
 expects, an `iso:` value from the catalog (#1274). The script looks the VM up once,
 then copies each `build/state/<file>` straight to the VM's `build/state/<file>` over
-the private VM's IAP tunnel (`gcloud compute scp --tunnel-through-iap`). It is
+IAP-tunnelled SSH (`gcloud compute scp --tunnel-through-iap`). It is
 idempotent per ISO: one the VM already holds as a same-size copy is skipped. A
 failed ISO does not stop the rest; the run exits non-zero naming every ISO that
 failed.
@@ -42,14 +42,24 @@ Once they land, `lab/scripts/stage-rhel-iso.sh` (run inside the VM by bootstrap,
 passes each `--iso <file>`; `--catalog` stages them all by hand) takes them from
 `build/state/` into the libvirt pool as usual.
 
+## Why IAP-tunnelled SSH
+
+The cloud VM **has** a public IP (`vrg-vm list` shows it), and lab web services are
+browsed on it directly; see
+[Reaching lab services from your workstation](../site/docs/operate/index.md#reaching-lab-services-from-your-workstation).
+SSH is different. vergil-vm's GCP firewall admits port `22` only from Google's IAP
+address range, so every SSH or `scp` to the VM, including this push, goes through
+IAP. That is the reason for `--tunnel-through-iap` here, not a missing public IP.
+(Before 2026-10-16 this page said the VM had no public IP. That was out of date;
+see #1592.)
+
 ## Why not a GCS bucket
 
-The VM is private (no public IP) and has no `gcloud`/`gsutil` installed. Routing
-the ISO through a Cloud Storage bucket would mean installing the Cloud SDK *and*
-wiring service-account credentials on the VM — a credential rabbit hole not worth
-it for a one-off seed. Pushing directly over IAP keeps all auth host-side (the
-operator's existing `gcloud` login) and needs nothing on the VM beyond stock
-sshd / git / coreutils.
+The VM has no `gcloud`/`gsutil` installed. Routing the ISO through a Cloud Storage
+bucket would mean installing the Cloud SDK *and* wiring service-account credentials
+on the VM — a credential rabbit hole not worth it for a one-off seed. Pushing
+directly over IAP-tunnelled SSH keeps all auth host-side (the operator's existing
+`gcloud` login) and needs nothing on the VM beyond stock sshd / git / coreutils.
 
 ## Notes and gotchas
 

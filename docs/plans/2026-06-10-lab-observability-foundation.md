@@ -363,6 +363,8 @@ vrg-commit --type feat --scope mqlab --message "add mqlab obs targets (#103)" --
 
 `obs up` is a composite verb: render targets, then create/start the monitoring pair, then provision via Ansible. `obs status` filters the fleet to the `monitoring` setup. `obs open` prints the Grafana URL + the tunnel one-liner.
 
+> **Correction (2026-10-16, #1592).** This plan is a historical record. Its `ssh -L` tunnel one-liner and `obs-open.sh` tunnel helper were superseded by the automatic `port_forwards` relay (#170, #264). No tunnel is needed today. A local Lima VM is browsed at `localhost:<port>`, and the cloud dev VM, which has a public IP, at `<external-ip>:<port>` (IP from `vrg-vm list`). See [Reaching lab services from your workstation](../site/docs/operate/index.md#reaching-lab-services-from-your-workstation).
+
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/test_cli_obs.py`:
@@ -1029,7 +1031,7 @@ Expected: JSON `{"database": "ok", ...}`.
 
 - [ ] **Step 4: Prove the URL opens from the workstation**
 
-Run `mqlab obs open`, follow the printed tunnel one-liner from your Mac, and load `http://10.50.0.2:3000` (or the tunneled `localhost:3000`). Log in as `admin` with the injected `GF_SECURITY_ADMIN_PASSWORD` (or `admin` if unset for the spike), confirm the **Lab / Fleet — Node Health** dashboard renders with `obs` and `mon-probe` tiles green.
+(Superseded tunnel step; see the 2026-10-16 correction under Task 5.) Run `mqlab obs open`, follow the printed tunnel one-liner from your Mac, and load `http://10.50.0.2:3000` (or the tunneled `localhost:3000`). Log in as `admin` with the injected `GF_SECURITY_ADMIN_PASSWORD` (or `admin` if unset for the spike), confirm the **Lab / Fleet — Node Health** dashboard renders with `obs` and `mon-probe` tiles green.
 Expected: dashboard loads; both tiles UP. **This is the Layer-0 success criterion — an observability stack you can open.**
 
 - [ ] **Step 5: Commit the spike evidence**

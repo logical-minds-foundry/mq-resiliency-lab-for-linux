@@ -364,11 +364,56 @@ relay that vergil-vm installs from the VM profile's `port_forwards` in
 forwards `3001`. `mqlab obs open` and `mqlab obs relay-heal` therefore discover the
 relay from the installed units (`systemctl list-units --all
 'vergil-portforward-*.service'`) rather than assuming `:3000`, and fail loud with
-the remedy if no relay to Grafana (`10.50.0.2:3000`) is installed.
+the remedy if no relay to Grafana (`10.50.0.2:3000`) is installed. How the
+workstation reaches that port on a local or a cloud dev VM is described in
+[Reaching lab services from your workstation](#reaching-lab-services-from-your-workstation).
 
 The render verbs are pure topology→file projections; the observe phase of
 `mqlab commons up` runs them and hands the output to `site-obs.yml`, so a normal
 bring-up leaves the boards current without a manual render.
+
+### Reaching lab services from your workstation
+
+This section is the lab's single description of how a browser on your workstation
+reaches a lab service. Other pages link here.
+
+Lab services run on nested guests, such as Grafana on the `obs` guest at
+`10.50.0.2:3000`. The workstation cannot address those guests directly. A
+`port_forwards` record `"<vm-port>|<host:port>"` in the VM profile in
+`vergil.toml` makes vergil-vm install a relay unit,
+`vergil-portforward-<vm-port>.service`, on the dev VM. The relay is a `socat` that
+listens on the dev VM's `0.0.0.0:<vm-port>` and forwards to `<host:port>` inside the
+lab. The relay is the same on both backends. Only the last hop to the workstation
+differs:
+
+| Dev VM | Browse | Where the address comes from |
+|---|---|---|
+| Local Lima VM | `localhost:<vm-port>` | Lima forwards the VM's `0.0.0.0` listeners to the Mac |
+| Cloud (GCP) VM | `<external-ip>:<vm-port>` | the **EXTERNAL IP** column of `vrg-vm list` |
+
+The cloud dev VM has a public IP. You do not need a `gcloud` IAP tunnel, an
+`ssh -L` forward or a relay of your own to reach a forwarded port. Open
+`http://<external-ip>:3000/d/lab-watcher` for Grafana, the same way you would open
+`localhost:3000` on a Lima VM. Three limits apply on the cloud VM:
+
+- **The cloud firewall must admit the port.** vergil-vm's GCP module creates one
+  ingress rule for browsing, `<vm>-browse`. It allows `tcp:3000` from any source
+  and no other port. A `port_forwards` port other than `3000` works on a Lima VM
+  but is blocked on the cloud VM until that rule admits it. Opening more ports is
+  vergil-vm work, tracked here as
+  [#345](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/issues/345).
+- **The IP is ephemeral.** GCP can assign a new external IP when the VM is
+  recreated or restarted. Read it from `vrg-vm list` each time. Never write it into
+  the repo.
+- **SSH is separate.** The VM's port `22` admits only Google's IAP address range,
+  so `vrg-vm session` and file transfers such as `scripts/push-rhel-iso.sh` go over
+  IAP-tunnelled SSH. That is a rule for SSH only. It does not mean the VM has no
+  public IP, and it does not affect browsing a forwarded port.
+
+Sources: vergil-vm `templates/provision/80-port-forwards.sh` (the relay unit),
+vergil-vm `opentofu/modules/gcp/vm/main.tf` (the `browse` and `ssh` firewall rules
+and the external IP), and the vergil-vm v2.1.36 release (vergil-vm #261), which
+added the external IP.
 
 ### `mqlab logsearch` verbs
 

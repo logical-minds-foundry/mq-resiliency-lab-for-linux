@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # scripts/push-rhel-iso.sh - push operator-supplied RHEL DVD ISOs from the host
-# build/state/ to an off-platform (GCP) lab VM's build/state/, over the VM's private
-# IAP tunnel. The off-platform VM's build/ is a persistent volume (NOT the host
+# build/state/ to an off-platform (GCP) lab VM's build/state/, over IAP-tunnelled SSH
+# (the VM has a public IP, but vergil-vm's firewall admits SSH only from Google's IAP
+# range, #1592). The off-platform VM's build/ is a persistent volume (NOT the host
 # mount), so each ~12.7G ISO must be pushed once after the volume is created; it then
 # persists until the volume is destroyed. gcloud auth is host-local (macOS); the VM
 # needs nothing installed beyond its stock sshd/git/coreutils.

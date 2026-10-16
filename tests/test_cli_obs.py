@@ -266,6 +266,11 @@ def test_obs_open_prints_workstation_url_and_automatic_forward():
     # the discovered relay unit and the heal verb are named (#1450)
     assert "vergil-portforward-3000.service" in result.stdout
     assert "mqlab obs relay-heal" in result.stdout
+    # the cloud VM is reached directly on its external IP, not through a tunnel (#1592)
+    assert "<external-ip>:3000" in result.stdout
+    assert "vrg-vm list" in result.stdout
+    assert "tunnel-through-iap" not in result.stdout
+    assert "ssh -L" not in result.stdout
 
 
 _ANONYMOUS_RELAY = (
@@ -280,6 +285,7 @@ def test_obs_open_follows_the_profiles_relay_port(monkeypatch):
     result = CliRunner().invoke(cli.app, ["obs", "open"])
     assert result.exit_code == 0
     assert "http://localhost:3001/d/lab-watcher" in result.stdout
+    assert "<external-ip>:3001" in result.stdout
     assert "localhost:3000" not in result.stdout
 
 
