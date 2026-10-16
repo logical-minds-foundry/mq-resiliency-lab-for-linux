@@ -1658,16 +1658,21 @@ detects the environment (Apple Virtualization → <code>macos</code>, Google Com
 <h2 id="rest-endpoints">REST endpoints<a class="headerlink" href="#rest-endpoints" title="Permanent link">&para;</a></h2>
 <p>Each queue manager's admin REST API / Console (Liberty <code>mqweb</code>, HTTPS on
 <strong><code>9443</code></strong>) is a published endpoint derived from the topology. mqweb runs on every
-QM node by default (#1502). Render the current map (both sites) to
-<code>build/work/rest/endpoints.json</code> with:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>mqlab<span class="w"> </span>rest<span class="w"> </span>render
-</code></pre></div>
-<p>Each record is <code>{stack, kind, endpoints}</code>, where <code>kind</code> is one of:</p>
+QM node by default (#1502). The derivation is an internal library
+(<code>mqlab.mqweb_endpoints</code>) behind <code>mqlab console open</code> (see
+<a href="../operate/#using-the-mq-console">Using the MQ Console</a>). Each stack has
+one of three endpoint kinds:</p>
 <ul>
 <li><strong><code>vip</code></strong> — the stack's floating HA VIP (<code>pcmk-ubuntu</code>, <code>rdqm-rhel</code>); one URL
   per site.</li>
 <li><strong><code>active-instance</code></strong> — every instance's URL (Native HA stacks, which have no
-  VIP); the client resolves the active one.</li>
+  VIP). The client finds the live one with the "follow the active" state probe:
+  ask each candidate the list query <code>GET /ibmmq/rest/v3/admin/qmgr?attributes=*</code>
+  and use the one whose record for the queue manager says <code>state: running</code>. The
+  per-QM query <code>GET …/admin/qmgr/&lt;QM&gt;</code> is never used to find it: it answers
+  HTTP 500 (reason 2543) on every healthy replica. <code>mqlab.mqweb_probe</code> is the
+  lab's reference implementation, and the lab recommends the same algorithm to
+  REST API applications.</li>
 <li><strong><code>counterparty</code></strong> — the shared <code>svc-sim</code> endpoint on <code>net-ext</code>.</li>
 </ul>
 <table>
@@ -1786,9 +1791,9 @@ commands:</p>
 <td>Observability renders (Prometheus targets, Grafana dashboard) + reach the Watcher</td>
 </tr>
 <tr>
-<td><code>mqlab rest</code></td>
-<td><code>render</code></td>
-<td>Render the published mqweb REST endpoints (both sites)</td>
+<td><code>mqlab console</code></td>
+<td><code>open</code></td>
+<td>Forward this VM to a stack's live mqweb and print the MQ Console URL and logins</td>
 </tr>
 <tr>
 <td><code>mqlab dns</code></td>

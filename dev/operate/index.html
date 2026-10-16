@@ -1358,6 +1358,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#using-the-mq-console" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using the MQ Console
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-watcher" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1783,6 +1794,76 @@ commit critical path — the cost strict-sync replication puts on every commit
 versus async CRR. It is deliberately separate from the always-on
 <code>mq-app-requester</code> cockpit stream (which is "good-enough noise", not a
 measurement tool).</p>
+<h2 id="using-the-mq-console">Using the MQ Console<a class="headerlink" href="#using-the-mq-console" title="Permanent link">&para;</a></h2>
+<p>mqweb (the MQ Console and the admin REST API) runs on every queue manager node. To
+open a stack's Console from your workstation, run on the dev VM:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>console<span class="w"> </span>open<span class="w"> </span>&lt;stack&gt;<span class="w">            </span><span class="c1"># e.g. nativeha-rhel-crr; site A</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>console<span class="w"> </span>open<span class="w"> </span>&lt;stack&gt;<span class="w"> </span>--site<span class="w"> </span>b<span class="w">   </span><span class="c1"># the DR site's endpoints</span>
+</code></pre></div>
+<p>The verb finds the stack's live mqweb and forwards the dev VM's
+<code>127.0.0.1:19443</code> to it. It then prints the URL, the logins, and how to reach the
+forward from your workstation. Access takes two hops:</p>
+<ol>
+<li><strong>Workstation → dev VM.</strong> The <code>vergil.toml</code> record <code>9443|127.0.0.1:19443</code>
+   makes vergil-vm install a relay on the VM's port <code>9443</code>, declared and reached
+   exactly like the Grafana relay on <code>3000</code>. (The <code>anonymous</code> profile uses
+   <code>9444</code>, beside Grafana's <code>3001</code>.) The verb prints both URLs:<ul>
+<li><strong>Local Lima VM.</strong> Lima forwards the port to your Mac. Browse
+  <code>https://localhost:9443/ibmmq/console/login.html</code>.</li>
+<li><strong>Cloud VM.</strong> Browse the VM's external IP, shown by <code>vrg-vm list</code>, on the
+  same port: <code>https://&lt;external-ip&gt;:9443/ibmmq/console/login.html</code>. The
+  cloud VM's firewall currently admits only <code>tcp:3000</code>, so this port answers
+  only once vergil-vm adds a firewall rule for it. See
+  <a href="#reaching-lab-services-from-your-workstation">Reaching lab services from your workstation</a>.</li>
+</ul>
+</li>
+<li><strong>Dev VM → live instance.</strong> A socat forwarder (<code>mqlab-console-forward</code>)
+   carries <code>127.0.0.1:19443</code> to the live instance's <code>:9443</code>. TLS passes straight
+   through. For a VIP stack the live instance is the VIP. For Native HA, which has
+   no VIP, <code>console open</code> asks each instance the list query
+   <code>GET /ibmmq/rest/v3/admin/qmgr?attributes=*</code> as <code>mqreadonly</code> and picks the one
+   reporting <code>running</code>. If none is running, as on the CRR recovery site before a
+   switchover, it fails and names every instance's answer.</li>
+</ol>
+<p>Log in with one of the three lab users. In this lab only, each password equals
+its username:</p>
+<table>
+<thead>
+<tr>
+<th>Login</th>
+<th>IBM role</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mqadmin</code> / <code>mqadmin</code></td>
+<td><code>MQWebAdmin</code></td>
+<td>Full administration</td>
+</tr>
+<tr>
+<td><code>mqreadonly</code> / <code>mqreadonly</code></td>
+<td><code>MQWebAdminRO</code></td>
+<td>Read-only administration</td>
+</tr>
+<tr>
+<td><code>mqoperator</code> / <code>mqoperator</code></td>
+<td><code>MQWebUser</code></td>
+<td>What the <code>mqoperator</code> MQ authority allows</td>
+</tr>
+</tbody>
+</table>
+<p>Two behaviours are expected:</p>
+<ul>
+<li><strong>The browser warns once about the certificate.</strong> Accept and continue. The
+  mqweb certificate names <code>mqweb</code>, not <code>localhost</code>, and it chains to the lab's
+  private CA. The workstation deliberately does not trust that CA: the lab builds
+  no trust link between the ephemeral lab and the host, and removing a one-time
+  click-through is not worth that complexity.</li>
+<li><strong>Re-run <code>mqlab console open</code> after a failover or a DR cutover.</strong> The forward
+  points at one instance and does not follow the queue manager. A re-run finds the
+  new live instance and replaces the forwarder.</li>
+</ul>
 <h2 id="the-watcher">The Watcher<a class="headerlink" href="#the-watcher" title="Permanent link">&para;</a></h2>
 <p>The <strong>Watcher</strong> is the management/observability plane — the <code>net-mgmt</code> side of the
 lab that observes every node but never carries transit traffic. It runs on the
@@ -1799,12 +1880,12 @@ lab that observes every node but never carries transit traffic. It runs on the
   surfaces it alongside the metrics.</li>
 </ul>
 <h3 id="mqlab-obs-verbs"><code>mqlab obs</code> verbs<a class="headerlink" href="#mqlab-obs-verbs" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
-<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
-<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># render lab_network_state metrics from virsh (stdout; render-only)</span>
-<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
-<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>relay-heal<span class="w"> </span><span class="o">[</span>--step<span class="o">]</span><span class="w">         </span><span class="c1"># restart the Grafana port-forward relay + verify the forward</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>targets<span class="w"> </span><span class="o">[</span>--stack<span class="w"> </span>&lt;stack&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># render Prometheus file_sd targets + exporter list</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>dashboard<span class="w">                   </span><span class="c1"># render every Grafana board from topology</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>net-state<span class="w">                   </span><span class="c1"># render lab_network_state metrics from virsh (stdout; render-only)</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>reach-peers<span class="w">                 </span><span class="c1"># render host→net→peer reachability</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>open<span class="w">                        </span><span class="c1"># print the Grafana URLs + a Loki live-tail query</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>mqlab<span class="w"> </span>obs<span class="w"> </span>relay-heal<span class="w"> </span><span class="o">[</span>--step<span class="o">]</span><span class="w">         </span><span class="c1"># restart the Grafana port-forward relay + verify the forward</span>
 </code></pre></div>
 <p>The workstation reaches Grafana through a <code>vergil-portforward-&lt;vm-port&gt;.service</code>
 relay that vergil-vm installs from the VM profile's <code>port_forwards</code> in
@@ -1879,10 +1960,10 @@ added the external IP.</p>
 runs on the <code>obs</code> node. It comes up with obs (<code>mqlab commons up</code>, or a stack's
 <code>observe</code> phase) and is reclaimed by <code>mqlab commons down</code>, so there is no separate
 bring-up verb. Once it is up, <code>mqlab logsearch</code> is the operator surface over it:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>status<span class="w">            </span><span class="c1"># cluster health + disk-used + read-only/full check</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>open<span class="w">              </span><span class="c1"># print the OpenSearch Dashboards URL</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>snapshot<span class="w">          </span><span class="c1"># take a snapshot -&gt; host-durable build/state/logsearch/</span>
-<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>restore<span class="w"> </span><span class="o">[</span>--snapshot<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># restore latest (or a named) host snapshot</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>status<span class="w">            </span><span class="c1"># cluster health + disk-used + read-only/full check</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>open<span class="w">              </span><span class="c1"># print the OpenSearch Dashboards URL</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>snapshot<span class="w">          </span><span class="c1"># take a snapshot -&gt; host-durable build/state/logsearch/</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>mqlab<span class="w"> </span>logsearch<span class="w"> </span>restore<span class="w"> </span><span class="o">[</span>--snapshot<span class="w"> </span>&lt;name&gt;<span class="o">]</span><span class="w">   </span><span class="c1"># restore latest (or a named) host snapshot</span>
 </code></pre></div>
 <ul>
 <li><strong><code>status</code></strong> reports <code>_cluster/health</code>, per-node disk-used, and any read-only /
