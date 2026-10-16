@@ -111,11 +111,32 @@ def _accounts_plays(path: Path) -> list[dict[str, Any]]:
     return [p for p in _plays(path) if "mq-authz-accounts" in _play_roles(p)]
 
 
+# Stacks declared in the topology whose provision playbook has not landed yet. Such a
+# stack is not bootstrappable, so it hosts no QM to guard. The entry is temporary on
+# purpose: test_pending_provision_playbooks_are_still_absent fails the moment the
+# playbook lands, which forces its removal here and puts it under the guards below.
+#   ansible/site-pdrbd.yml — pcmk-drbd-ubuntu (#1426), provision playbook due in #1427.
+PENDING_PROVISION = {"ansible/site-pdrbd.yml"}
+
+
+def _provision_playbooks() -> set[Path]:
+    topo = yaml.safe_load(TOPOLOGY.read_text(encoding="utf-8"))
+    declared = {s["provision"] for s in topo["stacks"].values()}
+    return {REPO_ROOT / p for p in declared - PENDING_PROVISION}
+
+
+def test_pending_provision_playbooks_are_still_absent() -> None:
+    for rel in sorted(PENDING_PROVISION):
+        assert not (REPO_ROOT / rel).exists(), (
+            f"{rel} has landed: drop it from PENDING_PROVISION so the mqoperator guards "
+            "cover it (it must apply mq-authz-accounts and mqoperator.mqsc.j2)"
+        )
+
+
 def test_every_qm_play_applies_authz_accounts() -> None:
     # Review Focus 4: every stack's provision playbook, and the svc-sim play, apply
     # mq-authz-accounts, so a new arm cannot silently lack the mqoperator OS account.
-    topo = yaml.safe_load(TOPOLOGY.read_text(encoding="utf-8"))
-    playbooks = {REPO_ROOT / s["provision"] for s in topo["stacks"].values()}
+    playbooks = _provision_playbooks()
     assert len(playbooks) >= 4, "stack discovery regressed"
     playbooks.add(SHARED)
     for pb in sorted(playbooks):
@@ -125,8 +146,7 @@ def test_every_qm_play_applies_authz_accounts() -> None:
 def test_accounts_plays_become_root() -> None:
     # The role creates OS groups and users, so its play must escalate; svc-sim's mq-qmgr
     # play runs without play-level become, which is why the accounts get their own play.
-    topo = yaml.safe_load(TOPOLOGY.read_text(encoding="utf-8"))
-    playbooks = {REPO_ROOT / s["provision"] for s in topo["stacks"].values()} | {SHARED}
+    playbooks = _provision_playbooks() | {SHARED}
     for pb in sorted(playbooks):
         for play in _accounts_plays(pb):
             assert play.get("become") is True, f"{pb.name}: {play.get('hosts')} lacks become"
