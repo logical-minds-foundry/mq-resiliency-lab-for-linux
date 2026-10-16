@@ -1630,16 +1630,14 @@ both an Ubuntu arm (<code>NHAUAPP</code>) and a RHEL arm (<code>NHARCAPP</code>)
 
 <h2 id="the-admin-plane-mqweb-data-plane-infrastructure">The admin plane — mqweb (data-plane infrastructure)<a class="headerlink" href="#the-admin-plane-mqweb-data-plane-infrastructure" title="Permanent link">&para;</a></h2>
 <blockquote>
-<p><strong>Status: off by default.</strong> Per-node mqweb is gated by <code>mqweb_enabled</code>
-(<code>ansible/group_vars/all/admin.yml</code>, default <code>false</code>; #1171, #1188), so a default
-bootstrap starts no mqweb anywhere. It was turned off after mqweb failed to cold-start
-reliably on the 2-vCPU QM nodes under macOS/arm64 nested virtualization. Those failures
-predate the huge-page fix for arm64 page-fault cost (#1240, #1241), so they may not
-recur. The role is kept; set <code>mqweb_enabled: true</code> to run it deliberately. Whether and
-how mqweb comes back is undecided (tracked in the ad-hoc backlog, <code>.github#266</code>). The
-rest of this section describes the design when it is enabled.</p>
+<p><strong>Status: on by default.</strong> mqweb runs on every QM node, including svc-sim's SVCQM
+(epic <code>.github#341</code>, #1502). It was gated off in #1171/#1188 after failing to
+cold-start on the 2-vCPU nodes under macOS/arm64; the #1499 spike re-measured it as
+affordable (<code>docs/reference/mqweb-spike-findings.md</code>). Every provision path exports
+the stack's <code>mqweb_aes_passphrase</code> secret and <code>MQWEB_STATE_DIR</code>, which the role
+requires.</p>
 </blockquote>
-<p>When enabled, each queue manager runs <strong>mqweb</strong> — the MQ administrative REST API and
+<p>Each queue manager runs <strong>mqweb</strong> — the MQ administrative REST API and
 Console (WebSphere Liberty, <code>9443/HTTPS</code>) — as a stateless per-node service. It is
 <strong>data-plane infrastructure</strong>: the control surface co-located with the queue
 manager it fronts, part of what the lab <em>instruments</em>, <strong>not</strong> part of the
