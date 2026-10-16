@@ -37,7 +37,7 @@
       ({{ drbd9_modver.stderr | default('', true) | trim }}), not DRBD 9.x — this node
       booted a kernel other than the one the pdrbd box's DKMS module was built for.
       Do not load the in-kernel 8.4 module: rebuild the pdrbd box
-      (mqlab box rebuild pdrbd-<os><major>, e.g. pdrbd-ubuntu24) and re-create the nodes.
+      (mqlab box rebuild pdrbd-<os><major>) and re-create the nodes.
 
 - name: load drbd (idempotent; the /proc/modules guard keeps reporting honest)
   ansible.builtin.shell: |
