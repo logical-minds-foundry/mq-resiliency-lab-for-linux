@@ -80,7 +80,7 @@ while editing a per-run configure role leaves every fat box at REUSE.
 | `san` | `san` / — | no | `mq-resiliency-observability` |
 | `mq-client` | `mq-ubuntu` / — | yes | `mq-resiliency-clients` |
 | `mq-nativeha` | `nativeha-ubuntu` / `nativeha-rhel` | yes | `mq-resiliency-observability` |
-| `pcmk` | `pcmk-ubuntu` / — | no | `mq-resiliency-observability` |
+| `pcmk` | `pcmk-ubuntu` / — | yes | `mq-resiliency-observability` |
 | `pdrbd` | `pdrbd-ubuntu` / — | yes | `mq-resiliency-observability` |
 | `mq-rdqm` | — / `mq-rdqm` | yes | `mq-resiliency-observability` |
 
@@ -441,6 +441,12 @@ touch the SAN targets (`san-a`/`san-b`) — they carry no IBM-MQ payload and boo
 their own `san-ubuntu26` box (below). Host-resolved: baked natively per host (arm64
 or x86), guest arch not pinned.
 
+The box is **MQ-bearing** (#1572). `mq-install`'s skip-if-baked guard keys on the
+presence of `cmqc.h`, not on its version, and the per-run `_pcmk-cluster-ha.yml`
+pass runs the same role. So a node cloned from a stale box keeps the old MQ and
+nothing upgrades it. The `lab/mq-version` pin is therefore part of this box's
+manifest hash, and a pin bump rebakes it (#1087).
+
 | Role | In bake | Notes |
 |------|---------|-------|
 | `acl` (apt pkg) | ✅ full | Unprivileged-become prereq for `site-pcmk.yml` — the pcmk-side #659 acl-stall kill. |
@@ -460,7 +466,7 @@ Corosync/Pacemaker and LINBIT DRBD 9. It bakes the `pcmk` box's set plus the
 It then loads the module and asserts `/sys/module/drbd/version` is `9.x` before the
 image is captured, so a node never compiles a kernel module at boot. The in-kernel
 DRBD is 8.4.11 (two nodes, no quorum), so it is never used. The box is **MQ-bearing**,
-unlike `pcmk`: `mq-install`'s skip-if-baked guard keys on presence only, so an MQ
+like `pcmk`: `mq-install`'s skip-if-baked guard keys on presence only, so an MQ
 pin bump has to rebake it (#1087). Host-resolved.
 
 | Role | In bake | Notes |

@@ -55,8 +55,9 @@ roles:
     bake: { ubuntu: nativeha-ubuntu, rhel: nativeha-rhel }
     mq_bearing: true
     components: [mq-resiliency-observability]
-  # pcmk is deliberately not MQ-bearing, matching lab/boxes/_manifest-hash.sh.
-  pcmk: { bake: { ubuntu: pcmk-ubuntu }, components: [mq-resiliency-observability] }
+  # MQ-bearing (#1572): it bakes MQ via mq-install, whose skip-if-baked guard keys on
+  # presence only, so an MQ pin bump must rebake it or its nodes keep the old MQ (#1087).
+  pcmk: { bake: { ubuntu: pcmk-ubuntu }, mq_bearing: true, components: [mq-resiliency-observability] }
   # pacemaker-drbd cluster nodes (epic .github#310, #1423): MQ + LINBIT DRBD 9 (drbd-dkms).
   # MQ-bearing: it bakes MQ via mq-install, so an MQ pin bump must rebake it (#1087).
   pdrbd: { bake: { ubuntu: pdrbd-ubuntu }, mq_bearing: true, components: [mq-resiliency-observability] }

@@ -295,7 +295,7 @@ def test_fatbox_dry_run_with_components_hashes_them(tmp_path):
             "--bake-stem",
             "pcmk-ubuntu",
             "--mq-bearing",
-            "0",
+            base[base.index("--mq-bearing") + 1],
             "--os-pin",
             base[base.index("--os-pin") + 1],
             "--runtime-pin",

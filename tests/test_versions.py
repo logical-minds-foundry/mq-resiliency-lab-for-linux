@@ -308,8 +308,70 @@ def test_box_name_is_role_plus_token():
     assert cat.box("mq-rdqm", OsRef("rhel", 9)).bake_stem == "mq-rdqm"
 
 
-def test_pcmk_is_not_mq_bearing():
-    assert load_catalog().box("pcmk", OsRef("ubuntu", 24)).mq_bearing is False
+def test_pcmk_is_mq_bearing_because_it_bakes_mq():
+    """bake-pcmk-ubuntu.yml installs MQ through mq-install, whose skip-if-baked guard keys
+    on the presence of cmqc.h, not its version, and the per-run cluster pass runs the same
+    role. So the lab/mq-version pin must be in the pcmk box's manifest hash: otherwise a
+    pin bump REUSEs the stale box and its nodes keep the old MQ (#1087, #1572)."""
+    assert load_catalog().box("pcmk", OsRef("ubuntu", 24)).mq_bearing is True
+
+
+def _includes_role(node: Any, role: str) -> bool:
+    """True if a parsed playbook includes or imports ``role`` anywhere, by an
+    ``include_role``/``import_role`` ``name:`` or a ``roles:`` entry."""
+    if isinstance(node, list):
+        return any(_includes_role(item, role) for item in node)
+    if not isinstance(node, dict):
+        return False
+    for key, value in node.items():
+        action = str(key).rsplit(".", 1)[-1]
+        if action in ("include_role", "import_role"):
+            if isinstance(value, dict) and value.get("name") == role:
+                return True
+        elif action == "roles" and isinstance(value, list):
+            names = [v.get("role") if isinstance(v, dict) else v for v in value]
+            if role in names:
+                return True
+        if _includes_role(value, role):
+            return True
+    return False
+
+
+def test_every_role_whose_bake_includes_mq_install_is_mq_bearing():
+    """A bake playbook that includes mq-install bakes MQ, so its role must be MQ-bearing
+    or an MQ pin bump silently REUSEs a box on the old MQ (#1087). pcmk slipped through
+    this way (#1572)."""
+    cat = load_catalog()
+    ansible = versions_catalog_path().parent.parent / "ansible"
+    bakes_mq = {
+        role
+        for role, spec in cat.roles.items()
+        for stem in spec["bake"].values()
+        if _includes_role(
+            yaml.safe_load((ansible / f"bake-{stem}.yml").read_text(encoding="utf-8")),
+            "mq-install",
+        )
+    }
+    assert {"pcmk", "pdrbd", "mq-client"} <= bakes_mq  # the guard sees real includes
+    assert sorted(r for r in bakes_mq if not cat.roles[r]["mq_bearing"]) == []
+
+
+@pytest.mark.parametrize(
+    ("node", "expected"),
+    [
+        ({"ansible.builtin.include_role": {"name": "mq-install"}}, True),
+        ({"import_role": {"name": "other"}}, False),
+        ({"include_role": "mq-install"}, False),
+        ({"roles": ["mq-install"]}, True),
+        ({"roles": [{"role": "mq-install"}]}, True),
+        ({"roles": ["other"]}, False),
+        ({"roles": "mq-install"}, False),
+        ([{"tasks": [{"block": [{"include_role": {"name": "mq-install"}}]}]}], True),
+        ("mq-install", False),
+    ],
+)
+def test_includes_role_matcher(node, expected):
+    assert _includes_role(node, "mq-install") is expected
 
 
 def test_box_unknown_family_for_role():

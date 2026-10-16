@@ -631,14 +631,14 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   see [`box-bake-manifest.md`](box-bake-manifest.md#the-bakeconfigure-line). The
   inputs include the **OS pin** (`--os-pin <base_box>@<pin>`: the RHEL point release
   or the Ubuntu cloud-image version), so a catalog re-pin forces a rebake (#1274).
-  For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client` and
-  `mq-nativeha` roles, for example `mq-rdqm-rhel10`, `mq-client-ubuntu26`,
-  `mq-nativeha-rhel10` and `mq-nativeha-ubuntu26` — the roles flagged `mq_bearing: true`
+  For the **MQ-bearing** boxes (every OS major of the `mq-rdqm`, `mq-client`,
+  `mq-nativeha`, `pcmk` and `pdrbd` roles, for example `mq-rdqm-rhel10`,
+  `mq-client-ubuntu26`, `mq-nativeha-ubuntu26` and `pcmk-ubuntu26` — the roles flagged `mq_bearing: true`
   in [`lab/versions.yaml`](../../lab/versions.yaml), passed as `--mq-bearing 1`) the
   single-source MQ-version pin [`lab/mq-version`](../../lab/mq-version) is folded
   into that hash (#1087/#1088), so bumping the pin flips exactly those boxes to
   BUILD on the next bootstrap while the non-MQ boxes (`obs-ubuntu26`,
-  `infra-ubuntu26`, `san-ubuntu26` and the `pcmk` boxes) stay REUSE — a
+  `infra-ubuntu26` and `san-ubuntu26`) stay REUSE — a
   pin bump rebases the MQ box layer with no manual `mqlab box rebuild`.
   For a box that bakes **guest components** (`roles.<role>.components`), the hash
   also folds in the pinned guest runtime (`--runtime-pin <version>+<pbs_release>`)
