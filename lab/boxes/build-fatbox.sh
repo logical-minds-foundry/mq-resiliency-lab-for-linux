@@ -29,6 +29,12 @@
 #                                       vars mqlab wrote (runtime tarball + staged artifacts)
 #   --domain-type <kvm|qemu>            REQUIRED; mqlab supplies it from host facts
 #   --cpu-mode <host-passthrough|maximum> REQUIRED; pairs with --domain-type
+#   --bake-cpus <n>                     REQUIRED; the transient build domain's vCPUs
+#   --bake-memory <MiB>                 REQUIRED; the transient build domain's memory.
+#                                       mqlab sizes both from the largest topology node
+#                                       that boots the box (platforms.bake_size, #1596),
+#                                       floored at 2 vCPU / 2048 MiB. Build environment
+#                                       only: NOT folded into the manifest hash.
 #   --rebuild-box / LAB_REBUILD_BOX=1   force a fresh build (overwrite the cache)
 #   --dry-run                           print the decision and exit, do nothing
 #
@@ -67,6 +73,8 @@ OS_PIN=""
 MQ_BEARING=""
 DOMAIN_TYPE=""
 CPU_MODE=""
+BAKE_CPUS=""
+BAKE_MEMORY=""
 RUNTIME_PIN=""
 COMPONENTS=""
 COMPONENTS_SET=0   # --components is required but may be EMPTY (a box baking none)
@@ -78,6 +86,7 @@ usage: build-fatbox.sh --box <name> --arch <aarch64|x86_64> --base-kind <ubuntu|
                        --base-box <name> --base-box-version <v|none> --bake <stem> \
                        --dvd <iso|none> --os-pin <base@pin> --mq-bearing <0|1> \
                        --domain-type <kvm|qemu> --cpu-mode <host-passthrough|maximum> \
+                       --bake-cpus <n> --bake-memory <MiB> \
                        --runtime-pin <ver+release> --components <name@tree,...|""> \
                        [--install-vars <path>] [--rebuild-box] [--dry-run]
 
@@ -107,6 +116,8 @@ while [ "$#" -gt 0 ]; do
     --dry-run) DRY_RUN=1 ;;
     --domain-type) DOMAIN_TYPE="${2:-}"; shift ;;
     --cpu-mode) CPU_MODE="${2:-}"; shift ;;
+    --bake-cpus) BAKE_CPUS="${2:-}"; shift ;;
+    --bake-memory) BAKE_MEMORY="${2:-}"; shift ;;
     --runtime-pin) RUNTIME_PIN="${2:-}"; shift ;;
     --components)
       if [ "$#" -lt 2 ]; then
@@ -137,6 +148,17 @@ require dvd "$DVD"
 require os-pin "$OS_PIN"
 require mq-bearing "$MQ_BEARING"
 require runtime-pin "$RUNTIME_PIN"
+require bake-cpus "$BAKE_CPUS"
+require bake-memory "$BAKE_MEMORY"
+# The bake domain size (#1596): positive integers, never a silent default. The floor
+# (2 vCPU / 2048 MiB) is enforced here too, so a hand-run cannot bake below the size
+# every box was baked at before per-box sizing.
+if ! [[ "$BAKE_CPUS" =~ ^[1-9][0-9]*$ ]] || [ "$BAKE_CPUS" -lt 2 ]; then
+  echo "ERROR: --bake-cpus must be an integer >= 2 (got '${BAKE_CPUS}')" >&2; usage; exit 2
+fi
+if ! [[ "$BAKE_MEMORY" =~ ^[1-9][0-9]*$ ]] || [ "$BAKE_MEMORY" -lt 2048 ]; then
+  echo "ERROR: --bake-memory must be an integer MiB >= 2048 (got '${BAKE_MEMORY}')" >&2; usage; exit 2
+fi
 if [ "$COMPONENTS_SET" != 1 ]; then
   echo 'ERROR: --components is required ("" for a box that bakes none)' >&2
   usage
@@ -238,6 +260,7 @@ fi
 
 echo "box cache: $CACHE"
 echo "decision:  $action"
+echo "bake size: ${BAKE_CPUS} vCPU / ${BAKE_MEMORY} MiB"
 if [ "$action" = REUSE ] && [ "$age_days" -ge "$WARN_DAYS" ]; then
   echo "NOTICE: cached box is ${age_days}d old (>= ${WARN_DAYS}d); pass --rebuild-box to refresh." >&2
 fi
@@ -445,7 +468,9 @@ if [ -n "$COMPONENTS" ]; then
 fi
 
 # 4. Define + boot the transient build domain (same virt knobs the lab uses; acpi so
-#    `virsh shutdown` powers it off cleanly).
+#    `virsh shutdown` powers it off cleanly), sized by --bake-cpus/--bake-memory: the
+#    largest node that boots this box (#1596). A fixed 2 vCPU / 2048 MiB guest starved
+#    the obs bake, whose handlers start the OpenSearch/Dashboards/Data Prepper JVMs.
 # aarch64 needs UEFI (AAVMF) firmware: on the arm 'virt' machine ACPI requires UEFI (#736),
 # whereas x86/q35 boots on SeaBIOS. Mirror the running lab guests' loader/nvram
 # (platforms.AAVMF_LOADER); cleanup already `undefine --nvram`, so the per-domain VARS goes.
@@ -463,8 +488,8 @@ build_cleanup_add "$BUILD_XML"
 cat > "$BUILD_XML" <<XML
 <domain type='${DOMAIN_TYPE}'>
   <name>${BUILD_DOM}</name>
-  <memory unit='MiB'>2048</memory>
-  <vcpu>2</vcpu>
+  <memory unit='MiB'>${BAKE_MEMORY}</memory>
+  <vcpu>${BAKE_CPUS}</vcpu>
   ${OS_XML}
   <features><acpi/></features>
   <cpu mode='${CPU_MODE}'/>
@@ -492,6 +517,7 @@ cat > "$BUILD_XML" <<XML
   </devices>
 </domain>
 XML
+echo "bake guest $BUILD_DOM: ${BAKE_CPUS} vCPU / ${BAKE_MEMORY} MiB"
 virsh -c qemu:///system define "$BUILD_XML"
 virsh -c qemu:///system start "$BUILD_DOM"
 

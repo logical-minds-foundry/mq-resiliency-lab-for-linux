@@ -21,7 +21,7 @@ import yaml
 from mqlab import topology
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts, probe
 from mqlab.paths import resolved_topology_path
-from mqlab.versions import load_catalog, node_boxes
+from mqlab.versions import load_catalog, node_boxes, node_role
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -103,6 +103,7 @@ def _provider(
         raise PlatformError(f"node {name}: emulating ARM on x86 is unsupported")
     kvm = guest == facts.arch and facts.kvm
     is_arm = guest == AARCH64
+    cpus, memory = node_sizing(name, spec, defaults)
     return ResolvedNode(
         os=str(entry.os.ref),
         box=entry.name,
@@ -115,12 +116,88 @@ def _provider(
         input_bus="virtio" if is_arm else None,
         cpu_mode=CPU_KVM if kvm else CPU_TCG,
         boot_timeout=None if kvm else TCG_BOOT_TIMEOUT,
-        cpus=spec.get("cpus", defaults.get("cpus", 1)),
-        memory=spec.get("memory", defaults.get("memory", 1024)),
+        cpus=cpus,
+        memory=memory,
         extra_disk=spec.get("extra_disk"),
         dvd=f"{LIBVIRT_POOL}/{entry.os.iso}" if entry.os.iso else None,
         nics=spec.get("nics", {}),
     )
+
+
+def node_sizing(name: str, spec: dict[str, Any], defaults: dict[str, Any]) -> tuple[int, int]:
+    """(cpus, memory MiB) for one topology node: its own values, else the topology
+    ``defaults``, else 1 vCPU / 1024 MiB. Both must be positive integers; anything else
+    fails loud, so a typo never reaches the Vagrantfile or a bake domain."""
+    cpus = spec.get("cpus", defaults.get("cpus", 1))
+    memory = spec.get("memory", defaults.get("memory", 1024))
+    for key, value in (("cpus", cpus), ("memory", memory)):
+        # bool is an int subclass; `cpus: true` is a typo, not one vCPU.
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise PlatformError(
+                f"node {name}: {key} must be a positive integer, got {value!r} — "
+                "fix lab/topology.yaml"
+            )
+    return cpus, memory
+
+
+# Bake-guest sizing (#1596). build-fatbox.sh's transient build domain used to be a fixed
+# 2 vCPU / 2048 MiB for every box, while the obs node that boots the obs box runs at
+# 12 vCPU / 10240 MiB: the obs bake starts OpenSearch / Dashboards / Data Prepper JVMs
+# through its handlers, and a 2 GB, swapless guest ran out of memory (145 MB free) and
+# dropped the bake's SSH session. A box is now baked at the size of the largest node
+# that boots it (bake_size), never below the old floor.
+BAKE_FLOOR_CPUS = 2
+BAKE_FLOOR_MEMORY_MIB = 2048
+# Ceiling for a bake guest. A bake may run while lab guests are up (commons + a stack,
+# about 40 GB on a 3+3 Native HA lab), and the hosts are the cloud dev VM (16 vCPU /
+# 62 GB) and the Mac Lima VM (24 vCPU / 64 GB). 12 vCPU / 12 GiB fits beside a running
+# lab on both and covers the largest node today (obs: 12 / 10240). A topology node
+# larger than this fails loud in bake_size rather than baking under-sized or
+# over-committing the host: raising it is a deliberate host-capacity decision.
+BAKE_CAP_CPUS = 12
+BAKE_CAP_MEMORY_MIB = 12288
+
+
+@dataclass(frozen=True)
+class BakeSize:
+    """The transient bake domain's size for one box role, and the nodes it came from."""
+
+    cpus: int
+    memory: int  # MiB
+    nodes: tuple[str, ...]
+
+
+def bake_size(topo: dict[str, Any], role: str) -> BakeSize:
+    """The bake-guest size for the box ``role``: the max cpus and the max memory across
+    the topology nodes that boot it (``box: <role>``), floored at BAKE_FLOOR_* (#1596).
+
+    ``topo`` is the EFFECTIVE topology (topology.load(): the base plus the MQLAB_ENV
+    profile), so a profile's per-node override sizes the bake the same way it sizes the
+    node. Per-node sizing goes through node_sizing, the same authority resolve() uses.
+    Fails loud when no node boots the role (there is no runtime size to bake for) or when
+    the derived size exceeds BAKE_CAP_* (a host-capacity decision, never a silent clamp).
+    """
+    defaults = topo.get("defaults") or {}
+    nodes: dict[str, Any] = topo.get("nodes") or {}
+    sizes = {
+        name: node_sizing(name, spec or {}, defaults)
+        for name, spec in nodes.items()
+        if node_role(name, spec) == role
+    }
+    if not sizes:
+        raise PlatformError(
+            f"box role {role!r}: no topology node boots it (`box: {role}`), so there is no "
+            "node size to bake it at — fix lab/topology.yaml"
+        )
+    cpus = max(BAKE_FLOOR_CPUS, *(c for c, _ in sizes.values()))
+    memory = max(BAKE_FLOOR_MEMORY_MIB, *(m for _, m in sizes.values()))
+    if cpus > BAKE_CAP_CPUS or memory > BAKE_CAP_MEMORY_MIB:
+        raise PlatformError(
+            f"box role {role!r}: its nodes need a {cpus} vCPU / {memory} MiB bake guest, over "
+            f"the {BAKE_CAP_CPUS} vCPU / {BAKE_CAP_MEMORY_MIB} MiB cap (platforms.BAKE_CAP_*) "
+            "— raise the cap only after checking the hosts can give it beside a running lab"
+        )
+    return BakeSize(cpus=cpus, memory=memory, nodes=tuple(sorted(sizes)))
 
 
 def box_build_domain_virt(box_arch: str, facts: HostFacts) -> tuple[str, str]:

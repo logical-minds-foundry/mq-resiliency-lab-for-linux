@@ -23,7 +23,7 @@ import pytest
 from mqlab import box, cli
 from mqlab.hostfacts import AARCH64, X86_64, HostFacts
 from mqlab.orchestrator import StepFailedError
-from tests.boxfleet import box_bakes, fatbox_args, manifest_hash_args
+from tests.boxfleet import box_bakes, fatbox_args, manifest_hash_args, real_bake_topology
 
 _REPO = Path(__file__).resolve().parents[1]
 _FATBOX = _REPO / "lab" / "boxes" / "build-fatbox.sh"
@@ -72,6 +72,8 @@ def test_build_steps_pass_catalog_flags_for_fatbox(monkeypatch, tmp_path):
     monkeypatch.setenv("MQLAB_REPO_ROOT", str(tmp_path))
     # tmp_path is no git repo: stub the component source identity (its own seam).
     monkeypatch.setattr(box, "_component_tree", lambda name: "f" * 40)
+    # ...and has no lab/topology.yaml: size the bake from the committed one (#1596).
+    monkeypatch.setattr(box, "_bake_topology", real_bake_topology)
     steps = box._build_steps([("mq-rdqm-rhel9", False)], _X86)
     assert len(steps) == 1
     argv = steps[0].command.argv
@@ -107,6 +109,10 @@ def test_build_steps_pass_catalog_flags_for_fatbox(monkeypatch, tmp_path):
             "kvm",
             "--cpu-mode",
             "host-passthrough",
+            "--bake-cpus",  # the mq-rdqm nodes are 2 vCPU / 2048 MiB (#1596)
+            "2",
+            "--bake-memory",
+            "2048",
             "--runtime-pin",
             box.FLEET["mq-rdqm-rhel9"].runtime_pin,
         ]
@@ -154,6 +160,7 @@ def test_build_steps_ubuntu_fat_box_tracks_host_arch_under_kvm(monkeypatch, tmp_
     # mq-client bakes mq-resiliency-clients (epic .github#294) and tmp_path is no git
     # repo: stub the component source identity (its own seam, test_box_components).
     monkeypatch.setattr(box, "_component_tree", lambda name: "f" * 40)
+    monkeypatch.setattr(box, "_bake_topology", real_bake_topology)
     argv = box._build_steps([("mq-client-ubuntu26", False)], _ARM)[0].command.argv
     assert argv[argv.index("--arch") + 1] == "aarch64"
     assert argv[argv.index("--domain-type") + 1] == "kvm"

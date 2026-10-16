@@ -28,12 +28,18 @@ from typing import TYPE_CHECKING, Any
 import typer
 import yaml
 
-from mqlab import cli, component, mqexporter, venvsync
+from mqlab import cli, component, mqexporter, topology, venvsync
 from mqlab.hostfacts import HostFacts, probe
 from mqlab.manifest import DEFAULT_MQ_VERSION
 from mqlab.orchestrator import CommandStep, StepFailedError, run_steps
 from mqlab.paths import cache, repo_root, state
-from mqlab.platforms import box_build_arch, box_build_domain_virt, ensure_resolved
+from mqlab.platforms import (
+    PlatformError,
+    bake_size,
+    box_build_arch,
+    box_build_domain_virt,
+    ensure_resolved,
+)
 from mqlab.retired_boxes import RETIRED_BASE_ARTIFACTS, RETIRED_BOX_NAMES
 from mqlab.runner import Command, SubprocessRunner
 from mqlab.runtime import RuntimePinError
@@ -263,8 +269,30 @@ def builder_args(spec: BoxSpec, facts: HostFacts) -> list[str]:
         "--mq-bearing",
         "1" if spec.mq_bearing else "0",
         *virt,
+        *_bake_size_args(spec),
         *_component_args(spec),
     ]
+
+
+def _bake_topology() -> dict[str, Any]:
+    """The effective topology (base + MQLAB_ENV profile) the bake guest is sized from
+    (seam): the same view the Vagrantfile render sizes the nodes from."""
+    return topology.load()
+
+
+def _bake_size_args(spec: BoxSpec) -> list[str]:
+    """The transient bake domain's size for a fat box (#1596): the largest topology node
+    that boots its role, floored at 2 vCPU / 2048 MiB (platforms.bake_size).
+
+    The size is the build ENVIRONMENT, not box content, so it is deliberately NOT folded
+    into the manifest hash (_manifest-hash.sh): no bake reads the guest's CPU or memory
+    facts into what it installs, and a resize must not rebake every cached box."""
+    try:
+        size = bake_size(_bake_topology(), str(spec.role))
+    except (PlatformError, VersionError, ValueError) as exc:
+        typer.echo(f"mqlab box: {spec.name}: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+    return ["--bake-cpus", str(size.cpus), "--bake-memory", str(size.memory)]
 
 
 def _component_tree(name: str) -> str:
