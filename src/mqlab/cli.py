@@ -2265,54 +2265,101 @@ def pki_list() -> None:
 
 # --- dr: cross-site DR cutover / failback (the DR *operation*, #867) --------------
 # This is the operator verb that DRIVES a cross-site cutover, distinct from the
-# mqrc.dr package (the DR *measurement* framework in the mq-resiliency-clients component). It
-# wraps lab/scripts/rdqm-dr-cutover.sh — which needs `ansible` on PATH — by shelling
-# it from inside the mqlab venv (SubprocessRunner inherits this process's env, so the
-# venv PATH carries ansible), removing the manual `uv run` the bare script required
-# (#294's deferred item). cutover = a2b (site A -> B); failback = b2a (B -> A).
+# mqrc.dr package (the DR *measurement* framework in the mq-resiliency-clients component).
+# It dispatches on the stack's OWN declared DR verbs (#1424, epic .github#310): verbs
+# dr-cutover / dr-failback carry exactly one kind key —
+#   script:   a lab/scripts/ entry, run as `bash <script> <a2b|b2a> <QM>` with
+#             RPO0_DRILL=1 in env when drilling (rdqm-rhel's rdqm-dr-cutover.sh);
+#   playbook: an ansible/ playbook, run as `ansible-playbook <pb> -e dr_direction=<a2b|b2a>
+#             -e qm_name=<QM> -e rpo0_drill=<true|false>` from ansible/;
+# plus an optional `rpo0: true` declaring that the implementation performs the RPO-0
+# seed/verify. --rpo0-drill on a verb without it is refused (exit 2) before anything
+# runs: an operator who asked for the check never gets a cutover with a silent pass.
+# Both kinds run from inside the mqlab venv (SubprocessRunner inherits this process's
+# env, so the venv PATH carries ansible). cutover = a2b (site A -> B); failback = b2a.
 dr_app = typer.Typer(
     help="disaster-recovery operation: cross-site cutover / failback (#867)",
     no_args_is_help=True,
 )
 app.add_typer(dr_app, name="dr")
 
-_RDQM_DR_CUTOVER_SCRIPT = "rdqm-dr-cutover.sh"
+_DR_KINDS = ("script", "playbook")
 _Rpo0DrillOpt = Annotated[
     bool,
     typer.Option(
         "--rpo0-drill",
         help=(
             "seed a persistent message before the cut and assert it survives at the peer "
-            "(RPO-0, no message loss); exercises only against a live rdqm DR arm"
+            "(RPO-0, no message loss); only on stacks whose DR verb declares rpo0"
         ),
     ),
 ]
 
 
-def _dr_run(stack_name: str, direction: str, verb: str, *, rpo0_drill: bool) -> None:
-    # Resolve + gate the stack, render the inventory the script's ansible calls read, then
-    # shell rdqm-dr-cutover.sh with the direction + the stack's app QM. Only the rdqm
-    # mechanism has this script (the pacemaker arm's cutover is a different flow); refuse
-    # anything else with a clean exit-2 message rather than run the wrong script.
-    stack = _stack_qm_or_exit(stack_name)
-    if stack.mechanism != "rdqm":
+def _dr_impl(stack: Stack, verb: str) -> tuple[str, str, bool]:
+    # Resolve the stack's dr-<verb> into (kind, value, rpo0). Every malformed shape is a
+    # clean exit-2 naming the stack and the topology, never a traceback or a guess.
+    impl = dict(stack.verbs.get(f"dr-{verb}") or {})
+    if not impl:
+        typer.echo(f"dr {verb}: stack {stack.name} does not declare a dr-{verb} verb", err=True)
+        raise typer.Exit(code=2)
+    rpo0 = bool(impl.pop("rpo0", False))
+    if len(impl) != 1:
         typer.echo(
-            f"dr {verb}: only the rdqm mechanism has an rdqm-dr-cutover flow "
-            f"(stack {stack_name!r} is {stack.mechanism!r})",
+            f"dr {verb}: stack {stack.name}'s dr-{verb} must declare exactly one of "
+            f"script / playbook in lab/topology.yaml (got {sorted(impl)})",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    [(kind, value)] = impl.items()
+    if kind not in _DR_KINDS:
+        typer.echo(f"dr {verb}: unsupported dr-{verb} kind {kind!r} on {stack.name}", err=True)
+        raise typer.Exit(code=2)
+    return kind, str(value), rpo0
+
+
+def _dr_command(
+    stack: Stack, kind: str, value: str, direction: str, *, rpo0_drill: bool
+) -> Command:
+    if kind == "script":
+        argv = ["bash", str(lab_script(value)), direction, stack.qm.qm_app]
+        env = {"RPO0_DRILL": "1"} if rpo0_drill else None
+        return Command(argv, cwd=repo_root() / "ansible", env=env)
+    argv = [
+        "ansible-playbook",
+        value,
+        "-e",
+        f"dr_direction={direction}",
+        "-e",
+        f"qm_name={stack.qm.qm_app}",
+        "-e",
+        f"rpo0_drill={'true' if rpo0_drill else 'false'}",
+    ]
+    return Command(argv, cwd=repo_root() / "ansible")
+
+
+def _dr_run(stack_name: str, direction: str, verb: str, *, rpo0_drill: bool) -> None:
+    # Resolve + gate the stack, resolve ITS dr verb (refusing a drill the verb does not
+    # implement), render the inventory the verb's ansible reads, then run it.
+    stack = _stack_qm_or_exit(stack_name)
+    kind, value, rpo0 = _dr_impl(stack, verb)
+    if rpo0_drill and not rpo0:
+        typer.echo(
+            f"dr {verb}: stack {stack.name}'s dr-{verb} does not implement the RPO-0 drill "
+            "(declare `rpo0: true` only on a verb that seeds and verifies it); "
+            f"run `mqlab dr {verb} {stack.name}` without --rpo0-drill",
             err=True,
         )
         raise typer.Exit(code=2)
     _require_record_if_live(stack.name)  # a live stack with no OS record is refused (#280)
-    argv = ["bash", str(lab_script(_RDQM_DR_CUTOVER_SCRIPT)), direction, stack.qm.qm_app]
-    env = {"RPO0_DRILL": "1"} if rpo0_drill else None
     deps = build_deps(verb, datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
     try:
-        # The script drives ansible against build/work/inventory.ini (via ansible.cfg) —
+        # The verb drives ansible against build/work/inventory.ini (via ansible.cfg) —
         # render it fresh so the site nodes resolve, mirroring the qm/bootstrap paths.
         _render_inventory(deps)
         step = CommandStep(
             f"{stack.name} dr {verb}",
-            Command(argv, cwd=repo_root() / "ansible", env=env),  # noqa: S607
+            _dr_command(stack, kind, value, direction, rpo0_drill=rpo0_drill),
         )
         run_steps(
             [step],

@@ -1,0 +1,83 @@
+---
+# CONFIGURE (per run; epic .github#310 T3, #1423). The install half (install.yml) is a
+# no-op on a baked pdrbd box (package_facts guard). This half guarantees that the drbd
+# module LOADED on this node is DRBD 9 for the kernel the node actually BOOTED, and that
+# the drbdpool-style volume group exists on the instance's extra disk.
+#
+# Kernel drift (Review Focus #2): DKMS built the module for the kernel the box was baked
+# on. A node booting a different kernel has no DKMS module for it, so `modprobe drbd`
+# would silently load the in-kernel 8.4.11 (2-node, no quorum) — or find none at all.
+# Both cases stop here, before modprobe, with the fix named.
+- name: read installed packages (skip-if-baked guard)
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: DRBD 9 install half (skipped when baked into the pdrbd box)
+  ansible.builtin.include_tasks: install.yml
+  when: "'drbd-dkms' not in ansible_facts.packages"
+
+# modinfo resolves the module modprobe WOULD load for that kernel (updates/dkms first).
+# rc 1 means no drbd module exists for the running kernel at all: still a drift, so it
+# falls through to the assert below and its fix message; any other rc fails here.
+- name: drbd module version modprobe would load for the RUNNING kernel
+  ansible.builtin.shell: |
+    modinfo -k "$(uname -r)" -F version drbd
+  register: drbd9_modver
+  changed_when: false
+  failed_when: drbd9_modver.rc not in [0, 1]
+
+- name: assert DRBD 9 for the running kernel (kernel drift guard)
+  ansible.builtin.assert:
+    that:
+      - drbd9_modver.rc == 0
+      - drbd9_modver.stdout is match('^9[.]')
+    fail_msg: >-
+      the drbd module for the running kernel {{ ansible_kernel }} is
+      '{{ drbd9_modver.stdout | default('', true) or 'absent' }}'
+      ({{ drbd9_modver.stderr | default('', true) | trim }}), not DRBD 9.x — this node
+      booted a kernel other than the one the pdrbd box's DKMS module was built for.
+      Do not load the in-kernel 8.4 module: rebuild the pdrbd box
+      (mqlab box rebuild pdrbd-<os><major>) and re-create the nodes.
+
+- name: load drbd (idempotent; the /proc/modules guard keeps reporting honest)
+  ansible.builtin.shell: |
+    set -e
+    if grep -q '^drbd ' /proc/modules; then
+      echo already-loaded
+    else
+      modprobe drbd
+      echo loaded
+    fi
+  register: drbd9_modprobe
+  changed_when: drbd9_modprobe.stdout == 'loaded'
+  become: true
+
+# The guarantee is about the LOADED module: one loaded before this role ran (the guard
+# above skips modprobe) is proven too.
+- name: read the loaded drbd module version
+  ansible.builtin.slurp:
+    src: /sys/module/drbd/version
+  register: drbd9_loaded_ver
+
+- name: assert the loaded drbd module is DRBD 9
+  ansible.builtin.assert:
+    that: "(drbd9_loaded_ver.content | b64decode | trim) is match('^9[.]')"
+    fail_msg: >-
+      the LOADED drbd module is '{{ drbd9_loaded_ver.content | b64decode | trim }}', not
+      DRBD 9.x (kernel {{ ansible_kernel }}) — something loaded the in-kernel module first.
+      Reboot the node; if it recurs, rebuild the pdrbd box (mqlab box rebuild
+      pdrbd-<os><major>).
+
+# A vgs probe, not a path guard. stdin is closed on pvcreate/vgcreate so a prompt (a stale
+# signature on a reused disk) bails instead of hanging the run (drbd-operations.md #158).
+- name: drbdpool-style VG on this instance's extra disk (vgs probe guard)
+  ansible.builtin.shell: |
+    set -e
+    if ! vgs {{ drbd9_vg }} >/dev/null 2>&1; then
+      pvcreate {{ drbd9_disk }} </dev/null
+      vgcreate {{ drbd9_vg }} {{ drbd9_disk }} </dev/null
+      echo VG-CREATED
+    fi
+  register: drbd9_vg_out
+  changed_when: "'VG-CREATED' in drbd9_vg_out.stdout"
+  become: true

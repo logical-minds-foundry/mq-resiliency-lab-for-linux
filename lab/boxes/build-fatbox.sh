@@ -379,7 +379,8 @@ fi
 
 # The Ubuntu MQ bakes install the full MQ via the Ubuntu mq-install role — obs for the
 # mq_prometheus cgo build's SDK, mq-ubuntu for the svc/app/probe commons, and the HA arms
-# (nativeha-ubuntu, pcmk-ubuntu) for their cluster nodes' server. (infra is BIND9 — no MQ.)
+# (nativeha-ubuntu, pcmk-ubuntu, pdrbd-ubuntu) for their cluster nodes' server. (infra is
+# BIND9 — no MQ.)
 # Like rdqm-install, mq-install reads its tarball from mq_media_dir; point it at the
 # host-durable main-worktree cache (the worktree's build/ is empty). The deb tarball is
 # arch-specific, so the pre-flight matches the --arch this bake builds for — ARM64 on
@@ -398,7 +399,7 @@ mq_pin() {
   printf '%s' "$pin"
 }
 case "$BAKE" in
-  obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu)
+  obs | mq-ubuntu | nativeha-ubuntu | pcmk-ubuntu | pdrbd-ubuntu)
     MQ_PIN="$(mq_pin)"
     case "$ARCH" in
       aarch64) MQ_MEDIA_TOKEN=UbuntuLinuxARM64 ;;
