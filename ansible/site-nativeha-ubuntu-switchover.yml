@@ -1,21 +1,38 @@
-# CRR planned switchover (#417, Phase 2 of #246): flip Live/Recovery roles so
-# `target_live` (a|b) is the Live site, the other Recovery. The Debian peer of
+# CRR planned switchover (#417, Phase 2 of #246): flip Live/Recovery roles so the
+# target site (a|b) is the Live site, the other Recovery. The Debian peer of
 # site-nativeha-switchover.yml — same spike-proven procedure (group NAMES stay
 # fixed; only GroupRole flips, then both groups restart); only the host groups,
-# default QM (NHAUAPP), and peer net-wan addrs differ. Run this playbook directly
-# with `-e target_live=`; the planned `mqlab dr cutover`/`failback` verbs (design:
-# docs/specs/2026-06-14-mqlab-dr-commands-design.md; automation epic #38) will wrap
-# it once built.
+# default QM (NHAUAPP), and peer net-wan addrs differ.
+#
+# This is the nativeha-ubuntu stack's declared dr-cutover / dr-failback verb
+# (lab/topology.yaml), so the usual way to run it is through mqlab (#1424, #1571):
+#   mqlab dr cutover  nativeha-ubuntu   # -e dr_direction=a2b: site B becomes Live
+#   mqlab dr failback nativeha-ubuntu   # -e dr_direction=b2a: site A becomes Live
+# mqlab also passes -e qm_name=<the stack's app QM> and -e rpo0_drill=false. The QM is
+# -e qm_name (an extra-var outranks the plays' own qm_name var), else -e qm_app, else
+# NHAUAPP. Run by hand, name the site to make Live instead of a direction:
 #   -e target_live=b   # cutover A -> B
 #   -e target_live=a   # failback B -> A
+# vars/nativeha-switchover.yml resolves the target from either input, and the first play
+# (tasks/nativeha-switchover-target.yml) fails before any node is touched if neither is
+# given, a value is unknown, or both are given and disagree.
+
+- name: preflight — resolve and check the switchover target (#1571)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files: [vars/nativeha-switchover.yml]
+  tasks:
+    - ansible.builtin.import_tasks: tasks/nativeha-switchover-target.yml
 
 - hosts: nha_ubuntu_a
   become: true
+  vars_files: [vars/nativeha-switchover.yml]
   vars:
     qm_name: "{{ qm_app | default('NHAUAPP') }}"
-    ks_cn: "{{ qm_app | default('NHAUAPP') }}"
+    ks_cn: "{{ qm_name }}"
     this_group: Live
-    this_role: "{{ 'live' if target_live == 'a' else 'Recovery' }}"
+    this_role: "{{ 'live' if nha_switchover_live == 'a' else 'Recovery' }}"
     peer_group_name: Recovery
     peer_wan_addrs: ["10.99.0.14", "10.99.0.15", "10.99.0.16"]
     recovery_enabled: "Yes"
@@ -24,11 +41,12 @@
 
 - hosts: nha_ubuntu_b
   become: true
+  vars_files: [vars/nativeha-switchover.yml]
   vars:
     qm_name: "{{ qm_app | default('NHAUAPP') }}"
-    ks_cn: "{{ qm_app | default('NHAUAPP') }}"
+    ks_cn: "{{ qm_name }}"
     this_group: Recovery
-    this_role: "{{ 'live' if target_live == 'b' else 'Recovery' }}"
+    this_role: "{{ 'live' if nha_switchover_live == 'b' else 'Recovery' }}"
     peer_group_name: Live
     peer_wan_addrs: ["10.99.0.11", "10.99.0.12", "10.99.0.13"]
     recovery_enabled: "Yes"

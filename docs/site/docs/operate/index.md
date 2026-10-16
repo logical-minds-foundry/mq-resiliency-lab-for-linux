@@ -262,12 +262,18 @@ playbook lands, `pcmk-drbd-ubuntu`.
 !!! note "Per-arm DR coverage as-built"
     The **Pacemaker/SAN** arm (`pcmk-ubuntu`) declares no DR verb, so
     `mqlab dr` refuses it; it cuts over through `lab/scripts/pcmk-dr-cutover.sh`.
-    The **Native HA** arms declare their switchover playbook
-    (`ansible/site-nativeha-switchover.yml` / `…-ubuntu-switchover.yml`) as their
-    DR verbs, but that playbook takes `-e target_live=a|b` rather than the
-    `dr_direction` that `mqlab dr` passes, and the `mqlab dr` path is not
-    validated for those arms: run the switchover playbook directly as before
-    (`-e target_live=b` to cut over, `-e target_live=a` to fail back). Run
+    The **Native HA** arms (`nativeha-rhel-crr`, `nativeha-ubuntu`) declare their
+    CRR switchover playbook (`ansible/site-nativeha-switchover.yml` /
+    `…-ubuntu-switchover.yml`) as their DR verbs, so `mqlab dr cutover <stack>`
+    makes site B the Live group and `mqlab dr failback <stack>` makes site A Live
+    again. The playbook maps `dr_direction` to the site to make Live (`a2b` → B,
+    `b2a` → A) and takes the queue manager from `qm_name`. Its first play checks
+    the inputs on the controller and fails before any node is touched if the
+    direction is missing or unknown. These verbs do not declare `rpo0: true`, so
+    `--rpo0-drill` is refused on them (exit 2).
+    The playbook still accepts the hand-run form, `-e target_live=b` to cut over
+    and `-e target_live=a` to fail back, and refuses a run that passes both
+    `target_live` and a `dr_direction` that disagrees with it. Run
     `mqlab parity` to print the cross-arm capability matrix.
 
 ## Inject WAN latency (`mqlab netem`)
