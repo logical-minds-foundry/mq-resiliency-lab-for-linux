@@ -620,6 +620,23 @@ replaced by `-` (`rhel-9-x86_64.box`); the name already carries the arch. Becaus
 `state/` outlives the VM, a baked box survives a VM rebuild without a re-bake —
 this is the pivot the rebuild tiers in §4 turn on.
 
+### The bake guest's size
+
+`build-fatbox.sh` bakes each fat box in a transient libvirt domain sized by
+`--bake-cpus` / `--bake-memory`. mqlab derives both from the effective topology
+(`lab/topology.yaml` plus the `MQLAB_ENV` profile) through `platforms.bake_size`: the
+largest `cpus` and the largest `memory` across the nodes whose `box:` is that box's
+role, never below 2 vCPU / 2048 MiB. So `obs` bakes at its node's 12 vCPU / 10240 MiB,
+because its handlers start the OpenSearch, Dashboards and Data Prepper JVMs during the
+bake. A fixed 2 GB guest ran out of memory there (#1596). The small boxes keep the
+2 / 2048 floor.
+
+A bake can run while lab guests are up, on hosts of 16 vCPU / 62 GB (cloud dev VM)
+and 24 vCPU / 64 GB (Mac Lima VM). So a bake guest is capped at 12 vCPU / 12288 MiB
+(`platforms.BAKE_CAP_*`). A node that needs more fails loud instead of being clamped,
+and a test checks that every fleet box's bake size is within the cap. Raising the cap
+is a deliberate host-capacity decision.
+
 ### Staleness: manifest-hash + graduated age
 
 The builder REUSEs a cached box only while it is still valid on two axes:
@@ -646,6 +663,9 @@ The builder REUSEs a cached box only while it is still valid on two axes:
   committed source rather than the staged artifact. A committed component change or
   a runtime bump rebakes exactly those boxes; a box that bakes none is unaffected
   (epic `.github#294`).
+  The **bake-guest size** is deliberately *not* in the hash (#1596): it is the build
+  environment, not box content. No bake reads the guest's CPU or memory facts, so a
+  larger bake guest bakes the same box, and resizing it does not rebake the cache.
 - **Graduated age** — under 7 days: REUSE silently; 7–14 days: REUSE but emit a
   NOTICE to refresh; **14 days or older: REFUSE** (non-zero exit) demanding
   `--rebuild-box`, because a bake that old may miss base-OS security updates.

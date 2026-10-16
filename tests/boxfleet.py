@@ -9,9 +9,12 @@ the catalog inputs tests used to scrape from the shell builders' old `case` tabl
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
-from mqlab import box
+import yaml
+
+from mqlab import box, topology
 from mqlab.hostfacts import X86_64, HostFacts
 
 X86_FACTS = HostFacts(arch=X86_64, kvm=True, distro_family="apt", in_vergil=True, x86_64_v3=True)
@@ -23,6 +26,15 @@ FAKE_TREE = "0" * 40
 REAL_CATALOG = Path(__file__).resolve().parents[1] / "lab" / "versions.yaml"
 # The committed guest components the catalog's roles.<role>.components name (.github#294).
 REAL_COMPONENTS = Path(__file__).resolve().parents[1] / "components"
+# The committed topology the bake guest is sized from (#1596), located from this file
+# for the same reason as REAL_CATALOG.
+REAL_TOPOLOGY = Path(__file__).resolve().parents[1] / "lab" / "topology.yaml"
+
+
+def real_bake_topology() -> dict[str, Any]:
+    """The committed topology with no env profile applied (box._bake_topology's stand-in
+    for a test that re-roots the repo at a tmp dir with no lab/topology.yaml)."""
+    return topology.effective(yaml.safe_load(REAL_TOPOLOGY.read_text()), env="")
 
 
 def x86_fleet() -> dict[str, box.BoxSpec]:
