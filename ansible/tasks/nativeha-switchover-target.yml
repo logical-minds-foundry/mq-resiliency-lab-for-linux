@@ -1,0 +1,39 @@
+# Fail-loud preflight for the Native HA CRR switchover playbooks (#1571). Imported by the
+# first (localhost) play of site-nativeha-switchover.yml and site-nativeha-ubuntu-switchover.yml,
+# which also load vars/nativeha-switchover.yml. Nothing touches a node until these pass.
+#
+# Inputs (extra-vars): dr_direction (a2b|b2a, from `mqlab dr`) and/or target_live (a|b, by
+# hand); rpo0_drill (from `mqlab dr`; always false for these verbs, which declare no rpo0).
+
+- name: Assert a known switchover target is given (dr_direction or target_live)
+  ansible.builtin.assert:
+    that:
+      - dr_direction is defined or target_live is defined
+      - dr_direction is not defined or dr_direction in nha_switchover_direction_live
+      - target_live is not defined or target_live in ['a', 'b']
+    fail_msg: >-
+      the switchover needs its target: `-e dr_direction=a2b|b2a` (what `mqlab dr
+      cutover|failback` passes) or `-e target_live=a|b` (the site to make Live); got
+      dr_direction={{ dr_direction | default('<unset>') }}
+      target_live={{ target_live | default('<unset>') }}
+
+- name: Assert dr_direction and target_live agree when both are given
+  ansible.builtin.assert:
+    that:
+      - >-
+        dr_direction is not defined or target_live is not defined
+        or nha_switchover_direction_live[dr_direction] == target_live
+    # Ansible renders fail_msg even when the assert passes, so every var in it is defaulted.
+    fail_msg: >-
+      dr_direction={{ dr_direction | default('<unset>') }} and
+      target_live={{ target_live | default('<unset>') }} disagree (a2b makes site b Live,
+      b2a makes site a Live); pass one of them, or make them agree
+
+- name: Assert no RPO-0 drill is requested (this switchover does not seed or verify one)
+  ansible.builtin.assert:
+    that:
+      - not (rpo0_drill | default(false) | bool)
+    fail_msg: >-
+      rpo0_drill={{ rpo0_drill | default('<unset>') }}: the Native HA switchover does not
+      implement the RPO-0 seed/verify (its DR verbs declare no `rpo0: true` in
+      lab/topology.yaml); rerun without the drill

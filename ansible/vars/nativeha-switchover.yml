@@ -1,0 +1,18 @@
+---
+# The switchover target of the Native HA CRR switchover playbooks (#1571):
+# site-nativeha-switchover.yml and its Debian peer site-nativeha-ubuntu-switchover.yml
+# load this file in every play, so the two arms resolve the Live site the same way.
+#
+# Two callers, one answer: `nha_switchover_live` (a|b) is the site that ends up Live.
+#   - `mqlab dr cutover|failback <stack>` runs the stack's declared playbook DR verb as
+#     `ansible-playbook <pb> -e dr_direction=<a2b|b2a> -e qm_name=<QM> -e rpo0_drill=<bool>`
+#     (src/mqlab/cli.py, #1424). a2b (cutover) makes site B Live; b2a (failback), site A.
+#   - an operator running the playbook by hand passes `-e target_live=a|b` directly.
+# tasks/nativeha-switchover-target.yml asserts the inputs before anything runs: at least
+# one is given, each is a known value, and when both are given they agree.
+nha_switchover_direction_live:
+  a2b: b
+  b2a: a
+nha_switchover_live: >-
+  {{ target_live if target_live is defined
+     else nha_switchover_direction_live[dr_direction] }}

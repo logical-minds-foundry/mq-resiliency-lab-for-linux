@@ -621,10 +621,10 @@ zero-loss) path — not an unplanned failover — for routine validation.
 2. **Switch over (Live → DR site):**
 
    ```bash
-   ansible-playbook site-nativeha-switchover.yml -e target_live=b   # cutover: site A -> site B
+   mqlab dr cutover nativeha-rhel-crr   # cutover: site A -> site B
    ```
 
-   `target_live=b` makes site B the Live group. Watch the groups pass through
+   The cutover makes site B the Live group. Watch the groups pass through
    `Pending live` / `Pending recovery` and settle, then re-check the group view:
    roles swapped (`GRPROLE(Live)` on the DR group, `GRPROLE(Recovery)` on the
    origin), `GRSTATUS(Normal)`, **not** `Partitioned`, `CONNGRP(yes)`, and
@@ -637,10 +637,10 @@ zero-loss) path — not an unplanned failover — for routine validation.
 4. **Fail back (DR site → origin):**
 
    ```bash
-   ansible-playbook site-nativeha-switchover.yml -e target_live=a   # failback: site B -> site A
+   mqlab dr failback nativeha-rhel-crr   # failback: site B -> site A
    ```
 
-   `target_live=a` restores site A as Live. Re-assert the same gates. The
+   The failback restores site A as Live. Re-assert the same gates. The
    deployment is back to its original Live/Recovery role assignment, fully on
    10.0.
 
@@ -648,8 +648,11 @@ Record the `dspmq -o nativeha -g` output at each checkpoint as the validation
 evidence.
 
 > Lab vs. non-lab mechanism. On this lab's native-HA arm the switchover round
-> trip is driven **today** by the Ansible playbook
-> `ansible/site-nativeha-switchover.yml` (run directly, as above). Under the hood
+> trip is driven by `mqlab dr cutover` / `mqlab dr failback`, which run the stack's
+> declared DR verb, the Ansible playbook `ansible/site-nativeha-switchover.yml`
+> (`ansible/site-nativeha-ubuntu-switchover.yml` on the `nativeha-ubuntu` stack),
+> with `-e dr_direction=a2b|b2a -e qm_name=<QM>`. The playbook can also be run by
+> hand with `-e target_live=b` (cutover) or `-e target_live=a` (failback). Under the hood
 > the playbook performs the `qm.ini` role edit directly — `GroupRole` in the
 > `NativeHALocalInstance` stanza and `Enabled` in the `NativeHARecoveryGroup`
 > stanza — then restarts the `mqmonitor@<QM>` systemd unit across all instances of
@@ -660,14 +663,6 @@ evidence.
 > `dspmq -o nativeha -g`. The switchover/failover IBM Docs illustrate the same
 > role change with container `oc`/`kubectl` commands; on the VM arm the underlying
 > mechanism is this direct `qm.ini` edit.
->
-> Do **not** use `mqlab dr cutover` / `mqlab dr failback` for the native-HA arm.
-> Those verbs dispatch on each stack's declared `dr-cutover` / `dr-failback`
-> verb, and the native-HA stacks declare this switchover playbook, but `mqlab dr`
-> passes `-e dr_direction=a2b|b2a` while the playbook reads `-e target_live=a|b`.
-> That path is not validated for native HA. Native-HA `mqlab dr` support is
-> tracked by the DR-commands automation epic (`vergil-project/.github#38`); until
-> it lands, run the playbook directly.
 
 ### 6.1 Functional sanity check on the active 10.0 queue manager
 
