@@ -1,0 +1,32 @@
+#*=====================================================================*#
+#* PID 5724-H72                                                        *#
+#* Copyright IBM Corp. 2009, 2026                                      *#
+#*=====================================================================*#
+#***********************************************************************#
+#* Module Name: mqs.ini                                                *#
+#* Type       : IBM MQ Machine-wide Configuration File                 *#
+#* Function   : Define IBM MQ resources for an entire machine          *#
+#*                                                                     *#
+#***********************************************************************#
+#* Notes      :                                                        *#
+#* 1) This is the installation time default configuration              *#
+#*                                                                     *#
+#***********************************************************************#
+AllQueueManagers:
+   #********************************************************************#
+   #* The path to the qmgrs directory, below which queue manager data  *#
+   #* is stored                                                        *#
+   #********************************************************************#
+   DefaultPrefix=/var/mqm
+
+LogDefaults:
+   LogDefaultPath=/var/mqm/log
+
+QueueManager:
+   Name=RDQMAPP
+   Prefix=/var/mqm
+   Directory=rdqmapp
+   DataPath=/var/mqm/vols/rdqmapp/qmgr/rdqmapp
+   InstallationName=Installation1
+   DR=Replicated
+   HA=Replicated

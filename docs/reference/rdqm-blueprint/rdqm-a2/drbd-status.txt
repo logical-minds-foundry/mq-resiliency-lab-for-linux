@@ -1,0 +1,6 @@
+rdqmapp role:Secondary
+  disk:UpToDate open:no
+  rdqm-a1 role:Primary tls:yes
+    peer-disk:UpToDate
+  rdqm-a3 role:Secondary tls:yes
+    peer-disk:UpToDate
