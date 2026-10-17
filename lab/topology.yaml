@@ -319,19 +319,19 @@ nodes:
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81 }
+    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81, net-ext: 10.60.0.81 }
   pdrbd-b2:
     box: pdrbd
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82 }
+    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82, net-ext: 10.60.0.82 }
   pdrbd-b3:
     box: pdrbd
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83 }
+    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83, net-ext: 10.60.0.83 }
 
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the

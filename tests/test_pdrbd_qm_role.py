@@ -355,12 +355,22 @@ def test_site_b_is_its_own_cluster_with_no_fencing() -> None:
     assert web["serial"] == 1
 
 
-def test_distributed_import_uses_node_connames_and_the_site_a_vip() -> None:
+def test_distributed_import_reaches_the_qm_at_either_site() -> None:
+    # Both sites, site A first: after a DR cutover the QM runs at site B, and with only
+    # site-A names e2e failed live with MQRC 2538 (#1428).
     [imp] = [p for p in _plays(SITE) if p.get("import_playbook") == "site-distributed-shared.yml"]
     v = imp["vars"]
-    assert v["our_conn"] == ",".join(f"pdrbd-a{i}-ext.client.com(1414)" for i in (1, 2, 3))
-    assert v["app_conn"] == "pdrbd-vip-a.client.com(1414)"
+    assert v["our_conn"] == ",".join(
+        f"pdrbd-{s}{i}-ext.client.com(1414)" for s in ("a", "b") for i in (1, 2, 3)
+    )
+    assert v["app_conn"] == "pdrbd-vip-a.client.com(1414),pdrbd-vip-b.client.com(1414)"
     assert v["app_tls"] is True
+
+
+def test_every_pdrbd_node_named_in_our_conn_has_a_net_ext_nic() -> None:
+    topo = _load(REPO_ROOT / "lab" / "topology.yaml")
+    for h in topo["groups"]["pdrbd_a"] + topo["groups"]["pdrbd_b"]:
+        assert "net-ext" in topo["nodes"][h]["nics"], h
 
 
 # --- the DR/HA shape (T6, #1428) --------------------------------------------------------------

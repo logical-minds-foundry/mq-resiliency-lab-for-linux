@@ -43,16 +43,22 @@
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: assert dr_direction (and no RPO-0 drill on a forced cutover)
+    - name: assert dr_direction and qm_name
       ansible.builtin.assert:
         that:
           - dr_direction | default('') in ['a2b', 'b2a']
           - qm_name | default('') | length > 0
+        fail_msg: >-
+          dr_direction must be a2b or b2a (got {{ dr_direction | default('unset') }}) and
+          qm_name must be set (got {{ qm_name | default('unset') }})
+
+    - name: assert no RPO-0 drill on a forced cutover
+      ansible.builtin.assert:
+        that:
           - not ((dr_force | default(false) | bool) and (rpo0_drill | default(false) | bool))
         fail_msg: >-
-          dr_direction must be a2b or b2a (got {{ dr_direction | default('unset') }}), qm_name
-          must be set, and a forced cutover cannot run the RPO-0 drill (RPO>0 is its
-          expected outcome)
+          a forced cutover (dr_force=true) cannot run the RPO-0 drill: RPO>0 is its expected
+          outcome. Drop rpo0_drill, or drop dr_force for a planned switch
 
     - name: source/target site groups
       ansible.builtin.set_fact:

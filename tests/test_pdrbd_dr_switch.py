@@ -125,9 +125,13 @@ def test_late_refusal_says_the_source_was_demoted_and_how_to_repromote() -> None
 
 
 def test_forced_cutover_refuses_the_rpo0_drill() -> None:
-    that = str(_task("assert dr_direction")["ansible.builtin.assert"]["that"])
-    assert "dr_force" in that
-    assert "rpo0_drill" in that
+    # Its own assert, second only to the direction check, with a message that names the
+    # conflict alone (the combined message read "must be a2b or b2a (got a2b)" live, #1428).
+    assert _index("assert no RPO-0 drill on a forced cutover") == 1
+    gate = _task("assert no RPO-0 drill on a forced cutover")["ansible.builtin.assert"]
+    assert "dr_force" in str(gate["that"])
+    assert "rpo0_drill" in str(gate["that"])
+    assert "dr_direction" not in gate["fail_msg"]
 
 
 def test_source_steps_are_skipped_only_on_a_forced_cutover() -> None:
