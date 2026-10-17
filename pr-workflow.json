@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1428",
+  "branch": "feature/1428-pdrbd-dr",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-17T21:47:29Z",
+  "updated_at": "2026-10-17T21:47:29Z",
+  "git": {
+    "base_sha": "b58761119ef262af46d70bef67e466f7bd9eb2f4",
+    "head_sha": "b4bfbd9b50a811f12cbe512dbe31911510631b8a"
+  },
+  "pr_metadata": {
+    "title": "feat(pdrbd): DR: site B cluster, stacked DR resource, RDQM-style DR demote/promote with RPO-0 drill",
+    "summary": "Plan 310 Task 6. Site B forms its own 3-node cluster and HA resource. Each QM gets RDQM's stacked DR resource <qm>.dr (2 members, protocol A, port and minor 7001, over net-wan to one logical peer), under a second ocf:linbit:drbd clone (clone-max=1). The filesystem sits on the stacked device. site-pdrbd-dr-switch.yml does an RDQM-style DR demote/promote: it gates the target before any change, never contacts the source on a forced DR, and runs the RPO-0 drill. The app and partner links reach the QM at either site (site B gains net-ext). The parity matrix marks dr-bootstrap, cutover and failback supported.",
+    "notes": "Validated on b4bfbd9: 3122 passed, 100% coverage. Live on the local lab (aarch64): HA+DR bootstrap, a provision re-run that skips all first-time steps, cutover and failback with RPO-0 held and e2e 5/5 at each site, the broken-link refusal (exit 2, nothing changed), and a hard WAN cut where the DR primary kept quorum and e2e kept passing. Evidence is in the #1428 comment. Follow-ups: #1621 (token, ledger, changed reporting) and #1622 (the same DR wiring gap on the RDQM arm).",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
