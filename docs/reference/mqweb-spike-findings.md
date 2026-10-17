@@ -11,10 +11,11 @@
 >    instance?
 > 3. Which REST API version should the lab use?
 >
-> **Status: gate decided on cloud x86.** This document holds the **cloud x86** half and
-> the Console browser checks (§4.5). By the human's decision (2026-10-16, recorded in
-> `.github#358`), the **macOS/arm64** half is deferred to the epic's end-of-epic
-> validation (T6/T7). Its rows stay **PENDING** here and are filled there.
+> **Status: both halves done.** The gate was decided on cloud x86 (this spike). By the
+> human's decision (2026-10-16, `.github#358`) the **macOS/arm64** half was deferred to the
+> epic's Task 6 validation. It ran as #1595 (SUCCESS, 2026-10-17), and #1614 filled its
+> figures in here. Only the Ubuntu stacks run on arm64 (`.github#360`): IBM ships no
+> RHEL-on-ARM MQ, so `nativeha-ubuntu` (QM `NHAUAPP`) stands in for `nativeha-rhel-crr`.
 >
 > Convention: **[data]** is something measured on the lab or quoted from a source.
 > **[judgment]** is our reasoning on top of it.
@@ -23,14 +24,15 @@
 
 | Spec §3 question | Cloud x86 answer | macOS/arm64 answer |
 |---|---|---|
-| 1. Per-node cost; one-pass rebuild? | Cold start about 21 s per node at bootstrap; warm restart 6–8 s; Java RSS about 165–175 MB steady. The bootstrap completed in **one pass** (29 min 22 s). | PENDING |
-| 2. Replica and CRR behaviour | mqweb runs and answers on every instance. The **named** query `GET /admin/qmgr/NHARCAPP` fails on every non-active instance with HTTP 500 (MQRC 2543). The **collection** query `GET /admin/qmgr` reports `replica` or `recoveryGroupLeader` there. The Console is served and accepts a login on every instance, but only the active instance can open the queue manager (§4.5). | PENDING |
-| 3. REST version | `v1`, `v2` and `v3` all answer identically on 10.0.1.0; `v4` is 404. **`REST_API_VERSION=v3`**. | PENDING (confirmation only) |
+| 1. Per-node cost; one-pass rebuild? | Cold start about 21 s per node at bootstrap; warm restart 6–8 s; Java RSS about 165–175 MB steady. The bootstrap completed in **one pass** (29 min 22 s). | Cold start about 9–10 s per node at bootstrap; restart→ready 3.3–6.7 s; Java RSS about 180–240 MB steady. `pcmk-ubuntu` and `nativeha-ubuntu` each completed in **one pass** (35 min 36 s and 19 min 56 s). §3.3. |
+| 2. Replica and CRR behaviour | mqweb runs and answers on every instance. The **named** query `GET /admin/qmgr/NHARCAPP` fails on every non-active instance with HTTP 500 (MQRC 2543). The **collection** query `GET /admin/qmgr` reports `replica` or `recoveryGroupLeader` there. The Console is served and accepts a login on every instance, but only the active instance can open the queue manager (§4.5). | **Identical** on `NHAUAPP`: same states, the same HTTP 500 / 2543 on the named query off the active instance, and the same Console behaviour on a replica. §4.6. |
+| 3. REST version | `v1`, `v2` and `v3` all answer identically on 10.0.1.0; `v4` is 404. **`REST_API_VERSION=v3`**. | `v3` answers on every node; the other versions were not re-checked. |
 
-**Verdict: PASS on cloud x86, after a PAUSE that the human resolved.** The named surprise
-was that a named-QM REST GET on a replica returns an error, not `"state":"replica"`.
-The fix the human accepted is to probe with the collection query; `.github#358` amends
-the spec and plan for it. See §6. The cost and one-pass criteria pass.
+**Verdict: PASS on cloud x86, after a PAUSE that the human resolved, and PASS on
+macOS/arm64.** The named surprise was that a named-QM REST GET on a replica returns an
+error, not `"state":"replica"`. The fix the human accepted is to probe with the collection
+query; `.github#358` amends the spec and plan for it. arm64 behaves the same. See §6. The
+cost and one-pass criteria pass on both platforms.
 
 ## 2. Method
 
@@ -69,6 +71,19 @@ The edit was reverted before committing. This document is the only change on the
   HTTP answer (`ready_s`). Then sum the Java RSS (`rss_kb`) at ready and again 60 s
   later. The nodes ran one at a time, three rounds each. Liberty's own
   `CWWKF0011I ... started in N seconds` figure is recorded alongside.
+
+  > **Method correction (#1614).** As the plan writes it (Task 1 Step 2), the clock starts
+  > *after* `systemctl restart mqweb.service` returns. `mqweb.service` is `Type=forking`,
+  > so `restart` blocks through the stop and through `strmqweb` until Liberty is nearly
+  > up. Timed that way, `ready_s` measures only the last fraction of a second: 0.07–0.32 s
+  > on every macOS node (#1595). The arm64 half therefore also recorded
+  > **`restart_to_ready_s`**, with the clock started *before* the restart. That is the
+  > figure that means "how long a restart takes to serve again".
+  >
+  > [judgment] The cloud `ready_s` in §3.2 (6.3–8.4 s) cannot be the after-return
+  > interval of the same unit; that reads well under a second. It most likely spans the
+  > restart, so it compares with macOS `restart_to_ready_s`. The spike's exact command
+  > was not recorded, so this is unconfirmed. See §7.
 - **REST:** `curl` from the dev VM to each node's data-plane IP on `:9443`, as the
   current lab admin (`mqadmin`, password from the lab secret `mqweb_admin_password`).
   Both the named query (`/admin/qmgr/NHARCAPP`) and the collection query
@@ -116,7 +131,8 @@ gates.**
 
 ### 3.2 Restart cold start and memory (cloud x86) [data]
 
-Three rounds per node, reported as min / median / max:
+Three rounds per node, reported as min / median / max. What this `ready_s` measured is
+unconfirmed; see the method correction in §2.3.
 
 | Node | `ready_s` | Liberty start (s) | `rss_kb` at ready | `rss_kb` at +60 s |
 |---|---|---|---|---|
@@ -133,15 +149,67 @@ After all measurements, with mqweb and the QM running, every node showed about
 630–720 MiB used and about 985–1075 MiB available out of 1704 MiB. Before the restart
 rounds, the steady RSS after bootstrap was 169628–178072 kB.
 
-### 3.3 macOS/arm64 [PENDING]
+### 3.3 macOS/arm64 [data]
 
-| Item | Value |
+From #1595 (result comment of 2026-10-17). The host was the local Lima VM on Apple
+silicon: aarch64, 24 vCPU, 64 GiB, nested KVM. The guests were Ubuntu, with QM nodes at
+2 vCPU and 2 GiB. `MQLAB_ENV` was `macos` (auto-detected), and the only
+`env_profiles.macos` lever in force was **`memory_backing: hugepages`**. mqweb ran on
+every QM node by default (#1502), with no scratch edit.
+
+| Stack | One pass | Total wall clock |
+|---|---|---|
+| `pcmk-ubuntu` (+ svc-sim and the commons) | **yes**: rc 0, no phase retries | 35 min 36 s |
+| `nativeha-ubuntu` (after `pcmk-ubuntu` was torn down, for host memory) | **yes**: rc 0, no phase retries | 19 min 56 s |
+| `nativeha-ubuntu`, a later cold rebuild for #1606 | **yes**: rc 0, no phase retries | 16 min 15 s |
+
+An earlier `pcmk-ubuntu` attempt died in `prereq:vms` about 60 s in, when PyPI and ghcr
+were unreachable from the host and before any VM existed. It does not count against
+one-pass.
+
+**Readiness-gate wait per node** (the role's `wait_for` 9443, nodes one at a time):
+
+| Node | Gate wait (s) |
 |---|---|
-| Bootstrap one-pass? Total wall clock | PENDING |
-| Readiness-gate wait per node (a1..a3, b1..b3) | PENDING |
-| `ready_s` min / median / max per node | PENDING |
-| `rss_kb` (ready, +60 s) per node | PENDING |
-| `env_profiles.macos` levers in force (huge pages) | PENDING |
+| `pcmk-a1..a3`, `pcmk-b1..b3`, svc-sim (`pcmk-ubuntu` run) | 9.24–9.30 each |
+| `nha-ubuntu-a1` / `-a2` / `-a3` | 10.32 / 10.36 / 9.36 |
+| `nha-ubuntu-b1` / `-b2` / `-b3` | 9.33 / 10.30 / 10.35 |
+| svc-sim (`nativeha-ubuntu` run) | 9.32 |
+
+No node logged "not ready". `systemctl is-active mqweb.service` returned `active` on
+every QM node of both stacks and on svc-sim.
+
+**Restart and memory**, three rounds per node, min / median / max. `restart_to_ready_s`
+uses the corrected method (§2.3). `ready_s` as the plan writes it read 0.07–0.32 s
+everywhere.
+
+| Node | `restart_to_ready_s` | `rss_kb` at ready (MB) | `rss_kb` at +60 s (MB) |
+|---|---|---|---|
+| `pcmk-a1` | 3.62 / 3.65 / 3.89 | 245–258 | 221–225 |
+| `pcmk-a2` | 4.05 / 4.59 / 6.36 | 247–251 | 217–229 |
+| `pcmk-a3` | 3.56 / 4.02 / 4.16 | 262–273 | 238–240 |
+| `pcmk-b1` | 3.54 / 3.96 / 4.02 | 258–264 | 228–237 |
+| `pcmk-b2` | 3.63 / 3.70 / 3.99 | 255–258 | 220–224 |
+| `pcmk-b3` | 3.54 / 3.80 / 6.13 | 245–256 | 217–230 |
+| svc-sim (`pcmk-ubuntu` run) | 3.80 / 4.17 / 4.43 | 252–261 | 222–226 |
+| `nha-ubuntu-a1` | 3.60 / 4.11 / 5.20 | 248–260 | 179–193 |
+| `nha-ubuntu-a2` (active) | 4.06 / 4.06 / 6.68 | 260–273 | 224–231 |
+| `nha-ubuntu-a3` | 3.85 / 4.00 / 4.03 | 255–259 | 193–225 |
+| `nha-ubuntu-b1` | 3.81 / 4.09 / 4.52 | 257–270 | 187–193 |
+| `nha-ubuntu-b2` | 3.62 / 4.26 / 4.79 | 260–275 | 191–194 |
+| `nha-ubuntu-b3` | 3.97 / 3.98 / 4.63 | 262–265 | 186–194 |
+| svc-sim (`nativeha-ubuntu` run) | 3.28 / 3.93 / 5.04 | 244–258 | 215–223 |
+
+**Host CPU starvation (an observed macOS difference, not mqweb) [data].** While these
+stacks were up, the Mac's 18 cores were oversubscribed: two running VMs had 36 vCPUs
+between them, and the Mac sat at 100% CPU. The nested guests then froze for 3–163 s at
+a time. Guest kernels logged soft lockups and RCU stalls, often on idle CPUs. Corosync
+lost its token, so Pacemaker fenced `pcmk` nodes (four fences), and Native HA failed
+over twice on `nativeha-ubuntu`. Both arms recovered by themselves. An A/B test with
+mqweb stopped on every QM node still stalled (21 stalls in 20 min). Root cause and
+evidence: #1602. #1602 shipped `mqlab vm starvation`, which names the condition, and a
+lab-gotchas entry; the human accepted it as a constraint of a single-workstation lab.
+Cloud x86 showed none of this.
 
 ### 3.4 Reading the numbers [judgment]
 
@@ -153,8 +221,18 @@ rounds, the steady RSS after bootstrap was 169628–178072 kB.
 - The restart figures are **warm**: the OS page cache and Liberty's `workarea` are
   already populated. The figure to compare across platforms is the bootstrap gate
   (§3.1), not §3.2. The historic macOS failure (VAL-A, #1154) happened at cold start
-  under TCG emulation of these x86-pinned RHEL nodes. That combination is the risk the
-  macOS half still has to measure.
+  under TCG emulation of these x86-pinned RHEL nodes. That combination no longer occurs:
+  arm64 runs only the Ubuntu stacks, natively (`.github#360`).
+- On macOS/arm64 (§3.3), per-node mqweb is cheap too. The bootstrap gate is 9–10 s,
+  about half of cloud's 21 s, and restart→ready is 3.3–6.7 s. The platforms ran
+  different stacks (Ubuntu on arm64, RHEL on cloud), so this is a like-for-like check of
+  the criteria, not a benchmark between them. Steady RSS is higher than cloud's: about
+  180–240 MB against 160–180 MB. That still leaves well over 1 GB on a 2 GiB node.
+  Nothing here argues against D3 on macOS either.
+- The macOS stalls and fences (§3.3) come from the host, not from mqweb. They void any
+  timing taken while they happen. The figures above came from windows without starvation
+  as far as checked, but a single-workstation lab can drift into starvation at any time.
+  Check with `mqlab vm starvation` before trusting a macOS measurement.
 - RSS falls by about 75 MB within 60 s of ready, from start-up allocation to steady
   state. For sizing, use the steady figure plus headroom for Console sessions. This
   spike did not measure RSS under Console load.
@@ -292,6 +370,34 @@ The screenshots are in the temp bucket under `$(mqlab build path temp)/mqweb-con
   explored. The Native HA role is visible only as the status column of the Local queue
   managers list.
 
+### 4.6 macOS/arm64: REST and Console on `nativeha-ubuntu` [data]
+
+From #1595. Logged in as `mqreadonly` (the role logins replaced the single admin
+credential in Task 2), with the list query `GET …/v3/admin/qmgr?attributes=*` and the
+per-QM query `GET …/v3/admin/qmgr/NHAUAPP`:
+
+| Node | Collection query | Named query |
+|---|---|---|
+| `a2` (active) | 200, `running` (active / live) | 200, `running` |
+| `a1`, `a3` | 200, `replica` (live) | HTTP 500, `MQWB0004E`, reasonCode 2543 |
+| `b1` (leader) | 200, `recoveryGroupLeader` (leader / recovery) | HTTP 500, `MQWB0004E`, reasonCode 2543 |
+| `b2`, `b3` | 200, `replica` (recovery) | HTTP 500, `MQWB0004E`, reasonCode 2543 |
+
+This **matches cloud x86 (§4.2) exactly**. The raw 500 bodies on `a1`, `b1` and `b2` give
+`MQRC_STANDBY_Q_MGR`.
+
+Console, checked by the human in a browser on the Mac through `mqlab console open`:
+
+- The bare `/ibmmq/console/` now **redirects to the login page**, where §4.5 got
+  `MQWB2010E` JSON. This confirms Task 2's retirement of anonymous access.
+- `mqadmin`, `mqreadonly` and `mqoperator` all log in, and each role behaves as
+  expected. The certificate warning came up once only.
+- The first attempt reached a **replica**. The forward had been opened against `a2`,
+  and Native HA then failed over to `a1` (host starvation, §3.3). The Console listed
+  `NHAUAPP` as `replica` and would not open it, exactly as in §4.5. Re-running
+  `mqlab console open` moved the forward to the active instance. This is the behaviour
+  `console open` documents ("re-run after a failover").
+
 ## 5. REST version (spec §3 Q3)
 
 [data] On MQ `10.0.1.0`, `v1`, `v2` and `v3` gave identical answers on every node and
@@ -310,9 +416,9 @@ Plan PASS criteria, against the cloud x86 data:
 
 | Criterion | Cloud x86 | macOS/arm64 |
 |---|---|---|
-| Every node ready within `TimeoutStartSec` (1800 s) | **Met.** Cold start about 21 s; warm restart at most 8.4 s | PENDING |
-| Bootstrap one-pass | **Met.** Exit 0, no re-run, no phase retries | PENDING |
-| Replica states as expected | **Not met as specified.** The named-QM GET errors on replicas (§4.2). The states are as expected only on the collection query | PENDING |
+| Every node ready within `TimeoutStartSec` (1800 s) | **Met.** Cold start about 21 s; warm restart at most 8.4 s | **Met.** Cold start 9–10 s; restart→ready at most 6.68 s |
+| Bootstrap one-pass | **Met.** Exit 0, no re-run, no phase retries | **Met.** `pcmk-ubuntu` and `nativeha-ubuntu`: exit 0, no phase retries |
+| Replica states as expected | **Not met as specified.** The named-QM GET errors on replicas (§4.2). The states are as expected only on the collection query | **Same as cloud x86** (§4.6), so it is met under the accepted resolution (collection query) |
 
 **Spike result (cloud x86): PAUSE: a named-QM REST GET
 (`/admin/qmgr/<QM>`) on a non-active Native HA instance returns HTTP 500 `MQWB0004E`
@@ -338,17 +444,23 @@ criteria. The resolution:
    is needed, because Task 2 removes anonymous access.
 
 No new IBM deviation (spec §8) came out of the cloud half. The figures support D3
-as written for cloud x86. D3's macOS risk is still open until the arm64 half runs.
+as written for cloud x86.
+
+**macOS/arm64 verdict: PASS (#1595).** Every criterion is met, and the REST and Console
+behaviour is identical to cloud x86. That closes D3's macOS risk. The one macOS
+difference, host CPU starvation that fences or fails over the cluster arms (§3.3, #1602),
+comes from the host. It is not an mqweb finding, and it raises no IBM deviation.
 
 ## 7. Remaining work
 
-- [ ] **macOS/arm64 half, deferred to T6/T7.**
-  - Do a cold `mqlab bootstrap nativeha-rhel-crr` with mqweb on.
-  - Fill §3.3 and the macOS column of §1 and §6: the one-pass result, gate waits, and
-    `ready_s` / `rss_kb` for each of the six nodes.
-  - Re-run the §4.2 REST table and the §4.5 Console table to confirm they match.
-  - If arm64 differs materially, the epic pauses.
-- [x] **Console in a browser** (§4.5).
+- [x] **macOS/arm64 half** (#1595; filled by #1614). It ran on `nativeha-ubuntu` and
+  `pcmk-ubuntu`, not `nativeha-rhel-crr`, which cannot run on arm64 (`.github#360`).
+  §3.3, §4.6 and the macOS column of §1 and §6 hold it. arm64 did not differ materially.
+- [x] **Console in a browser** (§4.5, and §4.6 for arm64).
 - [x] **Final verdict** (§6). The spec §3/§8 amendments are in `.github#358`.
+- [ ] **Confirm what the cloud `ready_s` measured** (§2.3). Next time a cloud stack is up,
+  re-time a few restarts with both clocks (`ready_s` and `restart_to_ready_s`), and
+  relabel §3.2 if needed. No criterion depends on it: either reading is far inside
+  1800 s.
 
-The cloud lab used for these figures was left running with mqweb on.
+The cloud lab used for the cloud figures was left running with mqweb on.
