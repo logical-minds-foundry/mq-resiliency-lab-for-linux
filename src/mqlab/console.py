@@ -67,8 +67,17 @@ class ConsoleError(RuntimeError):
     """The Console forward could not be set up (fail loud, name the remedy)."""
 
 
+def load_state_argv() -> list[str]:
+    """Read the forwarder unit's LoadState: ``loaded`` when a previous forwarder exists.
+
+    An absent unit reads ``not-found`` with exit 0, so the caller stops only a unit that
+    exists and need not tolerate a failing stop (#1605).
+    """
+    return ["systemctl", "show", "-p", "LoadState", "--value", UNIT]
+
+
 def stop_argv() -> list[str]:
-    """Stop the previous forwarder (re-run after a failover); an absent unit is fine."""
+    """Stop the previous forwarder (re-run after a failover)."""
     return ["sudo", "systemctl", "stop", UNIT]
 
 

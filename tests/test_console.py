@@ -48,6 +48,11 @@ def test_forwarder_replaces_previous_unit() -> None:
     assert c.stop_argv() == ["sudo", "systemctl", "stop", c.UNIT]
 
 
+def test_load_state_reads_the_forwarder_unit() -> None:
+    # #1605: the stop runs only when this reads "loaded".
+    assert c.load_state_argv() == ["systemctl", "show", "-p", "LoadState", "--value", c.UNIT]
+
+
 def test_forward_backend_is_the_vergil_relay_target() -> None:
     # vergil.toml port_forwards "9443|127.0.0.1:19443": the relay target is this forwarder.
     assert c.FORWARD_BACKEND == "127.0.0.1:19443"
@@ -145,10 +150,13 @@ _RECS = [
 
 class _Harness:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        self.runs: list[tuple[list[str], bool]] = []
+        self.runs: list[list[str]] = []
         self.asked: list[tuple[str, str, str, str]] = []
         self.states = {"https://10.10.1.91:9443": "replica", "https://10.10.1.92:9443": "running"}
         self.fail_forward = False
+        self.fail_stop = False
+        self.fail_show = False
+        self.load_state = "not-found"
         self.listening = True
         monkeypatch.setattr(mqweb_endpoints, "lab_mqweb_endpoints", lambda: _RECS)
         monkeypatch.setattr(mqweb_probe, "qm_state", self.qm_state)
@@ -167,11 +175,21 @@ class _Harness:
         state = self.states.get(url)
         return mqweb_probe.Answer(state, state or "unreachable (refused)")
 
-    def run(self, argv: list[str], *, check: bool) -> subprocess.CompletedProcess[str]:
-        self.runs.append((argv, check))
-        if check and self.fail_forward:
+    def run(
+        self, argv: list[str], *, check: bool, **kw: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert check, "every forwarder step is checked (no silent failures)"
+        self.runs.append(argv)
+        if argv == c.load_state_argv():
+            assert kw == {"capture_output": True, "text": True}
+            if self.fail_show:
+                raise subprocess.CalledProcessError(1, argv, stderr="bus error")
+            return subprocess.CompletedProcess(argv, 0, stdout=f"{self.load_state}\n")
+        if (argv == c.stop_argv() and self.fail_stop) or (
+            argv[:2] == ["sudo", "systemd-run"] and self.fail_forward
+        ):
             raise subprocess.CalledProcessError(1, argv)
-        return subprocess.CompletedProcess(argv, 0 if check else 5)
+        return subprocess.CompletedProcess(argv, 0)
 
     def wait_listening(self) -> None:
         if not self.listening:
@@ -216,7 +234,7 @@ def test_cli_probe_error_exits_1_and_starts_nothing(harness: _Harness) -> None:
     assert harness.runs == []
 
 
-def test_cli_success_replaces_the_forwarder_and_prints_the_banner(
+def test_cli_success_starts_the_forwarder_and_prints_the_banner(
     harness: _Harness,
 ) -> None:
     result = harness.invoke("nativeha-rhel-crr")
@@ -225,11 +243,12 @@ def test_cli_success_replaces_the_forwarder_and_prints_the_banner(
     # The probe logs in as mqreadonly and stops at the running instance.
     assert [a[0] for a in harness.asked] == ["https://10.10.1.91:9443", "https://10.10.1.92:9443"]
     assert {a[1:] for a in harness.asked} == {(qm, "mqreadonly", "mqreadonly")}
-    # Stop first (unchecked: an absent unit is fine), then the checked forward.
+    # No previous forwarder: read its state, skip the stop, start the forward (#1605).
     assert harness.runs == [
-        (c.stop_argv(), False),
-        (c.forward_argv("https://10.10.1.92:9443", "ubuntu"), True),
+        c.load_state_argv(),
+        c.forward_argv("https://10.10.1.92:9443", "ubuntu"),
     ]
+    assert "systemctl stop" not in result.output
     out = result.stdout
     assert "https://localhost:9443/ibmmq/console/login.html" in out
     assert "external IP, from `vrg-vm list`>:9443" in out
@@ -272,6 +291,35 @@ def test_cli_forward_start_failure_exits_1(harness: _Harness) -> None:
     result = harness.invoke("nativeha-rhel-crr")
     assert result.exit_code == 1
     assert "starting the forwarder failed" in result.stderr
+
+
+def test_cli_rerun_stops_the_previous_forwarder_first(harness: _Harness) -> None:
+    harness.load_state = "loaded"
+    result = harness.invoke("nativeha-rhel-crr")
+    assert result.exit_code == 0, result.output
+    assert harness.runs == [
+        c.load_state_argv(),
+        c.stop_argv(),
+        c.forward_argv("https://10.10.1.92:9443", "ubuntu"),
+    ]
+
+
+def test_cli_failing_stop_exits_1_and_starts_nothing(harness: _Harness) -> None:
+    harness.load_state = "loaded"
+    harness.fail_stop = True
+    result = harness.invoke("nativeha-rhel-crr")
+    assert result.exit_code == 1
+    assert "stopping the previous forwarder failed" in result.stderr
+    assert harness.runs == [c.load_state_argv(), c.stop_argv()]
+
+
+def test_cli_unreadable_forwarder_state_exits_1(harness: _Harness) -> None:
+    harness.fail_show = True
+    result = harness.invoke("nativeha-rhel-crr")
+    assert result.exit_code == 1
+    assert "reading the forwarder's state failed" in result.stderr
+    assert "bus error" in result.stderr
+    assert harness.runs == [c.load_state_argv()]
 
 
 def test_cli_forwarder_not_listening_exits_1(harness: _Harness) -> None:
