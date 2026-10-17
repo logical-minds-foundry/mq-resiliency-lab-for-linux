@@ -72,12 +72,39 @@ authz_bench_grants:
 # the old per-queue mqmon grants (APP.REPLY, SVC.REQUEST). +dsp +inq only — read-only, no
 # put/get, so the N1 denial (mqmon MQPUT APP.REPLY -> 2035) still holds. This is the
 # least-privilege profile, not the industry "run the monitor as mqm" cop-out.
+#
+# DSP on topics and channels, and DSP INQ on the command queue (#1606). Each object-status
+# poll the exporter runs PCF Inquire Topic Status (objects.topics "#"), Inquire Channel
+# (showInactiveChannels: true) and Inquire Queue / Queue Status (mq-golang mqmetric
+# topic.go, channel.go, queue.go at mq-metric-samples v6.0.0). The command server checks
+# dsp on every object those touch: IBM "Authority checking for PCF commands in IBM MQ"
+# (SSYHRD_10.0.0 administer/q020060_, Table 1: Inquire Channel / Queue / Queue Status =
+# dsp), and "Authorizations for commands" (refadmin/q083530_: dsp = display the object's
+# attributes). Without these, every poll was refused per topic string and per inactive
+# channel: ~11 AMQ8245W/AMQ8009W per second on the active instance, enough to fill all
+# three 32 MB error logs in ~2 h and push real events out, and the denied objects were
+# missing from the scrape (no topic series at all, no SYSTEM.ADMIN.COMMAND.QUEUE, no
+# inactive channels — the dashboard signal #944 turned showInactiveChannels on for).
+#   - SYSTEM.ADMIN.TOPIC gains DSP beside SUB: an exact-name profile overrides the TOPIC **
+#     one, so the $SYS/MQ subtree it administers needs DSP named here.
+#   - TOPIC ** DSP covers the other topic objects (SYSTEM.BASE.TOPIC = the root,
+#     SYSTEM.BROKER.ADMIN.STREAM, and any app topic object).
+#   - CHANNEL ** DSP lets Inquire Channel report defined-but-inactive channels. CLNTCONN
+#     is its own OAM object type (Table 1: Inquire Client Connection Channel = dsp), so the
+#     CLNTCONN ** DSP grant covers SYSTEM.DEF.CLNTCONN, which CHANNEL ** does not.
+#   - SYSTEM.ADMIN.COMMAND.QUEUE gains DSP INQ beside PUT, for the same exact-name reason:
+#     its own profile overrode the QUEUE ** DSP INQ grant, so the queue was never scraped.
+# All display-only (no PUB, no CTRL, no CHG): the same TOPIC/CHANNEL shape as the
+# IBM-cited mqoperator profile below. N1 (mqmon MQPUT APP.REPLY -> 2035) is unaffected.
 authz_mqmon_grants:
-  - { objtype: QMGR,  authadd: "CONNECT, INQ, DSP" }
-  - { objtype: TOPIC, profile: "SYSTEM.ADMIN.TOPIC",         authadd: "SUB" }
-  - { objtype: QUEUE, profile: "SYSTEM.ADMIN.COMMAND.QUEUE", authadd: "PUT" }
-  - { objtype: QUEUE, profile: "SYSTEM.DEFAULT.MODEL.QUEUE", authadd: "DSP, INQ, GET" }
-  - { objtype: QUEUE, profile: "**",                         authadd: "DSP, INQ" }
+  - { objtype: QMGR,    authadd: "CONNECT, INQ, DSP" }
+  - { objtype: TOPIC,   profile: "SYSTEM.ADMIN.TOPIC",         authadd: "SUB, DSP" }
+  - { objtype: TOPIC,   profile: "**",                         authadd: "DSP" }
+  - { objtype: CHANNEL, profile: "**",                         authadd: "DSP" }
+  - { objtype: CLNTCONN, profile: "**",                        authadd: "DSP" }
+  - { objtype: QUEUE,   profile: "SYSTEM.ADMIN.COMMAND.QUEUE", authadd: "PUT, DSP, INQ" }
+  - { objtype: QUEUE,   profile: "SYSTEM.DEFAULT.MODEL.QUEUE", authadd: "DSP, INQ, GET" }
+  - { objtype: QUEUE,   profile: "**",                         authadd: "DSP, INQ" }
 
 # mqoperator — the MQ Console/REST MQWebUser sample login (epic .github#341 spec §2.2). Under
 # MQWebUser, mqweb authorizes every request AS THIS USER (IBM S8), so these OAM grants are the

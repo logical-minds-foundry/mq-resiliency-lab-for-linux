@@ -11,7 +11,8 @@ SET CHLAUTH('{{ m.channel }}') TYPE(SSLPEERMAP) SSLPEER('{{ m.sslpeer }}') USERS
 * mqmon (mq_prometheus exporter) least-privilege security profile (#943 / .github#173 §5)
 * — SET AUTHREC co-located with the object MQSC (repo rule). PROFILE('**') OBJTYPE(QUEUE)
 * +dsp +inq is the coverage gate proven live (#943 §3): read-only, so monitoring sees
-* every queue (incl. backed-up idle ones) but can neither put nor get.
+* every queue (incl. backed-up idle ones) but can neither put nor get. DSP on topics and
+* channels (#1606) lets the exporter's object-status poll inquire them without a 2035 flood.
 {% for g in authz_mqmon_grants %}
 {% if g.objtype == 'QMGR' %}
 SET AUTHREC OBJTYPE(QMGR) GROUP('mqmon') AUTHADD({{ g.authadd }})

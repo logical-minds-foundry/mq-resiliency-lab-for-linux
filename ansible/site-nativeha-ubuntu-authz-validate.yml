@@ -316,6 +316,42 @@
         ev_mon_ns_text: "{{ (ev_mon_ns.stdout | default('')) ~ '\n' ~ (ev_mon_ns.stderr | default('')) }}"
       run_once: true
 
+    # #1606: the exporter's object-status poll (Inquire Topic Status / Inquire Channel)
+    # needs dsp on the topic and channel objects, or every poll is refused per object
+    # (~11 AMQ8245W/AMQ8009W a second) and those objects drop out of the scrape. Same
+    # generic-profile evidence shape as the queue namespace above, both streams (#1511).
+    - name: evidence -- mqmon +dsp on the topic namespace (** generic profile)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dmpmqaut -m {{ qm }} -t topic -n '**' -g mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_topic_ns
+
+    - name: evidence -- mqmon +dsp on the channel namespace (** generic profile)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dmpmqaut -m {{ qm }} -t channel -n '**' -g mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_chl_ns
+
+    # CLNTCONN is its own OAM object type: CHANNEL ** does not cover SYSTEM.DEF.CLNTCONN.
+    - name: evidence -- mqmon +dsp on the client-connection channel namespace (**)
+      ansible.builtin.command:
+        cmd: "su - mqm -c \"/opt/mqm/bin/dmpmqaut -m {{ qm }} -t clntconn -n '**' -g mqmon\""
+      changed_when: false
+      run_once: true
+      delegate_to: "{{ active_host }}"
+      register: ev_mon_clntconn_ns
+
+    - name: evidence -- the topic and channel namespace records, both streams (#1606)
+      ansible.builtin.set_fact:
+        ev_mon_topic_ns_text: "{{ (ev_mon_topic_ns.stdout | default('')) ~ '\n' ~ (ev_mon_topic_ns.stderr | default('')) }}"
+        ev_mon_chl_ns_text: "{{ (ev_mon_chl_ns.stdout | default('')) ~ '\n' ~ (ev_mon_chl_ns.stderr | default('')) }}"
+        ev_mon_clntconn_ns_text: "{{ (ev_mon_clntconn_ns.stdout | default('')) ~ '\n' ~ (ev_mon_clntconn_ns.stderr | default('')) }}"
+      run_once: true
+
     - name: report the captured authorization evidence
       ansible.builtin.debug:
         msg:
@@ -328,6 +364,9 @@
           - "CMDQ mqmon : {{ ev_mon_cmdq.stdout | default('') }}"
           - "ADMIN.TOPIC mqmon : {{ ev_mon_topic.stdout | default('') }}"
           - "QUEUE ** mqmon : {{ ev_mon_ns_text }}"
+          - "TOPIC ** mqmon : {{ ev_mon_topic_ns_text }}"
+          - "CHANNEL ** mqmon : {{ ev_mon_chl_ns_text }}"
+          - "CLNTCONN ** mqmon : {{ ev_mon_clntconn_ns_text }}"
       run_once: true
 
     - name: assert the CHLAUTH posture + the #844/N5 DLQ grant + the #936 mqmon exporter grants
@@ -342,6 +381,14 @@
           # and subscribe to the $SYS/MQ resource-monitoring tree (+sub on SYSTEM.ADMIN.TOPIC).
           - "'put' in (ev_mon_cmdq.stdout | default(''))"
           - "'sub' in (ev_mon_topic.stdout | default(''))"
+          # #1606: display on what the object-status poll inquires. The exact-name
+          # profiles override the ** ones, so dsp is checked on them directly.
+          - "'dsp' in (ev_mon_cmdq.stdout | default(''))"
+          - "'inq' in (ev_mon_cmdq.stdout | default(''))"
+          - "'dsp' in (ev_mon_topic.stdout | default(''))"
+          - "'dsp' in ev_mon_topic_ns_text"
+          - "'dsp' in ev_mon_chl_ns_text"
+          - "'dsp' in ev_mon_clntconn_ns_text"
           # #943: the queue-namespace grant (PROFILE('**') OBJTYPE(QUEUE) +dsp +inq) — the
           # coverage gate proven live (§3). Read-only: dsp+inq, no put/get in the record.
           # #1511: both streams (10.0.1 dmpmqaut writes the record to stderr).
@@ -349,7 +396,7 @@
           - "'dsp' in ev_mon_ns_text"
           - "'inq' in ev_mon_ns_text"
         fail_msg: "authorization evidence FAILED -- see the report task above."
-        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936) + dsp/inq on the queue namespace PROFILE('**') (#943)."
+        success_msg: "authz posture confirmed: CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP; mqsvc +put +setall on the DLQ (#844/N5); mqmon +put on the command queue + sub on SYSTEM.ADMIN.TOPIC (#936) + dsp/inq on the queue namespace PROFILE('**') (#943) + dsp on the topic/channel/clntconn namespaces and dsp/inq on the command queue (#1606)."
       run_once: true
 
 # #943 (Part D) -- exporter coverage: prove the mqmon namespace grant translates into
@@ -440,11 +487,18 @@
           - "exporter_port | length > 0"
           - "'ibmmq_queue' in (exporter_metrics.content | default(''))"
           - "'APP.REPLY' in (exporter_metrics.content | default(''))"
+          # #1606: objects the poll was refused before the dsp grants: the command queue
+          # (its exact-name profile overrode QUEUE **), topic status, and a
+          # defined-but-inactive channel (SYSTEM.DEF.SVRCONN never runs).
+          - "'queue=\"SYSTEM.ADMIN.COMMAND.QUEUE\"' in (exporter_metrics.content | default(''))"
+          - "'ibmmq_topic_' in (exporter_metrics.content | default(''))"
+          - "'channel=\"SYSTEM.DEF.SVRCONN\"' in (exporter_metrics.content | default(''))"
         fail_msg: >-
           exporter coverage FAILED at :{{ exporter_port | default('?') }} --
-          no ibmmq_queue_* series (or APP.REPLY missing). The mqmon namespace grant may
-          not have taken effect, or the exporter/QM is down.
-        success_msg: "exporter coverage confirmed: ibmmq_queue_* series present, APP.REPLY visible in the live scrape."
+          no ibmmq_queue_* series, APP.REPLY missing, or a #1606 object (the command
+          queue, topic status, an inactive channel) missing. The mqmon grants may not
+          have taken effect, or the exporter/QM is down.
+        success_msg: "exporter coverage confirmed: ibmmq_queue_* series, APP.REPLY, the command queue, topic status and inactive channels visible in the live scrape."
 
 # ============================================================================
 # RUN (live, from a worktree; inventory = build/work/inventory.ini):
