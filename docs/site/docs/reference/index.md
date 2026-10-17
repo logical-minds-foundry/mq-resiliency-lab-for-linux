@@ -137,15 +137,46 @@ one of three endpoint kinds:
 | `nativeha-ubuntu` | `active-instance` | `10.10.1.11-13:9443` | `10.10.2.11-13:9443` |
 | `svc-sim` | `counterparty` | `https://10.60.0.50:9443` | — |
 
-The MQ Console and the REST API both require a login; there is no anonymous
-access. Each node's mqweb registry has one sample user per IBM role: `mqadmin`
-(`MQWebAdmin`), `mqreadonly` (`MQWebAdminRO`) and `mqoperator` (`MQWebUser`). In
-this lab only, each password equals its username. Every password in
-`mqwebuser.xml` is AES-encoded with `securityUtility`, using one server key made
-from the runtime-injected lab secret `mqweb_aes_passphrase`, which is never
-committed. For the acceptance procedure that proves each
-endpoint is live, see the
+`pcmk-drbd-ubuntu` (`vip`, `https://10.10.{1,2}.170:9443`) is in the topology but
+cannot be bootstrapped yet (epic `.github#310`).
+
+For the acceptance procedure that proves each endpoint is live, see the
 [mqweb endpoint verification runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md).
+
+### mqweb security model
+
+The lab follows IBM's MQ 10.0.x guidance for mqweb, and every choice cites the IBM
+topic it follows. The design, its sources and its deviations register are in the
+[MQ Web first-class spec](https://github.com/logical-minds-foundry/.github/blob/develop/epics/341-mqweb-first-class/spec.md)
+(§2.2 and §8).
+
+- **No anonymous access.** The MQ Console and the REST API both require a login.
+  Each node's mqweb registry has one sample user per IBM role:
+
+  | Login | IBM role | Acts on the queue manager as | Writes refused by |
+  |---|---|---|---|
+  | `mqadmin` | `MQWebAdmin` | the user that started mqweb (`mqm`) | nothing (full administration) |
+  | `mqreadonly` | `MQWebAdminRO` | the user that started mqweb, display only | mqweb |
+  | `mqoperator` | `MQWebUser` | its own OS account, which exists on every node | the queue manager (OAM) |
+
+  The two read-only tiers show defence in depth. mqweb itself refuses a write from
+  `mqreadonly`. A write from `mqoperator` is refused by the queue manager, so it
+  stays refused even if mqweb is misconfigured. `mqoperator` gets IBM's documented
+  minimum authorities for `MQWebUser` users, plus display-only access to objects.
+  The grants are MQSC `SET AUTHREC`, defined as `authz_mqoperator_grants` in
+  `ansible/group_vars/all/authz.yml`.
+- **Every password in `mqwebuser.xml` is AES-encoded** with `securityUtility`,
+  including the keystore password. All of them use one server key, made from the
+  runtime-injected lab secret `mqweb_aes_passphrase`, which is never committed.
+- **IBM's transport defaults are kept.** HTTPS only (HTTP disabled), CSRF
+  validation on, CORS off, and the default LTPA session settings. TLS 1.3 uses the
+  lab-PKI `mqweb` certificate.
+- **Two deviations from IBM guidance.** Both are recorded in the spec's §8:
+  - **D1:** `httpHost` is `*`, not IBM's default `localhost`. A floating VIP needs
+    mqweb to answer on whichever node holds it. As a result, mqweb also answers on
+    the management network until plane enforcement lands.
+  - **D2:** each password equals its username. The lab is ephemeral and holds no
+    data. **Never carry this to a real deployment.**
 
 ## `mqlab` CLI verb map
 

@@ -134,6 +134,12 @@ runtime with the "follow the active" state probe). The topology-derived endpoint
 are an internal library behind `mqlab console open`, which forwards the dev VM to
 a stack's live mqweb for the MQ Console.
 
+mqweb runs locally on each node rather than in IBM's client mode. IBM's
+administrative REST API reaches a remote queue manager only through a gateway queue
+manager, and the lab adds none. Access requires a login, one sample user per IBM
+role, and the operator tier is enforced by the queue manager's own authority checks;
+see the [mqweb security model](../reference/index.md#mqweb-security-model).
+
 ## The event feed — MQ instrumentation events (every queue manager)
 
 Every queue manager also runs the **`mq-event-monitor`** MQ SERVICE — an

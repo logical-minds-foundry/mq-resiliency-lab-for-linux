@@ -87,8 +87,8 @@ Bring-up is built to either finish or stop loudly at a named step, never to hang
   management-NIC DHCP lease timeout does not end the run.
 - **Readiness waits.** Each service the data path depends on has a bounded,
   fatal readiness wait. The log-search tier (OpenSearch, Data Prepper, Dashboards)
-  waits up to 40 minutes each. A service the data path does not need (per-node mqweb,
-  when enabled) only warns if it is slow. The waits are pinned by a guardrail test,
+  waits up to 40 minutes each. A service the data path does not need (per-node mqweb)
+  only warns if it is slow. The waits are pinned by a guardrail test,
   so they cannot drift back to too-short values.
 - **Package updates.** Baked Ubuntu boxes ship with apt auto-updates turned off. On
   any host that was not baked that way, provisioning masks the apt timers early, so a
@@ -388,7 +388,10 @@ Two behaviours are expected:
   click-through is not worth that complexity.
 - **Re-run `mqlab console open` after a failover or a DR cutover.** The forward
   points at one instance and does not follow the queue manager. A re-run finds the
-  new live instance and replaces the forwarder.
+  new live instance and replaces the forwarder. On a Native HA stack, a stale
+  forward shows itself in the Console: the login works, but **Local queue
+  managers** lists the queue manager with status `Replica` and it cannot be
+  opened. That is the replica's own mqweb answering, not a fault.
 
 ## The Watcher
 

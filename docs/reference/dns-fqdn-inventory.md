@@ -48,7 +48,7 @@ published address is on the data plane:
 | Stack | Published endpoint | Proposed FQDN |
 |---|---|---|
 | pcmk / RDQM | the QM's data-plane VIP `:9443`, **each site** (`vip` / `vip_b`) | `pcmk-vip-a/-b.client.com:9443` · `rdqm-vip-a/-b.client.com:9443` |
-| Native HA (no VIP) | the **active** instance's `net-data` node IP `:9443`, runtime-resolved (`dspmq -o nativeha`) | `nha-{ubuntu,rhel}-a{1,2,3}-data-a.client.com:9443` (candidate set) |
+| Native HA (no VIP) | the **active** instance's `net-data` node IP `:9443`, runtime-resolved by the REST "follow the active" state probe (`mqlab.mqweb_probe`) | `nha-{ubuntu,rhel}-a{1,2,3}-data-a.client.com:9443` (candidate set) |
 | `svc-sim` (counterparty) | its `net-ext` address `:9443`, administered **lab-only** | `svc-sim-ext.service.com:9443` — outside "our data plane"; a real estate would not administer the counterparty's mqweb |
 
 mqweb binds `httpHost=*` (so it also answers on `net-mgmt`), but the address the lab
