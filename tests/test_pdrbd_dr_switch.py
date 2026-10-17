@@ -36,6 +36,16 @@ def _all_tasks() -> list[tuple[str, dict[str, Any]]]:
     return out
 
 
+def _switch_top_level() -> list[dict[str, Any]]:
+    [play] = [p for p in _load(PB) if p["name"] == "switch"]
+    return play["tasks"]
+
+
+def _source_block() -> dict[str, Any]:
+    [block] = [t for t in _switch_top_level() if "block" in t]
+    return block
+
+
 def _index(fragment: str) -> int:
     return next(i for i, (_, t) in enumerate(_all_tasks()) if fragment in t["name"])
 
@@ -59,21 +69,59 @@ def test_dr_switch_validates_direction() -> None:
     assert "qm_name" in that
 
 
+_PREFLIGHT = "pre-flight — assert the target's disk is UpToDate"
+_REASSERT = "re-assert the target's disk is UpToDate"
+
+
 def test_dr_switch_asserts_disk_state_before_promote() -> None:
-    assert _index("assert the target's disk is UpToDate") < _index("promote at the target site")
+    # Review Focus 4: the gate runs before ANY change and again right before the promote.
+    assert _index(_PREFLIGHT) < _index(_REASSERT) < _index("promote at the target site")
+    assert _index("target DR state after the source demote") < _index(_REASSERT)
+
+
+def test_dr_switch_preflight_gate_precedes_every_change() -> None:
+    # A refused switch leaves the source untouched and still serving: the pre-flight gate
+    # comes before the RPO-0 seed, the demote and every other changing task.
+    gate = _index(_PREFLIGHT)
+    changing = [
+        i
+        for i, (_, t) in enumerate(_all_tasks())
+        if t.get("changed_when") is True or "include_tasks" in str(t)
+    ]
+    assert changing
+    assert all(gate < i for i in changing), changing
+    assert gate < _index("stop and demote at the source site")
+    assert gate < _index("RPO-0 seed")
+    msg = _task(_PREFLIGHT)["ansible.builtin.assert"]["fail_msg"]
+    assert "replication is broken or lagging" in msg
+    assert "NOTHING WAS CHANGED" in msg
 
 
 def test_dr_switch_force_is_explicit() -> None:
-    gate = _task("assert the target's disk is UpToDate")
-    that = str(gate["ansible.builtin.assert"]["that"])
-    assert "dr_force" in that
+    # Both gates evaluate the one shared expression.
+    for frag in (_PREFLIGHT, _REASSERT):
+        assert _task(frag)["ansible.builtin.assert"]["that"] == "dst_gate | bool", frag
+    gate = _switch_vars()["dst_gate"]
+    assert "dr_force_b" in gate
     # A planned switch needs the link up and the source's disk UpToDate too: a
     # disconnected target can call itself UpToDate while missing protocol-A writes.
-    assert "dst_conn == ['Connected']" in that
-    assert "dst_peer_disk == ['UpToDate']" in that
-    assert "refusing to promote" in gate["ansible.builtin.assert"]["fail_msg"]
-    assert "dr_force_b" in _switch_vars()
+    assert "dst_conn == ['Connected']" in gate
+    assert "dst_peer_disk == ['UpToDate']" in gate
     assert _switch_vars()["dr_force_b"] == "{{ dr_force | default(false) | bool }}"
+
+
+def test_late_refusal_says_the_source_was_demoted_and_how_to_repromote() -> None:
+    msg = _task(_REASSERT)["ansible.builtin.assert"]["fail_msg"]
+    assert "THE SOURCE" in msg
+    assert "WAS DEMOTED" in msg
+    assert "{{ src_repromote_cmd }}" in msg
+    cmd = _switch_vars()["src_repromote_cmd"]
+    # The exact inverse of the demote, on the node that ran it.
+    assert "ansible '{{ groups[src][0] }}' -b -m shell" in cmd
+    assert "drbd_dr_qm-clone target-role=Promoted" in cmd
+    assert "-dr-role --update 1" in cmd
+    demote = _task("stop and demote at the source site")
+    assert demote["delegate_to"] == "{{ groups[src][0] }}"
 
 
 def test_forced_cutover_refuses_the_rpo0_drill() -> None:
@@ -83,16 +131,48 @@ def test_forced_cutover_refuses_the_rpo0_drill() -> None:
 
 
 def test_source_steps_are_skipped_only_on_a_forced_cutover() -> None:
+    block = _source_block()
+    assert block["when"] == "not dr_force_b"
+    names = [t["name"] for t in block["block"]]
     for frag in (
         "source site crm_mon",
         "find the source site's DR-promoted node",
         "assert the source site's DR clone is Promoted",
+        "RPO-0 seed",
         "stop and demote at the source site",
         "assert the source DR resource is Secondary",
     ):
-        assert _task(frag)["when"] == "not dr_force_b", frag
-    for frag in ("target site crm_mon", "promote at the target site"):
+        assert any(frag in n for n in names), frag
+    for frag in ("target site crm_mon", "promote at the target site", _PREFLIGHT, _REASSERT):
         assert "when" not in _task(frag), frag
+
+
+def _delegates_to_source(task: dict[str, Any]) -> bool:
+    target = str(task.get("delegate_to", ""))
+    return "src" in target or "rpo0-drill-seed" in str(task)
+
+
+def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
+    # Drill 6 destroys every site-A node, then force-promotes B. The source may be
+    # unreachable, so nothing on the forced path may connect to it:
+    # - no play targets a node directly (all run on localhost, no fact gathering), so
+    #   Ansible never opens a connection it was not asked for;
+    for play in _load(PB):
+        assert play["hosts"] == "localhost", play["name"]
+        assert play["gather_facts"] is False, play["name"]
+    # - every task that reaches a source node is inside the ONE block gated
+    #   `not dr_force_b` (a skipped task never connects to its delegate), and no other task;
+    inside = _source_block()["block"]
+    outside = [t for t in _switch_top_level() if "block" not in t]
+    assert all(_delegates_to_source(t) or "set_fact" in str(t) or "assert" in str(t)
+               for t in inside)  # fmt: skip
+    assert not [t["name"] for t in outside if _delegates_to_source(t)]
+    # - the target-side tasks reach only the target (its first node, or its DR member).
+    for t in outside:
+        target = str(t.get("delegate_to", ""))
+        assert target in ("", "{{ groups[dst][0] }}", "{{ dr_dst_nodes[0] }}"), t["name"]
+    # - and no unreachable-tolerance is sprinkled around instead.
+    assert "ignore_unreachable" not in PB.read_text(encoding="utf-8")
 
 
 def test_dr_switch_rpo0_seed_before_demote_and_verify_after_promote() -> None:
@@ -103,6 +183,7 @@ def test_dr_switch_rpo0_seed_before_demote_and_verify_after_promote() -> None:
     assert _task("RPO-0 verify")["ansible.builtin.include_tasks"] == "tasks/rpo0-drill-verify.yml"
     for frag in ("RPO-0 seed", "RPO-0 verify"):
         assert _task(frag)["when"] == "rpo0_drill | default(false) | bool", frag
+    assert "rpo0-drill-seed" in str(_source_block())  # the seed contacts the source
 
 
 def test_dr_switch_never_masks_a_failure() -> None:
@@ -132,7 +213,9 @@ def test_dr_switch_demotes_source_before_promoting_target() -> None:
     secondary_at = _index("assert the source DR resource is Secondary")
     assert secondary_at < _index("promote at the target site")
     secondary = _task("assert the source DR resource is Secondary")
-    assert "['Secondary']" in secondary["failed_when"]
+    assert "['Secondary']" in secondary["until"]  # waited for, bounded, then loud
+    assert (secondary["retries"], secondary["delay"]) == (30, 2)
+    assert "failed_when" not in secondary
 
 
 def test_pcs_waits_fail_loud_with_the_live_state() -> None:

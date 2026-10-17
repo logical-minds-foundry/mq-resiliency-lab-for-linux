@@ -266,8 +266,11 @@ without the check you asked for. Today that is `rdqm-rhel` and `pcmk-drbd-ubuntu
 
 `pcmk-drbd-ubuntu` declares `ansible/site-pdrbd-dr-switch.yml`, an RDQM-style DR
 demote then promote: it moves only the DR clone's `target-role` and the
-`pdrbd:<qm>-dr-role` marker, leaving each site's HA clone running. It refuses to
-promote unless the target's DR disk is UpToDate and connected to an UpToDate source.
+`pdrbd:<qm>-dr-role` marker, leaving each site's HA clone running. Before it changes
+anything, it checks that the target's DR disk is UpToDate and connected to an UpToDate
+source. If not, it refuses and the source keeps serving. It checks again after the
+source demote. If that second check fails, it says the source was demoted and prints
+the command that re-promotes it.
 A forced DR after losing the source site is a manual run with `-e dr_force=true`,
 which accepts an RPO above zero and so refuses `--rpo0-drill`.
 
