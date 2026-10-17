@@ -8,6 +8,7 @@
 - [Vagrant leaves orphaned extra-disk volumes](#vagrant-leaves-orphaned-extra-disk-volumes)
 - [Concurrent same-box boot trips a Vagrant machine lock](#concurrent-same-box-boot-trips-a-vagrant-machine-lock)
 - [macOS bootstrap stops before booting: "huge-page reservation SHORT"](#macos-bootstrap-stops-before-booting-huge-page-reservation-short)
+- [Fences and failovers when the host is CPU-starved](#fences-and-failovers-when-the-host-is-cpu-starved)
 - [Can't live-attach a NIC ("No more available PCI slots")](#cant-live-attach-a-nic-no-more-available-pci-slots)
 - [Driving the lab from a worktree](#driving-the-lab-from-a-worktree)
 - [build/ artifacts missing in a worktree](#build-artifacts-missing-in-a-worktree)
@@ -81,6 +82,51 @@ don't need) and re-run `bootstrap`. Check the pool with
 guests running, release them from `ansible/` with
 `ansible-playbook host-hugepages.yml -c local -i localhost, -e hugepages_release=true`.
 Details: [`perf-and-staging.md` §5.1](../development/perf-and-staging.md#51-huge-page-backed-guest-ram-macos).
+
+## Fences and failovers when the host is CPU-starved
+
+**Symptom.** A healthy, idle stack starts misbehaving on its own, with nothing
+driving it:
+
+- Pacemaker fences nodes. Corosync logs `Corosync main process was not scheduled
+  for N ms` and `token timed out`.
+- Native HA fails over. Replicas log `AMQ3247W` ("active instance … has not sent
+  anything"), and the active instance logs slow log writes (`AMQ6729W`) and
+  `AMQ6176W`.
+- Guests go briefly unreachable (`No route to host`).
+
+It hits both sites and the commons at once, including guests doing nothing.
+
+**Cause.** The host is out of CPU, and the nested lab guests stop being scheduled
+for seconds at a time (#1602). Corosync and Native HA then correctly conclude that
+a peer is dead. Nothing is wrong with the lab itself. On the macOS dev VM this
+happens when the Mac's cores are oversubscribed. In #1602 two VMs were running,
+`vergil-user` with 12 vCPUs and the lab VM with 24, on 18 cores, and the Mac sat
+at 100% CPU. Every nested guest's exit goes through macOS, so the nested guests
+froze for 3–163 s while the Lima VM itself only slowed down. Guest kernels log
+`watchdog: BUG: soft lockup - CPU#n stuck for Ns!`, often on `swapper` (the idle
+task), and `rcu: INFO: rcu_preempt detected stalls`. A guest whose idle CPUs are
+"stuck" is not overloaded; it isn't being run at all.
+
+This is an accepted constraint of running the whole lab on one workstation, not a
+defect to tune away. Longer corosync or Native HA timeouts would only hide it,
+because no sane timeout survives a 20–160 s freeze.
+
+**Confirm.** `mqlab vm starvation` reads every running guest's kernel log for
+those two signatures and fails loud, naming the guests and the window. Narrow it
+to the incident with `--since` (journalctl syntax, for example
+`--since "2026-10-17 11:00"` or `--since "30 min ago"`). The kernel reports a soft
+lockup only after about 20 s, so the check catches the severe freezes. Shorter ones
+(corosync's 3.65 s token is enough to fence) show only as the corosync and
+`AMQ3247W` warnings above, which usually come alongside severe ones.
+
+**Fix.** Free host CPU. On macOS, stop or idle the other VMs and heavy apps while
+a lab stack is up. Then re-check a fresh window with
+`mqlab vm starvation --since "10 min ago"`. The lab recovers by itself: fenced
+nodes rejoin, Native HA resyncs. Re-run or resume whatever was interrupted
+(`mqlab bootstrap <stack> --from <phase>`). Treat a result taken during
+starvation, such as a timing, a failover count or a validation run, as void
+rather than as a lab finding.
 
 ## Can't live-attach a NIC ("No more available PCI slots")
 

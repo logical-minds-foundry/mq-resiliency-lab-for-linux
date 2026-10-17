@@ -1,0 +1,110 @@
+# Host CPU starvation check (#1602): `mqlab vm starvation [--since ...]`.
+#
+# On an oversubscribed host (macOS: every running VM's vCPUs together exceed the Mac's
+# cores) the nested lab guests stop being scheduled for seconds at a time. Corosync then
+# loses its token and Pacemaker fences; Native HA loses its heartbeats and fails over.
+# Those look like lab bugs. This play names the real cause: it reads each running
+# guest's kernel log for the two signatures a descheduled guest leaves behind, and fails
+# loud when it finds any:
+#   watchdog: BUG: soft lockup - CPU#<n> stuck for <s>s! [<comm>:<pid>]
+#   rcu: INFO: rcu_<flavour> detected stalls on CPUs/tasks   (or: self-detected stall)
+# The kernel reports a soft lockup only after a CPU is stuck for 2 x watchdog_thresh (20 s
+# by default) and an RCU stall after ~21 s, so this catches the severe freezes. Shorter
+# ones (corosync's 3.65 s token is enough to fence) leave no kernel trace; they show as
+# corosync "not scheduled" and Native HA AMQ3247W warnings, usually alongside severe ones.
+# Read-only: journalctl only, nothing changes on a guest.
+#
+# The CLI passes every input:
+#   -e starvation_hosts=<guest[:guest...]>   # the running lab guests
+#   -e starvation_since=<journalctl --since value, or '' for the whole current boot>
+
+- name: Require the CLI-supplied inputs (a missing starvation_hosts would match no host)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Assert every input is set
+      ansible.builtin.assert:
+        that:
+          - starvation_hosts | default('') | length > 0
+          - starvation_since is defined
+        fail_msg: >-
+          host-starvation.yml needs -e starvation_hosts= -e starvation_since=;
+          run it through: mqlab vm starvation
+
+- name: Read each running guest's kernel log for starvation signatures
+  # The default only keeps a bare syntax check parseable; the play above has already
+  # failed the run when starvation_hosts is unset.
+  hosts: "{{ starvation_hosts | default('starvation_hosts_unset') }}"
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the kernel log (journalctl -k, current boot)
+      ansible.builtin.command:
+        argv: >-
+          {{ ['journalctl', '-k', '--no-pager', '-o', 'short-iso']
+             + (['--since', starvation_since] if starvation_since | length > 0 else []) }}
+      register: _kernel_log
+      changed_when: false
+
+    - name: Count soft lockups and RCU stalls on this guest
+      vars:
+        _lockups: "{{ _kernel_log.stdout_lines | select('search', 'soft lockup - CPU#[0-9]+ stuck for') | list }}"
+        _stalls: "{{ _kernel_log.stdout_lines | select('search', 'rcu: INFO: rcu_[a-z]+ (self-)?detected stall') | list }}"
+        # short-iso lines start with the timestamp, so a plain sort is chronological
+        _hits: "{{ (_lockups + _stalls) | sort }}"
+      ansible.builtin.set_fact:
+        starvation_lockups: "{{ _lockups | length }}"
+        starvation_stalls: "{{ _stalls | length }}"
+        starvation_worst_s: >-
+          {{ (_lockups | map('regex_search', 'stuck for ([0-9]+)s', '\1') | map('first')
+              | map('int') | list + [0]) | max }}
+        starvation_window: >-
+          {{ (_hits | first).split(' ')[0] ~ ' .. ' ~ (_hits | last).split(' ')[0]
+             if _hits else '-' }}
+        starvation_hit: "{{ _hits | length > 0 }}"
+
+- name: Report, and fail loud on any starvation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _guests: "{{ starvation_hosts.split(':') }}"
+    _since: "{{ 'since ' ~ starvation_since if starvation_since | length > 0 else 'current boot' }}"
+    # a guest with no starvation_hit fact had its log go unread (unreachable or failed)
+    _unread: "{{ _guests | reject('in', hostvars | dict2items | selectattr('value.starvation_hit', 'defined') | map(attribute='key') | list) | list }}"
+    _starved: "{{ _guests | difference(_unread) | map('extract', hostvars) | selectattr('starvation_hit') | map(attribute='inventory_hostname') | list }}"
+  tasks:
+    - name: Per-guest result
+      ansible.builtin.debug:
+        msg: >-
+          {{ item }}:
+          {{ 'kernel log NOT READ (unreachable or failed above)' if item in _unread else
+             'soft lockups ' ~ hostvars[item].starvation_lockups
+             ~ ' (worst ' ~ hostvars[item].starvation_worst_s ~ ' s), RCU stalls '
+             ~ hostvars[item].starvation_stalls ~ ', window ' ~ hostvars[item].starvation_window }}
+      loop: "{{ _guests }}"
+
+    - name: Assert no guest was starved of host CPU
+      ansible.builtin.assert:
+        that:
+          - _starved | length == 0
+          - _unread | length == 0
+        success_msg: >-
+          No soft lockups or RCU stalls on any running guest ({{ _since }}):
+          the host is giving the guests their CPU.
+        # Plain text inside {% if %} blocks, so the message can quote freely. assert renders
+        # fail_msg even when it passes, and an empty render is None (an error), hence the
+        # trailing fallback.
+        fail_msg: >-
+          {% if _starved %}HOST CPU STARVATION on {{ _starved | join(', ') }} ({{ _since }}):
+          these guests were not scheduled for seconds at a time (the kernel soft lockups /
+          RCU stalls above). The host is oversubscribed; the lab is not broken. Fences,
+          failovers, corosync "not scheduled" and Native HA AMQ3247W in the same window are
+          this, not a lab bug. Free host CPU (on macOS: stop or idle the other VMs and heavy
+          apps), then re-check a fresh window with: mqlab vm starvation --since "10 min ago".
+          See docs/reference/lab-gotchas.md, "Fences and failovers when the host is
+          CPU-starved". {% endif %}{% if _unread %}Could not read the kernel log on
+          {{ _unread | join(', ') }} (see the failures above); a guest that is unreachable
+          may itself be starved.{% endif %}{% if not (_starved or _unread) %}no starvation
+          found{% endif %}
