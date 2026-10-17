@@ -1,0 +1,1 @@
+(no filesystem mounted under /var/mqm/vols on this node)

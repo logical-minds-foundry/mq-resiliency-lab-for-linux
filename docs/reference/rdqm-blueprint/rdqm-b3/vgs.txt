@@ -1,0 +1,2 @@
+  VG       #PV #LV VSize   VFree
+  drbdpool   1   2 <10.00g 3.98g

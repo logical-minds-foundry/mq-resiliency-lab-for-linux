@@ -1,0 +1,211 @@
+### /etc/drbd.conf
+# You can find an example in  /usr/share/doc/drbd.../drbd.conf.example
+
+include "drbd.d/global_common.conf";
+include "drbd.d/*.res";
+### ls -l /etc/drbd.d/
+total 28
+-rw-r--r--. 1 root root  347 Oct 16 20:46 global_common.conf
+-rw-r--r--. 1 root root 2783 Oct 16 20:46 global_common.conf.rdqmsave
+-rw-r--r--. 1 root root 1186 Oct 16 21:12 rdqmapp.dr.res
+-rw-r--r--. 1 root root 1155 Oct 16 21:12 rdqmapp.res
+-rw-r--r--. 1 root root 1846 Oct 16 21:11 rdqm-b1.crt
+-rw-------. 1 root root 3243 Oct 16 21:11 rdqm-b1.key
+-rw-r--r--. 1 root root 1854 Oct 16 21:11 rdqm-repl-ca.crt
+### /etc/drbd.d/global_common.conf
+global {
+    usage-count no;
+    udev-always-use-vnr;
+}
+
+common {
+    options {
+        twopc-timeout 100;
+    }
+
+    disk {
+        c-fill-target 1M;
+        c-max-rate 500M;
+        c-min-rate 100M;
+        resync-without-replication no;
+    }
+
+    net {
+        ping-timeout 40;
+        socket-check-timeout 5;
+        max-buffers 40k;
+    }
+}
+### /etc/drbd.d/global_common.conf.rdqmsave
+# DRBD is the result of over a decade of development by LINBIT.
+# In case you need professional services for DRBD or have
+# feature requests visit http://www.linbit.com
+
+global {
+	usage-count yes;
+
+	# Decide what kind of udev symlinks you want for "implicit" volumes
+	# (those without explicit volume <vnr> {} block, implied vnr=0):
+	# /dev/drbd/by-resource/<resource>/<vnr>   (explicit volumes)
+	# /dev/drbd/by-resource/<resource>         (default for implict)
+	udev-always-use-vnr; # treat implicit the same as explicit volumes
+
+	# minor-count dialog-refresh disable-ip-verification
+	# cmd-timeout-short 5; cmd-timeout-medium 121; cmd-timeout-long 600;
+}
+
+common {
+	handlers {
+		# These are EXAMPLE handlers only.
+		# They may have severe implications,
+		# like hard resetting the node under certain circumstances.
+		# Be careful when choosing your poison.
+
+		# IMPORTANT: most of the following scripts symlink to "notify.sh" which tries to send mail via "mail".
+		# If you intend to use this notify.sh script make sure that "mail" is installed.
+		#
+		# pri-on-incon-degr "/usr/lib/drbd/notify-pri-on-incon-degr.sh; /usr/lib/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+		# pri-lost-after-sb "/usr/lib/drbd/notify-pri-lost-after-sb.sh; /usr/lib/drbd/notify-emergency-reboot.sh; echo b > /proc/sysrq-trigger ; reboot -f";
+		# local-io-error "/usr/lib/drbd/notify-io-error.sh; /usr/lib/drbd/notify-emergency-shutdown.sh; echo o > /proc/sysrq-trigger ; halt -f";
+		# fence-peer "/usr/lib/drbd/crm-fence-peer.sh";
+		# split-brain "/usr/lib/drbd/notify-split-brain.sh root";
+		# out-of-sync "/usr/lib/drbd/notify-out-of-sync.sh root";
+		# before-resync-target "/usr/lib/drbd/snapshot-resync-target-lvm.sh -p 15 -- -c 16k";
+		# after-resync-target /usr/lib/drbd/unsnapshot-resync-target-lvm.sh;
+		# quorum-lost "/usr/lib/drbd/notify-quorum-lost.sh root";
+		# disconnected /bin/true;
+	}
+
+	startup {
+		# wfc-timeout degr-wfc-timeout outdated-wfc-timeout wait-after-sb
+	}
+
+	options {
+		# cpu-mask on-no-data-accessible
+
+		# RECOMMENDED for three or more storage nodes with DRBD 9:
+		# quorum majority;
+		# on-no-quorum suspend-io | io-error;
+	}
+
+	disk {
+		# size on-io-error fencing disk-barrier disk-flushes
+		# disk-drain md-flushes resync-rate resync-after al-extents
+                # c-plan-ahead c-delay-target c-fill-target c-max-rate
+                # c-min-rate disk-timeout
+	}
+
+	net {
+		# protocol timeout max-epoch-size max-buffers
+		# connect-int ping-int sndbuf-size rcvbuf-size ko-count
+		# allow-two-primaries cram-hmac-alg shared-secret "REDACTED"
+		# after-sb-1pri after-sb-2pri always-asbp rr-conflict
+		# ping-timeout data-integrity-alg tcp-cork on-congestion
+		# congestion-fill congestion-extents csums-alg verify-alg
+		# use-rle
+	}
+}
+### /etc/drbd.d/rdqmapp.dr.res
+resource rdqmapp.dr {
+    options {
+        quorum majority;
+        on-no-quorum io-error;
+        auto-promote no;
+    }
+    volume 0 {
+        device minor 7001;
+    }
+    handlers {
+      before-resync-source "/var/mqm/rdqm/before-resync-source";
+      before-resync-target "/var/mqm/rdqm/before-resync-target";
+      after-resync-target "/var/mqm/rdqm/after-resync-target";
+      disconnected "/var/mqm/rdqm/disconnected";
+    }
+    stacked-on-top-of rdqmapp {
+        node-id 1;
+    }
+    on encrypted.remote {
+        node-id 0;
+        volume 0 {
+            disk _remote;
+        }
+    }
+    connection {
+        net {
+            protocol A;
+            verify-alg sha1;
+            allow-remote-read no;
+            tls yes;
+        }
+        path {
+            host rdqm-b1 address ipv4 10.99.0.41:7001;
+            host encrypted.remote address ipv4 10.99.0.31:7001;
+        }
+        path {
+            host rdqm-b1 address ipv4 10.99.0.41:7001;
+            host encrypted.remote address ipv4 10.99.0.32:7001;
+        }
+        path {
+            host rdqm-b1 address ipv4 10.99.0.41:7001;
+            host encrypted.remote address ipv4 10.99.0.33:7001;
+        }
+    }
+}
+### /etc/drbd.d/rdqmapp.res
+resource rdqmapp {
+    options {
+        quorum 2;
+        on-no-quorum io-error;
+        auto-promote no;
+    }
+    net {
+        verify-alg sha1;
+        rr-conflict retry-connect;
+        tls yes;
+        #
+    }
+    disk {
+        disable-write-same yes;
+    }
+    handlers {
+      quorum-lost "/var/mqm/rdqm/quorum-lost";
+      after-resync-target "/var/mqm/rdqm/after-resync-target";
+      disconnected "/var/mqm/rdqm/disconnected";
+    }
+    on rdqm-b1 {
+        node-id 0;
+        address ipv4 172.16.2.41:7000;
+        volume 0 {
+            device minor 100;
+            disk /dev/drbdpool/rdqmapp_00;
+            meta-disk internal;
+        }
+    }
+   on rdqm-b2 {
+       node-id 1;
+       address ipv4 172.16.2.42:7000;
+       volume 0 {
+            device minor 100;
+            disk /dev/drbdpool/rdqmapp_00;
+            meta-disk internal;
+        }
+    }
+    on rdqm-b3 {
+        node-id 2;
+        address ipv4 172.16.2.43:7000;
+        volume 0 {
+            device minor 100;
+            disk /dev/drbdpool/rdqmapp_00;
+            meta-disk internal;
+        }
+    }
+    connection-mesh {
+        hosts rdqm-b1 rdqm-b2 rdqm-b3;
+    }
+}
+### /etc/drbd.d/rdqm-b1.crt
+[PEM CERTIFICATE body REDACTED for the committed blueprint (#1425)]
+### /etc/drbd.d/rdqm-b1.key
+[PEM RSA PRIVATE KEY body REDACTED for the committed blueprint (#1425)]
+### /etc/drbd.d/rdqm-repl-ca.crt
+[PEM CERTIFICATE body REDACTED for the committed blueprint (#1425)]

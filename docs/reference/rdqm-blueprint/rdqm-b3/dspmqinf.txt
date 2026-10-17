@@ -1,0 +1,1 @@
+addmqinf -s QueueManager -v Name=RDQMAPP -v Directory=rdqmapp -v Prefix=/var/mqm -v DataPath=/var/mqm/vols/rdqmapp/qmgr/rdqmapp

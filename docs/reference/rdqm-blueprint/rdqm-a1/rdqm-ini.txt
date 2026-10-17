@@ -1,0 +1,9 @@
+Node:
+  Name=rdqm-a1
+  HA_Replication=172.16.1.31
+Node:
+  Name=rdqm-a2
+  HA_Replication=172.16.1.32
+Node:
+  Name=rdqm-a3
+  HA_Replication=172.16.1.33

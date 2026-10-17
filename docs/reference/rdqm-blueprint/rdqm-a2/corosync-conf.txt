@@ -1,0 +1,44 @@
+totem {
+    version: 2
+    crypto_cipher: none
+    crypto_hash: none
+    clear_node_high_bit: yes
+    token: 10000
+    interface {
+        linknumber: 0
+        knet_ping_timeout: 5000
+        knet_ping_interval: 500
+        knet_pong_count: 2
+    }
+}
+logging {
+    fileline: off
+    to_syslog: yes
+    debug: off
+    timestamp: on
+    logger_subsys {
+        subsys: QUORUM
+        debug: off
+    }
+}
+nodelist {
+    node {
+        name: rdqm-a1
+        nodeid: 1
+        ring0_addr: 172.16.1.31
+    }
+    node {
+        name: rdqm-a2
+        nodeid: 2
+        ring0_addr: 172.16.1.32
+    }
+    node {
+        name: rdqm-a3
+        nodeid: 3
+        ring0_addr: 172.16.1.33
+    }
+}
+
+quorum {
+    provider: corosync_votequorum
+}

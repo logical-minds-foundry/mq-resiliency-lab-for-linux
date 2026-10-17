@@ -1,0 +1,123 @@
+# /etc/drbd.conf
+global {
+    usage-count no;
+}
+
+common {
+    options {
+        twopc-timeout    100;
+    }
+    net {
+        ping-timeout      40;
+        socket-check-timeout   5;
+        max-buffers      40k;
+    }
+    disk {
+        c-fill-target     1M;
+        c-max-rate       500M;
+        c-min-rate       100M;
+        resync-without-replication  no;
+    }
+}
+
+# resource rdqmapp.dr on rdqm-a3: not ignored, stacked
+# defined at /etc/drbd.d/rdqmapp.dr.res:1
+resource rdqmapp.dr {
+    volume 0 {
+        device           minor 7001;
+    }
+    stacked-on-top-of rdqmapp {
+        # on rdqm-a1 rdqm-a2 rdqm-a3 
+        node-id 0;
+    }
+    on encrypted.remote {
+        node-id 1;
+        volume 0 {
+            disk         _remote;
+        }
+    }
+    connection {
+        path {
+            host rdqm-a3             address         ipv4 10.99.0.33:7001;
+            host encrypted.remote             address         ipv4 10.99.0.41:7001;
+        }
+        path {
+            host rdqm-a3             address         ipv4 10.99.0.33:7001;
+            host encrypted.remote             address         ipv4 10.99.0.42:7001;
+        }
+        path {
+            host rdqm-a3             address         ipv4 10.99.0.33:7001;
+            host encrypted.remote             address         ipv4 10.99.0.43:7001;
+        }
+        net {
+            protocol       A;
+            verify-alg   sha1;
+            allow-remote-read  no;
+            tls          yes;
+        }
+    }
+    options {
+        quorum           majority;
+        on-no-quorum     io-error;
+        auto-promote      no;
+    }
+    handlers {
+        before-resync-source /var/mqm/rdqm/before-resync-source;
+        before-resync-target /var/mqm/rdqm/before-resync-target;
+        after-resync-target /var/mqm/rdqm/after-resync-target;
+        disconnected     /var/mqm/rdqm/disconnected;
+    }
+}
+
+# resource rdqmapp on rdqm-a3: not ignored, not stacked
+# defined at /etc/drbd.d/rdqmapp.res:1
+resource rdqmapp {
+    on rdqm-a1 {
+        node-id 0;
+        volume 0 {
+            device       minor 100;
+            disk         /dev/drbdpool/rdqmapp_00;
+            meta-disk    internal;
+        }
+        address          ipv4 172.16.1.31:7000;
+    }
+    on rdqm-a2 {
+        node-id 1;
+        volume 0 {
+            device       minor 100;
+            disk         /dev/drbdpool/rdqmapp_00;
+            meta-disk    internal;
+        }
+        address          ipv4 172.16.1.32:7000;
+    }
+    on rdqm-a3 {
+        node-id 2;
+        volume 0 {
+            device       minor 100;
+            disk         /dev/drbdpool/rdqmapp_00;
+            meta-disk    internal;
+        }
+        address          ipv4 172.16.1.33:7000;
+    }
+    connection-mesh {
+        hosts rdqm-a1 rdqm-a2 rdqm-a3;
+    }
+    options {
+        quorum             2;
+        on-no-quorum     io-error;
+        auto-promote      no;
+    }
+    net {
+        verify-alg       sha1;
+        rr-conflict      retry-connect;
+        tls              yes;
+    }
+    disk {
+        disable-write-same yes;
+    }
+    handlers {
+        quorum-lost      /var/mqm/rdqm/quorum-lost;
+        after-resync-target /var/mqm/rdqm/after-resync-target;
+        disconnected     /var/mqm/rdqm/disconnected;
+    }
+}

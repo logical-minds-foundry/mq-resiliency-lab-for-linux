@@ -1,0 +1,3 @@
+  LV                       VG       LSize  Attr       Origin Devices      
+  rdqmapp_00               drbdpool  3.00g -wi-ao----        /dev/vdb(0)  
+  rdqmapp_00-before-resync drbdpool <3.02g -wi-a-----        /dev/vdb(768)
