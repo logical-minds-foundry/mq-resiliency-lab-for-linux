@@ -1648,6 +1648,11 @@ for the Native HA arms (which have no VIP; the active member is resolved at
 runtime with the "follow the active" state probe). The topology-derived endpoints
 are an internal library behind <code>mqlab console open</code>, which forwards the dev VM to
 a stack's live mqweb for the MQ Console.</p>
+<p>mqweb runs locally on each node rather than in IBM's client mode. IBM's
+administrative REST API reaches a remote queue manager only through a gateway queue
+manager, and the lab adds none. Access requires a login, one sample user per IBM
+role, and the operator tier is enforced by the queue manager's own authority checks;
+see the <a href="../reference/#mqweb-security-model">mqweb security model</a>.</p>
 <h2 id="the-event-feed-mq-instrumentation-events-every-queue-manager">The event feed — MQ instrumentation events (every queue manager)<a class="headerlink" href="#the-event-feed-mq-instrumentation-events-every-queue-manager" title="Permanent link">&para;</a></h2>
 <p>Every queue manager also runs the <strong><code>mq-event-monitor</code></strong> MQ SERVICE — an
 <code>amqsevt</code> collector defined <code>CONTROL(QMGR)</code>, so it starts and stops <strong>with</strong> the

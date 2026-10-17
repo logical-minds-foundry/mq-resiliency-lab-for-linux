@@ -1566,8 +1566,8 @@ To compare two runs (before and after a change, or macOS against cloud), use:</p
   management-NIC DHCP lease timeout does not end the run.</li>
 <li><strong>Readiness waits.</strong> Each service the data path depends on has a bounded,
   fatal readiness wait. The log-search tier (OpenSearch, Data Prepper, Dashboards)
-  waits up to 40 minutes each. A service the data path does not need (per-node mqweb,
-  when enabled) only warns if it is slow. The waits are pinned by a guardrail test,
+  waits up to 40 minutes each. A service the data path does not need (per-node mqweb)
+  only warns if it is slow. The waits are pinned by a guardrail test,
   so they cannot drift back to too-short values.</li>
 <li>
 <p><strong>Package updates.</strong> Baked Ubuntu boxes ship with apt auto-updates turned off. On
@@ -1871,7 +1871,10 @@ its username:</p>
   click-through is not worth that complexity.</li>
 <li><strong>Re-run <code>mqlab console open</code> after a failover or a DR cutover.</strong> The forward
   points at one instance and does not follow the queue manager. A re-run finds the
-  new live instance and replaces the forwarder.</li>
+  new live instance and replaces the forwarder. On a Native HA stack, a stale
+  forward shows itself in the Console: the login works, but <strong>Local queue
+  managers</strong> lists the queue manager with status <code>Replica</code> and it cannot be
+  opened. That is the replica's own mqweb answering, not a fault.</li>
 </ul>
 <h2 id="the-watcher">The Watcher<a class="headerlink" href="#the-watcher" title="Permanent link">&para;</a></h2>
 <p>The <strong>Watcher</strong> is the management/observability plane — the <code>net-mgmt</code> side of the

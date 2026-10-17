@@ -1404,6 +1404,12 @@ how it was built. They live in-repo under <code>docs/specs/</code>, <code>docs/p
   — how disaster-recovery and high-availability behavior is validated.</li>
 <li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/specs/2026-06-08-docs-site-and-architecture-design.md">Docs site + architecture design</a></strong>
   — the design behind this documentation site.</li>
+<li><strong><a href="https://github.com/logical-minds-foundry/.github/blob/develop/epics/341-mqweb-first-class/spec.md">MQ Web (Console + REST) as a first-class, secured lab component</a></strong>
+  (<a href="https://github.com/logical-minds-foundry/.github/blob/develop/epics/341-mqweb-first-class/plan.md">plan</a>)
+  — why mqweb runs locally on every queue manager node and client mode was
+  rejected, the IBM-cited security model and its deviations register, and how
+  clients find the live endpoint (epic
+  <a href="https://github.com/logical-minds-foundry/.github/issues/341">.github#341</a>).</li>
 </ul>
 <h2 id="findings-reports">Findings reports<a class="headerlink" href="#findings-reports" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1417,14 +1423,22 @@ how it was built. They live in-repo under <code>docs/specs/</code>, <code>docs/p
 <li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-06-19-mq-json-logging-research.md">MQ diagnostic logging in JSON — a research study</a></strong>
   — every way MQ 9.4 emits JSON-format diagnostic logs (server/system/client +
   mqweb), the full text-log surface, and the JSON-only ingestion decision (#282).</li>
-<li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-10-guest-runtime-spike.md">Guest runtime spike</a></strong>
+<li>
+<p><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reports/2026-10-guest-runtime-spike.md">Guest runtime spike</a></strong>
   — the pinned CPython 3.14 guest runtime, an MQI binding built from sdist, and hash-pinned
   installs that never consult an index, proven on Ubuntu 24.04 and RHEL 9.6 for
   the <a href="../operate/guest-components/">guest components</a> (epic
   <a href="https://github.com/logical-minds-foundry/.github/issues/294">.github#294</a>). The
   spike proved the pattern with the binding the clients used at the time; they have
   since moved to IBM's maintained <code>ibmmq</code> (epic
-  <a href="https://github.com/logical-minds-foundry/.github/issues/300">.github#300</a>).</li>
+  <a href="https://github.com/logical-minds-foundry/.github/issues/300">.github#300</a>).</p>
+</li>
+<li>
+<p><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-spike-findings.md">mqweb spike findings</a></strong>
+  — per-node mqweb cold-start time and memory, Console behaviour on Native HA
+  replicas, and REST <code>/v2</code> versus <code>/v3</code>, measured on cloud x86 and macOS/arm64
+  (epic <a href="https://github.com/logical-minds-foundry/.github/issues/341">.github#341</a>).</p>
+</li>
 </ul>
 <h2 id="related-tooling">Related tooling<a class="headerlink" href="#related-tooling" title="Permanent link">&para;</a></h2>
 <ul>
