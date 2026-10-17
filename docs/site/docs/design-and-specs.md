@@ -13,6 +13,12 @@ how it was built. They live in-repo under `docs/specs/`, `docs/plans/`, and
   — how disaster-recovery and high-availability behavior is validated.
 - **[Docs site + architecture design](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/specs/2026-06-08-docs-site-and-architecture-design.md)**
   — the design behind this documentation site.
+- **[MQ Web (Console + REST) as a first-class, secured lab component](https://github.com/logical-minds-foundry/.github/blob/develop/epics/341-mqweb-first-class/spec.md)**
+  ([plan](https://github.com/logical-minds-foundry/.github/blob/develop/epics/341-mqweb-first-class/plan.md))
+  — why mqweb runs locally on every queue manager node and client mode was
+  rejected, the IBM-cited security model and its deviations register, and how
+  clients find the live endpoint (epic
+  [.github#341](https://github.com/logical-minds-foundry/.github/issues/341)).
 
 ## Findings reports
 
@@ -34,6 +40,11 @@ how it was built. They live in-repo under `docs/specs/`, `docs/plans/`, and
   spike proved the pattern with the binding the clients used at the time; they have
   since moved to IBM's maintained `ibmmq` (epic
   [.github#300](https://github.com/logical-minds-foundry/.github/issues/300)).
+
+- **[mqweb spike findings](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-spike-findings.md)**
+  — per-node mqweb cold-start time and memory, Console behaviour on Native HA
+  replicas, and REST `/v2` versus `/v3`, measured on cloud x86 and macOS/arm64
+  (epic [.github#341](https://github.com/logical-minds-foundry/.github/issues/341)).
 
 ## Related tooling
 

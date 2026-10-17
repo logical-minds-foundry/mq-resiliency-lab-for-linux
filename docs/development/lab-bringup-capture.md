@@ -5,8 +5,9 @@
 > `10.20.0.x` planes). That model predates the #351 four-stack topology;
 > provisioning is now Ansible `runmqsc`, and the `python -m mqlab.apply` +
 > `content/*.yaml` path shown in §3 has been **retired**. Kept for historical
-> reference only — do not run these commands. Canonical REST addresses come from
-> `mqlab rest render`.
+> reference only — do not run these commands. The canonical REST addresses come from
+> `mqlab.mqweb_endpoints`, behind `mqlab console open` (`mqlab rest` was removed in
+> #1503, epic .github#341).
 >
 > Working capture written *as the bring-up is executed* (2026-06-08, issue #53).
 > Not the definitive doc — the site-docs session owns that. This exists to
