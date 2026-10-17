@@ -33,6 +33,7 @@ the lab's own CLI, **`mqlab`**, run from this repo's checkout with **`uv run`**:
 ```sh
 uv run mqlab vm inventory          # the node map (names ↔ IPs ↔ roles)
 uv run mqlab vm roster             # roster view of the nodes
+uv run mqlab vm starvation         # were the guests starved of host CPU? (fails loud)
 uv run mqlab status                # per-stack phase / queue-manager status
 uv run mqlab bootstrap <stack>     # bring a stack up
 uv run mqlab teardown <stack>      # take a stack down

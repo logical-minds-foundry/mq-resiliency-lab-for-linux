@@ -1907,6 +1907,67 @@ def vm_ssh(guest: str) -> None:
     _ssh_into(guest)
 
 
+# --- vm starvation: name host CPU starvation instead of leaving it to look like a lab bug
+# (#1602). On an oversubscribed host the nested guests stop being scheduled for seconds
+# at a time, and corosync fences / Native HA fails over. host-starvation.yml reads every
+# running guest's kernel log for the soft-lockup and RCU-stall signatures and fails loud.
+_STARVATION_PLAYBOOK = "host-starvation.yml"
+
+_StarvationSince = Annotated[
+    str,
+    typer.Option(
+        "--since",
+        help="only look at kernel messages since this time (journalctl --since syntax, "
+        "e.g. '10 min ago' or '2026-10-17 11:00'); default: each guest's current boot",
+    ),
+]
+
+
+def _vm_starvation_run(since: str) -> None:
+    deps = build_deps("vm-starvation", datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ"))
+    try:
+        states = _probe_states(deps)
+        guests = [g for g in topology.load().get("nodes", {}) if classify(states, g) == RUNNING]
+        if not guests:
+            note = "no lab guest is running — nothing to check (bring a stack up first)"
+            deps.renderer.note(note)
+            deps.transcript.write(note)
+            raise typer.Exit(code=3)
+        _render_inventory(deps)
+        step = CommandStep(
+            "host CPU starvation check",
+            Command(
+                [
+                    "ansible-playbook",
+                    _STARVATION_PLAYBOOK,
+                    # JSON, not key=value: ansible splits key=value extra vars on spaces,
+                    # which would cut a --since such as '10 min ago' to '10'.
+                    "-e",
+                    json.dumps({"starvation_hosts": ":".join(guests), "starvation_since": since}),
+                ],  # noqa: S607
+                cwd=repo_root() / "ansible",
+            ),
+        )
+        run_steps(
+            [step],
+            runner=deps.runner,
+            renderer=deps.renderer,
+            transcript=deps.transcript,
+            step_mode=False,
+            pauser=deps.pauser,
+        )
+    except StepFailedError as exc:
+        raise typer.Exit(code=exc.exit_code) from exc
+    finally:
+        deps.transcript.close()
+
+
+@vm_app.command("starvation")
+def vm_starvation(since: _StarvationSince = "") -> None:
+    """Check the running guests' kernel logs for host CPU starvation (fails loud on any)."""
+    _vm_starvation_run(since)
+
+
 # --- qm: the MQ queue-manager lifecycle, dispatched off the stack's verbs (#350) --
 # create/destroy run the stack's qm-* playbooks (the client-reproducible deliverable);
 # up/down/status are direct, streamed shell ops on the stack's cluster first node

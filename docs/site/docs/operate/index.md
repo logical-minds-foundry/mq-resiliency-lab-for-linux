@@ -94,6 +94,12 @@ Bring-up is built to either finish or stop loudly at a named step, never to hang
   any host that was not baked that way, provisioning masks the apt timers early, so a
   background update cannot hold the dpkg lock mid-run.
 
+- **Host CPU starvation.** If nodes fence or Native HA fails over with nothing driving
+  the lab, check the host before the lab: `mqlab vm starvation` fails loud when the
+  guests' kernels show they were not being scheduled. On macOS, that means other VMs or
+  apps are using the Mac's CPU. See
+  [the lab-gotchas entry](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-gotchas.md#fences-and-failovers-when-the-host-is-cpu-starved).
+
 If a run does stop, fix the cause and resume from the failed phase with
 `mqlab bootstrap <stack> --from <phase>` instead of starting over. The transcript and
 perf report in `$(mqlab build path state)/runs/` show which step failed and how
