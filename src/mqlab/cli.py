@@ -888,15 +888,29 @@ def console_open(
         raise typer.Exit(code=1) from exc
     user = getpass.getuser()
     access = _console_access()
-    # Replace any previous forwarder (Review Focus 5). An absent unit makes `stop` exit
-    # non-zero, which is fine; any other stop failure leaves the unit in place, and the
-    # checked systemd-run below then fails loud on the existing unit name.
-    for argv, check in ((console.stop_argv(), False), (console.forward_argv(live, user), True)):
+    # Replace any previous forwarder (Review Focus 5). Stop it only when it exists, so a
+    # first run prints no systemd "not loaded" error (#1605) and a real stop failure
+    # fails loud instead of being tolerated.
+    try:
+        load_state = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            console.load_state_argv(), check=True, capture_output=True, text=True
+        ).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        typer.echo(
+            f"mqlab console open: reading the forwarder's state failed: {exc}: "
+            f"{(exc.stderr or '').strip()}",
+            err=True,
+        )
+        raise typer.Exit(code=1) from exc
+    steps = [("starting the forwarder", console.forward_argv(live, user))]
+    if load_state == "loaded":
+        steps.insert(0, ("stopping the previous forwarder", console.stop_argv()))
+    for what, argv in steps:
         typer.echo(f"$ {shlex.join(argv)}")
         try:
-            subprocess.run(argv, check=check)  # noqa: S603 - fixed argv, no shell
+            subprocess.run(argv, check=True)  # noqa: S603 - fixed argv, no shell
         except subprocess.CalledProcessError as exc:
-            typer.echo(f"mqlab console open: starting the forwarder failed: {exc}", err=True)
+            typer.echo(f"mqlab console open: {what} failed: {exc}", err=True)
             raise typer.Exit(code=1) from exc
     try:
         console.wait_listening()
