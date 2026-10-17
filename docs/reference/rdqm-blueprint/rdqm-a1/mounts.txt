@@ -1,0 +1,1 @@
+/var/mqm/vols/rdqmapp                       /dev/drbd7001 ext4       rw,relatime,seclabel

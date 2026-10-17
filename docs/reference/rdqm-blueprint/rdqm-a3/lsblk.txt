@@ -1,0 +1,11 @@
+NAME                                  FSTYPE      FSVER            LABEL                   UUID                                   FSAVAIL FSUSE% MOUNTPOINTS
+sr0                                   iso9660     Joliet Extension RHEL-10-2-BaseOS-x86_64 2026-05-11-20-11-35-00                       0   100% /media/rhel
+vda                                                                                                                                              
+├─vda1                                                                                                                                           
+├─vda2                                xfs                                                  d6758e2d-f221-461d-89a5-d12eb9909e0b      1.5G    21% /boot
+├─vda3                                swap        1                                        95430fe2-9306-46ee-86aa-e10b77f770b7                  [SWAP]
+└─vda4                                xfs                                                  6f295a28-cef4-477f-a8ea-08cc9a079ced     12.3G    23% /
+vdb                                   LVM2_member LVM2 001                                 RqNdua-iaeW-WrCi-QFEe-IB6L-AiLQ-Iy6VC0                
+├─drbdpool-rdqmapp_00                 drbd        v09                                      d515c40285b27538                                      
+│ └─drbd100                                                                                                                                      
+└─drbdpool-rdqmapp_00--before--resync                                                                                                            
