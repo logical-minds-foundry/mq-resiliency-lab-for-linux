@@ -1,56 +1,118 @@
 ---
-# One provision for the pcmk-drbd-ubuntu stack (epic .github#310 T5, #1427), composed like
-# site-pcmk.yml / site-rdqm.yml from building blocks:
+# One provision for the pcmk-drbd-ubuntu stack (epic .github#310 T5 #1427, T6 #1428),
+# composed like site-pcmk.yml / site-rdqm.yml from building blocks:
 #   1. _pdrbd-cluster-ha.yml        — site A: DRBD 9 + VG, MQ, Pacemaker cluster, mqweb
-#   2. authz service accounts        — mqapp/mqmon/mqsvc/mqoperator on every QM node
-#   3. pdrbd-qm                      — the per-QM RDQM-shaped volume, the QM, its MQSC and
-#                                      the Pacemaker resources
-#   4. site-distributed-shared.yml  — the SVC counterparty QM + inter-QM channels + the
+#   2. _pdrbd-dr-replication.yml    — site B: the same, its OWN cluster (skipped by --no-dr)
+#   3. authz service accounts        — mqapp/mqmon/mqsvc/mqoperator on every QM node
+#   4. pdrbd-qm                      — ONE play over both sites: each site's HA resource,
+#                                      the stacked DR resource, the QM (site A), its MQSC
+#                                      and each site's Pacemaker resources
+#   5. watched DR-sync wait          — the stacked DR resource UpToDate on both members
+#   6. site-distributed-shared.yml  — the SVC counterparty QM + inter-QM channels + the
 #                                      app requester (`mqlab qm e2e` needs it)
-# Task 6 (#1428) adds site B and the DR/HA shape.
+#
+# Shape (plan "The shape decision"): DR/HA by default; HA-only under `bootstrap --no-dr`,
+# which passes dr_enabled=false. The shape is fixed when the QM is first created; the
+# pdrbd-qm role refuses to change it on a formed QM.
 #
 # Provision-phase var contract (#350): the bootstrap `provision` phase passes qm_app /
 # qm_svc / chl_to_svc / chl_to_app / svc_req_queue (phases._qm_extra_vars). The fixed lab
-# values (the site-A VIP, the SVC CONNAME, the site peers' addresses) are lab constants
-# below, identical to topology.yaml's pcmk-drbd-ubuntu qm: block and pdrbd-a* nics.
-
-# Temporary: Task 6 (#1428) deletes this play when it lands the DR/HA shape.
-- name: preflight — the DR/HA shape is not built yet
-  hosts: localhost
-  gather_facts: false
-  tasks:
-    - name: refuse a DR provision until Task 6 (lab #1428) lands
-      ansible.builtin.assert:
-        that: not (dr_enabled | default(true) | bool)
-        fail_msg: >-
-          pcmk-drbd-ubuntu builds only the HA-only shape until Task 6 (#1428) lands; run
-          `mqlab bootstrap pcmk-drbd-ubuntu --no-dr`
+# values (the per-site VIPs, the SVC CONNAME, the nodes' addresses in vars/pdrbd-peers.yml)
+# are lab constants, identical to topology.yaml's pcmk-drbd-ubuntu qm: block and pdrbd-*
+# nics (tests/test_topology_pdrbd.py, tests/test_pdrbd_qm_role.py).
 
 - import_playbook: _pdrbd-cluster-ha.yml
 
+- import_playbook: _pdrbd-dr-replication.yml
+  when: dr_enabled | default(true) | bool
+
 # Stage 2 authorization (#74) + mqoperator (#1501): the OAM principals must exist on EVERY
-# node the QM can run on before any grant resolves against them. Site A only until Task 6.
-- name: authz service accounts on every app-QM node
-  hosts: pdrbd_a
+# node the QM can run on — site B included, where a DR switch lands it — before any grant
+# resolves against them.
+- name: authz service accounts on every app-QM node (HA + DR)
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   roles: [mq-authz-accounts]
 
-- name: per-QM replicated volume + resources (site A)
+- name: per-QM replicated volume + resources (site A, and site B as DR secondary)
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
+  become: true
+  vars_files:
+    - vars/pdrbd-peers.yml
+    - vars/pdrbd-crm-mon.yml
+  vars:
+    qm_name: "{{ qm_app }}"
+    svc_conn: "svc-sim-ext.service.com"
+    pdrbd_site: "{{ 'a' if inventory_hostname in groups['pdrbd_a'] else 'b' }}"
+    pdrbd_site_group: "pdrbd_{{ pdrbd_site }}"
+    # topology.yaml pcmk-drbd-ubuntu qm.vip / qm.vip_b: one floating IP per site, as RDQM.
+    qm_vip: "{{ '10.10.1.170' if pdrbd_site == 'a' else '10.10.2.170' }}"
+    # Site-local HA peers, node-ids 0-2 at each site (rdqm-a1/rdqm-b1 drbd-dump.txt).
+    pdrbd_site_peers: "{{ pdrbd_peers_all | selectattr('site', 'equalto', pdrbd_site) | list }}"
+    # The other site: the DR resource's three path targets.
+    pdrbd_remote_peers: "{{ pdrbd_peers_all | rejectattr('site', 'equalto', pdrbd_site) | list }}"
+    pdrbd_my_wan: "{{ (pdrbd_peers_all | selectattr('name', 'equalto', inventory_hostname) | first).addr_wan }}"
+    # stacked-on-top-of node-id: 0 at site A, 1 at site B (rdqm-a1/rdqm-b1 drbd-dump.txt).
+    pdrbd_dr_local_id: "{{ 0 if pdrbd_site == 'a' else 1 }}"
+  roles: [pdrbd-qm]
+
+# Watch the DR resource reach UpToDate on both members (spec §7): log progress, fail if
+# the sync percentage does not advance within pdrbd_sync_stall_secs, and fail outright past
+# pdrbd_sync_max_secs — a stall is a failure, not a wait. Formation clears both bitmaps,
+# so a fresh build should report in-sync at once; this proves it rather than assuming it,
+# and catches a DR resource that came up Inconsistent or disconnected. Runs on every
+# site-A node; only the node holding the stacked resource (the site-A HA primary) has it.
+# `drbdadm status all` does not list the stacked resource (BP README §2.1), so the probe
+# is `drbdsetup status`. in-sync requires the peer Connected AND peer-disk UpToDate AND no
+# sync state, so a missing peer is a stall, not a pass.
+- name: wait for DR sync (the stacked DR resource UpToDate on both members), watched
   hosts: pdrbd_a
   become: true
   vars:
-    qm_name: "{{ qm_app }}"
-    qm_vip: 10.10.1.170                 # topology.yaml pcmk-drbd-ubuntu qm.vip
-    svc_conn: "svc-sim-ext.service.com"
-    pdrbd_site_group: pdrbd_a
-    # Site-local HA peers, node-ids 0-2 (RDQM numbers each site 0-2: rdqm-a1/drbd-dump.txt,
-    # rdqm-b1/drbd-dump.txt). addr_wan is unused by the HA template; Task 6's DR template
-    # uses it.
-    pdrbd_site_peers:
-      - { name: pdrbd-a1, addr_hb: 172.16.1.71, addr_wan: 10.99.0.71, node_id: 0 }
-      - { name: pdrbd-a2, addr_hb: 172.16.1.72, addr_wan: 10.99.0.72, node_id: 1 }
-      - { name: pdrbd-a3, addr_hb: 172.16.1.73, addr_wan: 10.99.0.73, node_id: 2 }
-  roles: [pdrbd-qm]
+    pdrbd_dr_res: "{{ qm_app | lower }}.dr"
+    pdrbd_sync_stall_secs: 180
+    pdrbd_sync_max_secs: 3600
+  tasks:
+    - name: poll drbdsetup status until the DR peer is UpToDate
+      ansible.builtin.shell: |
+        set -o pipefail
+        if ! drbdsetup status {{ pdrbd_dr_res }} >/dev/null 2>&1; then echo not-here; exit 0; fi
+        start=$(date +%s); last_pct=""; last_move=$start
+        while :; do
+          st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
+          if grep -q 'connection:Connected' <<<"$st" \
+             && grep -q 'peer-disk:UpToDate' <<<"$st" \
+             && grep -Eq '^  volume:[0-9]+ .*disk:UpToDate' <<<"$st" \
+             && ! grep -Eq 'replication:(SyncSource|SyncTarget|WFBitMapS|WFBitMapT|PausedSyncS|PausedSyncT)' <<<"$st"; then
+            echo "in-sync after $(( $(date +%s) - start ))s"; exit 0
+          fi
+          pct=$(grep -Eo 'done:[0-9.]+' <<<"$st" | head -n 1)
+          now=$(date +%s)
+          if [ "$pct" != "$last_pct" ]; then
+            echo "$(date -u +%H:%M:%S) sync ${pct:-pending}"; last_pct=$pct; last_move=$now
+          fi
+          if [ $(( now - last_move )) -ge {{ pdrbd_sync_stall_secs }} ]; then
+            echo "DR sync STALLED at ${pct:-pending} for {{ pdrbd_sync_stall_secs }}s" >&2; echo "$st" >&2; exit 1
+          fi
+          if [ $(( now - start )) -ge {{ pdrbd_sync_max_secs }} ]; then
+            echo "DR sync exceeded {{ pdrbd_sync_max_secs }}s" >&2; echo "$st" >&2; exit 1
+          fi
+          sleep 10
+        done
+      args:
+        executable: /bin/bash
+      register: pdrbd_dr_sync
+      changed_when: false
+      when: dr_enabled | default(true) | bool  # plays take no `when:`; gate the task
+
+    - name: exactly one site-A node held the DR resource and reported in-sync
+      ansible.builtin.assert:
+        that: >-
+          groups['pdrbd_a'] | map('extract', hostvars, ['pdrbd_dr_sync', 'stdout'])
+          | select('match', '^in-sync') | list | length == 1
+        fail_msg: "no site-A node (or more than one) holds {{ pdrbd_dr_res }} in sync — check crm_mon"
+      run_once: true
+      when: dr_enabled | default(true) | bool
 
 - import_playbook: site-distributed-shared.yml
   vars:

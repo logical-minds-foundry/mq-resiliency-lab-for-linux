@@ -39,7 +39,10 @@ def test_pdrbd_verbs():
     assert v["qm-destroy"] == {"playbook": "site-pdrbd-qm-down.yml"}
     assert v["qm-up"] == {"pcs": "resource enable mq_group"}
     assert v["qm-down"] == {"pcs": "resource disable mq_group"}
-    assert "drbdadm status" in v["qm-status"]["cmd"]
+    # drbdadm status all omits the stacked DR resource (blueprint README §2.1); it stays only
+    # as the gate (it fails with no resource up), drbdsetup shows both resources.
+    assert "drbdsetup status --verbose" in v["qm-status"]["cmd"]
+    assert "drbdadm status all >/dev/null" in v["qm-status"]["cmd"]
     # `mqlab dr` (#1424) dispatches on these; rpo0: the playbook seeds + verifies RPO-0.
     assert v["dr-cutover"] == {"playbook": "site-pdrbd-dr-switch.yml", "rpo0": True}
     assert v["dr-failback"] == {"playbook": "site-pdrbd-dr-switch.yml", "rpo0": True}
@@ -89,3 +92,17 @@ def test_pdrbd_os_catalog_entry():
     cat = load_catalog()
     assert cat.stacks["pcmk-drbd-ubuntu"]["supported"] == [OsRef("ubuntu", 24), OsRef("ubuntu", 26)]
     assert cat.stacks["pcmk-drbd-ubuntu"]["default"] == OsRef("ubuntu", 26)
+
+
+def test_pdrbd_peer_vars_match_topology():
+    peers = yaml.safe_load((repo_root() / "ansible" / "vars" / "pdrbd-peers.yml").read_text())[
+        "pdrbd_peers_all"
+    ]
+    nodes = _topology()["nodes"]
+    assert [p["name"] for p in peers] == [*_A, *_B]
+    for p in peers:
+        nics = nodes[p["name"]]["nics"]
+        hb = nics.get("net-hb-a") or nics.get("net-hb-b")
+        assert (p["addr_hb"], p["addr_wan"]) == (hb, nics["net-wan"]), p["name"]
+    for site in ("a", "b"):  # site-local HA node-ids 0-2, as RDQM numbers each site
+        assert sorted(p["node_id"] for p in peers if p["site"] == site) == [0, 1, 2]

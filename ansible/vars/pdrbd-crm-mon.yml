@@ -1,0 +1,21 @@
+---
+# The `crm_mon -1 -r` clone-role parse for pcmk-drbd-ubuntu (epic .github#310, #1428),
+# shared by the pdrbd-qm role (provision end-state checks) and site-pdrbd-dr-switch.yml.
+#
+# Format (Pacemaker 3.0.1 list output): a clone is a top-level resource line indented two
+# spaces, its role lines are indented four, and a role line carries the node list in
+# brackets. Observed live on this arm (#1615):
+#     * Clone Set: drbd_qm-clone [drbd_qm] (promotable):
+#       * Promoted: [ pdrbd-a1 ]
+#       * Unpromoted: [ pdrbd-a2 pdrbd-a3 ]
+# and on RDQM's DR secondary, where a target-role annotates the role
+# (docs/reference/rdqm-blueprint/rdqm-b1/pcmk-status.txt):
+#       * Unpromoted (target-role): [ rdqm-b1 ]
+#
+# Substitute CLONE (the clone id) and ROLE (Promoted | Unpromoted) with `replace`, then
+# `regex_findall`: the one capture is the role line's space-separated node list. A role
+# line is only read inside its own clone's block (indent >= 4 under the clone header), so
+# another clone's role line never matches. No match is an empty list, and every caller
+# asserts the count it needs, so a format change fails loud (tests/test_pdrbd_dr_switch.py
+# runs this pattern against both formats above).
+pdrbd_crm_role_re: 'Clone Set: CLONE \[[^\]\n]+\][^\n]*\n(?: {4,}\*[^\n]*\n)*? {4}\* ROLE(?: \([^)\n]*\))?: \[ ([^\]\n]+?) \]'

@@ -1,0 +1,61 @@
+---
+# Building block (epic .github#310 T6, #1428): site B of the pcmk-drbd-ubuntu stack — an
+# independent 3-node site with its own Pacemaker cluster and, once pdrbd-qm runs, its own
+# HA resource, like RDQM's site B (rdqm-b1/quorum.txt, rdqm-b1/corosync-conf.txt,
+# rdqm-b1/drbd-dump.txt). No cluster spans the sites (CL-1). Site B becomes the DR
+# secondary through the stacked <qm>.dr resource (pdrbd-qm). Composed by site-pdrbd.yml
+# AFTER _pdrbd-cluster-ha.yml, and skipped by `bootstrap --no-dr` (dr_enabled=false).
+#
+# The same blocks as site A's building block, in the same order. No pcmk-stonith play:
+# RDQM fences at neither the Pacemaker nor the DRBD level (CL-2).
+
+# Cold-boot guard (#151/#160): wait for every site-B node before any play touches it.
+- name: wait for site B to be SSH-ready (cold-boot guard)
+  hosts: pdrbd_b
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+- name: acl for unprivileged become (site B)
+  hosts: pdrbd_b
+  become: true
+  tasks:
+    - name: acl package
+      # Baked into the pdrbd box; a no-op there. lock_timeout waits out a fresh-boot
+      # unattended-upgrades holding the dpkg lock (#820).
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+        lock_timeout: "{{ apt_lock_timeout }}"
+
+# Per-run half of drbd9 (#1423): DRBD 9 for the BOOTED kernel (fails loud on a kernel
+# drift, Review Focus 2) + the drbdpool VG on the extra disk.
+- name: DRBD 9 + drbdpool VG (site B)
+  hosts: pdrbd_b
+  roles: [drbd9]
+
+- name: MQ product (no-op on the baked box) (site B)
+  hosts: pdrbd_b
+  roles: [mq-install]
+
+- name: site B Pacemaker cluster
+  hosts: pdrbd_b
+  vars:
+    pcmk_cluster_name: mqpdrbd-b
+    # Lab constants (topology.yaml pdrbd-b* net-hb-b), as site A's block does.
+    pcmk_site_nodes:
+      - { name: pdrbd-b1, hb: 172.16.2.81 }
+      - { name: pdrbd-b2, hb: 172.16.2.82 }
+      - { name: pdrbd-b3, hb: 172.16.2.83 }
+  roles: [pcmk-cluster]
+
+# mqweb: stateless per-node admin REST/Console on every QM node (#1502), site B included,
+# so the QM is administrable wherever a DR switch lands it (the rdqm_b precedent in
+# _rdqm-dr-replication.yml). serial: 1 — cold-start mqweb one node at a time (#1161).
+- name: mqweb on every site-B node
+  hosts: pdrbd_b
+  serial: 1
+  roles:
+    - mqweb

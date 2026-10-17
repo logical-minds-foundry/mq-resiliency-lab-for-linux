@@ -1,22 +1,31 @@
 ---
-# qm-destroy for pcmk-drbd-ubuntu (epic .github#310 T5, #1427), driven by `mqlab qm destroy`
-# (which passes -e qm_name). Removes the Pacemaker resources, takes the DRBD resource down,
-# wipes its metadata, removes the <qm>_00 LV, the QM definition and the unit on every node.
+# qm-destroy for pcmk-drbd-ubuntu (epic .github#310 T5 #1427, T6 #1428), driven by
+# `mqlab qm destroy` (which passes -e qm_name). Both sites (site A only when
+# dr_enabled=false). Per site: removes the Pacemaker resources and the DR role marker. Per
+# node: takes the stacked DR resource down, then the HA resource; wipes the HA metadata;
+# removes the <qm>_00 LV (the stacked metadata lives inside it), the QM definition and the
+# unit. Each per-site step runs once PER SITE (each site is its own cluster), never
+# run_once.
 #
 # `pcs resource delete` without --force: pcs stops a running resource first, so the QM,
-# VIP and filesystem stop through their constraints and the DRBD clone demotes and stops
-# before anything is removed. --force would skip that clean stop.
+# VIP and filesystem stop through their constraints and the DR and HA clones demote and
+# stop before anything is removed (ocf:linbit:drbd stop runs `drbdadm down`, with -S for
+# the stacked resource). --force would skip that clean stop. Order: the group, then the DR
+# clone (stacked on the HA device), then the HA clone.
 
-- name: remove the Pacemaker resources
-  hosts: pdrbd_a
+- name: remove the Pacemaker resources (once per site)
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
+  vars:
+    pdrbd_res: "{{ qm_name | lower }}"
+    pdrbd_site_group: "{{ 'pdrbd_a' if inventory_hostname in groups['pdrbd_a'] else 'pdrbd_b' }}"
   tasks:
     # cibadmin exits 105 only when the CIB answered and has no such id; any other failure
     # is loud (pcs resource status cannot tell "absent" from "cluster unreachable").
-    - name: delete mq_group (with its members) and the drbd_qm clone
+    - name: delete mq_group (with its members), the drbd_dr_qm clone and the drbd_qm clone
       ansible.builtin.shell: |
         set -e
-        for r in mq_group drbd_qm-clone; do
+        for r in mq_group drbd_dr_qm-clone drbd_qm-clone; do
           rc=0
           cibadmin --query --xpath "//*[@id='$r']" >/dev/null 2>&1 || rc=$?
           case "$rc" in
@@ -25,18 +34,55 @@
             *) echo "cibadmin probe for $r failed (rc=$rc)" >&2; exit 1 ;;
           esac
         done
-      run_once: true
+      when: inventory_hostname == groups[pdrbd_site_group][0]
       register: pdrbd_rsc_delete
       changed_when: "'DELETED' in pdrbd_rsc_delete.stdout"
 
-- name: take the volume down and remove it
-  hosts: pdrbd_a
+    # The pdrbd:<qm>-dr-role marker (pdrbd-qm; mirrors RDQM's rdqm:<qm>-dr-role).
+    - name: delete the DR role marker (absent is fine)
+      ansible.builtin.shell: |
+        set -e
+        rc=0
+        cibadmin --query --xpath "//cluster_property_set[@id='pdrbd']/nvpair[@name='{{ pdrbd_res }}-dr-role']" >/dev/null 2>&1 || rc=$?
+        case "$rc" in
+          0) crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --delete; echo DELETED ;;
+          105) echo ABSENT ;;
+          *) echo "cibadmin probe for the dr-role marker failed (rc=$rc)" >&2; exit 1 ;;
+        esac
+      when: inventory_hostname == groups[pdrbd_site_group][0]
+      register: pdrbd_marker_delete
+      changed_when: "'DELETED' in pdrbd_marker_delete.stdout"
+
+- name: take the volumes down and remove them
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
   become: true
   vars:
     pdrbd_res: "{{ qm_name | lower }}"
+    pdrbd_dr_res: "{{ qm_name | lower }}.dr"
     pdrbd_lv: "{{ qm_name | lower }}_00"
     pdrbd_vg: drbdpool
   tasks:
+    # Normally already down: deleting the DR clone stopped it. The stacked resource goes
+    # down before the HA resource it sits on (UG 5.20.1: the lower device must stay Primary
+    # while the stacked one runs). `drbdsetup status` probes it: `drbdadm status` does not
+    # list a stacked resource (BP README §2.1).
+    - name: stacked DR resource down (absent is fine)
+      ansible.builtin.shell: |
+        set -e
+        if drbdsetup status {{ pdrbd_dr_res }} >/dev/null 2>&1; then
+          drbdadm -S down {{ pdrbd_dr_res }}
+          echo DOWN
+        fi
+      register: pdrbd_dr_down
+      changed_when: "'DOWN' in pdrbd_dr_down.stdout"
+
+    # Removed before the HA steps: drbdadm parses every .res file, and a stacked resource
+    # whose lower resource is gone is a config error.
+    - name: remove the DR resource file
+      ansible.builtin.file:
+        path: "/etc/drbd.d/{{ pdrbd_dr_res }}.res"
+        state: absent
+
     - name: drbd down + wipe-md (absent is fine)
       ansible.builtin.shell: |
         set -e
@@ -56,6 +102,9 @@
         path: "/etc/drbd.d/{{ pdrbd_res }}.res"
         state: absent
 
+    # The stacked DR metadata sits inside this LV (internal, at the end of the HA device),
+    # so it goes with the LV. A recreated LV can reuse the extents; pdrbd-qm therefore
+    # force-creates the stacked metadata on every fresh HA volume rather than adopting it.
     - name: remove the <qm>_00 LV (absent is fine)
       ansible.builtin.shell: |
         set -e

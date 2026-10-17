@@ -137,8 +137,9 @@ one of three endpoint kinds:
 | `nativeha-ubuntu` | `active-instance` | `10.10.1.11-13:9443` | `10.10.2.11-13:9443` |
 | `svc-sim` | `counterparty` | `https://10.60.0.50:9443` | — |
 
-`pcmk-drbd-ubuntu` (`vip`, `https://10.10.{1,2}.170:9443`) is in the topology but
-cannot be bootstrapped yet (epic `.github#310`).
+`pcmk-drbd-ubuntu` (`vip`, `https://10.10.{1,2}.170:9443`) answers on the site that is
+the DR primary: site A after bootstrap, site B after `mqlab dr cutover` (epic
+`.github#310`).
 
 For the acceptance procedure that proves each endpoint is live, see the
 [mqweb endpoint verification runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md).

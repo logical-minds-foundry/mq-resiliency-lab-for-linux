@@ -1,0 +1,46 @@
+# {{ ansible_managed }} — RDQM-shaped per-QM DR resource, STACKED on the HA resource
+# (epic .github#310, #1428). 2 members: this site's HA primary (stacked-on-top-of) and the
+# other site as ONE logical peer reached over three net-wan paths, protocol A.
+# Values: docs/reference/rdqm-blueprint/rdqm-a1/drbd-conf.txt (rdqmapp.dr.res) and
+# rdqm-b1/drbd-dump.txt (site B: node-ids swapped).
+# Rendered per node: the local `host` in every path is this node (rdqm-a2/drbd-dump.txt
+# names rdqm-a2), so the resource runs on whichever node is the site's HA primary.
+# Syntax: `stacked-on-top-of` "replaces one of the on sections normally found in any
+# resource configuration" (DRBD 9.0 User's Guide 5.20.2; drbd.conf-9.0(5)); stacked
+# metadata is always internal (UG 5.20.1), so the local side names no backing disk.
+# Multiple `path`s per connection: drbd.conf-9.0(5) `path`; the TCP transport uses one path
+# at a time (UG 2.7). NOT set, as in RDQM: the split-brain policies (RP-7), the fence
+# policy. Also not set, unlike RDQM: its IBM rdqmhandler hooks (incl. the snapshot LV;
+# TL-3, DR-3) and replication TLS (lab #1609).
+resource {{ pdrbd_dr_res }} {
+    options {
+        quorum majority;
+        on-no-quorum io-error;
+        auto-promote no;
+    }
+    volume 0 {
+        device minor {{ pdrbd_dr_minor }};
+    }
+    stacked-on-top-of {{ pdrbd_res }} {
+        node-id {{ pdrbd_dr_local_id }};
+    }
+    on {{ pdrbd_dr_peer_name }} {
+        node-id {{ 1 - (pdrbd_dr_local_id | int) }};
+        volume 0 {
+            disk _remote;
+        }
+    }
+    connection {
+        net {
+            protocol A;
+            verify-alg sha1;
+            allow-remote-read no;
+        }
+{% for r in pdrbd_remote_peers %}
+        path {
+            host {{ inventory_hostname }} address ipv4 {{ pdrbd_my_wan }}:{{ pdrbd_dr_port }};
+            host {{ pdrbd_dr_peer_name }} address ipv4 {{ r.addr_wan }}:{{ pdrbd_dr_port }};
+        }
+{% endfor %}
+    }
+}

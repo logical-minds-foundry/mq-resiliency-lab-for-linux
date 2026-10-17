@@ -1,0 +1,21 @@
+---
+# RPO-0 drill seed (epic .github#310, #1428; mirrors lab/scripts/rdqm-dr-cutover.sh
+# rpo0_seed, #867): a uniquely tagged PERSISTENT message on the live QM before the cut.
+# Inputs: rpo0_node (the node running the live QM), qm_name. Sets fact rpo0_token.
+# The drill queue is defined idempotently with DEFPSIST(YES), so amqsput's message is
+# persistent: it must survive the cut to count as RPO-0.
+- name: RPO-0 seed — token
+  ansible.builtin.set_fact:
+    rpo0_token: "RPO0-{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}-{{ 99999 | random }}"
+
+- name: RPO-0 seed — define the drill queue and put the token
+  ansible.builtin.shell: |
+    set -eo pipefail
+    echo 'DEFINE QLOCAL(DR.RPO0.DRILL) DEFPSIST(YES) REPLACE' | /opt/mqm/bin/runmqsc {{ qm_name }}
+    printf '%s\n' '{{ rpo0_token }}' | /opt/mqm/samp/bin/amqsput DR.RPO0.DRILL {{ qm_name }}
+  args:
+    executable: /bin/bash
+  delegate_to: "{{ rpo0_node }}"
+  become: true
+  become_user: mqm
+  changed_when: true
