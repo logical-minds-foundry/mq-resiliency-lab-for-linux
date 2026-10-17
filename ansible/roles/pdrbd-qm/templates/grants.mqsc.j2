@@ -1,0 +1,12 @@
+* Least-privilege OAM grants for {{ qm_name }} (#74): the authz_grants set the pcmk and rdqm
+* arms apply with setmqaut, expressed as MQSC SET AUTHREC (repo rule: SET AUTHREC, not
+* setmqaut). Same principals, same objects, same authorities: "+put +setall" -> PUT, SETALL.
+* SET AUTHREC takes effect immediately. Every line must succeed (the apply accepts rc 0 only).
+{% for g in authz_grants %}
+{% set auths = (g.authorities | replace('+', '') | upper).split() | join(', ') %}
+{% if g.object_type == 'qmgr' %}
+SET AUTHREC OBJTYPE(QMGR) GROUP('{{ g.group }}') AUTHADD({{ auths }})
+{% else %}
+SET AUTHREC PROFILE('{{ g.object }}') OBJTYPE({{ g.object_type | upper }}) GROUP('{{ g.group }}') AUTHADD({{ auths }})
+{% endif %}
+{% endfor %}

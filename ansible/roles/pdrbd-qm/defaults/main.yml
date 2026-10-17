@@ -1,0 +1,28 @@
+---
+# pdrbd-qm (epic .github#310, #1427): one RDQM-shaped replicated volume per QM. Every value
+# is the RDQM blueprint's (docs/reference/rdqm-blueprint/; reconciled on #1427, adopted by
+# the owner 2026-10-17 under .github#362); each line names its source file.
+pdrbd_vg: drbdpool                    # rdqm-a1/vgs.txt
+pdrbd_res: "{{ qm_name | lower }}"    # HA resource = lower-case QM (rdqm-a1/drbd-dump.txt)
+pdrbd_lv: "{{ pdrbd_res }}_00"        # rdqm-a1/lvs.txt (rdqmapp_00)
+pdrbd_lv_size: 3072M                  # rdqm-a1/pcmk-config.txt rdqmapp-size=3072; lvs.txt 3.00g
+pdrbd_fstype: ext4                    # rdqm-a1/mounts.txt
+pdrbd_mount_opts: defaults            # rdqm-a1/mounts.txt (rw,relatime; seclabel is SELinux)
+pdrbd_mount_root: /var/mqm/vols       # rdqm-a1/mounts.txt
+pdrbd_mount: "{{ pdrbd_mount_root }}/{{ pdrbd_res }}"
+pdrbd_ha_port: 7000                   # rdqm-a1/pcmk-config.txt rdqmapp-drbd-port
+pdrbd_ha_minor: 100                   # rdqm-a1/pcmk-config.txt rdqmapp-drbd-minor
+pdrbd_stickiness: 1                   # rdqm-a1/pcmk-config.txt rsc_defaults
+pdrbd_preferred_score: 50             # rdqm-a1/pcmk-config.txt rdqmapp_preferred_location
+# Shape (plan "The shape decision"): HA-only here. Task 6 (#1428) adds the DR/HA shape,
+# chosen from dr_enabled when the QM is FIRST created and never changed on a formed QM.
+pdrbd_dr: false
+# The ONE device mkfs formats and Pacemaker mounts. HA-only: the HA device (by-res needs
+# udev-always-use-vnr, rendered in global_common.conf as RDQM does).
+pdrbd_fs_device: "/dev/drbd/by-res/{{ pdrbd_res }}/0"
+# The QM's TLS keystore directory, on the replicated volume so SSLKEYR follows the QM
+# (the pcmk arm's /mqshared/ssl precedent). pki-distribute needs a dedicated directory.
+pdrbd_ssl_dir: "{{ pdrbd_mount }}/ssl"
+# Set by the play from the inventory + topology hb IPs:
+#   pdrbd_site_group: pdrbd_a | pdrbd_b
+#   pdrbd_site_peers: [{ name, addr_hb, addr_wan, node_id }]   # this site's 3 nodes only

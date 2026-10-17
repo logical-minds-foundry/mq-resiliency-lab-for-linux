@@ -1,0 +1,63 @@
+---
+# One provision for the pcmk-drbd-ubuntu stack (epic .github#310 T5, #1427), composed like
+# site-pcmk.yml / site-rdqm.yml from building blocks:
+#   1. _pdrbd-cluster-ha.yml        — site A: DRBD 9 + VG, MQ, Pacemaker cluster, mqweb
+#   2. authz service accounts        — mqapp/mqmon/mqsvc/mqoperator on every QM node
+#   3. pdrbd-qm                      — the per-QM RDQM-shaped volume, the QM, its MQSC and
+#                                      the Pacemaker resources
+#   4. site-distributed-shared.yml  — the SVC counterparty QM + inter-QM channels + the
+#                                      app requester (`mqlab qm e2e` needs it)
+# Task 6 (#1428) adds site B and the DR/HA shape.
+#
+# Provision-phase var contract (#350): the bootstrap `provision` phase passes qm_app /
+# qm_svc / chl_to_svc / chl_to_app / svc_req_queue (phases._qm_extra_vars). The fixed lab
+# values (the site-A VIP, the SVC CONNAME, the site peers' addresses) are lab constants
+# below, identical to topology.yaml's pcmk-drbd-ubuntu qm: block and pdrbd-a* nics.
+
+# Temporary: Task 6 (#1428) deletes this play when it lands the DR/HA shape.
+- name: preflight — the DR/HA shape is not built yet
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: refuse a DR provision until Task 6 (lab #1428) lands
+      ansible.builtin.assert:
+        that: not (dr_enabled | default(true) | bool)
+        fail_msg: >-
+          pcmk-drbd-ubuntu builds only the HA-only shape until Task 6 (#1428) lands; run
+          `mqlab bootstrap pcmk-drbd-ubuntu --no-dr`
+
+- import_playbook: _pdrbd-cluster-ha.yml
+
+# Stage 2 authorization (#74) + mqoperator (#1501): the OAM principals must exist on EVERY
+# node the QM can run on before any grant resolves against them. Site A only until Task 6.
+- name: authz service accounts on every app-QM node
+  hosts: pdrbd_a
+  become: true
+  roles: [mq-authz-accounts]
+
+- name: per-QM replicated volume + resources (site A)
+  hosts: pdrbd_a
+  become: true
+  vars:
+    qm_name: "{{ qm_app }}"
+    qm_vip: 10.10.1.170                 # topology.yaml pcmk-drbd-ubuntu qm.vip
+    svc_conn: "svc-sim-ext.service.com"
+    pdrbd_site_group: pdrbd_a
+    # Site-local HA peers, node-ids 0-2 (RDQM numbers each site 0-2: rdqm-a1/drbd-dump.txt,
+    # rdqm-b1/drbd-dump.txt). addr_wan is unused by the HA template; Task 6's DR template
+    # uses it.
+    pdrbd_site_peers:
+      - { name: pdrbd-a1, addr_hb: 172.16.1.71, addr_wan: 10.99.0.71, node_id: 0 }
+      - { name: pdrbd-a2, addr_hb: 172.16.1.72, addr_wan: 10.99.0.72, node_id: 1 }
+      - { name: pdrbd-a3, addr_hb: 172.16.1.73, addr_wan: 10.99.0.73, node_id: 2 }
+  roles: [pdrbd-qm]
+
+- import_playbook: site-distributed-shared.yml
+  vars:
+    our_qm: "{{ qm_app }}"
+    # Like RDQM: no partner-facing VIP; the SVC QM's sender to us carries a CONNAME list of
+    # the three site-A net-ext node addresses (site-rdqm.yml precedent, #216 spike).
+    our_conn: "pdrbd-a1-ext.client.com(1414),pdrbd-a2-ext.client.com(1414),pdrbd-a3-ext.client.com(1414)"
+    # The app host reaches the app QM on its one data VIP. APP.SVRCONN is mutual TLS.
+    app_conn: "pdrbd-vip-a.client.com(1414)"
+    app_tls: true

@@ -82,12 +82,13 @@ The candidates, derived from topology:
 |---|---|---|---|
 | `pcmk-ubuntu` (VIP) | PCMKAPP | `https://10.10.1.200:9443` | `https://10.10.2.200:9443` |
 | `rdqm-rhel` (VIP) | RDQMAPP | `https://10.10.1.100:9443` | `https://10.10.2.100:9443` |
+| `pcmk-drbd-ubuntu` (VIP) | PDRBDAPP | `https://10.10.1.170:9443` | `https://10.10.2.170:9443` |
 | `nativeha-ubuntu` (active instance) | NHAUAPP | `https://10.10.1.{11,12,13}:9443` | `https://10.10.2.{11,12,13}:9443` |
 | `nativeha-rhel-crr` (active instance) | NHARCAPP | `https://10.10.1.{91,92,93}:9443` | `https://10.10.2.{91,92,93}:9443` |
 | `svc-sim` (counterparty, `net-ext`) | SVCQM | `https://10.60.0.50:9443` | — |
 
-`pcmk-drbd-ubuntu` (`https://10.10.{1,2}.170:9443`) is in topology but is not yet
-bootstrappable (epic `.github#310`). Add its rows when it is.
+`pcmk-drbd-ubuntu` bootstraps HA-only (`--no-dr`) until its DR site lands (#1428,
+epic `.github#310`), so only its site-A endpoint answers today.
 
 > **Replicas answer too.** A non-active Native HA instance's mqweb is up. The collection
 > query `GET $REST/qmgr` returns the QM with `"state": "replica"` (or

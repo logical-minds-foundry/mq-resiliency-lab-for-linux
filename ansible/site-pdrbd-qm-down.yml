@@ -1,0 +1,92 @@
+---
+# qm-destroy for pcmk-drbd-ubuntu (epic .github#310 T5, #1427), driven by `mqlab qm destroy`
+# (which passes -e qm_name). Removes the Pacemaker resources, takes the DRBD resource down,
+# wipes its metadata, removes the <qm>_00 LV, the QM definition and the unit on every node.
+#
+# `pcs resource delete` without --force: pcs stops a running resource first, so the QM,
+# VIP and filesystem stop through their constraints and the DRBD clone demotes and stops
+# before anything is removed. --force would skip that clean stop.
+
+- name: remove the Pacemaker resources
+  hosts: pdrbd_a
+  become: true
+  tasks:
+    # cibadmin exits 105 only when the CIB answered and has no such id; any other failure
+    # is loud (pcs resource status cannot tell "absent" from "cluster unreachable").
+    - name: delete mq_group (with its members) and the drbd_qm clone
+      ansible.builtin.shell: |
+        set -e
+        for r in mq_group drbd_qm-clone; do
+          rc=0
+          cibadmin --query --xpath "//*[@id='$r']" >/dev/null 2>&1 || rc=$?
+          case "$rc" in
+            0) pcs resource delete "$r"; echo "DELETED $r" ;;
+            105) echo "ABSENT $r" ;;
+            *) echo "cibadmin probe for $r failed (rc=$rc)" >&2; exit 1 ;;
+          esac
+        done
+      run_once: true
+      register: pdrbd_rsc_delete
+      changed_when: "'DELETED' in pdrbd_rsc_delete.stdout"
+
+- name: take the volume down and remove it
+  hosts: pdrbd_a
+  become: true
+  vars:
+    pdrbd_res: "{{ qm_name | lower }}"
+    pdrbd_lv: "{{ qm_name | lower }}_00"
+    pdrbd_vg: drbdpool
+  tasks:
+    - name: drbd down + wipe-md (absent is fine)
+      ansible.builtin.shell: |
+        set -e
+        if drbdadm status {{ pdrbd_res }} >/dev/null 2>&1; then
+          drbdadm down {{ pdrbd_res }}
+          echo DOWN
+        fi
+        if [ -e /etc/drbd.d/{{ pdrbd_res }}.res ]; then
+          timeout 60 drbdadm wipe-md --force {{ pdrbd_res }} </dev/null
+          echo WIPED
+        fi
+      register: pdrbd_wipe
+      changed_when: "'DOWN' in pdrbd_wipe.stdout or 'WIPED' in pdrbd_wipe.stdout"
+
+    - name: remove the resource file
+      ansible.builtin.file:
+        path: "/etc/drbd.d/{{ pdrbd_res }}.res"
+        state: absent
+
+    - name: remove the <qm>_00 LV (absent is fine)
+      ansible.builtin.shell: |
+        set -e
+        if lvs {{ pdrbd_vg }}/{{ pdrbd_lv }} >/dev/null 2>&1; then
+          lvremove -y {{ pdrbd_vg }}/{{ pdrbd_lv }} </dev/null
+          echo REMOVED
+        fi
+      register: pdrbd_lvremove
+      changed_when: "'REMOVED' in pdrbd_lvremove.stdout"
+
+    # dspmq -m exits 72 for a QM this node does not know; any other failure is loud.
+    - name: remove the QM definition (rmvmqinf; absent is fine)
+      ansible.builtin.shell: |
+        set -e
+        rc=0
+        su mqm -c "/opt/mqm/bin/dspmq -m {{ qm_name }}" >/dev/null 2>&1 || rc=$?
+        case "$rc" in
+          0) su mqm -c "/opt/mqm/bin/rmvmqinf {{ qm_name }}"; echo REMOVED ;;
+          72) echo ABSENT ;;
+          *) echo "dspmq -m {{ qm_name }} failed (rc=$rc)" >&2; exit 1 ;;
+        esac
+      register: pdrbd_rmvmqinf
+      changed_when: "'REMOVED' in pdrbd_rmvmqinf.stdout"
+
+    - name: remove the systemd unit
+      ansible.builtin.file:
+        path: "/etc/systemd/system/mq-{{ qm_name }}.service"
+        state: absent
+      notify: daemon-reload
+
+  handlers:
+    - name: daemon-reload
+      ansible.builtin.systemd:
+        daemon_reload: true

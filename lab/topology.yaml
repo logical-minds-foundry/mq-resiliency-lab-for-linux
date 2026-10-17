@@ -475,8 +475,9 @@ stacks:
   # pcmk-drbd-ubuntu (epic .github#310): RDQM rebuilt from upstream Corosync/Pacemaker/
   # DRBD 9. Built to RDQM's captured config (docs/reference/rdqm-blueprint/); deviations
   # in docs/reference/rdqm-vs-vanilla-deviations.md. Like RDQM: one floating IP per site
-  # (no vip_ext), operator-driven DR (no Booth). The verbs' playbooks land in Tasks 5-6
-  # (#1427, #1428); the stack is not bootstrappable until Task 5.
+  # (no vip_ext), operator-driven DR (no Booth). Task 5 (#1427) landed the provision and
+  # qm-destroy playbooks: the stack bootstraps HA-only (`--no-dr`) until Task 6 (#1428)
+  # lands site B and the DR switch playbook.
   pcmk-drbd-ubuntu:
     mechanism: pacemaker-drbd
     os_family: ubuntu

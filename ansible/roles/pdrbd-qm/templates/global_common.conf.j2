@@ -1,0 +1,24 @@
+# {{ ansible_managed }} — RDQM's global/common section, value for value
+# (docs/reference/rdqm-blueprint/rdqm-a1/drbd-conf.txt, global_common.conf; TL-5).
+# Units per drbdsetup-options.xml: twopc-timeout and ping-timeout are tenths of a second.
+global {
+    usage-count no;
+    udev-always-use-vnr;
+}
+
+common {
+    options {
+        twopc-timeout 100;
+    }
+    disk {
+        c-fill-target 1M;
+        c-max-rate 500M;
+        c-min-rate 100M;
+        resync-without-replication no;
+    }
+    net {
+        ping-timeout 40;
+        socket-check-timeout 5;
+        max-buffers 40k;
+    }
+}

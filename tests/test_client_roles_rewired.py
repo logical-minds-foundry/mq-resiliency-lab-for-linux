@@ -347,6 +347,7 @@ SHARED_IMPORTERS = {
     "site-nativeha-ubuntu.yml": True,
     "site-rdqm.yml": False,
     "site-pcmk.yml": False,
+    "site-pdrbd.yml": False,
 }
 
 

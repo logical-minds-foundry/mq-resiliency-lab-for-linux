@@ -1,0 +1,9 @@
+* Our-side inter-QM objects (#147): {{ qm_name }} -> {{ qm_svc }} across net-ext.
+* Applied once at QM creation, persisted to the shared LUN so it follows the QM
+* on failover. Retry timers are tuned for lab snappiness, not production
+* (spec 2026-06-13-distributed-mq-architecture-design.md §5.2).
+DEFINE QLOCAL(APP.REPLY) DEFPSIST(YES) REPLACE
+DEFINE QREMOTE(SVC.REQUEST) RNAME({{ svc_req_queue }}) RQMNAME({{ qm_svc }}) XMITQ({{ qm_svc }}) REPLACE
+DEFINE QLOCAL({{ qm_svc }}) USAGE(XMITQ) TRIGGER TRIGTYPE(FIRST) INITQ(SYSTEM.CHANNEL.INITQ) TRIGDATA({{ chl_to_svc }}) REPLACE
+DEFINE CHANNEL({{ chl_to_svc }}) CHLTYPE(SDR) TRPTYPE(TCP) CONNAME('{{ svc_conn }}(1414)') XMITQ({{ qm_svc }}) SSLCIPH({{ tls_cipher }}) SSLPEER('{{ tls_peer_svc }}') SHORTRTY(10) SHORTTMR(5) LONGRTY(999999999) LONGTMR(20) HBINT({{ inter_qm_hbint }}) REPLACE
+DEFINE CHANNEL({{ chl_to_app }}) CHLTYPE(RCVR) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_svc }}') PUTAUT(DEF) HBINT({{ inter_qm_hbint }}) REPLACE

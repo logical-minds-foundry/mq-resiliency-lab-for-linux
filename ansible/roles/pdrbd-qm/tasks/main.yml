@@ -1,0 +1,450 @@
+---
+# pdrbd-qm (epic .github#310, #1427): the per-QM RDQM-shaped volume + Pacemaker resources,
+# on the local site group (pdrbd_site_group). HA-only shape (Task 5); Task 6 (#1428) adds
+# the stacked DR resource.
+#
+# Re-run safety (Review Focus 3). First-time formation is guarded by `pdrbd_formed`
+# (this site's CIB already holds drbd_qm), so a re-run never re-creates metadata,
+# re-formats or re-creates the QM over live data. The promote + mkfs carries a second,
+# independent guard: it runs only after a create-md that THIS run performed. A first run
+# that fails part-way is therefore not resumed over a half-built volume; run
+# `mqlab qm destroy` and provision again.
+#
+# "Once per site" is `inventory_hostname == pdrbd_creator`, never run_once (Task 6 runs
+# both sites in one play).
+
+# JSON diagnostic logging (#282): seed the mqs.ini template + journald drop-in BEFORE the
+# QM is created, so crtmqm bakes the DiagnosticMessages stanza into qm.ini. Every node, as
+# the pcmk arm does.
+- name: JSON diagnostic logging — mqs.ini template + journald (#282)
+  ansible.builtin.include_role:
+    name: mq-diag-logging
+    tasks_from: system
+
+# Event monitoring (#114): the collector wrapper on EVERY node, so the SERVICE's STARTCMD
+# exists wherever Pacemaker starts the QM. The QM-level half runs in the creation block.
+- name: event monitoring — host prep (wrapper on every node) (#114)
+  ansible.builtin.include_role:
+    name: mq-event-monitor
+  vars:
+    qmgr_name: "{{ qm_name }}"
+
+- name: this site's creation node
+  ansible.builtin.set_fact:
+    pdrbd_creator: "{{ groups[pdrbd_site_group][0] }}"
+
+# cibadmin, not `pcs resource status`: pcs exits 1 both for "no such resource" and for
+# "cluster unreachable", and reading an error as "not formed" would re-run first-time
+# formation over live data. cibadmin --xpath exits 105 (CRM_EX_NOSUCH) only when the CIB
+# answered and holds no match; any other non-zero exit fails here.
+- name: probe — does this site's CIB already own the QM's HA DRBD resource?
+  ansible.builtin.command:
+    argv: [cibadmin, --query, --xpath, "//primitive[@id='drbd_qm']"]
+  register: pdrbd_owned
+  changed_when: false
+  failed_when: pdrbd_owned.rc not in [0, 105]
+  become: true
+
+- name: record formation state
+  ansible.builtin.set_fact:
+    pdrbd_formed: "{{ pdrbd_owned.rc == 0 }}"
+
+# RDQM's agent is drbd-pacemaker 9.33.1 (rdqm-a1/packages.txt); ours comes from the LINBIT
+# PPA's drbd-utils. Prove the agent exists and takes the blueprint parameters before any
+# resource uses them (adjust_master_score: HA clone, CL-4; wfc_timeout: DR clone, CL-5).
+- name: ocf:linbit:drbd on this node accepts the blueprint parameters
+  ansible.builtin.command:
+    argv: [crm_resource, --show-metadata, "ocf:linbit:drbd"]
+  register: pdrbd_agent_meta
+  changed_when: false
+  failed_when: >-
+    pdrbd_agent_meta.rc != 0
+    or pdrbd_agent_meta.stdout is not search('name="adjust_master_score"')
+    or pdrbd_agent_meta.stdout is not search('name="wfc_timeout"')
+  become: true
+
+# A lvs probe, not a path guard. No galaxy collections in the lab (#156), so no lvol module.
+- name: per-QM logical volume <qm>_00 in the drbdpool VG (lvs probe)
+  ansible.builtin.shell: |
+    set -e
+    if ! lvs {{ pdrbd_vg }}/{{ pdrbd_lv }} >/dev/null 2>&1; then
+      lvcreate -y -L {{ pdrbd_lv_size }} -n {{ pdrbd_lv }} {{ pdrbd_vg }} </dev/null
+      echo LV-CREATED
+    fi
+  register: pdrbd_lv_out
+  changed_when: "'LV-CREATED' in pdrbd_lv_out.stdout"
+  become: true
+
+- name: keep the stock global_common.conf once (RDQM keeps .rdqmsave; TL-5)
+  ansible.builtin.copy:
+    src: /etc/drbd.d/global_common.conf
+    dest: /etc/drbd.d/global_common.conf.pdrbdsave
+    remote_src: true
+    force: false
+    mode: "0644"
+  become: true
+
+- name: DRBD global/common section (RDQM's values)
+  ansible.builtin.template:
+    src: global_common.conf.j2
+    dest: /etc/drbd.d/global_common.conf
+    mode: "0644"
+  become: true
+
+- name: HA resource definition (site-local, RDQM's rdqmapp.res)
+  ansible.builtin.template:
+    src: qm.res.j2
+    dest: "/etc/drbd.d/{{ pdrbd_res }}.res"
+    mode: "0644"
+  become: true
+
+- name: the rendered DRBD config parses (an option this drbd-utils rejects fails here, loud)
+  ansible.builtin.command:
+    argv: [drbdadm, dump, all]
+  changed_when: false
+  become: true
+
+# Two wedge modes from docs/reference/drbd-operations.md: an in-use device blocks forever
+# (probe `drbdadm status` first — it never blocks), and a down device can prompt on stdin
+# (</dev/null + timeout bound it). A dump-md that times out fails loud rather than being
+# read as "no metadata". set -e: a real create-md failure is loud.
+- name: create-md (only when the resource is not up and has no metadata)
+  ansible.builtin.shell: |
+    set -e
+    if drbdadm status {{ pdrbd_res }} >/dev/null 2>&1; then
+      echo RESOURCE-UP
+      exit 0
+    fi
+    rc=0
+    timeout 30 drbdadm dump-md {{ pdrbd_res }} </dev/null >/dev/null 2>&1 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      echo MD-EXISTS
+    elif [ "$rc" -eq 124 ]; then
+      echo "drbdadm dump-md {{ pdrbd_res }} timed out; refusing to create-md over it" >&2
+      exit 1
+    else
+      timeout 60 drbdadm create-md --force {{ pdrbd_res }} </dev/null
+      echo MD-CREATED
+    fi
+  register: pdrbd_md
+  changed_when: "'MD-CREATED' in pdrbd_md.stdout"
+  when: not pdrbd_formed
+  become: true
+
+- name: bring the resource up (adjust when already up — never masked)
+  ansible.builtin.shell: |
+    set -e
+    if drbdadm status {{ pdrbd_res }} >/dev/null 2>&1; then
+      drbdadm adjust {{ pdrbd_res }}
+      echo RES-ADJUSTED
+    else
+      drbdadm up {{ pdrbd_res }}
+      echo RES-BROUGHT-UP
+    fi
+  register: pdrbd_up
+  changed_when: "'RES-BROUGHT-UP' in pdrbd_up.stdout"
+  become: true
+
+- name: assert the drbd disk attached
+  ansible.builtin.command:
+    argv: [drbdadm, dstate, "{{ pdrbd_res }}"]
+  register: pdrbd_dstate
+  changed_when: false
+  failed_when: >-
+    pdrbd_dstate.rc != 0
+    or 'Diskless' in pdrbd_dstate.stdout
+    or 'Unconfigured' in pdrbd_dstate.stdout
+  become: true
+
+- name: first-time formation on this site's creation node
+  when:
+    - not pdrbd_formed
+    - inventory_hostname == pdrbd_creator
+  become: true
+  block:
+    # `drbdadm status` omits the connection field while a peer is Connected
+    # (rdqm-a1/drbd-status.txt shows only `rdqm-a2 role:Secondary`), so count it from
+    # `drbdsetup status --verbose`, which prints it. Bounded: 60 x 2 s, then loud.
+    - name: wait for the site peers to connect
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_res }}"]
+      register: pdrbd_peers
+      until: (pdrbd_peers.stdout | regex_findall('connection:Connected') | length) >= 2
+      retries: 60
+      delay: 2
+      changed_when: false
+
+    # auto-promote is `no` (blueprint), so every promotion is explicit. --clear-bitmap skips
+    # the initial full sync of blank disks with every peer connected: the
+    # docs/reference/drbd-operations.md "real fix". The second guard (MD-CREATED) means
+    # this only ever follows a create-md performed by this run on this node.
+    - name: initial promote + mkfs (fresh volume, skip the full initial sync)
+      ansible.builtin.shell: |
+        set -e
+        drbdadm new-current-uuid --clear-bitmap {{ pdrbd_res }}/0
+        drbdadm primary {{ pdrbd_res }}
+        mkfs.{{ pdrbd_fstype }} -q {{ pdrbd_fs_device }}
+      when: "'MD-CREATED' in (pdrbd_md.stdout | default(''))"
+      changed_when: true
+
+    - name: mount point (creation node, before the mount)
+      ansible.builtin.file:
+        path: "{{ pdrbd_mount }}"
+        state: directory
+        owner: mqm
+        group: mqm
+        mode: "0755"
+
+    # Shell, not ansible.posix.mount: the lab installs no galaxy collections (#156), and
+    # this mount is transient (Pacemaker's mq_fs owns it from the CIB push on).
+    - name: mount the volume on the creation node
+      ansible.builtin.shell: |
+        set -e
+        if ! mountpoint -q {{ pdrbd_mount }}; then
+          mount -t {{ pdrbd_fstype }} -o {{ pdrbd_mount_opts }} {{ pdrbd_fs_device }} {{ pdrbd_mount }}
+          echo MOUNTED
+        fi
+      register: pdrbd_mounted
+      changed_when: "'MOUNTED' in pdrbd_mounted.stdout"
+
+    - name: QM data and log directories on the replicated volume (RDQM path layout)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: mqm
+        group: mqm
+        mode: "0755"
+      loop:
+        - "{{ pdrbd_mount }}"
+        - "{{ pdrbd_mount }}/qmgr"
+        - "{{ pdrbd_mount }}/log"
+
+    # RDQM's layout: DataPath=/var/mqm/vols/rdqmapp/qmgr/rdqmapp (rdqm-a1/mqs-ini.txt, ST-5).
+    # No `-p`: the listener is the L1414 object in the base MQSC, as on the pcmk arm.
+    - name: create the queue manager on the replicated volume
+      ansible.builtin.command:
+        argv:
+          - /opt/mqm/bin/crtmqm
+          - -md
+          - "{{ pdrbd_mount }}/qmgr"
+          - -ld
+          - "{{ pdrbd_mount }}/log"
+          - "{{ qm_name }}"
+      become: true
+      become_user: mqm
+      changed_when: true
+
+    # TLS (#250): the QM's lab-pki keystore on the replicated volume, so SSLKEYR follows the
+    # QM on failover. Registers pki_keyrpwd for the base MQSC.
+    - name: place the QM keystore on the replicated volume (TLS)
+      ansible.builtin.include_role:
+        name: pki-distribute
+      vars:
+        pki_entity: "{{ qm_name }}"
+        pki_dest_dir: "{{ pdrbd_ssl_dir }}"
+
+    - name: start the QM for configuration
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/strmqm, "{{ qm_name }}"]
+      become: true
+      become_user: mqm
+      changed_when: true
+
+    # Every MQSC below goes over stdin (the site-nativeha.yml precedent): nothing is left on
+    # disk, and the keystore password in the base MQSC never touches a file. runmqsc rc 10
+    # means a command was refused; on a fresh QM that is a real failure, so rc 0 only.
+    - name: base queue manager MQSC (listener, SVRCONNs, keystore; CHLAUTH still off)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/runmqsc, "{{ qm_name }}"]
+        stdin: "{{ lookup('ansible.builtin.template', 'base.mqsc.j2') }}"
+      become: true
+      become_user: mqm
+      register: pdrbd_mqsc
+      changed_when: true
+      failed_when: pdrbd_mqsc.rc != 0
+      no_log: true
+
+    # Inter-QM objects (#147): the our-side half of the link to the SVC QM.
+    - name: inter-QM MQSC (shared template)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/runmqsc, "{{ qm_name }}"]
+        stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/templates/mq/inter-qm.mqsc.j2') }}"
+      become: true
+      become_user: mqm
+      register: pdrbd_mqsc
+      changed_when: true
+      failed_when: pdrbd_mqsc.rc != 0
+
+    # Stage 2 authorization (#74): AFTER the channels exist, so the maps reference real
+    # channels. Flips CHLAUTH ENABLED + deny-all back-stop + SSLPEERMAP + the mqmon profile.
+    - name: authorization MQSC — CHLAUTH + maps + mqmon profile (shared template)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/runmqsc, "{{ qm_name }}"]
+        stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/templates/mq/authz.mqsc.j2') }}"
+      become: true
+      become_user: mqm
+      register: pdrbd_mqsc
+      changed_when: true
+      failed_when: pdrbd_mqsc.rc != 0
+
+    # The mqapp/mqsvc grants the pcmk/rdqm arms apply with setmqaut, as SET AUTHREC.
+    - name: least-privilege OAM grants MQSC (authz_grants as SET AUTHREC)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/runmqsc, "{{ qm_name }}"]
+        stdin: "{{ lookup('ansible.builtin.template', 'grants.mqsc.j2') }}"
+      become: true
+      become_user: mqm
+      register: pdrbd_mqsc
+      changed_when: true
+      failed_when: pdrbd_mqsc.rc != 0
+
+    # mqoperator (MQWebUser) grants (epic .github#341 spec §2.2, IBM S15; #1501): the shared
+    # arm-agnostic SET AUTHREC set, as every QM arm applies it.
+    - name: mqoperator grants MQSC (MQWebUser, #1501)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/runmqsc, "{{ qm_name }}"]
+        stdin: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/roles/mq-pcmk-qmgr/templates/mqoperator.mqsc.j2') }}"
+      become: true
+      become_user: mqm
+      register: pdrbd_mqsc
+      changed_when: true
+      failed_when: pdrbd_mqsc.rc != 0
+
+    - name: event monitoring — enable classes + define/start collector (#114)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+        tasks_from: service
+      vars:
+        qmgr_name: "{{ qm_name }}"
+
+    - name: clean stop (hand the QM to Pacemaker)
+      ansible.builtin.command:
+        argv: [/opt/mqm/bin/endmqm, -w, "{{ qm_name }}"]
+      become: true
+      become_user: mqm
+      changed_when: true
+
+    - name: capture the addmqinf command
+      ansible.builtin.shell: |
+        set -o pipefail
+        /opt/mqm/bin/dspmqinf -o command {{ qm_name }} | grep '^addmqinf'
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: mqm
+      register: pdrbd_addmqinf
+      changed_when: false
+
+    - name: release the volume and demote (Pacemaker owns promotion from here)
+      ansible.builtin.shell: |
+        set -e
+        umount {{ pdrbd_mount }}
+        drbdadm secondary {{ pdrbd_res }}
+      changed_when: true
+
+# Every RDQM node carries the same addmqinf definition, site B included
+# (rdqm-*/dspmqinf.txt); Task 6 teaches site B.
+- name: teach the QM definition to the other site nodes
+  ansible.builtin.command:
+    cmd: "su mqm -c '{{ hostvars[groups['pdrbd_a'][0]].pdrbd_addmqinf.stdout }}'"
+  when:
+    - not pdrbd_formed
+    - inventory_hostname != groups['pdrbd_a'][0]
+  register: pdrbd_addmqinf_out
+  failed_when: pdrbd_addmqinf_out.rc != 0 and 'already' not in (pdrbd_addmqinf_out.stderr | default(''))
+  changed_when: pdrbd_addmqinf_out.rc == 0
+  become: true
+
+- name: mount point on every node
+  ansible.builtin.file:
+    path: "{{ pdrbd_mount }}"
+    state: directory
+    owner: mqm
+    group: mqm
+    mode: "0755"
+  become: true
+
+# Deviation CL-6: RDQM runs the QM under the IBM agent ocf:ibm:rdqm (owner decision 5).
+- name: queue-manager systemd unit (Pacemaker is the only starter)
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/mq-{{ qm_name }}.service"
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=IBM MQ queue manager {{ qm_name }} (pacemaker-drbd managed)
+      [Service]
+      Type=forking
+      User=mqm
+      ExecStart=/opt/mqm/bin/strmqm {{ qm_name }}
+      ExecStop=/opt/mqm/bin/endmqm -w {{ qm_name }}
+      TimeoutStartSec=300
+  notify: daemon-reload
+  become: true
+
+- name: ensure the unit is disabled (cluster-only start)
+  ansible.builtin.systemd:
+    name: "mq-{{ qm_name }}.service"
+    enabled: false
+    daemon_reload: true
+  become: true
+
+# rdqm-a1/pcmk-config.txt: stonith off, stickiness 1. The quorum policy stays at its
+# default (stop), as RDQM leaves it (CL-2). Both pcs sets are idempotent.
+- name: cluster properties (rdqm-a1/pcmk-config.txt)
+  ansible.builtin.shell: |
+    set -e
+    pcs property set stonith-enabled=false
+    pcs resource defaults update resource-stickiness={{ pdrbd_stickiness }}
+  when: inventory_hostname == pdrbd_creator
+  changed_when: true
+  become: true
+
+# Values: rdqm-a1/pcmk-config.txt. Chain: HA Promoted -> mq_group (fs -> vip -> qm), the
+# same chain as RDQM's INFINITY colocations + orders ([PE] "Groups"), with the location
+# preference on the group. HA-only shape (Task 5). Judgment: derived by removing RDQM's DR
+# layer; not captured. Built in a CIB file and pushed atomically.
+# pcs 0.11.7 (24.04) and 0.12.x (26.04) both accept every form here: `--group`/`--after`
+# and clone meta without the `meta` keyword are deprecated since 0.11.6 but not removed
+# (pcs CHANGELOG, https://github.com/ClusterLabs/pcs/blob/main/CHANGELOG.md).
+# --no-default-ops keeps pcs from adding a Filesystem monitor RDQM does not have (CL-8).
+- name: Pacemaker resources (first-time only; built in a CIB file and pushed atomically)
+  when:
+    - not pdrbd_formed
+    - inventory_hostname == pdrbd_creator
+  become: true
+  ansible.builtin.shell: |
+    set -e
+    cib=$(mktemp)
+    trap 'rm -f "$cib"' EXIT
+    pcs cluster cib "$cib"
+    pcs -f "$cib" resource create drbd_qm ocf:linbit:drbd drbd_resource={{ pdrbd_res }} \
+      adjust_master_score="0 10 10000 10000" \
+      op monitor interval=20s timeout=20s role=Unpromoted \
+      op monitor interval=10s timeout=20s role=Promoted \
+      op start timeout=240s op stop timeout=100s op promote timeout=90s op demote timeout=90s \
+      promotable notify=true
+    pcs -f "$cib" resource create mq_fs ocf:heartbeat:Filesystem device={{ pdrbd_fs_device }} \
+      directory={{ pdrbd_mount }} fstype={{ pdrbd_fstype }} options={{ pdrbd_mount_opts }} \
+      force_unmount=safe fast_stop=no \
+      op start timeout=60s op stop timeout=60s --no-default-ops --group mq_group
+    pcs -f "$cib" resource create mq_vip ocf:heartbeat:IPaddr2 ip={{ qm_vip }} cidr_netmask=24 \
+      op monitor interval=30s --group mq_group --after mq_fs
+    pcs -f "$cib" resource create mq_qm systemd:mq-{{ qm_name }} \
+      op monitor interval=30s timeout=60s op start timeout=300s op stop timeout=300s \
+      --group mq_group --after mq_vip
+    pcs -f "$cib" constraint colocation add mq_group with Promoted drbd_qm-clone INFINITY
+    pcs -f "$cib" constraint order promote drbd_qm-clone then start mq_group
+    pcs -f "$cib" constraint location mq_group prefers {{ pdrbd_creator }}={{ pdrbd_preferred_score }}
+    pcs cluster cib-push "$cib" --config
+  changed_when: true
+
+- name: wait for the QM to run under Pacemaker
+  ansible.builtin.command:
+    argv: [pcs, status, resources]
+  register: pdrbd_rsc_status
+  until: pdrbd_rsc_status.stdout is search('mq_qm\s.*Started')
+  retries: 60
+  delay: 5
+  when: inventory_hostname == pdrbd_creator
+  changed_when: false
+  become: true

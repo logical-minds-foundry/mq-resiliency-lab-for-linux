@@ -1,0 +1,34 @@
+# {{ ansible_managed }} — RDQM-shaped per-QM HA resource (epic .github#310).
+# SITE-LOCAL: only this site's three nodes, a connection-mesh over net-hb-<site>. The other
+# site is never a member, so a WAN cut cannot cost this site HA quorum (RP-1/RP-2).
+# Values: docs/reference/rdqm-blueprint/rdqm-a1/drbd-conf.txt (rdqmapp.res).
+# Deliberately NOT set, as in RDQM: protocol (default C), the split-brain policies (RP-7),
+# the fence policy (default dont-care), handlers (IBM rdqmhandler; TL-3), tls (lab #1609).
+resource {{ pdrbd_res }} {
+    options {
+        quorum 2;
+        on-no-quorum io-error;
+        auto-promote no;
+    }
+    net {
+        verify-alg sha1;
+        rr-conflict retry-connect;
+    }
+    disk {
+        disable-write-same yes;
+    }
+{% for p in pdrbd_site_peers %}
+    on {{ p.name }} {
+        node-id {{ p.node_id }};
+        address ipv4 {{ p.addr_hb }}:{{ pdrbd_ha_port }};
+        volume 0 {
+            device minor {{ pdrbd_ha_minor }};
+            disk /dev/{{ pdrbd_vg }}/{{ pdrbd_lv }};
+            meta-disk internal;
+        }
+    }
+{% endfor %}
+    connection-mesh {
+        hosts {{ pdrbd_site_peers | map(attribute='name') | join(' ') }};
+    }
+}
