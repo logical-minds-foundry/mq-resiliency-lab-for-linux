@@ -33,6 +33,12 @@ Each claim is labelled as one of two kinds:
   `[PEM … body REDACTED for the committed blueprint (#1425)]` marker. The file names
   and `ls -l` lines are kept as data. No keystore (`*.kdb`, `*.p12`, `*.sth`, `*.jks`)
   and no corosync `authkey` appears anywhere.
+- **Key handling from #1603 on:** this capture predates the fix, so its private keys
+  were removed by hand at commit time (Redaction 2). The playbook now records a key file
+  in `/etc/drbd.d/` by path only, whether it is matched by name or by a `PRIVATE KEY`
+  block in its content. It replaces any private key block left in the DRBD items with a
+  marker. It also fails the run if `PRIVATE KEY` appears in any capture item before the
+  write, or in any written file afterwards.
 - **MQ level:** 10.0.1.0. Sources: `lab/mq-version`; `MQSeries*-10.0.1-0` in
   `rdqm-a1/packages.txt`; node attribute `mqvrmf=10.0.1.0` in `rdqm-a1/pcmk-config.txt`.
 - **OS:** RHEL 10.2 (install media label `RHEL-10-2-BaseOS-x86_64` in

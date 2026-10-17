@@ -10,6 +10,9 @@ import subprocess
 
 import jinja2
 import yaml
+from ansible.modules.find import contentfilter
+from ansible.parsing.dataloader import DataLoader
+from ansible.template import Templar, trust_as_template
 
 PLAYBOOK = pathlib.Path("ansible/capture-rdqm-blueprint.yml")
 _ALLOWED_REMOTE = {"ansible.builtin.command", "ansible.builtin.shell", "ansible.builtin.assert"}
@@ -260,3 +263,168 @@ def test_mounts_awk_reports_none_when_nothing_matches():
         ["awk", awk_prog], input=owned, capture_output=True, text=True, check=True
     )
     assert some.stdout == "/var/mqm/vols/rdqmapp /dev/drbd100 ext4 rw\n"
+
+
+# --- #1603: /etc/drbd.d holds each node's DRBD TLS private key; it must never be captured.
+
+# Synthetic PEM bodies (not real keys): the tests assert these bodies never reach the output.
+_KEY_BODY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC-fake-key-body"
+_CERT_BODY = "MIIDazCCAlOgAwIBAgIUfake-cert-body"
+_KEY_PEM = f"-----BEGIN PRIVATE KEY-----\n{_KEY_BODY}\n-----END PRIVATE KEY-----\n"
+_CERT_PEM = f"-----BEGIN CERTIFICATE-----\n{_CERT_BODY}\n-----END CERTIFICATE-----\n"
+
+
+def _key_redact(text: str) -> str:
+    """Run the playbook's own private-key-block awk program over `text`."""
+    prog = _capture_play()["vars"]["drbd_key_block_redact_awk"]
+    result = subprocess.run(["awk", prog], input=text, capture_output=True, text=True, check=True)
+    return result.stdout
+
+
+def _run_drbd_conf(etc: pathlib.Path) -> subprocess.CompletedProcess[str]:
+    """Render the drbd-conf task body and run it against a fake /etc tree under `etc`."""
+    play_vars = _capture_play()["vars"]
+    variables = {k: v for k, v in play_vars.items() if k != "cap_items"}
+    templar = Templar(loader=DataLoader(), variables=variables)  # Ansible's own quote filter
+    rendered = str(templar.template(trust_as_template(_body(_task_by_register("cap_drbd_conf")))))
+    assert "/etc/drbd" in rendered
+    script = rendered.replace("/etc/drbd", f"{etc}/drbd")
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=False)
+
+
+def _fake_drbd_etc(tmp_path: pathlib.Path) -> pathlib.Path:
+    (tmp_path / "drbd.conf").write_text('include "drbd.d/*.res";\n')
+    drbd_d = tmp_path / "drbd.d"
+    drbd_d.mkdir()
+    (drbd_d / "global_common.conf").write_text('net {\n    shared-secret "s3cr3t";\n}\n')
+    (drbd_d / "rdqm-a1.key").write_text(_KEY_PEM)
+    (drbd_d / "rdqm-a1.crt").write_text(_CERT_PEM)
+    (drbd_d / "bundle.pem").write_text(_CERT_PEM + _KEY_PEM)  # key by content, not name
+    (drbd_d / "store.p12").write_text("binary-keystore-bytes\n")
+    (drbd_d / "subdir").mkdir()  # not a regular file: skipped
+    return tmp_path
+
+
+def test_key_file_patterns_cover_every_key_and_keystore_type():
+    patterns = _capture_play()["vars"]["drbd_key_file_case"].split("|")
+    assert set(patterns) >= {"*.key", "*.p12", "*.kdb", "*.sth", "*.jks"}
+
+
+def test_drbd_conf_excludes_key_files_by_name_and_by_content(tmp_path):
+    result = _run_drbd_conf(_fake_drbd_etc(tmp_path))
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    # Key files: path recorded, contents never read or printed.
+    assert f"### {tmp_path}/drbd.d/rdqm-a1.key (key file: path recorded" in out
+    assert f"### {tmp_path}/drbd.d/store.p12 (key file: path recorded" in out
+    assert f"### {tmp_path}/drbd.d/bundle.pem (carries a private key block" in out
+    assert _KEY_BODY not in out and "binary-keystore-bytes" not in out
+    assert "PRIVATE KEY" not in out
+    # Public material and ordinary config are still captured; shared-secret still redacted.
+    assert f"### {tmp_path}/drbd.d/rdqm-a1.crt\n" + _CERT_PEM in out
+    assert 'shared-secret "REDACTED";' in out and "s3cr3t" not in out
+    assert "rdqm-a1.key" in out.split("### ls -l")[1]  # the ls -l listing keeps the name
+
+
+def test_drbd_conf_fails_loudly_on_an_unreadable_drbd_conf(tmp_path):
+    # set -euo pipefail: a missing drbd.conf fails the item, never an empty capture.
+    (tmp_path / "drbd.d").mkdir()
+    assert _run_drbd_conf(tmp_path).returncode != 0
+
+
+def test_both_drbd_items_pipe_through_the_key_block_redaction():
+    for reg in ("cap_drbd_dump", "cap_drbd_conf"):
+        body = _body(_task_by_register(reg))
+        assert re.search(r"\|\s*awk \{\{ drbd_key_block_redact_awk \| quote \}\}\s*$", body), reg
+
+
+def test_key_block_redaction_replaces_every_private_key_block_kind():
+    sample = (
+        "before\n"
+        + _KEY_PEM
+        + "-----BEGIN RSA PRIVATE KEY-----\nrsa-body\n-----END RSA PRIVATE KEY-----\n"
+        + "-----BEGIN ENCRYPTED PRIVATE KEY-----\nenc-body\n-----END ENCRYPTED PRIVATE KEY-----\n"
+        + _CERT_PEM
+        + "after\n"
+    )
+    out = _key_redact(sample)
+    assert "PRIVATE KEY" not in out
+    for body in (_KEY_BODY, "rsa-body", "enc-body"):
+        assert body not in out
+    assert out.count("[private key block redacted at capture (#1603)]") == 3
+    assert out.startswith("before\n") and out.endswith(_CERT_PEM + "after\n")
+
+
+def test_key_block_redaction_handles_a_one_line_block():
+    out = _key_redact("x -----BEGIN PRIVATE KEY-----body-----END PRIVATE KEY----- y\nnext\n")
+    assert out == "[private key block redacted at capture (#1603)]\nnext\n"
+
+
+def test_key_block_redaction_drops_an_unterminated_block_and_says_so():
+    out = _key_redact("head\n-----BEGIN EC PRIVATE KEY-----\nec-body\nmore\n")
+    assert "ec-body" not in out and "more" not in out and "PRIVATE KEY" not in out
+    assert out == (
+        "head\n[private key block redacted at capture (#1603)]\n"
+        "[private key block with no END line: rest of input dropped (#1603)]\n"
+    )
+
+
+def test_key_block_redaction_leaves_keyless_text_unchanged():
+    sample = "resource rdqmapp {\n    protocol C;\n}\n" + _CERT_PEM
+    assert _key_redact(sample) == sample
+
+
+def _task_by_name(prefix: str) -> dict:
+    [task] = [t for t in _capture_play()["tasks"] if t["name"].startswith(prefix)]
+    return task
+
+
+def test_prewrite_guard_rejects_private_key_text_on_either_stream():
+    guard = _task_by_name("check - no capture item carries PRIVATE KEY")
+    assert guard["loop"] == "{{ cap_items }}"
+    tmpl = "{{ " + guard["ansible.builtin.assert"]["that"] + " }}"
+    assert _render(tmpl, "plain config", "") == "True"
+    assert _render(tmpl, "[private key block redacted at capture (#1603)]", "") == "True"
+    assert _render(tmpl, _KEY_PEM, "") == "False"
+    assert _render(tmpl, "", "-----BEGIN RSA PRIVATE KEY-----") == "False"
+    # The stream join cannot fabricate a match: "PRIVATE" + "KEY" across streams is no key.
+    assert _render(tmpl, "PRIVATE", " KEY") == "True"
+    # The failure message names the item and host only, never the captured content.
+    assert "item.value" not in guard["ansible.builtin.assert"]["fail_msg"]
+
+
+def test_prewrite_guard_runs_after_every_capture_and_before_any_write():
+    tasks = _capture_play()["tasks"]
+    pos = tasks.index(_task_by_name("check - no capture item carries PRIVATE KEY"))
+    captures = [i for i, t in enumerate(tasks) if str(t.get("register", "")).startswith("cap_")]
+    first_write = next(i for i, t in enumerate(tasks) if _is_write(t))
+    assert max(captures) < pos < first_write
+
+
+def test_postwrite_guard_scans_every_written_file_once_after_the_write(tmp_path):
+    tasks = _capture_play()["tasks"]
+    scan = _task_by_name("guard - scan the written capture for PRIVATE KEY")
+    check = _task_by_name("guard - no written capture file contains PRIVATE KEY")
+    assert tasks.index(_copy_task()) < tasks.index(scan) < tasks.index(check)
+    for task in (scan, check):
+        assert task["delegate_to"] == "localhost" and task["run_once"] is True
+    find = scan["ansible.builtin.find"]
+    assert find["paths"] == "{{ blueprint_out }}"
+    assert find["recurse"] is True and find["hidden"] is True and find["file_type"] == "file"
+    assert check["ansible.builtin.assert"]["that"] == f"{scan['register']}.matched == 0"
+    # Run Ansible's own content filter with the task's settings: a key anywhere in a file
+    # (not only at a line start) is found; a redacted file is not.
+    leaked = tmp_path / "leaked.txt"
+    leaked.write_text("### /etc/drbd.d/x\n  " + _KEY_PEM)
+    clean = tmp_path / "clean.txt"
+    clean.write_text(_key_redact("### /etc/drbd.d/x\n" + _KEY_PEM))
+    args = (find["contains"], None, find["read_whole_file"])
+    assert contentfilter(str(leaked), *args) is True
+    assert contentfilter(str(clean), *args) is False
+
+
+def test_postwrite_guard_message_names_the_files():
+    msg = _task_by_name("guard - no written capture file contains PRIVATE KEY")[
+        "ansible.builtin.assert"
+    ]["fail_msg"]
+    assert "blueprint_key_scan.files | map(attribute='path')" in msg

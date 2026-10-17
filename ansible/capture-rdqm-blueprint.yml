@@ -1,8 +1,12 @@
 ---
 # Read-only capture of what RDQM GENERATES on a live HA/DR group (epic .github#310 T1, #1422).
 # The capture is the blueprint the pacemaker-drbd arm is built to. It changes NOTHING on the
-# nodes, reads NO secret material (keystores, corosync authkey), and redacts DRBD
-# shared-secret values at capture time (never captured-then-scrubbed). Any failing command
+# nodes and never copies secret material off a node (#1603): keystores and the corosync
+# authkey are never read; a key file in /etc/drbd.d (by name, or by carrying a PRIVATE KEY
+# block) is recorded by path only, never by content; any PRIVATE KEY block left in the DRBD
+# items is replaced with a marker, and DRBD shared-secret values are redacted, all at capture
+# time (never captured-then-scrubbed). A guard fails the run if any capture item carries
+# PRIVATE KEY before the write, and again if any written file does. Any failing command
 # fails the run on EVERY host (any_errors_fatal) before anything is written: an incomplete
 # blueprint is worse than none. Run by the operator with the rdqm-rhel stack up (both sites)
 # and its app QM running:
@@ -20,6 +24,21 @@
   vars:
     # GNU sed -E: replace any DRBD shared-secret value (quoted or bare) with "REDACTED".
     drbd_secret_redact_sed: 's/(shared-secret[[:space:]]+)("[^"]*"|[^;[:space:]]+)/\1"REDACTED"/'
+    # Shell case patterns for key files in /etc/drbd.d (#1603): such a file is listed by path
+    # only and its contents are never read. A file of any other name that carries a PRIVATE
+    # KEY block is caught by content (grep -q) in the drbd-conf task and treated the same way.
+    drbd_key_file_case: "*.key|*.p12|*.kdb|*.sth|*.jks"
+    # awk safety net (#1603): every -----BEGIN ... PRIVATE KEY----- ... -----END ... PRIVATE
+    # KEY----- block becomes one marker line, whatever file or command it came from. A block
+    # with no END line drops the rest of the input and says so; it never passes through.
+    # The markers are lower case, so the PRIVATE KEY guard below never trips on them.
+    drbd_key_block_redact_awk: >-
+      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ {
+      print "[private key block redacted at capture (#1603)]";
+      skip = !/-----END [A-Z0-9 ]*PRIVATE KEY-----/; next }
+      skip { if (/-----END [A-Z0-9 ]*PRIVATE KEY-----/) skip = 0; next }
+      { print }
+      END { if (skip) print "[private key block with no END line: rest of input dropped (#1603)]" }
     # Every capture item: <blueprint_out>/<host>/<key>.txt from the registered result. One
     # list, shared by the non-empty check and the write, so neither can miss an item.
     cap_items:
@@ -100,9 +119,11 @@
       register: cap_drbd_version
       changed_when: false
 
-    # The two DRBD config items fold stderr in BEFORE the redaction sed, so a diagnostic on
-    # stderr can never carry an unredacted shared-secret past it into the capture.
-    - name: drbd config files (drbd.conf + every /etc/drbd.d file; shared-secret redacted)
+    # The two DRBD config items fold stderr in BEFORE the redaction sed and awk, so a
+    # diagnostic on stderr can never carry an unredacted secret past them into the capture.
+    # Key files are listed by path only (#1603): the drbd.d directory holds each node's DRBD
+    # replication TLS private key (rdqm-replication-tls, #545).
+    - name: drbd config files (drbd.conf + every non-key /etc/drbd.d file; secrets redacted)
       ansible.builtin.shell: |
         set -euo pipefail
         {
@@ -112,19 +133,28 @@
           ls -l /etc/drbd.d/
           for f in /etc/drbd.d/*; do
             [ -f "$f" ] || continue
+            case "$f" in
+              {{ drbd_key_file_case }})
+                echo "### $f (key file: path recorded, contents not read)"
+                continue ;;
+            esac
+            if grep -q -e 'PRIVATE KEY' -- "$f"; then
+              echo "### $f (carries a private key block: path recorded, contents not captured)"
+              continue
+            fi
             echo "### $f"
             cat "$f"
           done
-        } 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }}
+        } 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }} | awk {{ drbd_key_block_redact_awk | quote }}
       args:
         executable: /bin/bash
       register: cap_drbd_conf
       changed_when: false
 
-    - name: drbd effective config (shared-secret redacted at capture)
+    - name: drbd effective config (shared-secret and private key blocks redacted at capture)
       ansible.builtin.shell: |
         set -o pipefail
-        drbdadm dump all 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }}
+        drbdadm dump all 2>&1 | sed -E {{ drbd_secret_redact_sed | quote }} | awk {{ drbd_key_block_redact_awk | quote }}
       args:
         executable: /bin/bash
       register: cap_drbd_dump
@@ -244,6 +274,19 @@
       loop_control:
         label: "{{ item.key }}"
 
+    # Guard 1 (#1603): no item may carry private key text, on either stream, into the write.
+    # The message names the item and host only, never the content.
+    - name: check - no capture item carries PRIVATE KEY (stdout + stderr)
+      ansible.builtin.assert:
+        that: "'PRIVATE KEY' not in (item.value.stdout ~ '\\n' ~ item.value.stderr)"
+        fail_msg: >-
+          capture item {{ item.key }} on {{ inventory_hostname }} carries PRIVATE KEY text
+          after redaction; refusing to write any of the capture (#1603)
+        quiet: true
+      loop: "{{ cap_items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
     # Controller-side writes: reached only once EVERY host has passed every preflight, every
     # capture command and the non-empty check (any_errors_fatal), so a failed run leaves
     # nothing on disk.
@@ -268,3 +311,28 @@
       loop: "{{ cap_items }}"
       loop_control:
         label: "{{ item.key }}"
+
+    # Guard 2 (#1603): scan what actually landed on disk, every host's files, once all hosts
+    # have written. Any match fails the run loudly and names the files (never their content).
+    - name: guard - scan the written capture for PRIVATE KEY
+      ansible.builtin.find:
+        paths: "{{ blueprint_out }}"
+        recurse: true
+        hidden: true
+        file_type: file
+        contains: "PRIVATE KEY"
+        read_whole_file: true
+      register: blueprint_key_scan
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: guard - no written capture file contains PRIVATE KEY
+      ansible.builtin.assert:
+        that: blueprint_key_scan.matched == 0
+        fail_msg: >-
+          PRIVATE KEY text was written to the capture; delete these files now and do not
+          commit them (#1603): {{ blueprint_key_scan.files | map(attribute='path') | join(', ') }}
+      delegate_to: localhost
+      become: false
+      run_once: true
