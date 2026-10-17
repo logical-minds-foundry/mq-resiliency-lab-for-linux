@@ -115,8 +115,8 @@ def _accounts_plays(path: Path) -> list[dict[str, Any]]:
 # stack is not bootstrappable, so it hosts no QM to guard. The entry is temporary on
 # purpose: test_pending_provision_playbooks_are_still_absent fails the moment the
 # playbook lands, which forces its removal here and puts it under the guards below.
-#   ansible/site-pdrbd.yml — pcmk-drbd-ubuntu (#1426), provision playbook due in #1427.
-PENDING_PROVISION = {"ansible/site-pdrbd.yml"}
+# Empty since #1427 landed ansible/site-pdrbd.yml (pcmk-drbd-ubuntu).
+PENDING_PROVISION: set[str] = set()
 
 
 def _provision_playbooks() -> set[Path]:
@@ -169,6 +169,8 @@ def test_svc_sim_accounts_precede_the_qm() -> None:
 def test_every_qm_play_applies_mqoperator_mqsc() -> None:
     files = [
         ANSIBLE / "roles" / "mq-pcmk-qmgr" / "tasks" / "main.yml",
+        # pcmk-drbd-ubuntu (site-pdrbd.yml): the pdrbd-qm role applies it (#1427).
+        ANSIBLE / "roles" / "pdrbd-qm" / "tasks" / "main.yml",
         ANSIBLE / "site-rdqm.yml",
         ANSIBLE / "site-nativeha-ubuntu.yml",
         ANSIBLE / "site-nativeha.yml",

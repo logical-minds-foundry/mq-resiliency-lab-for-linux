@@ -22,13 +22,20 @@ Seeded by #1425 from the 2026-10-16 capture. The pacemaker-drbd column states th
 structural point, the row says so, and the affected task (#1427 or #1428) is revised
 before it starts.
 
+#1427 (site-A HA, HA-only shape) set the rows it builds to their as-built status, read
+from the configuration its code renders: ST-2, ST-3, RP-2, RP-4, RP-6, RP-7, CL-2, CL-3,
+CL-4, CL-6 to CL-10 and TL-5. Its live bring-up confirms them. Rows whose as-built value
+can only be read from a running node (for example the corosync settings in CL-1 and SC-2,
+the units in TL-4, the versions in RP-8 and SP-1) stay `pending`, as do the rows that
+need site B or the DR resource (Task 6, #1428).
+
 ## Storage
 
 | ID | RDQM element | Blueprint source | pacemaker-drbd equivalent | Status | Consequence |
 |---|---|---|---|---|---|
 | ST-1 | `drbdpool` VG on a local disk (`/dev/vdb`, `<10.00g`) | `rdqm-a1/vgs.txt`, `rdqm-a1/lsblk.txt` | `drbdpool` VG on the extra disk (`drbd9` role) | exact | — |
-| ST-2 | Per-QM data LV `drbdpool/rdqmapp_00`, 3 GiB (`rdqmapp-size=3072`) | `rdqm-a1/lvs.txt`, `rdqm-a1/pcmk-config.txt` | Per-QM LV in `drbdpool`, 3G (`pdrbd-qm`). The plan names it `<qm>`; RDQM uses `<qm>_00` | pending | Naming only |
-| ST-3 | `ext4` on the DRBD device, mounted at `/var/mqm/vols/<qm>` with default options (`rw,relatime`; `seclabel` is SELinux) | `rdqm-a1/mounts.txt` | `ext4` with `defaults` at the same path | pending | — |
+| ST-2 | Per-QM data LV `drbdpool/rdqmapp_00`, 3 GiB (`rdqmapp-size=3072`) | `rdqm-a1/lvs.txt`, `rdqm-a1/pcmk-config.txt` | Per-QM LV `drbdpool/<qm>_00`, `3072M` (`pdrbd-qm`, #1427) | exact | — |
+| ST-3 | `ext4` on the DRBD device, mounted at `/var/mqm/vols/<qm>` with default options (`rw,relatime`; `seclabel` is SELinux) | `rdqm-a1/mounts.txt` | `ext4` with `defaults` at `/var/mqm/vols/<qm>` (`pdrbd-qm`, #1427) | exact | — |
 | ST-4 | The filesystem sits on the **stacked DR device** (`/dev/drbd/by-res/rdqmapp.dr/0` = `drbd7001`), not on the HA device | `rdqm-a1/lsblk.txt`, `rdqm-a1/pcmk-config.txt` | The plan mounts `/dev/drbd<minor>` of a single resource | pending | **Structural.** It follows from RP-1 |
 | ST-5 | QM data and logs under the replicated mount (`DataPath=/var/mqm/vols/rdqmapp/qmgr/rdqmapp`); every node carries the same `addmqinf` definition, site B included | `rdqm-a1/mqs-ini.txt`, `rdqm-*/dspmqinf.txt` | `crtmqm -md/-ld` on the mount, plus `addmqinf` on the other nodes | pending | — |
 
@@ -37,12 +44,12 @@ before it starts.
 | ID | RDQM element | Blueprint source | pacemaker-drbd equivalent | Status | Consequence |
 |---|---|---|---|---|---|
 | RP-1 | **Two DRBD resources per HA/DR QM.** `rdqmapp` is the HA resource: 3 nodes of one site, `connection-mesh`. `rdqmapp.dr` is the DR resource, `stacked-on-top-of rdqmapp`, with 2 members: this site's HA primary and the other site as one logical peer, `encrypted.remote` | `rdqm-a1/drbd-dump.txt`, `rdqm-b1/drbd-dump.txt` | The plan has **one six-peer resource** with per-connection protocols | pending | **Structural contradiction**: Task 5's template and Task 6's DR wiring must change |
-| RP-2 | HA quorum is site-local with a fixed count: `quorum 2` of 3, `on-no-quorum io-error`, `auto-promote no` | `rdqm-a1/drbd-dump.txt` | The plan has `quorum majority` over 6 peers and `on-no-quorum suspend-io` | pending | With one six-peer resource, a WAN cut leaves each site 3 of 6 peers and freezes the live site. RDQM avoids this because the WAN peer is never an HA quorum member |
+| RP-2 | HA quorum is site-local with a fixed count: `quorum 2` of 3, `on-no-quorum io-error`, `auto-promote no` | `rdqm-a1/drbd-dump.txt` | Site-local HA resource `<qm>` over this site's 3 nodes, `quorum 2`, `on-no-quorum io-error`, `auto-promote no` (`pdrbd-qm` `qm.res.j2`, #1427) | exact | The WAN peer is never an HA quorum member, so a WAN cut cannot cost the live site HA quorum |
 | RP-3 | DR quorum: `rdqmapp.dr` has `quorum majority` and `on-no-quorum io-error` over its 2 members | `rdqm-a1/drbd-dump.txt` | Not in the plan | pending | The capture does not show how the live primary behaves on a WAN cut. Drill 3 settles it on both arms |
-| RP-4 | HA replication uses protocol C (DRBD default) on port 7000, minor 100, over `net-hb-<site>` | `rdqm-a1/drbd-dump.txt`, `rdqm-a1/rdqm-ini.txt` | Protocol C over the hb network, but the plan uses port 7001 and minor 100 | pending | Port value only |
+| RP-4 | HA replication uses protocol C (DRBD default) on port 7000, minor 100, over `net-hb-<site>` | `rdqm-a1/drbd-dump.txt`, `rdqm-a1/rdqm-ini.txt` | Protocol not set (DRBD default C), port 7000, minor 100, over `net-hb-<site>` (`pdrbd-qm`, #1427) | exact | — |
 | RP-5 | DR replication uses protocol A on port 7001, minor 7001, over `net-wan`, with three `path`s (one per remote node) to the single logical peer | `rdqm-a1/drbd-dump.txt`, `rdqm-a1/pcmk-config.txt` (`rdqmapp-dr-*`) | The plan has protocol A over `net-wan` as 9 node-to-node cross-site connections | pending | Structural, via RP-1 |
-| RP-6 | Common options: `twopc-timeout 100`, `ping-timeout 40`, `socket-check-timeout 5`, `max-buffers 40k`, `c-fill-target 1M`, `c-max-rate 500M`, `c-min-rate 100M`, `resync-without-replication no` | `rdqm-a1/drbd-dump.txt`, `rdqm-a1/drbd-conf.txt` | Plan Task 6 proposes the `drbd-operations.md` buffers "unless the blueprint shows RDQM's own values". It does, so use these | pending | — |
-| RP-7 | No `after-sb-*` policy (DRBD default: `disconnect`) and no DRBD `fencing` (default `dont-care`); `rr-conflict retry-connect`, `verify-alg sha1`, `disable-write-same yes` on HA; `allow-remote-read no` on DR | `rdqm-a1/drbd-dump.txt` | The plan sets `after-sb-0pri discard-zero-changes`, `after-sb-1pri discard-secondary` and `after-sb-2pri disconnect` | pending | The plan's automatic split-brain recovery is **not** RDQM behaviour |
+| RP-6 | Common options: `twopc-timeout 100`, `ping-timeout 40`, `socket-check-timeout 5`, `max-buffers 40k`, `c-fill-target 1M`, `c-max-rate 500M`, `c-min-rate 100M`, `resync-without-replication no` | `rdqm-a1/drbd-dump.txt`, `rdqm-a1/drbd-conf.txt` | The same values in a rendered `global_common.conf` (`pdrbd-qm` `global_common.conf.j2`, #1427) | exact | — |
+| RP-7 | No `after-sb-*` policy (DRBD default: `disconnect`) and no DRBD `fencing` (default `dont-care`); `rr-conflict retry-connect`, `verify-alg sha1`, `disable-write-same yes` on HA; `allow-remote-read no` on DR | `rdqm-a1/drbd-dump.txt` | HA resource: no `after-sb-*`, no `fencing`, `rr-conflict retry-connect`, `verify-alg sha1`, `disable-write-same yes` (#1427). DR resource: Task 6 (#1428) | exact | HA half as built. The DR half (`allow-remote-read no`) lands with the DR resource in Task 6; no automatic split-brain recovery on either arm |
 | RP-8 | LINBIT DRBD 9.3.3 kernel module (`+ptf` build) with drbd-utils 9.33.1 | `rdqm-a1/drbd-version.txt`, `rdqm-a1/packages.txt` | LINBIT DRBD 9 (`drbd-dkms`) from LINBIT's PPA | pending | Versions may differ; record them in Task 9 |
 
 ## Cluster
@@ -50,15 +57,15 @@ before it starts.
 | ID | RDQM element | Blueprint source | pacemaker-drbd equivalent | Status | Consequence |
 |---|---|---|---|---|---|
 | CL-1 | One three-node corosync/Pacemaker cluster per site, using votequorum (expected 3, quorum 2), knet with `token 10000` and no corosync crypto, ring 0 on `net-hb-<site>`. No cluster spans the sites | `rdqm-*/corosync-conf.txt`, `rdqm-*/quorum.txt` | One `pcmk-cluster` per site (`mqpdrbd-a` / `mqpdrbd-b`) | pending | — |
-| CL-2 | `stonith-enabled=false` and no fencing devices; `no-quorum-policy` not set (default `stop`) | `rdqm-a1/pcmk-config.txt` | The plan sets `stonith-enabled=false` and `no-quorum-policy=stop` | pending | Matches the hypothesis. RDQM uses no fencing |
-| CL-3 | `resource-stickiness=1` (resource default) | `rdqm-a1/pcmk-config.txt` | The plan uses `resource-stickiness=1000` | pending | Value deviation; reconcile to 1 |
-| CL-4 | HA DRBD role: `ocf:linbit:drbd` promotable clone `ms_drbd_<qm>` with `adjust_master_score="0 10 10000 10000"` | `rdqm-a1/pcmk-config.txt` | `ocf:linbit:drbd` promotable clone `drbd_qm-clone` | pending | Same upstream agent |
+| CL-2 | `stonith-enabled=false` and no fencing devices; `no-quorum-policy` not set (default `stop`) | `rdqm-a1/pcmk-config.txt` | `stonith-enabled=false`, no fencing devices, `no-quorum-policy` left unset (`pdrbd-qm`, #1427) | exact | Neither arm fences |
+| CL-3 | `resource-stickiness=1` (resource default) | `rdqm-a1/pcmk-config.txt` | `resource-stickiness=1` resource default (`pdrbd-qm`, #1427) | exact | — |
+| CL-4 | HA DRBD role: `ocf:linbit:drbd` promotable clone `ms_drbd_<qm>` with `adjust_master_score="0 10 10000 10000"` | `rdqm-a1/pcmk-config.txt` | `ocf:linbit:drbd` promotable clone `drbd_qm-clone` (`notify=true`, no `clone-max`), `adjust_master_score="0 10 10000 10000"`, the same op timeouts (#1427) | exact | Same upstream agent and values; only the resource IDs differ |
 | CL-5 | DR DRBD role: a second `ocf:linbit:drbd` promotable clone `ms_drbd_dr_<qm>` with `clone-max=1` and `wfc_timeout=false`, colocated with the HA Master and ordered after HA promote | `rdqm-a1/pcmk-config.txt` | None in the plan | pending | Structural, via RP-1. The agent is upstream, not IBM |
-| CL-6 | QM resource: **`ocf:ibm:rdqm`** (IBM-proprietary; start timeout 43200 s, monitor 30 s) | `rdqm-a1/pcmk-config.txt`, `rdqm-a1/ocf-agents.txt` | `systemd:mq-<QM>` unit in `mq_group` | pending | IBM agent behaviour (monitor depth, start semantics) is not reproduced |
-| CL-7 | **`ocf:ibm:rdqmx`** (IBM-proprietary, undocumented) ordered between the filesystem and the floating IP | `rdqm-a1/pcmk-config.txt` | None | pending | What it does is unknown; empty meta-data (supplementary probe) |
-| CL-8 | Filesystem agent `ocf:heartbeat:Filesystem` with `force_unmount=safe` and `fast_stop=no` | `rdqm-a1/pcmk-config.txt` | `ocf:heartbeat:Filesystem` with `OCF_CHECK_LEVEL=20` monitor | pending | Parameter values differ |
-| CL-9 | Floating IP `ocf:heartbeat:IPaddr2` (`cidr_netmask=24`, `nic=enp6s0`) on `net-data-<site>` | `rdqm-a1/pcmk-config.txt`, `rdqm-a1/rdqmstatus-qm.txt` | `ocf:heartbeat:IPaddr2` in `mq_group` | pending | — |
-| CL-10 | Constraint chain: HA promote → DR start; DR promote → fs → rdqmx → ip → QM (each `inf` colocated); `location <qm> 50:` on the preferred node | `rdqm-a1/pcmk-config.txt` | The plan uses a group `mq_fs → mq_vip → mq_qm` colocated with the HA Promoted role | pending | IP-before-QM order matches; the fs → IP order is reversed relative to the plan's group; no preferred-location score in the plan |
+| CL-6 | QM resource: **`ocf:ibm:rdqm`** (IBM-proprietary; start timeout 43200 s, monitor 30 s) | `rdqm-a1/pcmk-config.txt`, `rdqm-a1/ocf-agents.txt` | `systemd:mq-<QM>` unit in `mq_group`: monitor 30 s / timeout 60 s and stop 300 s as RDQM, start **300 s** (#1427) | partial | IBM agent behaviour (monitor depth, start semantics) is not reproduced (owner decision 5). Start is 300 s, not 43200 s: twelve hours is the IBM agent's log-replay allowance, and on a `systemd` unit it would hide a hung `strmqm` |
+| CL-7 | **`ocf:ibm:rdqmx`** (IBM-proprietary, undocumented) ordered between the filesystem and the floating IP | `rdqm-a1/pcmk-config.txt` | Not reproduced (#1427) | none | What it does is unknown; empty meta-data (supplementary probe) |
+| CL-8 | Filesystem agent `ocf:heartbeat:Filesystem` with `force_unmount=safe` and `fast_stop=no` | `rdqm-a1/pcmk-config.txt` | `ocf:heartbeat:Filesystem` with `force_unmount=safe` and `fast_stop=no`, start/stop 60 s, no monitor op (`--no-default-ops`) (#1427) | exact | — |
+| CL-9 | Floating IP `ocf:heartbeat:IPaddr2` (`cidr_netmask=24`, `nic=enp6s0`) on `net-data-<site>` | `rdqm-a1/pcmk-config.txt`, `rdqm-a1/rdqmstatus-qm.txt` | `ocf:heartbeat:IPaddr2` `cidr_netmask=24`, monitor 30 s, in `mq_group`; no `nic` (#1427) | partial | IPaddr2 infers the NIC from the address's subnet instead of a pinned name |
+| CL-10 | Constraint chain: HA promote → DR start; DR promote → fs → rdqmx → ip → QM (each `inf` colocated); `location <qm> 50:` on the preferred node | `rdqm-a1/pcmk-config.txt` | HA-only chain (#1427): group `mq_group` = `mq_fs` → `mq_vip` → `mq_qm`, colocated `INFINITY` with the HA Promoted role and started after its promote; `location mq_group 50:` on the site's creation node. The DR half follows in Task 6 (#1428) | partial | Same order minus `rdqmx` (CL-7); a group is equivalent to `INFINITY` colocations plus start orders ([PE] "Groups"). The location score is on the group, not the QM. Judgment: the HA-only shape is derived by removing RDQM's DR layer; it was not captured |
 | CL-11 | RDQM keeps its own state in the CIB: property set `rdqm:` (`<qm>-dr-role`, `-qm-type`, `-ha-state`, ports, IP lists, encryption flags) and node attributes (`drbd-replication`, `mqm-uid/gid`, `mqvrmf`) | `rdqm-a1/pcmk-config.txt` | None | none | Tooling reads this state; the open-source arm reads live state instead |
 | CL-12 | Pacemaker alert `rdqm-alert` → `/var/mqm/rdqm/rdqmalert` | `rdqm-a1/pcmk-config.txt` | None | pending | — |
 
@@ -78,7 +85,7 @@ before it starts.
 | TL-2 | `rdqm.ini` (per-site node list and `HA_Replication` addresses), `rdqmadm`, `crtmqm -sx/-rr`, `rdqmdr`, `rdqmstatus` | `rdqm-a1/rdqm-ini.txt`, `rdqm-a1/rdqmstatus-*.txt` | Ansible roles and plays plus `mqlab` verbs | pending | — |
 | TL-3 | DRBD handlers (`quorum-lost`, `disconnected`, `after-resync-target`, `before-resync-*`), all `/var/mqm/rdqm/<h>` → `/opt/mqm/bin/rdqmhandler` | `rdqm-a1/drbd-dump.txt`; supplementary probe | None | pending | IBM reactions to quorum loss and disconnects are not reproduced |
 | TL-4 | Units: `rdqm.service` and `pacemaker.service` enabled; `corosync.service` and `drbd.service` disabled | `rdqm-a1/units.txt` | `pacemaker` / `corosync` enabled by `pcmk-cluster` | pending | — |
-| TL-5 | RDQM replaces the stock `global_common.conf` (saved as `.rdqmsave`) | `rdqm-a1/drbd-conf.txt` | The blueprint values from RP-6 are rendered by `pdrbd-qm` | pending | — |
+| TL-5 | RDQM replaces the stock `global_common.conf` (saved as `.rdqmsave`) | `rdqm-a1/drbd-conf.txt` | `pdrbd-qm` replaces it with the RP-6 values, saving the stock file once as `.pdrbdsave` (#1427) | exact | — |
 
 ## Replication security
 

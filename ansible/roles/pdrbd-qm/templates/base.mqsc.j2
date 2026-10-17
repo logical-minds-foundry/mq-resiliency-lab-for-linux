@@ -1,0 +1,15 @@
+* Base queue manager configuration for {{ qm_name }} (pacemaker-drbd arm, #1427): the same
+* lab posture as the pcmk arm's base MQSC (roles/mq-pcmk-qmgr/tasks/main.yml, "apply MQSC
+* config"), with the keystore on the replicated volume. CHLAUTH stays DISABLED here; the
+* Stage 2 authorization MQSC (templates/mq/authz.mqsc.j2) flips it ENABLED once the maps
+* exist. Contains the keystore password: applied over stdin with no_log, never written out.
+DEFINE LISTENER(L1414) TRPTYPE(TCP) PORT(1414) CONTROL(QMGR) REPLACE
+START LISTENER(L1414)
+DEFINE CHANNEL(APP.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') HBINT(15) KAINT(15) REPLACE
+DEFINE CHANNEL(MON.SVRCONN) CHLTYPE(SVRCONN) TRPTYPE(TCP) SSLCIPH({{ tls_cipher }}) SSLCAUTH(REQUIRED) SSLPEER('{{ tls_peer_client }}') REPLACE
+ALTER QMGR CHLAUTH(DISABLED) CONNAUTH(' ')
+REFRESH SECURITY TYPE(CONNAUTH)
+ALTER QMGR SSLKEYR('{{ pdrbd_ssl_dir }}/key') KEYRPWD('{{ pki_keyrpwd.stdout }}') CERTLABL('{{ qm_name }}')
+REFRESH SECURITY TYPE(SSL)
+DEFINE QLOCAL(HA.TEST) DEFPSIST(YES) REPLACE
+ALTER QMGR MONQ(HIGH) MONCHL(HIGH) MONACLS(HIGH) STATMQI(ON) STATQ(ON) STATCHL(HIGH) MAXHANDS(512)

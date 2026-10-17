@@ -37,6 +37,7 @@ STACK_PLAYS = {
     "_nativeha-ubuntu-dr-replication.yml",
     "_pcmk-cluster-ha.yml",
     "_pcmk-dr-replication.yml",
+    "_pdrbd-cluster-ha.yml",  # pcmk-drbd-ubuntu site A (#1427)
     "_rdqm-cluster-ha.yml",
     "_rdqm-dr-replication.yml",
 }
@@ -46,8 +47,8 @@ STACK_PLAYS = {
 # purpose: test_pending_provision_playbooks_are_still_absent fails the moment the
 # playbook lands, which forces its removal here and puts it under the guards below
 # (the same pattern as tests/test_mqweb_operator_authz.py).
-#   ansible/site-pdrbd.yml — pcmk-drbd-ubuntu (#1426), provision playbook due in #1427.
-PENDING_PROVISION = {"ansible/site-pdrbd.yml"}
+# Empty since #1427 landed ansible/site-pdrbd.yml (pcmk-drbd-ubuntu).
+PENDING_PROVISION: set[str] = set()
 
 _ROLE_VERBS = (
     "ansible.builtin.include_role",

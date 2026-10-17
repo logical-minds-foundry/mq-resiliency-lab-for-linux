@@ -1,0 +1,61 @@
+---
+# Building block (epic .github#310 T5, #1427): site A of the pcmk-drbd-ubuntu stack — DRBD 9
+# + the drbdpool VG, MQ, mqweb and the site's 3-node Pacemaker cluster. Like RDQM, every
+# site is its OWN cluster; none spans the sites (rdqm-*/corosync-conf.txt,
+# rdqm-*/quorum.txt; CL-1). Composed by site-pdrbd.yml ahead of the per-QM volume.
+#
+# No pcmk-stonith play: RDQM uses no fencing at either the Pacemaker or the DRBD level
+# (stonith-enabled=false, no fencing devices, no DRBD fencing/fence-peer:
+# rdqm-a1/pcmk-config.txt, rdqm-a1/drbd-dump.txt; CL-2).
+
+# Cold-boot guard (#151/#160): a guest not yet SSH-ready when its play fires drops out
+# UNREACHABLE and the run marches on against half a site. Wait for every node first.
+- name: wait for site A to be SSH-ready (cold-boot guard)
+  hosts: pdrbd_a
+  gather_facts: false
+  tasks:
+    - name: wait for connection
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+- name: acl for unprivileged become
+  hosts: pdrbd_a
+  become: true
+  tasks:
+    - name: acl package
+      # Baked into the pdrbd box; a no-op there. lock_timeout waits out a fresh-boot
+      # unattended-upgrades holding the dpkg lock (#820).
+      ansible.builtin.apt:
+        name: acl
+        update_cache: false
+        lock_timeout: "{{ apt_lock_timeout }}"
+
+# Per-run half of drbd9 (#1423): DRBD 9 for the BOOTED kernel (fails loud on a kernel
+# drift, Review Focus 2) + the drbdpool VG on the extra disk.
+- name: DRBD 9 + drbdpool VG
+  hosts: pdrbd_a
+  roles: [drbd9]
+
+- name: MQ product (no-op on the baked box)
+  hosts: pdrbd_a
+  roles: [mq-install]
+
+- name: site A Pacemaker cluster
+  hosts: pdrbd_a
+  vars:
+    pcmk_cluster_name: mqpdrbd-a
+    # Lab constants (topology.yaml pdrbd-a* net-hb-a), as the site-pcmk precedent does.
+    pcmk_site_nodes:
+      - { name: pdrbd-a1, hb: 172.16.1.71 }
+      - { name: pdrbd-a2, hb: 172.16.1.72 }
+      - { name: pdrbd-a3, hb: 172.16.1.73 }
+  roles: [pcmk-cluster]
+
+# mqweb: stateless per-node admin REST/Console on every QM node (#1502, design §1/§8.3).
+# serial: 1 — cold-start mqweb one node at a time (#1161): mqweb is a full Liberty JVM
+# whose concurrent cold-start compounds the nested-virt tax.
+- name: mqweb on every site-A node
+  hosts: pdrbd_a
+  serial: 1
+  roles:
+    - mqweb
