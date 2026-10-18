@@ -277,8 +277,10 @@ def test_no_key_material_in_the_repo_role() -> None:
 def test_kernel_handshake_upcall_and_ktls_are_proven() -> None:
     tasks = _role_tasks()
     hs = _task(tasks, "the kernel's TLS handshake upcall")
-    assert "genl ctrl get name handshake" in hs["ansible.builtin.shell"]
-    assert "exit 1" in hs["ansible.builtin.shell"]
+    # A direct generic-netlink query, never `genl` (it aborts on 26.04 arm64, #1609).
+    assert hs["ansible.builtin.script"]["cmd"] == "genl-family-present.py handshake"
+    assert hs["ansible.builtin.script"]["executable"] == "python3"
+    assert hs["changed_when"] is False
     boot = _task(tasks, "load kTLS at every boot")
     assert boot["ansible.builtin.copy"]["dest"] == "/etc/modules-load.d/pdrbd-tls.conf"
     assert boot["ansible.builtin.copy"]["content"].strip() == "tls"

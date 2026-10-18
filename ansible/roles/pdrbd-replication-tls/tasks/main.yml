@@ -49,14 +49,12 @@
 # --- kernel prerequisites -----------------------------------------------------------------
 # tlshd serves the kernel's "handshake" generic-netlink family (CONFIG_NET_HANDSHAKE,
 # built in on Ubuntu's kernels). Without it DRBD's tls_*_hello calls have no upcall.
+# Probed with a direct CTRL_CMD_GETFAMILY query, not `genl`: iproute2 6.19's genl aborts
+# ("stack smashing detected") on 26.04 arm64, which a shell probe reads as "absent".
 - name: the kernel's TLS handshake upcall (handshake genetlink family) is present
-  ansible.builtin.shell: |
-    set -e
-    if ! genl ctrl get name handshake >/dev/null 2>&1; then
-      echo "kernel $(uname -r) has no 'handshake' generic-netlink family (CONFIG_NET_HANDSHAKE):" \
-           "DRBD's replication TLS cannot reach tlshd" >&2
-      exit 1
-    fi
+  ansible.builtin.script:
+    cmd: genl-family-present.py handshake
+    executable: python3
   changed_when: false
   become: true
 
