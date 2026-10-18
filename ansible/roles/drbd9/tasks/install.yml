@@ -116,6 +116,28 @@
     lock_timeout: "{{ apt_lock_timeout }}"
   become: true
 
+# DRBD 9's replication TLS (`net { tls yes; }`, lab #1609) hands the handshake to tlshd
+# through the kernel's net/handshake upcall; RDQM's MQSeriesRDQM requires ktls-utils for
+# the same reason (rdqm-install). Ubuntu ships it in universe: 0.9 on Ubuntu 24.04,
+# 1.3.0 on 26.04 (Launchpad getPublishedSources, ktls-utils). The per-run
+# pdrbd-replication-tls role fits its config to whichever version is installed.
+- name: tlshd (ktls-utils) for DRBD's kernel TLS handshake
+  ansible.builtin.apt:
+    name: [ktls-utils]
+    state: present
+    lock_timeout: "{{ apt_lock_timeout }}"
+  become: true
+
+# The package's postinst enables and starts tlshd with its empty stock config. It needs
+# this node's certificate first, which is per-run (pdrbd-replication-tls), so the image
+# carries it INERT (#642 phased startup); the per-run role enables and starts it.
+- name: tlshd inert in the image (enabled per run, once its certificate is in place)
+  ansible.builtin.systemd:
+    name: tlshd
+    enabled: false
+    state: stopped
+  become: true
+
 # depmod searches updates/ (where DKMS installs) before kernel/, so modprobe picks the
 # DKMS-built module over any in-kernel 8.4. A failed DKMS build leaves no module and
 # modprobe fails here, loud.

@@ -1,0 +1,33 @@
+---
+# pdrbd-replication-tls (lab #1609, epic .github#310 Task 6b): DRBD 9 kernel TLS for the
+# pcmk-drbd-ubuntu arm's HA and DR resources, as RDQM's `crtmqm -re` sets it up (#545,
+# rdqm-replication-tls): one CA-signed certificate per node, deployed root-owned to
+# /etc/drbd.d, and tlshd pointed at it.
+
+# Controller-side store for this arm's replication CA + per-node key/cert (gitignored
+# build state, re-generatable). Separate from the RDQM arm's store, so neither arm's
+# nodes trust the other's certificates.
+pdrbd_repl_ca_dir: "{{ mqlab_state_dir }}/secrets/pki/pdrbd-repl"
+pdrbd_repl_ca_common_name: "pdrbd Replication CA"
+
+# The second SAN in every node's certificate. DRBD asks tlshd to verify the peer under
+# the peer's configured name (drbd_transport_tcp.c: peername = the connection's net_conf
+# name), and the DR resource names the other site as ONE logical peer, so every node's
+# certificate must carry that name. It MUST equal pdrbd-qm's pdrbd_dr_peer_name; RDQM uses
+# `encrypted.remote` for both (rdqm-a1/drbd-conf.txt; tests/test_pdrbd_replication_tls.py).
+pdrbd_repl_group_dns: encrypted.remote
+
+# On-node directory tlshd reads the CA / node cert / node key from (RDQM's path,
+# rdqm-a1/drbd-conf.txt `ls -l /etc/drbd.d/`).
+pdrbd_repl_drbd_dir: /etc/drbd.d
+pdrbd_repl_ca_file: pdrbd-repl-ca.crt
+
+# ktls-utils 0.9 (Ubuntu 24.04) has no x509.truststore and verifies peers against the
+# system trust store only (src/tlshd/client.c, server.c: gnutls_certificate_set_x509_system_trust),
+# so on that version the CA is added there. 0.10+ reads x509.truststore, and the CA stays
+# out of the system store.
+pdrbd_repl_system_ca: /usr/local/share/ca-certificates/pdrbd-repl-ca.crt
+
+# tlshd log level (#558): non-zero, so handshake outcomes and certificate errors reach the
+# journal. 0.9 spells it [main] debug, 0.10+ [debug] loglevel.
+pdrbd_repl_tlshd_loglevel: 1

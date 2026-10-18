@@ -3,12 +3,14 @@
 # composed like site-pcmk.yml / site-rdqm.yml from building blocks:
 #   1. _pdrbd-cluster-ha.yml        — site A: DRBD 9 + VG, MQ, Pacemaker cluster, mqweb
 #   2. _pdrbd-dr-replication.yml    — site B: the same, its OWN cluster (skipped by --no-dr)
-#   3. authz service accounts        — mqapp/mqmon/mqsvc/mqoperator on every QM node
-#   4. pdrbd-qm                      — ONE play over both sites: each site's HA resource,
+#   3. pdrbd-replication-tls         — DRBD replication TLS: certs + tlshd on every node (#1609)
+#   4. authz service accounts        — mqapp/mqmon/mqsvc/mqoperator on every QM node
+#   5. pdrbd-qm                      — ONE play over both sites: each site's HA resource,
 #                                      the stacked DR resource, the QM (site A), its MQSC
 #                                      and each site's Pacemaker resources
-#   5. watched DR-sync wait          — the stacked DR resource UpToDate on both members
-#   6. site-distributed-shared.yml  — the SVC counterparty QM + inter-QM channels + the
+#   6. watched DR-sync wait          — the stacked DR resource UpToDate on both members
+#   7. site-pdrbd-tls-verify.yml    — every HA and DR connection Connected over TLS (#1609)
+#   8. site-distributed-shared.yml  — the SVC counterparty QM + inter-QM channels + the
 #                                      app requester (`mqlab qm e2e` needs it)
 #
 # Shape (plan "The shape decision"): DR/HA by default; HA-only under `bootstrap --no-dr`,
@@ -25,6 +27,15 @@
 
 - import_playbook: _pdrbd-dr-replication.yml
   when: dr_enabled | default(true) | bool
+
+# Replication TLS (lab #1609; ledger SC-1): every DRBD node's certificate, the CA trust and
+# a running tlshd, on both sites, BEFORE pdrbd-qm brings any resource up — with `tls yes`
+# a link only reaches Connected through a tlshd handshake. The order RDQM's provision uses
+# too (site-rdqm.yml: rdqm-replication-tls before crtmqm -re).
+- name: replication TLS on every DRBD node (certs + tlshd)
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
+  become: true
+  roles: [pdrbd-replication-tls]
 
 # Stage 2 authorization (#74) + mqoperator (#1501): the OAM principals must exist on EVERY
 # node the QM can run on — site B included, where a DR switch lands it — before any grant
@@ -113,6 +124,10 @@
         fail_msg: "no site-A node (or more than one) holds {{ pdrbd_dr_res }} in sync — check crm_mon"
       run_once: true
       when: dr_enabled | default(true) | bool
+
+# Every HA and DR connection is up AND encrypted (lab #1609), on both sites, after the
+# DR-sync wait has proven the DR link Connected. Fails loud on a plaintext connection.
+- import_playbook: site-pdrbd-tls-verify.yml
 
 - import_playbook: site-distributed-shared.yml
   vars:

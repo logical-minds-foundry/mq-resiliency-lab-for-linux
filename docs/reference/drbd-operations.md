@@ -11,6 +11,7 @@
 - [The initial-sync fight (250 KB/s → seconds)](#the-initial-sync-fight-250-kbs--seconds)
 - [The dump-md hang (2-hour stall)](#the-dump-md-hang-2-hour-stall)
 - [Force-promote on a dead peer](#force-promote-on-a-dead-peer)
+- [Replication TLS (pcmk-drbd arm)](#replication-tls-pcmk-drbd-arm)
 - [Command quick-reference](#command-quick-reference)
 
 ## The initial-sync fight (250 KB/s → seconds)
@@ -106,6 +107,20 @@ peer). The LUN under `/dev/drbd0` is then exportable via LIO.
 `Connecting` to the dead peer; a force-promote wrapped in `|| true` can silently
 no-op and leave it `Secondary`. Always **verify `role:Primary`** before the next
 cutover step (see the fail-loud check in `pcmk-dr-force.sh`).
+
+## Replication TLS (pcmk-drbd arm)
+
+The `pcmk-drbd-ubuntu` arm's two DRBD resources per QM set `tls yes;` as RDQM's do
+(#1609). DRBD hands each connection's handshake to `tlshd` through the kernel's
+`handshake` upcall, on both the control socket and the data socket, and asks it to verify
+the peer under the peer's **configured name**: the host name on the HA mesh, and
+`encrypted.remote` on the DR link. Both names are SANs in every node's certificate.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| A peer never leaves `Connecting` | The TLS handshake fails | `journalctl -u tlshd` on both ends (it logs at level 1), and `dmesg` for `tls handshake` lines from `drbd_transport_tcp`. Check that `tlshd` is active and that the certificate's SANs carry the peer name |
+| `drbdadm adjust` fails with `cannot switch tls (no -> yes) while connected` | The kernel refuses to change `tls` on a connection that has sockets (`drbd_transport_tcp.c` `dtt_net_conf_change`) | Rebuild the stack (`mqlab teardown`, then `mqlab bootstrap`). The provision stops on this before it renders any config |
+| `drbdsetup status --verbose` shows `tls:yes`, but is the link encrypted? | `tls:` is the configured flag, not a socket property | On a `Connected` link it is: the flag cannot change while connected, and the connect only completes after the handshake. `/proc/net/tls_stat` (`TlsCurrTxSw`/`TlsCurrRxSw`) counts the kTLS sockets, two per connection. `site-pdrbd-tls-verify.yml` checks both |
 
 ## Command quick-reference
 

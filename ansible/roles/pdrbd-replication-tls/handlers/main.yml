@@ -1,0 +1,25 @@
+---
+# Order matters: handlers run in the order listed here, so a trust-bundle refresh lands
+# before the tlshd restart it notifies.
+- name: refresh the system trust bundle (pdrbd)
+  ansible.builtin.command:
+    argv: [update-ca-certificates]
+  changed_when: true
+  become: true
+  notify: restart tlshd (pdrbd)
+
+# Bounded retry on the transient systemd 'unknown state' / D-Bus query race (#882, as the
+# RDQM arm's rdqm-replication-tls handler): a non-transient failure satisfies `until` on
+# attempt 1 (fail-loud).
+- name: restart tlshd (pdrbd)
+  ansible.builtin.systemd:
+    name: tlshd
+    state: restarted
+  become: true
+  register: pdrbd_repl_tls_restart
+  until: >-
+    pdrbd_repl_tls_restart is succeeded or
+    pdrbd_repl_tls_restart.msg | default('') is not
+    search('Connection reset by peer|D-Bus connection terminated|Service is in unknown state')
+  retries: 5
+  delay: 5
