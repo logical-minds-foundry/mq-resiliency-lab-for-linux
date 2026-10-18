@@ -1751,8 +1751,9 @@ one of three endpoint kinds:</p>
 </tr>
 </tbody>
 </table>
-<p><code>pcmk-drbd-ubuntu</code> (<code>vip</code>, <code>https://10.10.{1,2}.170:9443</code>) is in the topology but
-cannot be bootstrapped yet (epic <code>.github#310</code>).</p>
+<p><code>pcmk-drbd-ubuntu</code> (<code>vip</code>, <code>https://10.10.{1,2}.170:9443</code>) answers on the site that is
+the DR primary: site A after bootstrap, site B after <code>mqlab dr cutover</code> (epic
+<code>.github#310</code>).</p>
 <p>For the acceptance procedure that proves each endpoint is live, see the
 <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/mqweb-endpoint-verification.md">mqweb endpoint verification runbook</a>.</p>
 <h3 id="mqweb-security-model">mqweb security model<a class="headerlink" href="#mqweb-security-model" title="Permanent link">&para;</a></h3>

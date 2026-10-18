@@ -1740,8 +1740,16 @@ before the cut and asserts it is present at the peer afterward — the survival
 assertion behind the DR framing. It is accepted <strong>only</strong> for a stack whose DR
 verb declares <code>rpo0: true</code> (it implements the seed and the verify). On any other
 stack <code>mqlab dr</code> refuses with exit 2 and runs nothing — it never cuts over
-without the check you asked for. Today that is <code>rdqm-rhel</code> and, once its DR
-playbook lands, <code>pcmk-drbd-ubuntu</code>.</p>
+without the check you asked for. Today that is <code>rdqm-rhel</code> and <code>pcmk-drbd-ubuntu</code>.</p>
+<p><code>pcmk-drbd-ubuntu</code> declares <code>ansible/site-pdrbd-dr-switch.yml</code>, an RDQM-style DR
+demote then promote: it moves only the DR clone's <code>target-role</code> and the
+<code>pdrbd:&lt;qm&gt;-dr-role</code> marker, leaving each site's HA clone running. Before it changes
+anything, it checks that the target's DR disk is UpToDate and connected to an UpToDate
+source. If not, it refuses and the source keeps serving. It checks again after the
+source demote. If that second check fails, it says the source was demoted and prints
+the command that re-promotes it.
+A forced DR after losing the source site is a manual run with <code>-e dr_force=true</code>,
+which accepts an RPO above zero and so refuses <code>--rpo0-drill</code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Per-arm DR coverage as-built</p>
 <p>The <strong>Pacemaker/SAN</strong> arm (<code>pcmk-ubuntu</code>) declares no DR verb, so
