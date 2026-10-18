@@ -42,9 +42,11 @@ MATRIX: dict[str, dict[str, Support]] = {
     "rdqm-rhel": dict.fromkeys(VERBS, Support.NOT_YET),
     "nativeha-rhel-crr": dict.fromkeys(VERBS, Support.SUPPORTED),
     "nativeha-ubuntu": dict.fromkeys(VERBS, Support.SUPPORTED),
-    # pcmk-drbd-ubuntu (epic .github#310) starts NOT_YET; Task 9 sets each verb from
-    # the recorded drill evidence.
-    "pcmk-drbd-ubuntu": dict.fromkeys(VERBS, Support.NOT_YET),
+    # pcmk-drbd-ubuntu (epic .github#310): the DR verbs were proven live in Task 6
+    # (#1428, 2026-10-17: HA+DR bootstrap, cutover + failback with the RPO-0 drill, e2e
+    # at each site). Task 9 sets the rest from the recorded drill evidence.
+    "pcmk-drbd-ubuntu": dict.fromkeys(VERBS, Support.NOT_YET)
+    | dict.fromkeys(("dr-bootstrap", "cutover", "failback"), Support.SUPPORTED),
 }
 
 

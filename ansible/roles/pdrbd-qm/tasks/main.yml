@@ -1,17 +1,31 @@
 ---
-# pdrbd-qm (epic .github#310, #1427): the per-QM RDQM-shaped volume + Pacemaker resources,
-# on the local site group (pdrbd_site_group). HA-only shape (Task 5); Task 6 (#1428) adds
-# the stacked DR resource.
+# pdrbd-qm (epic .github#310, #1427, #1428): the per-QM RDQM-shaped volumes + Pacemaker
+# resources, on the local site group (pdrbd_site_group). site-pdrbd.yml runs it over BOTH
+# sites in one play, so formation steps interleave across the sites in task order (the
+# linear strategy): site B's DR member is up before site A clears the DR bitmap.
+#
+# Two shapes, fixed when the QM is first created (pdrbd_dr; plan "The shape decision"):
+#   HA-only — the site-local HA resource <qm>; the filesystem on its device.
+#   DR/HA   — the HA resource at each site plus the DR resource <qm>.dr STACKED on it,
+#             the filesystem on the stacked device (RDQM: rdqm-a1/pcmk-config.txt).
+# Site A creates the QM; site B forms its own HA resource and its DR member, receives the
+# QM's data over the DR resource, and never runs mkfs or crtmqm.
 #
 # Re-run safety (Review Focus 3). First-time formation is guarded by `pdrbd_formed`
 # (this site's CIB already holds drbd_qm), so a re-run never re-creates metadata,
-# re-formats or re-creates the QM over live data. The promote + mkfs carries a second,
+# re-formats or re-creates the QM over live data. Every destructive step carries a second,
 # independent guard: it runs only after a create-md that THIS run performed. A first run
 # that fails part-way is therefore not resumed over a half-built volume; run
 # `mqlab qm destroy` and provision again.
 #
-# "Once per site" is `inventory_hostname == pdrbd_creator`, never run_once (Task 6 runs
-# both sites in one play).
+# "Once per site" is `inventory_hostname == pdrbd_creator`, never run_once; "site A only"
+# is `inventory_hostname == groups['pdrbd_a'][0]`.
+#
+# Stacked-resource commands take `drbdadm -S` (--stacked: "Perform the command on a
+# stacked resource", drbdadm-9.0(8)). The sequence is the DRBD 9.0 User's Guide 5.20.3:
+# the lower resource up and Primary, then `create-md --stacked`, `up --stacked`,
+# `primary --stacked`. `drbdadm status all` does not list a stacked resource (BP README
+# §2.1), so its probes use `drbdsetup status`, which never blocks.
 
 # JSON diagnostic logging (#282): seed the mqs.ini template + journald drop-in BEFORE the
 # QM is created, so crtmqm bakes the DiagnosticMessages stanza into qm.ini. Every node, as
@@ -48,6 +62,30 @@
 - name: record formation state
   ansible.builtin.set_fact:
     pdrbd_formed: "{{ pdrbd_owned.rc == 0 }}"
+
+# The same cibadmin probe for the DR clone's primitive: rc 105 = the CIB answered, no match.
+- name: probe — does this site's CIB already own the QM's DR DRBD resource?
+  ansible.builtin.command:
+    argv: [cibadmin, --query, --xpath, "//primitive[@id='drbd_dr_qm']"]
+  register: pdrbd_dr_owned
+  changed_when: false
+  failed_when: pdrbd_dr_owned.rc not in [0, 105]
+  become: true
+
+# The DR role is a creation-time property (RDQM: `crtmqm -rr`; IBM "Creating DR/HA RDQMs",
+# 10.0.x). Moving a live filesystem from the HA device onto a stacked device is not done:
+# the stacked resource's internal metadata goes at the END of the lower device (DRBD 9.0
+# User's Guide 5.20.1; "Internal meta data") and would overwrite the filesystem's tail.
+- name: the DR shape of a formed QM never changes (RDQM fixes it at crtmqm -rr)
+  ansible.builtin.assert:
+    that: not pdrbd_formed or ((pdrbd_dr_formed | bool) == (pdrbd_dr | bool))
+    fail_msg: >-
+      {{ qm_name }} was formed {{ 'with' if pdrbd_dr_formed | bool else 'without' }} DR at
+      this site, and this run asks for {{ 'DR' if pdrbd_dr | bool else 'no DR' }}. The DR
+      shape is fixed at creation; destroy and re-create the QM (`mqlab qm destroy`, i.e.
+      qm-destroy, then bootstrap) to change it.
+  vars:
+    pdrbd_dr_formed: "{{ pdrbd_dr_owned.rc == 0 }}"
 
 # RDQM's agent is drbd-pacemaker 9.33.1 (rdqm-a1/packages.txt); ours comes from the LINBIT
 # PPA's drbd-utils. Prove the agent exists and takes the blueprint parameters before any
@@ -96,6 +134,17 @@
     src: qm.res.j2
     dest: "/etc/drbd.d/{{ pdrbd_res }}.res"
     mode: "0644"
+  become: true
+
+# Rendered on EVERY node of the site, each naming itself: the DR resource runs on whichever
+# node is the site's HA primary (`# on rdqm-a1 rdqm-a2 rdqm-a3` in rdqm-a1/drbd-dump.txt).
+# Before the parse check, so a .dr.res this drbd-utils rejects fails there, loud.
+- name: DR resource definition (stacked; rendered per node, RDQM's rdqmapp.dr.res)
+  ansible.builtin.template:
+    src: qm.dr.res.j2
+    dest: "/etc/drbd.d/{{ pdrbd_dr_res }}.res"
+    mode: "0644"
+  when: pdrbd_dr | bool
   become: true
 
 - name: the rendered DRBD config parses (an option this drbd-utils rejects fails here, loud)
@@ -156,7 +205,7 @@
     or 'Unconfigured' in pdrbd_dstate.stdout
   become: true
 
-- name: first-time formation on this site's creation node
+- name: HA formation on each site's creation node
   when:
     - not pdrbd_formed
     - inventory_hostname == pdrbd_creator
@@ -164,7 +213,7 @@
   block:
     # `drbdadm status` omits the connection field while a peer is Connected
     # (rdqm-a1/drbd-status.txt shows only `rdqm-a2 role:Secondary`), so count it from
-    # `drbdsetup status --verbose`, which prints it. Bounded: 60 x 2 s, then loud.
+    # `drbdsetup status --verbose`, which prints it (#1615). Bounded: 60 x 2 s, then loud.
     - name: wait for the site peers to connect
       ansible.builtin.command:
         argv: [drbdsetup, status, --verbose, "{{ pdrbd_res }}"]
@@ -175,16 +224,109 @@
       changed_when: false
 
     # auto-promote is `no` (blueprint), so every promotion is explicit. --clear-bitmap skips
-    # the initial full sync of blank disks with every peer connected: the
-    # docs/reference/drbd-operations.md "real fix". The second guard (MD-CREATED) means
-    # this only ever follows a create-md performed by this run on this node.
-    - name: initial promote + mkfs (fresh volume, skip the full initial sync)
+    # the initial full sync of blank disks with every peer connected (DRBD 9.0 User's
+    # Guide 5.1.9 "Skipping initial resynchronization"; docs/reference/drbd-operations.md
+    # "the real fix"). The second guard (MD-CREATED) means this only ever follows a
+    # create-md performed by this run on this node. Both sites run it: site B's HA layer
+    # runs Primary under the DR secondary (rdqm-b1/pcmk-status.txt).
+    - name: HA initial promote (fresh volume, skip the full initial sync)
       ansible.builtin.shell: |
         set -e
         drbdadm new-current-uuid --clear-bitmap {{ pdrbd_res }}/0
         drbdadm primary {{ pdrbd_res }}
-        mkfs.{{ pdrbd_fstype }} -q {{ pdrbd_fs_device }}
       when: "'MD-CREATED' in (pdrbd_md.stdout | default(''))"
+      changed_when: true
+
+- name: DR formation on each site's creation node (stacked on the now-Primary HA device)
+  when:
+    - pdrbd_dr | bool
+    - not pdrbd_formed
+    - inventory_hostname == pdrbd_creator
+  become: true
+  block:
+    # The stacked metadata is written INTO the HA device (internal, at its end; UG 5.20.1),
+    # so it replicates to the site peers. Runs only on a HA volume THIS run created
+    # (MD-CREATED): such a volume holds no data by definition, so create-md is forced.
+    # Deliberately no `dump-md` shortcut: a recreated <qm>_00 LV can land on the extents of
+    # a destroyed one, whose old stacked metadata (qm-destroy removes the LV, not that tail)
+    # would otherwise be adopted with stale UUIDs. An already-UP stacked resource on a fresh
+    # HA volume is impossible in a sound state, so it fails loud. </dev/null + timeout:
+    # docs/reference/drbd-operations.md (create-md can prompt on stdin).
+    - name: stacked create-md (DR metadata inside the HA device)
+      ansible.builtin.shell: |
+        set -e
+        if drbdsetup status {{ pdrbd_dr_res }} >/dev/null 2>&1; then
+          echo "{{ pdrbd_dr_res }} is already up on a freshly created HA volume; refusing to create-md" >&2
+          exit 1
+        fi
+        timeout 60 drbdadm -S create-md --force {{ pdrbd_dr_res }} </dev/null
+        echo DR-MD-CREATED
+      register: pdrbd_dr_md
+      changed_when: "'DR-MD-CREATED' in pdrbd_dr_md.stdout"
+      when: "'MD-CREATED' in (pdrbd_md.stdout | default(''))"
+
+    - name: stacked up
+      ansible.builtin.shell: |
+        set -e
+        if drbdsetup status {{ pdrbd_dr_res }} >/dev/null 2>&1; then
+          echo DR-ALREADY-UP
+        else
+          drbdadm -S up {{ pdrbd_dr_res }}
+          echo DR-BROUGHT-UP
+        fi
+      register: pdrbd_dr_up
+      changed_when: "'DR-BROUGHT-UP' in pdrbd_dr_up.stdout"
+
+    - name: assert the stacked DR disk attached
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      register: pdrbd_dr_state
+      changed_when: false
+      failed_when: >-
+        pdrbd_dr_state.rc != 0
+        or pdrbd_dr_state.stdout | length == 0
+        or 'disk:Diskless' in pdrbd_dr_state.stdout
+
+- name: QM creation (site A creation node only — site B receives it over the DR resource)
+  when:
+    - not pdrbd_formed
+    - inventory_hostname == groups['pdrbd_a'][0]
+  become: true
+  block:
+    # Both sites' DR members are up (the DR formation task above ran on b1 too). The
+    # connection field is printed by `drbdsetup status --verbose` (#1615). Bounded, loud.
+    - name: wait for the DR peer to connect (both sites' DR members are up)
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      register: pdrbd_dr_peer
+      until: pdrbd_dr_peer.stdout is search('connection:Connected')
+      retries: 90
+      delay: 2
+      changed_when: false
+      when: pdrbd_dr | bool
+
+    # Both DR members are blank and connected, so clear the DR bitmap too (UG 5.1.9: the
+    # same sequence, "for stacked resources, simply add the -S or --stacked option"): the
+    # DR initial sync is skipped, and mkfs + QM writes replicate as ordinary protocol-A
+    # traffic. "To be able to synchronize the backup node, the stacked device on the active
+    # node must be up and in the primary role" (UG 5.20.1). mkfs targets pdrbd_fs_device:
+    # the STACKED device when DR is built, because the stacked metadata makes it smaller
+    # than the HA device. udevadm settle + test -b: the by-res link of a just-promoted
+    # device must exist before mkfs is pointed at it. The second guard: only on volumes
+    # whose metadata THIS run created.
+    - name: initial promote + mkfs (on the device that is finally mounted)
+      ansible.builtin.shell: |
+        set -e
+        {% if pdrbd_dr | bool %}
+        drbdadm -S new-current-uuid --clear-bitmap {{ pdrbd_dr_res }}/0
+        drbdadm -S primary {{ pdrbd_dr_res }}
+        {% endif %}
+        udevadm settle
+        test -b {{ pdrbd_fs_device }}
+        mkfs.{{ pdrbd_fstype }} -q {{ pdrbd_fs_device }}
+      when: >-
+        'MD-CREATED' in (pdrbd_md.stdout | default(''))
+        and (not (pdrbd_dr | bool) or 'DR-MD-CREATED' in (pdrbd_dr_md.stdout | default('')))
       changed_when: true
 
     - name: mount point (creation node, before the mount)
@@ -335,15 +477,31 @@
       register: pdrbd_addmqinf
       changed_when: false
 
-    - name: release the volume and demote (Pacemaker owns promotion from here)
-      ansible.builtin.shell: |
-        set -e
-        umount {{ pdrbd_mount }}
-        drbdadm secondary {{ pdrbd_res }}
-      changed_when: true
+# On EACH site's creation node, after the site-A QM creation. The order is forced: the
+# stacked resource goes down before the HA resource is demoted, because the lower device
+# "must be in the primary role" while the stacked one runs (UG 5.20.1). The HA resource
+# stays up as Secondary. Taking the stacked resource down keeps its metadata (incl. the
+# cleared-bitmap UUIDs), so the DR clone's first start reconnects without a full sync
+# (judgment; the watched DR-sync wait in site-pdrbd.yml proves it live). Pacemaker owns
+# promotion and the stacked up/down from here (ocf:linbit:drbd stop runs `drbdadm down`;
+# it detects a stacked resource itself and adds -S: drbd-utils scripts/drbd.ocf).
+- name: release the volumes (Pacemaker owns promotion and the stacked up/down from here)
+  ansible.builtin.shell: |
+    set -e
+    if mountpoint -q {{ pdrbd_mount }}; then umount {{ pdrbd_mount }}; fi
+    {% if pdrbd_dr | bool %}
+    drbdadm -S secondary {{ pdrbd_dr_res }}
+    drbdadm -S down {{ pdrbd_dr_res }}
+    {% endif %}
+    drbdadm secondary {{ pdrbd_res }}
+  when:
+    - not pdrbd_formed
+    - inventory_hostname == pdrbd_creator
+  changed_when: true
+  become: true
 
 # Every RDQM node carries the same addmqinf definition, site B included
-# (rdqm-*/dspmqinf.txt); Task 6 teaches site B.
+# (rdqm-*/dspmqinf.txt): all five other nodes of both sites learn it from site A's.
 - name: teach the QM definition to the other site nodes
   ansible.builtin.command:
     cmd: "su mqm -c '{{ hostvars[groups['pdrbd_a'][0]].pdrbd_addmqinf.stdout }}'"
@@ -399,14 +557,22 @@
   changed_when: true
   become: true
 
-# Values: rdqm-a1/pcmk-config.txt. Chain: HA Promoted -> mq_group (fs -> vip -> qm), the
-# same chain as RDQM's INFINITY colocations + orders ([PE] "Groups"), with the location
-# preference on the group. HA-only shape (Task 5). Judgment: derived by removing RDQM's DR
-# layer; not captured. Built in a CIB file and pushed atomically.
+# Values: rdqm-a1/pcmk-config.txt (site A), rdqm-b1/pcmk-config.txt (site B). Built in a
+# CIB file and pushed atomically, on each site's creation node, first time only.
 # pcs 0.11.7 (24.04) and 0.12.x (26.04) both accept every form here: `--group`/`--after`
 # and clone meta without the `meta` keyword are deprecated since 0.11.6 but not removed
 # (pcs CHANGELOG, https://github.com/ClusterLabs/pcs/blob/main/CHANGELOG.md).
 # --no-default-ops keeps pcs from adding a Filesystem monitor RDQM does not have (CL-8).
+#
+# DR/HA chain, RDQM's (rdqm-a1/pcmk-config.txt), all INFINITY/Mandatory:
+#   ms_drbd_rdqmapp:promote -> ms_drbd_dr_rdqmapp:start; DR colocated with the HA Master
+#   ms_drbd_dr_rdqmapp:promote AND :start -> p_fs:start; fs colocated with the DR Master
+#   fs -> [rdqmx, CL-7] -> ip -> QM  (here the group mq_group; [PE] "Groups")
+# The DR clone: `wfc_timeout=false` (no wait for the peer at start: a non-digit value
+# means "not wait at all", drbd-utils scripts/drbd.ocf), promotable, notify, clone-max=1
+# (CL-5). Its target-role IS the DR role marker: Promoted at the DR primary site (A at
+# formation), Unpromoted at the DR secondary (rdqm-a1 / rdqm-b1 pcmk-config.txt, DR-1).
+# HA-only chain: the same with the DR layer removed (judgment; not captured).
 - name: Pacemaker resources (first-time only; built in a CIB file and pushed atomically)
   when:
     - not pdrbd_formed
@@ -423,6 +589,14 @@
       op monitor interval=10s timeout=20s role=Promoted \
       op start timeout=240s op stop timeout=100s op promote timeout=90s op demote timeout=90s \
       promotable notify=true
+    {% if pdrbd_dr | bool %}
+    pcs -f "$cib" resource create drbd_dr_qm ocf:linbit:drbd drbd_resource={{ pdrbd_dr_res }} wfc_timeout=false \
+      op monitor interval=20s timeout=20s role=Unpromoted \
+      op monitor interval=10s timeout=20s role=Promoted \
+      op start timeout=240s op stop timeout=100s op promote timeout=90s op demote timeout=90s \
+      promotable notify=true clone-max=1
+    pcs -f "$cib" resource meta drbd_dr_qm-clone target-role={{ 'Promoted' if pdrbd_site_group == 'pdrbd_a' else 'Unpromoted' }}
+    {% endif %}
     pcs -f "$cib" resource create mq_fs ocf:heartbeat:Filesystem device={{ pdrbd_fs_device }} \
       directory={{ pdrbd_mount }} fstype={{ pdrbd_fstype }} options={{ pdrbd_mount_opts }} \
       force_unmount=safe fast_stop=no \
@@ -432,12 +606,67 @@
     pcs -f "$cib" resource create mq_qm systemd:mq-{{ qm_name }} \
       op monitor interval=30s timeout=60s op start timeout=300s op stop timeout=300s \
       --group mq_group --after mq_vip
+    {% if pdrbd_dr | bool %}
+    pcs -f "$cib" constraint colocation add drbd_dr_qm-clone with Promoted drbd_qm-clone INFINITY
+    pcs -f "$cib" constraint order promote drbd_qm-clone then start drbd_dr_qm-clone
+    pcs -f "$cib" constraint colocation add mq_group with Promoted drbd_dr_qm-clone INFINITY
+    pcs -f "$cib" constraint order promote drbd_dr_qm-clone then start mq_group
+    pcs -f "$cib" constraint order start drbd_dr_qm-clone then start mq_group
+    {% else %}
     pcs -f "$cib" constraint colocation add mq_group with Promoted drbd_qm-clone INFINITY
     pcs -f "$cib" constraint order promote drbd_qm-clone then start mq_group
+    {% endif %}
     pcs -f "$cib" constraint location mq_group prefers {{ pdrbd_creator }}={{ pdrbd_preferred_score }}
     pcs cluster cib-push "$cib" --config
   changed_when: true
 
+# Mirrors RDQM's CIB property rdqm:<qm>-dr-role (rdqm-a1/pcmk-config.txt `1`,
+# rdqm-b1/pcmk-config.txt `2`). Judgment: 1 = DR primary, 2 = DR secondary, inferred from
+# rdqmstatus ("DR role: Primary" / "Secondary"). First time only: after a switch the marker
+# belongs to site-pdrbd-dr-switch.yml, and a provision re-run must never flip it back.
+- name: DR role marker in the CIB (mirrors RDQM's rdqm:<qm>-dr-role; 1 primary, 2 secondary)
+  ansible.builtin.command:
+    argv:
+      - crm_attribute
+      - --type
+      - crm_config
+      - --set-name
+      - pdrbd
+      - --name
+      - "{{ pdrbd_res }}-dr-role"
+      - --update
+      - "{{ '1' if pdrbd_site_group == 'pdrbd_a' else '2' }}"
+  when:
+    - pdrbd_dr | bool
+    - not pdrbd_formed
+    - inventory_hostname == pdrbd_creator
+  changed_when: true
+  become: true
+
+# The end state each site must reach depends on its CURRENT DR role, not on which site it
+# is: after a DR switch, site B is the DR primary, and a provision re-run must check that,
+# not the formation-time roles. A formed DR site without a valid marker fails loud.
+- name: this site's DR role (the marker; 1 = DR primary, 2 = DR secondary)
+  ansible.builtin.command:
+    argv:
+      - crm_attribute
+      - --type
+      - crm_config
+      - --set-name
+      - pdrbd
+      - --name
+      - "{{ pdrbd_res }}-dr-role"
+      - --query
+      - --quiet
+  register: pdrbd_dr_role
+  changed_when: false
+  failed_when: pdrbd_dr_role.rc != 0 or pdrbd_dr_role.stdout | trim not in ['1', '2']
+  when:
+    - pdrbd_dr | bool
+    - inventory_hostname == pdrbd_creator
+  become: true
+
+# HA-only, or the DR primary site: the QM runs here.
 - name: wait for the QM to run under Pacemaker
   ansible.builtin.command:
     argv: [pcs, status, resources]
@@ -445,6 +674,36 @@
   until: pdrbd_rsc_status.stdout is search('mq_qm\s.*Started')
   retries: 60
   delay: 5
-  when: inventory_hostname == pdrbd_creator
+  when:
+    - inventory_hostname == pdrbd_creator
+    - not (pdrbd_dr | bool) or (pdrbd_dr_role.stdout | default('') | trim) == '1'
+  changed_when: false
+  become: true
+
+# The DR secondary site: the blueprint's steady state (rdqm-b1/pcmk-status.txt, DR-1). The
+# HA clone Promoted on exactly one node; the DR clone running Unpromoted on THAT node; the
+# filesystem, IP and QM Stopped. Polled up to 300 s; the last crm_mon output is in the
+# failure. The clone-role parse is vars/pdrbd-crm-mon.yml's (tested on both formats).
+- name: DR-secondary steady state (HA Promoted + DR Unpromoted on one node; mq_group Stopped)
+  ansible.builtin.command:
+    argv: [crm_mon, "-1", "-r"]
+  register: pdrbd_secondary_crm
+  until: >-
+    (pdrbd_secondary_crm.stdout
+     | regex_findall(pdrbd_crm_role_re | replace('CLONE', 'drbd_qm-clone') | replace('ROLE', 'Promoted'))
+     | length) == 1
+    and (pdrbd_secondary_crm.stdout
+     | regex_findall(pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Unpromoted')))
+    == (pdrbd_secondary_crm.stdout
+     | regex_findall(pdrbd_crm_role_re | replace('CLONE', 'drbd_qm-clone') | replace('ROLE', 'Promoted')))
+    and pdrbd_secondary_crm.stdout is search('mq_fs\s.*Stopped')
+    and pdrbd_secondary_crm.stdout is search('mq_vip\s.*Stopped')
+    and pdrbd_secondary_crm.stdout is search('mq_qm\s.*Stopped')
+  retries: 60
+  delay: 5
+  when:
+    - pdrbd_dr | bool
+    - inventory_hostname == pdrbd_creator
+    - (pdrbd_dr_role.stdout | default('') | trim) == '2'
   changed_when: false
   become: true

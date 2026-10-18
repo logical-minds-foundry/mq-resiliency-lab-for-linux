@@ -54,8 +54,11 @@ def test_parity_command_prints_matrix() -> None:
     assert "not_yet" in result.stdout
 
 
-def test_pdrbd_row_declares_every_verb_not_yet() -> None:
-    # pcmk-drbd-ubuntu (epic .github#310) starts NOT_YET; Task 9 sets it from drill evidence.
+def test_pdrbd_row_supports_only_the_live_proven_dr_verbs() -> None:
+    # pcmk-drbd-ubuntu (epic .github#310): Task 6 (#1428) proved the DR verbs live; the
+    # rest stay NOT_YET until Task 9 sets them from drill evidence.
     row = MATRIX["pcmk-drbd-ubuntu"]
     assert set(row) == set(VERBS)
-    assert set(row.values()) == {Support.NOT_YET}
+    dr = {"dr-bootstrap", "cutover", "failback"}
+    assert {v for v, s in row.items() if s is Support.SUPPORTED} == dr
+    assert {row[v] for v in set(VERBS) - dr} == {Support.NOT_YET}

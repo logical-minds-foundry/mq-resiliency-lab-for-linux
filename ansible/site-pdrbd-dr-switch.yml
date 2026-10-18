@@ -1,0 +1,271 @@
+---
+# Operator-driven cross-site switch for pcmk-drbd-ubuntu (epic .github#310 T6, #1428):
+# RDQM-style DR demote (`rdqmdr -s`) at the source, then DR promote (`rdqmdr -p`) at the
+# target. Run via `mqlab dr cutover|failback pcmk-drbd-ubuntu [--rpo0-drill]`, which passes
+# dr_direction (a2b | b2a), qm_name and rpo0_drill (lab/topology.yaml dr-cutover/-failback).
+#
+# What moves (judgment, inferred from the steady state; BP README §4): the two sites differ
+# in exactly two places — the DR clone's target-role (Promoted at the DR primary,
+# Unpromoted at the secondary) and the rdqm:<qm>-dr-role property (1 / 2) — while each
+# site's HA clone stays Promoted (rdqm-a1/rdqm-b1 pcmk-config.txt, rdqm-b1/pcmk-status.txt).
+# So this playbook flips the DR clone's target-role and the pdrbd:<qm>-dr-role marker and
+# nothing else: the HA clone at either site is never touched. The constraint chain does
+# the rest (DR Unpromoted stops QM -> IP -> fs; DR Promoted starts fs -> IP -> QM).
+#
+# Order (Review Focus 4: a refusal must leave the source untouched and still serving):
+#   1. PRE-FLIGHT, before any change: the target's DR member is UpToDate AND Connected to
+#      an UpToDate peer. A broken or lagging link is refused HERE, with the reason, and
+#      nothing has changed.
+#   2. (RPO-0 drill) seed a persistent message on the live QM.
+#   3. Demote the source (DR clone Unpromoted), and wait until its DR resource is
+#      Secondary: `rdqmdr -p` "fails if the primary instance of the queue manager is still
+#      running and the DR replication link is still functioning" (IBM rdqmdr, MQ 10.0.x).
+#   4. RE-ASSERT the target is UpToDate and in sync (the link can drop during the demote).
+#      If it fails now, the source IS demoted: the failure says so and prints the exact
+#      command that re-promotes the source.
+#   5. Promote the target (DR clone Promoted); assert DR Primary and the QM Started.
+#   6. (RPO-0 drill) the seeded message must be retrievable at the new live QM.
+#
+# dr_force=true (manual only: `ansible-playbook site-pdrbd-dr-switch.yml -e dr_direction=a2b
+# -e qm_name=PDRBDAPP -e dr_force=true`) promotes the target after the source site is LOST
+# — the forced-DR drill (Task 8 drill 6: every source node destroyed). The source may be
+# unreachable, so the forced path never contacts it: both plays run on localhost with
+# gather_facts off, and EVERY task that reaches a source node sits in ONE block gated
+# `not dr_force_b` (tests/test_pdrbd_dr_switch.py pins this). Ansible evaluates a task's
+# `when` before it connects to the delegated host, so a skipped source task opens no
+# connection at all — no unreachable-host tolerance needed. The disk gates accept UpToDate or
+# Outdated without a connected peer, and RPO>0 is the expected outcome, so a forced run
+# refuses the RPO-0 drill. Whether DRBD lets a 2-member `quorum majority` DR resource
+# promote after an ungraceful peer loss is the open DR-quorum question (plan Task 6, Task 8
+# drill 6): a refused promote fails here with the live state, never a silent no-op.
+
+- name: resolve direction
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: assert dr_direction and qm_name
+      ansible.builtin.assert:
+        that:
+          - dr_direction | default('') in ['a2b', 'b2a']
+          - qm_name | default('') | length > 0
+        fail_msg: >-
+          dr_direction must be a2b or b2a (got {{ dr_direction | default('unset') }}) and
+          qm_name must be set (got {{ qm_name | default('unset') }})
+
+    - name: assert no RPO-0 drill on a forced cutover
+      ansible.builtin.assert:
+        that:
+          - not ((dr_force | default(false) | bool) and (rpo0_drill | default(false) | bool))
+        fail_msg: >-
+          a forced cutover (dr_force=true) cannot run the RPO-0 drill: RPO>0 is its expected
+          outcome. Drop rpo0_drill, or drop dr_force for a planned switch
+
+    - name: source/target site groups
+      ansible.builtin.set_fact:
+        dr_src: "{{ 'pdrbd_a' if dr_direction == 'a2b' else 'pdrbd_b' }}"
+        dr_dst: "{{ 'pdrbd_b' if dr_direction == 'a2b' else 'pdrbd_a' }}"
+
+- name: switch
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars/pdrbd-crm-mon.yml
+  vars:
+    pdrbd_res: "{{ qm_name | lower }}"
+    pdrbd_dr_res: "{{ qm_name | lower }}.dr"
+    src: "{{ hostvars['localhost'].dr_src }}"
+    dst: "{{ hostvars['localhost'].dr_dst }}"
+    dr_force_b: "{{ dr_force | default(false) | bool }}"
+    dr_promoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Promoted') }}"
+    dr_unpromoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Unpromoted') }}"
+    # `drbdsetup status --verbose <res>` lines (#1615): the resource line (column 0), the
+    # local volume line (2 spaces), a peer's connection line (2), its volume line (4).
+    drbd_role_re: '(?m)^\S+ node-id:\d+ role:(\w+)'
+    drbd_disk_re: '(?m)^  volume:\d+ minor:\d+ disk:(\w+)'
+    drbd_conn_re: '(?m)^  \S+ node-id:\d+ connection:(\w+)'
+    drbd_peer_disk_re: '(?m)^    volume:\d+ .*peer-disk:(\w+)'
+    # The target gate, shared by the pre-flight and the post-demote re-assert. Planned
+    # switch: the target's own disk UpToDate AND its one DR peer Connected with peer-disk
+    # UpToDate — a disconnected target can still call itself UpToDate while missing the
+    # source's last protocol-A writes, so UpToDate alone is not enough. Forced (dr_force,
+    # explicit): the source is gone, so only the local disk is judged, and Outdated is
+    # accepted with its RPO>0.
+    dst_gate: >-
+      {{ (dst_disk == ['UpToDate'] and dst_conn == ['Connected'] and dst_peer_disk == ['UpToDate'])
+         or (dr_force_b and dst_disk | length == 1 and dst_disk[0] in ['UpToDate', 'Outdated']) }}
+    dst_state_msg: >-
+      target DR disk {{ dst_disk | join(',') or 'unknown' }}, link {{ dst_conn | join(',') or 'none' }},
+      peer disk {{ dst_peer_disk | join(',') or 'unknown' }} on {{ dr_dst_nodes[0] }}
+    # What re-promotes the source after a refusal past the demote (step 4): the exact
+    # inverse of the demote task, on the node that ran it.
+    src_repromote_cmd: >-
+      cd ansible && ansible '{{ groups[src][0] }}' -b -m shell -a 'pcs resource meta
+      drbd_dr_qm-clone target-role=Promoted --wait=600 && crm_attribute --type crm_config
+      --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 1'
+  tasks:
+    # ---- 1. pre-flight: the target, before any change ----
+    - name: target site crm_mon
+      ansible.builtin.command:
+        argv: [crm_mon, "-1", "-r"]
+      delegate_to: "{{ groups[dst][0] }}"
+      register: dst_crm
+      changed_when: false
+      become: true
+
+    - name: find the target site's DR member (its HA primary, DR clone Unpromoted)
+      ansible.builtin.set_fact:
+        dr_dst_nodes: "{{ dst_crm.stdout | regex_findall(dr_unpromoted_re) }}"
+
+    - name: assert the target site's DR clone runs Unpromoted on exactly one node
+      ansible.builtin.assert:
+        that:
+          - dr_dst_nodes | length == 1
+          - dr_dst_nodes[0].split() | length == 1
+        fail_msg: >-
+          {{ dst }}: drbd_dr_qm-clone is not running Unpromoted on exactly one node — is
+          {{ dst }} the DR secondary? Nothing was changed. crm_mon: {{ dst_crm.stdout }}
+
+    # The stacked resource: `drbdadm status all` does not list it (BP README §2.1).
+    - name: target DR state before any change (drbdsetup; the stacked resource)
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      register: dst_dr
+      changed_when: false
+      become: true
+
+    - name: parse the target DR state (pre-flight)
+      ansible.builtin.set_fact:
+        dst_disk: "{{ dst_dr.stdout | regex_findall(drbd_disk_re) }}"
+        dst_conn: "{{ dst_dr.stdout | regex_findall(drbd_conn_re) }}"
+        dst_peer_disk: "{{ dst_dr.stdout | regex_findall(drbd_peer_disk_re) }}"
+
+    - name: pre-flight — assert the target's disk is UpToDate and in sync (nothing changed yet)
+      ansible.builtin.assert:
+        that: dst_gate | bool
+        fail_msg: >-
+          {{ dst_state_msg }} — refusing to switch: replication is broken or lagging.
+          NOTHING WAS CHANGED: the source site still runs the QM. Wait for the link and the
+          resync, or pass -e dr_force=true for a forced DR that accepts the RPO>0 loss.
+          drbdsetup: {{ dst_dr.stdout }}
+
+    # ---- 2-3. the source: the ONLY tasks that contact a source node ----
+    # Skipped as a whole on a forced cutover: the source site may be lost (unreachable),
+    # and a skipped task never connects to its delegate.
+    - name: source site — demote (skipped on a forced cutover; the source may be unreachable)
+      when: not dr_force_b
+      block:
+        - name: source site crm_mon
+          ansible.builtin.command:
+            argv: [crm_mon, "-1", "-r"]
+          delegate_to: "{{ groups[src][0] }}"
+          register: src_crm
+          changed_when: false
+          become: true
+
+        - name: find the source site's DR-promoted node (its HA primary, running the QM)
+          ansible.builtin.set_fact:
+            dr_src_nodes: "{{ src_crm.stdout | regex_findall(dr_promoted_re) }}"
+
+        - name: assert the source site's DR clone is Promoted on exactly one node
+          ansible.builtin.assert:
+            that:
+              - dr_src_nodes | length == 1
+              - dr_src_nodes[0].split() | length == 1
+            fail_msg: >-
+              {{ src }}: drbd_dr_qm-clone is not Promoted on exactly one node — is {{ src }}
+              the DR primary? Nothing was changed. crm_mon: {{ src_crm.stdout }}
+
+        - name: RPO-0 seed on the live QM
+          ansible.builtin.include_tasks: tasks/rpo0-drill-seed.yml
+          vars:
+            rpo0_node: "{{ dr_src_nodes[0] }}"
+          when: rpo0_drill | default(false) | bool
+
+        # rdqmdr -s. pcs --wait returns non-zero if the cluster does not settle in time; the
+        # live state goes to stderr before the failure.
+        - name: stop and demote at the source site (DR clone to Unpromoted; HA stays up)
+          ansible.builtin.shell: |
+            set -e
+            if ! pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300; then
+              crm_mon -1 -r >&2
+              exit 1
+            fi
+            crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 2
+          delegate_to: "{{ groups[src][0] }}"
+          changed_when: true
+          become: true
+
+        # Bounded wait (30 x 2 s), then loud with the last state.
+        - name: assert the source DR resource is Secondary (rdqmdr -p refuses a running primary)
+          ansible.builtin.command:
+            argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+          delegate_to: "{{ dr_src_nodes[0] }}"
+          register: src_dr
+          until: >-
+            src_dr.rc == 0
+            and (src_dr.stdout | regex_findall(drbd_role_re)) == ['Secondary']
+          retries: 30
+          delay: 2
+          changed_when: false
+          become: true
+
+    # ---- 4. re-assert the target after the demote ----
+    - name: target DR state after the source demote
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      register: dst_dr
+      changed_when: false
+      become: true
+
+    - name: parse the target DR state (post-demote)
+      ansible.builtin.set_fact:
+        dst_disk: "{{ dst_dr.stdout | regex_findall(drbd_disk_re) }}"
+        dst_conn: "{{ dst_dr.stdout | regex_findall(drbd_conn_re) }}"
+        dst_peer_disk: "{{ dst_dr.stdout | regex_findall(drbd_peer_disk_re) }}"
+
+    - name: re-assert the target's disk is UpToDate and in sync before the promote
+      ansible.builtin.assert:
+        that: dst_gate | bool
+        fail_msg: >-
+          {{ dst_state_msg }} — refusing to promote: replication broke or lagged during the
+          switch.
+          {% if dr_force_b %}Forced cutover: the source was not touched.{% else %}THE SOURCE
+          WAS DEMOTED: {{ src }} no longer runs the QM (DR clone Unpromoted, dr-role 2).
+          Re-promote it with: {{ src_repromote_cmd }}{% endif %}
+          drbdsetup: {{ dst_dr.stdout }}
+
+    # ---- 5. promote the target ----
+    # rdqmdr -p. A refused promote (e.g. `quorum:no` on a forced cutover) fails here with
+    # the live state — a recorded finding (Task 8 drill 6), never a silent no-op.
+    - name: promote at the target site (DR clone to Promoted; the chain starts fs, vip, QM)
+      ansible.builtin.shell: |
+        set -e
+        if ! pcs resource meta drbd_dr_qm-clone target-role=Promoted --wait=600; then
+          crm_mon -1 -r >&2
+          exit 1
+        fi
+        crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 1
+      delegate_to: "{{ groups[dst][0] }}"
+      changed_when: true
+      become: true
+
+    - name: assert the target DR resource is Primary and the QM Started
+      ansible.builtin.shell: |
+        set -o pipefail
+        st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
+        grep -q 'role:Primary' <<<"$(head -n 1 <<<"$st")" || { echo "$st" >&2; exit 1; }
+        crm_mon -1 -r | grep -Eq 'mq_qm\s.*Started' || { crm_mon -1 -r >&2; exit 1; }
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      changed_when: false
+      become: true
+
+    # ---- 6. RPO-0 verify ----
+    - name: RPO-0 verify at the new live QM
+      ansible.builtin.include_tasks: tasks/rpo0-drill-verify.yml
+      vars:
+        rpo0_node: "{{ dr_dst_nodes[0] }}"
+      when: rpo0_drill | default(false) | bool

@@ -14,15 +14,32 @@ pdrbd_ha_port: 7000                   # rdqm-a1/pcmk-config.txt rdqmapp-drbd-por
 pdrbd_ha_minor: 100                   # rdqm-a1/pcmk-config.txt rdqmapp-drbd-minor
 pdrbd_stickiness: 1                   # rdqm-a1/pcmk-config.txt rsc_defaults
 pdrbd_preferred_score: 50             # rdqm-a1/pcmk-config.txt rdqmapp_preferred_location
-# Shape (plan "The shape decision"): HA-only here. Task 6 (#1428) adds the DR/HA shape,
-# chosen from dr_enabled when the QM is FIRST created and never changed on a formed QM.
-pdrbd_dr: false
-# The ONE device mkfs formats and Pacemaker mounts. HA-only: the HA device (by-res needs
-# udev-always-use-vnr, rendered in global_common.conf as RDQM does).
-pdrbd_fs_device: "/dev/drbd/by-res/{{ pdrbd_res }}/0"
+# Shape (plan "The shape decision"), fixed when the QM is FIRST created and never changed
+# on a formed QM (RDQM fixes it at `crtmqm -rr`; IBM "Creating DR/HA RDQMs", 10.0.x).
+# DR/HA (the default): the HA resource plus the stacked DR resource, at both sites.
+# HA-only (`bootstrap --no-dr` passes dr_enabled=false): the HA resource alone, as RDQM's
+# `crtmqm -sx -reh` QM has no `.dr` resource.
+pdrbd_dr: "{{ dr_enabled | default(true) | bool }}"
+pdrbd_dr_res: "{{ pdrbd_res }}.dr"    # rdqm-a1/drbd-dump.txt (rdqmapp.dr)
+pdrbd_dr_port: 7001                   # rdqm-a1/pcmk-config.txt rdqmapp-dr-port
+pdrbd_dr_minor: 7001                  # rdqm-a1/drbd-dump.txt device minor 7001
+# The other site as ONE logical DR peer. RDQM names it `encrypted.remote`, its replication
+# TLS certificate SAN (BP README §2.1); this arm uses `dr-remote` until lab #1609 settles
+# the TLS naming (judgment; ledger RP-5).
+pdrbd_dr_peer_name: dr-remote
+# The ONE device mkfs formats and Pacemaker mounts. With DR it is the STACKED device
+# (rdqm-a1/pcmk-config.txt device=/dev/drbd/by-res/rdqmapp.dr/0): the stacked resource's
+# internal metadata makes it smaller than the HA device ([UG] 5.20.1 "Device stacking
+# considerations"), so the two must never diverge. HA-only: the HA device. The by-res
+# links need udev-always-use-vnr, rendered in global_common.conf as RDQM does.
+pdrbd_fs_device: "/dev/drbd/by-res/{{ pdrbd_dr_res if pdrbd_dr | bool else pdrbd_res }}/0"
 # The QM's TLS keystore directory, on the replicated volume so SSLKEYR follows the QM
 # (the pcmk arm's /mqshared/ssl precedent). pki-distribute needs a dedicated directory.
 pdrbd_ssl_dir: "{{ pdrbd_mount }}/ssl"
-# Set by the play from the inventory + topology hb IPs:
-#   pdrbd_site_group: pdrbd_a | pdrbd_b
-#   pdrbd_site_peers: [{ name, addr_hb, addr_wan, node_id }]   # this site's 3 nodes only
+# Set by the play (site-pdrbd.yml) from vars/pdrbd-peers.yml:
+#   pdrbd_site_group:   pdrbd_a | pdrbd_b
+#   pdrbd_site_peers:   [{ name, addr_hb, addr_wan, node_id, site }]   # this site's 3 nodes
+#   pdrbd_remote_peers: the other site's 3 nodes (the DR template's path targets)
+#   pdrbd_my_wan:       this node's net-wan address
+#   pdrbd_dr_local_id:  0 at site A, 1 at site B (rdqm-a1/rdqm-b1 drbd-dump.txt)
+# and from vars/pdrbd-crm-mon.yml: pdrbd_crm_role_re (the crm_mon clone-role parse).

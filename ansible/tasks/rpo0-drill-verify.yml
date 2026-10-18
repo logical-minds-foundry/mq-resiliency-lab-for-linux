@@ -1,0 +1,23 @@
+---
+# RPO-0 drill verify (epic .github#310, #1428; mirrors lab/scripts/rdqm-dr-cutover.sh
+# rpo0_verify, #867): the seeded token must be retrievable at the new live QM. amqsget
+# destructively drains the queue and prints each message body, then waits and ends on
+# "no more messages". The rdqm script captures it in a command substitution under set -e,
+# i.e. it requires rc 0 on a drained queue; this task requires the same (any other rc fails
+# here, loud — the #1428 live run confirms the rc on this arm's MQ level). A miss fails:
+# RPO-0 violated.
+# Inputs: rpo0_node (the node now running the live QM), qm_name, rpo0_token.
+- name: RPO-0 verify — get from the drill queue at the new live QM
+  ansible.builtin.command:
+    argv: [/opt/mqm/samp/bin/amqsget, DR.RPO0.DRILL, "{{ qm_name }}"]
+  delegate_to: "{{ rpo0_node }}"
+  become: true
+  become_user: mqm
+  register: rpo0_got
+  changed_when: true
+
+- name: RPO-0 verify — assert the token survived the cut
+  ansible.builtin.assert:
+    that: rpo0_token in rpo0_got.stdout
+    fail_msg: "RPO-0 VIOLATED: token {{ rpo0_token }} not found at {{ rpo0_node }} ({{ qm_name }})"
+    success_msg: "RPO-0 held: token {{ rpo0_token }} retrieved at {{ rpo0_node }} ({{ qm_name }})"

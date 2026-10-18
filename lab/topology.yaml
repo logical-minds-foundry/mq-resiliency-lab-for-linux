@@ -319,19 +319,19 @@ nodes:
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81 }
+    nics: { net-mgmt: 10.50.0.81, net-data-b: 10.10.2.81, net-hb-b: 172.16.2.81, net-wan: 10.99.0.81, net-ext: 10.60.0.81 }
   pdrbd-b2:
     box: pdrbd
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82 }
+    nics: { net-mgmt: 10.50.0.82, net-data-b: 10.10.2.82, net-hb-b: 172.16.2.82, net-wan: 10.99.0.82, net-ext: 10.60.0.82 }
   pdrbd-b3:
     box: pdrbd
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83 }
+    nics: { net-mgmt: 10.50.0.83, net-data-b: 10.10.2.83, net-hb-b: 172.16.2.83, net-wan: 10.99.0.83, net-ext: 10.60.0.83 }
 
 # groups — atomic role × site groups, each host listed exactly once. These are the
 # shared grouping namespace: the Ansible inventory renders them verbatim and the
@@ -475,9 +475,9 @@ stacks:
   # pcmk-drbd-ubuntu (epic .github#310): RDQM rebuilt from upstream Corosync/Pacemaker/
   # DRBD 9. Built to RDQM's captured config (docs/reference/rdqm-blueprint/); deviations
   # in docs/reference/rdqm-vs-vanilla-deviations.md. Like RDQM: one floating IP per site
-  # (no vip_ext), operator-driven DR (no Booth). Task 5 (#1427) landed the provision and
-  # qm-destroy playbooks: the stack bootstraps HA-only (`--no-dr`) until Task 6 (#1428)
-  # lands site B and the DR switch playbook.
+  # (no vip_ext), operator-driven DR (no Booth). Full HA+DR by default (#1428): each site
+  # its own cluster + HA resource, the DR resource stacked on it; `--no-dr` builds the
+  # HA-only shape, fixed at QM creation.
   pcmk-drbd-ubuntu:
     mechanism: pacemaker-drbd
     os_family: ubuntu
@@ -494,7 +494,9 @@ stacks:
       qm-destroy:  { playbook: site-pdrbd-qm-down.yml }
       qm-up:       { pcs: "resource enable mq_group" }
       qm-down:     { pcs: "resource disable mq_group" }
-      qm-status:   { cmd: "pcs status resources && drbdadm status all" }
+      # drbdadm status all gates (it fails with no resource up) but omits the stacked DR
+      # resource (blueprint README §2.1); drbdsetup status --verbose shows both.
+      qm-status:   { cmd: "pcs status resources && drbdadm status all >/dev/null && drbdsetup status --verbose" }
       # `mqlab dr` dispatches on these (#1424); rpo0: the playbook seeds + verifies RPO-0.
       dr-cutover:  { playbook: site-pdrbd-dr-switch.yml, rpo0: true }
       dr-failback: { playbook: site-pdrbd-dr-switch.yml, rpo0: true }

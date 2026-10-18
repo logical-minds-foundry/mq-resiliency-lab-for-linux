@@ -1,0 +1,15 @@
+---
+# pcmk-drbd-ubuntu DRBD nodes (epic .github#310, #1428). One list for both sites; each
+# site's HA resource is FILTERED from it (site == this site) and nothing ever widens a
+# resource across the sites.
+#   addr_hb:  the site-local HA resource (net-hb-<site>); node-ids 0-2 at EACH site, as
+#             rdqm-a1/drbd-dump.txt and rdqm-b1/drbd-dump.txt number them.
+#   addr_wan: the stacked DR resource's paths (net-wan).
+# Lab constants: must match lab/topology.yaml's pdrbd-* nics (tests/test_topology_pdrbd.py).
+pdrbd_peers_all:
+  - { name: pdrbd-a1, addr_hb: 172.16.1.71, addr_wan: 10.99.0.71, node_id: 0, site: a }
+  - { name: pdrbd-a2, addr_hb: 172.16.1.72, addr_wan: 10.99.0.72, node_id: 1, site: a }
+  - { name: pdrbd-a3, addr_hb: 172.16.1.73, addr_wan: 10.99.0.73, node_id: 2, site: a }
+  - { name: pdrbd-b1, addr_hb: 172.16.2.81, addr_wan: 10.99.0.81, node_id: 0, site: b }
+  - { name: pdrbd-b2, addr_hb: 172.16.2.82, addr_wan: 10.99.0.82, node_id: 1, site: b }
+  - { name: pdrbd-b3, addr_hb: 172.16.2.83, addr_wan: 10.99.0.83, node_id: 2, site: b }
