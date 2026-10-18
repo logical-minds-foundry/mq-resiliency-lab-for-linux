@@ -468,12 +468,18 @@
     our_qm: "{{ qm_app }}"
     # RDQM spends its one floating IP on the data VIP (the app's HA path), so the
     # partner QM cannot reach us at a single net-ext VIP. Instead the SVC QM's SDR to us
-    # carries a CONNAME list of the three rdqm_a net-ext node IPs: MQ tries them in
-    # order and reconnects to whichever node currently runs the app QM, so the partner
-    # link rides an HA failover without a second floating IP (#216 spike).
-    our_conn: "rdqm-a1-ext.client.com(1414),rdqm-a2-ext.client.com(1414),rdqm-a3-ext.client.com(1414)"
-    # The app host reaches the app QM on its one data VIP. APP.SVRCONN is now mutual
-    # TLS on this arm (rdqm-app-tls role above, #410/#426) -> app_tls true, matching
-    # pcmk/nativeha; the app-client keystore is already placed by mq-client. (#429)
-    app_conn: "rdqm-vip-a.client.com(1414)"
+    # carries a CONNAME list of the net-ext node addresses: MQ tries them in order and
+    # reconnects to whichever node currently runs the app QM, so the partner link rides
+    # an HA failover without a second floating IP (#216 spike). Both sites are listed,
+    # site A first, so the link also follows the QM across a DR cutover; with site A
+    # only, e2e failed with MQRC 2538 after a cutover on the pdrbd copy of this arm
+    # (#1428, mirrored here in #1622).
+    our_conn: >-
+      rdqm-a1-ext.client.com(1414),rdqm-a2-ext.client.com(1414),rdqm-a3-ext.client.com(1414),rdqm-b1-ext.client.com(1414),rdqm-b2-ext.client.com(1414),rdqm-b3-ext.client.com(1414)
+    # The app host reaches the app QM on the data VIP of whichever site is DR primary:
+    # site-A VIP, then site-B VIP (rdqm-qm-create.sh / rdqm-dr-cutover.sh bind qm.vip_b
+    # there; site-pcmk.yml precedent). APP.SVRCONN is mutual TLS on this arm
+    # (rdqm-app-tls role above, #410/#426) -> app_tls true, matching pcmk/nativeha; the
+    # app-client keystore is already placed by mq-client. (#429)
+    app_conn: "rdqm-vip-a.client.com(1414),rdqm-vip-b.client.com(1414)"
     app_tls: true
