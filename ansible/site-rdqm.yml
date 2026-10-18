@@ -231,6 +231,24 @@
       retries: 60
       delay: 10
 
+# Event monitoring (#514 enable + #515 collector), the lab-wide standard (epic .github#114).
+# Host-prep runs on EVERY rdqm node, HA (rdqm_a) AND DR (rdqm_b): any node can become primary
+# on an HA or DR move, so the run.sh wrapper must be present everywhere the SERVICE could
+# STARTCMD it. It is its own play because the QM-level play below resolves the active node
+# with rdqm-active-node, which waits for STATUS(Running) and so cannot run on a DR secondary
+# (#1624: rdqm_b had no wrapper, so a DR cutover lost every MQ event). The journald
+# rate-limit drop-in the host-prep asserts is baked into the box (rdqm-install `install`).
+- name: event monitoring — host prep (wrapper on every rdqm node, HA + DR) (#114, #1624)
+  # Under `bootstrap --no-dr` (#188) site-B is absent, so drop rdqm_b.
+  hosts: "rdqm_a{{ ':rdqm_b' if (dr_enabled | default(true) | bool) else '' }}"
+  gather_facts: false
+  tasks:
+    - name: event monitoring — host prep (wrapper on every rdqm node) (#114)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+      vars:
+        qmgr_name: "{{ qm_app }}"
+
 # Restore per-QM JSON diagnostic logging for the RDQM app QM (#569, follow-up to #562).
 # #562 stops seeding the DiagnosticMessagesTemplate on RDQM (its `crtmqm -sx` rejects the
 # template as a same-named ClusterSyslog conflict, AMQ7059E), so RDQMAPP no longer inherits
@@ -281,20 +299,11 @@
         mq_qmini_path: "{{ rdqm_datapath }}/qm.ini"
       when: rdqm_is_active
 
-    # Event monitoring (#514 enable + #515 collector), the lab-wide standard (epic .github#114).
-    # Host-prep runs on EVERY rdqm node (any node can become primary on an HA/DR move, so the
-    # run.sh wrapper must be present everywhere the SERVICE could STARTCMD it). The journald
-    # rate-limit drop-in the host-prep asserts is baked into the box (rdqm-install `install`).
-    - name: event monitoring — host prep (wrapper on every rdqm node) (#114)
-      ansible.builtin.include_role:
-        name: mq-event-monitor
-      vars:
-        qmgr_name: "{{ qm_app }}"
-
     # The QM-level MQSC (enable classes + define/start the collector SERVICE) runs ONCE on the
     # active RDQM node — mirroring the mq-diag-logging/qmini gating above. The SERVICE object
     # lands in RDQMAPP on the DRBD-replicated DataPath and follows the QM across HA/DR moves;
-    # CONTROL(QMGR) auto-starts it on the node RDQM lands the QM on (wrapper present, above).
+    # CONTROL(QMGR) auto-starts it on the node RDQM lands the QM on (wrapper present on every
+    # HA + DR node, from the host-prep play above).
     - name: event monitoring — enable classes + define/start collector (active RDQM node) (#114)
       ansible.builtin.include_role:
         name: mq-event-monitor

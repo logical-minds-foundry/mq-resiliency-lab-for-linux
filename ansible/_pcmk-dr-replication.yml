@@ -41,6 +41,24 @@
   roles: [pcmk-stonith]
 - hosts: pcmk_b
   roles: [mq-install]
+# The per-node MQ host prep mq-pcmk-qmgr gives every site-A node, repeated on site B so a
+# forced cutover lands the QM on a node that is ready for it (#1624). JSON diagnostic
+# logging (#282): the mqs.ini DiagnosticSystemMessages stanza + the journald rate-limit
+# drop-in. Event monitoring (#114): the collector wrapper the mq-event-monitor SERVICE
+# STARTCMDs wherever Pacemaker starts the QM. The SERVICE object itself lives in the QM on
+# the LUN and arrives with it; without the wrapper here it could not start on site B.
+- hosts: pcmk_b
+  become: true
+  tasks:
+    - name: seed JSON diagnostic logging (mqs.ini template + journald) (#282, #1624)
+      ansible.builtin.include_role:
+        name: mq-diag-logging
+        tasks_from: system
+    - name: event monitoring — host prep (wrapper on every pcmk node) (#114, #1624)
+      ansible.builtin.include_role:
+        name: mq-event-monitor
+      vars:
+        qmgr_name: "{{ qm_app }}"
 # serial: 1 — cold-start mqweb one node at a time (#1161, generalizing #1151's
 # play-level serialization from _nativeha-ubuntu-cluster-ha.yml to every mqweb play).
 # mqweb is a full Liberty JVM whose concurrent cold-start compounds the nested-virt tax;
