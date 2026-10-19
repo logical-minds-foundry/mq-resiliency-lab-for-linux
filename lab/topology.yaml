@@ -122,6 +122,10 @@ nodes:
   # --- Phase C: RDQM arm, six RHEL x86_64 nodes (spec 10-C) — native KVM/host-passthrough
   # on an x86 host; TCG (emulated) only when the host is arm64/macOS (resolved per host by
   # src/mqlab/platforms.py _provider). ---
+  # Both sites carry net-ext so the SVC partner link (our_conn) and this QM's own sender
+  # to SVCQM reach it wherever DR has it running (#1622, the #1428 pdrbd fix). Site B's
+  # net-ext is .34-.36, NOT the mgmt-mirroring .41-.43: 10.60.0.40-.49 is the vendor
+  # (svc-sim-a/-b) address block reserved by the two-site SVC DR plan (#237).
   rdqm-a1:
     box: mq-rdqm
     cpus: 2
@@ -145,19 +149,19 @@ nodes:
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.41, net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41 }
+    nics: { net-mgmt: 10.50.0.41, net-data-b: 10.10.2.41, net-hb-b: 172.16.2.41, net-wan: 10.99.0.41, net-ext: 10.60.0.34 }
   rdqm-b2:
     box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.42, net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42 }
+    nics: { net-mgmt: 10.50.0.42, net-data-b: 10.10.2.42, net-hb-b: 172.16.2.42, net-wan: 10.99.0.42, net-ext: 10.60.0.35 }
   rdqm-b3:
     box: mq-rdqm
     cpus: 2
     memory: 2048
     extra_disk: 10
-    nics: { net-mgmt: 10.50.0.43, net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43 }
+    nics: { net-mgmt: 10.50.0.43, net-data-b: 10.10.2.43, net-hb-b: 172.16.2.43, net-wan: 10.99.0.43, net-ext: 10.60.0.36 }
 
   # --- Phase D: Pacemaker/SAN arm, arm64 KVM (spec 10-D) ---
   san-a:
