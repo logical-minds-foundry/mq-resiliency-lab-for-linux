@@ -564,7 +564,8 @@ The lab's Ubuntu cluster/SAN roles install these packages:
   26.04**, and the DRBD and LIO target modules it supplied on 24.04 are in the
   base modules package instead. `drbd-san` installs the kernel-modules package
   named in its per-version vars file (since #1278, `vars/Ubuntu-24.yml` names
-  `linux-modules-extra-{{ ansible_kernel }}`), so T8 adds a `vars/Ubuntu-26.yml`
+  `linux-modules-extra-{{ ansible_facts['kernel'] }}`; it was spelled
+  `{{ ansible_kernel }}` when this entry was written, before #136), so T8 adds a `vars/Ubuntu-26.yml`
   that names `linux-modules-<kver>`, which the box already carries. `pacemaker` moves a major version (2.1 → 3.0) and `pcs` moves
   0.11 → 0.12. Expect role fix-ups there too. T8/V2 must prove this; it is not
   established here.
