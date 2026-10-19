@@ -30,14 +30,57 @@
 # -e qm_name=PDRBDAPP -e dr_force=true`) promotes the target after the source site is LOST
 # — the forced-DR drill (Task 8 drill 6: every source node destroyed). The source may be
 # unreachable, so the forced path never contacts it: both plays run on localhost with
-# gather_facts off, and EVERY task that reaches a source node sits in ONE block gated
-# `not dr_force_b` (tests/test_pdrbd_dr_switch.py pins this). Ansible evaluates a task's
-# `when` before it connects to the delegated host, so a skipped source task opens no
-# connection at all — no unreachable-host tolerance needed. The disk gates accept UpToDate or
+# gather_facts off, and EVERY task that reaches a source node lives in ONE task file,
+# tasks/pdrbd-dr-switch-source.yml, pulled in by an include_tasks gated `not dr_force_b`
+# (tests/test_pdrbd_dr_switch.py pins this; tests/test_pdrbd_dr_switch_run.py runs the
+# forced path for real). A skipped include never reads its file, so on the forced path no
+# source task is templated or connects — no unreachable-host tolerance needed. A gated
+# BLOCK is not enough (#1647): ansible-core templates each task's `delegate_to` BEFORE its
+# `when` (TaskExecutor._execute_internal runs _calculate_delegate_to first), and since 2.19
+# an undefined variable there is an error (2.18 templated it with fail_on_undefined=False).
+# So a skipped task delegated to `dr_src_nodes[0]`, set only by a skipped set_fact, failed
+# the forced run on ansible-core 2.21.1. The disk gates accept UpToDate or
 # Outdated without a connected peer, and RPO>0 is the expected outcome, so a forced run
-# refuses the RPO-0 drill. Whether DRBD lets a 2-member `quorum majority` DR resource
-# promote after an ungraceful peer loss is the open DR-quorum question (plan Task 6, Task 8
-# drill 6): a refused promote fails here with the live state, never a silent no-op.
+# refuses the RPO-0 drill.
+#
+# Forced promote of an OUTDATED target (#1655; drill 6 broke the DR link with a graceful
+# `drbdadm disconnect`, which outdates the peer). Owner decision (2026-10-19): a forced DR
+# must promote it and accept the loss — rdqmdr -p refuses only while "the primary instance
+# of the queue manager is still running and the DR replication link is still functioning"
+# (IBM rdqmdr, MQ 10.0.x), so with the link down promoting is the documented behaviour.
+#   Data — ocf:linbit:drbd (drbd-utils 9.35.0, /usr/lib/ocf/resource.d/linbit/drbd and
+#   drbd.shellfuncs.sh, read on pdrbd-b1): the status parser sets _disk_all_consistent and
+#   _disk_all_up_to_date false for `disk:Outdated`; drbd_update_master_score then matches
+#   none of the UpToDate / some-peer-UpToDate / transitional / all-consistent branches and
+#   falls to `remove_master_score`. So an Outdated DR disk has NO promotion score
+#   (live: crm_mon -A shows master-drbd_qm only, no master-drbd_dr_qm), Pacemaker has
+#   nothing to promote, and `pcs ... --wait` returns 0 on a settled, unpromoted cluster.
+#   For `disk:UpToDate`, not Primary, with a peer-disk DUnknown (status_pdsk_any_unknown)
+#   the agent sets `local_ok`, the third adjust_master_score value: the DR clone sets none,
+#   so the default "0 10 1000 10000" gives 1000 (RDQM's DR primitive sets none either,
+#   rdqm-blueprint/rdqm-b1/pcmk-config.txt). Every score needs quorum first: on
+#   `quorum:no` the agent removes it ("NOT quorate, should not be master").
+#   Data — DRBD 9 User's Guide (https://linbit.com/drbd-user-guide/drbd-guide-9_0-en/):
+#   2.16 "DRBD disallows promoting a resource that is in the outdated state"; 5.23.7 Last
+#   man standing, footnote 7: "The exception is if you manually promote a resource with
+#   the --force flag"; 16.2.1: a disconnected resource switching to primary starts a new
+#   data generation, and with `primary --force` at once. drbdsetup(8) (drbd-utils 9.35.0)
+#   `primary --force`: "Force the resource to become primary even if some devices are not
+#   guaranteed to have up-to-date data ... when manually recovering from a disaster";
+#   `--quorum`: "a node in the cluster partition can only be promoted to primary if the
+#   cluster partition has quorum", and "If all missing nodes are marked as outdated, a
+#   partition always has quorum". Live (drill 6 hold): b1 `quorum:yes`, peer Connecting.
+#   Judgment — so the forced path, only when the target disk is not UpToDate, runs
+#   `drbdadm -S primary --force` then `drbdadm -S secondary` on the target's DR member:
+#   the disk becomes UpToDate (new current UUID), the resource goes back to Secondary so
+#   it is never Primary outside Pacemaker beyond the two back-to-back commands, and the
+#   agent's next monitor scores it 1000. Then it re-reads the state (UpToDate, Secondary,
+#   quorum:yes, or fail naming which), WAITS for the master-drbd_dr_qm score (the monitor
+#   runs every 20 s; `pcs --wait` alone would settle before it), and only then sets
+#   target-role=Promoted, so Pacemaker still owns the promote and the fs -> vip -> QM
+#   chain. The guide does not say whether `--force` overrides quorum; this path does not
+#   rely on it — a target without quorum fails loudly with the live state. Old primary
+#   reconnecting later is a split brain to resolve by hand (RP-7; no after-sb policy).
 
 - name: resolve direction
   hosts: localhost
@@ -84,6 +127,7 @@
     drbd_disk_re: '(?m)^  volume:\d+ minor:\d+ disk:(\w+)'
     drbd_conn_re: '(?m)^  \S+ node-id:\d+ connection:(\w+)'
     drbd_peer_disk_re: '(?m)^    volume:\d+ .*peer-disk:(\w+)'
+    drbd_quorum_re: '(?m)^  volume:\d+ minor:\d+ .*quorum:(\w+)'
     # The target gate, shared by the pre-flight and the post-demote re-assert. Planned
     # switch: the target's own disk UpToDate AND its one DR peer Connected with peer-disk
     # UpToDate — a disconnected target can still call itself UpToDate while missing the
@@ -150,65 +194,12 @@
           drbdsetup: {{ dst_dr.stdout }}
 
     # ---- 2-3. the source: the ONLY tasks that contact a source node ----
-    # Skipped as a whole on a forced cutover: the source site may be lost (unreachable),
-    # and a skipped task never connects to its delegate.
-    - name: source site — demote (skipped on a forced cutover; the source may be unreachable)
+    # Not loaded at all on a forced cutover: the source site may be lost (unreachable), and
+    # a gated block is not enough (see the header, #1647). A skipped include_tasks never
+    # reads its file, so nothing in it is templated.
+    - name: source site — demote (not loaded on a forced cutover; the source may be unreachable)
+      ansible.builtin.include_tasks: tasks/pdrbd-dr-switch-source.yml
       when: not dr_force_b
-      block:
-        - name: source site crm_mon
-          ansible.builtin.command:
-            argv: [crm_mon, "-1", "-r"]
-          delegate_to: "{{ groups[src][0] }}"
-          register: src_crm
-          changed_when: false
-          become: true
-
-        - name: find the source site's DR-promoted node (its HA primary, running the QM)
-          ansible.builtin.set_fact:
-            dr_src_nodes: "{{ src_crm.stdout | regex_findall(dr_promoted_re) }}"
-
-        - name: assert the source site's DR clone is Promoted on exactly one node
-          ansible.builtin.assert:
-            that:
-              - dr_src_nodes | length == 1
-              - dr_src_nodes[0].split() | length == 1
-            fail_msg: >-
-              {{ src }}: drbd_dr_qm-clone is not Promoted on exactly one node — is {{ src }}
-              the DR primary? Nothing was changed. crm_mon: {{ src_crm.stdout }}
-
-        - name: RPO-0 seed on the live QM
-          ansible.builtin.include_tasks: tasks/rpo0-drill-seed.yml
-          vars:
-            rpo0_node: "{{ dr_src_nodes[0] }}"
-          when: rpo0_drill | default(false) | bool
-
-        # rdqmdr -s. pcs --wait returns non-zero if the cluster does not settle in time; the
-        # live state goes to stderr before the failure.
-        - name: stop and demote at the source site (DR clone to Unpromoted; HA stays up)
-          ansible.builtin.shell: |
-            set -e
-            if ! pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300; then
-              crm_mon -1 -r >&2
-              exit 1
-            fi
-            crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 2
-          delegate_to: "{{ groups[src][0] }}"
-          changed_when: true
-          become: true
-
-        # Bounded wait (30 x 2 s), then loud with the last state.
-        - name: assert the source DR resource is Secondary (rdqmdr -p refuses a running primary)
-          ansible.builtin.command:
-            argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
-          delegate_to: "{{ dr_src_nodes[0] }}"
-          register: src_dr
-          until: >-
-            src_dr.rc == 0
-            and (src_dr.stdout | regex_findall(drbd_role_re)) == ['Secondary']
-          retries: 30
-          delay: 2
-          changed_when: false
-          become: true
 
     # ---- 4. re-assert the target after the demote ----
     - name: target DR state after the source demote
@@ -236,6 +227,79 @@
           Re-promote it with: {{ src_repromote_cmd }}{% endif %}
           drbdsetup: {{ dst_dr.stdout }}
 
+    # ---- 4b. forced only: make an Outdated target promotable (#1655, see the header) ----
+    # Every task here runs only on the target's DR member (dr_dst_nodes[0], set by the
+    # pre-flight on every path), so the forced path still never contacts the source.
+    - name: forced — make an Outdated target UpToDate at the DRBD level (primary --force, then secondary)
+      ansible.builtin.shell: |
+        if ! drbdadm -S primary --force {{ pdrbd_dr_res }}; then
+          echo "drbdadm primary --force {{ pdrbd_dr_res }} was refused; Pacemaker was not asked to promote" >&2
+          drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+          exit 1
+        fi
+        if ! drbdadm -S secondary {{ pdrbd_dr_res }}; then
+          echo "{{ pdrbd_dr_res }} IS PRIMARY OUTSIDE PACEMAKER: drbdadm secondary failed after primary --force" >&2
+          drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      when: dr_force_b and dst_disk != ['UpToDate']
+      changed_when: true
+      become: true
+
+    - name: forced — target DR state before the promote
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      register: dst_forced
+      when: dr_force_b
+      changed_when: false
+      become: true
+
+    - name: forced — assert the target is UpToDate, Secondary and quorate (what the agent scores)
+      ansible.builtin.assert:
+        that:
+          - dst_forced.stdout | regex_findall(drbd_disk_re) == ['UpToDate']
+          - dst_forced.stdout | regex_findall(drbd_role_re) == ['Secondary']
+          - dst_forced.stdout | regex_findall(drbd_quorum_re) == ['yes']
+        fail_msg: >-
+          {{ pdrbd_dr_res }} on {{ dr_dst_nodes[0] }} is disk
+          {{ dst_forced.stdout | regex_findall(drbd_disk_re) | join(',') or 'unknown' }}, role
+          {{ dst_forced.stdout | regex_findall(drbd_role_re) | join(',') or 'unknown' }}, quorum
+          {{ dst_forced.stdout | regex_findall(drbd_quorum_re) | join(',') or 'unknown' }} —
+          ocf:linbit:drbd gives a promotion score only to an UpToDate disk with quorum, so
+          Pacemaker could not promote it. Not promoted; the source was not touched.
+          drbdsetup: {{ dst_forced.stdout }}
+      when: dr_force_b
+
+    # `pcs --wait` returns once the cluster settles; with no score yet it settles at once,
+    # unpromoted. The agent's Unpromoted monitor (every 20 s) sets the score, so wait for it.
+    - name: forced — wait for the agent's promotion score on the target
+      ansible.builtin.shell: |
+        set -o pipefail
+        last=""
+        for _ in $(seq 1 45); do
+          if last=$(crm_attribute --type status --node {{ dr_dst_nodes[0] }} --name master-drbd_dr_qm --query --quiet 2>&1); then
+            case $last in
+              ''|*[!0-9]*) ;;
+              *) if [ "$last" -gt 0 ]; then echo "master-drbd_dr_qm=$last"; exit 0; fi ;;
+            esac
+          fi
+          sleep 2
+        done
+        echo "no promotion score (master-drbd_dr_qm) on {{ dr_dst_nodes[0] }} after 90 s (last: ${last:-empty}): ocf:linbit:drbd sets none for a disk that is not UpToDate or without quorum, so Pacemaker has nothing to promote. Not promoted; the source was not touched." >&2
+        crm_mon -1 -A -r >&2
+        drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+        exit 1
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ dr_dst_nodes[0] }}"
+      when: dr_force_b
+      changed_when: false
+      become: true
+
     # ---- 5. promote the target ----
     # rdqmdr -p. A refused promote (e.g. `quorum:no` on a forced cutover) fails here with
     # the live state — a recorded finding (Task 8 drill 6), never a silent no-op.
@@ -255,7 +319,12 @@
       ansible.builtin.shell: |
         set -o pipefail
         st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
-        grep -q 'role:Primary' <<<"$(head -n 1 <<<"$st")" || { echo "$st" >&2; exit 1; }
+        if ! grep -q 'role:Primary' <<<"$(head -n 1 <<<"$st")"; then
+          echo "{{ pdrbd_dr_res }} is not Primary after pcs --wait settled: Pacemaker promoted nothing. ocf:linbit:drbd gives no promotion score (master-drbd_dr_qm) to a disk that is not UpToDate (e.g. Outdated) or without quorum (#1655)" >&2
+          echo "$st" >&2
+          crm_mon -1 -A -r >&2
+          exit 1
+        fi
         crm_mon -1 -r | grep -Eq 'mq_qm\s.*Started' || { crm_mon -1 -r >&2; exit 1; }
       args:
         executable: /bin/bash

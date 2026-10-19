@@ -21,9 +21,9 @@
 
 - name: assert this is a Debian/Ubuntu bake host (pam_motd + update-motd.d is Ubuntu machinery)
   ansible.builtin.assert:
-    that: ansible_os_family == 'Debian'
+    that: ansible_facts['os_family'] == 'Debian'
     fail_msg: >-
-      motd-off is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
+      motd-off is for the Ubuntu boxes only (got os_family={{ ansible_facts['os_family'] }});
       do not include it from a RHEL bake.
 
 # noqa command-instead-of-module: a read-only grep over /etc/pam.d is the discovery itself.

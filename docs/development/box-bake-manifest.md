@@ -149,7 +149,10 @@ three log-search-tier roles the log-search epic added the same way —
 
 ## Per-OS-version vars (#1277, epic `.github#280`)
 
-OS-family dispatch stays `install-{{ ansible_os_family }}.yml`. Values that differ
+OS-family dispatch stays `install-{{ ansible_facts['os_family'] }}.yml`. (Facts are read
+only through `ansible_facts['<fact>']`: `ansible.cfg` sets `inject_facts_as_vars = False`,
+and `tests/test_ansible_facts_guard.py` rejects a top-level `ansible_<fact>` name, #136.)
+Values that differ
 between **versions** of one family live in `roles/<role>/vars/<Distribution>-<major>.yml`
 (e.g. `RedHat-9.yml`). They load through one shared include,
 `ansible/tasks/os-vars.yml`, which **fails when no file matches**. It has no fallback to

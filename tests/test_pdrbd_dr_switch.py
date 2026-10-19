@@ -23,6 +23,8 @@ PB = ANSIBLE / "site-pdrbd-dr-switch.yml"
 SITE = ANSIBLE / "site-pdrbd.yml"
 SEED = ANSIBLE / "tasks" / "rpo0-drill-seed.yml"
 VERIFY = ANSIBLE / "tasks" / "rpo0-drill-verify.yml"
+_SRC_REL = "tasks/pdrbd-dr-switch-source.yml"
+SRC_TASKS = ANSIBLE / _SRC_REL
 CRM_VARS = ANSIBLE / "vars" / "pdrbd-crm-mon.yml"
 BLUEPRINT = REPO_ROOT / "docs" / "reference" / "rdqm-blueprint"
 
@@ -32,10 +34,13 @@ def _load(path: Path) -> Any:
 
 
 def _all_tasks() -> list[tuple[str, dict[str, Any]]]:
+    """Every task in run order, with the source include expanded in place."""
     out: list[tuple[str, dict[str, Any]]] = []
     for play in _load(PB):
         for t in play.get("tasks", []):
-            out.extend((play["name"], inner) for inner in t.get("block", [t]))
+            is_source = t.get("ansible.builtin.include_tasks") == _SRC_REL
+            inner = _source_tasks() if is_source else t.get("block", [t])
+            out.extend((play["name"], i) for i in inner)
     return out
 
 
@@ -44,9 +49,14 @@ def _switch_top_level() -> list[dict[str, Any]]:
     return play["tasks"]
 
 
-def _source_block() -> dict[str, Any]:
-    [block] = [t for t in _switch_top_level() if "block" in t]
-    return block
+def _source_include() -> dict[str, Any]:
+    [inc] = [t for t in _switch_top_level() if t.get("ansible.builtin.include_tasks") == _SRC_REL]
+    return inc
+
+
+def _source_tasks() -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = _load(SRC_TASKS)
+    return tasks
 
 
 def _index(fragment: str) -> int:
@@ -138,9 +148,12 @@ def test_forced_cutover_refuses_the_rpo0_drill() -> None:
 
 
 def test_source_steps_are_skipped_only_on_a_forced_cutover() -> None:
-    block = _source_block()
-    assert block["when"] == "not dr_force_b"
-    names = [t["name"] for t in block["block"]]
+    # An include, not a block (#1647): a block's tasks have their delegate_to templated
+    # before their inherited `when`; a skipped include never loads its file.
+    inc = _source_include()
+    assert inc["when"] == "not dr_force_b"
+    assert not [t["name"] for t in _switch_top_level() if "block" in t]
+    names = [t["name"] for t in _source_tasks()]
     for frag in (
         "source site crm_mon",
         "find the source site's DR-promoted node",
@@ -167,10 +180,11 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
     for play in _load(PB):
         assert play["hosts"] == "localhost", play["name"]
         assert play["gather_facts"] is False, play["name"]
-    # - every task that reaches a source node is inside the ONE block gated
-    #   `not dr_force_b` (a skipped task never connects to its delegate), and no other task;
-    inside = _source_block()["block"]
-    outside = [t for t in _switch_top_level() if "block" not in t]
+    # - every task that reaches a source node is in the ONE task file included under
+    #   `not dr_force_b` (a skipped include is never loaded or templated), and no other task;
+    inside = _source_tasks()
+    outside = [t for t in _switch_top_level() if t.get("ansible.builtin.include_tasks") != _SRC_REL]
+    assert len(outside) == len(_switch_top_level()) - 1
     assert all(_delegates_to_source(t) or "set_fact" in str(t) or "assert" in str(t)
                for t in inside)  # fmt: skip
     assert not [t["name"] for t in outside if _delegates_to_source(t)]
@@ -179,22 +193,90 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
         target = str(t.get("delegate_to", ""))
         assert target in ("", "{{ groups[dst][0] }}", "{{ dr_dst_nodes[0] }}"), t["name"]
     # - and no unreachable-tolerance is sprinkled around instead.
-    assert "ignore_unreachable" not in PB.read_text(encoding="utf-8")
+    for path in (PB, SRC_TASKS):
+        assert "ignore_unreachable" not in path.read_text(encoding="utf-8"), path.name
+
+
+_FORCE = "forced — make an Outdated target UpToDate at the DRBD level"
+_FORCED_STATE = "forced — target DR state before the promote"
+_FORCED_ASSERT = "forced — assert the target is UpToDate, Secondary and quorate"
+_FORCED_SCORE = "forced — wait for the agent's promotion score"
+
+
+def test_forced_cutover_forces_an_outdated_target_at_the_drbd_level_first() -> None:
+    # #1655: ocf:linbit:drbd gives an Outdated disk no promotion score, so the forced path
+    # makes the target UpToDate with `primary --force`, hands it straight back to Secondary
+    # (never Primary outside Pacemaker), and only then lets Pacemaker promote it.
+    force = _task(_FORCE)
+    assert force["when"] == "dr_force_b and dst_disk != ['UpToDate']"
+    assert force["delegate_to"] == "{{ dr_dst_nodes[0] }}"
+    assert force["changed_when"] is True
+    body = force["ansible.builtin.shell"]
+    primary = body.index("drbdadm -S primary --force {{ pdrbd_dr_res }}")
+    secondary = body.index("drbdadm -S secondary {{ pdrbd_dr_res }}")
+    assert primary < secondary
+    assert body.count("exit 1") == 2  # each step fails loud, with the live state
+    assert body.count("drbdsetup status --verbose {{ pdrbd_dr_res }} >&2") == 2
+    assert "IS PRIMARY OUTSIDE PACEMAKER" in body
+    order = [_index(f) for f in (_REASSERT, _FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE)]
+    assert order == sorted(order)
+    assert order[-1] < _index("promote at the target site")
+
+
+def test_forced_cutover_proves_the_target_is_promotable_before_pacemaker() -> None:
+    for frag in (_FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+        task = _task(frag)
+        assert task["when"] == "dr_force_b", frag
+        assert task.get("delegate_to", "{{ dr_dst_nodes[0] }}") == "{{ dr_dst_nodes[0] }}", frag
+    that = _task(_FORCED_ASSERT)["ansible.builtin.assert"]["that"]
+    assert "dst_forced.stdout | regex_findall(drbd_disk_re) == ['UpToDate']" in that
+    assert "dst_forced.stdout | regex_findall(drbd_role_re) == ['Secondary']" in that
+    assert "dst_forced.stdout | regex_findall(drbd_quorum_re) == ['yes']" in that
+    assert "promotion score" in _task(_FORCED_ASSERT)["ansible.builtin.assert"]["fail_msg"]
+    # `pcs --wait` settles at once when there is no score yet, so the score is waited for,
+    # bounded, and its absence fails loud with the live state.
+    score = _task(_FORCED_SCORE)["ansible.builtin.shell"]
+    assert "--name master-drbd_dr_qm --query" in score
+    assert "--node {{ dr_dst_nodes[0] }}" in score
+    assert "seq 1 45" in score
+    assert "crm_mon -1 -A -r >&2" in score
+    assert score.rstrip().endswith("exit 1")
+
+
+def test_post_promote_assert_names_the_missing_promotion_score() -> None:
+    body = _task("assert the target DR resource is Primary")["ansible.builtin.shell"]
+    assert "Pacemaker promoted nothing" in body
+    assert "no promotion score (master-drbd_dr_qm)" in body
+    assert "crm_mon -1 -A -r >&2" in body
+
+
+def test_planned_switch_skips_every_forced_step() -> None:
+    # The planned path is unchanged: every new task is gated on dr_force_b.
+    for frag in (_FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+        assert str(_task(frag)["when"]).startswith("dr_force_b"), frag
+        variables = {"dr_force_b": False, "dst_disk": ["Outdated"]}
+        assert _cond(_task(frag)["when"], variables) is False, frag
+    variables = {"dr_force_b": True, "dst_disk": ["UpToDate"]}
+    assert _cond(_task(_FORCE)["when"], variables) is False  # nothing to force
+    variables = {"dr_force_b": True, "dst_disk": ["Outdated"]}
+    assert _cond(_task(_FORCE)["when"], variables) is True
 
 
 def test_dr_switch_rpo0_seed_before_demote_and_verify_after_promote() -> None:
     seed, demote = _index("RPO-0 seed"), _index("stop and demote at the source site")
     promote, verify = _index("promote at the target site"), _index("RPO-0 verify")
     assert seed < demote < promote < verify
-    assert _task("RPO-0 seed")["ansible.builtin.include_tasks"] == "tasks/rpo0-drill-seed.yml"
+    # The seed's path is relative to the source task file, which sits beside it in tasks/.
+    assert _task("RPO-0 seed")["ansible.builtin.include_tasks"] == "rpo0-drill-seed.yml"
+    assert (SRC_TASKS.parent / "rpo0-drill-seed.yml") == SEED
     assert _task("RPO-0 verify")["ansible.builtin.include_tasks"] == "tasks/rpo0-drill-verify.yml"
     for frag in ("RPO-0 seed", "RPO-0 verify"):
         assert _task(frag)["when"] == "rpo0_drill | default(false) | bool", frag
-    assert "rpo0-drill-seed" in str(_source_block())  # the seed contacts the source
+    assert "rpo0-drill-seed" in str(_source_tasks())  # the seed contacts the source
 
 
 def test_dr_switch_never_masks_a_failure() -> None:
-    for path in (PB, SEED, VERIFY, SITE):
+    for path in (PB, SRC_TASKS, SEED, VERIFY, SITE):
         text = path.read_text(encoding="utf-8")
         assert "|| true" not in text, path.name
         assert "failed_when: false" not in text, path.name
@@ -208,7 +290,9 @@ def test_dr_switch_flips_only_the_dr_clone() -> None:
     promote = _task("promote at the target site")["ansible.builtin.shell"]
     assert "drbd_dr_qm-clone target-role=Unpromoted" in demote
     assert "drbd_dr_qm-clone target-role=Promoted" in promote
-    assert "drbd_qm-clone" not in PB.read_text(encoding="utf-8").replace("drbd_dr_qm-clone", "")
+    for path in (PB, SRC_TASKS):
+        text = path.read_text(encoding="utf-8")
+        assert "drbd_qm-clone" not in text.replace("drbd_dr_qm-clone", ""), path.name
     # ... and the dr-role marker with it (RDQM's rdqm:<qm>-dr-role, 1 primary / 2 secondary).
     assert "-dr-role --update 2" in demote
     assert "-dr-role --update 1" in promote
@@ -332,6 +416,30 @@ def test_drbdsetup_parse() -> None:
     assert re.findall(v["drbd_peer_disk_re"], _DRBDSETUP) == ["UpToDate", "UpToDate"]
     lagging = _DRBDSETUP.replace("peer-disk:UpToDate", "peer-disk:Inconsistent", 1)
     assert re.findall(v["drbd_peer_disk_re"], lagging) == ["Inconsistent", "UpToDate"]
+    assert re.findall(v["drbd_quorum_re"], _DRBDSETUP) == ["yes"]
+
+
+# The stacked DR resource on pdrbd-b1, verbatim from the #1430 drill 6 hold (2026-10-19):
+# the link broken by a graceful disconnect, site A destroyed.
+_DRBDSETUP_DR_OUTDATED = (
+    "pdrbdapp.dr node-id:1 role:Secondary suspended:no force-io-failures:no\n"
+    "  volume:0 minor:7001 disk:Outdated backing_dev:/dev/drbd100 quorum:yes open:no\n"
+    "      blocked:no\n"
+    "  encrypted.remote node-id:0 connection:Connecting role:Unknown tls:yes\n"
+    "      congested:no ap-in-flight:0 rs-in-flight:0\n"
+    "    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no\n"
+)
+
+
+def test_drbdsetup_parse_on_the_held_drill6_state() -> None:
+    v = _switch_vars()
+    assert re.findall(v["drbd_role_re"], _DRBDSETUP_DR_OUTDATED) == ["Secondary"]
+    assert re.findall(v["drbd_disk_re"], _DRBDSETUP_DR_OUTDATED) == ["Outdated"]
+    assert re.findall(v["drbd_quorum_re"], _DRBDSETUP_DR_OUTDATED) == ["yes"]
+    assert re.findall(v["drbd_conn_re"], _DRBDSETUP_DR_OUTDATED) == ["Connecting"]
+    assert re.findall(v["drbd_peer_disk_re"], _DRBDSETUP_DR_OUTDATED) == ["DUnknown"]
+    no_quorum = _DRBDSETUP_DR_OUTDATED.replace("quorum:yes", "quorum:no")
+    assert re.findall(v["drbd_quorum_re"], no_quorum) == ["no"]
 
 
 # --- the watched DR-sync wait (spec §7) -----------------------------------------------------

@@ -9,7 +9,7 @@ drbd_kmod_dir: el9/kmod-drbd-9
 pacemaker_dir: el9/pacemaker-2
 drbd_utils_dir: el9/drbd-utils-9
 # The offline DVD dnf repo's display name; the point release comes from the guest's facts.
-rdqm_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
+rdqm_dvd_repo_name: "RHEL {{ ansible_facts['distribution_version'] }} DVD"
 # Base-OS packages the RDQM prereqs need but do not declare (#1484). None on el9: its
 # python3 (3.9) still ships the `distutils` that the pacemaker-2 dir's crmsh imports.
 rdqm_os_extra_packages: []

@@ -13,7 +13,7 @@
 # linux-arm64, and its default --browser.sandbox=false already launches the browser
 # with --no-sandbox (required under Ubuntu LTS's restricted unprivileged userns).
 grafana_image_renderer_version: "5.10.3"
-grafana_image_renderer_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+grafana_image_renderer_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
 grafana_image_renderer_pkg: "grafana-image-renderer-linux-{{ grafana_image_renderer_arch }}"
 grafana_image_renderer_base_url: "https://github.com/grafana/grafana-image-renderer/releases/download"
 grafana_image_renderer_url: "{{ grafana_image_renderer_base_url }}/v{{ grafana_image_renderer_version }}/{{ grafana_image_renderer_pkg }}"
@@ -31,4 +31,4 @@ grafana_image_renderer_home: "/var/lib/grafana-renderer"
 # Chrome/Edge .deb exists).
 grafana_image_renderer_browser_x86: "/usr/bin/google-chrome-stable"
 grafana_image_renderer_browser_arm: "/usr/bin/chromium"
-grafana_image_renderer_browser_path: "{{ grafana_image_renderer_browser_arm if ansible_architecture == 'aarch64' else grafana_image_renderer_browser_x86 }}"
+grafana_image_renderer_browser_path: "{{ grafana_image_renderer_browser_arm if ansible_facts['architecture'] == 'aarch64' else grafana_image_renderer_browser_x86 }}"

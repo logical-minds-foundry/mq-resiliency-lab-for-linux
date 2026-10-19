@@ -82,7 +82,7 @@
     name: linbit-drbd9-stack
     types: [deb]
     uris: "{{ drbd9_linbit_ppa_uri }}"
-    suites: ["{{ ansible_distribution_release }}"]
+    suites: ["{{ ansible_facts['distribution_release'] }}"]
     components: [main]
     signed_by: "{{ drbd9_linbit_keyring }}"
     state: present
@@ -97,10 +97,10 @@
 
 # Headers + dkms land BEFORE drbd-dkms, so its postinst builds the module against the
 # running kernel in the same pass (not later, from a header package's trigger).
-- name: kernel headers + DKMS for the running kernel ({{ ansible_kernel }})
+- name: kernel headers + DKMS for the running kernel ({{ ansible_facts['kernel'] }})
   ansible.builtin.apt:
     name:
-      - "linux-headers-{{ ansible_kernel }}"
+      - "linux-headers-{{ ansible_facts['kernel'] }}"
       - dkms
       - lvm2
     state: present
@@ -155,10 +155,10 @@
   ansible.builtin.assert:
     that: "(drbd9_bake_ver.content | b64decode | trim) is match('^9[.]')"
     fail_msg: >-
-      loaded drbd module for kernel {{ ansible_kernel }} is
+      loaded drbd module for kernel {{ ansible_facts['kernel'] }} is
       '{{ drbd9_bake_ver.content | b64decode | trim }}', expected 9.x from LINBIT's
       drbd-dkms — check the DKMS build (dkms status drbd; /var/lib/dkms/drbd/*/build/make.log)
-    success_msg: "drbd {{ drbd9_bake_ver.content | b64decode | trim }} loaded for kernel {{ ansible_kernel }}"
+    success_msg: "drbd {{ drbd9_bake_ver.content | b64decode | trim }} loaded for kernel {{ ansible_facts['kernel'] }}"
 
 - name: unload so the image is captured clean
   ansible.builtin.command: rmmod drbd
