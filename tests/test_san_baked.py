@@ -169,14 +169,14 @@ def test_drbd_kernel_modules_package_comes_from_the_os_vars_include() -> None:
 
 def test_ubuntu24_names_linux_modules_extra_for_the_running_kernel() -> None:
     assert _load(ROLES / "drbd-san" / "vars" / "Ubuntu-24.yml") == {
-        "drbd_san_kernel_modules_pkg": "linux-modules-extra-{{ ansible_kernel }}"
+        "drbd_san_kernel_modules_pkg": "linux-modules-extra-{{ ansible_facts['kernel'] }}"
     }
 
 
 def test_ubuntu26_names_the_base_linux_modules_for_the_running_kernel() -> None:
     """26.04 has no linux-modules-extra; DRBD + LIO ship in linux-modules-<kver> (#1282)."""
     assert _load(ROLES / "drbd-san" / "vars" / "Ubuntu-26.yml") == {
-        "drbd_san_kernel_modules_pkg": "linux-modules-{{ ansible_kernel }}"
+        "drbd_san_kernel_modules_pkg": "linux-modules-{{ ansible_facts['kernel'] }}"
     }
 
 
@@ -206,7 +206,7 @@ def test_per_run_main_runs_the_install_half_first(role: str) -> None:
 
 def test_iscsi_target_install_half_is_the_os_adapter() -> None:
     (task,) = _load(ROLES / "iscsi-target" / "tasks" / "install.yml")
-    assert task["ansible.builtin.include_tasks"] == "install-{{ ansible_os_family }}.yml"
+    assert task["ansible.builtin.include_tasks"] == "install-{{ ansible_facts['os_family'] }}.yml"
 
 
 # --- manifest-hash closure ----------------------------------------------------------

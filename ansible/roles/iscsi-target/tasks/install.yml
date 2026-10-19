@@ -5,4 +5,4 @@
 # target itself (backstore, IQN, LUN, ACLs, portal) is per-run configuration and stays in
 # main.yml.
 - name: install targetcli (OS-adapter)
-  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+  ansible.builtin.include_tasks: "install-{{ ansible_facts['os_family'] }}.yml"

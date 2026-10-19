@@ -31,7 +31,7 @@ ANSIBLE = REPO_ROOT / "ansible"
 OS_VARS = ANSIBLE / "tasks" / "os-vars.yml"
 INCLUDE_PATH = "../../../tasks/os-vars.yml"
 
-# catalog family -> Ansible's `ansible_distribution` fact (the vars-file name prefix).
+# catalog family -> Ansible's `ansible_facts['distribution']` fact (the vars-file name prefix).
 DISTRIBUTION = {"rhel": "RedHat", "ubuntu": "Ubuntu"}
 
 # Ansible role -> the catalog stacks whose OSes run its os-vars include. Only the code
@@ -73,11 +73,14 @@ RHEL_INSTALL_BODIES = {
     "mq-nativeha-spike": ANSIBLE / "roles/mq-nativeha-spike/tasks/main.yml",
 }
 
-# RHEL 9.6 facts as the guest reports them (ansible_distribution_version is the point).
+# RHEL 9.6 facts as the guest reports them (distribution_version is the point). Facts are
+# reachable only under ansible_facts (inject_facts_as_vars = False, #136).
 RHEL96_FACTS = {
-    "ansible_distribution": "RedHat",
-    "ansible_distribution_major_version": "9",
-    "ansible_distribution_version": "9.6",
+    "ansible_facts": {
+        "distribution": "RedHat",
+        "distribution_major_version": "9",
+        "distribution_version": "9.6",
+    }
 }
 
 # The pre-#1277 literals, verbatim — the rendered output must reproduce them exactly
@@ -180,7 +183,7 @@ def test_os_vars_include_fails_loudly_without_a_match() -> None:
     params = task["vars"]["params"]
     assert set(params) == {"files", "paths"}, f"no extra first_found options: {params}"
     assert params["files"] == [
-        "{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yml"
+        "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_major_version'] }}.yml"
     ]
     assert params["paths"] == ["{{ playbook_dir }}/roles/{{ os_vars_role }}/vars"]
 
@@ -234,9 +237,11 @@ def test_rdqm_prereq_paths_render_identically_on_rhel96() -> None:
 
 # RHEL 10.2 facts (#1440): rdqm-install on the el10 PreReqs dirs of MQ 10.0.1.
 RHEL102_FACTS = {
-    "ansible_distribution": "RedHat",
-    "ansible_distribution_major_version": "10",
-    "ansible_distribution_version": "10.2",
+    "ansible_facts": {
+        "distribution": "RedHat",
+        "distribution_major_version": "10",
+        "distribution_version": "10.2",
+    }
 }
 
 

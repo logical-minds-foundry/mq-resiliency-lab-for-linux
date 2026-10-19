@@ -103,7 +103,7 @@
     argv:
       - "{{ lab_stage_dir }}/MQServer/Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/modver"
       - -m
-      - "{{ ansible_kernel }}"
+      - "{{ ansible_facts['kernel'] }}"
   register: kmod_modver
   changed_when: false
 
@@ -118,7 +118,7 @@
       - kmod_modver.stdout_lines[1] is match('[0-9]+([.][0-9]+){3}$')
       - kmod_modver.stdout_lines[1] is version(mq_version, '<=')
     fail_msg: >-
-      IBM's modver gave no usable kmod for kernel {{ ansible_kernel }} with MQ
+      IBM's modver gave no usable kmod for kernel {{ ansible_facts['kernel'] }} with MQ
       {{ mq_version }}. Expected two lines (kmod rpm, minimum MQ level); got:
       {{ kmod_modver.stdout_lines }}
     quiet: true
@@ -126,7 +126,7 @@
 - name: record the kmod modver chose (relative to the unpacked media) and the kernel release
   ansible.builtin.set_fact:
     rdqm_kmod_rpm: "Advanced/RDQM/PreReqs/{{ drbd_kmod_dir }}/{{ kmod_modver.stdout_lines[0] }}"
-    rdqm_kernel_release: "{{ ansible_kernel.split('.' ~ rhel_el_tag) | first }}"
+    rdqm_kernel_release: "{{ ansible_facts['kernel'].split('.' ~ rhel_el_tag) | first }}"
 
 - name: stat the kmod rpm modver chose
   ansible.builtin.stat:
@@ -150,7 +150,7 @@
 - name: WARN if the running kernel is in IBM's known-compatibility-issue list (non-fatal)
   ansible.builtin.debug:
     msg: >-
-      WARNING: kernel {{ ansible_kernel }} is in IBM's RDQM range of kernel versions with
+      WARNING: kernel {{ ansible_facts['kernel'] }} is in IBM's RDQM range of kernel versions with
       known compatibility issues ({{ item.first }} -> {{ item.last }}). IBM says these
       kernels are "known to require a new kernel module to function correctly with IBM MQ
       RDQM" and advises deferring to them until updated kmods ship. Source:
@@ -223,7 +223,7 @@
     mode: "0755"
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 - name: stage the SELinux modules RDQM's DRBD handlers need
@@ -235,7 +235,7 @@
   register: rdqm_selinux_staged
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 - name: list the loaded SELinux modules
@@ -245,7 +245,7 @@
   changed_when: false
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 # (Re)load a module when its staged file changed or it is not loaded yet.
@@ -260,7 +260,7 @@
   changed_when: true
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
     - item.changed or item.item not in rdqm_selinux_loaded.stdout_lines
 
@@ -271,7 +271,7 @@
   changed_when: "'Relabeled' in rdqm_handler_restorecon.stdout"
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 - name: read the RDQM handler's SELinux label
@@ -281,7 +281,7 @@
   changed_when: false
   become: true
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 - name: the RDQM handler carries rdqm_handler_exec_t (fail loud)
@@ -293,7 +293,7 @@
       rdqm_handler_exec_t: the rdqm_drbd_helper SELinux module is not in effect, so DRBD's
       handlers would exit 255 and RDQM would never record its initial sync (#1486).
   when:
-    - ansible_selinux.status | default('disabled') == 'enabled'
+    - ansible_facts['selinux'].status | default('disabled') == 'enabled'
     - rdqm_selinux_modules | length > 0
 
 # Remove the staged tarball and its unpacked tree once both dnf steps are done, so
