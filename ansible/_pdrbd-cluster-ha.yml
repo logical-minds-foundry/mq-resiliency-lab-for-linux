@@ -49,6 +49,9 @@
       - { name: pdrbd-a1, hb: 172.16.1.71 }
       - { name: pdrbd-a2, hb: 172.16.1.72 }
       - { name: pdrbd-a3, hb: 172.16.1.73 }
+  vars_files:
+    # Corosync timing per the RDQM blueprint (token 10000; CL-1, #1621).
+    - vars/pdrbd-corosync.yml
   roles: [pcmk-cluster]
 
 # mqweb: stateless per-node admin REST/Console on every QM node (#1502, design §1/§8.3).

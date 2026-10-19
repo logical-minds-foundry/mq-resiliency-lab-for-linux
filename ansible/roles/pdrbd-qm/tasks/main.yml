@@ -576,21 +576,60 @@
   notify: daemon-reload
   become: true
 
-- name: ensure the unit is disabled (cluster-only start)
-  ansible.builtin.systemd:
-    name: "mq-{{ qm_name }}.service"
-    enabled: false
-    daemon_reload: true
+# systemd must have read a new or changed unit before Pacemaker's systemd:mq-<QM> resource
+# (pushed below) uses it, so run the notified daemon-reload here, not at the end of the
+# play. Only a changed unit file notifies it, so a re-run reloads nothing (#1621).
+- name: daemon-reload now if the unit file changed (before the Pacemaker resources)
+  ansible.builtin.meta: flush_handlers
+
+# The unit has no [Install] section, so systemd reports it `static`: nothing can enable
+# it, and only Pacemaker starts it. Checked, not set: ansible's systemd `enabled: false`
+# reads a static unit's `is-enabled` (rc 0) as enabled and runs a no-op `systemctl
+# disable`, so it reported changed on every run (#1615, #1621).
+# noqa command-instead-of-module: `systemctl is-enabled` is a state QUERY.
+- name: the unit is not enabled at boot (static or disabled; cluster-only start)  # noqa: command-instead-of-module
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, "mq-{{ qm_name }}.service"]
+  register: pdrbd_unit_enabled
+  changed_when: false
+  # is-enabled exits 1 for `disabled`, so judge by its output; anything else fails loud.
+  failed_when: pdrbd_unit_enabled.stdout | trim not in ['static', 'disabled']
   become: true
 
 # rdqm-a1/pcmk-config.txt: stonith off, stickiness 1. The quorum policy stays at its
-# default (stop), as RDQM leaves it (CL-2). Both pcs sets are idempotent.
-- name: cluster properties (rdqm-a1/pcmk-config.txt)
-  ansible.builtin.shell: |
-    set -e
-    pcs property set stonith-enabled=false
-    pcs resource defaults update resource-stickiness={{ pdrbd_stickiness }}
+# default (stop), as RDQM leaves it (CL-2). Read first, so a re-run that finds both
+# already set changes nothing and reports nothing (#1621). crm_attribute --query exits
+# 105 (CRM_EX_NOSUCH) when the CIB answered and the attribute is unset; any other
+# non-zero exit fails loud.
+- name: cluster properties — read the current values (rdqm-a1/pcmk-config.txt)
+  ansible.builtin.command:
+    argv: [crm_attribute, --type, "{{ item.type }}", --name, "{{ item.name }}", --query, --quiet]
+  loop:
+    - { type: crm_config, name: stonith-enabled }
+    - { type: rsc_defaults, name: resource-stickiness }
+  loop_control:
+    label: "{{ item.type }} {{ item.name }}"
+  register: pdrbd_cluster_props
+  changed_when: false
+  failed_when: pdrbd_cluster_props.rc not in [0, 105]
   when: inventory_hostname == pdrbd_creator
+  become: true
+
+- name: cluster properties — set only what differs (rdqm-a1/pcmk-config.txt)
+  ansible.builtin.command:
+    argv: "{{ item.argv }}"
+  loop:
+    - argv: [pcs, property, set, stonith-enabled=false]
+      current: "{{ pdrbd_cluster_props.results[0].stdout | default('') | trim }}"
+      want: "false"
+    - argv: [pcs, resource, defaults, update, "resource-stickiness={{ pdrbd_stickiness }}"]
+      current: "{{ pdrbd_cluster_props.results[1].stdout | default('') | trim }}"
+      want: "{{ pdrbd_stickiness | string }}"
+  loop_control:
+    label: "{{ item.argv | join(' ') }} (now '{{ item.current }}')"
+  when:
+    - inventory_hostname == pdrbd_creator
+    - item.current != item.want
   changed_when: true
   become: true
 

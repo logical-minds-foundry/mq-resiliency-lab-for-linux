@@ -1,0 +1,22 @@
+---
+# Corosync timing for both pcmk-drbd-ubuntu site clusters (mqpdrbd-a, mqpdrbd-b; #1621,
+# ledger row CL-1). Loaded by the pcmk-cluster play in _pdrbd-cluster-ha.yml and in
+# _pdrbd-dr-replication.yml, so both sites run the same values, as RDQM's two sites do.
+#
+# Data: every RDQM node's corosync.conf in the blueprint sets `token: 10000` and, on
+# link 0, `knet_ping_timeout: 5000`, `knet_ping_interval: 500`, `knet_pong_count: 2`
+# (docs/reference/rdqm-blueprint/rdqm-a1/corosync-conf.txt, the same in rdqm-a2/a3 and
+# rdqm-b1/b2/b3). They are IBM's values for a VM ("Changing the heartbeat timeout for HA
+# RDQM", https://www.ibm.com/docs/en/SSYHRD_10.0.0/configure/heartbeat_timeout.html:
+# knet_ping_timeout = token / 2, knet_ping_interval = token / 20, knet_pong_count = 2),
+# which the lab's rdqm-ha role applies (#1515).
+#
+# Set explicitly because corosync would not derive them: its default knet ping values
+# come from the runtime token (10650 ms on 3 nodes), giving 5325 / 2662, not 5000 / 500
+# (corosync v3.1.9 exec/totemconfig.c calc_knet_ping_timers). Not set: token_coefficient
+# and consensus, which the blueprint leaves to corosync too, so both arms run the same
+# derived runtime token (10000 + 650 = 10650 ms) and consensus (1.2 x 10650 = 12780 ms).
+pcmk_cluster_totem_token_ms: 10000
+pcmk_cluster_knet_ping_timeout_ms: 5000
+pcmk_cluster_knet_ping_interval_ms: 500
+pcmk_cluster_knet_pong_count: 2

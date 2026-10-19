@@ -14,6 +14,24 @@
 - name: install cluster stack (OS-adapter)
   ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
 
+# Corosync timing (#1621; defaults/main.yml). The knet link values go to `pcs cluster
+# setup` as one link's options, all three or none, as the blueprint that motivates them
+# sets them (pcs also refuses ping_interval without ping_timeout and the reverse).
+- name: "corosync timing variables are consistent (fail loud)"
+  ansible.builtin.assert:
+    that:
+      - pcmk_cluster_totem_token_ms | int >= 0
+      - >-
+        [pcmk_cluster_knet_ping_timeout_ms, pcmk_cluster_knet_ping_interval_ms,
+        pcmk_cluster_knet_pong_count] | map('int') | select('gt', 0) | list | length in [0, 3]
+    fail_msg: >-
+      Set pcmk_cluster_knet_ping_timeout_ms, pcmk_cluster_knet_ping_interval_ms and
+      pcmk_cluster_knet_pong_count together or not at all (got
+      {{ pcmk_cluster_knet_ping_timeout_ms }} / {{ pcmk_cluster_knet_ping_interval_ms }} /
+      {{ pcmk_cluster_knet_pong_count }}), and pcmk_cluster_totem_token_ms >= 0 (got
+      {{ pcmk_cluster_totem_token_ms }}) (#1621).
+  run_once: true
+
 - name: site hosts entries (hb addresses)
   ansible.builtin.lineinfile:
     path: /etc/hosts
@@ -88,7 +106,7 @@
           echo already-formed
         else
           pcs host auth {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} -u hacluster -p "$PCMK_HACLUSTER_PASSWORD"
-          pcs cluster setup {{ pcmk_cluster_name }} {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} --force
+          pcs cluster setup {{ pcmk_cluster_name }} {% for n in pcmk_site_nodes %}{{ n.name }} addr={{ n.hb }} {% endfor %} {% if pcmk_cluster_knet_ping_interval_ms | int > 0 %}transport knet link linknumber=0 ping_timeout={{ pcmk_cluster_knet_ping_timeout_ms | int }} ping_interval={{ pcmk_cluster_knet_ping_interval_ms | int }} pong_count={{ pcmk_cluster_knet_pong_count | int }} {% endif %}{% if pcmk_cluster_totem_token_ms | int > 0 %}totem token={{ pcmk_cluster_totem_token_ms | int }} {% endif %}--force
         fi
         pcs cluster enable --all
         pcs cluster start --all
@@ -138,3 +156,37 @@
   run_once: true
   changed_when: false
   become: true
+
+# Corosync timing check (#1621), only where the play sets a value. Every node, read from
+# its running corosync: totem.token is the configured token, the knet values are link
+# 0's. pcs writes these only at formation, so a cluster formed before they were set (or
+# with others) still runs the old ones; that fails here rather than passing unnoticed.
+- name: read the running corosync totem settings
+  ansible.builtin.command:
+    argv: [corosync-cmapctl, totem.]
+  register: pcmk_cluster_cmap
+  changed_when: false
+  when: (pcmk_cluster_totem_token_ms | int > 0) or (pcmk_cluster_knet_ping_interval_ms | int > 0)
+  become: true
+
+- name: "corosync runs the configured timing values (fail loud)"
+  ansible.builtin.assert:
+    that: >-
+      pcmk_cluster_cmap.stdout is search('(?m)^' ~ (item.key | regex_escape)
+      ~ ' \(\w+\) = ' ~ item.value ~ '$')
+    fail_msg: >-
+      corosync on {{ inventory_hostname }} does not run {{ item.key }} = {{ item.value }};
+      corosync-cmapctl reports {{ pcmk_cluster_cmap.stdout_lines | select('search',
+      item.key) | list }}. pcs sets this only when it forms the cluster, so a cluster
+      formed without it keeps its old value: re-form {{ pcmk_cluster_name }} by tearing
+      the stack down and bootstrapping it again (#1621).
+  loop: >-
+    {{ ({'totem.token': pcmk_cluster_totem_token_ms | int}
+        if pcmk_cluster_totem_token_ms | int > 0 else {})
+       | combine({'totem.interface.0.knet_ping_timeout': pcmk_cluster_knet_ping_timeout_ms | int,
+                  'totem.interface.0.knet_ping_interval': pcmk_cluster_knet_ping_interval_ms | int,
+                  'totem.interface.0.knet_pong_count': pcmk_cluster_knet_pong_count | int}
+                 if pcmk_cluster_knet_ping_interval_ms | int > 0 else {})
+       | dict2items }}
+  loop_control:
+    label: "{{ item.key }} = {{ item.value }}"

@@ -537,6 +537,87 @@ def test_defaults_mount_the_stacked_device_with_dr() -> None:
     )
 
 
+# --- truthful `changed` on a re-run (#1621) ---------------------------------------------------
+
+
+def _top_level_names() -> list[str]:
+    return [t["name"] for t in _load(TASKS)]
+
+
+def test_every_always_changed_task_is_first_time_only() -> None:
+    # A re-run of a formed site must report changed=0 for this role (#1615 finding 1). So a
+    # task whose changed_when is literally true runs only at formation (pdrbd_formed),
+    # except the cluster-properties set, which runs only for a value that differs.
+    for task, _ in _tasks():
+        if task.get("changed_when") is not True:
+            continue
+        guard = _guard(task["name"])
+        if task["name"].startswith("cluster properties — set only what differs"):
+            assert "item.current != item.want" in guard
+        else:
+            assert "not pdrbd_formed" in guard, task["name"]
+
+
+def test_unit_state_is_checked_not_set() -> None:
+    # The unit has no [Install] section, so it is `static`; ansible's systemd
+    # `enabled: false` runs a no-op disable on a static unit and reports changed every run.
+    unit = _by_name("queue-manager systemd unit")["ansible.builtin.copy"]["content"]
+    assert "[Service]" in unit
+    assert "[Install]" not in unit
+    text = TASKS.read_text(encoding="utf-8")
+    assert "daemon_reload" not in text, "the notified handler reloads; nothing else may"
+    systemd_tasks = [t for t, _ in _tasks() if "ansible.builtin.systemd" in t]
+    assert not [t["name"] for t in systemd_tasks if "enabled" in t["ansible.builtin.systemd"]]
+    check = _by_name("the unit is not enabled at boot")
+    assert check["ansible.builtin.command"]["argv"] == [
+        "systemctl", "is-enabled", "mq-{{ qm_name }}.service",
+    ]  # fmt: skip
+    assert check["changed_when"] is False
+    assert check["failed_when"] == (
+        "pdrbd_unit_enabled.stdout | trim not in ['static', 'disabled']"
+    )
+
+
+def test_daemon_reload_flushes_before_pacemaker_uses_the_unit() -> None:
+    # The unit-file task notifies the role's daemon-reload handler (a changed file only);
+    # flush_handlers runs it before the systemd:mq-<QM> resource is pushed, not at play end.
+    unit = _by_name("queue-manager systemd unit")
+    assert unit["notify"] == "daemon-reload"
+    (handler,) = _load(ROLE / "handlers" / "main.yml")
+    assert handler["name"] == "daemon-reload"
+    assert handler["ansible.builtin.systemd"] == {"daemon_reload": True}
+    names = _top_level_names()
+    flush = names.index(
+        "daemon-reload now if the unit file changed (before the Pacemaker resources)"
+    )
+    assert _load(TASKS)[flush] == {
+        "name": names[flush],
+        "ansible.builtin.meta": "flush_handlers",
+    }
+    pcmk = next(i for i, n in enumerate(names) if n.startswith("Pacemaker resources"))
+    assert names.index("queue-manager systemd unit (Pacemaker is the only starter)") < flush < pcmk
+
+
+def test_cluster_properties_are_read_before_they_are_set() -> None:
+    names = _top_level_names()
+    read_i = names.index("cluster properties — read the current values (rdqm-a1/pcmk-config.txt)")
+    set_i = names.index("cluster properties — set only what differs (rdqm-a1/pcmk-config.txt)")
+    assert read_i + 1 == set_i
+    read, setter = _load(TASKS)[read_i], _load(TASKS)[set_i]
+    assert read["changed_when"] is False
+    # 105 = the CIB answered and the attribute is unset; any other error fails loud.
+    assert read["failed_when"] == "pdrbd_cluster_props.rc not in [0, 105]"
+    assert [(i["type"], i["name"]) for i in read["loop"]] == [
+        ("crm_config", "stonith-enabled"),
+        ("rsc_defaults", "resource-stickiness"),
+    ]
+    assert [i["want"] for i in setter["loop"]] == ["false", "{{ pdrbd_stickiness | string }}"]
+    for i, item in enumerate(setter["loop"]):
+        assert f"pdrbd_cluster_props.results[{i}].stdout" in item["current"]
+    assert setter["when"] == ["inventory_hostname == pdrbd_creator", "item.current != item.want"]
+    assert read["when"] == "inventory_hostname == pdrbd_creator"
+
+
 # --- qm-destroy -----------------------------------------------------------------------------
 
 

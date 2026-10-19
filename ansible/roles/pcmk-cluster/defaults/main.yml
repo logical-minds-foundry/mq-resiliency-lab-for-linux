@@ -1,0 +1,26 @@
+---
+# pcmk-cluster role defaults.
+#
+# Corosync totem/knet timing (#1621). 0 means "not set": `pcs cluster setup` gets no
+# option for it, and corosync uses its own default. With every value at 0 the rendered
+# setup command is byte-identical to the one before these variables existed, so the arms
+# that do not set them (pcmk-ubuntu, both sites) are unchanged
+# (tests/test_pcmk_cluster_totem.py pins that).
+#
+# Data, corosync.conf(5) and exec/totemconfig.c at corosync v3.1.9
+# (https://github.com/corosync/corosync/blob/v3.1.9/man/corosync.conf.5,
+# https://github.com/corosync/corosync/blob/v3.1.9/exec/totemconfig.c):
+# - token defaults to 3000 ms. With 3 or more nodes the timeout corosync actually runs is
+#   token + (nodes - 2) * token_coefficient (default 650 ms), published in cmap as
+#   runtime.config.totem.token; the configured value stays in totem.token.
+# - consensus defaults to 1.2 x that runtime token, so it follows the token by itself.
+# - knet_ping_timeout defaults to runtime token / knet_pong_count, knet_ping_interval to
+#   runtime token / (knet_pong_count * 2), knet_pong_count to 2. knet_ping_interval and
+#   knet_ping_timeout are a pair: set both or neither (pcs enforces it too).
+#
+# pcs writes these only when it forms the cluster. A cluster formed with other values
+# keeps them, and the post-formation check in tasks/main.yml fails loud on it.
+pcmk_cluster_totem_token_ms: 0
+pcmk_cluster_knet_ping_timeout_ms: 0
+pcmk_cluster_knet_ping_interval_ms: 0
+pcmk_cluster_knet_pong_count: 0
