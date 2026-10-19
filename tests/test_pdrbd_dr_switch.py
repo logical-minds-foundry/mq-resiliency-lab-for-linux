@@ -12,7 +12,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
+from ansible.parsing.dataloader import DataLoader
+from ansible.template import Templar, trust_as_template
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ANSIBLE = REPO_ROOT / "ansible"
@@ -349,3 +352,75 @@ def test_provision_waits_for_dr_sync_with_a_stall_window() -> None:
     shell = plays[wait]["tasks"][0]["ansible.builtin.shell"]
     assert "connection:Connected" in shell
     assert "peer-disk:UpToDate" in shell
+
+
+# --- the DR-sync result is printed, and the gate reads the last line (#1635) ----------------
+
+_PROGRESS = ["11:45:23 sync done:42.10", "11:45:33 sync done:97.80", "in-sync after 20s"]
+
+
+def _cond(expr: str, variables: dict[str, Any]) -> Any:
+    """A bare Ansible conditional (when/that), evaluated through the real templar."""
+    templar = Templar(loader=DataLoader(), variables=variables)
+    return templar.template(trust_as_template("{{ " + expr.strip() + " }}"))
+
+
+def _sync_tasks() -> list[dict[str, Any]]:
+    [play] = [p for p in _load(SITE) if "wait for DR sync" in p.get("name", "")]
+    return list(play["tasks"])
+
+
+def _sync_task(prefix: str) -> dict[str, Any]:
+    (task,) = [t for t in _sync_tasks() if t["name"].startswith(prefix)]
+    return task
+
+
+def _registered(lines: list[str]) -> dict[str, Any]:
+    return {"stdout": "\n".join(lines), "stdout_lines": lines}
+
+
+def test_dr_sync_result_is_printed_between_the_poll_and_the_gate() -> None:
+    names = [t["name"] for t in _sync_tasks()]
+    assert names[0].startswith("poll drbdsetup status")
+    assert names[1].startswith("DR sync result")
+    assert names[2].startswith("exactly one site-A node")
+    poll, show = _sync_tasks()[0], _sync_tasks()[1]
+    assert poll["register"] == "pdrbd_dr_sync"
+    # Every line, so the progress shows as well as the elapsed time.
+    assert show["ansible.builtin.debug"] == {"msg": "{{ pdrbd_dr_sync.stdout_lines }}"}
+
+
+@pytest.mark.parametrize(
+    ("dr_enabled", "result", "shown"),
+    [
+        (True, _registered(_PROGRESS), True),  # caught up: progress lines, then in-sync
+        (True, _registered(["in-sync after 0s"]), True),  # in sync at once
+        (True, _registered(["not-here"]), False),  # does not hold the DR resource
+        (False, {"skipped": True}, False),  # --no-dr: the poll was skipped, nothing to show
+    ],
+)
+def test_dr_sync_result_shows_only_on_the_node_that_held_the_dr_resource(
+    *, dr_enabled: bool, result: dict[str, Any], shown: bool
+) -> None:
+    when = _sync_task("DR sync result")["when"]
+    assert _cond(when, {"dr_enabled": dr_enabled, "pdrbd_dr_sync": result}) is shown
+
+
+@pytest.mark.parametrize(
+    ("outputs", "passes"),
+    [
+        ([_PROGRESS, ["not-here"], ["not-here"]], True),  # progress first must still pass
+        ([["not-here"], ["in-sync after 0s"], ["not-here"]], True),
+        ([["not-here"], ["not-here"], ["not-here"]], False),  # nobody held it
+        ([["in-sync after 0s"], ["in-sync after 3s"], ["not-here"]], False),  # two holders
+    ],
+)
+def test_dr_sync_gate_reads_the_verdict_from_the_last_line(
+    *, outputs: list[list[str]], passes: bool
+) -> None:
+    gate = _sync_task("exactly one site-A node")
+    nodes = ["pdrbd-a1", "pdrbd-a2", "pdrbd-a3"]
+    hostvars = {n: {"pdrbd_dr_sync": _registered(o)} for n, o in zip(nodes, outputs, strict=True)}
+    variables = {"groups": {"pdrbd_a": nodes}, "hostvars": hostvars}
+    assert _cond(gate["ansible.builtin.assert"]["that"], variables) is passes
+    assert gate["run_once"] is True
