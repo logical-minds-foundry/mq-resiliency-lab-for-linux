@@ -18,9 +18,9 @@
 
 - name: assert this is a Debian/Ubuntu bake host (apt auto-update is Ubuntu machinery)
   ansible.builtin.assert:
-    that: ansible_os_family == 'Debian'
+    that: ansible_facts['os_family'] == 'Debian'
     fail_msg: >-
-      apt-autoupdate-off is for the Ubuntu boxes only (got os_family={{ ansible_os_family }});
+      apt-autoupdate-off is for the Ubuntu boxes only (got os_family={{ ansible_facts['os_family'] }});
       do not include it from a RHEL bake.
 
 - name: stop + mask the apt auto-update timers so no new run can start

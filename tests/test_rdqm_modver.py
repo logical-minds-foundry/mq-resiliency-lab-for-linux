@@ -10,7 +10,7 @@ Ansible's Templar) against real ``modver -m`` output captured in
 ``tests/fixtures/rdqm_modver_m.yaml`` (the el9 modver) and
 ``tests/fixtures/rdqm_modver_m_el10.yaml`` (the el10 modver, #1440):
 
-- the selection task runs modver in query mode for ``ansible_kernel``, with no
+- the selection task runs modver in query mode for ``ansible_facts['kernel']``, with no
   error-softening, and the old exact-release glob is gone;
 - the parse accepts every captured supported answer and rejects malformed ones;
 - the chosen rpm is what step 1 of the install hands to dnf;
@@ -139,7 +139,7 @@ def test_modver_runs_in_query_mode_for_the_running_kernel() -> None:
         "argv": [
             f"{_media()}/Advanced/RDQM/PreReqs/{{{{ drbd_kmod_dir }}}}/modver",
             "-m",
-            "{{ ansible_kernel }}",
+            "{{ ansible_facts['kernel'] }}",
         ]
     }
     assert task["register"] == "kmod_modver"
@@ -193,7 +193,7 @@ def test_parse_accepts_captured_modver_answers(case: dict[str, Any]) -> None:
     record = _task(RECORD)["ansible.builtin.set_fact"]
     facts = {
         **variables,
-        "ansible_kernel": case["kernel"],
+        "ansible_facts": {"kernel": case["kernel"]},
         "drbd_kmod_dir": case["kmod_dir"],
         "rhel_el_tag": case["el_tag"],
     }
@@ -266,7 +266,10 @@ def test_parse_accepts_an_older_minimum_level() -> None:
 
 def test_parse_failure_message_renders() -> None:
     msg = _task(PARSE)["ansible.builtin.assert"]["fail_msg"]
-    variables = {**_parse_vars(["Unsupported kernel release."]), "ansible_kernel": "6.12.0"}
+    variables = {
+        **_parse_vars(["Unsupported kernel release."]),
+        "ansible_facts": {"kernel": "6.12.0"},
+    }
     rendered = _render(msg, variables)
     assert "Unsupported kernel release." in rendered
     assert "6.12.0" in rendered
@@ -312,7 +315,7 @@ def test_warning_message_renders_with_its_source() -> None:
     task = _task(WARN)
     variables = {
         **_warn_vars("5.14.0-570.12.1"),
-        "ansible_kernel": "5.14.0-570.12.1.el9_6.x86_64",
+        "ansible_facts": {"kernel": "5.14.0-570.12.1.el9_6.x86_64"},
         "kmod_modver": {"stdout_lines": [KMOD, "10.0.0.0"]},
         "item": _rhel9_vars()["rdqm_kernel_known_issues"][0],
     }

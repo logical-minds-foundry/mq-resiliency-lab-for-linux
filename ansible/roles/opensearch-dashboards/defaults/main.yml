@@ -9,7 +9,7 @@
 # in sync with that manifest entry, exactly as opensearch_version tracks its manifest key.
 opensearch_dashboards_version: "3.9.0"
 # Dashboards tarball arch tokens are x64 / arm64 (match the opensearch role, NOT amd64).
-opensearch_dashboards_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+opensearch_dashboards_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}"
 opensearch_dashboards_pkg: "opensearch-dashboards-{{ opensearch_dashboards_version }}-linux-{{ opensearch_dashboards_arch }}"
 opensearch_dashboards_url: "https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/{{ opensearch_dashboards_version }}/{{ opensearch_dashboards_pkg }}.tar.gz"
 

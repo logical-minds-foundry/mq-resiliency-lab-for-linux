@@ -40,7 +40,7 @@ RELABEL = "label IBM's RDQM handler with its own entrypoint type"
 READ_LABEL = "read the RDQM handler's SELinux label"
 ASSERT_LABEL = "the RDQM handler carries rdqm_handler_exec_t (fail loud)"
 SELINUX_TASKS = (STAGE_DIR, STAGE, LIST, LOAD, RELABEL, READ_LABEL, ASSERT_LABEL)
-SELINUX_ON = "ansible_selinux.status | default('disabled') == 'enabled'"
+SELINUX_ON = "ansible_facts['selinux'].status | default('disabled') == 'enabled'"
 HAS_MODULES = "rdqm_selinux_modules | length > 0"
 
 # Keys that would let a failing task pass quietly.

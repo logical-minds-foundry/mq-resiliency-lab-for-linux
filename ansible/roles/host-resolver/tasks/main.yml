@@ -21,7 +21,7 @@
          | default({}) }}
 
 - name: point resolver at infra (Ubuntu / systemd-resolved)
-  when: host_resolver_dns.resolver is defined and ansible_os_family == "Debian"
+  when: host_resolver_dns.resolver is defined and ansible_facts['os_family'] == "Debian"
   become: true
   block:
     - name: resolved.conf.d directory
@@ -39,7 +39,7 @@
       notify: restart systemd-resolved
 
 - name: point resolver at infra (RHEL / NetworkManager global-dns)
-  when: host_resolver_dns.resolver is defined and ansible_os_family == "RedHat"
+  when: host_resolver_dns.resolver is defined and ansible_facts['os_family'] == "RedHat"
   become: true
   block:
     - name: NetworkManager conf.d directory

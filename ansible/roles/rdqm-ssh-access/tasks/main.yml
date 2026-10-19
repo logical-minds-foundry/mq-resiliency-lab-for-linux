@@ -74,7 +74,7 @@
 - name: SELinux-label mqm home + .ssh as ssh_home_t
   ansible.builtin.command: "restorecon -R {{ mqm_home }}"
   changed_when: false
-  when: ansible_selinux.status | default('disabled') == 'enabled'
+  when: ansible_facts['selinux'].status | default('disabled') == 'enabled'
   become: true
 
 - name: mqm sudo NOPASSWD for RDQM commands (IBM requirement)

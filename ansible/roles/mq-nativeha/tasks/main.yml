@@ -6,7 +6,7 @@
 # Vars (from the play): qm_name; nha_site_nodes = [{name, hb, data}, ...] for the
 # instances in this group (replication on the dedicated net-hb NIC).
 - name: install base IBM MQ (OS adapter)
-  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+  ansible.builtin.include_tasks: "install-{{ ansible_facts['os_family'] }}.yml"
 
 - name: read MQ level
   ansible.builtin.command: dspmqver -b -f 2
