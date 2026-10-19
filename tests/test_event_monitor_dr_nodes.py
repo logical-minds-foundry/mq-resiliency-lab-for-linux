@@ -29,7 +29,8 @@ TOPOLOGY = REPO_ROOT / "lab" / "topology.yaml"
 # them at all. Temporary on purpose: test_pending_qm_groups_are_still_unprovisioned
 # fails once a play targets the group, which forces its removal here and puts it under
 # the guard below.
-PENDING_QM_GROUPS = {"pdrbd_b"}  # pcmk-drbd-ubuntu's DR site (epic .github#310)
+# Empty since #1623 provisioned pcmk-drbd-ubuntu's DR site (pdrbd_b, via pdrbd-qm).
+PENDING_QM_GROUPS: set[str] = set()
 
 _ROLE_VERBS = (
     "ansible.builtin.include_role",
