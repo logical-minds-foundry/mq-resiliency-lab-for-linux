@@ -1,0 +1,114 @@
+---
+# Replication TLS proof for pcmk-drbd-ubuntu (lab #1609; ledger SC-1): every connection of
+# the QM's HA resource and of its stacked DR resource is Connected AND encrypted, on both
+# sites. Imported by site-pdrbd.yml after the watched DR-sync wait. Runs on its own too,
+# for example after a drill, with the provision's inventory:
+#   ansible-playbook site-pdrbd-tls-verify.yml -e qm_app=PDRBDAPP [-e dr_enabled=false]
+#
+# What "encrypted" rests on (data, from source):
+#   * `drbdsetup status --json` reports each connection's `tls` from its net_conf
+#     (drbd-utils 9.35 user/v9/drbdsetup.c connection_status_json; `--verbose` prints the
+#     same flag as `tls:yes`, the field RDQM's rdqm-a1/drbd-status.txt shows) — the
+#     CONFIGURED flag, not a socket property;
+#   * the kernel refuses to change `tls` while a connection has sockets (LINBIT drbd,
+#     drbd_transport_tcp.c dtt_net_conf_change), and with `tls` set a connect completes only
+#     after tlshd's handshake succeeds on BOTH the control and the data socket (dtt_connect:
+#     tls_init_hello + tls_wait_hello), so a Connected connection reporting tls went
+#     through TLS.
+# The independent check is the kernel's own: /proc/net/tls_stat counts the sockets with
+# kTLS installed (TlsCurrTxSw/RxSw, plus the *Device offload counters), and they must
+# cover two sockets per TLS connection on this node. A shortfall means a link is not kTLS.
+
+- name: every DRBD connection is encrypted (replication TLS, #1609)
+  hosts: "pdrbd_a{{ ':pdrbd_b' if (dr_enabled | default(true) | bool) else '' }}"
+  become: true
+  gather_facts: false
+  vars_files:
+    - vars/pdrbd-peers.yml
+  vars:
+    pdrbd_res: "{{ qm_app | lower }}"
+    pdrbd_dr_res: "{{ pdrbd_res }}.dr"
+    pdrbd_dr: "{{ dr_enabled | default(true) | bool }}"
+    pdrbd_site: "{{ 'a' if inventory_hostname in groups['pdrbd_a'] else 'b' }}"
+    # The HA resource is a site-local mesh: every node connects to each other site node.
+    pdrbd_ha_peer_count: "{{ (pdrbd_peers_all | selectattr('site', 'equalto', pdrbd_site) | list | length) - 1 }}"
+    pdrbd_tls_sites: "{{ ['pdrbd_a', 'pdrbd_b'] if pdrbd_dr | bool else ['pdrbd_a'] }}"
+  tasks:
+    # The HA resource is up on every node. Bounded wait (30 x 2 s) for every mesh peer to
+    # be Connected with tls; the last status JSON is in the failure.
+    - name: "HA resource: every site peer Connected over TLS (drbdsetup status --json)"
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --json, "{{ pdrbd_res }}"]
+      register: pdrbd_tls_ha
+      changed_when: false
+      until: >-
+        pdrbd_tls_ha.rc == 0
+        and (pdrbd_tls_ha.stdout | from_json | map(attribute='connections')
+             | flatten(levels=1) | list | length) == (pdrbd_ha_peer_count | int)
+        and (pdrbd_tls_ha.stdout | from_json | map(attribute='connections')
+             | flatten(levels=1) | selectattr('connection-state', 'equalto', 'Connected')
+             | selectattr('tls', 'equalto', true) | list | length) == (pdrbd_ha_peer_count | int)
+      retries: 30
+      delay: 2
+
+    # Only the site's HA primary holds the stacked DR resource; elsewhere drbdsetup answers
+    # rc 10 (No such resource). Any other exit fails.
+    - name: "DR resource: its peer Connected over TLS (where this node holds it)"
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --json, "{{ pdrbd_dr_res }}"]
+      register: pdrbd_tls_dr
+      changed_when: false
+      failed_when: pdrbd_tls_dr.rc not in [0, 10]
+      until: >-
+        pdrbd_tls_dr.rc == 10
+        or ((pdrbd_tls_dr.stdout | from_json | map(attribute='connections')
+             | flatten(levels=1) | list | length) == 1
+            and (pdrbd_tls_dr.stdout | from_json | map(attribute='connections')
+             | flatten(levels=1) | selectattr('connection-state', 'equalto', 'Connected')
+             | selectattr('tls', 'equalto', true) | list | length) == 1)
+      retries: 30
+      delay: 2
+      when: pdrbd_dr | bool
+
+    - name: exactly one node per site holds the DR resource (so the DR link was checked)
+      ansible.builtin.assert:
+        that: >-
+          pdrbd_tls_sites | map('extract', groups)
+          | map('map', 'extract', hostvars, ['pdrbd_tls_dr', 'rc'])
+          | map('select', 'equalto', 0) | map('list') | map('length') | unique | list == [1]
+        fail_msg: >-
+          {{ pdrbd_dr_res }} is not held by exactly one node per site — check crm_mon at each
+          site (the DR clone runs on the site's HA primary)
+      run_once: true
+      when: pdrbd_dr | bool
+
+    - name: read the kernel's kTLS counters
+      ansible.builtin.slurp:
+        src: /proc/net/tls_stat
+      register: pdrbd_tls_stat
+
+    - name: kTLS socket counts on this node, and its TLS connections
+      ansible.builtin.set_fact:
+        pdrbd_ktls_tx: >-
+          {{ (pdrbd_tls_stat.content | b64decode | regex_findall('TlsCurrTxSw[^0-9]+([0-9]+)') | first | int)
+             + (pdrbd_tls_stat.content | b64decode | regex_findall('TlsCurrTxDevice[^0-9]+([0-9]+)') | first | int) }}
+        pdrbd_ktls_rx: >-
+          {{ (pdrbd_tls_stat.content | b64decode | regex_findall('TlsCurrRxSw[^0-9]+([0-9]+)') | first | int)
+             + (pdrbd_tls_stat.content | b64decode | regex_findall('TlsCurrRxDevice[^0-9]+([0-9]+)') | first | int) }}
+        pdrbd_tls_conns: >-
+          {{ (pdrbd_ha_peer_count | int)
+             + (1 if (pdrbd_dr | bool) and (pdrbd_tls_dr.rc | default(10)) == 0 else 0) }}
+
+    # Two sockets (control + data) per DRBD connection.
+    - name: kTLS sockets cover every TLS connection (control + data socket each)
+      ansible.builtin.assert:
+        that:
+          - (pdrbd_ktls_tx | int) >= 2 * (pdrbd_tls_conns | int)
+          - (pdrbd_ktls_rx | int) >= 2 * (pdrbd_tls_conns | int)
+        fail_msg: >-
+          {{ inventory_hostname }} has {{ pdrbd_tls_conns }} DRBD connection(s) reporting tls,
+          but the kernel counts only {{ pdrbd_ktls_tx }} TX / {{ pdrbd_ktls_rx }} RX kTLS
+          sockets (need {{ 2 * (pdrbd_tls_conns | int) }} each): a link is not encrypted
+        success_msg: >-
+          {{ inventory_hostname }}: {{ pdrbd_tls_conns }} DRBD connection(s) over TLS,
+          {{ pdrbd_ktls_tx }} TX / {{ pdrbd_ktls_rx }} RX kTLS sockets

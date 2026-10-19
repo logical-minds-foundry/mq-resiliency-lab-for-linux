@@ -167,7 +167,7 @@ def test_ha_res_is_rdqm_shaped() -> None:
     for want in (
         "quorum 2;", "on-no-quorum io-error;", "auto-promote no;", "connection-mesh",
         "verify-alg sha1;", "rr-conflict retry-connect;", "disable-write-same yes;",
-        "meta-disk internal;", "pdrbd_site_peers",
+        "meta-disk internal;", "pdrbd_site_peers", "tls yes;",
     ):  # fmt: skip
         assert want in text, want
     # Not set by RDQM: split-brain auto-recovery, DRBD fencing, the old six-peer WAN wiring.
@@ -285,9 +285,11 @@ def test_site_pdrbd_order() -> None:
     assert order == [
         "_pdrbd-cluster-ha.yml",
         "_pdrbd-dr-replication.yml",
+        "pdrbd-replication-tls",  # certs + tlshd before any DRBD resource (#1609)
         "mq-authz-accounts",
         "pdrbd-qm",
         "pdrbd_a",  # the watched DR-sync wait
+        "site-pdrbd-tls-verify.yml",  # every connection encrypted (#1609)
         "site-distributed-shared.yml",
     ]
 
@@ -395,7 +397,7 @@ def _render_dr_res(host: str) -> str:
         pdrbd_dr_res="pdrbdapp.dr",
         pdrbd_dr_minor=7001,
         pdrbd_dr_port=7001,
-        pdrbd_dr_peer_name="dr-remote",
+        pdrbd_dr_peer_name="encrypted.remote",
         pdrbd_dr_local_id=0 if me["site"] == "a" else 1,
         pdrbd_my_wan=me["addr_wan"],
         pdrbd_remote_peers=[p for p in peers if p["site"] != me["site"]],
@@ -408,12 +410,12 @@ def test_dr_res_is_rdqm_shaped() -> None:
     for want in (
         "stacked-on-top-of {{ pdrbd_res }}", "quorum majority;", "on-no-quorum io-error;",
         "auto-promote no;", "protocol A;", "verify-alg sha1;", "allow-remote-read no;",
-        "disk _remote;", "path {", "pdrbd_remote_peers", "inventory_hostname",
+        "disk _remote;", "path {", "pdrbd_remote_peers", "inventory_hostname", "tls yes;",
     ):  # fmt: skip
         assert want in text, want
     # Not set by RDQM: split-brain auto-recovery, DRBD fencing; and never the HA layout.
-    # tls waits for lab #1609; handlers are IBM's rdqmhandler (TL-3/DR-3).
-    for banned in ("after-sb-", "fencing", "meta-disk", "connection-mesh", "tls yes", "handlers"):
+    # Handlers are IBM's rdqmhandler (TL-3/DR-3). tls: tests/test_pdrbd_replication_tls.py.
+    for banned in ("after-sb-", "fencing", "meta-disk", "connection-mesh", "handlers"):
         assert banned not in text, banned
 
 
@@ -422,17 +424,17 @@ def test_dr_res_renders_per_node_as_rdqm_does() -> None:
     # address to each site-B WAN address. rdqm-b1/drbd-dump.txt: the ids swapped.
     a2 = _render_dr_res("pdrbd-a2")
     assert "stacked-on-top-of pdrbdapp {\n        node-id 0;" in a2
-    assert "on dr-remote {\n        node-id 1;" in a2
+    assert "on encrypted.remote {\n        node-id 1;" in a2
     assert a2.count("path {") == 3
     for wan in ("10.99.0.81", "10.99.0.82", "10.99.0.83"):
         assert (
             f"host pdrbd-a2 address ipv4 10.99.0.72:7001;\n"
-            f"            host dr-remote address ipv4 {wan}:7001;"
+            f"            host encrypted.remote address ipv4 {wan}:7001;"
         ) in a2
     b1 = _render_dr_res("pdrbd-b1")
     assert "stacked-on-top-of pdrbdapp {\n        node-id 1;" in b1
-    assert "on dr-remote {\n        node-id 0;" in b1
-    assert "host dr-remote address ipv4 10.99.0.71:7001;" in b1
+    assert "on encrypted.remote {\n        node-id 0;" in b1
+    assert "host encrypted.remote address ipv4 10.99.0.71:7001;" in b1
     assert "device minor 7001;" in b1
 
 

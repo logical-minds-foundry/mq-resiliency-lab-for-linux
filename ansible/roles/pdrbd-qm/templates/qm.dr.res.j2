@@ -11,7 +11,8 @@
 # Multiple `path`s per connection: drbd.conf-9.0(5) `path`; the TCP transport uses one path
 # at a time (UG 2.7). NOT set, as in RDQM: the split-brain policies (RP-7), the fence
 # policy. Also not set, unlike RDQM: its IBM rdqmhandler hooks (incl. the snapshot LV;
-# TL-3, DR-3) and replication TLS (lab #1609).
+# TL-3, DR-3). `tls yes` sits in the connection's net, where RDQM has it (lab #1609,
+# SC-1); the logical peer name is the SAN tlshd verifies (pdrbd_dr_peer_name, RP-5).
 resource {{ pdrbd_dr_res }} {
     options {
         quorum majority;
@@ -35,6 +36,7 @@ resource {{ pdrbd_dr_res }} {
             protocol A;
             verify-alg sha1;
             allow-remote-read no;
+            tls yes;
         }
 {% for r in pdrbd_remote_peers %}
         path {

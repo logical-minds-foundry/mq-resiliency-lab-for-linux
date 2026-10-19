@@ -9,6 +9,10 @@
 # same build/state/secrets tree as lab-pki; re-generatable).
 rdqm_repl_ca_dir: "{{ mqlab_state_dir }}/secrets/pki/rdqm-repl"
 
+# The replication CA's subject CN. The pcmk-drbd arm reuses certs.yml (lab #1609,
+# pdrbd-replication-tls) with its own CA store and name; RDQM keeps this one.
+rdqm_repl_ca_common_name: "RDQM Replication CA"
+
 # Default group DNS name in each cert's SAN. Using IBM's default (encrypted.remote)
 # means crtmqm needs no -san option.
 rdqm_repl_group_dns: encrypted.remote

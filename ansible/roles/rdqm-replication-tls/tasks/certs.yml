@@ -29,7 +29,7 @@
   community.crypto.openssl_csr:
     path: "{{ rdqm_repl_ca_dir }}/ca.csr"
     privatekey_path: "{{ rdqm_repl_ca_dir }}/ca.key"
-    common_name: "RDQM Replication CA"
+    common_name: "{{ rdqm_repl_ca_common_name }}"
     basic_constraints: ["CA:TRUE"]
     basic_constraints_critical: true
     key_usage: ["keyCertSign", "cRLSign"]

@@ -480,7 +480,7 @@ pin bump has to rebake it (#1087). Host-resolved.
 | Role | In bake | Notes |
 |------|---------|-------|
 | `acl`, `mq-install`, `entropy`, `node-exporter`, `alloy`, `runtime-install`, `component-install` | as `pcmk-ubuntu24` | Same set and same split as the `pcmk` box above. |
-| `drbd9` | ✅ install half | LINBIT PPA, `linux-headers-<running kernel>` + `dkms` + `lvm2`, then `drbd-dkms` + `drbd-utils`. Proven at bake with `modprobe drbd` and a `9.x` assert, then unloaded. The **configure half** (`main.yml`) stays per-run. It checks `modinfo -k $(uname -r)` against the booted kernel **before** `modprobe`. If the node booted a kernel other than the baked one, it fails loud and names the fix: rebuild the `pdrbd` box. It then asserts the *loaded* module is `9.x`, and creates the `drbdpool` VG on the instance's extra disk (`/dev/vdb`). |
+| `drbd9` | ✅ install half | LINBIT PPA, `linux-headers-<running kernel>` + `dkms` + `lvm2`, then `drbd-dkms` + `drbd-utils`, plus Ubuntu's `ktls-utils` (`tlshd`) for DRBD's replication TLS (#1609), baked **inert** (disabled and stopped; the per-run `pdrbd-replication-tls` role configures and starts it). Proven at bake with `modprobe drbd` and a `9.x` assert, then unloaded. The **configure half** (`main.yml`) stays per-run. It checks `modinfo -k $(uname -r)` against the booted kernel **before** `modprobe`. If the node booted a kernel other than the baked one, it fails loud and names the fix: rebuild the `pdrbd` box. It then asserts the *loaded* module is `9.x`, and creates the `drbdpool` VG on the instance's extra disk (`/dev/vdb`). |
 
 ### `san-ubuntu26` → `ansible/bake-san.yml` (#1278, epic .github#280 spec §4.7.1)
 
@@ -534,7 +534,7 @@ The whole configure surface: queue-manager and cluster creation
 `cluster-state`, `nativeha-state` — these three collector roles only render the env
 file and enable the timer of the baked `mq-resiliency-observability` component —
 `host-resolver`, `net-reach`);
-all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `rdqm-app-tls`,
+all PKI/TLS (`lab-pki`, `pki-distribute`, `rdqm-replication-tls`, `pdrbd-replication-tls`, `rdqm-app-tls`,
 `rdqm-ssh-access`); messaging config (`mq-inter-qm` — the channels and keystores,
 plus the responder's env file and QM-ordering drop-in — and `app-requester` and
 `bench-client`, which render the requester's env file and the `mq-bench` wrapper;

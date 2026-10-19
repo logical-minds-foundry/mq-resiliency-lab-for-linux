@@ -3,7 +3,8 @@
 # site is never a member, so a WAN cut cannot cost this site HA quorum (RP-1/RP-2).
 # Values: docs/reference/rdqm-blueprint/rdqm-a1/drbd-conf.txt (rdqmapp.res).
 # Deliberately NOT set, as in RDQM: protocol (default C), the split-brain policies (RP-7),
-# the fence policy (default dont-care), handlers (IBM rdqmhandler; TL-3), tls (lab #1609).
+# the fence policy (default dont-care), handlers (IBM rdqmhandler; TL-3).
+# tls yes: replication TLS through tlshd, as RDQM (lab #1609, SC-1; pdrbd-replication-tls).
 resource {{ pdrbd_res }} {
     options {
         quorum 2;
@@ -13,6 +14,7 @@ resource {{ pdrbd_res }} {
     net {
         verify-alg sha1;
         rr-conflict retry-connect;
+        tls yes;
     }
     disk {
         disable-write-same yes;

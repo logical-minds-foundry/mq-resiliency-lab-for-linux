@@ -101,6 +101,43 @@
     or pdrbd_agent_meta.stdout is not search('name="wfc_timeout"')
   become: true
 
+# Replication TLS (lab #1609) on a lab formed before it. The kernel refuses to switch
+# `tls` on a connection that has sockets ("cannot switch tls (%s -> %s) while connected",
+# LINBIT drbd, drbd_transport_tcp.c dtt_net_conf_change), so `drbdadm adjust` cannot turn
+# TLS on under a live plaintext link, and a half-switched mesh (one end TLS, the other
+# plaintext) never reconnects. Switching each link by hand would mean taking peers away from
+# a Primary that needs them for quorum (HA quorum 2; the DR resource's quorum majority on 2
+# members), so this provision refuses instead, BEFORE any DRBD config is rendered: the
+# on-disk config keeps matching the running links, and the fix is named. rc 10 is
+# drbdsetup's "No such resource" (not up here: a cold build, or a node not holding the DR
+# resource); any other non-zero exit fails at the probe.
+- name: probe — live DRBD connections of this QM's resources (drbdsetup status --json)
+  ansible.builtin.command:
+    argv: [drbdsetup, status, --json, "{{ item }}"]
+  loop: "{{ [pdrbd_res] + ([pdrbd_dr_res] if pdrbd_dr | bool else []) }}"
+  register: pdrbd_tls_pre
+  changed_when: false
+  failed_when: pdrbd_tls_pre.rc not in [0, 10]
+  become: true
+
+- name: TLS cannot be switched on under a live plaintext link (rebuild a pre-#1609 stack)
+  ansible.builtin.assert:
+    that: pdrbd_plaintext_live | length == 0
+    fail_msg: >-
+      {{ inventory_hostname }}: DRBD connection(s) to {{ pdrbd_plaintext_live | join(', ') }}
+      on {{ qm_name | lower }} are Connected WITHOUT TLS. This provision sets `tls yes`
+      (lab #1609), and the kernel refuses to change it on a connected link ("cannot switch
+      tls ... while connected"), so it stops before rendering any DRBD config. This stack
+      was formed before #1609: rebuild it with `mqlab teardown pcmk-drbd-ubuntu` then
+      `mqlab bootstrap pcmk-drbd-ubuntu` (the pdrbd box must be rebuilt first: `mqlab box
+      status`).
+  vars:
+    pdrbd_plaintext_live: >-
+      {{ pdrbd_tls_pre.results | selectattr('rc', 'equalto', 0) | map(attribute='stdout')
+         | map('from_json') | flatten(levels=1) | map(attribute='connections')
+         | flatten(levels=1) | selectattr('connection-state', 'equalto', 'Connected')
+         | rejectattr('tls', 'equalto', true) | map(attribute='name') | list }}
+
 # A lvs probe, not a path guard. No galaxy collections in the lab (#156), so no lvol module.
 - name: per-QM logical volume <qm>_00 in the drbdpool VG (lvs probe)
   ansible.builtin.shell: |

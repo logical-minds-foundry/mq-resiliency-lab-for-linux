@@ -23,10 +23,11 @@ pdrbd_dr: "{{ dr_enabled | default(true) | bool }}"
 pdrbd_dr_res: "{{ pdrbd_res }}.dr"    # rdqm-a1/drbd-dump.txt (rdqmapp.dr)
 pdrbd_dr_port: 7001                   # rdqm-a1/pcmk-config.txt rdqmapp-dr-port
 pdrbd_dr_minor: 7001                  # rdqm-a1/drbd-dump.txt device minor 7001
-# The other site as ONE logical DR peer. RDQM names it `encrypted.remote`, its replication
-# TLS certificate SAN (BP README §2.1); this arm uses `dr-remote` until lab #1609 settles
-# the TLS naming (judgment; ledger RP-5).
-pdrbd_dr_peer_name: dr-remote
+# The other site as ONE logical DR peer, named as RDQM names it (rdqm-a1/drbd-conf.txt
+# `on encrypted.remote`; BP README §2.1). DRBD asks tlshd to verify the peer under this
+# name, so every node's replication certificate carries it as a SAN (lab #1609; it MUST
+# equal pdrbd-replication-tls's pdrbd_repl_group_dns; ledger RP-5, SC-1).
+pdrbd_dr_peer_name: encrypted.remote
 # The ONE device mkfs formats and Pacemaker mounts. With DR it is the STACKED device
 # (rdqm-a1/pcmk-config.txt device=/dev/drbd/by-res/rdqmapp.dr/0): the stacked resource's
 # internal metadata makes it smaller than the HA device ([UG] 5.20.1 "Device stacking
