@@ -30,10 +30,16 @@
 # -e qm_name=PDRBDAPP -e dr_force=true`) promotes the target after the source site is LOST
 # — the forced-DR drill (Task 8 drill 6: every source node destroyed). The source may be
 # unreachable, so the forced path never contacts it: both plays run on localhost with
-# gather_facts off, and EVERY task that reaches a source node sits in ONE block gated
-# `not dr_force_b` (tests/test_pdrbd_dr_switch.py pins this). Ansible evaluates a task's
-# `when` before it connects to the delegated host, so a skipped source task opens no
-# connection at all — no unreachable-host tolerance needed. The disk gates accept UpToDate or
+# gather_facts off, and EVERY task that reaches a source node lives in ONE task file,
+# tasks/pdrbd-dr-switch-source.yml, pulled in by an include_tasks gated `not dr_force_b`
+# (tests/test_pdrbd_dr_switch.py pins this; tests/test_pdrbd_dr_switch_run.py runs the
+# forced path for real). A skipped include never reads its file, so on the forced path no
+# source task is templated or connects — no unreachable-host tolerance needed. A gated
+# BLOCK is not enough (#1647): ansible-core templates each task's `delegate_to` BEFORE its
+# `when` (TaskExecutor._execute_internal runs _calculate_delegate_to first), and since 2.19
+# an undefined variable there is an error (2.18 templated it with fail_on_undefined=False).
+# So a skipped task delegated to `dr_src_nodes[0]`, set only by a skipped set_fact, failed
+# the forced run on ansible-core 2.21.1. The disk gates accept UpToDate or
 # Outdated without a connected peer, and RPO>0 is the expected outcome, so a forced run
 # refuses the RPO-0 drill. Whether DRBD lets a 2-member `quorum majority` DR resource
 # promote after an ungraceful peer loss is the open DR-quorum question (plan Task 6, Task 8
@@ -150,65 +156,12 @@
           drbdsetup: {{ dst_dr.stdout }}
 
     # ---- 2-3. the source: the ONLY tasks that contact a source node ----
-    # Skipped as a whole on a forced cutover: the source site may be lost (unreachable),
-    # and a skipped task never connects to its delegate.
-    - name: source site — demote (skipped on a forced cutover; the source may be unreachable)
+    # Not loaded at all on a forced cutover: the source site may be lost (unreachable), and
+    # a gated block is not enough (see the header, #1647). A skipped include_tasks never
+    # reads its file, so nothing in it is templated.
+    - name: source site — demote (not loaded on a forced cutover; the source may be unreachable)
+      ansible.builtin.include_tasks: tasks/pdrbd-dr-switch-source.yml
       when: not dr_force_b
-      block:
-        - name: source site crm_mon
-          ansible.builtin.command:
-            argv: [crm_mon, "-1", "-r"]
-          delegate_to: "{{ groups[src][0] }}"
-          register: src_crm
-          changed_when: false
-          become: true
-
-        - name: find the source site's DR-promoted node (its HA primary, running the QM)
-          ansible.builtin.set_fact:
-            dr_src_nodes: "{{ src_crm.stdout | regex_findall(dr_promoted_re) }}"
-
-        - name: assert the source site's DR clone is Promoted on exactly one node
-          ansible.builtin.assert:
-            that:
-              - dr_src_nodes | length == 1
-              - dr_src_nodes[0].split() | length == 1
-            fail_msg: >-
-              {{ src }}: drbd_dr_qm-clone is not Promoted on exactly one node — is {{ src }}
-              the DR primary? Nothing was changed. crm_mon: {{ src_crm.stdout }}
-
-        - name: RPO-0 seed on the live QM
-          ansible.builtin.include_tasks: tasks/rpo0-drill-seed.yml
-          vars:
-            rpo0_node: "{{ dr_src_nodes[0] }}"
-          when: rpo0_drill | default(false) | bool
-
-        # rdqmdr -s. pcs --wait returns non-zero if the cluster does not settle in time; the
-        # live state goes to stderr before the failure.
-        - name: stop and demote at the source site (DR clone to Unpromoted; HA stays up)
-          ansible.builtin.shell: |
-            set -e
-            if ! pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300; then
-              crm_mon -1 -r >&2
-              exit 1
-            fi
-            crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 2
-          delegate_to: "{{ groups[src][0] }}"
-          changed_when: true
-          become: true
-
-        # Bounded wait (30 x 2 s), then loud with the last state.
-        - name: assert the source DR resource is Secondary (rdqmdr -p refuses a running primary)
-          ansible.builtin.command:
-            argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
-          delegate_to: "{{ dr_src_nodes[0] }}"
-          register: src_dr
-          until: >-
-            src_dr.rc == 0
-            and (src_dr.stdout | regex_findall(drbd_role_re)) == ['Secondary']
-          retries: 30
-          delay: 2
-          changed_when: false
-          become: true
 
     # ---- 4. re-assert the target after the demote ----
     - name: target DR state after the source demote
