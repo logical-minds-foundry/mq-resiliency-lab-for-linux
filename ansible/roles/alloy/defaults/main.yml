@@ -1,6 +1,6 @@
 ---
 alloy_version: "1.20.1"  # obs version-currency (epic .github#236, #1130; patch refresh #1446); v1.20.1 arm64+amd64 assets verified upstream
-alloy_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+alloy_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
 alloy_pkg: "alloy-linux-{{ alloy_arch }}"
 alloy_url: "https://github.com/grafana/alloy/releases/download/v{{ alloy_version }}/{{ alloy_pkg }}.zip"
 loki_push_url: "http://10.50.0.2:3100/loki/api/v1/push"   # obs net-mgmt IP : Loki

@@ -3,4 +3,4 @@
 # ansible/tasks/os-vars.yml. The spike runs on the reused rdqm-* RHEL slots, so it needs a
 # vars file for every OS rdqm-rhel offers. The offline DVD dnf repo's display name; the
 # point release comes from the guest's facts.
-nha_spike_dvd_repo_name: "RHEL {{ ansible_distribution_version }} DVD"
+nha_spike_dvd_repo_name: "RHEL {{ ansible_facts['distribution_version'] }} DVD"

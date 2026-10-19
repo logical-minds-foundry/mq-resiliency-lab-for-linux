@@ -4,5 +4,5 @@
 #     obs box (#1190): with haveged active, the TempDirectory helper that hung forever
 #     returns instantly.
 #   RedHat: rng-tools (base repo) → rngd; jitterentropy-fed, no EPEL dependency.
-entropy_pkg: "{{ 'haveged' if ansible_os_family == 'Debian' else 'rng-tools' }}"
-entropy_service: "{{ 'haveged' if ansible_os_family == 'Debian' else 'rngd' }}"
+entropy_pkg: "{{ 'haveged' if ansible_facts['os_family'] == 'Debian' else 'rng-tools' }}"
+entropy_service: "{{ 'haveged' if ansible_facts['os_family'] == 'Debian' else 'rngd' }}"

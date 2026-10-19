@@ -28,7 +28,7 @@
     fail_msg: >-
       {{ inventory_hostname }} has no ktls-utils (tlshd), which DRBD's replication TLS needs
       (lab #1609). This node was cloned from a pdrbd box baked before #1609: rebuild it
-      (mqlab box build pdrbd-ubuntu{{ ansible_distribution_major_version }}; `mqlab box
+      (mqlab box build pdrbd-ubuntu{{ ansible_facts['distribution_major_version'] }}; `mqlab box
       status` shows it STALE) and re-create the stack's nodes.
 
 # The config's format and path follow the INSTALLED ktls-utils, never the OS release

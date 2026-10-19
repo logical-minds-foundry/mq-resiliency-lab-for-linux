@@ -12,7 +12,7 @@
 # removed or changed, and pacemaker's text node list still prints "Online: [ ... ]"
 # (lib/pengine/pe_output.c, Pacemaker-2.1.6 and Pacemaker-3.0.1).
 - name: install cluster stack (OS-adapter)
-  ansible.builtin.include_tasks: "install-{{ ansible_os_family }}.yml"
+  ansible.builtin.include_tasks: "install-{{ ansible_facts['os_family'] }}.yml"
 
 # Corosync timing (#1621; defaults/main.yml). The knet link values go to `pcs cluster
 # setup` as one link's options, all three or none, as the blueprint that motivates them

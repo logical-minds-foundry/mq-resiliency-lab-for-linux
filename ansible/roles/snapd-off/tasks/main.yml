@@ -23,11 +23,11 @@
 - name: assert this is a Debian/Ubuntu bake host with a known snapd_off_mode
   ansible.builtin.assert:
     that:
-      - ansible_os_family == 'Debian'
+      - ansible_facts['os_family'] == 'Debian'
       - snapd_off_mode in ['purge', 'keep']
     fail_msg: >-
       snapd-off is for the Ubuntu boxes only, with snapd_off_mode purge|keep
-      (got os_family={{ ansible_os_family }}, snapd_off_mode={{ snapd_off_mode }}).
+      (got os_family={{ ansible_facts['os_family'] }}, snapd_off_mode={{ snapd_off_mode }}).
 
 - name: look for the snap CLI (absent once a previous run purged snapd)
   ansible.builtin.stat:

@@ -21,7 +21,7 @@ Limits, stated so nobody reads more into a green run than it proves:
 - Handlers and ``meta`` role dependencies are not walked. No role ships a
   ``meta/main.yml`` today; the walker fails if one appears, so it cannot be skipped
   silently.
-- An include path still templated after substituting ``ansible_os_family`` fails the
+- An include path still templated after substituting ``ansible_facts['os_family']`` fails the
   walk rather than being skipped.
 - Only the provision entry points are walked (the two RHEL bakes, ``site-nativeha.yml``,
   ``site-rdqm.yml``). The standalone plays (TLS, switchover, validation, observability)
@@ -82,7 +82,7 @@ INCLUDE_TASKS = (
 )
 COPY_MODULES = ("ansible.builtin.copy", "copy")
 SHELL_INSTALL = re.compile(r"\b(?:dnf|yum)\s+(?:-y\s+)?install\b")
-DEBIAN_ONLY = re.compile(r"ansible_os_family\s*==\s*['\"]Debian['\"]")
+DEBIAN_ONLY = re.compile(r"ansible_facts\[['\"]os_family['\"]\]\s*==\s*['\"]Debian['\"]")
 MAX_DEPTH = 30
 
 
@@ -145,7 +145,7 @@ def _debian_only(task: dict[str, Any]) -> bool:
 
 
 def _resolve(path: str, base: Path) -> Path:
-    path = path.replace("{{ ansible_os_family }}", "RedHat")
+    path = path.replace("{{ ansible_facts['os_family'] }}", "RedHat")
     if "{{" in path:
         raise WalkError(f"templated include path the walker cannot resolve: {path!r}")
     return (base / path).resolve()
@@ -296,7 +296,9 @@ def test_walker_flags_the_1403_order(tmp_path: Path) -> None:
 
 def test_walker_accepts_the_fixed_order_through_nested_includes(tmp_path: Path) -> None:
     files = {
-        "roles/r/tasks/main.yml": [{"include_tasks": "install-{{ ansible_os_family }}.yml"}],
+        "roles/r/tasks/main.yml": [
+            {"include_tasks": "install-{{ ansible_facts['os_family'] }}.yml"}
+        ],
         "roles/r/tasks/install-RedHat.yml": [
             {"ansible.builtin.include_tasks": {"file": "../../../tasks/shared.yml"}},
             REPO_TASK,
@@ -309,9 +311,13 @@ def test_walker_accepts_the_fixed_order_through_nested_includes(tmp_path: Path) 
             {
                 "name": "deb",
                 "ansible.builtin.package": {"name": "x"},
-                "when": "ansible_os_family == 'Debian'",
+                "when": "ansible_facts['os_family'] == 'Debian'",
             },
-            {"name": "deb list", "package": "y", "when": ["x", 'ansible_os_family == "Debian"']},
+            {
+                "name": "deb list",
+                "package": "y",
+                "when": ["x", 'ansible_facts["os_family"] == "Debian"'],
+            },
             {"name": "shell", "ansible.builtin.shell": {"cmd": "dnf -y install foo"}},
             {"name": "cmd", "command": "echo hi"},
             "not-a-task",
