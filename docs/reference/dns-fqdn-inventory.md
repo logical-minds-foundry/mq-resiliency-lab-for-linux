@@ -8,7 +8,8 @@ Guiding rule (epic #21 doctrine): **err toward minimal dependency.** Names go on
 the app↔service axis (where realism and the security guides need them); the
 HA/replication fabric and the observability/Watcher plane stay on literal IPs so
 they never depend on the breakable DNS. The generated names are those `mqlab dns
-render` produces (`<host>-<plane>.<zone>`, `<short>-vip.client.com`).
+render` produces (`<host>-<plane>.<zone>`, and `<short>-vip-a.client.com` /
+`<short>-vip-b.client.com` for each site's VIP; see gap 1).
 
 ## Migrate → FQDN
 
@@ -74,13 +75,15 @@ Admin readability: where a fabric IP is kept, the host still gets its lab FQDN i
 
 ## Gaps / dependencies for C2
 
-1. **Site-B VIP has no generated FQDN.** `bind.py` `_vips()` emits `<short>-vip`
-   only from the site-A `qm.vip` (and `<short>-vip-ext` from `vip_ext`); the
-   site-B DR VIP (`10.10.2.200`, `10.10.2.100`) and site-B instance addresses are
-   absent from the zones. Any DR CONNAME that names the site-B VIP
-   (`mqrc/app_requester.py` `DEFAULT_CONN`, DR flows) needs a site-B name first —
-   e.g. add `<short>-vip-b.client.com` to the topology + generator. Small
-   B-style follow-up; do it before (or as the first step of) C2.
+1. **Site-B VIP names — resolved.** At C1 the generator emitted a VIP name only
+   for the site-A `qm.vip`, so a DR CONNAME could not name the site-B VIP. Since
+   #496, `src/mqlab/dns.py` `_vips()` emits a name for each VIP a stack declares:
+   `<short>-vip-a` (`vip`), `<short>-vip-b` (`vip_b`), `<short>-vip-ext-a`
+   (`vip_ext`) and `<short>-vip-ext-b` (`vip_ext_b`), all in `client.com`. So
+   `pcmk-vip-b` (`10.10.2.200`), `rdqm-vip-b` (`10.10.2.100`) and `pdrbd-vip-b`
+   (`10.10.2.170`) resolve. Site-B instance addresses get `<host>-data-b` names
+   from their `net-data-b` NICs like any other plane. The VIP arms' `app_conn`
+   and `DEFAULT_CONN` name both sites' VIPs (`<short>-vip-a…,<short>-vip-b…`).
 2. **Per-arm confirmation.** `our_conn`/`app_conn` are per-arm literals across all
    four arms (nha-ubuntu, nha-rhel-crr, rdqm, pcmk); confirm each swapped FQDN matches
    a name the generator actually emits (spot-checked live for nha-ubuntu: `dig`
