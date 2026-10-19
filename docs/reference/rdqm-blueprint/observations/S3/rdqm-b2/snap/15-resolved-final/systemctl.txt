@@ -1,0 +1,66 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 18:15:11 UTC; 1h 55min ago
+ Invocation: a4c070369d0041d8a89a394761a75db2
+   Main PID: 7229 (code=exited, status=0/SUCCESS)
+   Mem peak: 12.4M
+        CPU: 24ms
+
+Oct 19 18:15:11 rdqm-b2 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 18:15:11 rdqm-b2 rdqmd[7229]: Replicated data systemd initialization complete.
+Oct 19 18:15:11 rdqm-b2 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:29:42 UTC; 1h 40min ago
+ Invocation: 5bee25b5f33b4fe3b672ef63820f2dea
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 23608 (pacemakerd)
+      Tasks: 7
+     Memory: 30.5M (peak: 42.1M)
+        CPU: 54.755s
+     CGroup: /system.slice/pacemaker.service
+             ├─23608 /usr/sbin/pacemakerd
+             ├─23610 /usr/libexec/pacemaker/pacemaker-based
+             ├─23611 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─23613 /usr/libexec/pacemaker/pacemaker-execd
+             ├─23614 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─23616 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─23617 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 19:40:53 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438742 -> 1792438853
+Oct 19 19:40:53 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 5 -> 6
+Oct 19 19:40:54 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+Oct 19 19:41:14 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+Oct 19 19:42:44 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438853 -> 1792438964
+Oct 19 19:42:44 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 6 -> 7
+Oct 19 19:42:45 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+Oct 19 19:43:05 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+Oct 19 19:44:05 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+Oct 19 19:44:39 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:29:42 UTC; 1h 40min ago
+ Invocation: 6a90752121d242f6bfa1b21f47fd7787
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 23592 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 159.5M (peak: 172M)
+        CPU: 35.631s
+     CGroup: /system.slice/corosync.service
+             └─23592 /usr/sbin/corosync -f
+
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [KNET  ] rx: host: 3 link: 0 is up
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [KNET  ] link: Resetting MTU for link 0 because host 3 joined
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [QUORUM] Sync joined[1]: 3
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [TOTEM ] A new membership (1.1e) was formed. Members joined: 3
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 18:29:44 rdqm-b2 corosync[23592]:   [MAIN  ] Completed service synchronization, ready to provide service.

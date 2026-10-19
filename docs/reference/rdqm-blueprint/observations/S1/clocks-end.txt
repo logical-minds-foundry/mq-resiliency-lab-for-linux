@@ -1,0 +1,140 @@
+== 2026-10-19T19:00:35.835Z host vrg-77241e94d6f9.us-east1-b.c.vergil-project-500213-a1.internal
+Reference ID    : 5BBD5B9D (alphyn.canonical.com)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 18:54:21 2026
+System time     : 0.000074984 seconds slow of NTP time
+Last offset     : +0.000043840 seconds
+RMS offset      : 0.000169914 seconds
+Frequency       : 106.211 ppm slow
+Residual freq   : +0.000 ppm
+Skew            : 0.007 ppm
+Root delay      : 0.072340094 seconds
+Root dispersion : 0.001269763 seconds
+Update interval : 1037.2 seconds
+Leap status     : Normal
+== 2026-10-19T19:00:35.840Z rdqm-a1
+Reference ID    : 00000000 ()
+Stratum         : 0
+Ref time (UTC)  : Thu Jan 01 00:00:00 1970
+System time     : 0.000000002 seconds slow of NTP time
+Last offset     : +0.000000000 seconds
+RMS offset      : 0.000000000 seconds
+Frequency       : 106.290 ppm slow
+Residual freq   : +0.000 ppm
+Skew            : 0.000 ppm
+Root delay      : 1.000000000 seconds
+Root dispersion : 1.000000000 seconds
+Update interval : 0.0 seconds
+Leap status     : Not synchronised
+               Local time: Mon 2026-10-19 19:00:35 UTC
+           Universal time: Mon 2026-10-19 19:00:35 UTC
+                 RTC time: Mon 2026-10-19 19:00:35
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: no
+              NTP service: active
+          RTC in local TZ: no
+== 2026-10-19T19:00:36.161Z rdqm-a2
+Reference ID    : 6BA156D2 (baron.cgee.net)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 19:00:01 2026
+System time     : 0.000409790 seconds slow of NTP time
+Last offset     : -0.000446999 seconds
+RMS offset      : 0.002617194 seconds
+Frequency       : 105.233 ppm slow
+Residual freq   : -0.421 ppm
+Skew            : 7.678 ppm
+Root delay      : 0.041545615 seconds
+Root dispersion : 0.001058868 seconds
+Update interval : 64.8 seconds
+Leap status     : Normal
+               Local time: Mon 2026-10-19 19:00:36 UTC
+           Universal time: Mon 2026-10-19 19:00:36 UTC
+                 RTC time: Mon 2026-10-19 19:00:35
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+== 2026-10-19T19:00:36.503Z rdqm-a3
+Reference ID    : 6BA156D2 (baron.cgee.net)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 19:00:00 2026
+System time     : 0.000297197 seconds slow of NTP time
+Last offset     : -0.000314072 seconds
+RMS offset      : 0.000849693 seconds
+Frequency       : 102.567 ppm slow
+Residual freq   : -0.301 ppm
+Skew            : 4.742 ppm
+Root delay      : 0.040528927 seconds
+Root dispersion : 0.000672745 seconds
+Update interval : 64.5 seconds
+Leap status     : Normal
+               Local time: Mon 2026-10-19 19:00:36 UTC
+           Universal time: Mon 2026-10-19 19:00:36 UTC
+                 RTC time: Mon 2026-10-19 19:00:36
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+== 2026-10-19T19:00:36.804Z rdqm-b1
+Reference ID    : 480EB727 (jane.qotw.net)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 18:58:29 2026
+System time     : 0.000356257 seconds slow of NTP time
+Last offset     : -0.000082537 seconds
+RMS offset      : 0.000620427 seconds
+Frequency       : 105.951 ppm slow
+Residual freq   : -0.002 ppm
+Skew            : 0.137 ppm
+Root delay      : 0.040800270 seconds
+Root dispersion : 0.001255206 seconds
+Update interval : 257.3 seconds
+Leap status     : Normal
+               Local time: Mon 2026-10-19 19:00:37 UTC
+           Universal time: Mon 2026-10-19 19:00:37 UTC
+                 RTC time: Mon 2026-10-19 19:00:37
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+== 2026-10-19T19:00:37.119Z rdqm-b2
+Reference ID    : 480EB727 (jane.qotw.net)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 18:59:14 2026
+System time     : 0.001312493 seconds slow of NTP time
+Last offset     : -0.000501835 seconds
+RMS offset      : 0.000612422 seconds
+Frequency       : 106.072 ppm slow
+Residual freq   : +0.003 ppm
+Skew            : 0.320 ppm
+Root delay      : 0.041401692 seconds
+Root dispersion : 0.001518105 seconds
+Update interval : 193.8 seconds
+Leap status     : Normal
+               Local time: Mon 2026-10-19 19:00:37 UTC
+           Universal time: Mon 2026-10-19 19:00:37 UTC
+                 RTC time: Mon 2026-10-19 19:00:37
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+== 2026-10-19T19:00:37.418Z rdqm-b3
+Reference ID    : 480EB727 (jane.qotw.net)
+Stratum         : 3
+Ref time (UTC)  : Mon Oct 19 18:58:50 2026
+System time     : 0.000168339 seconds slow of NTP time
+Last offset     : -0.000114566 seconds
+RMS offset      : 0.000592948 seconds
+Frequency       : 105.964 ppm slow
+Residual freq   : +0.002 ppm
+Skew            : 0.126 ppm
+Root delay      : 0.041572168 seconds
+Root dispersion : 0.001199905 seconds
+Update interval : 195.0 seconds
+Leap status     : Normal
+               Local time: Mon 2026-10-19 19:00:37 UTC
+           Universal time: Mon 2026-10-19 19:00:37 UTC
+                 RTC time: Mon 2026-10-19 19:00:37
+                Time zone: UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no

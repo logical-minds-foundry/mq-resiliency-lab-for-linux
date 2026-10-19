@@ -1,0 +1,33 @@
+# journal.txt: exported for #1666; 32 lines kept; dropped lines by category: kit ssh/sudo/session: 5782, lab observability agents and timers: 975. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:43:42.187798+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:44:01.759773+00:00 rdqm-b3 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:44:05.804044+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T19:44:39.440017+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+2026-10-19T19:45:21.019059+00:00 rdqm-b3 NetworkManager[3650]: <info>  [1792439121.0188] dhcp4 (enp5s0): state changed new lease, address=192.168.121.215
+2026-10-19T19:45:21.027996+00:00 rdqm-b3 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:45:21.045894+00:00 rdqm-b3 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:45:31.072170+00:00 rdqm-b3 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:47:20.705873+00:00 rdqm-b3 auditd[754]: Audit daemon rotating log files
+2026-10-19T19:49:01.199908+00:00 rdqm-b3 anacron[62047]: Job `cron.weekly' started
+2026-10-19T19:49:01.207043+00:00 rdqm-b3 anacron[62047]: Job `cron.weekly' terminated
+2026-10-19T19:49:40.417127+00:00 rdqm-b3 systemd[1]: Starting dnf-makecache.service - dnf makecache...
+2026-10-19T19:49:41.223362+00:00 rdqm-b3 dnf[121066]: Updating Subscription Management repositories.
+2026-10-19T19:49:41.225244+00:00 rdqm-b3 dnf[121066]: Unable to read consumer identity
+2026-10-19T19:49:41.229413+00:00 rdqm-b3 dnf[121066]: This system is not registered with an entitlement server. You can use "rhc" or "subscription-manager" to register.
+2026-10-19T19:49:41.237620+00:00 rdqm-b3 dnf[121066]: Metadata cache refreshed recently.
+2026-10-19T19:49:41.347210+00:00 rdqm-b3 systemd[1]: dnf-makecache.service: Deactivated successfully.
+2026-10-19T19:49:41.347498+00:00 rdqm-b3 systemd[1]: Finished dnf-makecache.service - dnf makecache.
+2026-10-19T19:49:58.237261+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:49:58.238045+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:58:57.191187+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:58:57.192582+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:01:01.233192+00:00 rdqm-b3 CROND[133156]: (root) CMD (run-parts /etc/cron.hourly)
+2026-10-19T20:01:01.243371+00:00 rdqm-b3 run-parts[133159]: (/etc/cron.hourly) starting 0anacron
+2026-10-19T20:01:01.253592+00:00 rdqm-b3 run-parts[133165]: (/etc/cron.hourly) finished 0anacron
+2026-10-19T20:01:01.254868+00:00 rdqm-b3 CROND[133155]: (root) CMDEND (run-parts /etc/cron.hourly)
+2026-10-19T20:09:01.201563+00:00 rdqm-b3 anacron[62047]: Job `cron.monthly' started
+2026-10-19T20:09:01.208802+00:00 rdqm-b3 anacron[62047]: Job `cron.monthly' terminated
+2026-10-19T20:09:01.208837+00:00 rdqm-b3 anacron[62047]: Normal exit (3 jobs run)
+2026-10-19T20:09:47.247137+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:09:47.247440+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:09:47.249387+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]

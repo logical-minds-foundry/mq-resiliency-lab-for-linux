@@ -1,0 +1,67 @@
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 18:56:46 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:56:34 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Online: [ rdqm-a2 rdqm-a3 ]
+  * OFFLINE: [ rdqm-a1 ]
+
+Full List of Resources:
+  * p_fs_rdqmapp	(ocf:heartbeat:Filesystem):	 Started rdqm-a3
+  * p_rdqmx_rdqmapp	(ocf:ibm:rdqmx):	 Started rdqm-a3
+  * rdqmapp	(ocf:ibm:rdqm):	 Started rdqm-a3
+  * Clone Set: ms_drbd_rdqmapp [p_drbd_rdqmapp] (promotable):
+    * Promoted: [ rdqm-a3 ]
+    * Unpromoted: [ rdqm-a2 ]
+    * Stopped: [ rdqm-a1 ]
+  * Clone Set: ms_drbd_dr_rdqmapp [p_drbd_dr_rdqmapp] (promotable):
+    * Promoted: [ rdqm-a3 ]
+  * p_ip_rdqmapp	(ocf:heartbeat:IPaddr2):	 Started rdqm-a3
+
+Node Attributes:
+  * Node: rdqm-a2:
+    * drbd-replication                	: 172.16.1.32
+    * master-p_drbd_rdqmapp           	: 10000     
+    * mqm-gid                         	: 1001      
+    * mqm-uid                         	: 992       
+    * mqvrmf                          	: 10.0.1.0  
+    * rdqm-transient-attribute        	: 1         
+    * rdqmapp-dr-replication          	: 10.99.0.32
+    * rdqmapp-name                    	: RDQMAPP   
+  * Node: rdqm-a3:
+    * drbd-replication                	: 172.16.1.33
+    * master-p_drbd_dr_rdqmapp        	: 10000     
+    * master-p_drbd_rdqmapp           	: 10000     
+    * mqm-gid                         	: 1001      
+    * mqm-uid                         	: 992       
+    * mqvrmf                          	: 10.0.1.0  
+    * rdqm-transient-attribute        	: 1         
+    * rdqmapp-dr-replication          	: 10.99.0.33
+    * rdqmapp-name                    	: RDQMAPP   
+
+Operations:
+  * Node: rdqm-a3:
+    * p_rdqmx_rdqmapp: migration-threshold=1000000:
+      * (66) start
+    * rdqmapp: migration-threshold=1000000:
+      * (71) start
+      * (74) monitor: interval="30000ms"
+    * p_fs_rdqmapp: migration-threshold=1000000:
+      * (63) start
+    * p_drbd_rdqmapp: migration-threshold=1000000:
+      * (46) promote
+      * (50) monitor: interval="10000ms"
+    * p_drbd_dr_rdqmapp: migration-threshold=1000000:
+      * (58) promote
+      * (62) monitor: interval="10000ms"
+    * p_ip_rdqmapp: migration-threshold=1000000:
+      * (68) start
+      * (70) monitor: interval="30000ms"
+  * Node: rdqm-a2:
+    * p_drbd_rdqmapp: migration-threshold=1000000:
+      * (25) start
+      * (37) monitor: interval="20000ms"

@@ -1,0 +1,27 @@
+# journal-boot-1.txt: exported for #1666; 26 lines kept; dropped lines by category: kit ssh/sudo/session: 245, lab observability agents and timers: 27. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T18:52:48.088440+00:00 rdqm-a1 NetworkManager[824]: <info>  [1792435968.0882] device (enp10s0): state change: activated -> unavailable (reason 'carrier-changed', managed-type: 'full')
+2026-10-19T18:52:48.094438+00:00 rdqm-a1 NetworkManager[824]: <info>  [1792435968.0944] policy: set 'Wired connection 1' (enp5s0) as default for IPv4 routing and DNS
+2026-10-19T18:52:48.108061+00:00 rdqm-a1 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T18:52:48.124902+00:00 rdqm-a1 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T18:52:48.547469+00:00 rdqm-a1 rdqm[15955]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:52:48.547507+00:00 rdqm-a1 rdqm[15955]: rdqm: Calling real main function
+2026-10-19T18:52:55.468148+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: PingAck did not arrive in time.
+2026-10-19T18:52:55.468286+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> NetworkFailure ) peer( Secondary -> Unknown )
+2026-10-19T18:52:55.474402+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T18:52:55.476996+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T18:52:55.477267+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 1)
+2026-10-19T18:52:55.482674+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 19893750: 0->all empty
+2026-10-19T18:52:55.482813+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 19893750 (2ms)
+2026-10-19T18:52:55.494778+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001: new current UUID: 2FE113A2525D9323 weak: FFFFFFFFFFFFFFFE
+2026-10-19T18:52:55.500972+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T18:52:55.501155+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T18:52:55.514859+00:00 rdqm-a1 disconnected[16109]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T18:52:55.515576+00:00 rdqm-a1 disconnected[16109]: rdqmhandler(rdqmapp.dr) NetworkFailure
+2026-10-19T18:52:55.594199+00:00 rdqm-a1 disconnected[16109]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T18:52:55.602775+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T18:52:55.602878+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T18:52:55.602899+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Restarting receiver thread
+2026-10-19T18:52:55.605271+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T18:52:55.612825+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Configured local address not found, retrying every 10 sec, err=-99
+2026-10-19T18:52:58.144273+00:00 rdqm-a1 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T18:52:59.705220+00:00 rdqm-a1 systemd[1]: systemd-timedated.service: Deactivated successfully.

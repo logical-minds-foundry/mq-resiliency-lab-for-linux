@@ -1,0 +1,57 @@
+# AMQERR01.LOG: exported for #1666; 56 lines kept; dropped lines by category: outside window (whole entries): 50.
+10/19/2026 07:44:39 PM - Process(136865.1) User(mqm) Program(strmqm)
+                    Host(rdqm-b1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:44:39.603Z)
+                    CommentInsert1(/opt/mqm/bin/strmqm)
+                    CommentInsert2(/opt/mqm/bin/strmqm RDQMAPP)
+
+AMQ6206I: Command /opt/mqm/bin/strmqm was issued.
+
+EXPLANATION:
+Control command '/opt/mqm/bin/strmqm RDQMAPP' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------
+10/19/2026 07:44:40 PM - Process(137279.1) User(mqm) Program(rdqm)
+                    Host(rdqm-b1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:44:40.457Z)
+                    CommentInsert1(/usr/lib/ocf/resource.d/ibm/rdqm)
+                    CommentInsert2(/usr/lib/ocf/resource.d/ibm/rdqm start)
+
+AMQ6206I: Command /usr/lib/ocf/resource.d/ibm/rdqm was issued.
+
+EXPLANATION:
+Control command '/usr/lib/ocf/resource.d/ibm/rdqm start' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------
+10/19/2026 08:03:03 PM - Process(167248.1) User(mqm) Program(endmqm)
+                    Host(rdqm-b1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T20:03:03.849Z)
+                    CommentInsert1(/opt/mqm/bin/endmqm)
+                    CommentInsert2(/opt/mqm/bin/endmqm RDQMAPP)
+
+AMQ6206I: Command /opt/mqm/bin/endmqm was issued.
+
+EXPLANATION:
+Control command '/opt/mqm/bin/endmqm RDQMAPP' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------
+10/19/2026 08:03:50 PM - Process(168920.1) User(mqm) Program(strmqm)
+                    Host(rdqm-b1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T20:03:50.910Z)
+                    CommentInsert1(/opt/mqm/bin/strmqm)
+                    CommentInsert2(/opt/mqm/bin/strmqm RDQMAPP)
+
+AMQ6206I: Command /opt/mqm/bin/strmqm was issued.
+
+EXPLANATION:
+Control command '/opt/mqm/bin/strmqm RDQMAPP' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------

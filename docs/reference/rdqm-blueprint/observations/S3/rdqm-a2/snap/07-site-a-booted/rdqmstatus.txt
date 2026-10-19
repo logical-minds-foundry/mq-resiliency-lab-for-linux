@@ -1,0 +1,2 @@
+AMQ3785E: The replicated data subsystem has not been started.
+[rc=71]

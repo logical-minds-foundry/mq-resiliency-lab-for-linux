@@ -1,0 +1,267 @@
+<cib crm_feature_set="3.20.1" validate-with="pacemaker-4.0" epoch="67" num_updates="30" admin_epoch="0" cib-last-written="Mon Oct 19 18:52:55 2026" update-origin="rdqm-a1" update-client="root" update-user="root" have-quorum="1" dc-uuid="2">
+  <configuration>
+    <crm_config>
+      <cluster_property_set id="cib-bootstrap-options">
+        <nvpair id="cib-bootstrap-options-have-watchdog" name="have-watchdog" value="false"/>
+        <nvpair id="cib-bootstrap-options-dc-version" name="dc-version" value="3.0.1.linbit-1.el10-a6049fe"/>
+        <nvpair id="cib-bootstrap-options-cluster-infrastructure" name="cluster-infrastructure" value="corosync"/>
+        <nvpair name="stonith-enabled" value="false" id="cib-bootstrap-options-stonith-enabled"/>
+        <nvpair name="maintenance-mode" value="false" id="cib-bootstrap-options-maintenance-mode"/>
+      </cluster_property_set>
+      <cluster_property_set id="rdqm">
+        <nvpair id="rdqm-rdqmapp-size" name="rdqmapp-size" value="3072"/>
+        <nvpair id="rdqm-rdqmapp-dr-role" name="rdqmapp-dr-role" value="1"/>
+        <nvpair id="rdqm-rdqmapp-dr-local-ip" name="rdqmapp-dr-local-ip" value="10.99.0.31,10.99.0.32,10.99.0.33"/>
+        <nvpair id="rdqm-rdqmapp-dr-remote-ip" name="rdqmapp-dr-remote-ip" value="10.99.0.41,10.99.0.42,10.99.0.43"/>
+        <nvpair id="rdqm-rdqmapp-dr-port" name="rdqmapp-dr-port" value="7001"/>
+        <nvpair id="rdqm-rdqmapp-qm-type" name="rdqmapp-qm-type" value="3"/>
+        <nvpair id="rdqm-rdqmapp-ha-state" name="rdqmapp-ha-state" value="0"/>
+        <nvpair id="rdqm-rdqmapp-local-san" name="rdqmapp-local-san" value="encrypted.remote"/>
+        <nvpair id="rdqm-rdqmapp-remote-san" name="rdqmapp-remote-san" value="encrypted.remote"/>
+        <nvpair id="rdqm-rdqmapp-encrypt-dr" name="rdqmapp-encrypt-dr" value="1"/>
+        <nvpair id="rdqm-rdqmapp-encrypt-ha" name="rdqmapp-encrypt-ha" value="1"/>
+        <nvpair id="rdqm-rdqmapp-drbd-port" name="rdqmapp-drbd-port" value="7000"/>
+        <nvpair id="rdqm-rdqmapp-drbd-minor" name="rdqmapp-drbd-minor" value="100"/>
+        <nvpair id="rdqm-rdqmapp-dr-before-resync-time" name="rdqmapp-dr-before-resync-time" value="2026-10-19T18:44:43.999Z"/>
+        <nvpair id="rdqm-rdqmapp-dr-disconnect-time" name="rdqmapp-dr-disconnect-time" value="2026-10-19T18:52:55.565Z"/>
+      </cluster_property_set>
+    </crm_config>
+    <nodes>
+      <node id="1" uname="rdqm-a1">
+        <instance_attributes id="nodes-1">
+          <nvpair id="nodes-1-drbd-replication" name="drbd-replication" value="172.16.1.31"/>
+          <nvpair id="nodes-1-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-1-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-1-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-1-standby" name="standby" value="off"/>
+          <nvpair id="nodes-1-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+        </instance_attributes>
+      </node>
+      <node id="2" uname="rdqm-a2">
+        <instance_attributes id="nodes-2">
+          <nvpair id="nodes-2-drbd-replication" name="drbd-replication" value="172.16.1.32"/>
+          <nvpair id="nodes-2-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-2-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-2-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-2-standby" name="standby" value="off"/>
+          <nvpair id="nodes-2-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+          <nvpair id="nodes-2-rdqmapp-dr-replication" name="rdqmapp-dr-replication" value="10.99.0.32"/>
+        </instance_attributes>
+      </node>
+      <node id="3" uname="rdqm-a3">
+        <instance_attributes id="nodes-3">
+          <nvpair id="nodes-3-drbd-replication" name="drbd-replication" value="172.16.1.33"/>
+          <nvpair id="nodes-3-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-3-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-3-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-3-standby" name="standby" value="off"/>
+          <nvpair id="nodes-3-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+          <nvpair id="nodes-3-rdqmapp-dr-replication" name="rdqmapp-dr-replication" value="10.99.0.33"/>
+        </instance_attributes>
+      </node>
+    </nodes>
+    <resources>
+      <primitive id="p_fs_rdqmapp" class="ocf" provider="heartbeat" type="Filesystem">
+        <instance_attributes id="p_fs_rdqmapp-instance_attributes">
+          <nvpair name="device" value="/dev/drbd/by-res/rdqmapp.dr/0" id="p_fs_rdqmapp-instance_attributes-device"/>
+          <nvpair name="directory" value="/var/mqm/vols/rdqmapp" id="p_fs_rdqmapp-instance_attributes-directory"/>
+          <nvpair name="fstype" value="ext4" id="p_fs_rdqmapp-instance_attributes-fstype"/>
+          <nvpair name="force_unmount" value="safe" id="p_fs_rdqmapp-instance_attributes-force_unmount"/>
+          <nvpair name="fast_stop" value="no" id="p_fs_rdqmapp-instance_attributes-fast_stop"/>
+        </instance_attributes>
+        <operations>
+          <op name="start" timeout="60" interval="0s" id="p_fs_rdqmapp-start-0s"/>
+          <op name="stop" timeout="60" interval="0s" id="p_fs_rdqmapp-stop-0s"/>
+        </operations>
+      </primitive>
+      <primitive id="p_rdqmx_rdqmapp" class="ocf" provider="ibm" type="rdqmx">
+        <operations>
+          <op name="start" timeout="60" interval="0s" id="p_rdqmx_rdqmapp-start-0s"/>
+          <op name="stop" timeout="60" interval="0s" id="p_rdqmx_rdqmapp-stop-0s"/>
+        </operations>
+      </primitive>
+      <primitive id="rdqmapp" class="ocf" provider="ibm" type="rdqm">
+        <operations>
+          <op name="monitor" timeout="60" interval="30" id="rdqmapp-monitor-30"/>
+          <op name="start" timeout="43200" interval="0s" id="rdqmapp-start-0s"/>
+          <op name="stop" timeout="300" interval="0s" id="rdqmapp-stop-0s"/>
+        </operations>
+        <meta_attributes id="rdqmapp-meta_attributes">
+          <nvpair name="maintenance" value="false" id="rdqmapp-meta_attributes-maintenance"/>
+        </meta_attributes>
+      </primitive>
+      <clone id="ms_drbd_rdqmapp">
+        <meta_attributes id="ms_drbd_rdqmapp-meta_attributes">
+          <nvpair name="notify" value="true" id="ms_drbd_rdqmapp-meta_attributes-notify"/>
+          <nvpair name="promotable" value="true" id="ms_drbd_rdqmapp-meta_attributes-promotable"/>
+        </meta_attributes>
+        <primitive id="p_drbd_rdqmapp" class="ocf" provider="linbit" type="drbd">
+          <instance_attributes id="p_drbd_rdqmapp-instance_attributes">
+            <nvpair name="drbd_resource" value="rdqmapp" id="p_drbd_rdqmapp-instance_attributes-drbd_resource"/>
+            <nvpair name="adjust_master_score" value="0 10 10000 10000" id="p_drbd_rdqmapp-instance_attributes-adjust_master_score"/>
+          </instance_attributes>
+          <operations>
+            <op name="monitor" timeout="20" interval="20" role="Slave" id="p_drbd_rdqmapp-monitor-20"/>
+            <op name="monitor" timeout="20" interval="10" role="Master" id="p_drbd_rdqmapp-monitor-10"/>
+            <op name="start" timeout="240" interval="0s" id="p_drbd_rdqmapp-start-0s"/>
+            <op name="stop" timeout="100" interval="0s" id="p_drbd_rdqmapp-stop-0s"/>
+            <op name="promote" timeout="90" interval="0s" id="p_drbd_rdqmapp-promote-0s"/>
+            <op name="demote" timeout="90" interval="0s" id="p_drbd_rdqmapp-demote-0s"/>
+          </operations>
+        </primitive>
+      </clone>
+      <clone id="ms_drbd_dr_rdqmapp">
+        <meta_attributes id="ms_drbd_dr_rdqmapp-meta_attributes">
+          <nvpair name="notify" value="true" id="ms_drbd_dr_rdqmapp-meta_attributes-notify"/>
+          <nvpair name="promotable" value="true" id="ms_drbd_dr_rdqmapp-meta_attributes-promotable"/>
+          <nvpair name="clone-max" value="1" id="ms_drbd_dr_rdqmapp-meta_attributes-clone-max"/>
+          <nvpair name="target-role" value="Promoted" id="ms_drbd_dr_rdqmapp-meta_attributes-target-role"/>
+        </meta_attributes>
+        <primitive id="p_drbd_dr_rdqmapp" class="ocf" provider="linbit" type="drbd">
+          <instance_attributes id="p_drbd_dr_rdqmapp-instance_attributes">
+            <nvpair name="drbd_resource" value="rdqmapp.dr" id="p_drbd_dr_rdqmapp-instance_attributes-drbd_resource"/>
+            <nvpair name="wfc_timeout" value="false" id="p_drbd_dr_rdqmapp-instance_attributes-wfc_timeout"/>
+          </instance_attributes>
+          <operations>
+            <op name="monitor" timeout="20" interval="20" role="Slave" id="p_drbd_dr_rdqmapp-monitor-20"/>
+            <op name="monitor" timeout="20" interval="10" role="Master" id="p_drbd_dr_rdqmapp-monitor-10"/>
+            <op name="start" timeout="240" interval="0s" id="p_drbd_dr_rdqmapp-start-0s"/>
+            <op name="stop" timeout="100" interval="0s" id="p_drbd_dr_rdqmapp-stop-0s"/>
+            <op name="promote" timeout="90" interval="0s" id="p_drbd_dr_rdqmapp-promote-0s"/>
+            <op name="demote" timeout="90" interval="0s" id="p_drbd_dr_rdqmapp-demote-0s"/>
+          </operations>
+        </primitive>
+      </clone>
+      <primitive id="p_ip_rdqmapp" class="ocf" provider="heartbeat" type="IPaddr2">
+        <instance_attributes id="p_ip_rdqmapp-instance_attributes">
+          <nvpair name="ip" value="10.10.1.100" id="p_ip_rdqmapp-instance_attributes-ip"/>
+          <nvpair name="cidr_netmask" value="24" id="p_ip_rdqmapp-instance_attributes-cidr_netmask"/>
+          <nvpair name="nic" value="enp6s0" id="p_ip_rdqmapp-instance_attributes-nic"/>
+        </instance_attributes>
+        <operations>
+          <op name="monitor" interval="30" id="p_ip_rdqmapp-monitor-30"/>
+        </operations>
+      </primitive>
+    </resources>
+    <constraints>
+      <rsc_colocation id="rdqmapp_drbd_dr_with_drbd" score="INFINITY" rsc="ms_drbd_dr_rdqmapp" with-rsc="ms_drbd_rdqmapp" with-rsc-role="Master"/>
+      <rsc_colocation id="rdqmapp_fs_with_drbd_dr" score="INFINITY" rsc="p_fs_rdqmapp" with-rsc="ms_drbd_dr_rdqmapp" with-rsc-role="Master"/>
+      <rsc_colocation id="rdqmapp_rdqmx_with_fs" score="INFINITY" rsc="p_rdqmx_rdqmapp" with-rsc="p_fs_rdqmapp"/>
+      <rsc_order id="rdqmapp_drbd_dr_after_drbd" kind="Mandatory" first="ms_drbd_rdqmapp" first-action="promote" then="ms_drbd_dr_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_fs_after_drbd_dr" kind="Mandatory" first="ms_drbd_dr_rdqmapp" first-action="promote" then="p_fs_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_fs_after_drbd_dr_start" kind="Mandatory" first="ms_drbd_dr_rdqmapp" first-action="start" then="p_fs_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_rdqmx_after_fs" kind="Mandatory" first="p_fs_rdqmapp" first-action="start" then="p_rdqmx_rdqmapp" then-action="start"/>
+      <rsc_location id="rdqmapp_preferred_location" rsc="rdqmapp" score="50" node="rdqm-a1"/>
+      <rsc_colocation id="rdqmapp_ip_with_rdqmx" score="INFINITY" rsc="p_ip_rdqmapp" with-rsc="p_rdqmx_rdqmapp"/>
+      <rsc_order id="rdqmapp_ip_after_rdqmx" kind="Mandatory" first="p_rdqmx_rdqmapp" then="p_ip_rdqmapp"/>
+      <rsc_colocation id="rdqmapp_with_ip" score="INFINITY" rsc="rdqmapp" with-rsc="p_ip_rdqmapp"/>
+      <rsc_order id="rdqmapp_after_ip" kind="Mandatory" first="p_ip_rdqmapp" first-action="start" then="rdqmapp" then-action="start"/>
+    </constraints>
+    <rsc_defaults>
+      <meta_attributes id="build-resource-defaults">
+        <nvpair id="build-resource-stickiness" name="resource-stickiness" value="1"/>
+      </meta_attributes>
+    </rsc_defaults>
+    <alerts>
+      <alert id="rdqm-alert" path="/var/mqm/rdqm/rdqmalert"/>
+    </alerts>
+  </configuration>
+  <status>
+    <node_state id="3" uname="rdqm-a3" in_ccm="1792435457" crmd="1792435458" crm-debug-origin="controld_update_resource_history" join="member" expected="member">
+      <transient_attributes id="3">
+        <instance_attributes id="status-3">
+          <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+          <nvpair id="status-3-.feature-set" name="#feature-set" value="3.20.1"/>
+          <nvpair id="status-3-master-p_drbd_rdqmapp" name="master-p_drbd_rdqmapp" value="10000"/>
+          <nvpair id="status-3-master-p_drbd_dr_rdqmapp" name="master-p_drbd_dr_rdqmapp" value="10000"/>
+        </instance_attributes>
+      </transient_attributes>
+      <lrm id="3">
+        <lrm_resources>
+          <lrm_resource id="p_rdqmx_rdqmapp" class="ocf" provider="ibm" type="rdqmx">
+            <lrm_rsc_op id="p_rdqmx_rdqmapp_last_0" operation_key="p_rdqmx_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="6:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;6:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="66" rc-code="0" op-status="0" interval="0" last-rc-change="1792436020" exec-time="88" queue-time="0" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+          </lrm_resource>
+          <lrm_resource id="rdqmapp" class="ocf" provider="ibm" type="rdqm">
+            <lrm_rsc_op id="rdqmapp_last_0" operation_key="rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="7:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;7:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="71" rc-code="0" op-status="0" interval="0" last-rc-change="1792436021" exec-time="740" queue-time="0" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+            <lrm_rsc_op id="rdqmapp_monitor_30000" operation_key="rdqmapp_monitor_30000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="8:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;8:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="74" rc-code="0" op-status="0" interval="30000" last-rc-change="1792436021" exec-time="49" queue-time="0" op-digest="873ed4f07792aa8ff18f3254244675ea"/>
+          </lrm_resource>
+          <lrm_resource id="p_fs_rdqmapp" class="ocf" provider="heartbeat" type="Filesystem">
+            <lrm_rsc_op id="p_fs_rdqmapp_last_0" operation_key="p_fs_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="3:10:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;3:10:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="63" rc-code="0" op-status="0" interval="0" last-rc-change="1792436020" exec-time="359" queue-time="1" op-digest="5a4b91bc1d3a46c760e2cf154acb4a66"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_rdqmapp_last_0" operation_key="p_drbd_rdqmapp_promote_0" operation="promote" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="5:9:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;5:9:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="46" rc-code="0" op-status="0" interval="0" last-rc-change="1792436019" exec-time="76" queue-time="0" op-digest="6cc0cb819bcda0ce98b74bbd7f5cc004" op-force-restart="  drbd_resource  " op-restart-digest="1c855775c6d33cd834c2f746b183c512"/>
+            <lrm_rsc_op id="p_drbd_rdqmapp_monitor_10000" operation_key="p_drbd_rdqmapp_monitor_10000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="6:9:8:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:8;6:9:8:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="50" rc-code="8" op-status="0" interval="10000" last-rc-change="1792436019" exec-time="73" queue-time="0" op-digest="0bf5c10bc79b440894c7558f055fdfe7"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_dr_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_dr_rdqmapp_last_0" operation_key="p_drbd_dr_rdqmapp_promote_0" operation="promote" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="39:10:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;39:10:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="58" rc-code="0" op-status="0" interval="0" last-rc-change="1792436020" exec-time="70" queue-time="0" op-digest="ec92170c677d3beb5e4f120f3450ec43" op-force-restart="  drbd_resource  " op-restart-digest="29d9f05f2638d32cff3577e3eb401308"/>
+            <lrm_rsc_op id="p_drbd_dr_rdqmapp_monitor_10000" operation_key="p_drbd_dr_rdqmapp_monitor_10000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="40:10:8:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:8;40:10:8:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="62" rc-code="8" op-status="0" interval="10000" last-rc-change="1792436020" exec-time="99" queue-time="0" op-digest="803e33935f0e15d82f97ae69738ab165"/>
+          </lrm_resource>
+          <lrm_resource id="p_ip_rdqmapp" class="ocf" provider="heartbeat" type="IPaddr2">
+            <lrm_rsc_op id="p_ip_rdqmapp_last_0" operation_key="p_ip_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="67:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;67:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="68" rc-code="0" op-status="0" interval="0" last-rc-change="1792436020" exec-time="178" queue-time="0" op-digest="677f77beb66553845ca166e4c0187c81"/>
+            <lrm_rsc_op id="p_ip_rdqmapp_monitor_30000" operation_key="p_ip_rdqmapp_monitor_30000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="68:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;68:11:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a3" call-id="70" rc-code="0" op-status="0" interval="30000" last-rc-change="1792436021" exec-time="156" queue-time="0" op-digest="1f0fd460088ed0234f071d599addb1fb"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+    <node_state id="2" uname="rdqm-a2" in_ccm="1792435457" crmd="1792435457" crm-debug-origin="post_cache_update" join="member" expected="member">
+      <transient_attributes id="2">
+        <instance_attributes id="status-2">
+          <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+          <nvpair id="status-2-.feature-set" name="#feature-set" value="3.20.1"/>
+          <nvpair id="status-2-master-p_drbd_rdqmapp" name="master-p_drbd_rdqmapp" value="10000"/>
+        </instance_attributes>
+      </transient_attributes>
+      <lrm id="2">
+        <lrm_resources>
+          <lrm_resource id="p_rdqmx_rdqmapp" class="ocf" provider="ibm" type="rdqmx">
+            <lrm_rsc_op id="p_rdqmx_rdqmapp_last_0" operation_key="p_rdqmx_rdqmapp_monitor_0" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="8:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:7;8:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="9" rc-code="7" op-status="0" interval="0" last-rc-change="1792435479" exec-time="35" queue-time="0" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+          </lrm_resource>
+          <lrm_resource id="rdqmapp" class="ocf" provider="ibm" type="rdqm">
+            <lrm_rsc_op id="rdqmapp_last_0" operation_key="rdqmapp_monitor_0" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="9:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:7;9:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="13" rc-code="7" op-status="0" interval="0" last-rc-change="1792435479" exec-time="54" queue-time="0" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_rdqmapp_last_0" operation_key="p_drbd_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="21:1:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;21:1:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="25" rc-code="0" op-status="0" interval="0" last-rc-change="1792435479" exec-time="1119" queue-time="0" op-digest="6cc0cb819bcda0ce98b74bbd7f5cc004" op-force-restart="  drbd_resource  " op-restart-digest="1c855775c6d33cd834c2f746b183c512"/>
+            <lrm_rsc_op id="p_drbd_rdqmapp_monitor_20000" operation_key="p_drbd_rdqmapp_monitor_20000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="6:2:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;6:2:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="37" rc-code="0" op-status="0" interval="20000" last-rc-change="1792435481" exec-time="83" queue-time="0" op-digest="0bf5c10bc79b440894c7558f055fdfe7"/>
+          </lrm_resource>
+          <lrm_resource id="p_fs_rdqmapp" class="ocf" provider="heartbeat" type="Filesystem">
+            <lrm_rsc_op id="p_fs_rdqmapp_last_0" operation_key="p_fs_rdqmapp_monitor_0" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="7:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:7;7:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="19" rc-code="7" op-status="0" interval="0" last-rc-change="1792435479" exec-time="236" queue-time="0" op-digest="5a4b91bc1d3a46c760e2cf154acb4a66"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_dr_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_dr_rdqmapp_last_0" operation_key="p_drbd_dr_rdqmapp_monitor_0" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="11:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:7;11:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="24" rc-code="7" op-status="0" interval="0" last-rc-change="1792435479" exec-time="71" queue-time="0" op-digest="ec92170c677d3beb5e4f120f3450ec43" op-force-restart="  drbd_resource  " op-restart-digest="29d9f05f2638d32cff3577e3eb401308"/>
+          </lrm_resource>
+          <lrm_resource id="p_ip_rdqmapp" class="ocf" provider="heartbeat" type="IPaddr2">
+            <lrm_rsc_op id="p_ip_rdqmapp_last_0" operation_key="p_ip_rdqmapp_monitor_0" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="12:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:7;12:1:7:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a2" call-id="29" rc-code="7" op-status="0" interval="0" last-rc-change="1792435480" exec-time="226" queue-time="0" op-digest="677f77beb66553845ca166e4c0187c81"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+    <node_state id="1" uname="rdqm-a1" in_ccm="0" crmd="0" crm-debug-origin="post_cache_update" join="member" expected="member">
+      <lrm id="1">
+        <lrm_resources>
+          <lrm_resource id="p_rdqmx_rdqmapp" class="ocf" provider="ibm" type="rdqmx">
+            <lrm_rsc_op id="p_rdqmx_rdqmapp_last_0" operation_key="p_rdqmx_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="7:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;7:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="55" rc-code="0" op-status="0" interval="0" last-rc-change="1792435485" exec-time="129" queue-time="1" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+          </lrm_resource>
+          <lrm_resource id="rdqmapp" class="ocf" provider="ibm" type="rdqm">
+            <lrm_rsc_op id="rdqmapp_last_0" operation_key="rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="8:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;8:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="60" rc-code="0" op-status="0" interval="0" last-rc-change="1792435485" exec-time="2858" queue-time="0" op-digest="f2317cad3d54cec5d7d7aa7d0bf35cf8"/>
+            <lrm_rsc_op id="rdqmapp_monitor_30000" operation_key="rdqmapp_monitor_30000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="9:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;9:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="63" rc-code="0" op-status="0" interval="30000" last-rc-change="1792435488" exec-time="63" queue-time="0" op-digest="873ed4f07792aa8ff18f3254244675ea"/>
+          </lrm_resource>
+          <lrm_resource id="p_fs_rdqmapp" class="ocf" provider="heartbeat" type="Filesystem">
+            <lrm_rsc_op id="p_fs_rdqmapp_last_0" operation_key="p_fs_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="4:4:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;4:4:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="53" rc-code="0" op-status="0" interval="0" last-rc-change="1792435483" exec-time="1291" queue-time="0" op-digest="5a4b91bc1d3a46c760e2cf154acb4a66"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_rdqmapp_last_0" operation_key="p_drbd_rdqmapp_promote_0" operation="promote" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="9:2:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;9:2:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="35" rc-code="0" op-status="0" interval="0" last-rc-change="1792435481" exec-time="226" queue-time="0" op-digest="6cc0cb819bcda0ce98b74bbd7f5cc004" op-force-restart="  drbd_resource  " op-restart-digest="1c855775c6d33cd834c2f746b183c512"/>
+            <lrm_rsc_op id="p_drbd_rdqmapp_monitor_10000" operation_key="p_drbd_rdqmapp_monitor_10000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="10:2:8:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:8;10:2:8:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="39" rc-code="8" op-status="0" interval="10000" last-rc-change="1792435481" exec-time="147" queue-time="2" op-digest="0bf5c10bc79b440894c7558f055fdfe7"/>
+          </lrm_resource>
+          <lrm_resource id="p_drbd_dr_rdqmapp" class="ocf" provider="linbit" type="drbd">
+            <lrm_rsc_op id="p_drbd_dr_rdqmapp_last_0" operation_key="p_drbd_dr_rdqmapp_promote_0" operation="promote" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="42:3:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;42:3:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="47" rc-code="0" op-status="0" interval="0" last-rc-change="1792435482" exec-time="373" queue-time="0" op-digest="ec92170c677d3beb5e4f120f3450ec43" op-force-restart="  drbd_resource  " op-restart-digest="29d9f05f2638d32cff3577e3eb401308"/>
+            <lrm_rsc_op id="p_drbd_dr_rdqmapp_monitor_10000" operation_key="p_drbd_dr_rdqmapp_monitor_10000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="44:4:8:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:8;44:4:8:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="51" rc-code="8" op-status="0" interval="10000" last-rc-change="1792435483" exec-time="194" queue-time="0" op-digest="803e33935f0e15d82f97ae69738ab165"/>
+          </lrm_resource>
+          <lrm_resource id="p_ip_rdqmapp" class="ocf" provider="heartbeat" type="IPaddr2">
+            <lrm_rsc_op id="p_ip_rdqmapp_last_0" operation_key="p_ip_rdqmapp_start_0" operation="start" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="70:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;70:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="57" rc-code="0" op-status="0" interval="0" last-rc-change="1792435485" exec-time="302" queue-time="0" op-digest="677f77beb66553845ca166e4c0187c81"/>
+            <lrm_rsc_op id="p_ip_rdqmapp_monitor_30000" operation_key="p_ip_rdqmapp_monitor_30000" operation="monitor" crm-debug-origin="controld_update_resource_history" crm_feature_set="3.20.1" transition-key="71:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" transition-magic="0:0;71:5:0:19e7ca05-c263-4d39-ba97-62af3c17998f" exit-reason="" on_node="rdqm-a1" call-id="59" rc-code="0" op-status="0" interval="30000" last-rc-change="1792435485" exec-time="328" queue-time="0" op-digest="1f0fd460088ed0234f071d599addb1fb"/>
+          </lrm_resource>
+        </lrm_resources>
+      </lrm>
+    </node_state>
+  </status>
+</cib>

@@ -1,0 +1,169 @@
+resource "rdqmapp" {
+    options {
+        cpu-mask        	""; # default
+        on-no-data-accessible	io-error; # default
+        auto-promote    	no;
+        peer-ack-window 	4096s; # bytes, default
+        peer-ack-delay  	100; # milliseconds, default
+        twopc-timeout   	100; # 1/10 seconds
+        twopc-retry-timeout	1; # 1/10 seconds, default
+        auto-promote-timeout	20; # 1/10 seconds, default
+        max-io-depth    	8000; # default
+        quorum          	2;
+        on-no-quorum    	io-error;
+        quorum-minimum-redundancy	off; # default
+        on-suspended-primary-outdated	disconnect; # default
+        drbd8-api-compatibility	no; # default
+    }
+    _this_host {
+        node-id			2;
+        volume 0 {
+            device			minor 100;
+            disk			"/dev/drbdpool/rdqmapp_00";
+            meta-disk			internal;
+            disk {
+                size            	0s; # bytes, default
+                on-io-error     	detach; # default
+                disk-barrier    	no; # default
+                disk-flushes    	yes; # default
+                disk-drain      	yes; # default
+                md-flushes      	yes; # default
+                resync-after    	-1; # default
+                al-extents      	1237; # default
+                al-updates      	yes; # default
+                discard-zeroes-if-aligned	yes; # default
+                disable-write-same	yes;
+                disk-timeout    	0; # 1/10 seconds, default
+                read-balancing  	prefer-local; # default
+                rs-discard-granularity	0; # bytes, default
+                bitmap          	yes; # default
+                max-bio-size    	1048576; # default
+                diskless        	no; # default
+                block-size      	512; # default
+            }
+        }
+    }
+    connection {
+        _peer_node_id 0;
+        path {
+            _this_host ipv4 172.16.1.33:7000;
+            _remote_host ipv4 172.16.1.31:7000;
+        }
+        _cstate Connecting;
+        net {
+            transport       	""; # default
+            load-balance-paths	no; # default
+            protocol        	C; # default
+            timeout         	60; # 1/10 seconds, default
+            max-epoch-size  	2048; # default
+            connect-int     	10; # seconds, default
+            ping-int        	10; # seconds, default
+            sndbuf-size     	0; # bytes, default
+            rcvbuf-size     	0; # bytes, default
+            ko-count        	7; # default
+            allow-two-primaries	no; # default
+            cram-hmac-alg   	""; # default
+            shared-secret   	"REDACTED"; # default
+            after-sb-0pri   	disconnect; # default
+            after-sb-1pri   	disconnect; # default
+            after-sb-2pri   	disconnect; # default
+            always-asbp     	no; # default
+            rr-conflict     	retry-connect;
+            ping-timeout    	40; # 1/10 seconds
+            data-integrity-alg	""; # default
+            tcp-cork        	yes; # default
+            on-congestion   	block; # default
+            congestion-fill 	0s; # bytes, default
+            congestion-extents	1237; # default
+            csums-alg       	""; # default
+            csums-after-crash-only	no; # default
+            verify-alg      	"sha1";
+            use-rle         	yes; # default
+            socket-check-timeout	5;
+            fencing         	dont-care; # default
+            max-buffers     	40960;
+            allow-remote-read	yes; # default
+            tls             	yes;
+            tls-keyring     	""; # default
+            tls-privkey     	""; # default
+            tls-certificate 	""; # default
+            rdma-ctrl-rcvbuf-size	0; # default
+            rdma-ctrl-sndbuf-size	0; # default
+            _name           	"rdqm-a1";
+        }
+        volume 0 {
+            disk {
+                resync-rate     	250k; # bytes/second, default
+                c-plan-ahead    	20; # 1/10 seconds, default
+                c-delay-target  	10; # 1/10 seconds, default
+                c-fill-target   	2048s; # bytes
+                c-max-rate      	512000k; # bytes/second
+                c-min-rate      	102400k; # bytes/second
+                bitmap          	yes; # default
+                resync-without-replication	no;
+            }
+        }
+    }
+    connection {
+        _peer_node_id 1;
+        path {
+            _this_host ipv4 172.16.1.33:7000;
+            _remote_host ipv4 172.16.1.32:7000;
+        }
+        _cstate Connected;
+        net {
+            transport       	""; # default
+            load-balance-paths	no; # default
+            protocol        	C; # default
+            timeout         	60; # 1/10 seconds, default
+            max-epoch-size  	2048; # default
+            connect-int     	10; # seconds, default
+            ping-int        	10; # seconds, default
+            sndbuf-size     	0; # bytes, default
+            rcvbuf-size     	0; # bytes, default
+            ko-count        	7; # default
+            allow-two-primaries	no; # default
+            cram-hmac-alg   	""; # default
+            shared-secret   	"REDACTED"; # default
+            after-sb-0pri   	disconnect; # default
+            after-sb-1pri   	disconnect; # default
+            after-sb-2pri   	disconnect; # default
+            always-asbp     	no; # default
+            rr-conflict     	retry-connect;
+            ping-timeout    	40; # 1/10 seconds
+            data-integrity-alg	""; # default
+            tcp-cork        	yes; # default
+            on-congestion   	block; # default
+            congestion-fill 	0s; # bytes, default
+            congestion-extents	1237; # default
+            csums-alg       	""; # default
+            csums-after-crash-only	no; # default
+            verify-alg      	"sha1";
+            use-rle         	yes; # default
+            socket-check-timeout	5;
+            fencing         	dont-care; # default
+            max-buffers     	40960;
+            allow-remote-read	yes; # default
+            tls             	yes;
+            tls-keyring     	""; # default
+            tls-privkey     	""; # default
+            tls-certificate 	""; # default
+            rdma-ctrl-rcvbuf-size	0; # default
+            rdma-ctrl-sndbuf-size	0; # default
+            _name           	"rdqm-a2";
+        }
+        volume 0 {
+            disk {
+                resync-rate     	250k; # bytes/second, default
+                c-plan-ahead    	20; # 1/10 seconds, default
+                c-delay-target  	10; # 1/10 seconds, default
+                c-fill-target   	2048s; # bytes
+                c-max-rate      	512000k; # bytes/second
+                c-min-rate      	102400k; # bytes/second
+                bitmap          	yes; # default
+                resync-without-replication	no;
+            }
+        }
+    }
+}
+

@@ -1,0 +1,11 @@
+2026-10-19T19:47:20.7037324980 8388639 /var/log/audit/audit.log.1
+2026-10-19T19:49:40.7255689350 4322 /var/log/dnf.librepo.log
+2026-10-19T19:49:40.7275691470 12883 /var/log/dnf.rpm.log
+2026-10-19T19:49:41.2606256280 61397 /var/log/dnf.log
+2026-10-19T20:04:12.7389932640 642532 /var/log/pacemaker/pacemaker.log
+2026-10-19T20:06:33.5779264280 718921 /var/mqm/web/installations/Installation1/servers/mqweb/logs/verbosegc.001.log
+2026-10-19T20:09:01.6636297160 2158 /var/log/cron
+2026-10-19T20:10:18.7928086420 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T20:10:27.1686968390 1693346 /var/log/secure
+2026-10-19T20:10:27.1686968390 2628428 /var/log/messages
+2026-10-19T20:10:27.1876988540 4045073 /var/log/audit/audit.log

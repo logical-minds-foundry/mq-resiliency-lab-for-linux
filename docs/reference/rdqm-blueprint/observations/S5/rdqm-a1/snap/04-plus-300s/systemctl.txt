@@ -1,0 +1,85 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 19:05:24 UTC; 9min ago
+ Invocation: 569f4ba609644b3e98e31214c222ed18
+    Process: 1077 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1077 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.5M
+        CPU: 728ms
+
+Oct 19 19:05:20 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 19:05:24 rdqm-a1 rdqmd[1077]: Replicated data systemd initialization complete.
+Oct 19 19:05:24 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:05:20 UTC; 9min ago
+ Invocation: 5e3908053f28406a99ca21bcd22a7230
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1076 (pacemakerd)
+      Tasks: 144
+     Memory: 190.7M (peak: 197.5M)
+        CPU: 37.762s
+     CGroup: /system.slice/pacemaker.service
+             ├─ 1076 /usr/sbin/pacemakerd
+             ├─ 1119 /usr/libexec/pacemaker/pacemaker-based
+             ├─ 1120 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─ 1126 /usr/libexec/pacemaker/pacemaker-execd
+             ├─ 1128 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─ 1130 /usr/libexec/pacemaker/pacemaker-schedulerd
+             ├─ 1131 /usr/libexec/pacemaker/pacemaker-controld
+             ├─13678 /opt/mqm/bin/amqzxma0 -m RDQMAPP -u mqm
+             ├─13743 /opt/mqm/bin/amqzfuma -m RDQMAPP
+             ├─13748 /opt/mqm/bin/amqzmgr0 -m RDQMAPP
+             ├─13751 /opt/mqm/bin/amqzmuc0 -m RDQMAPP
+             ├─13767 /opt/mqm/bin/amqzmur0 -m RDQMAPP
+             ├─13782 /opt/mqm/bin/amqzmuf0 -m RDQMAPP
+             ├─13786 /opt/mqm/bin/amqrrmfa -m RDQMAPP -t2332800 -s2592000 -p2592000 -g5184000 -c3600
+             ├─13792 /opt/mqm/bin/amqpcsea RDQMAPP
+             ├─13793 /opt/mqm/bin/runmqchi -m RDQMAPP -q SYSTEM.CHANNEL.INITQ -r
+             ├─13809 /opt/mqm/bin/amqzlaa0 -mRDQMAPP -fip0
+             ├─13816 /opt/mqm/bin/amqfqpub -mRDQMAPP
+             ├─13835 /opt/mqm/bin/runmqlsr -r -m RDQMAPP -t TCP -p 1414
+             ├─13837 /opt/mqm/bin/amqfcxba -m RDQMAPP
+             ├─13839 /bin/bash /opt/mq-event-monitor/run.sh RDQMAPP
+             ├─13863 /opt/mqm/samp/bin/amqsevt -m RDQMAPP -o json_compact
+             ├─13864 logger --size 32768 -t mq-events
+             ├─13869 /opt/mqm/bin/amqrmppa -m RDQMAPP
+             └─13939 /opt/mqm/bin/runmqchl -c "RDQMAPP.SVCQM       " -m "RDQMAPP                                         "
+
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.ADMIN.TOPIC [topic]","ibm_datetime":"2026-10-19T19:14:50.645Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792437290_681793747","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.ADMIN.TOPIC [topic]."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8009W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.INTER.QMGR.PUBS/GENERAL","ibm_commentInsert3":"dsp","ibm_datetime":"2026-10-19T19:14:50.645Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqktopa.c:6338","ibm_sequence":"1792437290_681892978","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8009W: Entity 'mqmon' has insufficient authority to access topic string '$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.INTER.QMGR.PUBS/GENERAL'."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.ADMIN.TOPIC [topic]","ibm_datetime":"2026-10-19T19:14:50.645Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792437290_681988676","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.ADMIN.TOPIC [topic]."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8009W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.CLUSTER.HISTORY.QUEUE/EXTENDED","ibm_commentInsert3":"dsp","ibm_datetime":"2026-10-19T19:14:50.645Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqktopa.c:6338","ibm_sequence":"1792437290_682075792","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8009W: Entity 'mqmon' has insufficient authority to access topic string '$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.CLUSTER.HISTORY.QUEUE/EXTENDED'."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.ADMIN.TOPIC [topic]","ibm_datetime":"2026-10-19T19:14:50.645Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792437290_682163822","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.ADMIN.TOPIC [topic]."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8009W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.RETAINED.PUB.QUEUE/EXTENDED","ibm_commentInsert3":"dsp","ibm_datetime":"2026-10-19T19:14:50.646Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqktopa.c:6338","ibm_sequence":"1792437290_682249487","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8009W: Entity 'mqmon' has insufficient authority to access topic string '$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.RETAINED.PUB.QUEUE/EXTENDED'."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.ADMIN.TOPIC [topic]","ibm_datetime":"2026-10-19T19:14:50.646Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792437290_682408633","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.ADMIN.TOPIC [topic]."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8009W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.ADMIN.TRACE.ACTIVITY.QUEUE/PUT","ibm_commentInsert3":"dsp","ibm_datetime":"2026-10-19T19:14:50.646Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqktopa.c:6338","ibm_sequence":"1792437290_682517921","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8009W: Entity 'mqmon' has insufficient authority to access topic string '$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.ADMIN.TRACE.ACTIVITY.QUEUE/PUT'."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.ADMIN.TOPIC [topic]","ibm_datetime":"2026-10-19T19:14:50.646Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792437290_682614652","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.ADMIN.TOPIC [topic]."}
+Oct 19 19:14:50 rdqm-a1 ibm-mq[13767]: {"ibm_messageId":"AMQ8009W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.AMQP.COMMAND.QUEUE/GENERAL","ibm_commentInsert3":"dsp","ibm_datetime":"2026-10-19T19:14:50.646Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqktopa.c:6338","ibm_sequence":"1792437290_682749475","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"13809","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8009W: Entity 'mqmon' has insufficient authority to access topic string '$SYS/MQ/INFO/QMGR/RDQMAPP/Monitor/STATQ/SYSTEM.AMQP.COMMAND.QUEUE/GENERAL'."}
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:05:20 UTC; 9min ago
+ Invocation: 75b62bf65dc549e1804d1f1a946c27c7
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 918 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 161.1M (peak: 173.7M)
+        CPU: 4.597s
+     CGroup: /system.slice/corosync.service
+             └─918 /usr/sbin/corosync -f
+
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] link: Resetting MTU for link 0 because host 2 joined
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] host: host: 2 (passive) best link: 0 (pri: 1)
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] rx: host: 3 link: 0 is up
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] link: Resetting MTU for link 0 because host 3 joined
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [TOTEM ] A new membership (1.3d) was formed. Members
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [MAIN  ] Completed service synchronization, ready to provide service.

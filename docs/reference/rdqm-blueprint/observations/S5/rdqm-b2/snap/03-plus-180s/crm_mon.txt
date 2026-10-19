@@ -1,0 +1,70 @@
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-b1 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 19:12:47 2026 on rdqm-b2
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-b1
+  * 3 nodes configured
+  * 8 resource instances configured (1 DISABLED)
+
+Node List:
+  * Online: [ rdqm-b1 rdqm-b2 rdqm-b3 ]
+
+Full List of Resources:
+  * p_fs_rdqmapp	(ocf:heartbeat:Filesystem):	 Stopped
+  * p_rdqmx_rdqmapp	(ocf:ibm:rdqmx):	 Stopped
+  * rdqmapp	(ocf:ibm:rdqm):	 Stopped
+  * Clone Set: ms_drbd_rdqmapp [p_drbd_rdqmapp] (promotable):
+    * Promoted: [ rdqm-b1 ]
+    * Unpromoted: [ rdqm-b2 rdqm-b3 ]
+  * Clone Set: ms_drbd_dr_rdqmapp [p_drbd_dr_rdqmapp] (promotable, disabled):
+    * Unpromoted (target-role): [ rdqm-b1 ]
+  * p_ip_rdqmapp	(ocf:heartbeat:IPaddr2):	 Stopped
+
+Node Attributes:
+  * Node: rdqm-b1:
+    * drbd-replication                	: 172.16.2.41
+    * master-p_drbd_dr_rdqmapp        	: 10000     
+    * master-p_drbd_rdqmapp           	: 10000     
+    * mqm-gid                         	: 1001      
+    * mqm-uid                         	: 992       
+    * mqvrmf                          	: 10.0.1.0  
+    * rdqm-transient-attribute        	: 1         
+    * rdqmapp-name                    	: RDQMAPP   
+  * Node: rdqm-b2:
+    * drbd-replication                	: 172.16.2.42
+    * master-p_drbd_rdqmapp           	: 10000     
+    * mqm-gid                         	: 1001      
+    * mqm-uid                         	: 992       
+    * mqvrmf                          	: 10.0.1.0  
+    * rdqm-transient-attribute        	: 1         
+    * rdqmapp-dr-replication          	: 10.99.0.42
+    * rdqmapp-name                    	: RDQMAPP   
+  * Node: rdqm-b3:
+    * drbd-replication                	: 172.16.2.43
+    * master-p_drbd_rdqmapp           	: 10000     
+    * mqm-gid                         	: 1001      
+    * mqm-uid                         	: 992       
+    * mqvrmf                          	: 10.0.1.0  
+    * rdqmapp-dr-replication          	: 10.99.0.43
+    * rdqmapp-name                    	: RDQMAPP   
+
+Operations:
+  * Node: rdqm-b1:
+    * p_drbd_rdqmapp: migration-threshold=1000000:
+      * (19) probe
+      * (19) probe
+      * (22) monitor: interval="10000ms"
+    * p_drbd_dr_rdqmapp: migration-threshold=1000000:
+      * (27) probe
+      * (27) probe
+      * (30) monitor: interval="20000ms"
+  * Node: rdqm-b2:
+    * p_drbd_rdqmapp: migration-threshold=1000000:
+      * (20) probe
+      * (20) probe
+      * (28) monitor: interval="20000ms"
+  * Node: rdqm-b3:
+    * p_drbd_rdqmapp: migration-threshold=1000000:
+      * (18) probe
+      * (18) probe
+      * (26) monitor: interval="20000ms"

@@ -1,0 +1,69 @@
+constraint rsc_colocation rdqmapp_drbd_dr_with_drbd rsc=ms_drbd_dr_rdqmapp score=INFINITY with-rsc=ms_drbd_rdqmapp with-rsc-role=Master
+constraint rsc_colocation rdqmapp_fs_with_drbd_dr rsc=p_fs_rdqmapp score=INFINITY with-rsc=ms_drbd_dr_rdqmapp with-rsc-role=Master
+constraint rsc_colocation rdqmapp_ip_with_rdqmx rsc=p_ip_rdqmapp score=INFINITY with-rsc=p_rdqmx_rdqmapp
+constraint rsc_colocation rdqmapp_rdqmx_with_fs rsc=p_rdqmx_rdqmapp score=INFINITY with-rsc=p_fs_rdqmapp
+constraint rsc_colocation rdqmapp_with_ip rsc=rdqmapp score=INFINITY with-rsc=p_ip_rdqmapp
+constraint rsc_location rdqmapp_preferred_location node=rdqm-a1 rsc=rdqmapp score=50
+constraint rsc_order rdqmapp_after_ip first=p_ip_rdqmapp first-action=start kind=Mandatory then=rdqmapp then-action=start
+constraint rsc_order rdqmapp_drbd_dr_after_drbd first=ms_drbd_rdqmapp first-action=promote kind=Mandatory then=ms_drbd_dr_rdqmapp then-action=start
+constraint rsc_order rdqmapp_fs_after_drbd_dr first=ms_drbd_dr_rdqmapp first-action=promote kind=Mandatory then=p_fs_rdqmapp then-action=start
+constraint rsc_order rdqmapp_fs_after_drbd_dr_start first=ms_drbd_dr_rdqmapp first-action=start kind=Mandatory then=p_fs_rdqmapp then-action=start
+constraint rsc_order rdqmapp_ip_after_rdqmx first=p_rdqmx_rdqmapp kind=Mandatory then=p_ip_rdqmapp
+constraint rsc_order rdqmapp_rdqmx_after_fs first=p_fs_rdqmapp first-action=start kind=Mandatory then=p_rdqmx_rdqmapp then-action=start
+crm_config cib-bootstrap-options cluster-infrastructure=corosync
+crm_config cib-bootstrap-options dc-version=3.0.1.linbit-1.el10-a6049fe
+crm_config cib-bootstrap-options have-watchdog=false
+crm_config cib-bootstrap-options maintenance-mode=false
+crm_config cib-bootstrap-options stonith-enabled=false
+crm_config rdqm rdqmapp-dr-before-resync-time=2026-10-19T18:30:42.337Z
+crm_config rdqm rdqmapp-dr-local-ip=10.99.0.31,10.99.0.32,10.99.0.33
+crm_config rdqm rdqmapp-dr-port=7001
+crm_config rdqm rdqmapp-dr-remote-ip=10.99.0.41,10.99.0.42,10.99.0.43
+crm_config rdqm rdqmapp-dr-role=1
+crm_config rdqm rdqmapp-drbd-minor=100
+crm_config rdqm rdqmapp-drbd-port=7000
+crm_config rdqm rdqmapp-encrypt-dr=1
+crm_config rdqm rdqmapp-encrypt-ha=1
+crm_config rdqm rdqmapp-ha-state=0
+crm_config rdqm rdqmapp-local-san=encrypted.remote
+crm_config rdqm rdqmapp-qm-type=3
+crm_config rdqm rdqmapp-remote-san=encrypted.remote
+crm_config rdqm rdqmapp-size=3072
+node-attr rdqm-a1 drbd-replication=172.16.1.31
+node-attr rdqm-a1 mqm-gid=1001
+node-attr rdqm-a1 mqm-uid=992
+node-attr rdqm-a1 mqvrmf=10.0.1.0
+node-attr rdqm-a1 rdqmapp-name=RDQMAPP
+node-attr rdqm-a1 standby=off
+node-attr rdqm-a2 drbd-replication=172.16.1.32
+node-attr rdqm-a2 mqm-gid=1001
+node-attr rdqm-a2 mqm-uid=992
+node-attr rdqm-a2 mqvrmf=10.0.1.0
+node-attr rdqm-a2 rdqmapp-dr-replication=10.99.0.32
+node-attr rdqm-a2 rdqmapp-name=RDQMAPP
+node-attr rdqm-a2 standby=off
+node-attr rdqm-a3 drbd-replication=172.16.1.33
+node-attr rdqm-a3 mqm-gid=1001
+node-attr rdqm-a3 mqm-uid=992
+node-attr rdqm-a3 mqvrmf=10.0.1.0
+node-attr rdqm-a3 rdqmapp-dr-replication=10.99.0.33
+node-attr rdqm-a3 rdqmapp-name=RDQMAPP
+node-attr rdqm-a3 standby=off
+rsc-meta ms_drbd_dr_rdqmapp clone-max=1
+rsc-meta ms_drbd_dr_rdqmapp notify=true
+rsc-meta ms_drbd_dr_rdqmapp promotable=true
+rsc-meta ms_drbd_dr_rdqmapp target-role=Promoted
+rsc-meta ms_drbd_rdqmapp notify=true
+rsc-meta ms_drbd_rdqmapp promotable=true
+rsc-meta rdqmapp maintenance=false
+rsc_defaults build-resource-defaults resource-stickiness=1
+transient rdqm-a1 #feature-set=3.20.1
+transient rdqm-a1 master-p_drbd_dr_rdqmapp=10000
+transient rdqm-a1 master-p_drbd_rdqmapp=10000
+transient rdqm-a1 rdqm-transient-attribute=1
+transient rdqm-a2 #feature-set=3.20.1
+transient rdqm-a2 master-p_drbd_rdqmapp=10000
+transient rdqm-a2 rdqm-transient-attribute=1
+transient rdqm-a3 #feature-set=3.20.1
+transient rdqm-a3 master-p_drbd_rdqmapp=10000
+transient rdqm-a3 rdqm-transient-attribute=1

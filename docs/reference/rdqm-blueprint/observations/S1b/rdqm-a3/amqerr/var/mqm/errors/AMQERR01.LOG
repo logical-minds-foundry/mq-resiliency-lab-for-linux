@@ -1,0 +1,15 @@
+# AMQERR01.LOG: exported for #1666; 14 lines kept; dropped lines by category: outside window (whole entries): 50.
+10/19/2026 07:02:14 PM - Process(26661.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:02:14.839Z)
+                    CommentInsert1(/usr/lib/ocf/resource.d/ibm/rdqm)
+                    CommentInsert2(/usr/lib/ocf/resource.d/ibm/rdqm start)
+
+AMQ6206I: Command /usr/lib/ocf/resource.d/ibm/rdqm was issued.
+
+EXPLANATION:
+Control command '/usr/lib/ocf/resource.d/ibm/rdqm start' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------

@@ -1,0 +1,34 @@
+243:Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+337:Oct 19 18:29:24.947 rdqm-b2 pacemaker-attrd     [22707] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-b1] in instance_attributes: (unset) -> 1 | from rdqm-b1 with no write delay and node XML ID 1
+354:Oct 19 18:29:26.338 rdqm-b2 pacemaker-attrd     [22707] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-b2] in instance_attributes: (unset) -> 1 | from rdqm-b2 with no write delay and node XML ID 2
+359:Oct 19 18:29:26.341 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='2']/transient_attributes[@id='2']/instance_attributes[@id='status-2']:  <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+364:Oct 19 18:29:26.341 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='2']/transient_attributes[@id='2']/instance_attributes[@id='status-2']:  <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+563:Oct 19 18:29:33.581 rdqm-b2 pacemaker-attrd     [22707] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-b3] in instance_attributes: (unset) -> 1 | from rdqm-b3 with no write delay and node XML ID 3
+568:Oct 19 18:29:33.583 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='3']/transient_attributes[@id='3']/instance_attributes[@id='status-3']:  <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+574:Oct 19 18:29:33.583 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='3']/transient_attributes[@id='3']/instance_attributes[@id='status-3']:  <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+1012:Oct 19 18:29:44.723 rdqm-b2 pacemaker-attrd     [23614] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-b1] in instance_attributes: (unset) -> 1 | from rdqm-b1 with no write delay and node XML ID 1
+1013:Oct 19 18:29:44.723 rdqm-b2 pacemaker-attrd     [23614] (write_attribute) 	info: Sent CIB request 6 with 1 change for rdqm-transient-attribute (set unspecified)
+1022:Oct 19 18:29:44.727 rdqm-b2 pacemaker-based     [23610] (cib_perform_op) 	info: ++                     <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+1033:Oct 19 18:29:44.727 rdqm-b2 pacemaker-based     [23610] (cib_perform_op) 	info: ++                     <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+1038:Oct 19 18:29:44.731 rdqm-b2 pacemaker-attrd     [23614] (attrd_cib_callback) 	info: CIB update 6 result for rdqm-transient-attribute: OK | rc=0
+1039:Oct 19 18:29:44.731 rdqm-b2 pacemaker-attrd     [23614] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-b1]=1
+1043:Oct 19 18:29:44.770 rdqm-b2 pacemaker-attrd     [23614] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-b2] in instance_attributes: (unset) -> 1 | from rdqm-b2 with no write delay and node XML ID 2
+1044:Oct 19 18:29:44.771 rdqm-b2 pacemaker-attrd     [23614] (write_attribute) 	info: Sent CIB request 9 with 2 changes for rdqm-transient-attribute (set unspecified)
+1053:Oct 19 18:29:44.774 rdqm-b2 pacemaker-based     [23610] (cib_perform_op) 	info: ++                     <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+1064:Oct 19 18:29:44.774 rdqm-b2 pacemaker-based     [23610] (cib_perform_op) 	info: ++                     <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+1069:Oct 19 18:29:44.775 rdqm-b2 pacemaker-attrd     [23614] (attrd_cib_callback) 	info: CIB update 9 result for rdqm-transient-attribute: OK | rc=0
+1070:Oct 19 18:29:44.775 rdqm-b2 pacemaker-attrd     [23614] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-b1]=1
+-- context of first write
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                      </alerts>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: +  /cib/status/node_state[@id='1']:  @crm-debug-origin=post_cache_update, @join=member, @expected=member
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']:  <lrm id="1"/>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                     <lrm_resources/>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                   </lrm>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']:  <transient_attributes id="1"/>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                     <instance_attributes id="status-1">
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-.feature-set" name="#feature-set" value="3.20.1"/>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                     </instance_attributes>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: ++                                   </transient_attributes>
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: +~ /cib/status/node_state[@id='1'] moved to offset 0
+Oct 19 18:29:24.836 rdqm-b2 pacemaker-based     [22704] (cib_perform_op) 	info: +~ /cib/status/node_state[@id='2'] moved to offset 1

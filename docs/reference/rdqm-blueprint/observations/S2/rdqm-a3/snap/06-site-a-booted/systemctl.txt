@@ -1,0 +1,68 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: activating (start) since Mon 2026-10-19 19:29:29 UTC; 10s ago
+        Job: 280
+ Invocation: 19e52b21fc9a4dd88ad5abd201bb168f
+   Main PID: 994 (rdqmd)
+      Tasks: 2 (limit: 10565)
+     Memory: 23.4M (peak: 54.4M)
+        CPU: 2.704s
+     CGroup: /system.slice/rdqm.service
+             └─994 /var/mqm/rdqm/rdqmd -s
+
+Oct 19 19:29:29 rdqm-a3 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:29:29 UTC; 10s ago
+ Invocation: b17ea0ba519d4a64a951f41158a84473
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 988 (pacemakerd)
+      Tasks: 7
+     Memory: 28M (peak: 34.7M)
+        CPU: 388ms
+     CGroup: /system.slice/pacemaker.service
+             ├─ 988 /usr/sbin/pacemakerd
+             ├─1055 /usr/libexec/pacemaker/pacemaker-based
+             ├─1056 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1058 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1059 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1062 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1066 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Quorum acquired
+Oct 19 19:29:31 rdqm-a3 pacemaker-attrd[1059]:  notice: Recorded local node as attribute writer (was rdqm-a1)
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Node rdqm-a1 state is now member
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Node rdqm-a2 state is now member
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Node rdqm-a3 state is now member
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Pacemaker controller successfully started and accepting connections
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: Fencer successfully connected
+Oct 19 19:29:31 rdqm-a3 pacemaker-controld[1066]:  notice: State transition S_STARTING -> S_PENDING
+Oct 19 19:29:32 rdqm-a3 pacemaker-attrd[1059]:  notice: Setting rdqm-transient-attribute[rdqm-a2] in instance_attributes: (unset) -> 1
+Oct 19 19:29:32 rdqm-a3 pacemaker-attrd[1059]:  notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:29:29 UTC; 10s ago
+ Invocation: 7c012ac6d1f54ab395e2bacf60989e2b
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 913 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 158.3M (peak: 165.6M)
+        CPU: 404ms
+     CGroup: /system.slice/corosync.service
+             └─913 /usr/sbin/corosync -f
+
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [QUORUM] Sync joined[2]: 1 2
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [TOTEM ] A new membership (1.4a) was formed. Members joined: 1 2
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [QUORUM] This node is within the primary component and will provide service.
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [KNET  ] pmtud: PMTUD link change for host: 1 link: 0 from 522 to 1446
+Oct 19 19:29:31 rdqm-a3 corosync[913]:   [KNET  ] pmtud: Global data MTU changed to: 1446

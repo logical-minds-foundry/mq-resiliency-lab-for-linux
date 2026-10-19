@@ -1,0 +1,34 @@
+274:Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+285:Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                       <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+297:Oct 19 18:25:03.969 rdqm-a3 pacemaker-attrd     [23235] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a2] in instance_attributes: (unset) -> 1 | from rdqm-a2 with no write delay and node XML ID 2
+298:Oct 19 18:25:03.969 rdqm-a3 pacemaker-attrd     [23235] (write_attribute) 	info: Sent CIB request 9 with 1 change for rdqm-transient-attribute (set unspecified)
+325:Oct 19 18:25:03.972 rdqm-a3 pacemaker-attrd     [23235] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1 | from rdqm-a1 with no write delay and node XML ID 1
+355:Oct 19 18:25:03.976 rdqm-a3 pacemaker-attrd     [23235] (attrd_cib_callback) 	info: CIB update 9 result for rdqm-transient-attribute: OK | rc=0
+356:Oct 19 18:25:03.976 rdqm-a3 pacemaker-attrd     [23235] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a2]=1
+357:Oct 19 18:25:03.976 rdqm-a3 pacemaker-attrd     [23235] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a1]=(unset)
+379:Oct 19 18:25:05.280 rdqm-a3 pacemaker-attrd     [23235] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a3] in instance_attributes: (unset) -> 1 | from rdqm-a3 with no write delay and node XML ID 3
+385:Oct 19 18:25:05.283 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='3']/transient_attributes[@id='3']/instance_attributes[@id='status-3']:  <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+390:Oct 19 18:25:05.283 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='3']/transient_attributes[@id='3']/instance_attributes[@id='status-3']:  <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+837:Oct 19 18:25:16.811 rdqm-a3 pacemaker-attrd     [24114] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a3] in instance_attributes: (unset) -> 1 | from rdqm-a3 with no write delay and node XML ID 3
+839:Oct 19 18:25:16.813 rdqm-a3 pacemaker-attrd     [24114] (write_attribute) 	info: Sent CIB request 6 with 1 change for rdqm-transient-attribute (set unspecified)
+847:Oct 19 18:25:16.814 rdqm-a3 pacemaker-based     [24111] (cib_perform_op) 	info: ++                     <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+858:Oct 19 18:25:16.814 rdqm-a3 pacemaker-based     [24111] (cib_perform_op) 	info: ++                     <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+863:Oct 19 18:25:16.816 rdqm-a3 pacemaker-attrd     [24114] (attrd_cib_callback) 	info: CIB update 6 result for rdqm-transient-attribute: OK | rc=0
+864:Oct 19 18:25:16.816 rdqm-a3 pacemaker-attrd     [24114] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a3]=1
+868:Oct 19 18:25:16.837 rdqm-a3 pacemaker-attrd     [24114] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1 | from rdqm-a1 with no write delay and node XML ID 1
+869:Oct 19 18:25:16.838 rdqm-a3 pacemaker-attrd     [24114] (write_attribute) 	info: Sent CIB request 9 with 2 changes for rdqm-transient-attribute (set unspecified)
+877:Oct 19 18:25:16.839 rdqm-a3 pacemaker-based     [24111] (cib_perform_op) 	info: ++                     <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+-- context of first write
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                      </alerts>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: +  /cib/status/node_state[@id='1']:  @crm-debug-origin=post_cache_update, @join=member, @expected=member
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']:  <lrm id="1"/>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                     <lrm_resources/>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                   </lrm>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']:  <transient_attributes id="1"/>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                     <instance_attributes id="status-1">
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-.feature-set" name="#feature-set" value="3.20.1"/>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                       <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                     </instance_attributes>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: ++                                   </transient_attributes>
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: +~ /cib/status/node_state[@id='1'] moved to offset 0
+Oct 19 18:25:03.960 rdqm-a3 pacemaker-based     [23232] (cib_perform_op) 	info: +  /cib/status/node_state[@id='2']:  @crmd=1792434296, @crm-debug-origin=post_cache_update, @in_ccm=1792434296, @join=member, @expected=member

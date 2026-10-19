@@ -1,0 +1,26 @@
+Oct 19 19:44:03.959 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:44:04.012Z
+Oct 19 20:02:56.176 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=true
+Oct 19 20:02:56.825 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_colocation[@id='rdqmapp_with_ip']
+Oct 19 20:02:57.454 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_order[@id='rdqmapp_after_ip']
+Oct 19 20:02:58.101 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    ++ /cib/configuration/constraints:  <rsc_location id="p_rdqmx_rdqmapp_preferred_location" rsc="p_rdqmx_rdqmapp" score="50" node="rdqm-a1"/>
+Oct 19 20:03:21.554 cib_modify resources by rdqm-a1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Unpromoted
+Oct 19 20:03:24.186 cib_modify crm_config by rdqm-a1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 20:03:24.227 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T20:03:24.201Z
+Oct 19 20:03:25.523 cib_delete crm_config by rdqm-a1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 20:04:09.195 cib_modify resources by rdqm-a1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Promoted
+Oct 19 20:08:21.559 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=false
+    ++ /cib/configuration/constraints:  <rsc_colocation id="rdqmapp_with_ip" score="INFINITY" rsc="rdqmapp" with-rsc="p_ip_rdqmapp"/>
+    ++ /cib/configuration/constraints:  <rsc_order id="rdqmapp_after_ip" kind="Mandatory" first="p_ip_rdqmapp" first-action="start" then="rdqmapp" then-action="start"/>
+Oct 19 20:08:23.149 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_location[@id='p_rdqmx_rdqmapp_preferred_location']

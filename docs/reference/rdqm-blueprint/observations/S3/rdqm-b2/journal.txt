@@ -1,0 +1,23 @@
+# journal.txt: exported for #1666; 22 lines kept; dropped lines by category: kit ssh/sudo/session: 5795, lab observability agents and timers: 972. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:43:44.753488+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:43:48.280760+00:00 rdqm-b2 NetworkManager[3653]: <info>  [1792439028.2804] dhcp4 (enp5s0): state changed new lease, address=192.168.121.225
+2026-10-19T19:43:48.290139+00:00 rdqm-b2 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:43:48.312414+00:00 rdqm-b2 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:43:58.344944+00:00 rdqm-b2 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:44:01.508618+00:00 rdqm-b2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:44:05.804343+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T19:44:39.440055+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+2026-10-19T19:47:16.695917+00:00 rdqm-b2 auditd[747]: Audit daemon rotating log files
+2026-10-19T19:50:01.244781+00:00 rdqm-b2 anacron[62151]: Job `cron.monthly' started
+2026-10-19T19:50:01.251104+00:00 rdqm-b2 anacron[62151]: Job `cron.monthly' terminated
+2026-10-19T19:50:01.251122+00:00 rdqm-b2 anacron[62151]: Normal exit (3 jobs run)
+2026-10-19T19:50:15.046064+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:50:15.046072+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:59:16.989163+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:01:01.276523+00:00 rdqm-b2 CROND[133217]: (root) CMD (run-parts /etc/cron.hourly)
+2026-10-19T20:01:01.287572+00:00 rdqm-b2 run-parts[133220]: (/etc/cron.hourly) starting 0anacron
+2026-10-19T20:01:01.297607+00:00 rdqm-b2 run-parts[133226]: (/etc/cron.hourly) finished 0anacron
+2026-10-19T20:01:01.298154+00:00 rdqm-b2 CROND[133216]: (root) CMDEND (run-parts /etc/cron.hourly)
+2026-10-19T20:10:09.017543+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:10:24.899741+00:00 rdqm-b2 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T20:10:24.948562+00:00 rdqm-b2 systemd[1]: Started systemd-timedated.service - Time & Date Service.

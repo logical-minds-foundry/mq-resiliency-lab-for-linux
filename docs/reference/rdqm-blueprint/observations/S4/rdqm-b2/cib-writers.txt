@@ -1,0 +1,8 @@
+Oct 19 18:43:03.148 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-disconnect-time" name="rdqmapp-dr-disconnect-time" value="2026-10-19T18:43:03.134Z"/>
+Oct 19 18:44:44.839 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 18:44:44.905 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T18:44:44.845Z
+Oct 19 18:44:46.223 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']

@@ -1,0 +1,14 @@
+Node:                                   rdqm-b3
+OS kernel version:                      6.12.0-211.7.3
+DRBD OS kernel version:                 6.12.0-211.7.1
+DRBD version:                           9.3.3+ptf.28.g6c10a1e64888
+DRBD kernel module status:              Loaded
+
+Queue manager name:                     RDQMAPP
+Queue manager status:                   Running elsewhere
+HA status:                              Normal
+HA current location:                    rdqm-b1
+HA preferred location:                  rdqm-b1
+HA blocked location:                    None
+DR role:                                Primary
+[rc=0]

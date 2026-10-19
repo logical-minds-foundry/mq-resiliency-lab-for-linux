@@ -1,0 +1,25 @@
+rdqmapp node-id:0 role:Primary suspended:no force-io-failures:no
+    write-ordering:flush
+  volume:0 minor:100 disk:UpToDate backing_dev:/dev/drbdpool/rdqmapp_00 quorum:yes
+      open:yes
+      size:3145500 read:175814 written:155196 al-writes:25 bm-writes:5 upper-pending:0
+      lower-pending:0 al-suspended:no blocked:no
+  rdqm-a2 node-id:1 connection:Connected role:Secondary tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:0 sent:237116 out-of-sync:0 pending:0 unacked:0
+  rdqm-a3 node-id:2 connection:Connected role:Secondary tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:0 sent:237116 out-of-sync:0 pending:0 unacked:0
+
+rdqmapp.dr node-id:0 role:Primary suspended:no force-io-failures:no
+    write-ordering:flush
+  volume:0 minor:7001 disk:UpToDate backing_dev:/dev/drbd100 quorum:yes open:yes
+      size:3145368 read:11786 written:154956 al-writes:19 bm-writes:8 upper-pending:0
+      lower-pending:0 al-suspended:no blocked:no
+  encrypted.remote node-id:1 connection:Connected role:Secondary tls:yes
+      congested:no ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+        received:99020 sent:6964 out-of-sync:0 pending:0 unacked:0
+

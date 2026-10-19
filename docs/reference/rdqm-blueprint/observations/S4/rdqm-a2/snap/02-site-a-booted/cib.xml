@@ -1,0 +1,184 @@
+<cib crm_feature_set="3.20.1" validate-with="pacemaker-4.0" epoch="65" num_updates="4" admin_epoch="0" cib-last-written="Mon Oct 19 18:32:10 2026" update-origin="rdqm-a1" update-client="mqm" update-user="mqm" have-quorum="1">
+  <configuration>
+    <crm_config>
+      <cluster_property_set id="cib-bootstrap-options">
+        <nvpair id="cib-bootstrap-options-have-watchdog" name="have-watchdog" value="false"/>
+        <nvpair id="cib-bootstrap-options-dc-version" name="dc-version" value="3.0.1.linbit-1.el10-a6049fe"/>
+        <nvpair id="cib-bootstrap-options-cluster-infrastructure" name="cluster-infrastructure" value="corosync"/>
+        <nvpair name="stonith-enabled" value="false" id="cib-bootstrap-options-stonith-enabled"/>
+        <nvpair name="maintenance-mode" value="false" id="cib-bootstrap-options-maintenance-mode"/>
+      </cluster_property_set>
+      <cluster_property_set id="rdqm">
+        <nvpair id="rdqm-rdqmapp-size" name="rdqmapp-size" value="3072"/>
+        <nvpair id="rdqm-rdqmapp-dr-role" name="rdqmapp-dr-role" value="1"/>
+        <nvpair id="rdqm-rdqmapp-dr-local-ip" name="rdqmapp-dr-local-ip" value="10.99.0.31,10.99.0.32,10.99.0.33"/>
+        <nvpair id="rdqm-rdqmapp-dr-remote-ip" name="rdqmapp-dr-remote-ip" value="10.99.0.41,10.99.0.42,10.99.0.43"/>
+        <nvpair id="rdqm-rdqmapp-dr-port" name="rdqmapp-dr-port" value="7001"/>
+        <nvpair id="rdqm-rdqmapp-qm-type" name="rdqmapp-qm-type" value="3"/>
+        <nvpair id="rdqm-rdqmapp-ha-state" name="rdqmapp-ha-state" value="0"/>
+        <nvpair id="rdqm-rdqmapp-local-san" name="rdqmapp-local-san" value="encrypted.remote"/>
+        <nvpair id="rdqm-rdqmapp-remote-san" name="rdqmapp-remote-san" value="encrypted.remote"/>
+        <nvpair id="rdqm-rdqmapp-encrypt-dr" name="rdqmapp-encrypt-dr" value="1"/>
+        <nvpair id="rdqm-rdqmapp-encrypt-ha" name="rdqmapp-encrypt-ha" value="1"/>
+        <nvpair id="rdqm-rdqmapp-drbd-port" name="rdqmapp-drbd-port" value="7000"/>
+        <nvpair id="rdqm-rdqmapp-drbd-minor" name="rdqmapp-drbd-minor" value="100"/>
+        <nvpair id="rdqm-rdqmapp-dr-before-resync-time" name="rdqmapp-dr-before-resync-time" value="2026-10-19T18:30:42.337Z"/>
+      </cluster_property_set>
+    </crm_config>
+    <nodes>
+      <node id="1" uname="rdqm-a1">
+        <instance_attributes id="nodes-1">
+          <nvpair id="nodes-1-drbd-replication" name="drbd-replication" value="172.16.1.31"/>
+          <nvpair id="nodes-1-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-1-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-1-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-1-standby" name="standby" value="off"/>
+          <nvpair id="nodes-1-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+        </instance_attributes>
+      </node>
+      <node id="2" uname="rdqm-a2">
+        <instance_attributes id="nodes-2">
+          <nvpair id="nodes-2-drbd-replication" name="drbd-replication" value="172.16.1.32"/>
+          <nvpair id="nodes-2-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-2-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-2-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-2-standby" name="standby" value="off"/>
+          <nvpair id="nodes-2-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+          <nvpair id="nodes-2-rdqmapp-dr-replication" name="rdqmapp-dr-replication" value="10.99.0.32"/>
+        </instance_attributes>
+      </node>
+      <node id="3" uname="rdqm-a3">
+        <instance_attributes id="nodes-3">
+          <nvpair id="nodes-3-drbd-replication" name="drbd-replication" value="172.16.1.33"/>
+          <nvpair id="nodes-3-mqm-uid" name="mqm-uid" value="992"/>
+          <nvpair id="nodes-3-mqm-gid" name="mqm-gid" value="1001"/>
+          <nvpair id="nodes-3-mqvrmf" name="mqvrmf" value="10.0.1.0"/>
+          <nvpair id="nodes-3-standby" name="standby" value="off"/>
+          <nvpair id="nodes-3-rdqmapp-name" name="rdqmapp-name" value="RDQMAPP"/>
+          <nvpair id="nodes-3-rdqmapp-dr-replication" name="rdqmapp-dr-replication" value="10.99.0.33"/>
+        </instance_attributes>
+      </node>
+    </nodes>
+    <resources>
+      <primitive id="p_fs_rdqmapp" class="ocf" provider="heartbeat" type="Filesystem">
+        <instance_attributes id="p_fs_rdqmapp-instance_attributes">
+          <nvpair name="device" value="/dev/drbd/by-res/rdqmapp.dr/0" id="p_fs_rdqmapp-instance_attributes-device"/>
+          <nvpair name="directory" value="/var/mqm/vols/rdqmapp" id="p_fs_rdqmapp-instance_attributes-directory"/>
+          <nvpair name="fstype" value="ext4" id="p_fs_rdqmapp-instance_attributes-fstype"/>
+          <nvpair name="force_unmount" value="safe" id="p_fs_rdqmapp-instance_attributes-force_unmount"/>
+          <nvpair name="fast_stop" value="no" id="p_fs_rdqmapp-instance_attributes-fast_stop"/>
+        </instance_attributes>
+        <operations>
+          <op name="start" timeout="60" interval="0s" id="p_fs_rdqmapp-start-0s"/>
+          <op name="stop" timeout="60" interval="0s" id="p_fs_rdqmapp-stop-0s"/>
+        </operations>
+      </primitive>
+      <primitive id="p_rdqmx_rdqmapp" class="ocf" provider="ibm" type="rdqmx">
+        <operations>
+          <op name="start" timeout="60" interval="0s" id="p_rdqmx_rdqmapp-start-0s"/>
+          <op name="stop" timeout="60" interval="0s" id="p_rdqmx_rdqmapp-stop-0s"/>
+        </operations>
+      </primitive>
+      <primitive id="rdqmapp" class="ocf" provider="ibm" type="rdqm">
+        <operations>
+          <op name="monitor" timeout="60" interval="30" id="rdqmapp-monitor-30"/>
+          <op name="start" timeout="43200" interval="0s" id="rdqmapp-start-0s"/>
+          <op name="stop" timeout="300" interval="0s" id="rdqmapp-stop-0s"/>
+        </operations>
+        <meta_attributes id="rdqmapp-meta_attributes">
+          <nvpair name="maintenance" value="false" id="rdqmapp-meta_attributes-maintenance"/>
+        </meta_attributes>
+      </primitive>
+      <clone id="ms_drbd_rdqmapp">
+        <meta_attributes id="ms_drbd_rdqmapp-meta_attributes">
+          <nvpair name="notify" value="true" id="ms_drbd_rdqmapp-meta_attributes-notify"/>
+          <nvpair name="promotable" value="true" id="ms_drbd_rdqmapp-meta_attributes-promotable"/>
+        </meta_attributes>
+        <primitive id="p_drbd_rdqmapp" class="ocf" provider="linbit" type="drbd">
+          <instance_attributes id="p_drbd_rdqmapp-instance_attributes">
+            <nvpair name="drbd_resource" value="rdqmapp" id="p_drbd_rdqmapp-instance_attributes-drbd_resource"/>
+            <nvpair name="adjust_master_score" value="0 10 10000 10000" id="p_drbd_rdqmapp-instance_attributes-adjust_master_score"/>
+          </instance_attributes>
+          <operations>
+            <op name="monitor" timeout="20" interval="20" role="Slave" id="p_drbd_rdqmapp-monitor-20"/>
+            <op name="monitor" timeout="20" interval="10" role="Master" id="p_drbd_rdqmapp-monitor-10"/>
+            <op name="start" timeout="240" interval="0s" id="p_drbd_rdqmapp-start-0s"/>
+            <op name="stop" timeout="100" interval="0s" id="p_drbd_rdqmapp-stop-0s"/>
+            <op name="promote" timeout="90" interval="0s" id="p_drbd_rdqmapp-promote-0s"/>
+            <op name="demote" timeout="90" interval="0s" id="p_drbd_rdqmapp-demote-0s"/>
+          </operations>
+        </primitive>
+      </clone>
+      <clone id="ms_drbd_dr_rdqmapp">
+        <meta_attributes id="ms_drbd_dr_rdqmapp-meta_attributes">
+          <nvpair name="notify" value="true" id="ms_drbd_dr_rdqmapp-meta_attributes-notify"/>
+          <nvpair name="promotable" value="true" id="ms_drbd_dr_rdqmapp-meta_attributes-promotable"/>
+          <nvpair name="clone-max" value="1" id="ms_drbd_dr_rdqmapp-meta_attributes-clone-max"/>
+          <nvpair name="target-role" value="Promoted" id="ms_drbd_dr_rdqmapp-meta_attributes-target-role"/>
+        </meta_attributes>
+        <primitive id="p_drbd_dr_rdqmapp" class="ocf" provider="linbit" type="drbd">
+          <instance_attributes id="p_drbd_dr_rdqmapp-instance_attributes">
+            <nvpair name="drbd_resource" value="rdqmapp.dr" id="p_drbd_dr_rdqmapp-instance_attributes-drbd_resource"/>
+            <nvpair name="wfc_timeout" value="false" id="p_drbd_dr_rdqmapp-instance_attributes-wfc_timeout"/>
+          </instance_attributes>
+          <operations>
+            <op name="monitor" timeout="20" interval="20" role="Slave" id="p_drbd_dr_rdqmapp-monitor-20"/>
+            <op name="monitor" timeout="20" interval="10" role="Master" id="p_drbd_dr_rdqmapp-monitor-10"/>
+            <op name="start" timeout="240" interval="0s" id="p_drbd_dr_rdqmapp-start-0s"/>
+            <op name="stop" timeout="100" interval="0s" id="p_drbd_dr_rdqmapp-stop-0s"/>
+            <op name="promote" timeout="90" interval="0s" id="p_drbd_dr_rdqmapp-promote-0s"/>
+            <op name="demote" timeout="90" interval="0s" id="p_drbd_dr_rdqmapp-demote-0s"/>
+          </operations>
+        </primitive>
+      </clone>
+      <primitive id="p_ip_rdqmapp" class="ocf" provider="heartbeat" type="IPaddr2">
+        <instance_attributes id="p_ip_rdqmapp-instance_attributes">
+          <nvpair name="ip" value="10.10.1.100" id="p_ip_rdqmapp-instance_attributes-ip"/>
+          <nvpair name="cidr_netmask" value="24" id="p_ip_rdqmapp-instance_attributes-cidr_netmask"/>
+          <nvpair name="nic" value="enp6s0" id="p_ip_rdqmapp-instance_attributes-nic"/>
+        </instance_attributes>
+        <operations>
+          <op name="monitor" interval="30" id="p_ip_rdqmapp-monitor-30"/>
+        </operations>
+      </primitive>
+    </resources>
+    <constraints>
+      <rsc_colocation id="rdqmapp_drbd_dr_with_drbd" score="INFINITY" rsc="ms_drbd_dr_rdqmapp" with-rsc="ms_drbd_rdqmapp" with-rsc-role="Master"/>
+      <rsc_colocation id="rdqmapp_fs_with_drbd_dr" score="INFINITY" rsc="p_fs_rdqmapp" with-rsc="ms_drbd_dr_rdqmapp" with-rsc-role="Master"/>
+      <rsc_colocation id="rdqmapp_rdqmx_with_fs" score="INFINITY" rsc="p_rdqmx_rdqmapp" with-rsc="p_fs_rdqmapp"/>
+      <rsc_order id="rdqmapp_drbd_dr_after_drbd" kind="Mandatory" first="ms_drbd_rdqmapp" first-action="promote" then="ms_drbd_dr_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_fs_after_drbd_dr" kind="Mandatory" first="ms_drbd_dr_rdqmapp" first-action="promote" then="p_fs_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_fs_after_drbd_dr_start" kind="Mandatory" first="ms_drbd_dr_rdqmapp" first-action="start" then="p_fs_rdqmapp" then-action="start"/>
+      <rsc_order id="rdqmapp_rdqmx_after_fs" kind="Mandatory" first="p_fs_rdqmapp" first-action="start" then="p_rdqmx_rdqmapp" then-action="start"/>
+      <rsc_location id="rdqmapp_preferred_location" rsc="rdqmapp" score="50" node="rdqm-a1"/>
+      <rsc_colocation id="rdqmapp_ip_with_rdqmx" score="INFINITY" rsc="p_ip_rdqmapp" with-rsc="p_rdqmx_rdqmapp"/>
+      <rsc_order id="rdqmapp_ip_after_rdqmx" kind="Mandatory" first="p_rdqmx_rdqmapp" then="p_ip_rdqmapp"/>
+      <rsc_colocation id="rdqmapp_with_ip" score="INFINITY" rsc="rdqmapp" with-rsc="p_ip_rdqmapp"/>
+      <rsc_order id="rdqmapp_after_ip" kind="Mandatory" first="p_ip_rdqmapp" first-action="start" then="rdqmapp" then-action="start"/>
+    </constraints>
+    <rsc_defaults>
+      <meta_attributes id="build-resource-defaults">
+        <nvpair id="build-resource-stickiness" name="resource-stickiness" value="1"/>
+      </meta_attributes>
+    </rsc_defaults>
+    <alerts>
+      <alert id="rdqm-alert" path="/var/mqm/rdqm/rdqmalert"/>
+    </alerts>
+  </configuration>
+  <status>
+    <node_state id="3">
+      <transient_attributes id="3">
+        <instance_attributes id="status-3">
+          <nvpair id="status-3-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+        </instance_attributes>
+      </transient_attributes>
+    </node_state>
+    <node_state id="2">
+      <transient_attributes id="2">
+        <instance_attributes id="status-2">
+          <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+        </instance_attributes>
+      </transient_attributes>
+    </node_state>
+  </status>
+</cib>

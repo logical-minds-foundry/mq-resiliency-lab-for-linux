@@ -1,0 +1,12 @@
+2026-10-19T18:53:28.8394603330 76 /var/mqm/rdqm/rdqmapp-0-rdqmstatus.ini
+2026-10-19T18:53:41.0802233490 2246 /var/mqm/errors/AMQERR01.LOG
+2026-10-19T18:53:41.1446991260 96 /var/mqm/sockets/rdqmapp/qmgrlocl/rdqm-a3/subpool.lck
+2026-10-19T18:57:28.8961160400 4104 /var/mqm/usage/installations/Installation1/ibm.com_IBM_MQ.ums.data.json
+2026-10-19T18:57:32.0804545290 27772 /var/mqm/errors/RDQM.0.LOG
+2026-10-19T18:57:48.5522054540 844447 /var/log/pacemaker/pacemaker.log
+2026-10-19T19:00:04.1759902640 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T19:00:39.6697591080 16777216 /var/log/journal/2c592d94a9504464b807cb1d8fcc7385/system.journal
+2026-10-19T19:00:39.7702243540 5364914 /var/log/messages
+2026-10-19T19:00:39.7702243540 8388608 /var/log/journal/2c592d94a9504464b807cb1d8fcc7385/user-1000.journal
+2026-10-19T19:00:39.7706589190 437092 /var/log/secure
+2026-10-19T19:00:39.7736592280 6600512 /var/log/audit/audit.log

@@ -1,0 +1,92 @@
+# RDQM.0.LOG: exported for #1666; 91 lines kept; dropped lines by category: outside window: 1301.
+2026-10-19 18:52:55.515: 16109 rdqmhandler
+2026-10-19 18:52:55.515: 16109 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:52:55.528: 16109 >>STDOUT:
+active
+2026-10-19 18:52:55.528: 16109 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:52:55.528: 16109 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:52:55.539: 16109 >>STDOUT:
+active
+2026-10-19 18:52:55.539: 16109 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:52:55.539: 16109 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:52:55.565: 16109 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:52:55.565: 16109 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:52:55.565Z"
+2026-10-19 18:52:55.594: 16109 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:52:55.565Z"
+
+2026-10-19 18:57:14.012:  1041 rdqmd -s
+2026-10-19 18:57:14.012:  1041 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:57:20.419:  1041 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 18:57:20 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 18:56:34 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: online:
+    * Resources:
+      * p_drbd_rdqmapp	(ocf:linbit:drbd):	 Starting
+  * Node rdqm-a2: online:
+    * Resources:
+      * p_drbd_rdqmapp	(ocf:linbit:drbd):	 Unpromoted
+  * Node rdqm-a3: online:
+    * Resources:
+      * p_rdqmx_rdqmapp	(ocf:ibm:rdqmx):	 Started
+      * rdqmapp	(ocf:ibm:rdqm):	 Started
+      * p_fs_rdqmapp	(ocf:heartbeat:Filesystem):	 Started
+      * p_drbd_rdqmapp	(ocf:linbit:drbd):	 Promoted
+      * p_drbd_dr_rdqmapp	(ocf:linbit:drbd):	 Promoted
+      * p_ip_rdqmapp	(ocf:heartbeat:IPaddr2):	 Started
+
+2026-10-19 18:57:20.419:  1041 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:57:20.419:  1041 ---{ /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+2026-10-19 18:57:20.466:  1041 >>STDOUT:
+name="rdqm-transient-attribute" host="rdqm-a1" value="1"
+2026-10-19 18:57:20.466:  1041 ---} rc=0 unixrc=0 /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+
+2026-10-19 18:57:20.467:  1041 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:57:20.504:  1041 >>STDOUT:
+active
+2026-10-19 18:57:20.504:  1041 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:57:20.504:  1041 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:57:20.548:  1041 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:57:22.136:  2500 rdqmhandler
+2026-10-19 18:57:22.136:  2500 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:57:22.161:  2500 >>STDOUT:
+active
+2026-10-19 18:57:22.161:  2500 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:57:22.161:  2500 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:57:22.213:  2500 >>STDOUT:
+active
+2026-10-19 18:57:22.213:  2500 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:57:22.213:  2500 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:57:22.309:  2500 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:57:36.615:  3844 rdqmx start
+2026-10-19 18:57:36.615:  3844 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:57:36.647:  3844 >>STDOUT:
+active
+2026-10-19 18:57:36.648:  3844 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:57:36.648:  3844 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:57:36.684:  3844 >>STDOUT:
+active
+2026-10-19 18:57:36.684:  3844 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:57:36.684:  3844 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:57:36.729:  3844 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:57:37.695:  4059 rdqm start
+2026-10-19 18:57:37.695:  4059 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:57:37.790:  4059 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+

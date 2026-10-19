@@ -1,0 +1,9 @@
+2026-10-19T18:45:10.7408231390 339105 /var/log/pacemaker/pacemaker.log
+2026-10-19T18:48:24.7174850350 12825 /var/log/dnf.rpm.log
+2026-10-19T18:48:25.0675223200 1740 /var/log/hawkey.log
+2026-10-19T18:48:25.1315291380 4084 /var/log/dnf.librepo.log
+2026-10-19T18:48:25.2375404300 60055 /var/log/dnf.log
+2026-10-19T18:48:41.4712696080 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T18:49:35.8290596640 1611487 /var/log/messages
+2026-10-19T18:49:35.8290596640 301667 /var/log/secure
+2026-10-19T18:49:36.0610843790 4816208 /var/log/audit/audit.log

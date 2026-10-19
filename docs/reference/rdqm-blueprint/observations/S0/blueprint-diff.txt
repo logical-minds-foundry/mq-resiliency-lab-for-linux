@@ -1,0 +1,119 @@
+# S0 blueprint re-capture (20261019T183943Z, ansible/capture-rdqm-blueprint.yml, 6 hosts x 20 items, failed=0)
+# diffed against the committed 2026-10-16 blueprint (docs/reference/rdqm-blueprint/<host>/); '<' = committed, '>' = this capture.
+# Files not listed are identical. drbd-conf.txt is summarised, not diffed: on every host it differs only in the
+# /etc/drbd.d file dates (Oct 16 21:11 -> Oct 19 18:30) and the TLS certificate bodies (regenerated per build);
+# the key files are recorded by path only in both. The full capture stays in the state bucket.
+=== rdqm-a1/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 uJkmtB-7XPY-apbi-jzPZ-ieDk-rgQh-SD5Zow                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      a5789182f2f25b46                                      
+> vdb                                   LVM2_member LVM2 001                                 bKAVoQ-xXrw-Jj3s-PvEN-fhKZ-yyzm-OCLddN                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      9ab9621107836c2f                                      
+< │   └─drbd7001                                                                                                                       2.6G     3% /var/mqm/vols/rdqmapp
+> │   └─drbd7001                                                                                                                       2.6G     2% /var/mqm/vols/rdqmapp
+=== rdqm-a1/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.374Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.337Z"
+=== rdqm-a1/pcmk-status.txt
+<   * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-a1
+<   * Last change:  Fri Oct 16 21:13:32 2026 by mqm via mqm on rdqm-a1
+>   * Current DC: rdqm-a3 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+>   * Last updated: Mon Oct 19 18:40:00 2026 on rdqm-a1
+>   * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+=== rdqm-a1/quorum.txt
+< Date:             Fri Oct 16 21:46:16 2026
+> Date:             Mon Oct 19 18:40:05 2026
+=== rdqm-a1/rdqmstatus-qm.txt
+< CPU:                                    0.57%
+< Memory:                                 156MB
+< Queue manager file system:              250MB used, 2.9GB allocated [8%]
+> CPU:                                    0.41%
+> Memory:                                 152MB
+> Queue manager file system:              240MB used, 2.9GB allocated [8%]
+=== rdqm-a2/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 dGJ0W2-6lVM-0fR9-ICyy-CDKg-bKcS-X3sdw5                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      8e1d07710cf09585                                      
+> vdb                                   LVM2_member LVM2 001                                 6Qj4Um-cnjt-1iSH-0GO3-eRd1-yjNT-EnMBFl                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      badd8c73fa93303d                                      
+=== rdqm-a2/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.374Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.337Z"
+=== rdqm-a2/pcmk-status.txt
+<   * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-a2
+<   * Last change:  Fri Oct 16 21:13:32 2026 by mqm via mqm on rdqm-a1
+>   * Current DC: rdqm-a3 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+>   * Last updated: Mon Oct 19 18:40:00 2026 on rdqm-a2
+>   * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+=== rdqm-a2/quorum.txt
+< Date:             Fri Oct 16 21:46:16 2026
+> Date:             Mon Oct 19 18:40:05 2026
+=== rdqm-a3/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 RqNdua-iaeW-WrCi-QFEe-IB6L-AiLQ-Iy6VC0                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      d515c40285b27538                                      
+> vdb                                   LVM2_member LVM2 001                                 Om9fMU-gANN-770O-3b5I-vomj-jw5T-KY4Cnl                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      7bb9044342316078                                      
+=== rdqm-a3/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.374Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.337Z"
+=== rdqm-a3/pcmk-status.txt
+<   * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-a3
+<   * Last change:  Fri Oct 16 21:13:32 2026 by mqm via mqm on rdqm-a1
+>   * Current DC: rdqm-a3 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+>   * Last updated: Mon Oct 19 18:40:00 2026 on rdqm-a3
+>   * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+=== rdqm-a3/quorum.txt
+< Date:             Fri Oct 16 21:46:16 2026
+> Date:             Mon Oct 19 18:40:04 2026
+=== rdqm-b1/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 kQCocR-G2D2-SNrJ-fpfr-6Y9w-Egu3-wIKW2n                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      74649ac050836c22                                      
+> vdb                                   LVM2_member LVM2 001                                 igJGOI-1ON4-94mR-Y3kL-16cn-aWup-ZTotJS                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      f18dcf6310da2b02                                      
+=== rdqm-b1/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.525Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.718Z"
+=== rdqm-b1/pcmk-status.txt
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-b1
+<   * Last change:  Fri Oct 16 21:12:56 2026 by root via root on rdqm-b1
+>   * Last updated: Mon Oct 19 18:40:00 2026 on rdqm-b1
+>   * Last change:  Mon Oct 19 18:31:29 2026 by root via root on rdqm-b1
+<     * rdqm-transient-attribute        	: 1         
+=== rdqm-b1/quorum.txt
+< Date:             Fri Oct 16 21:46:16 2026
+> Date:             Mon Oct 19 18:40:05 2026
+=== rdqm-b2/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 Cw0cJD-cHE3-Akxv-jSGn-JzqL-6KYH-vgn6Jo                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      6638aa132294a264                                      
+> vdb                                   LVM2_member LVM2 001                                 4LwEhc-wOUB-KhDf-FfiI-WpZG-zxlG-zzXaDD                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      f020f4703d2a02c8                                      
+=== rdqm-b2/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.525Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.718Z"
+=== rdqm-b2/pcmk-status.txt
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-b2
+<   * Last change:  Fri Oct 16 21:12:56 2026 by root via root on rdqm-b1
+>   * Last updated: Mon Oct 19 18:40:00 2026 on rdqm-b2
+>   * Last change:  Mon Oct 19 18:31:29 2026 by root via root on rdqm-b1
+<     * rdqm-transient-attribute        	: 1         
+=== rdqm-b2/quorum.txt
+< Date:             Fri Oct 16 21:46:16 2026
+> Date:             Mon Oct 19 18:40:05 2026
+=== rdqm-b3/lsblk.txt
+< vdb                                   LVM2_member LVM2 001                                 pch29A-e5Gt-fDOV-uDtH-VLY7-McEz-zriGSZ                
+< ├─drbdpool-rdqmapp_00                 drbd        v09                                      dd45304a85fd9bcf                                      
+> vdb                                   LVM2_member LVM2 001                                 iHCtBR-z7a0-eoot-ICqa-yD8X-wJ1F-Li1iCZ                
+> ├─drbdpool-rdqmapp_00                 drbd        v09                                      f80929c414c6da66                                      
+=== rdqm-b3/pcmk-config.txt
+< 	rdqmapp-dr-before-resync-time="2026-10-16T21:12:09.525Z"
+> 	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.718Z"
+=== rdqm-b3/pcmk-status.txt
+<   * Last updated: Fri Oct 16 21:46:12 2026 on rdqm-b3
+<   * Last change:  Fri Oct 16 21:12:56 2026 by root via root on rdqm-b1
+>   * Last updated: Mon Oct 19 18:40:01 2026 on rdqm-b3
+>   * Last change:  Mon Oct 19 18:31:29 2026 by root via root on rdqm-b1
+<     * rdqm-transient-attribute        	: 1         
+=== rdqm-b3/quorum.txt
+< Date:             Fri Oct 16 21:46:17 2026
+> Date:             Mon Oct 19 18:40:05 2026

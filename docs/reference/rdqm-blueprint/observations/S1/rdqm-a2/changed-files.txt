@@ -1,0 +1,10 @@
+2026-10-19T18:53:32.7413309510 28595 /var/mqm/errors/RDQM.0.LOG
+2026-10-19T18:53:32.7469406710 76 /var/mqm/rdqm/rdqmapp-0-rdqmstatus.ini
+2026-10-19T18:57:48.5515335130 811988 /var/log/pacemaker/pacemaker.log
+2026-10-19T18:58:17.5085218630 177163 /var/mqm/web/installations/Installation1/servers/mqweb/logs/verbosegc.002.log
+2026-10-19T19:00:12.4156621930 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T19:00:39.4035281190 2219896 /var/log/messages
+2026-10-19T19:00:39.4045282250 445713 /var/log/secure
+2026-10-19T19:00:39.5395425630 8388608 /var/log/journal/d85394d4ab19433b9cbaa70f335123be/system.journal
+2026-10-19T19:00:39.6485541390 6605996 /var/log/audit/audit.log
+2026-10-19T19:00:39.6485541390 8388608 /var/log/journal/d85394d4ab19433b9cbaa70f335123be/user-1000.journal

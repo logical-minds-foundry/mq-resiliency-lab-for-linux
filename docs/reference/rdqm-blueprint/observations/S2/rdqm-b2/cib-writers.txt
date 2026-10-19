@@ -1,0 +1,58 @@
+Oct 19 19:16:42.379 cib_modify resources by rdqm-b1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Promoted
+Oct 19 19:30:02.009 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:30:02.061 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:30:02.023Z
+Oct 19 19:30:03.140 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:31:39.371 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:31:39.354Z
+Oct 19 19:31:40.830 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:31:40.875 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:31:40.844Z
+Oct 19 19:31:41.302 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:33:30.286 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:33:30.268Z
+Oct 19 19:33:31.728 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:33:31.776 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:33:31.734Z
+Oct 19 19:33:32.213 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:35:21.259 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:35:21.243Z
+Oct 19 19:35:22.653 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:35:22.703 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:35:22.667Z
+Oct 19 19:35:23.233 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:37:12.240 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:37:12.225Z
+Oct 19 19:37:13.604 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:37:13.653 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:37:13.619Z
+Oct 19 19:37:14.191 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:39:03.242 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:39:03.227Z
+Oct 19 19:39:04.652 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:39:04.689 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:39:04.664Z
+Oct 19 19:39:05.108 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']
+Oct 19 19:40:54.230 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:40:54.217Z
+Oct 19 19:41:16.167 cib_modify resources by rdqm-b1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Unpromoted
+Oct 19 19:42:46.604 cib_modify crm_config by rdqm-b1/crm_attribute
+    ++ /cib/configuration/crm_config/cluster_property_set[@id='rdqm']:  <nvpair id="rdqm-rdqmapp-dr-snapshot-node" name="rdqmapp-dr-snapshot-node" value="1"/>
+Oct 19 19:42:46.649 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:42:46.609Z
+Oct 19 19:42:47.074 cib_delete crm_config by rdqm-b1/crm_attribute
+    -- /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-snapshot-node']

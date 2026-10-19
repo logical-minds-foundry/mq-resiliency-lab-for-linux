@@ -1,0 +1,34 @@
+# journal-boot-1.txt: exported for #1666; 33 lines kept; dropped lines by category: kit ssh/sudo/session: 225, lab observability agents and timers: 388, lab monitor authority warnings (AMQ8245W/AMQ8009W): 700. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:01:01.106758+00:00 rdqm-a1 CROND[9945]: (root) CMD (run-parts /etc/cron.hourly)
+2026-10-19T19:01:01.120334+00:00 rdqm-a1 run-parts[9948]: (/etc/cron.hourly) starting 0anacron
+2026-10-19T19:01:01.133295+00:00 rdqm-a1 anacron[9956]: Anacron started on 2026-10-19
+2026-10-19T19:01:01.137243+00:00 rdqm-a1 anacron[9956]: Will run job `cron.daily' in 38 min.
+2026-10-19T19:01:01.137262+00:00 rdqm-a1 anacron[9956]: Will run job `cron.weekly' in 58 min.
+2026-10-19T19:01:01.137264+00:00 rdqm-a1 anacron[9956]: Will run job `cron.monthly' in 78 min.
+2026-10-19T19:01:01.137267+00:00 rdqm-a1 anacron[9956]: Jobs will be executed sequentially
+2026-10-19T19:01:01.141028+00:00 rdqm-a1 run-parts[9958]: (/etc/cron.hourly) finished 0anacron
+2026-10-19T19:01:01.142153+00:00 rdqm-a1 CROND[9944]: (root) CMDEND (run-parts /etc/cron.hourly)
+2026-10-19T19:01:10.990159+00:00 rdqm-a1 rsyslogd[923]: imjournal from <rdqm-a1:ibm-mq>: begin to drop messages due to rate-limiting
+2026-10-19T19:01:12.494907+00:00 rdqm-a1 rdqm[10511]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:01:12.494946+00:00 rdqm-a1 rdqm[10511]: rdqm: Calling real main function
+2026-10-19T19:01:14.661788+00:00 rdqm-a1 python3[10732]: ansible-ansible.legacy.command Invoked with _raw_params=drbdadm disconnect rdqmapp.dr && drbdadm status rdqmapp.dr _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T19:01:14.676862+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 3436377928: 0->1 conn( Disconnecting ) pdsk( Outdated )
+2026-10-19T19:01:14.686168+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: State change 3436377928: primary_nodes=1, weak_nodes=FFFFFFFFFFFFFFFE
+2026-10-19T19:01:14.686288+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Cluster is now split
+2026-10-19T19:01:14.686306+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 3436377928 (13ms)
+2026-10-19T19:01:14.696009+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> Disconnecting ) peer( Secondary -> Unknown ) [disconnect]
+2026-10-19T19:01:14.696723+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> Outdated ) repl( Established -> Off ) [disconnect]
+2026-10-19T19:01:14.699339+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T19:01:14.701894+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 1)
+2026-10-19T19:01:14.714400+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T19:01:14.714510+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T19:01:14.728153+00:00 rdqm-a1 disconnected[10786]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T19:01:14.728163+00:00 rdqm-a1 disconnected[10786]: rdqmhandler(rdqmapp.dr) Disconnecting
+2026-10-19T19:01:14.780590+00:00 rdqm-a1 disconnected[10786]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T19:01:14.789798+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T19:01:14.789924+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Disconnecting -> StandAlone ) [disconnected]
+2026-10-19T19:01:14.789943+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating receiver thread
+2026-10-19T19:01:15.394178+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001: new current UUID: 2FFDDFCED54932E1 weak: FFFFFFFFFFFFFFFE
+2026-10-19T19:01:30.927537+00:00 rdqm-a1 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:01:42.490436+00:00 rdqm-a1 rdqm[11474]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:01:42.490480+00:00 rdqm-a1 rdqm[11474]: rdqm: Calling real main function

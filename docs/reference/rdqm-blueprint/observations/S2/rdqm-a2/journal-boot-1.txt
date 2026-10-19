@@ -1,0 +1,4 @@
+# journal-boot-1.txt: exported for #1666; 3 lines kept; dropped lines by category: kit ssh/sudo/session: 512, lab observability agents and timers: 27. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:16:01.051698+00:00 rdqm-a2 anacron[20988]: Job `cron.daily' started
+2026-10-19T19:16:01.059915+00:00 rdqm-a2 anacron[20988]: Job `cron.daily' terminated
+2026-10-19T19:16:02.409345+00:00 rdqm-a2 systemd[1]: systemd-timedated.service: Deactivated successfully.

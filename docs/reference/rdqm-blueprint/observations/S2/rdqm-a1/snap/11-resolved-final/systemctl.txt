@@ -1,0 +1,67 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 19:29:53 UTC; 13min ago
+ Invocation: 39f53420215a498380f136572dac2433
+    Process: 1115 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1115 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.6M
+        CPU: 6.238s
+
+Oct 19 19:29:29 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 19:29:53 rdqm-a1 rdqmd[1115]: Replicated data systemd initialization complete.
+Oct 19 19:29:53 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:29:29 UTC; 13min ago
+ Invocation: 4f90971aa76541be89fef32004f068ca
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1114 (pacemakerd)
+      Tasks: 7
+     Memory: 87.9M (peak: 199.8M)
+        CPU: 38.705s
+     CGroup: /system.slice/pacemaker.service
+             ├─1114 /usr/sbin/pacemakerd
+             ├─1166 /usr/libexec/pacemaker/pacemaker-based
+             ├─1167 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1169 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1173 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1174 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1178 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 19:40:57 rdqm-a1 ibm-mq[4614]: {"ibm_messageId":"AMQ5041I","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"LOGGER-IO","ibm_datetime":"2026-10-19T19:40:57.079Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"INFO","module":"amqzmut0.c:4182","ibm_sequence":"1792438857_79909737","ibm_processId":"4614","ibm_threadId":"1","ibm_version":"10.0.1.0","ibm_processName":"amqzmuc0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ5041I: The queue manager task 'LOGGER-IO' has ended."}
+Oct 19 19:40:57 rdqm-a1 ibm-mq[4523]: {"ibm_messageId":"AMQ8004I","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert3":"RDQMAPP","ibm_datetime":"2026-10-19T19:40:57.084Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"INFO","module":"amqzxma0.c:2961","ibm_sequence":"1792438857_84460943","ibm_processId":"4523","ibm_threadId":"1","ibm_version":"10.0.1.0","ibm_processName":"amqzxma0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8004I: IBM MQ queue manager 'RDQMAPP' ended."}
+Oct 19 19:41:41 rdqm-a1 pacemaker-controld[1178]:  notice: Requesting local execution of monitor operation for rdqmapp on rdqm-a1
+Oct 19 19:41:41 rdqm-a1 rdqm[23630]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 19:41:41 rdqm-a1 rdqm[23630]: rdqm: Calling real main function
+Oct 19 19:41:41 rdqm-a1 pacemaker-controld[1178]:  notice: Result of monitor operation for rdqmapp on rdqm-a1: OK
+Oct 19 19:42:11 rdqm-a1 rdqm[24634]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 19:42:11 rdqm-a1 rdqm[24634]: rdqm: Calling real main function
+Oct 19 19:42:41 rdqm-a1 rdqm[25376]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 19:42:41 rdqm-a1 rdqm[25376]: rdqm: Calling real main function
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:29:29 UTC; 13min ago
+ Invocation: 2ff3a42d72304ad8a895a9404671bd29
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 931 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 157.1M (peak: 169.9M)
+        CPU: 5.660s
+     CGroup: /system.slice/corosync.service
+             └─931 /usr/sbin/corosync -f
+
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [KNET  ] link: Resetting MTU for link 0 because host 3 joined
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [QUORUM] Sync joined[1]: 3
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [TOTEM ] A new membership (1.4a) was formed. Members joined: 3
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 19:29:31 rdqm-a1 corosync[931]:   [KNET  ] pmtud: Global data MTU changed to: 1446

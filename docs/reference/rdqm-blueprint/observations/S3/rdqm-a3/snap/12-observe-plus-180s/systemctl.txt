@@ -1,0 +1,68 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 19:47:18 UTC; 7min ago
+ Invocation: 87b9c14fc4f44901803519851c5dc150
+    Process: 1212 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1212 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.4M
+        CPU: 6.414s
+
+Oct 19 19:46:54 rdqm-a3 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 19:47:18 rdqm-a3 rdqmd[1212]: transient attribute added rc(0)
+Oct 19 19:47:18 rdqm-a3 rdqmd[1212]: Replicated data systemd initialization complete.
+Oct 19 19:47:18 rdqm-a3 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:54 UTC; 8min ago
+ Invocation: 364f679de6ca4a08b4606d5dfddb7437
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1211 (pacemakerd)
+      Tasks: 7
+     Memory: 33.9M (peak: 42M)
+        CPU: 6.524s
+     CGroup: /system.slice/pacemaker.service
+             ├─1211 /usr/sbin/pacemakerd
+             ├─1289 /usr/libexec/pacemaker/pacemaker-based
+             ├─1290 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1292 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1293 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1305 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1306 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 19:47:21 rdqm-a3 pacemaker-schedulerd[1305]:  notice: Actions: Start      rdqmapp                 (                        rdqm-a1 )
+Oct 19 19:47:21 rdqm-a3 pacemaker-schedulerd[1305]:  notice: Actions: Start      p_ip_rdqmapp            (                        rdqm-a1 )
+Oct 19 19:47:21 rdqm-a3 pacemaker-schedulerd[1305]:  notice: Calculated transition 8, saving inputs in /var/lib/pacemaker/pengine/pe-input-67.bz2
+Oct 19 19:47:21 rdqm-a3 pacemaker-controld[1306]:  notice: Asking rdqm-a1 to execute p_rdqmx_rdqmapp_start_0 on rdqm-a1
+Oct 19 19:47:21 rdqm-a3 pacemaker-controld[1306]:  notice: Asking rdqm-a1 to execute p_ip_rdqmapp_start_0 on rdqm-a1
+Oct 19 19:47:21 rdqm-a3 pacemaker-controld[1306]:  notice: Asking rdqm-a1 to execute rdqmapp_start_0 on rdqm-a1
+Oct 19 19:47:21 rdqm-a3 pacemaker-controld[1306]:  notice: Asking rdqm-a1 to execute p_ip_rdqmapp_monitor_30000 on rdqm-a1
+Oct 19 19:47:22 rdqm-a3 pacemaker-controld[1306]:  notice: Asking rdqm-a1 to execute rdqmapp_monitor_30000 on rdqm-a1
+Oct 19 19:47:22 rdqm-a3 pacemaker-controld[1306]:  notice: Transition 8 (Complete=5, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-67.bz2): Complete
+Oct 19 19:47:22 rdqm-a3 pacemaker-controld[1306]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:54 UTC; 8min ago
+ Invocation: 19167e8550b443a99f4252ec09ef86da
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 1090 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 158.1M (peak: 165.7M)
+        CPU: 3.418s
+     CGroup: /system.slice/corosync.service
+             └─1090 /usr/sbin/corosync -f
+
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [KNET  ] link: Resetting MTU for link 0 because host 2 joined
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [KNET  ] host: host: 2 (passive) best link: 0 (pri: 1)
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [QUORUM] Sync joined[1]: 2
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [TOTEM ] A new membership (1.57) was formed. Members joined: 2
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a3 corosync[1090]:   [MAIN  ] Completed service synchronization, ready to provide service.

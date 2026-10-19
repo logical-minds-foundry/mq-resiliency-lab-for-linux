@@ -1,0 +1,40 @@
+# journal.txt: exported for #1666; 39 lines kept; dropped lines by category: kit ssh/sudo/session: 1510, lab observability agents and timers: 256. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T18:42:37.653583+00:00 rdqm-b2 systemd[1]: Created slice user-1000.slice - User Slice of UID 1000.
+2026-10-19T18:42:37.816767+00:00 rdqm-b2 systemd[42725]: Queued start job for default target default.target.
+2026-10-19T18:42:37.828829+00:00 rdqm-b2 systemd[42725]: Created slice app.slice - User Application Slice.
+2026-10-19T18:42:37.829284+00:00 rdqm-b2 systemd[42725]: Started grub-boot-success.timer - Mark boot as successful after the user session has run 2 minutes.
+2026-10-19T18:42:37.829334+00:00 rdqm-b2 systemd[42725]: Started systemd-tmpfiles-clean.timer - Daily Cleanup of User's Temporary Directories.
+2026-10-19T18:42:37.829353+00:00 rdqm-b2 systemd[42725]: Reached target paths.target - Paths.
+2026-10-19T18:42:37.829445+00:00 rdqm-b2 systemd[42725]: Reached target timers.target - Timers.
+2026-10-19T18:42:37.833773+00:00 rdqm-b2 systemd[42725]: Starting dbus.socket - D-Bus User Message Bus Socket...
+2026-10-19T18:42:37.836969+00:00 rdqm-b2 systemd[42725]: Starting systemd-tmpfiles-setup.service - Create User Files and Directories...
+2026-10-19T18:42:37.847889+00:00 rdqm-b2 systemd[42725]: Listening on dbus.socket - D-Bus User Message Bus Socket.
+2026-10-19T18:42:37.847971+00:00 rdqm-b2 systemd[42725]: Reached target sockets.target - Sockets.
+2026-10-19T18:42:37.864250+00:00 rdqm-b2 systemd[42725]: Finished systemd-tmpfiles-setup.service - Create User Files and Directories.
+2026-10-19T18:42:37.864433+00:00 rdqm-b2 systemd[42725]: Reached target basic.target - Basic System.
+2026-10-19T18:42:37.864492+00:00 rdqm-b2 systemd[42725]: Reached target default.target - Main User Target.
+2026-10-19T18:42:37.864558+00:00 rdqm-b2 systemd[42725]: Startup finished in 155ms.
+2026-10-19T18:42:38.019447+00:00 rdqm-b2 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T18:42:38.070064+00:00 rdqm-b2 systemd[1]: Started systemd-timedated.service - Time & Date Service.
+2026-10-19T18:43:05.798598+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T18:43:08.088908+00:00 rdqm-b2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T18:44:40.500390+00:00 rdqm-b2 systemd[42725]: Starting grub-boot-success.service - Mark boot as successful...
+2026-10-19T18:44:40.515315+00:00 rdqm-b2 systemd[42725]: Finished grub-boot-success.service - Mark boot as successful.
+2026-10-19T18:44:45.880816+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10
+2026-10-19T18:45:05.806451+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10 -> 10000
+2026-10-19T18:47:25.211018+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T18:47:40.499071+00:00 rdqm-b2 systemd[42725]: Created slice background.slice - User Background Tasks Slice.
+2026-10-19T18:47:40.500888+00:00 rdqm-b2 systemd[42725]: Starting systemd-tmpfiles-clean.service - Cleanup of User's Temporary Files and Directories...
+2026-10-19T18:47:40.523333+00:00 rdqm-b2 systemd[42725]: Finished systemd-tmpfiles-clean.service - Cleanup of User's Temporary Files and Directories.
+2026-10-19T18:48:24.502122+00:00 rdqm-b2 systemd[1]: Starting dnf-makecache.service - dnf makecache...
+2026-10-19T18:48:25.029964+00:00 rdqm-b2 dnf[49246]: Updating Subscription Management repositories.
+2026-10-19T18:48:25.031104+00:00 rdqm-b2 dnf[49246]: Unable to read consumer identity
+2026-10-19T18:48:25.035254+00:00 rdqm-b2 dnf[49246]: This system is not registered with an entitlement server. You can use "rhc" or "subscription-manager" to register.
+2026-10-19T18:48:25.046003+00:00 rdqm-b2 dnf[49246]: Failed determining last makecache time.
+2026-10-19T18:48:25.107236+00:00 rdqm-b2 dnf[49246]: RHEL 10.2 DVD BaseOS                             75 kB/s | 2.7 kB     00:00
+2026-10-19T18:48:25.180085+00:00 rdqm-b2 dnf[49246]: RHEL 10.2 DVD AppStream                          57 kB/s | 2.8 kB     00:00
+2026-10-19T18:48:25.210529+00:00 rdqm-b2 dnf[49246]: Metadata cache created.
+2026-10-19T18:48:25.354217+00:00 rdqm-b2 systemd[1]: dnf-makecache.service: Deactivated successfully.
+2026-10-19T18:48:25.354776+00:00 rdqm-b2 systemd[1]: Finished dnf-makecache.service - dnf makecache.
+2026-10-19T18:49:33.898482+00:00 rdqm-b2 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T18:49:33.965179+00:00 rdqm-b2 systemd[1]: Started systemd-timedated.service - Time & Date Service.

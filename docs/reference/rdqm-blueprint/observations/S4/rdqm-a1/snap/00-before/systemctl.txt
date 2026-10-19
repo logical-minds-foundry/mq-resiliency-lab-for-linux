@@ -1,0 +1,66 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 18:12:23 UTC; 30min ago
+ Invocation: 1a3aaa52fe744c11bdf86e0625d6d587
+   Main PID: 7956 (code=exited, status=0/SUCCESS)
+   Mem peak: 12.4M
+        CPU: 25ms
+
+Oct 19 18:12:22 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 18:12:23 rdqm-a1 rdqmd[7956]: Replicated data systemd initialization complete.
+Oct 19 18:12:23 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:25:14 UTC; 17min ago
+ Invocation: 0f939eb53dfb4bda9fde8cde2f79a48e
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 24418 (pacemakerd)
+      Tasks: 7
+     Memory: 41.7M (peak: 136.9M)
+        CPU: 19.053s
+     CGroup: /system.slice/pacemaker.service
+             ├─24418 /usr/sbin/pacemakerd
+             ├─24419 /usr/libexec/pacemaker/pacemaker-based
+             ├─24420 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─24421 /usr/libexec/pacemaker/pacemaker-execd
+             ├─24422 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─24423 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─24424 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 18:40:39 rdqm-a1 rdqm[57236]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:40:39 rdqm-a1 rdqm[57236]: rdqm: Calling real main function
+Oct 19 18:41:09 rdqm-a1 rdqm[57985]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:41:09 rdqm-a1 rdqm[57985]: rdqm: Calling real main function
+Oct 19 18:41:39 rdqm-a1 rdqm[58430]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:41:39 rdqm-a1 rdqm[58430]: rdqm: Calling real main function
+Oct 19 18:42:09 rdqm-a1 rdqm[58925]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:42:09 rdqm-a1 rdqm[58925]: rdqm: Calling real main function
+Oct 19 18:42:39 rdqm-a1 rdqm[59479]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:42:39 rdqm-a1 rdqm[59479]: rdqm: Calling real main function
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:25:14 UTC; 17min ago
+ Invocation: 50178b7963dd4f9eb3bfc103257d9ac6
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 24407 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 156.5M (peak: 171.9M)
+        CPU: 6.408s
+     CGroup: /system.slice/corosync.service
+             └─24407 /usr/sbin/corosync -f
+
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [QUORUM] Sync joined[2]: 2 3
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [TOTEM ] A new membership (1.1a) was formed. Members joined: 2 3
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [QUORUM] This node is within the primary component and will provide service.
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 18:25:15 rdqm-a1 corosync[24407]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 18:25:16 rdqm-a1 corosync[24407]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 18:25:16 rdqm-a1 corosync[24407]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 18:25:16 rdqm-a1 corosync[24407]:   [KNET  ] pmtud: Global data MTU changed to: 1446

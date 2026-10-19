@@ -1,0 +1,34 @@
+292:Oct 19 18:24:49.823 rdqm-a1 pacemaker-attrd     [23322] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1 | from rdqm-a1 with no write delay and node XML ID 1
+293:Oct 19 18:24:49.823 rdqm-a1 pacemaker-attrd     [23322] (write_attribute) 	info: Sent CIB request 8 with 1 change for rdqm-transient-attribute (set unspecified)
+298:Oct 19 18:24:49.826 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']/transient_attributes[@id='1']/instance_attributes[@id='status-1']:  <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+303:Oct 19 18:24:49.826 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='1']/transient_attributes[@id='1']/instance_attributes[@id='status-1']:  <nvpair id="status-1-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+304:Oct 19 18:24:49.827 rdqm-a1 pacemaker-controld  [23324] (abort_transition_graph) 	info: Transition 1 aborted by status-1-rdqm-transient-attribute doing create rdqm-transient-attribute=1: Transient attribute change | cib=0.4.8 source=abort_unless_down:126 path=/cib/status/node_state[@id='1']/transient_attributes[@id='1']/instance_attributes[@id='status-1'] complete=true
+307:Oct 19 18:24:49.827 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: CIB update 8 result for rdqm-transient-attribute: OK | rc=0
+308:Oct 19 18:24:49.827 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a1]=1
+637:Oct 19 18:24:56.599 rdqm-a1 pacemaker-attrd     [23322] (write_attribute) 	info: Sent CIB request 11 with 1 change for rdqm-transient-attribute (set unspecified)
+643:Oct 19 18:24:56.603 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: CIB update 11 result for rdqm-transient-attribute: OK | rc=0
+644:Oct 19 18:24:56.603 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a1]=1
+739:Oct 19 18:24:58.087 rdqm-a1 pacemaker-attrd     [23322] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a2] in instance_attributes: (unset) -> 1 | from rdqm-a2 with no write delay and node XML ID 2
+740:Oct 19 18:24:58.088 rdqm-a1 pacemaker-attrd     [23322] (write_attribute) 	info: Sent CIB request 19 with 2 changes for rdqm-transient-attribute (set unspecified)
+745:Oct 19 18:24:58.089 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='2']/transient_attributes[@id='2']/instance_attributes[@id='status-2']:  <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+751:Oct 19 18:24:58.090 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: ++ /cib/status/node_state[@id='2']/transient_attributes[@id='2']/instance_attributes[@id='status-2']:  <nvpair id="status-2-rdqm-transient-attribute" name="rdqm-transient-attribute" value="1"/>
+753:Oct 19 18:24:58.091 rdqm-a1 pacemaker-controld  [23324] (abort_transition_graph) 	info: Transition 12 aborted by status-2-rdqm-transient-attribute doing create rdqm-transient-attribute=1: Transient attribute change | cib=0.13.10 source=abort_unless_down:126 path=/cib/status/node_state[@id='2']/transient_attributes[@id='2']/instance_attributes[@id='status-2'] complete=true
+754:Oct 19 18:24:58.091 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: CIB update 19 result for rdqm-transient-attribute: OK | rc=0
+755:Oct 19 18:24:58.091 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a2]=1
+756:Oct 19 18:24:58.091 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: * Wrote rdqm-transient-attribute[rdqm-a1]=1
+1030:Oct 19 18:25:03.977 rdqm-a1 pacemaker-attrd     [23322] (write_attribute) 	info: Sent CIB request 22 with 2 changes for rdqm-transient-attribute (set unspecified)
+1052:Oct 19 18:25:03.981 rdqm-a1 pacemaker-attrd     [23322] (attrd_cib_callback) 	info: CIB update 22 result for rdqm-transient-attribute: OK | rc=0
+-- context of first write
+Oct 19 18:24:49.719 rdqm-a1 pacemaker-schedulerd[23323] (schedule_fencing_and_shutdowns) 	notice: Unclean nodes will not be fenced until quorum is attained or no-quorum-policy is set to ignore
+Oct 19 18:24:49.719 rdqm-a1 pacemaker-schedulerd[23323] (pcmk__log_transition_summary) 	error: Calculated transition 1 (with errors), saving inputs in /var/lib/pacemaker/pengine/pe-error-0.bz2
+Oct 19 18:24:49.719 rdqm-a1 pacemaker-schedulerd[23323] (pcmk__log_transition_summary) 	notice: Configuration errors found during scheduler processing,  please run "crm_verify -L" to identify issues
+Oct 19 18:24:49.724 rdqm-a1 pacemaker-controld  [23324] (do_state_transition) 	info: State transition S_POLICY_ENGINE -> S_TRANSITION_ENGINE | input=I_PE_SUCCESS cause=C_IPC_MESSAGE origin=handle_reply
+Oct 19 18:24:49.724 rdqm-a1 pacemaker-controld  [23324] (do_te_invoke) 	info: Processing graph 1 (ref=pe_calc-23324_pacemaker-controld-1792434289-8) derived from /var/lib/pacemaker/pengine/pe-error-0.bz2
+Oct 19 18:24:49.724 rdqm-a1 pacemaker-controld  [23324] (pcmk__execute_graph) 	notice: Transition 1 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-error-0.bz2): Complete
+Oct 19 18:24:49.724 rdqm-a1 pacemaker-controld  [23324] (do_log) 	info: Input I_TE_SUCCESS received in state S_TRANSITION_ENGINE from notify_crmd
+Oct 19 18:24:49.724 rdqm-a1 pacemaker-controld  [23324] (do_state_transition) 	notice: State transition S_TRANSITION_ENGINE -> S_IDLE | input=I_TE_SUCCESS cause=C_FSA_INTERNAL origin=notify_crmd
+Oct 19 18:24:49.823 rdqm-a1 pacemaker-attrd     [23322] (update_attr_on_host) 	notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1 | from rdqm-a1 with no write delay and node XML ID 1
+Oct 19 18:24:49.823 rdqm-a1 pacemaker-attrd     [23322] (write_attribute) 	info: Sent CIB request 8 with 1 change for rdqm-transient-attribute (set unspecified)
+Oct 19 18:24:49.824 rdqm-a1 pacemaker-based     [23319] (forward_request) 	info: Forwarding cib_commit_transact operation for section all to all (origin=rdqm-a1/pacemaker-attrd/8)
+Oct 19 18:24:49.826 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: Diff: --- 0.4.6 2
+Oct 19 18:24:49.826 rdqm-a1 pacemaker-based     [23319] (cib_perform_op) 	info: Diff: +++ 0.4.7 (null)

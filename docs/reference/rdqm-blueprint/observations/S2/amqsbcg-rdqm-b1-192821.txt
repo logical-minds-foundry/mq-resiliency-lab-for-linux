@@ -1,0 +1,5 @@
+
+AMQSBCG0 - starts here
+**********************
+ 
+ MQCONNX failed with CompCode:2, Reason:2059

@@ -1,0 +1,85 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 18:57:20 UTC; 4min 27s ago
+ Invocation: d92300bf27b24853a0f04a99d8713712
+    Process: 1041 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1041 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.5M
+        CPU: 936ms
+
+Oct 19 18:57:13 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 18:57:20 rdqm-a1 rdqmd[1041]: Replicated data systemd initialization complete.
+Oct 19 18:57:20 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:57:13 UTC; 4min 33s ago
+ Invocation: 3f31e5797f07485085029501c1f12766
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1030 (pacemakerd)
+      Tasks: 144
+     Memory: 185.9M (peak: 191.7M)
+        CPU: 22.482s
+     CGroup: /system.slice/pacemaker.service
+             ├─1030 /usr/sbin/pacemakerd
+             ├─1104 /usr/libexec/pacemaker/pacemaker-based
+             ├─1105 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1109 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1110 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1114 /usr/libexec/pacemaker/pacemaker-schedulerd
+             ├─1118 /usr/libexec/pacemaker/pacemaker-controld
+             ├─4156 /opt/mqm/bin/amqzxma0 -m RDQMAPP -u mqm
+             ├─4184 /opt/mqm/bin/amqzfuma -m RDQMAPP
+             ├─4189 /opt/mqm/bin/amqzmgr0 -m RDQMAPP
+             ├─4194 /opt/mqm/bin/amqzmuc0 -m RDQMAPP
+             ├─4277 /opt/mqm/bin/amqzmur0 -m RDQMAPP
+             ├─4293 /opt/mqm/bin/amqzmuf0 -m RDQMAPP
+             ├─4303 /opt/mqm/bin/amqrrmfa -m RDQMAPP -t2332800 -s2592000 -p2592000 -g5184000 -c3600
+             ├─4309 /opt/mqm/bin/amqpcsea RDQMAPP
+             ├─4310 /opt/mqm/bin/runmqchi -m RDQMAPP -q SYSTEM.CHANNEL.INITQ -r
+             ├─4327 /opt/mqm/bin/amqfqpub -mRDQMAPP
+             ├─4331 /opt/mqm/bin/amqzlaa0 -mRDQMAPP -fip0
+             ├─4359 /opt/mqm/bin/amqfcxba -m RDQMAPP
+             ├─4363 /opt/mqm/bin/runmqlsr -r -m RDQMAPP -t TCP -p 1414
+             ├─4365 /bin/bash /opt/mq-event-monitor/run.sh RDQMAPP
+             ├─4391 /opt/mqm/samp/bin/amqsevt -m RDQMAPP -o json_compact
+             ├─4392 logger --size 32768 -t mq-events
+             ├─4429 /opt/mqm/bin/amqrmppa -m RDQMAPP
+             └─4761 /opt/mqm/bin/runmqchl -c "RDQMAPP.SVCQM       " -m "RDQMAPP                                         "
+
+Oct 19 19:01:30 rdqm-a1 ibm-mq[4277]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.DEF.REQUESTER [channel]","ibm_datetime":"2026-10-19T19:01:30.387Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792436490_388293851","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"4331","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.DEF.REQUESTER [channel]."}
+Oct 19 19:01:30 rdqm-a1 mq-events[4392]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:01:30Z",     "epoch"      : 1792436490   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:01:30 rdqm-a1 mq-events[4392]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:01:30Z",     "epoch"      : 1792436490   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:01:30 rdqm-a1 mq-events[4392]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:01:30Z",     "epoch"      : 1792436490   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:01:30 rdqm-a1 ibm-mq[4277]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.DEF.SENDER [channel]","ibm_datetime":"2026-10-19T19:01:30.388Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792436490_389227926","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"4331","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.DEF.SENDER [channel]."}
+Oct 19 19:01:30 rdqm-a1 mq-events[4392]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:01:30Z",     "epoch"      : 1792436490   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:01:30 rdqm-a1 ibm-mq[4277]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.DEF.SERVER [channel]","ibm_datetime":"2026-10-19T19:01:30.388Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792436490_389659854","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"4331","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.DEF.SERVER [channel]."}
+Oct 19 19:01:30 rdqm-a1 ibm-mq[4277]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.DEF.SVRCONN [channel]","ibm_datetime":"2026-10-19T19:01:30.388Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792436490_389958364","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"4331","ibm_threadId":"8","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.DEF.SVRCONN [channel]."}
+Oct 19 19:01:42 rdqm-a1 rdqm[11474]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 19:01:42 rdqm-a1 rdqm[11474]: rdqm: Calling real main function
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:57:13 UTC; 4min 33s ago
+ Invocation: f240761a9d054f89a482a009d42e7b86
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 906 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 161.2M (peak: 170.9M)
+        CPU: 3.554s
+     CGroup: /system.slice/corosync.service
+             └─906 /usr/sbin/corosync -f
+
+Oct 19 18:57:14 rdqm-a1 corosync[906]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [QUORUM] Sync joined[2]: 2 3
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [TOTEM ] A new membership (1.30) was formed. Members joined: 2 3
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [QUORUM] This node is within the primary component and will provide service.
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 18:57:15 rdqm-a1 corosync[906]:   [MAIN  ] Completed service synchronization, ready to provide service.
