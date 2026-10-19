@@ -64,3 +64,28 @@ def test_pcmk_ubuntu_cluster_nodes_boot_the_baked_fat_box():
     # infra OS (#1278, spec §4.7.1), not the pcmk box.
     for h in ("san-a", "san-b"):
         assert nodes[h]["box"] == "san"
+
+
+def test_pcmk_ubuntu_qm_up_down_wait_for_pacemaker():
+    # #1640: --wait makes the verb block until mq_group is Started/Stopped and exit 1 if
+    # it is not; 240 s covers the group's serial op timeouts (agent metadata defaults:
+    # mq_qm 100 + mq_fs 60 + mq_vip 20 + mq_vip_ext 20).
+    v = lab_stacks()["pcmk-ubuntu"].verbs
+    assert v["qm-up"] == {"pcs": "resource enable --wait=240 mq_group"}
+    assert v["qm-down"] == {"pcs": "resource disable --wait=240 mq_group"}
+
+
+def test_every_state_changing_pcs_verb_waits():
+    # #1640: a pcs verb that changes cluster state without --wait returns before
+    # Pacemaker acts, so a failed stop or start prints success. Only qm-status (a read)
+    # may omit it. Sweeps every stack, so a new Pacemaker arm inherits the rule.
+    pcs_verbs = [
+        (stack.name, verb, impl["pcs"])
+        for stack in lab_stacks().values()
+        for verb, impl in stack.verbs.items()
+        if "pcs" in impl
+    ]
+    assert {name for name, _, _ in pcs_verbs} >= {"pcmk-ubuntu", "pcmk-drbd-ubuntu"}
+    for name, verb, cmd in pcs_verbs:
+        if verb != "qm-status":
+            assert "--wait=" in cmd, f"{name} {verb}: {cmd!r}"

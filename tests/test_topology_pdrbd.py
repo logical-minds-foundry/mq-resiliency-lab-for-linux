@@ -37,8 +37,10 @@ def test_pdrbd_verbs():
     v = lab_stacks()["pcmk-drbd-ubuntu"].verbs
     assert v["qm-create"] == {"playbook": "site-pdrbd.yml"}
     assert v["qm-destroy"] == {"playbook": "site-pdrbd-qm-down.yml"}
-    assert v["qm-up"] == {"pcs": "resource enable mq_group"}
-    assert v["qm-down"] == {"pcs": "resource disable mq_group"}
+    # --wait (#1640): the verb blocks until mq_group is Started/Stopped and fails if not;
+    # 420 s covers the group's serial op timeouts (mq_qm 300 + mq_fs 60 + mq_vip 20).
+    assert v["qm-up"] == {"pcs": "resource enable --wait=420 mq_group"}
+    assert v["qm-down"] == {"pcs": "resource disable --wait=420 mq_group"}
     # drbdadm status all omits the stacked DR resource (blueprint README §2.1); it stays only
     # as the gate (it fails with no resource up), drbdsetup shows both resources.
     assert "drbdsetup status --verbose" in v["qm-status"]["cmd"]
