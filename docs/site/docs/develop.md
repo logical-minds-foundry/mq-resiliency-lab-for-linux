@@ -26,3 +26,22 @@ Until then, the in-repo developer notes are the reference:
   how the per-role boxes are baked, kept registered, and rebuilt.
 - **[`build/` layout](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/build-layout.md)**:
   the `build/` buckets and the cloud VM's boot disk.
+- **Ansible roles read facts only as `ansible_facts['<fact>']`.** Write
+  `ansible_facts['os_family']`, never the top-level `ansible_os_family`.
+  [`ansible/ansible.cfg`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/ansible.cfg)
+  sets `inject_facts_as_vars = False`, so a top-level fact name is undefined at
+  runtime. ansible-core 2.20 deprecates the old `True` default, and 2.24 makes
+  `False` the default. Setting it now means a missed reference fails today
+  instead of on the 2.24 upgrade (#136). The guard test
+  [`tests/test_ansible_facts_guard.py`](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/tests/test_ansible_facts_guard.py)
+  fails on any `ansible_*` name under `ansible/` that is not `ansible_facts` or
+  an allowlisted connection or magic variable (`ansible_host`, `ansible_user`,
+  and so on). If you need a new one of those, add it to the test's allowlist.
+  The
+  [Ansible dependency currency](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/ansible-dependency-currency.md)
+  report says when the `ansible.cfg` line can go.
+- **Docs toolchain.** The site builds with the `docs` dependency group in
+  `pyproject.toml` (`uv sync --group docs`), which pins `mkdocs>=1.6,<2`.
+  MkDocs 2.0 breaks plugins and theme overrides. The MkDocs 2.0 notice printed
+  during the build is turned off upstream in the shared docs pipelines
+  (`NO_MKDOCS_2_WARNING=1`, vergil-actions v2.1.43).
