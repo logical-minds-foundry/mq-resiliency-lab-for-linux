@@ -187,6 +187,12 @@ Evidence so far:
 The cut has not been observed on an UpToDate pair. Drill 3 (DR-link outage on both
 arms, Task 8) is where this is settled. It is listed as a human-verify item.
 
+**Observed later (#1666, 2026-10-19):** on an UpToDate pair, after an ungraceful WAN cut,
+the live DR primary kept `quorum:yes` and its QM kept running. A new HA primary attached
+the DR copy alone and promoted it. See
+[`observations/README.md`](observations/README.md) §1.2 (S1, S3), which also records what
+RDQM does on forced DR, on a returning old primary, and on HA quorum loss.
+
 ### 2.3 Networks (Data, matched against `lab/topology.yaml`)
 
 | Traffic | Network | Addresses |
