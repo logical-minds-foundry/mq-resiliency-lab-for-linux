@@ -78,9 +78,9 @@
 # User's Guide 5.20.1; "Internal meta data") and would overwrite the filesystem's tail.
 - name: the DR shape of a formed QM never changes (RDQM fixes it at crtmqm -rr)
   ansible.builtin.assert:
-    that: not pdrbd_formed or ((pdrbd_dr_formed | bool) == (pdrbd_dr | bool))
+    that: not pdrbd_formed or (pdrbd_dr_formed == (pdrbd_dr | bool))
     fail_msg: >-
-      {{ qm_name }} was formed {{ 'with' if pdrbd_dr_formed | bool else 'without' }} DR at
+      {{ qm_name }} was formed {{ 'with' if pdrbd_dr_formed else 'without' }} DR at
       this site, and this run asks for {{ 'DR' if pdrbd_dr | bool else 'no DR' }}. The DR
       shape is fixed at creation; destroy and re-create the QM (`mqlab qm destroy`, i.e.
       qm-destroy, then bootstrap) to change it.
