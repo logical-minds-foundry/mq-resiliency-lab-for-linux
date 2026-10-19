@@ -221,13 +221,20 @@ fault scripts (run on the host, not through `mqlab`):
 
 - `lab/scripts/nativeha-fault-suite.sh <qm>` — the Native HA fault suite
   (hard `virsh destroy` of the active node, then assert the end state).
-- `lab/scripts/net-down.sh <net…>` / `lab/scripts/net-up.sh <net…>` — sever and
-  restore a lab network to inject a partition (the planes are designed severable).
-  Each publishes the resulting `lab_network_state` to the host node_exporter
-  (`lab/scripts/net-state-publish.sh`, `sudo` for the drop-zone write), so the
-  dashboard's network tiles follow the drill within one scrape. There is no
-  polling probe: the lab's virtual networks only change when these scripts (or
-  bring-up) change them (#1253).
+- `lab/scripts/net-cut.sh <down|up> <net> [node…]` — cut, then restore, every
+  running lab guest's link on one network (or only the named nodes) with
+  `virsh domif-setlink`, to inject a partition (the planes are designed
+  severable). It fails non-zero if no interface matches, a setlink fails, or
+  `virsh domif-getlink` does not then report the requested state (#1638). The
+  libvirt network stays active, so `lab_network_state` does not change.
+- `lab/scripts/net-down.sh <net…>` / `lab/scripts/net-up.sh <net…>` — remove and
+  create the libvirt networks themselves. These are **not** fault injectors:
+  `net-up.sh` does not reattach the taps of guests that were running when the
+  network was destroyed, so they stay cut off until they are rebuilt. Each
+  publishes the resulting `lab_network_state` to the host node_exporter
+  (`lab/scripts/net-state-publish.sh`, `sudo` for the drop-zone write). There is
+  no polling probe: the lab's virtual networks only change when these scripts
+  (or bring-up) change them (#1253).
 - `lab/scripts/drbd-degrade.sh` — degrade DRBD replication for a forced-DR drill.
 
 Watch any drill on the stack's **cockpit** board and the **lab-watcher** front
