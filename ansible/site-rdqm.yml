@@ -44,6 +44,10 @@
 # site B secondary -rr s) and auto-detects the formed site-B group for HA/DR — it
 # is moved (invoked), not rewritten. Contract: QM VIP SVC_CONN (matches the old
 # `mqlab qm create` _qm_script call).
+#
+# This play and the QM-level plays below (diag logging, TLS, authz on `hosts: rdqm_a`)
+# configure the QM at SITE A. After a DR cutover (QM live at site B) both the script and the
+# rdqm-active-node role refuse, naming `mqlab dr failback rdqm-rhel` (#1625).
 - name: replicated queue manager + inter-QM MQSC (folded qm-create)
   hosts: localhost
   connection: local
