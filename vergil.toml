@@ -12,6 +12,14 @@ ghas = true
 versions = ["3.14"]
 integration-tests = false
 
+# Test parallelism (vergil-tooling#3322). Cloud VMs and CI keep the `auto` default:
+# on a 16-vCPU cloud VM `-n auto` runs the suite in ~79 s vs 443 s serial. On the
+# Lima VM of an Apple-silicon Mac, `auto` (= 24 workers) oversubscribes the host and
+# loses most of the gain; 12 workers measured fastest there (42 s vs 196 s serial,
+# 136–162 s at `auto`). Measurements are recorded on #1630.
+[test.local-vm]
+workers = 12
+
 [publish]
 release = false
 docs = true
