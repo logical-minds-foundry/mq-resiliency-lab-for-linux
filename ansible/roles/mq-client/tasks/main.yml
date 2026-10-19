@@ -41,7 +41,7 @@
 
 - name: copy MQ tar to node
   ansible.builtin.copy:
-    src: "{{ mqlab_cache_dir }}/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_architecture == 'aarch64' else 'X64' }}.tar.gz"
+    src: "{{ mqlab_cache_dir }}/mq/{{ mq_version }}-IBM-MQ-Advanced-for-Developers-UbuntuLinux{{ 'ARM64' if ansible_facts['architecture'] == 'aarch64' else 'X64' }}.tar.gz"
     dest: "{{ lab_stage_dir }}/mqadv.tar.gz"
     mode: "0644"
   become: true  # lab_stage_dir is root-owned 0755

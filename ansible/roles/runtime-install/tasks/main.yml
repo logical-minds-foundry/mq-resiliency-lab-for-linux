@@ -16,11 +16,11 @@
 - name: Gather the guest architecture (when the play did not)
   ansible.builtin.setup:
     gather_subset: [min]
-  when: ansible_architecture is not defined
+  when: ansible_facts['architecture'] is not defined
 
 - name: Map the guest arch to the pinned tarball
   ansible.builtin.set_fact:
-    _rt_arch: "{{ {'x86_64': 'x86_64', 'aarch64': 'aarch64', 'arm64': 'aarch64'}.get(ansible_architecture, ansible_architecture) }}"
+    _rt_arch: "{{ {'x86_64': 'x86_64', 'aarch64': 'aarch64', 'arm64': 'aarch64'}.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
     _rt_root: "{{ runtime_install_prefix }}/cpython-{{ runtime_python.minor }}"
 
 - name: Precondition — mqlab staged a verified tarball for this arch

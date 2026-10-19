@@ -1,6 +1,6 @@
 ---
 loki_version: "3.7.8"  # obs version-currency (#1131; patch refresh #1446); drives BOTH loki + logcli URLs
-loki_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+loki_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'amd64' }}"
 loki_pkg: "loki-linux-{{ loki_arch }}"
 loki_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/{{ loki_pkg }}.zip"
 loki_retention: "24h"   # lab-ephemeral, mirrors prometheus_retention

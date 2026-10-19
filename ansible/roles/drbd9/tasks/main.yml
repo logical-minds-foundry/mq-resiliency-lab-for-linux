@@ -32,7 +32,7 @@
       - drbd9_modver.rc == 0
       - drbd9_modver.stdout is match('^9[.]')
     fail_msg: >-
-      the drbd module for the running kernel {{ ansible_kernel }} is
+      the drbd module for the running kernel {{ ansible_facts['kernel'] }} is
       '{{ drbd9_modver.stdout | default('', true) or 'absent' }}'
       ({{ drbd9_modver.stderr | default('', true) | trim }}), not DRBD 9.x — this node
       booted a kernel other than the one the pdrbd box's DKMS module was built for.
@@ -64,7 +64,7 @@
     that: "(drbd9_loaded_ver.content | b64decode | trim) is match('^9[.]')"
     fail_msg: >-
       the LOADED drbd module is '{{ drbd9_loaded_ver.content | b64decode | trim }}', not
-      DRBD 9.x (kernel {{ ansible_kernel }}) — something loaded the in-kernel module first.
+      DRBD 9.x (kernel {{ ansible_facts['kernel'] }}) — something loaded the in-kernel module first.
       Reboot the node; if it recurs, rebuild the pdrbd box (mqlab box rebuild
       pdrbd-<os><major>).
 

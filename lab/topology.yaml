@@ -399,8 +399,16 @@ stacks:
     verbs:
       qm-create:  { playbook: site-pcmk.yml }
       qm-destroy: { playbook: site-pcmk-qm-down.yml }
-      qm-up:      { pcs: "resource enable mq_group" }
-      qm-down:    { pcs: "resource disable mq_group" }
+      # --wait=n (#1640): without it pcs only sets target-role and returns at once, so
+      # a stop or start that then failed was never reported. With it pcs waits up to n s
+      # and exits 1 unless mq_group is Stopped/Started. n = the group's ops run in series:
+      # mq-pcmk-qmgr sets no stop/start timeouts, so pcs copies the agents' metadata
+      # defaults (pcs 0.9.160+): systemd mq_qm 100 s + Filesystem mq_fs 60 s + IPaddr2
+      # mq_vip, mq_vip_ext 20 s each = 200 s either way, plus 40 s for the scheduler and
+      # pcs's settle poll. pcs 0.12 deprecates --wait for `pcs status wait` + `pcs status
+      # query resource`, but pcs 0.11.7 (Ubuntu 24.04) has neither, so --wait stays.
+      qm-up:      { pcs: "resource enable --wait=240 mq_group" }
+      qm-down:    { pcs: "resource disable --wait=240 mq_group" }
       qm-status:  { pcs: "status resources" }
       # No honest reconnect-restart on this arm (#1514): refused, never faked.
       qm-reload:
@@ -496,8 +504,14 @@ stacks:
     verbs:
       qm-create:   { playbook: site-pdrbd.yml }
       qm-destroy:  { playbook: site-pdrbd-qm-down.yml }
-      qm-up:       { pcs: "resource enable mq_group" }
-      qm-down:     { pcs: "resource disable mq_group" }
+      # --wait=n (#1640): pcs waits up to n s and exits 1 unless mq_group is Stopped/
+      # Started (see pcmk-ubuntu for why, and why --wait over pcs 0.12's replacement).
+      # n = the group's ops run in series, from pdrbd-qm: mq_qm 300 s + mq_fs 60 s +
+      # mq_vip 20 s (the IPaddr2 metadata default; no --no-default-ops on it) = 380 s
+      # either way, plus 40 s for the scheduler and pcs's settle poll. The DRBD clones
+      # sit outside mq_group, so enable/disable does not move them.
+      qm-up:       { pcs: "resource enable --wait=420 mq_group" }
+      qm-down:     { pcs: "resource disable --wait=420 mq_group" }
       # drbdadm status all gates (it fails with no resource up) but omits the stacked DR
       # resource (blueprint README §2.1); drbdsetup status --verbose shows both.
       qm-status:   { cmd: "pcs status resources && drbdadm status all >/dev/null && drbdsetup status --verbose" }

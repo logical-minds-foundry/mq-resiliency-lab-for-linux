@@ -131,7 +131,7 @@ def test_drbd9_repo_is_deb822_signed_by_the_pinned_key_for_this_release() -> Non
     repo = _task(_tasks("install.yml"), "LINBIT DRBD 9 PPA repository")[
         "ansible.builtin.deb822_repository"
     ]
-    assert repo["suites"] == ["{{ ansible_distribution_release }}"]
+    assert repo["suites"] == ["{{ ansible_facts['distribution_release'] }}"]
     assert repo["components"] == ["main"]
     assert repo["types"] == ["deb"]
     assert repo["signed_by"] == "{{ drbd9_linbit_keyring }}"
@@ -195,7 +195,7 @@ def test_drbd9_install_builds_against_the_running_kernels_headers_first() -> Non
     tasks = _tasks("install.yml")
     headers = _task(tasks, "kernel headers + DKMS")
     module = _task(tasks, "DRBD 9 userland + DKMS module")
-    assert "linux-headers-{{ ansible_kernel }}" in headers["ansible.builtin.apt"]["name"]
+    assert "linux-headers-{{ ansible_facts['kernel'] }}" in headers["ansible.builtin.apt"]["name"]
     assert tasks.index(headers) < tasks.index(module)
 
 

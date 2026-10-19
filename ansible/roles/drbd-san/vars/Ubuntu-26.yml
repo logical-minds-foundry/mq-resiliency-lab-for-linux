@@ -15,4 +15,4 @@
 # 9.22.0 (26.04: 9.22.0-1.2build1, 24.04: 9.22.0-1build1; the Debian deltas are a GCC 15
 # build fix and a /usr-merge path move, per the package changelog). So the role's 8.4
 # semantics are unchanged on 26.04.
-drbd_san_kernel_modules_pkg: "linux-modules-{{ ansible_kernel }}"
+drbd_san_kernel_modules_pkg: "linux-modules-{{ ansible_facts['kernel'] }}"

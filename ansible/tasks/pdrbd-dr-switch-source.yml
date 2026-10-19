@@ -1,0 +1,60 @@
+---
+# Steps 2-3 of site-pdrbd-dr-switch.yml: the ONLY tasks that contact a source node. Pulled
+# in by an include_tasks gated `not dr_force_b`, so a forced cutover never loads this file
+# and nothing in it is templated (#1647). See the playbook header for why a gated block
+# is not enough.
+
+- name: source site crm_mon
+  ansible.builtin.command:
+    argv: [crm_mon, "-1", "-r"]
+  delegate_to: "{{ groups[src][0] }}"
+  register: src_crm
+  changed_when: false
+  become: true
+
+- name: find the source site's DR-promoted node (its HA primary, running the QM)
+  ansible.builtin.set_fact:
+    dr_src_nodes: "{{ src_crm.stdout | regex_findall(dr_promoted_re) }}"
+
+- name: assert the source site's DR clone is Promoted on exactly one node
+  ansible.builtin.assert:
+    that:
+      - dr_src_nodes | length == 1
+      - dr_src_nodes[0].split() | length == 1
+    fail_msg: >-
+      {{ src }}: drbd_dr_qm-clone is not Promoted on exactly one node — is {{ src }}
+      the DR primary? Nothing was changed. crm_mon: {{ src_crm.stdout }}
+
+- name: RPO-0 seed on the live QM
+  ansible.builtin.include_tasks: rpo0-drill-seed.yml
+  vars:
+    rpo0_node: "{{ dr_src_nodes[0] }}"
+  when: rpo0_drill | default(false) | bool
+
+# rdqmdr -s. pcs --wait returns non-zero if the cluster does not settle in time; the
+# live state goes to stderr before the failure.
+- name: stop and demote at the source site (DR clone to Unpromoted; HA stays up)
+  ansible.builtin.shell: |
+    set -e
+    if ! pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300; then
+      crm_mon -1 -r >&2
+      exit 1
+    fi
+    crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 2
+  delegate_to: "{{ groups[src][0] }}"
+  changed_when: true
+  become: true
+
+# Bounded wait (30 x 2 s), then loud with the last state.
+- name: assert the source DR resource is Secondary (rdqmdr -p refuses a running primary)
+  ansible.builtin.command:
+    argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+  delegate_to: "{{ dr_src_nodes[0] }}"
+  register: src_dr
+  until: >-
+    src_dr.rc == 0
+    and (src_dr.stdout | regex_findall(drbd_role_re)) == ['Secondary']
+  retries: 30
+  delay: 2
+  changed_when: false
+  become: true
