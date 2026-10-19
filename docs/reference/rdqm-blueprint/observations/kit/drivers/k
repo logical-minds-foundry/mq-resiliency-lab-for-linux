@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# wrapper: run the #1666 kit with the main checkout's temp bucket
+export OUT_ROOT="${OUT_ROOT:?set OUT_ROOT, e.g. $(mqlab build path temp)/rdqm-observe}"
+exec "$(dirname "$0")/../obs-kit.sh" "$@"
