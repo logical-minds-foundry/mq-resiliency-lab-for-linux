@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lab/scripts/net-down.sh [net-name ...] — destroy + undefine the named lab
 # networks (or all net-*.xml if none given; guests first!). Self-echoes actions.
+# NOT a fault injector: net-up.sh won't reattach running guests; drills use net-cut.sh.
 # Publishes the resulting lab_network_state to the observability layer (#1253).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
