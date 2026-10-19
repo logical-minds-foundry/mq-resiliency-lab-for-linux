@@ -59,7 +59,9 @@
 #   the agent sets `local_ok`, the third adjust_master_score value: the DR clone sets none,
 #   so the default "0 10 1000 10000" gives 1000 (RDQM's DR primitive sets none either,
 #   rdqm-blueprint/rdqm-b1/pcmk-config.txt). Every score needs quorum first: on
-#   `quorum:no` the agent removes it ("NOT quorate, should not be master").
+#   `quorum:no` the agent removes it ("NOT quorate, should not be master"). Since #1660
+#   the DR clone runs ocf:pdrbd:drbd-dr (see below), which lets the agent score a member
+#   that is not Primary only while Connected to a Secondary peer or under the grant.
 #   Data — DRBD 9 User's Guide (https://linbit.com/drbd-user-guide/drbd-guide-9_0-en/):
 #   2.16 "DRBD disallows promoting a resource that is in the outdated state"; 5.23.7 Last
 #   man standing, footnote 7: "The exception is if you manually promote a resource with
@@ -73,14 +75,32 @@
 #   Judgment — so the forced path, only when the target disk is not UpToDate, runs
 #   `drbdadm -S primary --force` then `drbdadm -S secondary` on the target's DR member:
 #   the disk becomes UpToDate (new current UUID), the resource goes back to Secondary so
-#   it is never Primary outside Pacemaker beyond the two back-to-back commands, and the
-#   agent's next monitor scores it 1000. Then it re-reads the state (UpToDate, Secondary,
-#   quorum:yes, or fail naming which), WAITS for the master-drbd_dr_qm score (the monitor
-#   runs every 20 s; `pcs --wait` alone would settle before it), and only then sets
-#   target-role=Promoted, so Pacemaker still owns the promote and the fs -> vip -> QM
-#   chain. The guide does not say whether `--force` overrides quorum; this path does not
-#   rely on it — a target without quorum fails loudly with the live state. Old primary
-#   reconnecting later is a split brain to resolve by hand (RP-7; no after-sb policy).
+#   it is never Primary outside Pacemaker beyond the two back-to-back commands. Then it
+#   re-reads the state (UpToDate, Secondary, quorum:yes, or fail naming which), grants the
+#   target node its one-shot promotion (#1660, below), WAITS for the master-drbd_dr_qm
+#   score (the monitor runs every 20 s; `pcs --wait` alone would settle before it), and
+#   only then sets target-role=Promoted, so Pacemaker still owns the promote and the fs ->
+#   vip -> QM chain. The guide does not say whether `--force` overrides quorum; this path
+#   does not rely on it — a target without quorum fails loudly with the live state.
+#
+# The returning old primary (#1660; #1430 drill 6 found it promoting at boot — two live
+# QMs, a DR split brain). The DR clone runs ocf:pdrbd:drbd-dr
+# (roles/pdrbd-qm/files/drbd-dr.sh, whose header carries the agent and DRBD source facts):
+# ocf:linbit:drbd plus one rule — a DR member that is not Primary is promotable only while
+# Connected to a Secondary peer with its own disk UpToDate. A lost site cannot be told it
+# lost the DR role (this path never contacts it), so on return it keeps target-role
+# Promoted but cannot promote: it is never Connected to a site that diverged (DRBD drops
+# that link to StandAlone at the handshake) and never promotes against a connected Primary.
+#   So the forced path promotes its target the explicit way: a one-shot, transient grant on
+# the target's DR member — node attribute pdrbd-dr-force-promote-<res> = 1, lifetime
+# reboot — which the wrapper honours like a connected Secondary peer and consumes on a
+# successful promote. The block's `always` deletes it on every outcome and proves it gone,
+# so no grant outlives this run. The planned path needs no grant (the source demoted to
+# Secondary and stayed Connected), but it now waits for the score too: the target is
+# scored only by the first monitor after the source turned Secondary.
+#   The old primary then rejoins as DR secondary through site-pdrbd-dr-rejoin.yml (IBM:
+# "initially made the secondary and be synchronized"); a split brain needs its explicit
+# -e dr_discard=true (RP-7: no after-sb-* policy, as RDQM).
 
 - name: resolve direction
   hosts: localhost
@@ -119,6 +139,9 @@
     src: "{{ hostvars['localhost'].dr_src }}"
     dst: "{{ hostvars['localhost'].dr_dst }}"
     dr_force_b: "{{ dr_force | default(false) | bool }}"
+    # The forced DR's one-shot promotion grant, read by ocf:pdrbd:drbd-dr (#1660;
+    # roles/pdrbd-qm/files/drbd-dr.sh `grant_attr`).
+    dr_grant_attr: "pdrbd-dr-force-promote-{{ pdrbd_dr_res }}"
     dr_promoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Promoted') }}"
     dr_unpromoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Unpromoted') }}"
     # `drbdsetup status --verbose <res>` lines (#1615): the resource line (column 0), the
@@ -274,63 +297,117 @@
           drbdsetup: {{ dst_forced.stdout }}
       when: dr_force_b
 
-    # `pcs --wait` returns once the cluster settles; with no score yet it settles at once,
-    # unpromoted. The agent's Unpromoted monitor (every 20 s) sets the score, so wait for it.
-    - name: forced — wait for the agent's promotion score on the target
-      ansible.builtin.shell: |
-        set -o pipefail
-        last=""
-        for _ in $(seq 1 45); do
-          if last=$(crm_attribute --type status --node {{ dr_dst_nodes[0] }} --name master-drbd_dr_qm --query --quiet 2>&1); then
-            case $last in
-              ''|*[!0-9]*) ;;
-              *) if [ "$last" -gt 0 ]; then echo "master-drbd_dr_qm=$last"; exit 0; fi ;;
-            esac
-          fi
-          sleep 2
-        done
-        echo "no promotion score (master-drbd_dr_qm) on {{ dr_dst_nodes[0] }} after 90 s (last: ${last:-empty}): ocf:linbit:drbd sets none for a disk that is not UpToDate or without quorum, so Pacemaker has nothing to promote. Not promoted; the source was not touched." >&2
-        crm_mon -1 -A -r >&2
-        drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
-        exit 1
-      args:
-        executable: /bin/bash
-      delegate_to: "{{ dr_dst_nodes[0] }}"
-      when: dr_force_b
-      changed_when: false
-      become: true
+    # ---- 4c-5. score, promote, assert; the forced grant never outlives the run ----
+    - name: promote the target (forced — under a one-shot grant that never outlives the run)
+      block:
+        # #1660: ocf:pdrbd:drbd-dr scores a DR member that is not Primary only while it is
+        # Connected to a Secondary peer. The forced target's peer is lost, so it is granted
+        # the promotion explicitly, on its own node only (the source is never contacted).
+        # Transient (lifetime reboot): a reboot clears it. --wait=local: the wrapper's next
+        # monitor on that node reads it.
+        - name: forced — grant the target's DR member a one-shot promotion (transient)
+          ansible.builtin.command:
+            argv:
+              - crm_attribute
+              - --node
+              - "{{ dr_dst_nodes[0] }}"
+              - --lifetime
+              - reboot
+              - --name
+              - "{{ dr_grant_attr }}"
+              - --update
+              - "1"
+              - --wait=local
+          delegate_to: "{{ dr_dst_nodes[0] }}"
+          when: dr_force_b
+          changed_when: true
+          become: true
 
-    # ---- 5. promote the target ----
-    # rdqmdr -p. A refused promote (e.g. `quorum:no` on a forced cutover) fails here with
-    # the live state — a recorded finding (Task 8 drill 6), never a silent no-op.
-    - name: promote at the target site (DR clone to Promoted; the chain starts fs, vip, QM)
-      ansible.builtin.shell: |
-        set -e
-        if ! pcs resource meta drbd_dr_qm-clone target-role=Promoted --wait=600; then
-          crm_mon -1 -r >&2
-          exit 1
-        fi
-        crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 1
-      delegate_to: "{{ groups[dst][0] }}"
-      changed_when: true
-      become: true
+        # `pcs --wait` returns once the cluster settles; with no score yet it settles at
+        # once, unpromoted. The Unpromoted monitor (every 20 s) sets the score, so wait for
+        # it: forced, once the grant is read; planned, once the target sees the demoted
+        # source as a connected Secondary.
+        - name: wait for the promotion score on the target
+          ansible.builtin.shell: |
+            set -o pipefail
+            last=""
+            for _ in $(seq 1 45); do
+              if last=$(crm_attribute --type status --node {{ dr_dst_nodes[0] }} --name master-drbd_dr_qm --query --quiet 2>&1); then
+                case $last in
+                  ''|*[!0-9]*) ;;
+                  *) if [ "$last" -gt 0 ]; then echo "master-drbd_dr_qm=$last"; exit 0; fi ;;
+                esac
+              fi
+              sleep 2
+            done
+            echo "no promotion score (master-drbd_dr_qm) on {{ dr_dst_nodes[0] }} after 90 s (last: ${last:-empty}): ocf:linbit:drbd sets none for a disk that is not UpToDate or without quorum, and ocf:pdrbd:drbd-dr none for a member that is not Connected to a Secondary peer {{ '(the forced grant was set)' if dr_force_b else '(planned: is the demoted source still connected?)' }}, so Pacemaker has nothing to promote. Not promoted{{ '; the source was not touched' if dr_force_b else '' }}." >&2
+            crm_mon -1 -A -r >&2
+            drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+            exit 1
+          args:
+            executable: /bin/bash
+          delegate_to: "{{ dr_dst_nodes[0] }}"
+          changed_when: false
+          become: true
 
-    - name: assert the target DR resource is Primary and the QM Started
-      ansible.builtin.shell: |
-        set -o pipefail
-        st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
-        if ! grep -q 'role:Primary' <<<"$(head -n 1 <<<"$st")"; then
-          echo "{{ pdrbd_dr_res }} is not Primary after pcs --wait settled: Pacemaker promoted nothing. ocf:linbit:drbd gives no promotion score (master-drbd_dr_qm) to a disk that is not UpToDate (e.g. Outdated) or without quorum (#1655)" >&2
-          echo "$st" >&2
-          crm_mon -1 -A -r >&2
-          exit 1
-        fi
-        crm_mon -1 -r | grep -Eq 'mq_qm\s.*Started' || { crm_mon -1 -r >&2; exit 1; }
-      args:
-        executable: /bin/bash
-      delegate_to: "{{ dr_dst_nodes[0] }}"
-      changed_when: false
-      become: true
+        # ---- 5. promote the target ----
+        # rdqmdr -p. A refused promote (e.g. `quorum:no` on a forced cutover) fails here
+        # with the live state — a recorded finding (Task 8 drill 6), never a silent no-op.
+        - name: promote at the target site (DR clone to Promoted; the chain starts fs, vip, QM)
+          ansible.builtin.shell: |
+            set -e
+            if ! pcs resource meta drbd_dr_qm-clone target-role=Promoted --wait=600; then
+              crm_mon -1 -r >&2
+              exit 1
+            fi
+            crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 1
+          delegate_to: "{{ groups[dst][0] }}"
+          changed_when: true
+          become: true
+
+        - name: assert the target DR resource is Primary and the QM Started
+          ansible.builtin.shell: |
+            set -o pipefail
+            st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
+            if ! grep -q 'role:Primary' <<<"$(head -n 1 <<<"$st")"; then
+              echo "{{ pdrbd_dr_res }} is not Primary after pcs --wait settled: Pacemaker promoted nothing. ocf:linbit:drbd gives no promotion score (master-drbd_dr_qm) to a disk that is not UpToDate (e.g. Outdated) or without quorum (#1655), and ocf:pdrbd:drbd-dr refuses a member not Connected to a Secondary peer without the forced grant (#1660)" >&2
+              echo "$st" >&2
+              crm_mon -1 -A -r >&2
+              exit 1
+            fi
+            crm_mon -1 -r | grep -Eq 'mq_qm\s.*Started' || { crm_mon -1 -r >&2; exit 1; }
+          args:
+            executable: /bin/bash
+          delegate_to: "{{ dr_dst_nodes[0] }}"
+          changed_when: false
+          become: true
+      always:
+        # The wrapper consumes the grant on a successful promote; this removes it on every
+        # other outcome too and proves it gone, so a later promotion of that node without a
+        # connected Secondary peer is never pre-authorised. crm_attribute: rc 105 = not set.
+        - name: forced — remove the one-shot grant and prove it gone (on every outcome)
+          ansible.builtin.shell: |
+            set -o pipefail
+            crm_attribute --node {{ dr_dst_nodes[0] }} --lifetime reboot --name {{ dr_grant_attr }} --delete --wait=local
+            rc=$?
+            if [ "$rc" -ne 0 ] && [ "$rc" -ne 105 ]; then
+              echo "deleting {{ dr_grant_attr }} on {{ dr_dst_nodes[0] }} failed (rc $rc)" >&2
+              exit 1
+            fi
+            for _ in $(seq 1 10); do
+              crm_attribute --node {{ dr_dst_nodes[0] }} --lifetime reboot --name {{ dr_grant_attr }} --query --quiet >/dev/null 2>&1
+              rc=$?
+              if [ "$rc" -eq 105 ]; then echo "grant {{ dr_grant_attr }} removed"; exit 0; fi
+              sleep 1
+            done
+            echo "THE FORCED-PROMOTE GRANT {{ dr_grant_attr }} IS STILL SET on {{ dr_dst_nodes[0] }} (query rc $rc): delete it with crm_attribute --node {{ dr_dst_nodes[0] }} --lifetime reboot --name {{ dr_grant_attr }} --delete" >&2
+            exit 1
+          args:
+            executable: /bin/bash
+          delegate_to: "{{ dr_dst_nodes[0] }}"
+          when: dr_force_b
+          changed_when: false
+          become: true
 
     # ---- 6. RPO-0 verify ----
     - name: RPO-0 verify at the new live QM

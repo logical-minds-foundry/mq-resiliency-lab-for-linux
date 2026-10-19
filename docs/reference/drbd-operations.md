@@ -12,6 +12,7 @@
 - [The dump-md hang (2-hour stall)](#the-dump-md-hang-2-hour-stall)
 - [Force-promote on a dead peer](#force-promote-on-a-dead-peer)
 - [Replication TLS (pcmk-drbd arm)](#replication-tls-pcmk-drbd-arm)
+- [Returning DR site after a forced DR](#returning-dr-site-after-a-forced-dr)
 - [Command quick-reference](#command-quick-reference)
 
 ## The initial-sync fight (250 KB/s → seconds)
@@ -121,6 +122,36 @@ the peer under the peer's **configured name**: the host name on the HA mesh, and
 | A peer never leaves `Connecting` | The TLS handshake fails | `journalctl -u tlshd` on both ends (it logs at level 1), and `dmesg` for `tls handshake` lines from `drbd_transport_tcp`. Check that `tlshd` is active and that the certificate's SANs carry the peer name |
 | `drbdadm adjust` fails with `cannot switch tls (no -> yes) while connected` | The kernel refuses to change `tls` on a connection that has sockets (`drbd_transport_tcp.c` `dtt_net_conf_change`) | Rebuild the stack (`mqlab teardown`, then `mqlab bootstrap`). The provision stops on this before it renders any config |
 | `drbdsetup status --verbose` shows `tls:yes`, but is the link encrypted? | `tls:` is the configured flag, not a socket property | On a `Connected` link it is: the flag cannot change while connected, and the connect only completes after the handshake. `/proc/net/tls_stat` (`TlsCurrTxSw`/`TlsCurrRxSw`) counts the kTLS sockets, two per connection. `site-pdrbd-tls-verify.yml` checks both |
+
+## Returning DR site after a forced DR
+
+This applies to the `pcmk-drbd-ubuntu` arm (#1660). A forced DR
+(`site-pdrbd-dr-switch.yml -e dr_force=true`) never contacts the lost site. So
+when that site comes back, its Pacemaker still has the DR clone at
+`target-role=Promoted`.
+
+Before #1660, the site promoted its DR resource at boot, before its first DRBD
+handshake. That gave two live queue managers and a DR split brain (#1430
+drill 6). The returning `ocf:linbit:drbd` member saw its peer as `Outdated`, a
+*known* peer-disk state. DRBD 9 restores that state from the
+`MDF_PEER_OUTDATED` metadata flag that a graceful `drbdadm disconnect` sets. So
+the agent gave it its top score.
+
+The DR clone now runs `ocf:pdrbd:drbd-dr`
+(`ansible/roles/pdrbd-qm/files/drbd-dr.sh`). That is `ocf:linbit:drbd` with
+one added rule: a DR member that is not Primary can be promoted only in two
+cases.
+
+- It is `Connected` to a peer in the `Secondary` role, and its own disk is
+  `UpToDate`.
+- The forced DR has granted it one promotion.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The returning site's DR clone stays `Unpromoted` while its `target-role` is `Promoted`. `mq_group` is Stopped there. The journal shows `pdrbd-drbd-dr[...]` `refusing to promote` or `started without a promotion score` | Working as designed. The other site is the DR primary. The returning member is `StandAlone` (split brain) or `Connected` to a Primary | `cd ansible && ansible-playbook site-pdrbd-dr-rejoin.yml -e rejoin_site=<a\|b> -e qm_name=<QM>`. This makes the returning site the DR secondary of record (`target-role=Unpromoted`, dr-role 2). If DRBD resynced it by itself, it waits for the resync. Then fail back with `mqlab dr failback\|cutover` |
+| The rejoin stops with `SPLIT BRAIN` | Both sites wrote after the link broke, so the data diverged (IBM calls this "partitioned"). There is no `after-sb-*` policy (RP-7), as on RDQM | Decide which data to keep. To keep the live site's data, re-run with `-e dr_discard=true`. The returning member reconnects with `--discard-my-data` and resyncs from the live site. To keep the returning site's data, follow IBM's second procedure ("Resolving a partitioned (split brain) problem in DR RDQM"). First stop the live site's QM: `pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300` there, and set its `pdrbd:<qm>-dr-role` to 2. Then run a forced DR toward the returning site. Then rejoin the other site with `-e dr_discard=true` |
+| The rejoin stops with `BOTH sites run the DR Primary` | A dual-active partition, for example on a stack formed before #1660 | The same decision. `-e dr_discard=true` stops the returning site's QM and discards its data |
+| After an HA failover at the DR primary site, the new HA primary's DR clone stays `Unpromoted` | The DR link was down during the failover. A member that is not Primary is promotable only while it is connected (the #1660 rule) | Restore the DR link: the next monitor (at most 20 s) promotes it. Or run a forced DR toward the same site |
 
 ## Command quick-reference
 

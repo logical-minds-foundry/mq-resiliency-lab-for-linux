@@ -87,18 +87,65 @@
   vars:
     pdrbd_dr_formed: "{{ pdrbd_dr_owned.rc == 0 }}"
 
+# #1660: the DR clone runs ocf:pdrbd:drbd-dr (files/drbd-dr.sh), never ocf:linbit:drbd
+# directly — a DR member promotes only while Connected to a Secondary peer, or under the
+# forced DR's one-shot grant. A DR site formed before #1660 runs the LINBIT agent, whose
+# score lets a returning old primary promote at boot (dual-active split brain, #1430 drill
+# 6). Swapping a primitive's agent restarts it, which would stop the live QM, so this
+# provision refuses instead, before anything changes (the #1609 TLS precedent). cibadmin
+# prints the primitive element, which names its provider and type.
+- name: a formed DR clone runs ocf:pdrbd:drbd-dr (rebuild a pre-#1660 stack)
+  ansible.builtin.assert:
+    that: >-
+      pdrbd_dr_owned.rc != 0
+      or (pdrbd_dr_owned.stdout is search('provider="pdrbd"')
+          and pdrbd_dr_owned.stdout is search('type="drbd-dr"'))
+    fail_msg: >-
+      {{ inventory_hostname }}: the DR clone's primitive drbd_dr_qm does not run
+      ocf:pdrbd:drbd-dr. This stack was formed before #1660, and its DR clone can promote a
+      returning DR site while its DR peer is not connected (dual-active split brain).
+      Nothing was changed. Rebuild it with `mqlab teardown pcmk-drbd-ubuntu` then `mqlab
+      bootstrap pcmk-drbd-ubuntu`. cibadmin: {{ pdrbd_dr_owned.stdout }}
+
+# The DR clone's agent (#1660), on EVERY node: the DR resource runs on whichever node is
+# the site's HA primary. Copied on every run, so a fix to the wrapper reaches a live lab at
+# its next operation (the agent script is read per operation; nothing restarts).
+- name: ocf:pdrbd:drbd-dr — provider directory
+  ansible.builtin.file:
+    path: /usr/lib/ocf/resource.d/pdrbd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: pdrbd_dr | bool
+  become: true
+
+- name: ocf:pdrbd:drbd-dr — the DR clone's agent (ocf:linbit:drbd plus the #1660 rule)
+  ansible.builtin.copy:
+    src: drbd-dr.sh
+    dest: /usr/lib/ocf/resource.d/pdrbd/drbd-dr
+    owner: root
+    group: root
+    mode: "0755"
+  when: pdrbd_dr | bool
+  become: true
+
 # RDQM's agent is drbd-pacemaker 9.33.1 (rdqm-a1/packages.txt); ours comes from the LINBIT
 # PPA's drbd-utils. Prove the agent exists and takes the blueprint parameters before any
 # resource uses them (adjust_master_score: HA clone, CL-4; wfc_timeout: DR clone, CL-5).
-- name: ocf:linbit:drbd on this node accepts the blueprint parameters
+# The DR clone's agent hands meta-data through from ocf:linbit:drbd, renamed drbd-dr, so
+# Pacemaker resolving it proves the install and the wrapped agent together.
+- name: ocf:linbit:drbd (and the DR clone's ocf:pdrbd:drbd-dr) accept the blueprint parameters
   ansible.builtin.command:
-    argv: [crm_resource, --show-metadata, "ocf:linbit:drbd"]
+    argv: [crm_resource, --show-metadata, "{{ item }}"]
+  loop: "{{ ['ocf:linbit:drbd'] + (['ocf:pdrbd:drbd-dr'] if pdrbd_dr | bool else []) }}"
   register: pdrbd_agent_meta
   changed_when: false
   failed_when: >-
     pdrbd_agent_meta.rc != 0
     or pdrbd_agent_meta.stdout is not search('name="adjust_master_score"')
     or pdrbd_agent_meta.stdout is not search('name="wfc_timeout"')
+    or (item == 'ocf:pdrbd:drbd-dr' and pdrbd_agent_meta.stdout is not search('<resource-agent name="drbd-dr"'))
   become: true
 
 # Replication TLS (lab #1609) on a lab formed before it. The kernel refuses to switch
@@ -649,6 +696,11 @@
 # (CL-5). Its target-role IS the DR role marker: Promoted at the DR primary site (A at
 # formation), Unpromoted at the DR secondary (rdqm-a1 / rdqm-b1 pcmk-config.txt, DR-1).
 # HA-only chain: the same with the DR layer removed (judgment; not captured).
+# The DR clone's agent is ocf:pdrbd:drbd-dr (#1660, CL-5): ocf:linbit:drbd with the same
+# parameters, plus the rule that a DR member promotes only while Connected to a Secondary
+# peer (or under the forced DR's grant). So site A's DR clone promotes once site B's DR
+# member is up and connected: at formation both sites push their resources in the same
+# task, and the wait below bounds it.
 - name: Pacemaker resources (first-time only; built in a CIB file and pushed atomically)
   when:
     - not pdrbd_formed
@@ -666,7 +718,7 @@
       op start timeout=240s op stop timeout=100s op promote timeout=90s op demote timeout=90s \
       promotable notify=true
     {% if pdrbd_dr | bool %}
-    pcs -f "$cib" resource create drbd_dr_qm ocf:linbit:drbd drbd_resource={{ pdrbd_dr_res }} wfc_timeout=false \
+    pcs -f "$cib" resource create drbd_dr_qm ocf:pdrbd:drbd-dr drbd_resource={{ pdrbd_dr_res }} wfc_timeout=false \
       op monitor interval=20s timeout=20s role=Unpromoted \
       op monitor interval=10s timeout=20s role=Promoted \
       op start timeout=240s op stop timeout=100s op promote timeout=90s op demote timeout=90s \
@@ -742,14 +794,27 @@
     - inventory_hostname == pdrbd_creator
   become: true
 
-# HA-only, or the DR primary site: the QM runs here.
+# HA-only, or the DR primary site: the QM runs here. Bounded (60 x 5 s), then loud with
+# the live state. With DR, the DR clone promotes only while its member is Connected to the
+# other site's Secondary member (#1660), so a first bootstrap converges only once site B's
+# DR member is up and the DR link is connected; the failure names that.
 - name: wait for the QM to run under Pacemaker
-  ansible.builtin.command:
-    argv: [pcs, status, resources]
-  register: pdrbd_rsc_status
-  until: pdrbd_rsc_status.stdout is search('mq_qm\s.*Started')
-  retries: 60
-  delay: 5
+  ansible.builtin.shell: |
+    set -o pipefail
+    for _ in $(seq 1 60); do
+      if pcs status resources | grep -Eq 'mq_qm\s.*Started'; then exit 0; fi
+      sleep 5
+    done
+    echo "mq_qm is not Started after 300 s." >&2
+    {% if pdrbd_dr | bool %}
+    echo "This is the DR primary site: its DR clone (ocf:pdrbd:drbd-dr) promotes only while {{ pdrbd_dr_res }} is Connected to the other site's DR member in the Secondary role (#1660). Check that the other site's DR clone runs and that the DR link is up." >&2
+    echo "{{ pdrbd_dr_res }} on {{ inventory_hostname }} (rc 10: not up on this node; see crm_mon for where it runs):" >&2
+    drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+    {% endif %}
+    crm_mon -1 -A -r >&2
+    exit 1
+  args:
+    executable: /bin/bash
   when:
     - inventory_hostname == pdrbd_creator
     - not (pdrbd_dr | bool) or (pdrbd_dr_role.stdout | default('') | trim) == '1'

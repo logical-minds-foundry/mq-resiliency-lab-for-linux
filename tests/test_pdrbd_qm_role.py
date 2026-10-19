@@ -461,6 +461,66 @@ def test_dr_clone_matches_blueprint() -> None:
         assert want in text, want
 
 
+_AGENT_SRC = ROLE / "files" / "drbd-dr.sh"
+_AGENT_DEST = "/usr/lib/ocf/resource.d/pdrbd/drbd-dr"
+
+
+def test_dr_clone_runs_the_no_dual_active_agent() -> None:
+    """#1660: the DR primitive is ocf:pdrbd:drbd-dr (ocf:linbit:drbd plus the rule that a
+    member that is not Primary promotes only while Connected to a Secondary peer); the HA
+    clone stays ocf:linbit:drbd (CL-4)."""
+    push = _by_name("Pacemaker resources (first-time only")["ansible.builtin.shell"]
+    assert "resource create drbd_dr_qm ocf:pdrbd:drbd-dr drbd_resource={{ pdrbd_dr_res }}" in push
+    assert "resource create drbd_qm ocf:linbit:drbd drbd_resource={{ pdrbd_res }}" in push
+    assert "drbd_dr_qm ocf:linbit:drbd" not in push
+    assert _AGENT_SRC.is_file()
+    assert _AGENT_SRC.read_text(encoding="utf-8").startswith("#!/bin/bash\n")
+
+
+def test_the_dr_agent_is_installed_and_proven_before_any_resource_uses_it() -> None:
+    names = [t["name"] for t, _ in _tasks()]
+    copy = _by_name("ocf:pdrbd:drbd-dr — the DR clone's agent")
+    assert copy["ansible.builtin.copy"]["src"] == "drbd-dr.sh"
+    assert copy["ansible.builtin.copy"]["dest"] == _AGENT_DEST
+    assert copy["ansible.builtin.copy"]["mode"] == "0755"
+    provider = _by_name("ocf:pdrbd:drbd-dr — provider directory")
+    assert provider["ansible.builtin.file"]["path"] == "/usr/lib/ocf/resource.d/pdrbd"
+    for task in (copy, provider):
+        assert task["when"] == "pdrbd_dr | bool"  # every node, every run, DR shape only
+    meta = _by_name("accept the blueprint parameters")
+    assert "ocf:pdrbd:drbd-dr" in meta["loop"]
+    assert '<resource-agent name="drbd-dr"' in meta["failed_when"]
+    order = [
+        names.index(provider["name"]),
+        names.index(copy["name"]),
+        names.index(meta["name"]),
+        next(i for i, n in enumerate(names) if n.startswith("Pacemaker resources (first-time")),
+    ]
+    assert order == sorted(order)
+
+
+def test_a_pre_1660_dr_stack_is_refused_before_anything_changes() -> None:
+    guard = _by_name("a formed DR clone runs ocf:pdrbd:drbd-dr")
+    that = guard["ansible.builtin.assert"]["that"]
+    assert "pdrbd_dr_owned.rc != 0" in that
+    assert 'provider="pdrbd"' in that
+    assert 'type="drbd-dr"' in that
+    msg = guard["ansible.builtin.assert"]["fail_msg"]
+    assert "Nothing was changed" in msg
+    assert "mqlab teardown pcmk-drbd-ubuntu" in msg
+    names = [t["name"] for t, _ in _tasks()]
+    assert names.index(guard["name"]) < next(i for i, n in enumerate(names) if _HA_CREATE_MD in n)
+    assert names.index(guard["name"]) < names.index(_by_name("per-QM logical volume")["name"])
+
+
+def test_the_dr_primary_wait_names_the_connected_peer_rule() -> None:
+    body = _by_name("wait for the QM to run under Pacemaker")["ansible.builtin.shell"]
+    assert "seq 1 60" in body
+    assert "promotes only while {{ pdrbd_dr_res }} is Connected" in body
+    assert "crm_mon -1 -A -r >&2" in body
+    assert body.rstrip().endswith("exit 1")
+
+
 def test_dr_role_marker_set_only_at_formation() -> None:
     # After a DR switch the marker belongs to the switch playbook; a provision re-run must
     # never flip it back.

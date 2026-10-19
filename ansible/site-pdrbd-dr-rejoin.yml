@@ -1,0 +1,366 @@
+---
+# Rejoin a returning DR site as the DR secondary, for pcmk-drbd-ubuntu (#1660; epic
+# .github#310). Run after a forced DR (site-pdrbd-dr-switch.yml dr_force=true) once the
+# lost site is back:
+#
+#   cd ansible && ansible-playbook site-pdrbd-dr-rejoin.yml -e rejoin_site=a -e qm_name=PDRBDAPP
+#   (add -e dr_discard=true only when it reports a split brain and you keep the live site's data)
+#
+# then fail the QM back with `mqlab dr failback pcmk-drbd-ubuntu --rpo0-drill` (or cutover,
+# for rejoin_site=b).
+#
+# The floor. IBM, "RDQM disaster recovery" (MQ 10.0.0,
+# https://www.ibm.com/docs/SSYHRD_10.0.0/configure/q131670_.html, cached
+# SSYHRD/10.0.0/configure-q131670_): after the primary's node "fails completely" and the
+# secondary is promoted, "When the original node is repaired or replaced, the queue manager
+# on that node will be initially made the secondary and be synchronized with the primary
+# queue manager on the recovery node." The same page: if the recovery QM was started "while
+# there is a loss of connectivity between the nodes then data divergence is likely if the
+# queue manager was active on the main node when connectivity was lost. In this scenario, a
+# partitioned state is expected to be reported once connectivity is restored ... you might
+# have to examine the two data sets and make an informed decision about what set to keep."
+# IBM, "Resolving a partitioned (split brain) problem in DR RDQM" (MQ 10.0.0,
+# https://www.ibm.com/docs/SSYHRD_10.0.0/configure/q133050_.html, cached
+# SSYHRD/10.0.0/configure-q133050_): "You must decide which of the two queue managers has
+# the most correct view of the data, and retain that set while discarding the other", and,
+# to keep the recovery node's data, make the main node's QM the secondary (`rdqmdr -s`).
+#
+# What this does (judgment, mapping the floor onto this arm):
+#   1. Pre-flight, nothing changed yet: the keeper (the other site) runs the DR Primary and
+#      the QM; the returning site's DR clone runs on exactly one node. If the returning site
+#      ALSO runs DR Primary (a dual-active partition, as before #1660), it refuses unless
+#      dr_discard=true, which is the explicit choice to stop that QM and discard its data.
+#   2. "Initially made the secondary" (rdqmdr -s, DR-2): the returning site's DR clone to
+#      target-role=Unpromoted and its pdrbd:<qm>-dr-role marker to 2. A lost site still
+#      carries target-role=Promoted (a forced DR cannot reach it), and ocf:pdrbd:drbd-dr is
+#      what kept it from promoting; this makes the record match.
+#   3. The DR handshake decides the rest. Connected (no divergence): DRBD resyncs the
+#      returning member from the keeper by itself. StandAlone on either side (a split brain;
+#      the DR resource has no after-sb-* policy, RP-7, so DRBD disconnects): the data
+#      diverged, and IBM leaves the choice to the operator. Without dr_discard it stops
+#      here, says so, and the keeper keeps serving. With dr_discard=true it reconnects the
+#      returning member with --discard-my-data (its divergent writes are discarded; it
+#      becomes the sync target) and reconnects a StandAlone keeper.
+#   4. Waits (watched, bounded) for the returning member to be Connected and UpToDate, then
+#      asserts the end state: the keeper still Primary with the QM Started, the returning
+#      site DR Unpromoted with mq_group Stopped.
+# The drill 6 recovery done by hand (#1660) was exactly these steps.
+
+- name: resolve the rejoining site
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: assert rejoin_site and qm_name
+      ansible.builtin.assert:
+        that:
+          - rejoin_site | default('') in ['a', 'b']
+          - qm_name | default('') | length > 0
+        fail_msg: >-
+          rejoin_site must be a or b — the site that came back (got
+          {{ rejoin_site | default('unset') }}) — and qm_name must be set (got
+          {{ qm_name | default('unset') }})
+
+- name: rejoin
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - vars/pdrbd-crm-mon.yml
+  vars:
+    pdrbd_res: "{{ qm_name | lower }}"
+    pdrbd_dr_res: "{{ qm_name | lower }}.dr"
+    back: "pdrbd_{{ rejoin_site }}"
+    keep: "{{ 'pdrbd_b' if rejoin_site == 'a' else 'pdrbd_a' }}"
+    dr_discard_b: "{{ dr_discard | default(false) | bool }}"
+    dr_promoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Promoted') }}"
+    dr_unpromoted_re: "{{ pdrbd_crm_role_re | replace('CLONE', 'drbd_dr_qm-clone') | replace('ROLE', 'Unpromoted') }}"
+    # The `drbdsetup status --verbose <res>` parses of site-pdrbd-dr-switch.yml (#1615;
+    # tests pin that they are identical), plus the connection's peer role.
+    drbd_role_re: '(?m)^\S+ node-id:\d+ role:(\w+)'
+    drbd_disk_re: '(?m)^  volume:\d+ minor:\d+ disk:(\w+)'
+    drbd_conn_re: '(?m)^  \S+ node-id:\d+ connection:(\w+)'
+    drbd_peer_role_re: '(?m)^  \S+ node-id:\d+ connection:\w+ role:(\w+)'
+    pdrbd_handshake_secs: 120
+    pdrbd_resync_stall_secs: 180
+    pdrbd_resync_max_secs: 3600
+  tasks:
+    # ---- 1. pre-flight: nothing has changed yet ----
+    - name: keeper site crm_mon
+      ansible.builtin.command:
+        argv: [crm_mon, "-1", "-r"]
+      delegate_to: "{{ groups[keep][0] }}"
+      register: keep_crm
+      changed_when: false
+      become: true
+
+    - name: find the keeper's DR Primary node
+      ansible.builtin.set_fact:
+        keep_nodes: "{{ keep_crm.stdout | regex_findall(dr_promoted_re) }}"
+
+    - name: assert the keeper runs the DR Primary and the QM
+      ansible.builtin.assert:
+        that:
+          - keep_nodes | length == 1
+          - keep_nodes[0].split() | length == 1
+          - keep_crm.stdout is search('mq_qm\s.*Started')
+        fail_msg: >-
+          {{ keep }} is not the live DR primary (drbd_dr_qm-clone Promoted on exactly one
+          node, mq_qm Started), so there is no site for {{ back }} to rejoin. Nothing was
+          changed. crm_mon: {{ keep_crm.stdout }}
+
+    - name: returning site crm_mon
+      ansible.builtin.command:
+        argv: [crm_mon, "-1", "-r"]
+      delegate_to: "{{ groups[back][0] }}"
+      register: back_crm
+      changed_when: false
+      become: true
+
+    - name: find where the returning site's DR clone runs
+      ansible.builtin.set_fact:
+        back_promoted: "{{ back_crm.stdout | regex_findall(dr_promoted_re) }}"
+        back_unpromoted: "{{ back_crm.stdout | regex_findall(dr_unpromoted_re) }}"
+
+    - name: assert the returning site's DR clone runs on exactly one node
+      ansible.builtin.assert:
+        that:
+          - (back_promoted + back_unpromoted) | length == 1
+          - (back_promoted + back_unpromoted)[0].split() | length == 1
+        fail_msg: >-
+          {{ back }}: drbd_dr_qm-clone is not running on exactly one node (it runs on the
+          site's HA primary: is the site's cluster up, with its HA clone Promoted?). Nothing
+          was changed. crm_mon: {{ back_crm.stdout }}
+
+    - name: refuse a dual-active partition unless its data is explicitly discarded
+      ansible.builtin.assert:
+        that: back_promoted | length == 0 or dr_discard_b
+        fail_msg: >-
+          BOTH sites run the DR Primary: {{ back }} on {{ back_promoted | join(' ') }} and
+          {{ keep }} on {{ keep_nodes[0] }} — a partitioned (split-brain) DR pair, each QM
+          with its own data. Decide which data to keep (IBM, "Resolving a partitioned
+          (split brain) problem in DR RDQM"). To keep {{ keep }}'s, re-run with
+          -e dr_discard=true: it stops {{ back }}'s QM and DISCARDS {{ back }}'s divergent
+          data. Nothing was changed.
+
+    - name: the returning site's DR member
+      ansible.builtin.set_fact:
+        back_node: "{{ (back_promoted + back_unpromoted)[0] }}"
+
+    # ---- 2. initially made the secondary (rdqmdr -s) ----
+    - name: returning site — DR clone to Unpromoted and dr-role 2 (stops its QM if running)
+      ansible.builtin.shell: |
+        set -e
+        if ! pcs resource meta drbd_dr_qm-clone target-role=Unpromoted --wait=300; then
+          crm_mon -1 -r >&2
+          exit 1
+        fi
+        crm_attribute --type crm_config --set-name pdrbd --name {{ pdrbd_res }}-dr-role --update 2
+      delegate_to: "{{ groups[back][0] }}"
+      changed_when: true
+      become: true
+
+    # ---- 3. the DR handshake: connected, split, or link down ----
+    # Up to pdrbd_handshake_secs for the returning member to settle: Secondary, and its DR
+    # connection Connected or StandAlone. Prints the verdict: connected | standalone |
+    # connecting (still Connecting at the deadline).
+    - name: returning member — Secondary, and wait for the DR handshake
+      ansible.builtin.shell: |
+        set -o pipefail
+        st=""; role=""
+        end=$(( $(date +%s) + {{ pdrbd_handshake_secs }} ))
+        while [ "$(date +%s)" -lt "$end" ]; do
+          st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
+          role=$(sed -En '1s/^[^ ]+ node-id:[0-9]+ role:([A-Za-z]+).*/\1/p' <<<"$st")
+          conn=$(sed -En 's/^  [^ ]+ node-id:[0-9]+ connection:([A-Za-z]+).*/\1/p' <<<"$st")
+          if [ "$role" = Secondary ]; then
+            case $conn in
+              Connected) echo connected; exit 0 ;;
+              StandAlone) echo standalone; exit 0 ;;
+            esac
+          fi
+          sleep 2
+        done
+        if [ "$role" != Secondary ]; then
+          echo "{{ pdrbd_dr_res }} on {{ back_node }} is still ${role:-not up} after {{ pdrbd_handshake_secs }} s, not Secondary" >&2
+          echo "$st" >&2
+          exit 1
+        fi
+        echo connecting
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ back_node }}"
+      register: back_hs
+      changed_when: false
+      become: true
+
+    - name: keeper DR state
+      ansible.builtin.command:
+        argv: [drbdsetup, status, --verbose, "{{ pdrbd_dr_res }}"]
+      delegate_to: "{{ keep_nodes[0] }}"
+      register: keep_dr
+      changed_when: false
+      become: true
+
+    # A split brain drops BOTH ends to StandAlone; a returning member whose DR resource
+    # restarted since then is Connecting to a StandAlone keeper, which never answers.
+    - name: classify the handshake
+      ansible.builtin.set_fact:
+        back_verdict: "{{ back_hs.stdout_lines | last }}"
+        keep_conn: "{{ keep_dr.stdout | regex_findall(drbd_conn_re) }}"
+        dr_split: >-
+          {{ (back_hs.stdout_lines | last) == 'standalone'
+             or ((back_hs.stdout_lines | last) == 'connecting'
+                 and (keep_dr.stdout | regex_findall(drbd_conn_re)) == ['StandAlone']) }}
+
+    - name: assert the DR link is up (else nothing to rejoin over)
+      ansible.builtin.assert:
+        that: back_verdict == 'connected' or dr_split | bool
+        fail_msg: >-
+          {{ back_node }} cannot reach {{ keep }}'s DR member: it is {{ back_verdict }}, the
+          keeper is {{ keep_conn | join(',') or 'unknown' }}. Check the DR link (net-wan).
+          {{ back }} is now the DR secondary of record (target-role Unpromoted, dr-role 2)
+          and stays so; re-run once the link is up. keeper drbdsetup: {{ keep_dr.stdout }}
+
+    - name: refuse to discard divergent data unless asked to
+      ansible.builtin.assert:
+        that: not (dr_split | bool) or dr_discard_b
+        fail_msg: >-
+          SPLIT BRAIN: the DR data of {{ back }} ({{ back_node }}, {{ back_verdict }}) and
+          {{ keep }} ({{ keep_nodes[0] }}, {{ keep_conn | join(',') }}) diverged, as IBM
+          expects after a forced DR while the old primary still ran ("partitioned"). {{ back }}
+          is now the DR secondary of record (target-role Unpromoted, dr-role 2) with its QM
+          stopped; {{ keep }} still serves. To DISCARD {{ back }}'s divergent writes and
+          resync it from {{ keep }} (IBM: keep the data from the recovery node), re-run with
+          -e dr_discard=true. To keep {{ back }}'s data instead, see
+          docs/reference/drbd-operations.md "Returning DR site after a forced DR".
+
+    # ---- 3b. split brain, discard explicitly chosen ----
+    # drbdadm-9.0(8) `connect --discard-my-data`: this node's data becomes the sync target.
+    # `-S`: the stacked resource. A member that is Connecting (not StandAlone) is first
+    # disconnected, so the flag takes effect on a fresh connect.
+    - name: returning member — reconnect, discarding its divergent data
+      ansible.builtin.shell: |
+        set -o pipefail
+        if ! drbdsetup status --verbose {{ pdrbd_dr_res }} | grep -Eq '^  [^ ]+ node-id:[0-9]+ connection:StandAlone'; then
+          if ! drbdadm -S disconnect {{ pdrbd_dr_res }}; then
+            drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+            exit 1
+          fi
+        fi
+        if ! drbdadm -S connect --discard-my-data {{ pdrbd_dr_res }}; then
+          echo "drbdadm -S connect --discard-my-data {{ pdrbd_dr_res }} failed on {{ back_node }}" >&2
+          drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ back_node }}"
+      when: dr_split | bool
+      changed_when: true
+      become: true
+
+    - name: keeper — reconnect a StandAlone DR member
+      ansible.builtin.shell: |
+        set -o pipefail
+        if drbdsetup status --verbose {{ pdrbd_dr_res }} | grep -Eq '^  [^ ]+ node-id:[0-9]+ connection:StandAlone'; then
+          if ! drbdadm -S connect {{ pdrbd_dr_res }}; then
+            echo "drbdadm -S connect {{ pdrbd_dr_res }} failed on {{ keep_nodes[0] }}" >&2
+            drbdsetup status --verbose {{ pdrbd_dr_res }} >&2
+            exit 1
+          fi
+          echo reconnected
+        fi
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ keep_nodes[0] }}"
+      register: keep_reconnect
+      when: dr_split | bool
+      changed_when: "'reconnected' in keep_reconnect.stdout"
+      become: true
+
+    # ---- 4. resync, watched (site-pdrbd.yml's DR-sync wait, from the returning side) ----
+    - name: wait for the returning member to be Connected and UpToDate (watched)
+      ansible.builtin.shell: |
+        set -o pipefail
+        start=$(date +%s); last_pct=""; last_move=$start
+        while :; do
+          st=$(drbdsetup status --verbose {{ pdrbd_dr_res }})
+          if grep -q 'connection:Connected' <<<"$st" \
+             && grep -q 'peer-disk:UpToDate' <<<"$st" \
+             && grep -Eq '^  volume:[0-9]+ .*disk:UpToDate' <<<"$st" \
+             && ! grep -Eq 'replication:(SyncSource|SyncTarget|WFBitMapS|WFBitMapT|PausedSyncS|PausedSyncT)' <<<"$st"; then
+            echo "in-sync after $(( $(date +%s) - start ))s"; exit 0
+          fi
+          pct=$(grep -Eo 'done:[0-9.]+' <<<"$st" | head -n 1)
+          now=$(date +%s)
+          if [ "$pct" != "$last_pct" ]; then
+            echo "$(date -u +%H:%M:%S) resync ${pct:-pending}"; last_pct=$pct; last_move=$now
+          fi
+          if [ $(( now - last_move )) -ge {{ pdrbd_resync_stall_secs }} ]; then
+            echo "DR resync of {{ back_node }} STALLED at ${pct:-pending} for {{ pdrbd_resync_stall_secs }}s" >&2; echo "$st" >&2; exit 1
+          fi
+          if [ $(( now - start )) -ge {{ pdrbd_resync_max_secs }} ]; then
+            echo "DR resync of {{ back_node }} exceeded {{ pdrbd_resync_max_secs }}s" >&2; echo "$st" >&2; exit 1
+          fi
+          sleep 5
+        done
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ back_node }}"
+      register: back_sync
+      changed_when: false
+      become: true
+
+    - name: resync result
+      ansible.builtin.debug:
+        msg: "{{ back_sync.stdout_lines }}"
+
+    # ---- 5. end state ----
+    - name: end state — keeper crm_mon and DR state
+      ansible.builtin.shell: |
+        set -o pipefail
+        crm_mon -1 -r
+        echo '--- drbdsetup'
+        drbdsetup status --verbose {{ pdrbd_dr_res }}
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ keep_nodes[0] }}"
+      register: keep_end
+      changed_when: false
+      become: true
+
+    - name: end state — returning site crm_mon and DR state
+      ansible.builtin.shell: |
+        set -o pipefail
+        crm_mon -1 -r
+        echo '--- drbdsetup'
+        drbdsetup status --verbose {{ pdrbd_dr_res }}
+      args:
+        executable: /bin/bash
+      delegate_to: "{{ back_node }}"
+      register: back_end
+      changed_when: false
+      become: true
+
+    - name: assert the end state (keeper serves as DR Primary; the returning site is DR secondary)
+      ansible.builtin.assert:
+        that:
+          - keep_end.stdout | regex_findall(dr_promoted_re) == [keep_nodes[0]]
+          - keep_end.stdout is search('mq_qm\s.*Started')
+          - keep_end.stdout | regex_findall(drbd_role_re) == ['Primary']
+          - back_end.stdout | regex_findall(dr_unpromoted_re) == [back_node]
+          - back_end.stdout | regex_findall(dr_promoted_re) == []
+          - back_end.stdout is search('mq_qm\s.*Stopped')
+          - back_end.stdout | regex_findall(drbd_role_re) == ['Secondary']
+          - back_end.stdout | regex_findall(drbd_disk_re) == ['UpToDate']
+          - back_end.stdout | regex_findall(drbd_conn_re) == ['Connected']
+          - back_end.stdout | regex_findall(drbd_peer_role_re) == ['Primary']
+        fail_msg: >-
+          the rejoin did not reach its end state. keeper ({{ keep_nodes[0] }}):
+          {{ keep_end.stdout }} — returning ({{ back_node }}): {{ back_end.stdout }}
+
+    - name: next step
+      ansible.builtin.debug:
+        msg: >-
+          {{ back }} is the DR secondary, in sync with {{ keep }}. To run the QM at {{ back }}
+          again: mqlab dr {{ 'failback' if rejoin_site == 'a' else 'cutover' }}
+          pcmk-drbd-ubuntu --rpo0-drill

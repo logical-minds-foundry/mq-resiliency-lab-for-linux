@@ -33,13 +33,20 @@ def _load(path: Path) -> Any:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _expand(t: dict[str, Any]) -> list[dict[str, Any]]:
+    """A task, or a block's tasks in run order (block, then rescue, then always)."""
+    if "block" not in t:
+        return [t]
+    return [*t["block"], *t.get("rescue", []), *t.get("always", [])]
+
+
 def _all_tasks() -> list[tuple[str, dict[str, Any]]]:
-    """Every task in run order, with the source include expanded in place."""
+    """Every task in run order, with the source include and any block expanded in place."""
     out: list[tuple[str, dict[str, Any]]] = []
     for play in _load(PB):
         for t in play.get("tasks", []):
             is_source = t.get("ansible.builtin.include_tasks") == _SRC_REL
-            inner = _source_tasks() if is_source else t.get("block", [t])
+            inner = _source_tasks() if is_source else _expand(t)
             out.extend((play["name"], i) for i in inner)
     return out
 
@@ -152,7 +159,14 @@ def test_source_steps_are_skipped_only_on_a_forced_cutover() -> None:
     # before their inherited `when`; a skipped include never loads its file.
     inc = _source_include()
     assert inc["when"] == "not dr_force_b"
-    assert not [t["name"] for t in _switch_top_level() if "block" in t]
+    # The one block (#1660: the forced grant's cleanup in `always`) holds target tasks
+    # only, delegated to nodes set by the pre-flight on EVERY path, so nothing in it can
+    # template an undefined source variable.
+    blocks = [t for t in _switch_top_level() if "block" in t]
+    assert [b["name"] for b in blocks] == [_GRANT_BLOCK]
+    assert "when" not in blocks[0]
+    for t in _expand(blocks[0]):
+        assert t["delegate_to"] in ("{{ groups[dst][0] }}", "{{ dr_dst_nodes[0] }}"), t["name"]
     names = [t["name"] for t in _source_tasks()]
     for frag in (
         "source site crm_mon",
@@ -187,9 +201,9 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
     assert len(outside) == len(_switch_top_level()) - 1
     assert all(_delegates_to_source(t) or "set_fact" in str(t) or "assert" in str(t)
                for t in inside)  # fmt: skip
-    assert not [t["name"] for t in outside if _delegates_to_source(t)]
+    assert not [t["name"] for o in outside for t in _expand(o) if _delegates_to_source(t)]
     # - the target-side tasks reach only the target (its first node, or its DR member).
-    for t in outside:
+    for t in [i for o in outside for i in _expand(o)]:
         target = str(t.get("delegate_to", ""))
         assert target in ("", "{{ groups[dst][0] }}", "{{ dr_dst_nodes[0] }}"), t["name"]
     # - and no unreachable-tolerance is sprinkled around instead.
@@ -200,7 +214,11 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
 _FORCE = "forced — make an Outdated target UpToDate at the DRBD level"
 _FORCED_STATE = "forced — target DR state before the promote"
 _FORCED_ASSERT = "forced — assert the target is UpToDate, Secondary and quorate"
-_FORCED_SCORE = "forced — wait for the agent's promotion score"
+_FORCED_SCORE = "wait for the promotion score on the target"
+_GRANT_BLOCK = "promote the target (forced — under a one-shot grant that never outlives the run)"
+_GRANT = "forced — grant the target's DR member a one-shot promotion"
+_UNGRANT = "forced — remove the one-shot grant and prove it gone"
+_AGENT = ANSIBLE / "roles" / "pdrbd-qm" / "files" / "drbd-dr.sh"
 
 
 def test_forced_cutover_forces_an_outdated_target_at_the_drbd_level_first() -> None:
@@ -218,16 +236,21 @@ def test_forced_cutover_forces_an_outdated_target_at_the_drbd_level_first() -> N
     assert body.count("exit 1") == 2  # each step fails loud, with the live state
     assert body.count("drbdsetup status --verbose {{ pdrbd_dr_res }} >&2") == 2
     assert "IS PRIMARY OUTSIDE PACEMAKER" in body
-    order = [_index(f) for f in (_REASSERT, _FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE)]
+    frags = (_REASSERT, _FORCE, _FORCED_STATE, _FORCED_ASSERT, _GRANT, _FORCED_SCORE)
+    order = [_index(f) for f in frags]
     assert order == sorted(order)
     assert order[-1] < _index("promote at the target site")
 
 
 def test_forced_cutover_proves_the_target_is_promotable_before_pacemaker() -> None:
-    for frag in (_FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+    for frag in (_FORCED_STATE, _FORCED_ASSERT, _GRANT, _FORCED_SCORE):
         task = _task(frag)
-        assert task["when"] == "dr_force_b", frag
         assert task.get("delegate_to", "{{ dr_dst_nodes[0] }}") == "{{ dr_dst_nodes[0] }}", frag
+    for frag in (_FORCED_STATE, _FORCED_ASSERT, _GRANT):
+        assert _task(frag)["when"] == "dr_force_b", frag
+    # The score is waited for on BOTH paths (#1660): ocf:pdrbd:drbd-dr scores a planned
+    # target only from the first monitor after the source turned Secondary.
+    assert "when" not in _task(_FORCED_SCORE)
     that = _task(_FORCED_ASSERT)["ansible.builtin.assert"]["that"]
     assert "dst_forced.stdout | regex_findall(drbd_disk_re) == ['UpToDate']" in that
     assert "dst_forced.stdout | regex_findall(drbd_role_re) == ['Secondary']" in that
@@ -250,9 +273,39 @@ def test_post_promote_assert_names_the_missing_promotion_score() -> None:
     assert "crm_mon -1 -A -r >&2" in body
 
 
+def test_the_forced_grant_is_explicit_transient_and_never_outlives_the_run() -> None:
+    # #1660: the forced target has no connected peer, so ocf:pdrbd:drbd-dr scores it only
+    # under the grant: a transient node attribute on the target's DR member, set after the
+    # target is proven UpToDate/Secondary/quorate and before the score is waited for.
+    grant = _task(_GRANT)["ansible.builtin.command"]["argv"]
+    assert grant == [
+        "crm_attribute", "--node", "{{ dr_dst_nodes[0] }}", "--lifetime", "reboot",
+        "--name", "{{ dr_grant_attr }}", "--update", "1", "--wait=local",
+    ]  # fmt: skip
+    assert _task(_GRANT)["delegate_to"] == "{{ dr_dst_nodes[0] }}"
+    assert _task(_GRANT)["changed_when"] is True
+    # The name is the one the agent reads ("pdrbd-dr-force-promote-$res").
+    assert _switch_vars()["dr_grant_attr"] == "pdrbd-dr-force-promote-{{ pdrbd_dr_res }}"
+    assert 'grant_attr="pdrbd-dr-force-promote-$res"' in _AGENT.read_text(encoding="utf-8")
+    # The cleanup is the block's `always`: it runs on every outcome, deletes, then PROVES
+    # the grant gone (rc 105 = not set), and is loud if it is not.
+    [block] = [t for t in _switch_top_level() if t.get("name") == _GRANT_BLOCK]
+    assert [t["name"] for t in block["always"]] == [_task(_UNGRANT)["name"]]
+    assert [t["name"] for t in block["block"]][0] == _task(_GRANT)["name"]
+    assert "promote at the target site" in str([t["name"] for t in block["block"]])
+    ungrant = _task(_UNGRANT)
+    assert ungrant["when"] == "dr_force_b"
+    assert ungrant["delegate_to"] == "{{ dr_dst_nodes[0] }}"
+    body = ungrant["ansible.builtin.shell"]
+    assert "--name {{ dr_grant_attr }} --delete --wait=local" in body
+    assert '[ "$rc" -eq 105 ]' in body
+    assert "IS STILL SET" in body
+    assert body.rstrip().endswith("exit 1")
+
+
 def test_planned_switch_skips_every_forced_step() -> None:
-    # The planned path is unchanged: every new task is gated on dr_force_b.
-    for frag in (_FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+    # The planned path is unchanged but for the score wait: every forced task is gated.
+    for frag in (_FORCE, _FORCED_STATE, _FORCED_ASSERT, _GRANT, _UNGRANT):
         assert str(_task(frag)["when"]).startswith("dr_force_b"), frag
         variables = {"dr_force_b": False, "dst_disk": ["Outdated"]}
         assert _cond(_task(frag)["when"], variables) is False, frag

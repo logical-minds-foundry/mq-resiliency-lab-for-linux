@@ -281,6 +281,33 @@ the command that re-promotes it.
 A forced DR after losing the source site is a manual run with `-e dr_force=true`,
 which accepts an RPO above zero and so refuses `--rpo0-drill`.
 
+The DR clone's agent, `ocf:pdrbd:drbd-dr`, adds one rule to `ocf:linbit:drbd`
+(#1660). A DR member that is not already Primary can be promoted only in two
+cases. Either it is connected to the other site's member, that member is
+Secondary, and its own disk is UpToDate. Or the forced DR has granted it one
+promotion. The forced DR sets that grant, a transient node attribute, on the
+target's DR member only, and always removes it before the run ends.
+
+So a site that was lost and comes back does not promote: there are never two
+DR Primaries. It stays secondary until you rejoin it:
+
+```bash
+cd ansible && ansible-playbook site-pdrbd-dr-rejoin.yml -e rejoin_site=a -e qm_name=PDRBDAPP
+```
+
+The rejoin makes the returning site the DR secondary of record, then waits for
+its resync from the live site. If the two sites' data diverged (a split brain,
+which IBM calls "partitioned"), the rejoin stops and changes no data. Re-run it
+with `-e dr_discard=true` to discard the returning site's divergent writes.
+Then `mqlab dr failback pcmk-drbd-ubuntu --rpo0-drill` returns the QM with
+RPO 0.
+
+The same rule applies to an HA failover at the DR primary site while the DR
+link is down: the new HA primary does not promote the DR resource until the
+link is back, unless you run a forced DR toward that site. A first bootstrap
+promotes site A only once site B's DR member is up and connected. See
+`docs/reference/drbd-operations.md`, "Returning DR site after a forced DR".
+
 !!! note "Per-arm DR coverage as-built"
     The **Pacemaker/SAN** arm (`pcmk-ubuntu`) declares no DR verb, so
     `mqlab dr` refuses it; it cuts over through `lab/scripts/pcmk-dr-cutover.sh`.

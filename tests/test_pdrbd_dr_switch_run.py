@@ -99,10 +99,12 @@ def _run(
     *extra: str,
     forced: str = _DRBD_FORCED,
     drbdadm_rc: int = 0,
+    pcs_promote_rc: int = 0,
 ) -> subprocess.CompletedProcess[str]:
     """Run the playbook. The DRBD stubs keep state: `drbdadm secondary` leaves `forced`
     behind (the state after the DRBD-level force), and the pcs promote leaves the resource
-    Primary. `drbdadm_rc` is what `drbdadm primary` exits with (11: DRBD refused it)."""
+    Primary. `drbdadm_rc` is what `drbdadm primary` exits with (11: DRBD refused it);
+    `pcs_promote_rc`, non-zero, makes every pcs call fail (the promote never settles)."""
     bindir = tmp_path / "bin"
     bindir.mkdir()
     log = tmp_path / "calls.log"
@@ -120,10 +122,27 @@ def _run(
         f"  *' secondary '*) cp {tmp_path / 'forced.out'} {state} ;;\n"
         "esac\n"
     )
-    pcs = f'case "$*" in *target-role=Promoted*) cp {tmp_path / "promoted.out"} {state} ;; esac\n'
+    pcs = (
+        f"exit {pcs_promote_rc}\n"
+        if pcs_promote_rc
+        else 'case "$*" in *target-role=Promoted*) '
+        f"cp {tmp_path / 'promoted.out'} {state} ;; esac\n"
+    )
     _stub(bindir, "drbdadm", record + drbdadm)
     _stub(bindir, "pcs", record + pcs)
-    _stub(bindir, "crm_attribute", record + 'case "$*" in *--query*) echo 1000 ;; esac\n')
+    # The promotion score reads 1000; the #1660 grant is a transient attribute that the
+    # stub stores in a file: --update sets it, --delete removes it, --query exits 105
+    # (not set) without it.
+    grant = tmp_path / "grant"
+    crm_attribute = (
+        'case "$*" in\n'
+        "  *master-drbd_dr_qm*--query*) echo 1000 ;;\n"
+        f"  *pdrbd-dr-force-promote-*--update*) echo 1 > {grant} ;;\n"
+        f"  *pdrbd-dr-force-promote-*--delete*) rm -f {grant} ;;\n"
+        f"  *pdrbd-dr-force-promote-*--query*) [ -f {grant} ] || exit 105; cat {grant} ;;\n"
+        "esac\n"
+    )
+    _stub(bindir, "crm_attribute", record + crm_attribute)
     inventory = tmp_path / "inventory.ini"
     inventory.write_text(_INVENTORY.format(python=sys.executable), encoding="utf-8")
     cfg = tmp_path / "ansible.cfg"
@@ -159,13 +178,32 @@ def test_forced_cutover_runs_past_the_source_and_promotes_the_target(tmp_path: P
     # #1655: the Outdated target is forced at the DRBD level, handed back to Secondary,
     # scored by the agent, and only then promoted by Pacemaker.
     lines = calls.splitlines()
+    grant = "--name pdrbd-dr-force-promote-pdrbdapp.dr"
+    upd = "--update 1 --wait=local"
     order = [
         lines.index("drbdadm -S primary --force pdrbdapp.dr"),
         lines.index("drbdadm -S secondary pdrbdapp.dr"),
+        # #1660: the one-shot grant, then the score, then the promote, then the cleanup.
+        lines.index(f"crm_attribute --node pdrbd-b1 --lifetime reboot {grant} {upd}"),
         next(i for i, c in enumerate(lines) if "master-drbd_dr_qm --query" in c),
         next(i for i, c in enumerate(lines) if "target-role=Promoted" in c),
+        next(i for i, c in enumerate(lines) if f"{grant} --delete" in c),
     ]
     assert order == sorted(order), calls
+    assert not (tmp_path / "grant").exists()  # proven gone before the run ends
+
+
+def test_forced_cutover_removes_the_grant_when_the_promote_fails(tmp_path: Path) -> None:
+    # The cleanup is the block's `always`: a promote that never settles still leaves no
+    # grant behind, and the run fails on the promote, not on the cleanup.
+    run = _run(tmp_path, _DRBD_FORCED, "-e", "dr_force=true", pcs_promote_rc=1)
+    out = run.stdout + run.stderr
+    assert run.returncode != 0, out
+    assert "TASK [promote at the target site" in out
+    calls = (tmp_path / "calls.log").read_text(encoding="utf-8")
+    assert "--name pdrbd-dr-force-promote-pdrbdapp.dr --update 1" in calls
+    assert "--name pdrbd-dr-force-promote-pdrbdapp.dr --delete" in calls
+    assert not (tmp_path / "grant").exists()
 
 
 def test_forced_cutover_of_an_uptodate_target_skips_the_drbd_level_force(
@@ -213,3 +251,4 @@ def test_planned_switch_still_contacts_the_source(tmp_path: Path) -> None:
     assert "source_site_must_not_be_contacted" in out
     calls = (tmp_path / "calls.log").read_text(encoding="utf-8")
     assert "pcs" not in calls  # nothing changed at either site
+    assert "pdrbd-dr-force-promote" not in calls  # a planned switch never grants
