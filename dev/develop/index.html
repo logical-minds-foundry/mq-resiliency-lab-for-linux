@@ -1309,6 +1309,25 @@ under epic
   how the per-role boxes are baked, kept registered, and rebuilt.</li>
 <li><strong><a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/development/build-layout.md"><code>build/</code> layout</a></strong>:
   the <code>build/</code> buckets and the cloud VM's boot disk.</li>
+<li><strong>Ansible roles read facts only as <code>ansible_facts['&lt;fact&gt;']</code>.</strong> Write
+  <code>ansible_facts['os_family']</code>, never the top-level <code>ansible_os_family</code>.
+  <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/ansible/ansible.cfg"><code>ansible/ansible.cfg</code></a>
+  sets <code>inject_facts_as_vars = False</code>, so a top-level fact name is undefined at
+  runtime. ansible-core 2.20 deprecates the old <code>True</code> default, and 2.24 makes
+  <code>False</code> the default. Setting it now means a missed reference fails today
+  instead of on the 2.24 upgrade (#136). The guard test
+  <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/tests/test_ansible_facts_guard.py"><code>tests/test_ansible_facts_guard.py</code></a>
+  fails on any <code>ansible_*</code> name under <code>ansible/</code> that is not <code>ansible_facts</code> or
+  an allowlisted connection or magic variable (<code>ansible_host</code>, <code>ansible_user</code>,
+  and so on). If you need a new one of those, add it to the test's allowlist.
+  The
+  <a href="https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/ansible-dependency-currency.md">Ansible dependency currency</a>
+  report says when the <code>ansible.cfg</code> line can go.</li>
+<li><strong>Docs toolchain.</strong> The site builds with the <code>docs</code> dependency group in
+  <code>pyproject.toml</code> (<code>uv sync --group docs</code>), which pins <code>mkdocs&gt;=1.6,&lt;2</code>.
+  MkDocs 2.0 breaks plugins and theme overrides. The MkDocs 2.0 notice printed
+  during the build is turned off upstream in the shared docs pipelines
+  (<code>NO_MKDOCS_2_WARNING=1</code>, vergil-actions v2.1.43).</li>
 </ul>
 
 
