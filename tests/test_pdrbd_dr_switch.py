@@ -197,6 +197,71 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
         assert "ignore_unreachable" not in path.read_text(encoding="utf-8"), path.name
 
 
+_FORCE = "forced — make an Outdated target UpToDate at the DRBD level"
+_FORCED_STATE = "forced — target DR state before the promote"
+_FORCED_ASSERT = "forced — assert the target is UpToDate, Secondary and quorate"
+_FORCED_SCORE = "forced — wait for the agent's promotion score"
+
+
+def test_forced_cutover_forces_an_outdated_target_at_the_drbd_level_first() -> None:
+    # #1655: ocf:linbit:drbd gives an Outdated disk no promotion score, so the forced path
+    # makes the target UpToDate with `primary --force`, hands it straight back to Secondary
+    # (never Primary outside Pacemaker), and only then lets Pacemaker promote it.
+    force = _task(_FORCE)
+    assert force["when"] == "dr_force_b and dst_disk != ['UpToDate']"
+    assert force["delegate_to"] == "{{ dr_dst_nodes[0] }}"
+    assert force["changed_when"] is True
+    body = force["ansible.builtin.shell"]
+    primary = body.index("drbdadm -S primary --force {{ pdrbd_dr_res }}")
+    secondary = body.index("drbdadm -S secondary {{ pdrbd_dr_res }}")
+    assert primary < secondary
+    assert body.count("exit 1") == 2  # each step fails loud, with the live state
+    assert body.count("drbdsetup status --verbose {{ pdrbd_dr_res }} >&2") == 2
+    assert "IS PRIMARY OUTSIDE PACEMAKER" in body
+    order = [_index(f) for f in (_REASSERT, _FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE)]
+    assert order == sorted(order)
+    assert order[-1] < _index("promote at the target site")
+
+
+def test_forced_cutover_proves_the_target_is_promotable_before_pacemaker() -> None:
+    for frag in (_FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+        task = _task(frag)
+        assert task["when"] == "dr_force_b", frag
+        assert task.get("delegate_to", "{{ dr_dst_nodes[0] }}") == "{{ dr_dst_nodes[0] }}", frag
+    that = _task(_FORCED_ASSERT)["ansible.builtin.assert"]["that"]
+    assert "dst_forced.stdout | regex_findall(drbd_disk_re) == ['UpToDate']" in that
+    assert "dst_forced.stdout | regex_findall(drbd_role_re) == ['Secondary']" in that
+    assert "dst_forced.stdout | regex_findall(drbd_quorum_re) == ['yes']" in that
+    assert "promotion score" in _task(_FORCED_ASSERT)["ansible.builtin.assert"]["fail_msg"]
+    # `pcs --wait` settles at once when there is no score yet, so the score is waited for,
+    # bounded, and its absence fails loud with the live state.
+    score = _task(_FORCED_SCORE)["ansible.builtin.shell"]
+    assert "--name master-drbd_dr_qm --query" in score
+    assert "--node {{ dr_dst_nodes[0] }}" in score
+    assert "seq 1 45" in score
+    assert "crm_mon -1 -A -r >&2" in score
+    assert score.rstrip().endswith("exit 1")
+
+
+def test_post_promote_assert_names_the_missing_promotion_score() -> None:
+    body = _task("assert the target DR resource is Primary")["ansible.builtin.shell"]
+    assert "Pacemaker promoted nothing" in body
+    assert "no promotion score (master-drbd_dr_qm)" in body
+    assert "crm_mon -1 -A -r >&2" in body
+
+
+def test_planned_switch_skips_every_forced_step() -> None:
+    # The planned path is unchanged: every new task is gated on dr_force_b.
+    for frag in (_FORCE, _FORCED_STATE, _FORCED_ASSERT, _FORCED_SCORE):
+        assert str(_task(frag)["when"]).startswith("dr_force_b"), frag
+        variables = {"dr_force_b": False, "dst_disk": ["Outdated"]}
+        assert _cond(_task(frag)["when"], variables) is False, frag
+    variables = {"dr_force_b": True, "dst_disk": ["UpToDate"]}
+    assert _cond(_task(_FORCE)["when"], variables) is False  # nothing to force
+    variables = {"dr_force_b": True, "dst_disk": ["Outdated"]}
+    assert _cond(_task(_FORCE)["when"], variables) is True
+
+
 def test_dr_switch_rpo0_seed_before_demote_and_verify_after_promote() -> None:
     seed, demote = _index("RPO-0 seed"), _index("stop and demote at the source site")
     promote, verify = _index("promote at the target site"), _index("RPO-0 verify")
@@ -351,6 +416,30 @@ def test_drbdsetup_parse() -> None:
     assert re.findall(v["drbd_peer_disk_re"], _DRBDSETUP) == ["UpToDate", "UpToDate"]
     lagging = _DRBDSETUP.replace("peer-disk:UpToDate", "peer-disk:Inconsistent", 1)
     assert re.findall(v["drbd_peer_disk_re"], lagging) == ["Inconsistent", "UpToDate"]
+    assert re.findall(v["drbd_quorum_re"], _DRBDSETUP) == ["yes"]
+
+
+# The stacked DR resource on pdrbd-b1, verbatim from the #1430 drill 6 hold (2026-10-19):
+# the link broken by a graceful disconnect, site A destroyed.
+_DRBDSETUP_DR_OUTDATED = (
+    "pdrbdapp.dr node-id:1 role:Secondary suspended:no force-io-failures:no\n"
+    "  volume:0 minor:7001 disk:Outdated backing_dev:/dev/drbd100 quorum:yes open:no\n"
+    "      blocked:no\n"
+    "  encrypted.remote node-id:0 connection:Connecting role:Unknown tls:yes\n"
+    "      congested:no ap-in-flight:0 rs-in-flight:0\n"
+    "    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no\n"
+)
+
+
+def test_drbdsetup_parse_on_the_held_drill6_state() -> None:
+    v = _switch_vars()
+    assert re.findall(v["drbd_role_re"], _DRBDSETUP_DR_OUTDATED) == ["Secondary"]
+    assert re.findall(v["drbd_disk_re"], _DRBDSETUP_DR_OUTDATED) == ["Outdated"]
+    assert re.findall(v["drbd_quorum_re"], _DRBDSETUP_DR_OUTDATED) == ["yes"]
+    assert re.findall(v["drbd_conn_re"], _DRBDSETUP_DR_OUTDATED) == ["Connecting"]
+    assert re.findall(v["drbd_peer_disk_re"], _DRBDSETUP_DR_OUTDATED) == ["DUnknown"]
+    no_quorum = _DRBDSETUP_DR_OUTDATED.replace("quorum:yes", "quorum:no")
+    assert re.findall(v["drbd_quorum_re"], no_quorum) == ["no"]
 
 
 # --- the watched DR-sync wait (spec §7) -----------------------------------------------------
