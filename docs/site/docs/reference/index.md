@@ -222,6 +222,10 @@ Hard-won, symptom-first reference notes live in the repo under `docs/reference/`
   as counter-options while IBM supports them (sourced, data vs judgment).
 - **[OS-version support matrix](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/os-version-support-matrix.md)**
   — IBM's MQ, Native HA and RDQM support status per OS release.
+- **[Ansible dependency currency](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/ansible-dependency-currency.md)**
+  — `ansible-core`, `ansible-lint` and the galaxy collections against their
+  latest releases, how they are locked and installed, and recommendations
+  (sourced, data vs judgment).
 - **[Lab gotchas playbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-gotchas.md)**
   — symptom → cause → fix for libvirt / Vagrant / Pacemaker.
 - **[Lab bootstrap runbook](https://github.com/logical-minds-foundry/mq-resiliency-lab-for-linux/blob/develop/docs/reference/lab-bootstrap.md)**
