@@ -1,8 +1,9 @@
 """Guard: no top-level ``ansible_*`` fact reference under ``ansible/`` (#136).
 
-ansible-core 2.24 removes ``INJECT_FACTS_AS_VARS``: gathered facts stop being injected
-as top-level ``ansible_<fact>`` variables and are reachable only as
-``ansible_facts['<fact>']`` (no ``ansible_`` prefix). The lab sets
+ansible-core 2.20 deprecates the ``True`` default of ``INJECT_FACTS_AS_VARS``, and the
+default switches to ``False`` by 2.24: gathered facts stop being injected as top-level
+``ansible_<fact>`` variables and are reachable only as ``ansible_facts['<fact>']`` (no
+``ansible_`` prefix). The lab sets
 ``inject_facts_as_vars = False`` in ``ansible/ansible.cfg`` now, so a top-level fact
 reference is already undefined at runtime. Several such sites pick which files load
 (``tasks/os-vars.yml``, the ``install-<os_family>.yml`` includes), so a miss fails
