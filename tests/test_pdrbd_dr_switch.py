@@ -23,6 +23,8 @@ PB = ANSIBLE / "site-pdrbd-dr-switch.yml"
 SITE = ANSIBLE / "site-pdrbd.yml"
 SEED = ANSIBLE / "tasks" / "rpo0-drill-seed.yml"
 VERIFY = ANSIBLE / "tasks" / "rpo0-drill-verify.yml"
+_SRC_REL = "tasks/pdrbd-dr-switch-source.yml"
+SRC_TASKS = ANSIBLE / _SRC_REL
 CRM_VARS = ANSIBLE / "vars" / "pdrbd-crm-mon.yml"
 BLUEPRINT = REPO_ROOT / "docs" / "reference" / "rdqm-blueprint"
 
@@ -32,10 +34,13 @@ def _load(path: Path) -> Any:
 
 
 def _all_tasks() -> list[tuple[str, dict[str, Any]]]:
+    """Every task in run order, with the source include expanded in place."""
     out: list[tuple[str, dict[str, Any]]] = []
     for play in _load(PB):
         for t in play.get("tasks", []):
-            out.extend((play["name"], inner) for inner in t.get("block", [t]))
+            is_source = t.get("ansible.builtin.include_tasks") == _SRC_REL
+            inner = _source_tasks() if is_source else t.get("block", [t])
+            out.extend((play["name"], i) for i in inner)
     return out
 
 
@@ -44,9 +49,14 @@ def _switch_top_level() -> list[dict[str, Any]]:
     return play["tasks"]
 
 
-def _source_block() -> dict[str, Any]:
-    [block] = [t for t in _switch_top_level() if "block" in t]
-    return block
+def _source_include() -> dict[str, Any]:
+    [inc] = [t for t in _switch_top_level() if t.get("ansible.builtin.include_tasks") == _SRC_REL]
+    return inc
+
+
+def _source_tasks() -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = _load(SRC_TASKS)
+    return tasks
 
 
 def _index(fragment: str) -> int:
@@ -138,9 +148,12 @@ def test_forced_cutover_refuses_the_rpo0_drill() -> None:
 
 
 def test_source_steps_are_skipped_only_on_a_forced_cutover() -> None:
-    block = _source_block()
-    assert block["when"] == "not dr_force_b"
-    names = [t["name"] for t in block["block"]]
+    # An include, not a block (#1647): a block's tasks have their delegate_to templated
+    # before their inherited `when`; a skipped include never loads its file.
+    inc = _source_include()
+    assert inc["when"] == "not dr_force_b"
+    assert not [t["name"] for t in _switch_top_level() if "block" in t]
+    names = [t["name"] for t in _source_tasks()]
     for frag in (
         "source site crm_mon",
         "find the source site's DR-promoted node",
@@ -167,10 +180,11 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
     for play in _load(PB):
         assert play["hosts"] == "localhost", play["name"]
         assert play["gather_facts"] is False, play["name"]
-    # - every task that reaches a source node is inside the ONE block gated
-    #   `not dr_force_b` (a skipped task never connects to its delegate), and no other task;
-    inside = _source_block()["block"]
-    outside = [t for t in _switch_top_level() if "block" not in t]
+    # - every task that reaches a source node is in the ONE task file included under
+    #   `not dr_force_b` (a skipped include is never loaded or templated), and no other task;
+    inside = _source_tasks()
+    outside = [t for t in _switch_top_level() if t.get("ansible.builtin.include_tasks") != _SRC_REL]
+    assert len(outside) == len(_switch_top_level()) - 1
     assert all(_delegates_to_source(t) or "set_fact" in str(t) or "assert" in str(t)
                for t in inside)  # fmt: skip
     assert not [t["name"] for t in outside if _delegates_to_source(t)]
@@ -179,22 +193,25 @@ def test_forced_cutover_never_contacts_an_unreachable_source() -> None:
         target = str(t.get("delegate_to", ""))
         assert target in ("", "{{ groups[dst][0] }}", "{{ dr_dst_nodes[0] }}"), t["name"]
     # - and no unreachable-tolerance is sprinkled around instead.
-    assert "ignore_unreachable" not in PB.read_text(encoding="utf-8")
+    for path in (PB, SRC_TASKS):
+        assert "ignore_unreachable" not in path.read_text(encoding="utf-8"), path.name
 
 
 def test_dr_switch_rpo0_seed_before_demote_and_verify_after_promote() -> None:
     seed, demote = _index("RPO-0 seed"), _index("stop and demote at the source site")
     promote, verify = _index("promote at the target site"), _index("RPO-0 verify")
     assert seed < demote < promote < verify
-    assert _task("RPO-0 seed")["ansible.builtin.include_tasks"] == "tasks/rpo0-drill-seed.yml"
+    # The seed's path is relative to the source task file, which sits beside it in tasks/.
+    assert _task("RPO-0 seed")["ansible.builtin.include_tasks"] == "rpo0-drill-seed.yml"
+    assert (SRC_TASKS.parent / "rpo0-drill-seed.yml") == SEED
     assert _task("RPO-0 verify")["ansible.builtin.include_tasks"] == "tasks/rpo0-drill-verify.yml"
     for frag in ("RPO-0 seed", "RPO-0 verify"):
         assert _task(frag)["when"] == "rpo0_drill | default(false) | bool", frag
-    assert "rpo0-drill-seed" in str(_source_block())  # the seed contacts the source
+    assert "rpo0-drill-seed" in str(_source_tasks())  # the seed contacts the source
 
 
 def test_dr_switch_never_masks_a_failure() -> None:
-    for path in (PB, SEED, VERIFY, SITE):
+    for path in (PB, SRC_TASKS, SEED, VERIFY, SITE):
         text = path.read_text(encoding="utf-8")
         assert "|| true" not in text, path.name
         assert "failed_when: false" not in text, path.name
@@ -208,7 +225,9 @@ def test_dr_switch_flips_only_the_dr_clone() -> None:
     promote = _task("promote at the target site")["ansible.builtin.shell"]
     assert "drbd_dr_qm-clone target-role=Unpromoted" in demote
     assert "drbd_dr_qm-clone target-role=Promoted" in promote
-    assert "drbd_qm-clone" not in PB.read_text(encoding="utf-8").replace("drbd_dr_qm-clone", "")
+    for path in (PB, SRC_TASKS):
+        text = path.read_text(encoding="utf-8")
+        assert "drbd_qm-clone" not in text.replace("drbd_dr_qm-clone", ""), path.name
     # ... and the dr-role marker with it (RDQM's rdqm:<qm>-dr-role, 1 primary / 2 secondary).
     assert "-dr-role --update 2" in demote
     assert "-dr-role --update 1" in promote
