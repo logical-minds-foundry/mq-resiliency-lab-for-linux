@@ -116,11 +116,23 @@
       changed_when: false
       when: dr_enabled | default(true) | bool  # plays take no `when:`; gate the task
 
+    # The poll output is registered, not shown, so print it from the node that held the DR
+    # resource: its `sync <pct>` progress lines, then `in-sync after <n>s` (#1635). The
+    # verdict is the LAST line: progress lines come first, so a sync that had to catch up
+    # does not start with `in-sync`. Ansible shows a shell task's output only at the end;
+    # a failed poll (stall or overrun) shows its stdout and stderr in the failure.
+    - name: DR sync result (progress, then elapsed) from the node that held the DR resource
+      ansible.builtin.debug:
+        msg: "{{ pdrbd_dr_sync.stdout_lines }}"
+      when: >-
+        (dr_enabled | default(true) | bool)
+        and (pdrbd_dr_sync.stdout_lines | last) is match('^in-sync after [0-9]+s$')
+
     - name: exactly one site-A node held the DR resource and reported in-sync
       ansible.builtin.assert:
         that: >-
-          groups['pdrbd_a'] | map('extract', hostvars, ['pdrbd_dr_sync', 'stdout'])
-          | select('match', '^in-sync') | list | length == 1
+          groups['pdrbd_a'] | map('extract', hostvars, ['pdrbd_dr_sync', 'stdout_lines'])
+          | map('last') | select('match', '^in-sync after [0-9]+s$') | list | length == 1
         fail_msg: "no site-A node (or more than one) holds {{ pdrbd_dr_res }} in sync — check crm_mon"
       run_once: true
       when: dr_enabled | default(true) | bool
