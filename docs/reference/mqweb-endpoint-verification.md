@@ -255,12 +255,21 @@ The node commands run in a shell on the guest, opened with `mqlab vm ssh <guest>
 mqlab console open pcmk-ubuntu                        # note the live endpoint
 # pcmk, on a cluster node (mqlab vm ssh pcmk-a1): move the resource group
 sudo pcs resource move mq_group pcmk-a2               # afterwards: sudo pcs resource clear mq_group
-# rdqm, on the current primary (mqlab vm ssh rdqm-a1): end the QM with reconnect;
-# RDQM restarts it on another node
-sudo su - mqm -c '/opt/mqm/bin/endmqm -r RDQMAPP'
+# rdqm, on the current primary (mqlab vm ssh rdqm-a1): suspend this node;
+# RDQM stops the QM here and restarts it on another site-A node
+sudo /opt/mqm/bin/rdqmadm -s
 # back on the dev VM:
 mqlab console open pcmk-ubuntu                        # same VIP; log in to the Console
+# rdqm, on rdqm-a1 again: resume the node; RDQMAPP moves back to its preferred node
+sudo /opt/mqm/bin/rdqmadm -r
 ```
+
+On RDQM, do not use `endmqm -r` to fail over. It ends the queue manager and disables
+it (`Replicated data queue manager disabled.`), so nothing restarts it on another node.
+`console open` then reports `ended`. Run `strmqm RDQMAPP` as `mqm` on the primary to
+bring it back. `rdqmadm -s` / `-r` are IBM's node suspend and resume
+([`rdqmadm`](https://www.ibm.com/docs/en/ibm-mq/9.4.x?topic=reference-rdqmadm-administer-replicated-data-queue-manager-cluster)),
+the same move as [`rdqm-ha-cheatsheet.md`](rdqm-ha-cheatsheet.md).
 
 **Native HA** (`nativeha-ubuntu`, `nativeha-rhel-crr`). Stop the active instance's
 monitor, so another instance in the Live group takes over. `console open` lands on the
