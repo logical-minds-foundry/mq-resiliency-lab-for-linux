@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import errno
+import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -81,6 +84,193 @@ def test_real_git_unrunnable_raises_build_env_error(monkeypatch):
         b._git(["git", "rev-parse", "--git-dir"])
     assert "git failed (could not run): git rev-parse --git-dir" in str(err.value)
     assert "No such file or directory" in str(err.value)
+
+
+def _st(uid: int, gid: int = 1000, mode: int = 0o40755):
+    return os.stat_result((mode, 0, 0, 1, uid, gid, 0, 0, 0, 0))
+
+
+def _fake_lstat(results):
+    """Injected lstat: path -> stat_result, or an OSError to raise."""
+
+    def lstat(path):
+        result = results[Path(path)]
+        if isinstance(result, OSError):
+            raise result
+        return result
+
+    return lstat
+
+
+_NOW = datetime(2026, 10, 19, 12, 50, 1, 234567, tzinfo=UTC)
+
+
+def _diag(cwd, lstat, rerun=lambda args, cwd: "re-run failed (exit 128): fatal: x"):
+    return b.dubious_ownership_diagnostics(
+        ["git", "rev-parse", "--git-dir"], cwd, lstat=lstat, rerun=rerun, now=lambda: _NOW
+    )
+
+
+def test_real_git_dubious_failure_appends_diagnostics_and_still_raises(monkeypatch, tmp_path):
+    # #1628: the original error is raised unchanged, with the diagnostics appended.
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        raise b.subprocess.CalledProcessError(128, args, output="", stderr=_DUBIOUS)
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(b, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    with pytest.raises(b.BuildEnvError) as err:
+        b._git(["git", "rev-parse", "--git-dir"])
+    msg = str(err.value)
+    assert msg.startswith("git failed (exit 128): git rev-parse --git-dir")
+    assert "ownership diagnostics (#1628) at " in msg
+    assert f"lstat {tmp_path}: {os.geteuid()}:" in msg
+    assert "re-run failed (exit 128): fatal: detected dubious ownership" in msg
+    assert len(calls) == 2  # the failed call + exactly one diagnostic re-run
+    assert isinstance(err.value.__cause__, b.subprocess.CalledProcessError)
+
+
+def test_real_git_other_failure_has_no_ownership_diagnostics(monkeypatch):
+    def fake_run(args, **kwargs):
+        raise b.subprocess.CalledProcessError(128, args, output="", stderr="fatal: not a repo")
+
+    monkeypatch.setattr(b, "repo_root", lambda: Path("/repo"))
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    with pytest.raises(b.BuildEnvError) as err:
+        b._git(["git", "rev-parse", "--git-dir"])
+    assert "ownership diagnostics" not in str(err.value)
+
+
+def test_diagnostics_report_an_lstat_errno_not_an_owner(tmp_path, monkeypatch):
+    # git treats a failed lstat as "not owned"; the diagnostics must say it FAILED, and why.
+    monkeypatch.delenv("SUDO_UID", raising=False)
+    (tmp_path / ".git").mkdir()
+    euid = os.geteuid()
+    lstat = _fake_lstat(
+        {
+            tmp_path: OSError(errno.EIO, "Input/output error"),
+            tmp_path / ".git": _st(euid),
+        }
+    )
+    out = _diag(tmp_path, lstat)
+    assert out.splitlines() == [
+        "  ownership diagnostics (#1628) at 2026-10-19T12:50:01.234567+00:00:",
+        f"  euid:egid {euid}:{os.getegid()}",
+        f"  lstat {tmp_path}: FAILED EIO (Input/output error)",
+        f"  lstat {tmp_path / '.git'}: {euid}:1000 drwxr-xr-x",
+        "  re-run failed (exit 128): fatal: x",
+    ]
+
+
+def test_diagnostics_name_an_unknown_errno_by_number(tmp_path):
+    (tmp_path / ".git").mkdir()
+    lstat = _fake_lstat({tmp_path: OSError("no errno"), tmp_path / ".git": OSError("x")})
+    assert f"lstat {tmp_path}: FAILED errno None (None)" in _diag(tmp_path, lstat)
+
+
+def test_diagnostics_flag_a_real_uid_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("SUDO_UID", "501")
+    (tmp_path / ".git").mkdir()
+    euid = os.geteuid()
+    lstat = _fake_lstat({tmp_path: _st(euid + 1), tmp_path / ".git": _st(euid)})
+    out = _diag(tmp_path, lstat)
+    assert f"euid:egid {euid}:{os.getegid()} SUDO_UID=501" in out
+    assert f"lstat {tmp_path}: {euid + 1}:1000 drwxr-xr-x  <-- uid differs from euid {euid}" in out
+    assert f"lstat {tmp_path / '.git'}: {euid}:1000 drwxr-xr-x\n" in out
+
+
+def test_diagnostics_follow_a_worktree_gitfile_to_its_gitdir(tmp_path):
+    gitdir = tmp_path / "main" / ".git" / "worktrees" / "wt"
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    (wt / ".git").write_text(f"gitdir: {gitdir}\n")
+    euid = os.geteuid()
+    lstat = _fake_lstat(
+        {
+            wt: _st(euid),
+            wt / ".git": _st(euid, mode=0o100644),
+            gitdir: OSError(errno.ENOENT, "No such file or directory"),
+        }
+    )
+    out = _diag(wt, lstat)
+    assert f"lstat {wt / '.git'}: {euid}:1000 -rw-r--r--" in out
+    assert f"lstat {gitdir}: FAILED ENOENT (No such file or directory)" in out
+
+
+def test_diagnostics_resolve_a_relative_gitfile_against_the_worktree(tmp_path):
+    (tmp_path / ".git").write_text("gitdir: ../main/.git/worktrees/wt\n")
+    target = tmp_path / "../main/.git/worktrees/wt"
+    euid = os.geteuid()
+    lstat = _fake_lstat({tmp_path: _st(euid), tmp_path / ".git": _st(euid), target: _st(euid)})
+    assert f"lstat {target}: {euid}:1000" in _diag(tmp_path, lstat)
+
+
+def test_diagnostics_report_an_unreadable_gitfile(tmp_path):
+    # .git missing entirely: both its lstat and the gitfile read say so.
+    enoent = OSError(errno.ENOENT, "No such file or directory")
+    lstat = _fake_lstat({tmp_path: _st(os.geteuid()), tmp_path / ".git": enoent})
+    out = _diag(tmp_path, lstat)
+    assert f"read {tmp_path / '.git'}: FAILED ENOENT (No such file or directory)" in out
+
+
+def test_diagnostics_stat_before_the_rerun(tmp_path):
+    (tmp_path / ".git").mkdir()
+    order = []
+
+    def lstat(path):
+        order.append("lstat")
+        return _st(os.geteuid())
+
+    def rerun(args, cwd):
+        order.append("rerun")
+        return "re-run succeeded (transient)"
+
+    assert _diag(tmp_path, lstat, rerun).endswith("  re-run succeeded (transient)")
+    assert order == ["lstat", "lstat", "rerun"]
+
+
+def test_rerun_verdict_transient_success(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen.update(kwargs)
+        return b.subprocess.CompletedProcess(args, 0, stdout="/repo/.git\n", stderr="")
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    assert b._rerun_verdict(["git", "rev-parse"], tmp_path) == "re-run succeeded (transient)"
+    assert seen["cwd"] == tmp_path
+    assert seen["stdin"] is b.subprocess.DEVNULL
+
+
+def test_rerun_verdict_persistent_failure_reports_first_stderr_line(monkeypatch, tmp_path):
+    def fake_run(args, **kwargs):
+        raise b.subprocess.CalledProcessError(128, args, output="", stderr=_DUBIOUS)
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    assert b._rerun_verdict(["git", "rev-parse"], tmp_path) == (
+        "re-run failed (exit 128): fatal: detected dubious ownership in repository at '/repo'"
+    )
+
+
+def test_rerun_verdict_failure_without_stderr(monkeypatch, tmp_path):
+    def fake_run(args, **kwargs):
+        raise b.subprocess.CalledProcessError(1, args, output="", stderr=None)
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    assert b._rerun_verdict(["git"], tmp_path) == "re-run failed (exit 1): (no stderr)"
+
+
+def test_rerun_verdict_unrunnable(monkeypatch, tmp_path):
+    def fake_run(args, **kwargs):
+        raise FileNotFoundError(errno.ENOENT, "No such file or directory", "git")
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    assert b._rerun_verdict(["git"], tmp_path) == (
+        "re-run could not run: ENOENT (No such file or directory)"
+    )
 
 
 def test_ensure_propagates_git_failure_diagnosis(tmp_path):

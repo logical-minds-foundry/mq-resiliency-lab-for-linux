@@ -8,10 +8,14 @@ subprocess work is isolated here and injected in tests.
 
 from __future__ import annotations
 
+import errno
 import filecmp
+import os
 import shutil
+import stat
 import subprocess
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -52,9 +56,10 @@ def _git(args: list[str]) -> str:
             cwd=cwd,
         ).stdout.strip()
     except subprocess.CalledProcessError as exc:
-        raise BuildEnvError(
-            git_failure_message(args, cwd, exit_code=exc.returncode, stderr=exc.stderr)
-        ) from exc
+        message = git_failure_message(args, cwd, exit_code=exc.returncode, stderr=exc.stderr)
+        if DUBIOUS in (exc.stderr or ""):
+            message += "\n" + dubious_ownership_diagnostics(args, cwd)
+        raise BuildEnvError(message) from exc
     except OSError as exc:  # git missing / cwd unusable: no exit code, but say why
         raise BuildEnvError(
             git_failure_message(args, cwd, exit_code=None, stderr=str(exc))
@@ -68,6 +73,79 @@ def git_failure_message(
     status = "could not run" if exit_code is None else f"exit {exit_code}"
     detail = (stderr or "").strip() or "(no stderr)"
     return f"git failed ({status}): {' '.join(args)}\n  cwd: {cwd}\n  stderr: {detail}"
+
+
+# Intermittent "dubious ownership" on the virtiofs-mounted checkout (#1628). git's check
+# (setup.c ensure_valid_ownership -> git-compat-util.h is_path_owned_by_current_uid, git
+# 2.43.0) returns "not owned" when lstat() FAILS, so the message cannot tell a failed stat
+# from a real uid mismatch. These diagnostics, captured the instant the call fails, can.
+# They only describe the failure: the caller still raises the original error.
+DUBIOUS = "dubious ownership"
+
+
+def _errno_text(exc: OSError) -> str:
+    return f"{errno.errorcode.get(exc.errno or -1, f'errno {exc.errno}')} ({exc.strerror})"
+
+
+def _lstat_line(path: Path, lstat: Callable[[Path], os.stat_result], euid: int) -> str:
+    try:
+        st = lstat(path)
+    except OSError as exc:
+        return f"  lstat {path}: FAILED {_errno_text(exc)}"
+    mismatch = "" if st.st_uid == euid else f"  <-- uid differs from euid {euid}"
+    return f"  lstat {path}: {st.st_uid}:{st.st_gid} {stat.filemode(st.st_mode)}{mismatch}"
+
+
+def _gitfile_lines(gitfile: Path, lstat: Callable[[Path], os.stat_result], euid: int) -> list[str]:
+    """In a worktree .git is a 'gitdir: <path>' file, and git also checks that target."""
+    try:
+        text = gitfile.read_text()
+    except IsADirectoryError:
+        return []  # main checkout: .git is the gitdir itself, already stat'd
+    except OSError as exc:
+        return [f"  read {gitfile}: FAILED {_errno_text(exc)}"]
+    # Joining an absolute path replaces the base, so this resolves both gitfile forms.
+    target = gitfile.parent / text.removeprefix("gitdir:").strip()
+    return [_lstat_line(target, lstat, euid)]
+
+
+def _rerun_verdict(args: list[str], cwd: Path) -> str:
+    """Run the failed git command once more, for diagnosis only, and say how it went."""
+    try:
+        subprocess.run(  # noqa: S603
+            args, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=True, cwd=cwd
+        )
+    except subprocess.CalledProcessError as exc:
+        first = ((exc.stderr or "").strip().splitlines() or ["(no stderr)"])[0]
+        return f"re-run failed (exit {exc.returncode}): {first}"
+    except OSError as exc:
+        return f"re-run could not run: {_errno_text(exc)}"
+    return "re-run succeeded (transient)"
+
+
+def dubious_ownership_diagnostics(
+    args: list[str],
+    cwd: Path,
+    *,
+    lstat: Callable[[Path], os.stat_result] = os.lstat,
+    rerun: Callable[[list[str], Path], str] = _rerun_verdict,
+    now: Callable[[], datetime] = lambda: datetime.now(tz=UTC),
+) -> str:
+    """What the process and filesystem looked like when git refused the repo (#1628)."""
+    stamp = now().isoformat(timespec="microseconds")
+    euid = os.geteuid()
+    sudo_uid = os.environ.get("SUDO_UID")
+    sudo = "" if sudo_uid is None else f" SUDO_UID={sudo_uid}"
+    gitfile = cwd / ".git"
+    lines = [
+        f"  ownership diagnostics (#1628) at {stamp}:",
+        f"  euid:egid {euid}:{os.getegid()}{sudo}",
+        _lstat_line(cwd, lstat, euid),
+        _lstat_line(gitfile, lstat, euid),
+        *_gitfile_lines(gitfile, lstat, euid),
+    ]
+    lines.append(f"  {rerun(args, cwd)}")  # after the stats: they are the immediate evidence
+    return "\n".join(lines)
 
 
 def is_worktree(*, run: Callable[[list[str]], str] = _git) -> bool:
