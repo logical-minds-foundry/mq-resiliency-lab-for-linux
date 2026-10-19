@@ -1,0 +1,43 @@
+# {{ ansible_managed }}
+# tlshd -- the kernel-TLS handshake daemon for DRBD's replication TLS (lab #1609), the
+# pcmk-drbd-ubuntu counterpart of RDQM's secure replication (#545, rdqm-replication-tls).
+# DRBD opens a connection in either direction, so client and server carry the same
+# identity: this node's CA-signed certificate and key.
+#
+# The layout follows the installed ktls-utils (pdrbd-replication-tls tasks/main.yml):
+{% if pdrbd_tlshd_legacy | bool %}
+# 0.9 (Ubuntu 24.04): [main] debug, and no x509.truststore -- peers are verified against
+# the system trust store, which holds the replication CA on this version only.
+[main]
+debug={{ pdrbd_repl_tlshd_loglevel }}
+tlsdebug=0
+nl_debug=0
+
+[authenticate.client]
+x509.certificate={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.key
+
+[authenticate.server]
+x509.certificate={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.key
+{% else %}
+# 0.10+ (Ubuntu 26.04 ships 1.3.0): the RDQM arm's layout, with peers verified against
+# the replication CA alone (x509.truststore).
+# loglevel MUST be non-zero (#558): 0 hides every handshake outcome and certificate error.
+[debug]
+loglevel={{ pdrbd_repl_tlshd_loglevel }}
+tls=0
+nl=0
+
+[authenticate]
+
+[authenticate.client]
+x509.truststore={{ pdrbd_repl_drbd_dir }}/{{ pdrbd_repl_ca_file }}
+x509.certificate={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.key
+
+[authenticate.server]
+x509.truststore={{ pdrbd_repl_drbd_dir }}/{{ pdrbd_repl_ca_file }}
+x509.certificate={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.crt
+x509.private_key={{ pdrbd_repl_drbd_dir }}/{{ inventory_hostname }}.key
+{% endif %}

@@ -4,7 +4,8 @@
 # the pcmk-drbd-ubuntu stack (the RDQM-faithful open-source arm: Corosync/Pacemaker + LINBIT
 # DRBD 9 on Ubuntu) otherwise pay EVERY bootstrap on the bare Ubuntu cloud-image base
 # (lab/versions.yaml) — base IBM MQ (server + client + SDK + samples debs, NO RDQM) + LINBIT
-# DRBD 9 (drbd-dkms + drbd-utils) + acl + node-exporter + alloy.
+# DRBD 9 (drbd-dkms + drbd-utils, plus ktls-utils for its replication TLS, #1609; tlshd
+# baked inert) + acl + node-exporter + alloy.
 #
 # DRBD 9, NEVER the in-kernel 8.4 (spec D2): the drbd9 role's install half adds
 # ppa:linbit/linbit-drbd9-stack, builds the drbd-dkms module against THIS image's kernel
