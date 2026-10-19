@@ -94,6 +94,6 @@
 
 - name: target service enabled (restores config at boot)
   ansible.builtin.systemd:
-    name: "{{ 'target' if ansible_os_family == 'RedHat' else 'rtslib-fb-targetctl' }}"
+    name: "{{ 'target' if ansible_facts['os_family'] == 'RedHat' else 'rtslib-fb-targetctl' }}"
     enabled: true
   become: true

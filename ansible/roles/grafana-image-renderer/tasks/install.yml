@@ -22,7 +22,7 @@
     url: https://dl.google.com/linux/linux_signing_key.pub
     dest: /etc/apt/keyrings/google-chrome.asc
     mode: "0644"
-  when: ansible_architecture != 'aarch64'
+  when: ansible_facts['architecture'] != 'aarch64'
 
 - name: google chrome apt repo (deb822, x86_64)
   ansible.builtin.deb822_repository:
@@ -34,14 +34,14 @@
     architectures: [amd64]
     signed_by: /etc/apt/keyrings/google-chrome.asc
     state: present
-  when: ansible_architecture != 'aarch64'
+  when: ansible_facts['architecture'] != 'aarch64'
 
 - name: install google chrome (x86_64)
   ansible.builtin.apt:
     name: google-chrome-stable
     update_cache: true
     lock_timeout: "{{ apt_lock_timeout }}"
-  when: ansible_architecture != 'aarch64'
+  when: ansible_facts['architecture'] != 'aarch64'
 
 # aarch64: no arm64 Chrome/Edge .deb exists — install the distro Chromium instead.
 - name: install chromium (aarch64)
@@ -49,7 +49,7 @@
     name: chromium-browser
     update_cache: true
     lock_timeout: "{{ apt_lock_timeout }}"
-  when: ansible_architecture == 'aarch64'
+  when: ansible_facts['architecture'] == 'aarch64'
 
 # --- Renderer binary + service -----------------------------------------------------
 # The release asset is a single self-contained executable (no archive to unpack).

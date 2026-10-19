@@ -24,7 +24,7 @@ data_prepper_version: "2.16.0"
 # JAVA_HOME guesswork in the unit — and satisfies the "Java 11+, java on PATH"
 # requirement by construction.
 # Data Prepper arch tokens are x64 / arm64 (like opensearch, NOT amd64).
-data_prepper_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+data_prepper_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}"
 data_prepper_pkg: "opensearch-data-prepper-jdk-{{ data_prepper_version }}-linux-{{ data_prepper_arch }}"
 data_prepper_url: "https://artifacts.opensearch.org/data-prepper/{{ data_prepper_version }}/{{ data_prepper_pkg }}.tar.gz"
 

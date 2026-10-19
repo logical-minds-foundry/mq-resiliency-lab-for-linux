@@ -127,7 +127,7 @@ def test_snapd_mode_is_keep_only_for_obs_on_aarch64() -> None:
         (task,) = _role_includes(_trim_play(box, _plays(stem)), "snapd-off")
         mode = (task.get("vars") or {}).get("snapd_off_mode")
         if stem == "obs":
-            assert mode == "{{ 'keep' if ansible_architecture == 'aarch64' else 'purge' }}"
+            assert mode == "{{ 'keep' if ansible_facts['architecture'] == 'aarch64' else 'purge' }}"
         else:
             assert mode is None, f"{box}: must take the default snapd_off_mode (purge)"
     assert _defaults(SNAP_ROLE)["snapd_off_mode"] == "purge"
@@ -140,7 +140,7 @@ def test_obs_aarch64_snap_is_really_the_chromium_browser_deb() -> None:
     )
     arm = next(t for t in install if t.get("name") == "install chromium (aarch64)")
     assert arm["ansible.builtin.apt"]["name"] == "chromium-browser"
-    assert arm["when"] == "ansible_architecture == 'aarch64'"
+    assert arm["when"] == "ansible_facts['architecture'] == 'aarch64'"
 
 
 # --- cloud-init-trim -----------------------------------------------------------------
@@ -264,7 +264,7 @@ def test_snapd_keep_mode_masks_only_the_seeded_gate() -> None:
 @pytest.mark.parametrize("role", (CI_ROLE, SNAP_ROLE))
 def test_roles_refuse_a_non_debian_host(role: Path) -> None:
     first = _tasks(role)[0]
-    assert "ansible_os_family == 'Debian'" in str(first["ansible.builtin.assert"]["that"])
+    assert "ansible_facts['os_family'] == 'Debian'" in str(first["ansible.builtin.assert"]["that"])
 
 
 # --- manifest-hash closure -----------------------------------------------------------

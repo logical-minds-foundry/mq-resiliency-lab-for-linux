@@ -9,7 +9,7 @@
 # sync with that manifest entry, exactly as loki_version tracks the `loki` manifest key.
 opensearch_version: "3.9.0"
 # OpenSearch tarball arch tokens are x64 / arm64 (NOT amd64), unlike loki/alloy.
-opensearch_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'x64' }}"
+opensearch_arch: "{{ 'arm64' if ansible_facts['architecture'] == 'aarch64' else 'x64' }}"
 # min (core-only) distribution: OpenSearch WITHOUT the bundled plugins — critically,
 # without the security plugin. This is the deliberate v1 posture (epic .github#198): the
 # logsearch tier runs plaintext on the unhardened telemetry plane (#827), so the security
