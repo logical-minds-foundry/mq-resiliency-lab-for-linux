@@ -1,0 +1,20 @@
+{
+  "schema_version": 2,
+  "issue": "1666",
+  "branch": "feature/1666-rdqm-observe",
+  "base": "origin/develop",
+  "status": "ready",
+  "created_at": "2026-10-19T20:47:11Z",
+  "updated_at": "2026-10-19T20:47:11Z",
+  "git": {
+    "base_sha": "fc0ada269567b1af60c8946d2664b9b0627a1c4d",
+    "head_sha": "7d006b14b58a9df78a4f680505dcb50d893ebe32"
+  },
+  "pr_metadata": {
+    "title": "docs(rdqm): record RDQM's DR-return and HA-under-DR-outage behaviour (#1666)",
+    "summary": "Seven black-box drills on a cold-built rdqm-rhel show that RDQM keeps HA failover working while the DR link is down, but has no guard against a returning old primary: it detects the split brain, reports Partitioned, and leaves the resolution to the operator. The recordings, findings and ledger updates give #1660 and #1668 the floor to design to.",
+    "notes": "- Findings: docs/reference/rdqm-blueprint/observations/README.md (\u00a71 summary and mechanism tables; \u00a72 per scenario; \u00a73 gaps). Every claim is labelled data or judgment and cites file:line.\n- All seven scenarios ran: S0, S4, S1, S1b, S5 (the addendum), S2 and S3. Key results:\n  - HA failover with the DR link down works: about 26 s (S1 and S1b).\n  - An isolated returning site A promotes its DR copy and runs the QM while B is live (S3, about 15.5 min dual-active). DRBD then reports split brain, rdqmstatus reports Partitioned, and both QMs keep running until rdqmdr -s / -p.\n  - A forced rdqmdr -p after a GRACEFUL break cannot start the QM, because B's disk is Outdated (S2).\n  - HA quorum loss recovers on its own in 23 s: the quorum-lost handler deletes the local master score (S5, for #1668).\n- Ledger: TL-3 and TL-4 are filled. RP-3, DR-2, DR-3 and CL-12 gain RDQM-side 'Observed' notes. DR-4, TL-6 and TL-7 are added. pcmk-drbd columns and statuses are untouched. One pcmk-side judgment in DR-2 ('rdqmdr -p must also force at the DRBD level') is contradicted by the data, for #1660 to resolve.\n- Main source: /var/mqm/errors/RDQM.0.LOG, RDQM's own command trace (a log file, read as observation). No IBM binary was inspected or copied. The secret guard passes: no PRIVATE KEY in any data file, every shared-secret REDACTED, PEM blocks redacted.\n- Size: about 51 MB of text in the working tree, about 5 MB compressed. The raw set (766 MB) is in the state bucket under rdqm-observe/20261019-issue-1666.\n- vrg-validate does not lint docs/reference/ (markdownlint covers docs/site and README; ruff covers src and tests; shellcheck covers scripts), so kit/*.py and *.sh are not covered by the gate.\n- Kit deviations: persistent journal created on all nodes; the poller covers all six nodes and runs journalctl --sync from S1; S3 used a paused-boot workaround for net-cut (#1673); S2 was continued by hand after its scripted wait (drivers/drill-from6.sh).\n- Lab left HEALTHY in the S0 state. Restore steps are recorded: RESET CHANNEL on both RDQMAPP/SVCQM senders (AMQ9526E after the partition), drill queues deleted, crm_resource --cleanup of b1's failed DR promote.\n- Follow-ups filed under .github#310: #1673 (net-cut booting with a link already cut), #1674 (dr failback after endmqm), #1675 (site B cannot reach svc-sim, so e2e fails at B).\n- Human-verify: the IBM topics cited were fetched with tools/ibm_doc_cache.py (q131670_, q133050_, disasterSwitch_, recovery-managing-primary-secondary-characteristics-dr-rdqms).",
+    "linkage": "Ref"
+  },
+  "submitted": null
+}
