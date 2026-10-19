@@ -45,6 +45,11 @@ def _real(stack_name: str) -> e2e.E2EParams:
         ),
         ("pcmk-ubuntu", "PCMKAPP", "pcmk-vip-a.client.com(1414),pcmk-vip-b.client.com(1414)"),
         ("rdqm-rhel", "RDQMAPP", "rdqm-vip-a.client.com(1414),rdqm-vip-b.client.com(1414)"),
+        (
+            "pcmk-drbd-ubuntu",
+            "PDRBDAPP",
+            "pdrbd-vip-a.client.com(1414),pdrbd-vip-b.client.com(1414)",
+        ),
     ],
 )
 def test_derive_per_stack_from_committed_sources(stack_name, qm, conn):

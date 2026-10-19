@@ -14,6 +14,33 @@
 # Callers gate their include_role with `when: rdqm_is_active`: a per-host conditional
 # DOES propagate through include_role (unlike run_once), so the role runs on exactly the
 # active node.
+#
+# Site A only, by design (#1625): provisioning configures the QM at site A. After a DR
+# cutover the QM is live at site B and site A is its DR secondary (QM Ended there), so the
+# STATUS(Running) wait below would spin out its budget and fail with no cause. Refuse first,
+# naming the failback. Every group node reports the site's role in its own rdqmstatus block
+# ("DR role: Primary|Secondary", docs/reference/rdqm-blueprint/rdqm-a2|b1/rdqmstatus-qm.txt);
+# an HA-only QM has no DR lines and passes.
+- name: "read {{ rdqm_qm }} rdqmstatus on each site-A node (DR role)"
+  ansible.builtin.command: "/opt/mqm/bin/rdqmstatus -m {{ rdqm_qm }}"
+  become: true
+  register: _rdqm_status
+  changed_when: false
+  until: _rdqm_status.rc == 0
+  retries: 12
+  delay: 5
+
+- name: "refuse while {{ rdqm_qm }} is live at site B (site A is the DR secondary)"
+  ansible.builtin.assert:
+    that: _rdqm_status.stdout is not search(_rdqm_dr_secondary_re, multiline=True)
+    fail_msg: >-
+      {{ rdqm_qm }} is live at site B: {{ inventory_hostname }} reports 'DR role: Secondary'.
+      This configures the QM at site A, so it refuses to run while site B is live. Fail back
+      first with `mqlab dr failback rdqm-rhel`, then re-run.
+    quiet: true
+  vars:
+    _rdqm_dr_secondary_re: '^DR role:\s+Secondary\s*$'
+
 - name: "read local {{ rdqm_qm }} status on each site-A node"
   ansible.builtin.command: "/opt/mqm/bin/dspmq -m {{ rdqm_qm }} -o status"
   become: true

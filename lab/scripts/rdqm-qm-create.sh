@@ -200,6 +200,45 @@ fi
 # `grep -q`, so the lab-wide SIGPIPE-safe rule (#1451) holds even in remote shell strings.
 qm_exists() { run rdqm-a1 "/opt/mqm/bin/dspmq | grep 'QMNAME($QM)' >/dev/null" >/dev/null 2>&1; }
 
+# Provisioning configures the QM at SITE A: the create makes site A the DR primary (-rr p),
+# and active_a_node / run_mqsc_retry / add_vip "$VIP" / the site-A plays in site-rdqm.yml all
+# target it. After `mqlab dr cutover rdqm-rhel` the QM is live at site B and site A is the DR
+# secondary (QM Ended there), so a re-provision would find no site-A node running it. Refuse
+# up front, naming the failback, rather than let active_a_node spin and fail without a cause
+# (#1625). Read the site's DR role from rdqmstatus: every group node reports "DR role:" in
+# its local block, Primary or Secondary (docs/reference/rdqm-blueprint/rdqm-a1|a2|b1/
+# rdqmstatus-qm.txt). A node whose rdqmstatus fails is tried again; no answer fails loud.
+site_a_dr_role() {
+  local n out role i
+  for i in $(seq 1 12); do
+    for n in rdqm-a1 rdqm-a2 rdqm-a3; do
+      out=$(ansible "$n" -b -m shell -a "/opt/mqm/bin/rdqmstatus -m $QM" 2>/dev/null) || continue
+      role=$(awk 'index($0, "DR role:") == 1 { sub(/^DR role:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); print; exit }' <<<"$out")
+      if [ -n "$role" ]; then echo "$role"; return 0; fi
+    done
+    sleep 5
+  done
+  echo "ERROR: could not read the DR role of $QM from any site-A node (rdqmstatus -m $QM on rdqm-a1/a2/a3)" >&2
+  return 1
+}
+
+require_site_a_dr_primary() {
+  local role
+  role=$(site_a_dr_role)
+  case "$role" in
+    Primary)
+      echo "=== site A is the DR primary for $QM — provisioning at site A ===" ;;
+    Secondary)
+      echo "ERROR: $QM is live at site B: site A is its DR secondary (rdqmstatus 'DR role: Secondary')." >&2
+      echo "ERROR: provisioning configures the QM at site A, so it refuses to run while site B is live." >&2
+      echo "ERROR: fail back first with 'mqlab dr failback rdqm-rhel', then re-run the provision." >&2
+      return 1 ;;
+    *)
+      echo "ERROR: unexpected DR role '$role' for $QM at site A (expected Primary or Secondary)" >&2
+      return 1 ;;
+  esac
+}
+
 if [ "$DR" = 1 ]; then
   echo "=== HA/DR detected (site-B group formed) — coordinated create (crtmqm auto-creates secondaries) ==="
   # Secure BOTH the HA and DR replication links with TLS (#545): -re. The per-node certs +
@@ -208,6 +247,8 @@ if [ "$DR" = 1 ]; then
   REPL_TLS="-re"
   if qm_exists; then
     echo "=== $QM already exists on rdqm-a1 — skipping create ==="
+    # A fresh create makes site A the DR primary; an existing QM may have been cut over.
+    require_site_a_dr_primary
   else
     # IBM's documented DR/HA create: ONE `crtmqm -sx` per site, run as mqm. crtmqm SSHes
     # to that site's peers (over 172.16.x) as mqm and auto-creates the secondaries
@@ -254,4 +295,8 @@ if [ -n "$SVC_CONN" ]; then
 fi
 
 run "$A_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM"
-[ "$DR" = 1 ] && run rdqm-b1 "/opt/mqm/bin/rdqmstatus -m $QM" || true
+# Site B's status too on HA/DR. An `if`, not `[ ] && run ... || true`, which also hid a
+# failed status call at site B (#1625).
+if [ "$DR" = 1 ]; then
+  run rdqm-b1 "/opt/mqm/bin/rdqmstatus -m $QM"
+fi

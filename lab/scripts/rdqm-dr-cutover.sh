@@ -151,7 +151,7 @@ wait_ha_settle() {  # $1 = new (TO-site) HA primary node
         echo "WARNING:   controlled end, and the node has free RAM. Recover with a rdqmdr re-flip on the" >&2
         echo "WARNING:   CURRENT HA primary of each site (rdqmstatus 'HA current location'), per the #288 report." >&2
       fi
-      echo "WARNING: continuing — verify manually with 'rdqmstatus -m $QM'." >&2
+      echo "WARNING: continuing; step 6 fails the run unless $QM is Running, DR primary, on its VIP." >&2
       return 0
     fi
     echo "=== waiting for HA to settle on $node (QM: ${qmstat:-?}, blocked: ${blocked:-?}) (${waited}s/${HA_SETTLE_TIMEOUT}s) ===" >&2
@@ -229,12 +229,41 @@ echo "=== 4. Wait for the QM's HA to settle at the new primary site (finding 3) 
 TO_PRIMARY="$(ha_primary "${TO_NODES[@]}")"
 wait_ha_settle "$TO_PRIMARY"
 
-echo "=== 5. Re-add the floating IP at the new live site ($TO_VIP on $TO_PRIMARY) ==="
-IFACE=$(ansible "$TO_PRIMARY" -m shell -a "ip -br addr | grep ${TO_VIP%.*}\\. | cut -d' ' -f1" | tail -1)
-run "$TO_PRIMARY" "/opt/mqm/bin/rdqmint -m $QM -a -f $TO_VIP -l $IFACE || true"
+echo "=== 5. Ensure the floating IP at the new live site ($TO_VIP on $TO_PRIMARY) ==="
+# Each site's group carries its own floating IP from the create (rdqm-qm-create.sh add_vip;
+# "HA floating IP address: 10.10.2.100" on every site-B node in the blueprint capture,
+# docs/reference/rdqm-blueprint/*/rdqmstatus-qm.txt), so normally it is already there. Check it, as add_vip does (#583),
+# instead of `rdqmint ... || true`, which hid a real add failure as well as the "already
+# exists" one (#1625). A strict read: a failed rdqmstatus aborts under `set -e`.
+TO_STATUS="$(run "$TO_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM")"
+TO_FIP="$(rdqm_field "HA floating IP address" "$TO_STATUS")"
+if [ "$TO_FIP" = "$TO_VIP" ]; then
+  echo "    floating IP $TO_VIP already configured for $QM at the new live site — no add needed"
+elif [ -n "$TO_FIP" ]; then
+  # RDQM allows one floating IP per QM (AMQ3877E on a second, docs/reports/2026-06-16-rdqm-verb-spike.md).
+  echo "ERROR: $QM at $TO_PRIMARY carries floating IP $TO_FIP, not the site's $TO_VIP (lab/topology.yaml)." >&2
+  exit 1
+else
+  IFACE=$(ansible "$TO_PRIMARY" -m shell -a "ip -br addr | grep ${TO_VIP%.*}\\. | cut -d' ' -f1" | tail -1)
+  run "$TO_PRIMARY" "/opt/mqm/bin/rdqmint -m $QM -a -f $TO_VIP -l $IFACE"
+fi
 
 echo "=== 6. Verify ==="
-run "$TO_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM"
+# Fail the run unless the new live site really is: DR primary, QM Running, on its own VIP.
+# The HA-settle wait (step 4) only warns on a timeout; this is the check that cannot pass on a
+# cutover that did not happen (#1625).
+TO_STATUS="$(run "$TO_PRIMARY" "/opt/mqm/bin/rdqmstatus -m $QM")"
+echo "$TO_STATUS"
+verify_fail=0
+for want in "DR role=Primary" "Queue manager status=Running" "HA floating IP address=$TO_VIP"; do
+  field="${want%%=*}"; expect="${want#*=}"
+  got="$(rdqm_field "$field" "$TO_STATUS")"
+  if [ "$got" != "$expect" ]; then
+    echo "ERROR: after the $DIR cutover, $TO_PRIMARY reports '$field: ${got:-<missing>}', expected '$expect'." >&2
+    verify_fail=1
+  fi
+done
+[ "$verify_fail" = 0 ] || exit 1
 
 if [ "$RPO0_DRILL" = 1 ]; then
   echo "=== 7. RPO-0 assertion: retrieve the seeded message at the new live site (finding: #294 drill) ==="
