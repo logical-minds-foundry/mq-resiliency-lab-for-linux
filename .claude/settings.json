@@ -26,5 +26,9 @@
   },
   "enabledPlugins": {
     "vergil@vergil-marketplace": true
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }
