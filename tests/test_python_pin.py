@@ -38,6 +38,12 @@ def test_uv_pins_a_managed_interpreter() -> None:
     assert _pyproject()["tool"]["uv"]["python-preference"] == "only-managed"
 
 
+def test_uv_never_auto_downloads_an_interpreter() -> None:
+    # Without a .python-version, an automatic download would fetch the newest
+    # CPython rather than the floor; scripts/setup installs the floor explicitly.
+    assert _pyproject()["tool"]["uv"]["python-downloads"] == "manual"
+
+
 def test_no_python_version_file() -> None:
     # A .python-version would pin the version behind the window's back (#1681).
     assert not (REPO_ROOT / ".python-version").exists(), ".python-version pins the version"

@@ -45,6 +45,12 @@ packages = ["src/mqlab"]
 # Vergil containers and CI override it with UV_PYTHON_PREFERENCE=only-system so
 # they run the image's interpreter (#1681, vergil-project/.github#407).
 python-preference = "only-managed"
+# With no `.python-version`, a bare `uv sync`/`uv venv`/`uv lock` on a host with
+# no managed Python would auto-download the NEWEST CPython (3.15 today), not the
+# floor CI tests. `manual` means uv only uses managed interpreters installed
+# explicitly (`scripts/setup` runs `uv python install <floor>`) and otherwise
+# fails loudly. Like the preference, this picks the source, not the version.
+python-downloads = "manual"
 
 [tool.ruff]
 target-version = "py314"
