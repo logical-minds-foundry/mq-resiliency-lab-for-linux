@@ -91,10 +91,11 @@ that reason; build the stack on RHEL 9 instead, with `os: rhel:9` in a build fil
 (`mqlab bootstrap <stack> --config <file>`).
 
 !!! note "After a Python-version bump"
-    The pinned Python version lives in `.python-version`. If it changes (or you
-    are upgrading from an older checkout), re-run `./scripts/setup` (or
-    `uv sync`) to rebuild the `.venv` against the pinned interpreter — an
-    existing venv is **not** rebuilt automatically.
+    The minimum Python version is the `requires-python` floor in
+    `pyproject.toml`; the version itself follows the Vergil version window.
+    If the floor changes (or you are upgrading from an older checkout), re-run
+    `./scripts/setup` (or `uv sync`) to rebuild the `.venv` against a
+    uv-managed interpreter — an existing venv is **not** rebuilt automatically.
 
 ## 4. Bring up your first stack
 

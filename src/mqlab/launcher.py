@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 # Minimum Python feature version the package's source requires. Kept consistent
-# with `requires-python` in pyproject.toml and `.python-version` by
+# with the `requires-python` floor in pyproject.toml by
 # tests/test_python_pin.py. An import-time SyntaxError under an interpreter
 # older than this is a stale venv (not a code bug), and is the only case this
 # launcher converts into remediation rather than re-raising.

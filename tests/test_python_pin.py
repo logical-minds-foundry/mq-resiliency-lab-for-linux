@@ -1,10 +1,15 @@
-"""The Python interpreter pin is present and internally consistent (#1063).
+"""The Python interpreter source and floor are pinned and consistent (#1063, #1681).
 
 The 3.12 -> 3.14 migration regressed because the runtime side was never pinned:
-with no `.python-version` and no `[tool.uv]` preference, `uv sync` seeded the
-venv from whatever satisfied `requires-python` — the base OS 3.12. These tests
-lock the pin in place and assert every source that names the version agrees, so
-the pin can never silently drift from `requires-python` again.
+with no `[tool.uv]` preference, `uv sync` seeded the venv from whatever
+satisfied `requires-python` — the base OS 3.12. `python-preference =
+"only-managed"` closes that: the venv is always seeded from a uv-managed
+interpreter, never the host's.
+
+The Python VERSION is not pinned in the repo. It follows Vergil's version
+window (#1681, vergil-project/.github#407): no `.python-version`, no
+`[ci].versions`, and `requires-python` carries only a floor. These tests lock
+that shape in place and keep the floor agreeing with `launcher.MIN_PYTHON`.
 """
 
 from __future__ import annotations
@@ -16,20 +21,16 @@ from mqlab import launcher
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-PYTHON_VERSION_FILE = REPO_ROOT / ".python-version"
+VERGIL_TOML = REPO_ROOT / "vergil.toml"
 
 
 def _pyproject():
     return tomllib.loads(PYPROJECT.read_text())
 
 
-def test_python_version_file_pins_314() -> None:
-    assert PYTHON_VERSION_FILE.is_file(), ".python-version is missing — interpreter not pinned"
-    assert PYTHON_VERSION_FILE.read_text().strip() == "3.14"
-
-
-def test_requires_python_is_314() -> None:
-    assert _pyproject()["project"]["requires-python"] == ">=3.14,<3.15"
+def _floor(requires_python: str) -> tuple[int, ...]:
+    assert requires_python.startswith(">="), f"requires-python is not a floor: {requires_python!r}"
+    return tuple(int(part) for part in requires_python.removeprefix(">=").split("."))
 
 
 def test_uv_pins_a_managed_interpreter() -> None:
@@ -37,18 +38,29 @@ def test_uv_pins_a_managed_interpreter() -> None:
     assert _pyproject()["tool"]["uv"]["python-preference"] == "only-managed"
 
 
-def test_ruff_and_mypy_target_314() -> None:
+def test_no_python_version_file() -> None:
+    # A .python-version would pin the version behind the window's back (#1681).
+    assert not (REPO_ROOT / ".python-version").exists(), ".python-version pins the version"
+
+
+def test_no_ci_versions_pin() -> None:
+    ci = tomllib.loads(VERGIL_TOML.read_text()).get("ci", {})
+    assert "versions" not in ci, "[ci].versions pins the CI matrix; the window owns it"
+
+
+def test_requires_python_is_a_floor_only() -> None:
+    # A floor with no upper bound: the window, not this file, caps the version.
+    requires_python = _pyproject()["project"]["requires-python"]
+    assert "," not in requires_python, f"requires-python has an upper bound: {requires_python!r}"
+    assert "<" not in requires_python, f"requires-python has an upper bound: {requires_python!r}"
+
+
+def test_requires_python_floor_matches_launcher() -> None:
+    assert _floor(_pyproject()["project"]["requires-python"]) == launcher.MIN_PYTHON
+
+
+def test_ruff_and_mypy_target_the_floor() -> None:
     pp = _pyproject()
-    assert pp["tool"]["ruff"]["target-version"] == "py314"
-    assert pp["tool"]["mypy"]["python_version"] == "3.14"
-
-
-def test_pin_is_consistent_across_sources() -> None:
-    # .python-version, the lower bound of requires-python, and launcher.MIN_PYTHON
-    # must all name the same feature version — one pin, cross-checked here.
-    pinned = tuple(int(part) for part in PYTHON_VERSION_FILE.read_text().strip().split("."))
-    lower_bound = _pyproject()["project"]["requires-python"].split(",")[0].removeprefix(">=")
-    lower_tuple = tuple(int(part) for part in lower_bound.split("."))
-
-    assert pinned == launcher.MIN_PYTHON
-    assert lower_tuple == launcher.MIN_PYTHON
+    major, minor = launcher.MIN_PYTHON
+    assert pp["tool"]["ruff"]["target-version"] == f"py{major}{minor}"
+    assert pp["tool"]["mypy"]["python_version"] == f"{major}.{minor}"

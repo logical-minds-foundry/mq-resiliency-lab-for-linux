@@ -9,7 +9,6 @@ primary-language = "python"
 ghas = true
 
 [ci]
-versions = ["3.14"]
 integration-tests = false
 
 # Test parallelism (vergil-tooling#3322). Cloud VMs and CI keep the `auto` default:
