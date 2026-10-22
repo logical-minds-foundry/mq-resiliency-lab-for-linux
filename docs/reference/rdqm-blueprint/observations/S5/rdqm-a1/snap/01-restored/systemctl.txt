@@ -1,0 +1,68 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 19:05:24 UTC; 4min 18s ago
+ Invocation: 569f4ba609644b3e98e31214c222ed18
+    Process: 1077 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1077 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.5M
+        CPU: 728ms
+
+Oct 19 19:05:20 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 19:05:24 rdqm-a1 rdqmd[1077]: Replicated data systemd initialization complete.
+Oct 19 19:05:24 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:05:20 UTC; 4min 22s ago
+ Invocation: 5e3908053f28406a99ca21bcd22a7230
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1076 (pacemakerd)
+      Tasks: 10
+     Memory: 135.3M (peak: 197.5M)
+        CPU: 19.851s
+     CGroup: /system.slice/pacemaker.service
+             ├─ 1076 /usr/sbin/pacemakerd
+             ├─ 1119 /usr/libexec/pacemaker/pacemaker-based
+             ├─ 1120 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─ 1126 /usr/libexec/pacemaker/pacemaker-execd
+             ├─ 1128 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─ 1130 /usr/libexec/pacemaker/pacemaker-schedulerd
+             ├─ 1131 /usr/libexec/pacemaker/pacemaker-controld
+             └─11504 /usr/lib/ocf/resource.d/ibm/rdqm stop
+
+Oct 19 19:09:42 rdqm-a1 ibm-mq[4129]: {"ibm_messageId":"AMQ5023I","ibm_arithInsert1":4188,"ibm_arithInsert2":0,"ibm_commentInsert1":"SYSTEM.CHANNEL.INITQ","ibm_datetime":"2026-10-19T19:09:42.110Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"INFO","module":"amqzmgr0.c:4744","ibm_sequence":"1792436982_160584544","ibm_processId":"4129","ibm_threadId":"1","ibm_version":"10.0.1.0","ibm_processName":"amqzmgr0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ5023I: The channel initiator has ended. ProcessId(4188)."}
+Oct 19 19:09:42 rdqm-a1 MQSeries[4129]: FFST record created in /var/mqm/errors/AMQ4129.0.FDC
+Oct 19 19:09:42 rdqm-a1 MQSeries[4129]: FFST record created in /var/mqm/errors/AMQ4129.0.FDC
+Oct 19 19:09:42 rdqm-a1 ibm-mq[4129]: {"ibm_messageId":"AMQ5029I","ibm_arithInsert1":4217,"ibm_arithInsert2":0,"ibm_commentInsert1":"MQ.EVENT.MONITOR","ibm_datetime":"2026-10-19T19:09:42.166Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"INFO","module":"amqzmgr0.c:4780","ibm_sequence":"1792436982_213295413","ibm_processId":"4129","ibm_threadId":"1","ibm_version":"10.0.1.0","ibm_processName":"amqzmgr0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ5029I: The Server 'MQ.EVENT.MONITOR' has ended. ProcessId(4217)."}
+Oct 19 19:09:42 rdqm-a1 MQSeries[4129]: FFST record created in /var/mqm/errors/AMQ4129.0.FDC
+Oct 19 19:09:42 rdqm-a1 MQSeries[4129]: FFST record created in /var/mqm/errors/AMQ4129.0.FDC
+Oct 19 19:09:42 rdqm-a1 ibm-mq[4129]: {"ibm_messageId":"AMQ5027I","ibm_arithInsert1":4215,"ibm_arithInsert2":0,"ibm_commentInsert1":"L1414","ibm_datetime":"2026-10-19T19:09:42.213Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"INFO","module":"amqzmgr0.c:4768","ibm_sequence":"1792436982_261088339","ibm_processId":"4129","ibm_threadId":"1","ibm_version":"10.0.1.0","ibm_processName":"amqzmgr0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ5027I: The listener 'L1414' has ended. ProcessId(4215)."}
+Oct 19 19:09:42 rdqm-a1 pacemaker-attrd[1128]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: 10000 -> (unset)
+Oct 19 19:09:42 rdqm-a1 rdqm[11504]: stop(rdqmapp) pid(4309) 'amqrmppa'
+Oct 19 19:09:42 rdqm-a1 rdqm[11504]: stop(rdqmapp) kill(4309)
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:05:20 UTC; 4min 22s ago
+ Invocation: 75b62bf65dc549e1804d1f1a946c27c7
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 918 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 161.1M (peak: 173.7M)
+        CPU: 2.338s
+     CGroup: /system.slice/corosync.service
+             └─918 /usr/sbin/corosync -f
+
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] link: Resetting MTU for link 0 because host 2 joined
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] host: host: 2 (passive) best link: 0 (pri: 1)
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] rx: host: 3 link: 0 is up
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] link: Resetting MTU for link 0 because host 3 joined
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [TOTEM ] A new membership (1.3d) was formed. Members
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:09:41 rdqm-a1 corosync[918]:   [MAIN  ] Completed service synchronization, ready to provide service.

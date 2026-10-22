@@ -1,0 +1,69 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: activating (start) since Mon 2026-10-19 18:44:15 UTC; 9s ago
+        Job: 307
+ Invocation: 1ef808fe4dfc4922b859f8d061c5fd9b
+   Main PID: 1072 (rdqmd)
+      Tasks: 3 (limit: 10565)
+     Memory: 35.2M (peak: 54.4M)
+        CPU: 2.393s
+     CGroup: /system.slice/rdqm.service
+             ├─1072 /var/mqm/rdqm/rdqmd -s
+             └─2755 /usr/bin/python3 -sP /usr/sbin/crm status bynode
+
+Oct 19 18:44:15 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:44:15 UTC; 9s ago
+ Invocation: 6c4b6e6efe79482b96bf9da75e7d3cfd
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1066 (pacemakerd)
+      Tasks: 7
+     Memory: 28M (peak: 33.6M)
+        CPU: 373ms
+     CGroup: /system.slice/pacemaker.service
+             ├─1066 /usr/sbin/pacemakerd
+             ├─1124 /usr/libexec/pacemaker/pacemaker-based
+             ├─1126 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1127 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1130 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1133 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1143 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: Node rdqm-a1 state is now member
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: Node rdqm-a2 state is now member
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: Node rdqm-a3 state is now member
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: Pacemaker controller successfully started and accepting connections
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: Fencer successfully connected
+Oct 19 18:44:17 rdqm-a1 pacemaker-controld[1143]:  notice: State transition S_STARTING -> S_PENDING
+Oct 19 18:44:17 rdqm-a1 pacemaker-attrd[1130]:  notice: Setting #attrd-protocol[rdqm-a1] in instance_attributes: (unset) -> 7
+Oct 19 18:44:17 rdqm-a1 pacemaker-attrd[1130]:  notice: Recorded local node as attribute writer (was rdqm-a3)
+Oct 19 18:44:18 rdqm-a1 pacemaker-attrd[1130]:  notice: Setting rdqm-transient-attribute[rdqm-a3] in instance_attributes: (unset) -> 1
+Oct 19 18:44:18 rdqm-a1 pacemaker-attrd[1130]:  notice: Setting rdqm-transient-attribute[rdqm-a2] in instance_attributes: (unset) -> 1
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:44:15 UTC; 9s ago
+ Invocation: 64a3643b51f94584b992a55d33a8862f
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 910 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 161.2M (peak: 170.7M)
+        CPU: 390ms
+     CGroup: /system.slice/corosync.service
+             └─910 /usr/sbin/corosync -f
+
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [KNET  ] host: host: 3 (passive) best link: 0 (pri: 1)
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [QUORUM] Sync joined[2]: 2 3
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [TOTEM ] A new membership (1.27) was formed. Members joined: 2 3
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [QUORUM] This node is within the primary component and will provide service.
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 18:44:17 rdqm-a1 corosync[910]:   [MAIN  ] Completed service synchronization, ready to provide service.

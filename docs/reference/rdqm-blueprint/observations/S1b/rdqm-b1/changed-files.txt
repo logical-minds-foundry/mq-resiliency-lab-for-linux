@@ -1,0 +1,8 @@
+2026-10-19T19:01:01.5725218820 1368 /var/log/cron
+2026-10-19T19:05:31.0526939420 62419 /var/mqm/errors/RDQM.0.LOG
+2026-10-19T19:05:36.7412437340 744464 /var/log/pacemaker/pacemaker.log
+2026-10-19T19:08:05.4693838170 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T19:08:43.4013913950 8388684 /var/log/audit/audit.log.1
+2026-10-19T19:08:44.4465020810 2188020 /var/log/messages
+2026-10-19T19:08:44.4475021870 610976 /var/log/secure
+2026-10-19T19:08:44.4485022930 46143 /var/log/audit/audit.log

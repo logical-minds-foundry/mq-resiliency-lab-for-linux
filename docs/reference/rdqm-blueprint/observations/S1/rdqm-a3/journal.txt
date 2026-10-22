@@ -1,0 +1,505 @@
+# journal.txt: exported for #1666; 504 lines kept; dropped lines by category: kit ssh/sudo/session: 1944, lab observability agents and timers: 1774, lab monitor authority warnings (AMQ8245W/AMQ8009W): 2828. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T18:52:30.488263+00:00 rdqm-a3 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T18:52:30.541023+00:00 rdqm-a3 systemd[1]: Started systemd-timedated.service - Time & Date Service.
+2026-10-19T18:52:48.432189+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792435968.4319] device (enp10s0): state change: activated -> unavailable (reason 'carrier-changed', managed-type: 'full')
+2026-10-19T18:52:48.437457+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792435968.4374] policy: set 'Wired connection 1' (enp5s0) as default for IPv4 routing and DNS
+2026-10-19T18:52:48.445461+00:00 rdqm-a3 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T18:52:48.466069+00:00 rdqm-a3 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T18:52:58.494590+00:00 rdqm-a3 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T18:53:00.554296+00:00 rdqm-a3 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T18:53:19.742445+00:00 rdqm-a3 corosync[919]:   [KNET  ] link: host: 1 link: 0 is down
+2026-10-19T18:53:19.742464+00:00 rdqm-a3 corosync[919]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+2026-10-19T18:53:19.742467+00:00 rdqm-a3 corosync[919]:   [KNET  ] host: host: 1 has no active links
+2026-10-19T18:53:22.881157+00:00 rdqm-a3 corosync[919]:   [TOTEM ] Token has not been received in 7987 ms
+2026-10-19T18:53:25.544504+00:00 rdqm-a3 corosync[919]:   [TOTEM ] A processor failed, forming new configuration: token timed out (10650ms), waiting 12780ms for consensus.
+2026-10-19T18:53:28.746042+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: PingAck did not arrive in time.
+2026-10-19T18:53:28.746213+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: conn( Connected -> NetworkFailure ) peer( Primary -> Unknown )
+2026-10-19T18:53:28.747136+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100: disk( UpToDate -> Consistent )
+2026-10-19T18:53:28.747180+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T18:53:28.747201+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Terminating sender thread
+2026-10-19T18:53:28.751103+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Starting sender thread (peer-node-id 0)
+2026-10-19T18:53:28.754082+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 1071471134: 2->all empty
+2026-10-19T18:53:28.761684+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Connection closed
+2026-10-19T18:53:28.761794+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: helper command: /sbin/drbdadm disconnected
+2026-10-19T18:53:28.775944+00:00 rdqm-a3 disconnected[12136]: rdqmhandler(rdqmapp) /var/mqm/rdqm/disconnected
+2026-10-19T18:53:28.775968+00:00 rdqm-a3 disconnected[12136]: rdqmhandler(rdqmapp) NetworkFailure
+2026-10-19T18:53:28.842468+00:00 rdqm-a3 disconnected[12136]: rdqmhandler(rdqmapp) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T18:53:28.848593+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T18:53:28.848814+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T18:53:28.851005+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Restarting receiver thread
+2026-10-19T18:53:28.851078+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T18:53:32.782748+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a2: pdsk( UpToDate -> Consistent ) [peer-state]
+2026-10-19T18:53:32.782954+00:00 rdqm-a3 kernel: drbd rdqmapp: Retrying cluster-wide state change after 24ms
+2026-10-19T18:53:32.813370+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 203268093: 2->all empty
+2026-10-19T18:53:32.889009+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a2: No reconciliation resync even though 'rdqm-a1' disappeared. (o=0)
+2026-10-19T18:53:32.906448+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a2: Aborting local state change 203268093 to yield to remote state change 1720197245.
+2026-10-19T18:53:32.906572+00:00 rdqm-a3 kernel: drbd rdqmapp: Retrying cluster-wide state change after 490ms
+2026-10-19T18:53:32.910906+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing remote state change 1720197245: 1->all empty
+2026-10-19T18:53:32.923530+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100: disk( Consistent -> UpToDate ) [peer-state]
+2026-10-19T18:53:32.923669+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a2: pdsk( Consistent -> UpToDate ) [peer-state]
+2026-10-19T18:53:32.930212+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a2: Committing remote state change 1720197245 (primary_nodes=0)
+2026-10-19T18:53:32.930317+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing remote state change 1910496147: 1->all empty
+2026-10-19T18:53:32.938924+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a2: Committing remote state change 1910496147 (primary_nodes=0)
+2026-10-19T18:53:33.402899+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 2317882196: 2->all empty
+2026-10-19T18:53:33.411818+00:00 rdqm-a3 kernel: drbd rdqmapp: State change 2317882196: primary_nodes=0, weak_nodes=0
+2026-10-19T18:53:33.411953+00:00 rdqm-a3 kernel: drbd rdqmapp: Committing cluster-wide state change 2317882196 (9ms)
+2026-10-19T18:53:33.411975+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 2074477656: 2->all empty
+2026-10-19T18:53:33.424503+00:00 rdqm-a3 kernel: drbd rdqmapp: State change 2074477656: primary_nodes=0, weak_nodes=0
+2026-10-19T18:53:33.424623+00:00 rdqm-a3 kernel: drbd rdqmapp: Committing cluster-wide state change 2074477656 (9ms)
+2026-10-19T18:53:38.329555+00:00 rdqm-a3 corosync[919]:   [QUORUM] Sync members[2]: 2 3
+2026-10-19T18:53:38.329569+00:00 rdqm-a3 corosync[919]:   [QUORUM] Sync left[1]: 1
+2026-10-19T18:53:38.329573+00:00 rdqm-a3 corosync[919]:   [TOTEM ] A new membership (2.2b) was formed. Members left: 1
+2026-10-19T18:53:38.329612+00:00 rdqm-a3 corosync[919]:   [TOTEM ] Failed to receive the leave message. failed: 1
+2026-10-19T18:53:38.333762+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Lost attribute writer rdqm-a1
+2026-10-19T18:53:38.333879+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Node rdqm-a1 state is now lost
+2026-10-19T18:53:38.333891+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Removing all rdqm-a1 attributes for node loss
+2026-10-19T18:53:38.333916+00:00 rdqm-a3 pacemaker-based[1152]:  notice: Node rdqm-a1 state is now lost
+2026-10-19T18:53:38.333917+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Removed 1 inactive node with cluster layer ID 1 from the membership cache
+2026-10-19T18:53:38.334688+00:00 rdqm-a3 pacemaker-fenced[1153]:  notice: Node rdqm-a1 state is now lost
+2026-10-19T18:53:38.334751+00:00 rdqm-a3 pacemaker-fenced[1153]:  notice: Removed 1 inactive node with cluster layer ID 1 from the membership cache
+2026-10-19T18:53:38.334867+00:00 rdqm-a3 pacemaker-based[1152]:  notice: Removed 1 inactive node with cluster layer ID 1 from the membership cache
+2026-10-19T18:53:38.335060+00:00 rdqm-a3 corosync[919]:   [QUORUM] Members[2]: 2 3
+2026-10-19T18:53:38.335064+00:00 rdqm-a3 corosync[919]:   [MAIN  ] Completed service synchronization, ready to provide service.
+2026-10-19T18:53:38.336498+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Node rdqm-a1 state is now lost
+2026-10-19T18:53:38.547418+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Recorded local node as attribute writer (was unset)
+2026-10-19T18:53:39.405055+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.443682+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:39.446082+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of promote operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.500001+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 385738382: 2->all role( Primary )
+2026-10-19T18:53:39.508468+00:00 rdqm-a3 kernel: drbd rdqmapp: State change 385738382: primary_nodes=4, weak_nodes=FFFFFFFFFFFFFFF9
+2026-10-19T18:53:39.508613+00:00 rdqm-a3 kernel: drbd rdqmapp: Committing cluster-wide state change 385738382 (9ms)
+2026-10-19T18:53:39.508684+00:00 rdqm-a3 kernel: drbd rdqmapp: role( Secondary -> Primary ) [primary]
+2026-10-19T18:53:39.523886+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of promote operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:39.529014+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.601327+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:39.604291+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of monitor operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.633319+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of start operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.681173+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of monitor operation for p_drbd_rdqmapp on rdqm-a3: Promoted
+2026-10-19T18:53:39.704902+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100: new current UUID: E5D67006DD8B124D weak: FFFFFFFFFFFFFFF9
+2026-10-19T18:53:39.734939+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Starting worker thread (node-id 0)
+2026-10-19T18:53:39.790717+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: meta-data IO uses: blk-bio
+2026-10-19T18:53:39.790812+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Diskless -> Attaching ) [attach]
+2026-10-19T18:53:39.790882+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: Maximum number of peer devices = 1
+2026-10-19T18:53:39.794964+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Method to ensure write ordering: flush
+2026-10-19T18:53:39.795061+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: Allocating 96 KiB for new bitmap
+2026-10-19T18:53:39.800048+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: resync bitmap: bits=786342 bits_4k=786342 words=12287 pages=24
+2026-10-19T18:53:39.803013+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: was UpToDate, new region assumed zeroed
+2026-10-19T18:53:39.803074+00:00 rdqm-a3 kernel: drbd7001: detected capacity change from 0 to 6290736
+2026-10-19T18:53:39.804956+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: size = 3072 MB (3145368 KB)
+2026-10-19T18:53:39.806933+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Attaching -> UpToDate ) quorum( no -> yes ) [attach]
+2026-10-19T18:53:39.816427+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Restored quorum from before reboot
+2026-10-19T18:53:39.816503+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: attached to current UUID: 2FE113A2525D9323
+2026-10-19T18:53:39.816532+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: Setting exposed data uuid: 2FE113A2525D9322
+2026-10-19T18:53:39.839135+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 1)
+2026-10-19T18:53:39.849116+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: conn( StandAlone -> Unconnected ) [connect]
+2026-10-19T18:53:39.855448+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Starting receiver thread (peer-node-id 1)
+2026-10-19T18:53:39.859049+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T18:53:39.864325+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Configured local address not found, retrying every 10 sec, err=-99
+2026-10-19T18:53:39.887240+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: (unset) -> 1000
+2026-10-19T18:53:39.894320+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of start operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:39.905139+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:39.975323+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.007123+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.048136+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.051165+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of promote operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.105525+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 2892605519: 0->all role( Primary )
+2026-10-19T18:53:40.105678+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 2892605519 (3ms)
+2026-10-19T18:53:40.110782+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: role( Secondary -> Primary ) [primary]
+2026-10-19T18:53:40.123123+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of promote operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.127016+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.188459+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: 1000 -> 10000
+2026-10-19T18:53:40.193171+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.203611+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of monitor operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.292728+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of start operation for p_fs_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.305445+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of monitor operation for p_drbd_dr_rdqmapp on rdqm-a3: Promoted
+2026-10-19T18:53:40.409002+00:00 rdqm-a3 Filesystem(p_fs_rdqmapp)[12736]: INFO: Running start for /dev/drbd/by-res/rdqmapp.dr/0 on /var/mqm/vols/rdqmapp
+2026-10-19T18:53:40.645875+00:00 rdqm-a3 kernel: EXT4-fs (drbd7001): recovery complete
+2026-10-19T18:53:40.651912+00:00 rdqm-a3 kernel: EXT4-fs (drbd7001): mounted filesystem d7d9819e-91bf-4fd0-acdc-43230bf5dc93 r/w with ordered data mode. Quota mode: none.
+2026-10-19T18:53:40.655492+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of start operation for p_fs_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.691515+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of start operation for p_rdqmx_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.703406+00:00 rdqm-a3 rdqmx[12783]: rdqmx: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:53:40.703417+00:00 rdqm-a3 rdqmx[12783]: rdqmx: Calling real main function
+2026-10-19T18:53:40.712330+00:00 rdqm-a3 rdqmx[12783]: start(rdqmapp)
+2026-10-19T18:53:40.780207+00:00 rdqm-a3 rdqmx[12783]: start(rdqmapp) rc(0)
+2026-10-19T18:53:40.781795+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of start operation for p_rdqmx_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:40.847248+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of start operation for p_ip_rdqmapp on rdqm-a3
+2026-10-19T18:53:40.985155+00:00 rdqm-a3 IPaddr2(p_ip_rdqmapp)[12956]: INFO: Adding inet address 10.10.1.100/24 with broadcast address 10.10.1.255 to device enp6s0
+2026-10-19T18:53:40.996878+00:00 rdqm-a3 IPaddr2(p_ip_rdqmapp)[12962]: INFO: Bringing device enp6s0 up
+2026-10-19T18:53:41.021918+00:00 rdqm-a3 IPaddr2(p_ip_rdqmapp)[12982]: INFO: /usr/libexec/heartbeat/send_arp  -i 200 -r 5 -p /run/resource-agents/send_arp-10.10.1.100 enp6s0 10.10.1.100 auto not_used not_used
+2026-10-19T18:53:41.027017+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of start operation for p_ip_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:41.034556+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of monitor operation for p_ip_rdqmapp on rdqm-a3
+2026-10-19T18:53:41.036549+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of start operation for rdqmapp on rdqm-a3
+2026-10-19T18:53:41.052434+00:00 rdqm-a3 rdqm[12991]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:53:41.052445+00:00 rdqm-a3 rdqm[12991]: rdqm: Calling real main function
+2026-10-19T18:53:41.079575+00:00 rdqm-a3 rdqm[12991]: start(rdqmapp)
+2026-10-19T18:53:41.091117+00:00 rdqm-a3 ibm-mq[12991]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/qmgr/rdqmapp' is 8.26% used, 2707MB free.
+2026-10-19T18:53:41.092980+00:00 rdqm-a3 ibm-mq[12991]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/log/rdqmapp' is 7.72% used, 2723MB free.
+2026-10-19T18:53:41.114543+00:00 rdqm-a3 ibm-mq[12991]: AMQ5657W: The system resource RLIMIT_NOFILE is set at an unusually low level for IBM MQ.
+2026-10-19T18:53:41.193338+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of monitor operation for p_ip_rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:41.430613+00:00 rdqm-a3 ibm-mq[13126]: AMQ5051I: The queue manager task 'LOGGER-IO' has started.
+2026-10-19T18:53:41.462034+00:00 rdqm-a3 ibm-mq[13059]: AMQ7374I: Log replay for the queue manager has started at Log Sequence Number (LSN) '<0:0:53:1730> 0x00000000003506c2'.
+2026-10-19T18:53:41.489083+00:00 rdqm-a3 ibm-mq[13059]: AMQ7229I: 4599 log records accessed on queue manager 'RDQMAPP' during the log replay phase.
+2026-10-19T18:53:41.489238+00:00 rdqm-a3 ibm-mq[13059]: AMQ7230I: Log replay for queue manager 'RDQMAPP' complete.
+2026-10-19T18:53:41.489985+00:00 rdqm-a3 ibm-mq[13126]: AMQ5051I: The queue manager task 'CHECKPOINT' has started.
+2026-10-19T18:53:41.497556+00:00 rdqm-a3 ibm-mq[13059]: AMQ7231I: 0 log records accessed on queue manager 'RDQMAPP' during the recovery phase.
+2026-10-19T18:53:41.497878+00:00 rdqm-a3 ibm-mq[13059]: AMQ7232I: Transaction manager state recovered for queue manager 'RDQMAPP'.
+2026-10-19T18:53:41.529941+00:00 rdqm-a3 ibm-mq[13059]: AMQ7233I: 0 out of 0 in-flight transactions resolved for queue manager 'RDQMAPP'.
+2026-10-19T18:53:41.571923+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.574015+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.577317+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.577757+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.577918+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.578086+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.578259+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.579805+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'ERROR-LOG' has started.
+2026-10-19T18:53:41.582677+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T18:53:41.641128+00:00 rdqm-a3 ibm-mq[13141]: AMQ9410I: Repository manager started.
+2026-10-19T18:53:41.653044+00:00 rdqm-a3 ibm-mq[13141]: AMQ8003I: IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+2026-10-19T18:53:41.655133+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'DUR-SUBS-MGR' has started.
+2026-10-19T18:53:41.668678+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'TOPIC-TREE' has started.
+2026-10-19T18:53:41.674940+00:00 rdqm-a3 ibm-mq[13121]: AMQ5024I: The command server has started. ProcessId(13171).
+2026-10-19T18:53:41.679298+00:00 rdqm-a3 ibm-mq[13121]: AMQ5022I: The channel initiator has started. ProcessId(13172).
+2026-10-19T18:53:41.686316+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'DEFERRED_DELIVERY' has started.
+2026-10-19T18:53:41.686413+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'ACTVTRC' has started.
+2026-10-19T18:53:41.686489+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'RESOURCE_MONITOR' has started.
+2026-10-19T18:53:41.686567+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'DEFERRED-MSG' has started.
+2026-10-19T18:53:41.686640+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'STATISTICS' has started.
+2026-10-19T18:53:41.693730+00:00 rdqm-a3 ibm-mq[13141]: AMQ5037I: The queue manager task 'MARKINTSCAN' has started.
+2026-10-19T18:53:41.706738+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'EXPIRER' has started.
+2026-10-19T18:53:41.706898+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'PRESERVED-Q' has started.
+2026-10-19T18:53:41.706999+00:00 rdqm-a3 ibm-mq[13141]: AMQ5052I: The queue manager task 'QPUBSUB-CTRLR' has started.
+2026-10-19T18:53:41.707079+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'ASYNCQ' has started.
+2026-10-19T18:53:41.707154+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'Q-DELETION' has started.
+2026-10-19T18:53:41.707231+00:00 rdqm-a3 ibm-mq[13141]: AMQ5052I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has started.
+2026-10-19T18:53:41.707306+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'MULTICAST' has started.
+2026-10-19T18:53:41.707381+00:00 rdqm-a3 ibm-mq[13141]: AMQ5052I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has started.
+2026-10-19T18:53:41.723782+00:00 rdqm-a3 ibm-mq[13141]: AMQ5052I: The queue manager task 'PUBSUB-DAEMON' has started.
+2026-10-19T18:53:41.725288+00:00 rdqm-a3 ibm-mq[13141]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Controller' has started.
+2026-10-19T18:53:41.725365+00:00 rdqm-a3 ibm-mq[13141]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+2026-10-19T18:53:41.725442+00:00 rdqm-a3 ibm-mq[13141]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Command Task' has started.
+2026-10-19T18:53:41.728601+00:00 rdqm-a3 ibm-mq[13141]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Publish Task' has started.
+2026-10-19T18:53:41.753091+00:00 rdqm-a3 ibm-mq[13141]: AMQ8024I: IBM MQ channel initiator started.
+2026-10-19T18:53:41.769704+00:00 rdqm-a3 ibm-mq[12991]: AMQ9722W: Plain text communication is enabled.
+2026-10-19T18:53:41.775559+00:00 rdqm-a3 rdqm[12991]: start(rdqmapp) rc(0)
+2026-10-19T18:53:41.779571+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of start operation for rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:41.789289+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of monitor operation for rdqmapp on rdqm-a3
+2026-10-19T18:53:41.793299+00:00 rdqm-a3 ibm-mq[13121]: AMQ5026I: The listener 'L1414' has started. ProcessId(13217).
+2026-10-19T18:53:41.806751+00:00 rdqm-a3 ibm-mq[13121]: AMQ5028I: The Server 'MQ.EVENT.MONITOR' has started. ProcessId(13221).
+2026-10-19T18:53:41.826166+00:00 rdqm-a3 rdqm[13218]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:53:41.826190+00:00 rdqm-a3 rdqm[13218]: rdqm: Calling real main function
+2026-10-19T18:53:41.833552+00:00 rdqm-a3 ibm-mq[13141]: AMQ5806I: Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+2026-10-19T18:53:41.842067+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of monitor operation for rdqmapp on rdqm-a3: OK
+2026-10-19T18:53:41.870192+00:00 rdqm-a3 ibm-mq[13141]: AMQ5051I: The queue manager task 'IQM-COMMS-MANAGER' has started.
+2026-10-19T18:53:45.042584+00:00 rdqm-a3 IPaddr2(p_ip_rdqmapp)[13281]: INFO: ARPING 10.10.1.100 from 10.10.1.100 enp6s0
+                                                                       Sent 5 probes (5 broadcast(s))
+                                                                       Received 0 response(s)
+2026-10-19T18:53:45.117268+00:00 rdqm-a3 ibm-mq[13141]: AMQ9299I: Channel 'RDQMAPP.SVCQM' has started.
+2026-10-19T18:54:05.103433+00:00 rdqm-a3 ibm-mq[13141]: AMQ9299I: Channel 'SVCQM.RDQMAPP' has started.
+2026-10-19T18:54:12.538166+00:00 rdqm-a3 rdqm[14242]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:54:12.538192+00:00 rdqm-a3 rdqm[14242]: rdqm: Calling real main function
+2026-10-19T18:54:42.537269+00:00 rdqm-a3 rdqm[14901]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:54:42.537300+00:00 rdqm-a3 rdqm[14901]: rdqm: Calling real main function
+2026-10-19T18:55:12.538462+00:00 rdqm-a3 rdqm[15835]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:55:12.538478+00:00 rdqm-a3 rdqm[15835]: rdqm: Calling real main function
+2026-10-19T18:55:41.437699+00:00 rdqm-a3 chronyd[828]: Selected source 198.137.202.56 (2.rhel.pool.ntp.org)
+2026-10-19T18:55:42.540804+00:00 rdqm-a3 rdqm[16490]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:55:42.540819+00:00 rdqm-a3 rdqm[16490]: rdqm: Calling real main function
+2026-10-19T18:56:12.536779+00:00 rdqm-a3 rdqm[17139]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:56:12.536813+00:00 rdqm-a3 rdqm[17139]: rdqm: Calling real main function
+2026-10-19T18:56:25.302476+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3021] device (enp10s0): carrier: link connected
+2026-10-19T18:56:25.303201+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3031] device (enp10s0): state change: unavailable -> disconnected (reason 'carrier-changed', managed-type: 'full')
+2026-10-19T18:56:25.305050+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3050] policy: auto-activating connection 'enp10s0' (ecc689b1-4d85-4ca9-833b-001852f22e5f)
+2026-10-19T18:56:25.305779+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3057] device (enp10s0): Activation: starting connection 'enp10s0' (ecc689b1-4d85-4ca9-833b-001852f22e5f)
+2026-10-19T18:56:25.306084+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3060] device (enp10s0): state change: disconnected -> prepare (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.306583+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3065] device (enp10s0): state change: prepare -> config (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.307369+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.3073] device (enp10s0): state change: config -> ip-config (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.452130+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.4520] device (enp10s0): state change: ip-config -> ip-check (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.464923+00:00 rdqm-a3 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T18:56:25.493960+00:00 rdqm-a3 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T18:56:25.496256+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.4961] device (enp10s0): state change: ip-check -> secondaries (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.496626+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.4965] device (enp10s0): state change: secondaries -> activated (reason 'none', managed-type: 'full')
+2026-10-19T18:56:25.497440+00:00 rdqm-a3 NetworkManager[827]: <info>  [1792436185.4973] device (enp10s0): Activation: successful, device activated.
+2026-10-19T18:56:34.650510+00:00 rdqm-a3 tlshd[17809]: Querying the handshake service
+2026-10-19T18:56:34.651979+00:00 rdqm-a3 tlshd[17809]: Parsing a valid netlink message
+2026-10-19T18:56:34.652010+00:00 rdqm-a3 tlshd[17809]: No peer identities found
+2026-10-19T18:56:34.652013+00:00 rdqm-a3 tlshd[17810]: Querying the handshake service
+2026-10-19T18:56:34.652013+00:00 rdqm-a3 tlshd[17809]: No certificates found
+2026-10-19T18:56:34.652041+00:00 rdqm-a3 tlshd[17809]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:56:34.652085+00:00 rdqm-a3 tlshd[17810]: Parsing a valid netlink message
+2026-10-19T18:56:34.652091+00:00 rdqm-a3 tlshd[17809]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:56:34.652107+00:00 rdqm-a3 tlshd[17810]: No peer identities found
+2026-10-19T18:56:34.652109+00:00 rdqm-a3 tlshd[17810]: No certificates found
+2026-10-19T18:56:34.652130+00:00 rdqm-a3 tlshd[17810]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:56:34.652186+00:00 rdqm-a3 tlshd[17810]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:56:34.652292+00:00 rdqm-a3 tlshd[17809]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:56:34.652490+00:00 rdqm-a3 tlshd[17810]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:56:34.652582+00:00 rdqm-a3 tlshd[17809]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-a3.crt
+2026-10-19T18:56:34.652645+00:00 rdqm-a3 tlshd[17810]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-a3.crt
+2026-10-19T18:56:34.652741+00:00 rdqm-a3 tlshd[17809]: Retrieved private key from /etc/drbd.d/rdqm-a3.key
+2026-10-19T18:56:34.652812+00:00 rdqm-a3 tlshd[17810]: Retrieved private key from /etc/drbd.d/rdqm-a3.key
+2026-10-19T18:56:34.655361+00:00 rdqm-a3 tlshd[17810]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:56:34.674030+00:00 rdqm-a3 tlshd[17809]: Server's trusted authorities:
+2026-10-19T18:56:34.674274+00:00 rdqm-a3 tlshd[17809]:    [0]: CN=RDQM Replication CA
+2026-10-19T18:56:34.674341+00:00 rdqm-a3 tlshd[17809]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:56:34.675453+00:00 rdqm-a3 tlshd[17809]: The peer offered 1 certificate(s).
+2026-10-19T18:56:34.711124+00:00 rdqm-a3 tlshd[17809]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:56:34.711296+00:00 rdqm-a3 tlshd[17809]: Handshake with 'encrypted.remote' (10.99.0.41) succeeded
+2026-10-19T18:56:34.721694+00:00 rdqm-a3 tlshd[17810]: The peer offered 1 certificate(s).
+2026-10-19T18:56:34.722098+00:00 rdqm-a3 tlshd[17810]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:56:34.722339+00:00 rdqm-a3 tlshd[17810]: Peer certificate: subject `CN=rdqm-b1', issuer `CN=RDQM Replication CA', serial 0x10f3254e193288a49584a9bbb2cbb2cf7ae34811, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:33 UTC', expires `2028-07-06 20:59:33 UTC', pin-sha256="C1yWGjihmapQcp1G81w7NBwgPeJJGuQlXziLFpPwXUA="
+2026-10-19T18:56:34.723962+00:00 rdqm-a3 tlshd[17810]: Handshake with 'encrypted.remote' (10.99.0.41) succeeded
+2026-10-19T18:56:34.730931+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Handshake to peer 1 successful: Agreed network protocol version 124
+2026-10-19T18:56:34.731050+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T18:56:34.736294+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 866440241: 0->1 role( Primary ) conn( Connected )
+2026-10-19T18:56:34.755180+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T18:56:34.755317+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 2FE113A2525D9322:352ED29163B0A8DD:90617B8A5914216E:A47086BDC65D9FB4 bits:14931 flags:22
+2026-10-19T18:56:34.755342+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer 352ED29163B0A8DC:0000000000000000:A47086BDC65D9FB4:0000000000000000 bits:0 flags:120
+2026-10-19T18:56:34.755368+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=source-use-bitmap by rule=bitmap-self
+2026-10-19T18:56:34.762961+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: State change 866440241: primary_nodes=1, weak_nodes=FFFFFFFFFFFFFFFC
+2026-10-19T18:56:34.777591+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 866440241 (32ms)
+2026-10-19T18:56:34.777765+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connecting -> Connected ) peer( Unknown -> Secondary ) [connected]
+2026-10-19T18:56:34.777807+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( DUnknown -> Consistent ) repl( Off -> WFBitMapS ) [connected]
+2026-10-19T18:56:34.794475+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: send bitmap stats [Bytes(packets)]: plain 0(0), RLE 74(1), total 74; compression: 100.0%
+2026-10-19T18:56:34.795030+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Consistent -> Outdated ) [peer-state]
+2026-10-19T18:56:34.810127+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: receive bitmap stats [Bytes(packets)]: plain 0(0), RLE 74(1), total 74; compression: 100.0%
+2026-10-19T18:56:34.810274+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm before-resync-source
+2026-10-19T18:56:34.830003+00:00 rdqm-a3 before-resync-source[17829]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/before-resync-source
+2026-10-19T18:56:34.915686+00:00 rdqm-a3 before-resync-source[17829]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/before-resync-source rc(0)
+2026-10-19T18:56:34.921809+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm before-resync-source exit code 0
+2026-10-19T18:56:34.940188+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Outdated -> Inconsistent ) repl( WFBitMapS -> SyncSource ) [receive-bitmap]
+2026-10-19T18:56:34.949938+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Began resync as SyncSource (will sync 59724 KB [14931 bits set]).
+2026-10-19T18:56:35.539625+00:00 rdqm-a3 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T18:56:36.361817+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: updated UUIDs 2FE113A2525D9322:0000000000000000:352ED29163B0A8DC:90617B8A5914216E
+2026-10-19T18:56:36.376890+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Resync done (total 1 sec; paused 0 sec; 59724 K/sec)
+2026-10-19T18:56:36.377043+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Inconsistent -> UpToDate ) repl( SyncSource -> Established ) [resync-finished]
+2026-10-19T18:56:42.564887+00:00 rdqm-a3 rdqm[17966]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:56:42.564918+00:00 rdqm-a3 rdqm[17966]: rdqm: Calling real main function
+2026-10-19T18:57:12.537474+00:00 rdqm-a3 rdqm[18934]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:57:12.537557+00:00 rdqm-a3 rdqm[18934]: rdqm: Calling real main function
+2026-10-19T18:57:16.176693+00:00 rdqm-a3 corosync[919]:   [KNET  ] rx: host: 1 link: 0 is up
+2026-10-19T18:57:16.176718+00:00 rdqm-a3 corosync[919]:   [KNET  ] link: Resetting MTU for link 0 because host 1 joined
+2026-10-19T18:57:16.176728+00:00 rdqm-a3 corosync[919]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+2026-10-19T18:57:16.370861+00:00 rdqm-a3 corosync[919]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+2026-10-19T18:57:16.561276+00:00 rdqm-a3 corosync[919]:   [QUORUM] Sync members[3]: 1 2 3
+2026-10-19T18:57:16.561306+00:00 rdqm-a3 corosync[919]:   [QUORUM] Sync joined[1]: 1
+2026-10-19T18:57:16.561480+00:00 rdqm-a3 corosync[919]:   [TOTEM ] A new membership (1.30) was formed. Members joined: 1
+2026-10-19T18:57:16.603754+00:00 rdqm-a3 pacemaker-fenced[1153]:  notice: Node rdqm-a1 state is now member
+2026-10-19T18:57:16.605109+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Node rdqm-a1 state is now member
+2026-10-19T18:57:16.608749+00:00 rdqm-a3 pacemaker-based[1152]:  notice: Node rdqm-a1 state is now member
+2026-10-19T18:57:16.615493+00:00 rdqm-a3 corosync[919]:   [QUORUM] Members[3]: 1 2 3
+2026-10-19T18:57:16.615505+00:00 rdqm-a3 corosync[919]:   [MAIN  ] Completed service synchronization, ready to provide service.
+2026-10-19T18:57:16.617034+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Node rdqm-a1 state is now member
+2026-10-19T18:57:16.623323+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting #attrd-protocol[rdqm-a1] in instance_attributes: (unset) -> 7
+2026-10-19T18:57:16.634366+00:00 rdqm-a3 rdqmalert[19126]: rdqmalert: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:57:16.634401+00:00 rdqm-a3 rdqmalert[19126]: rdqmalert: Calling real main function
+2026-10-19T18:57:16.655563+00:00 rdqm-a3 rdqmalert[19126]: 'node' 'member' 'rdqm-a1' '1'
+2026-10-19T18:57:16.882804+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Recorded local node as attribute writer (was unset)
+2026-10-19T18:57:17.075902+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1
+2026-10-19T18:57:18.035081+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting #feature-set[rdqm-a1] in instance_attributes: (unset) -> 3.20.1
+2026-10-19T18:57:18.261225+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:18.542624+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:21.811306+00:00 rdqm-a3 tlshd[19306]: Querying the handshake service
+2026-10-19T18:57:21.812178+00:00 rdqm-a3 tlshd[19307]: Querying the handshake service
+2026-10-19T18:57:21.817076+00:00 rdqm-a3 tlshd[19307]: Parsing a valid netlink message
+2026-10-19T18:57:21.817116+00:00 rdqm-a3 tlshd[19307]: No peer identities found
+2026-10-19T18:57:21.817119+00:00 rdqm-a3 tlshd[19307]: No certificates found
+2026-10-19T18:57:21.817158+00:00 rdqm-a3 tlshd[19307]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:57:21.817262+00:00 rdqm-a3 tlshd[19307]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:57:21.823761+00:00 rdqm-a3 tlshd[19307]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:57:21.824057+00:00 rdqm-a3 tlshd[19307]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-a3.crt
+2026-10-19T18:57:21.824287+00:00 rdqm-a3 tlshd[19307]: Retrieved private key from /etc/drbd.d/rdqm-a3.key
+2026-10-19T18:57:21.826276+00:00 rdqm-a3 tlshd[19306]: Parsing a valid netlink message
+2026-10-19T18:57:21.826318+00:00 rdqm-a3 tlshd[19306]: No peer identities found
+2026-10-19T18:57:21.826321+00:00 rdqm-a3 tlshd[19306]: No certificates found
+2026-10-19T18:57:21.826355+00:00 rdqm-a3 tlshd[19306]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:57:21.826393+00:00 rdqm-a3 tlshd[19306]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:57:21.827865+00:00 rdqm-a3 tlshd[19306]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:57:21.828160+00:00 rdqm-a3 tlshd[19306]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-a3.crt
+2026-10-19T18:57:21.828366+00:00 rdqm-a3 tlshd[19306]: Retrieved private key from /etc/drbd.d/rdqm-a3.key
+2026-10-19T18:57:21.861968+00:00 rdqm-a3 tlshd[19307]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:57:21.982404+00:00 rdqm-a3 tlshd[19306]: Server's trusted authorities:
+2026-10-19T18:57:21.982495+00:00 rdqm-a3 tlshd[19306]:    [0]: CN=RDQM Replication CA
+2026-10-19T18:57:21.982500+00:00 rdqm-a3 tlshd[19306]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:57:21.986960+00:00 rdqm-a3 tlshd[19306]: The peer offered 1 certificate(s).
+2026-10-19T18:57:22.007893+00:00 rdqm-a3 tlshd[19307]: The peer offered 1 certificate(s).
+2026-10-19T18:57:22.008168+00:00 rdqm-a3 tlshd[19307]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:57:22.008378+00:00 rdqm-a3 tlshd[19307]: Peer certificate: subject `CN=rdqm-a1', issuer `CN=RDQM Replication CA', serial 0x3b9790cbf3c7ac616f8aa3fc92bdf52277ad29fa, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="5vS9caZUnmywbdY9f31Wd3ZpdP2DhhRa/RpOyg80iUY="
+2026-10-19T18:57:22.008584+00:00 rdqm-a3 tlshd[19307]: Handshake with 'rdqm-a1' (172.16.1.31) succeeded
+2026-10-19T18:57:22.040261+00:00 rdqm-a3 tlshd[19306]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:57:22.040692+00:00 rdqm-a3 tlshd[19306]: Handshake with 'rdqm-a1' (172.16.1.31) succeeded
+2026-10-19T18:57:22.101596+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T18:57:22.102034+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T18:57:22.129489+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing remote state change 1816056421: 0->2 role( Secondary ) conn( Connected )
+2026-10-19T18:57:22.160545+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: drbd_sync_handshake:
+2026-10-19T18:57:22.160696+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: self E5D67006DD8B124D:646A1CEDCA1F9082:21FAB043AC9AA6F6:88462DE107C9002E bits:1869 flags:120
+2026-10-19T18:57:22.160736+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: peer 646A1CEDCA1F9082:0000000000000000:21FAB043AC9AA6F6:88462DE107C9002E bits:14336 flags:22
+2026-10-19T18:57:22.160764+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: uuid_compare()=source-use-bitmap by rule=bitmap-self
+2026-10-19T18:57:22.231476+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 1816056421 (primary_nodes=4)
+2026-10-19T18:57:22.231625+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: conn( Connecting -> Connected ) peer( Unknown -> Secondary ) [remote]
+2026-10-19T18:57:22.231660+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( DUnknown -> Consistent ) repl( Off -> WFBitMapS ) [remote]
+2026-10-19T18:57:22.240905+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: send bitmap stats [Bytes(packets)]: plain 0(0), RLE 113(1), total 113; compression: 99.9%
+2026-10-19T18:57:22.264170+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: drbd_sync_handshake:
+2026-10-19T18:57:22.264332+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: self E5D67006DD8B124D:646A1CEDCA1F9082:21FAB043AC9AA6F6:88462DE107C9002E bits:1869 flags:120
+2026-10-19T18:57:22.264370+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: peer 646A1CEDCA1F9082:0000000000000000:21FAB043AC9AA6F6:88462DE107C9002E bits:14336 flags:2
+2026-10-19T18:57:22.264397+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: uuid_compare()=source-use-bitmap by rule=bitmap-self
+2026-10-19T18:57:22.264465+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Consistent -> Outdated ) [peer-state]
+2026-10-19T18:57:22.279335+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: receive bitmap stats [Bytes(packets)]: plain 0(0), RLE 77(1), total 77; compression: 100.0%
+2026-10-19T18:57:22.279514+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: helper command: /sbin/drbdadm before-resync-source
+2026-10-19T18:57:22.301193+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: helper command: /sbin/drbdadm before-resync-source exit code 0
+2026-10-19T18:57:22.301323+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Outdated -> Inconsistent ) repl( WFBitMapS -> SyncSource ) [receive-bitmap]
+2026-10-19T18:57:22.301376+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Began resync as SyncSource (will sync 59952 KB [14988 bits set]).
+2026-10-19T18:57:23.160395+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: updated UUIDs E5D67006DD8B124D:0000000000000000:646A1CEDCA1F9082:21FAB043AC9AA6F6
+2026-10-19T18:57:23.255166+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Resync done (total 1 sec; paused 0 sec; 59952 K/sec)
+2026-10-19T18:57:23.255296+00:00 rdqm-a3 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Inconsistent -> UpToDate ) repl( SyncSource -> Established ) [resync-finished]
+2026-10-19T18:57:23.269201+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing remote state change 3890040673: 0->1 role( Secondary ) conn( Connected )
+2026-10-19T18:57:23.304945+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 3890040673 (primary_nodes=4)
+2026-10-19T18:57:23.558300+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_rdqmapp[rdqm-a1] in instance_attributes: (unset) -> 10000
+2026-10-19T18:57:23.606217+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:23.883805+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:24.166791+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of stop operation for rdqmapp on rdqm-a3
+2026-10-19T18:57:24.197234+00:00 rdqm-a3 rdqm[19348]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:57:24.197255+00:00 rdqm-a3 rdqm[19348]: rdqm: Calling real main function
+2026-10-19T18:57:24.198301+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:24.208877+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:57:24.349764+00:00 rdqm-a3 rdqm[19348]: stop(rdqmapp)
+2026-10-19T18:57:24.363975+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:24.382102+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:24.518984+00:00 rdqm-a3 rdqm[19348]: stop(rdqmapp) requesting shutdown
+2026-10-19T18:57:24.528264+00:00 rdqm-a3 ibm-mq[13141]: AMQ9411I: Repository manager ended normally.
+2026-10-19T18:57:24.536533+00:00 rdqm-a3 ibm-mq[13141]: AMQ9542W: Queue manager is ending.
+2026-10-19T18:57:24.549121+00:00 rdqm-a3 ibm-mq[13121]: AMQ5025I: The command server has ended. ProcessId(13171).
+2026-10-19T18:57:24.549354+00:00 rdqm-a3 ibm-mq[13121]: AMQ5027I: The listener 'L1414' has ended. ProcessId(13217).
+2026-10-19T18:57:24.553184+00:00 rdqm-a3 ibm-mq[13121]: AMQ5023I: The channel initiator has ended. ProcessId(13172).
+2026-10-19T18:57:24.599218+00:00 rdqm-a3 ibm-mq[13141]: AMQ9542W: Queue manager is ending.
+2026-10-19T18:57:24.615495+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'IQM-COMMS-MANAGER' has ended.
+2026-10-19T18:57:24.626207+00:00 rdqm-a3 ibm-mq[13141]: AMQ9542W: Queue manager is ending.
+2026-10-19T18:57:24.634147+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'DEFERRED_DELIVERY' has ended.
+2026-10-19T18:57:24.635903+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'STATISTICS' has ended.
+2026-10-19T18:57:24.650682+00:00 rdqm-a3 ibm-mq[13121]: AMQ5029I: The Server 'MQ.EVENT.MONITOR' has ended. ProcessId(13221).
+2026-10-19T18:57:24.659274+00:00 rdqm-a3 ibm-mq[13141]: AMQ9542W: Queue manager is ending.
+2026-10-19T18:57:24.659458+00:00 rdqm-a3 ibm-mq[13141]: AMQ9999E: Channel 'MON.SVRCONN' to host '10.10.1.7' ended abnormally.
+2026-10-19T18:57:24.659974+00:00 rdqm-a3 ibm-mq[13141]: AMQ9542W: Queue manager is ending.
+2026-10-19T18:57:24.660379+00:00 rdqm-a3 ibm-mq[13141]: AMQ9999E: Channel 'SVCQM.RDQMAPP' to host '10.60.0.50' ended abnormally.
+2026-10-19T18:57:24.696178+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T18:57:24.696287+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T18:57:24.700074+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T18:57:24.700162+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T18:57:24.700306+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T18:57:24.700491+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T18:57:24.702234+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T18:57:24.702324+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T18:57:24.702401+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T18:57:24.702523+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T18:57:24.702603+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T18:57:24.702749+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T18:57:24.702908+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T18:57:24.702998+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T18:57:24.703066+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T18:57:24.703126+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T18:57:24.703188+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T18:57:24.703260+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T18:57:24.703331+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T18:57:24.703406+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T18:57:24.706478+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T18:57:24.706572+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+2026-10-19T18:57:24.706661+00:00 rdqm-a3 ibm-mq[13141]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has ended.
+2026-10-19T18:57:24.706755+00:00 rdqm-a3 ibm-mq[13141]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Publish Task' has ended.
+2026-10-19T18:57:24.710479+00:00 rdqm-a3 rdqm[19348]: stop(rdqmapp) stopped channels
+2026-10-19T18:57:24.710765+00:00 rdqm-a3 rdqm[19348]: stop(rdqmapp) waiting for shutdown (0)
+2026-10-19T18:57:24.712058+00:00 rdqm-a3 ibm-mq[13141]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Command Task' has ended.
+2026-10-19T18:57:24.712172+00:00 rdqm-a3 ibm-mq[13141]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Controller' has ended.
+2026-10-19T18:57:24.715012+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T18:57:24.715128+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T18:57:24.715207+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T18:57:24.715282+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T18:57:24.715353+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T18:57:24.715468+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T18:57:24.715562+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T18:57:24.715651+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+2026-10-19T18:57:24.727219+00:00 rdqm-a3 ibm-mq[13141]: AMQ5807I: Queued Publish/Subscribe Daemon for queue manager RDQMAPP ended.
+2026-10-19T18:57:24.728665+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T18:57:24.729796+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T18:57:24.851164+00:00 rdqm-a3 ibm-mq[13141]: AMQ5041I: The queue manager task 'ERROR-LOG' has ended.
+2026-10-19T18:57:24.863651+00:00 rdqm-a3 ibm-mq[13126]: AMQ5041I: The queue manager task 'CHECKPOINT' has ended.
+2026-10-19T18:57:28.715777+00:00 rdqm-a3 ibm-mq[13126]: AMQ5041I: The queue manager task 'LOGGER-IO' has ended.
+2026-10-19T18:57:28.726056+00:00 rdqm-a3 ibm-mq[13059]: AMQ8004I: IBM MQ queue manager 'RDQMAPP' ended.
+2026-10-19T18:57:29.735593+00:00 rdqm-a3 rdqm[19348]: stop(rdqmapp) rc(0)
+2026-10-19T18:57:29.741227+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of stop operation for rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:29.786480+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of stop operation for p_ip_rdqmapp on rdqm-a3
+2026-10-19T18:57:30.022265+00:00 rdqm-a3 IPaddr2(p_ip_rdqmapp)[19619]: INFO: IP status = ok, IP_CIP=
+2026-10-19T18:57:30.041193+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of stop operation for p_ip_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:30.069673+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of stop operation for p_rdqmx_rdqmapp on rdqm-a3
+2026-10-19T18:57:30.090401+00:00 rdqm-a3 rdqmx[19626]: rdqmx: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T18:57:30.091679+00:00 rdqm-a3 rdqmx[19626]: rdqmx: Calling real main function
+2026-10-19T18:57:30.117631+00:00 rdqm-a3 rdqmx[19626]: stop(rdqmapp)
+2026-10-19T18:57:30.138675+00:00 rdqm-a3 rdqmx[19626]: stop(rdqmapp) rc(0)
+2026-10-19T18:57:30.145908+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of stop operation for p_rdqmx_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:30.177295+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of stop operation for p_fs_rdqmapp on rdqm-a3
+2026-10-19T18:57:30.516358+00:00 rdqm-a3 Filesystem(p_fs_rdqmapp)[19719]: INFO: Running stop for /dev/drbd/by-res/rdqmapp.dr/0 on /var/mqm/vols/rdqmapp
+2026-10-19T18:57:30.752318+00:00 rdqm-a3 Filesystem(p_fs_rdqmapp)[19823]: INFO: Trying to unmount /var/mqm/vols/rdqmapp
+2026-10-19T18:57:30.779609+00:00 rdqm-a3 systemd[1]: var-mqm-vols-rdqmapp.mount: Deactivated successfully.
+2026-10-19T18:57:30.860637+00:00 rdqm-a3 kernel: EXT4-fs (drbd7001): unmounting filesystem d7d9819e-91bf-4fd0-acdc-43230bf5dc93.
+2026-10-19T18:57:31.131711+00:00 rdqm-a3 Filesystem(p_fs_rdqmapp)[19845]: INFO: unmounted /var/mqm/vols/rdqmapp successfully
+2026-10-19T18:57:31.176000+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of stop operation for p_fs_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:31.211668+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of demote operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:57:31.341252+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 3343606153: 0->all role( Secondary )
+2026-10-19T18:57:31.357249+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: State change 3343606153: primary_nodes=0, weak_nodes=0
+2026-10-19T18:57:31.357390+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 3343606153 (18ms)
+2026-10-19T18:57:31.380028+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: role( Primary -> Secondary ) [secondary]
+2026-10-19T18:57:31.422081+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of demote operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:31.448451+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:57:31.567061+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:31.587304+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:57:31.649042+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:31.667026+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of stop operation for p_drbd_dr_rdqmapp on rdqm-a3
+2026-10-19T18:57:31.772743+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 391620027: 0->1 conn( Disconnecting )
+2026-10-19T18:57:31.790515+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: State change 391620027: primary_nodes=0, weak_nodes=0
+2026-10-19T18:57:31.790687+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Cluster is now split
+2026-10-19T18:57:31.790727+00:00 rdqm-a3 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 391620027 (23ms)
+2026-10-19T18:57:31.794666+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> Disconnecting ) peer( Secondary -> Unknown ) [down]
+2026-10-19T18:57:31.803516+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off ) [down]
+2026-10-19T18:57:31.812704+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T18:57:31.812896+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 1)
+2026-10-19T18:57:31.893221+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T18:57:31.893347+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T18:57:31.941314+00:00 rdqm-a3 disconnected[19961]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T18:57:31.942279+00:00 rdqm-a3 disconnected[19961]: rdqmhandler(rdqmapp.dr) Disconnecting
+2026-10-19T18:57:32.081497+00:00 rdqm-a3 disconnected[19961]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T18:57:32.087866+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T18:57:32.095747+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: conn( Disconnecting -> StandAlone ) [disconnected]
+2026-10-19T18:57:32.095943+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Terminating receiver thread
+2026-10-19T18:57:32.107923+00:00 rdqm-a3 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T18:57:32.135154+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: disk( UpToDate -> Detaching ) [down]
+2026-10-19T18:57:32.135321+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Detaching -> Diskless ) quorum( yes -> no ) [go-diskless]
+2026-10-19T18:57:32.142233+00:00 rdqm-a3 kernel: drbd rdqmapp.dr/0 drbd7001: Freeing bitmap of size 96 KiB
+2026-10-19T18:57:32.192616+00:00 rdqm-a3 kernel: drbd /unregistered/rdqmapp.dr: Terminating worker thread
+2026-10-19T18:57:32.277812+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: 10000 -> (unset)
+2026-10-19T18:57:32.287132+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of stop operation for p_drbd_dr_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:32.483585+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:32.567470+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:32.659917+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of demote operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:32.775660+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing cluster-wide state change 4080936068: 2->all role( Secondary )
+2026-10-19T18:57:32.796698+00:00 rdqm-a3 kernel: drbd rdqmapp: State change 4080936068: primary_nodes=0, weak_nodes=0
+2026-10-19T18:57:32.796899+00:00 rdqm-a3 kernel: drbd rdqmapp: Committing cluster-wide state change 4080936068 (17ms)
+2026-10-19T18:57:32.796952+00:00 rdqm-a3 kernel: drbd rdqmapp: role( Primary -> Secondary ) [secondary]
+2026-10-19T18:57:32.834253+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of demote operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:32.859882+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:33.000443+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:33.119733+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:33.183678+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:33.387569+00:00 rdqm-a3 kernel: drbd rdqmapp: Preparing remote state change 447894532: 0->all role( Primary )
+2026-10-19T18:57:33.419724+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 447894532 (primary_nodes=1)
+2026-10-19T18:57:33.419902+00:00 rdqm-a3 kernel: drbd rdqmapp rdqm-a1: peer( Secondary -> Primary ) [remote]
+2026-10-19T18:57:33.466217+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:33.722082+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:33.822952+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Requesting local execution of monitor operation for p_drbd_rdqmapp on rdqm-a3
+2026-10-19T18:57:34.042447+00:00 rdqm-a3 pacemaker-controld[1167]:  notice: Result of monitor operation for p_drbd_rdqmapp on rdqm-a3: OK
+2026-10-19T18:57:35.188646+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: (unset) -> 1000
+2026-10-19T18:57:36.128662+00:00 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: 1000 -> 10000
+2026-10-19T18:57:39.038499+00:00 rdqm-a3 kernel: hrtimer: interrupt took 3091861 ns
+2026-10-19T18:58:56.004111+00:00 rdqm-a3 chronyd[828]: Selected source 107.161.86.210 (2.rhel.pool.ntp.org)
+2026-10-19T18:59:03.665310+00:00 rdqm-a3 systemd[1]: Starting systemd-tmpfiles-clean.service - Cleanup of Temporary Directories...
+2026-10-19T18:59:03.862054+00:00 rdqm-a3 systemd[1]: systemd-tmpfiles-clean.service: Deactivated successfully.
+2026-10-19T18:59:03.862502+00:00 rdqm-a3 systemd[1]: Finished systemd-tmpfiles-clean.service - Cleanup of Temporary Directories.
+2026-10-19T19:00:36.737090+00:00 rdqm-a3 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T19:00:36.794222+00:00 rdqm-a3 systemd[1]: Started systemd-timedated.service - Time & Date Service.

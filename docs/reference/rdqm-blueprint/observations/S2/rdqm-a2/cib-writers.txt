@@ -1,0 +1,40 @@
+Oct 19 19:30:01.255 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:30:01.305Z
+Oct 19 19:31:38.988 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:31:39.048Z
+Oct 19 19:31:40.080 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:31:40.143Z
+Oct 19 19:33:29.892 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:33:29.958Z
+Oct 19 19:33:31.102 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:33:31.140Z
+Oct 19 19:35:20.878 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:35:20.940Z
+Oct 19 19:35:21.896 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:35:21.963Z
+Oct 19 19:37:11.862 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:37:11.924Z
+Oct 19 19:37:12.853 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:37:12.917Z
+Oct 19 19:39:02.853 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:39:02.915Z
+Oct 19 19:39:03.885 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:39:03.950Z
+Oct 19 19:40:44.101 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=true
+Oct 19 19:40:44.902 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_colocation[@id='rdqmapp_with_ip']
+Oct 19 19:40:45.539 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_order[@id='rdqmapp_after_ip']
+Oct 19 19:40:46.205 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    ++ /cib/configuration/constraints:  <rsc_location id="p_rdqmx_rdqmapp_preferred_location" rsc="p_rdqmx_rdqmapp" score="50" node="rdqm-a1"/>
+Oct 19 19:40:53.843 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:40:53.904Z
+Oct 19 19:41:40.954 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=false
+    ++ /cib/configuration/constraints:  <rsc_colocation id="rdqmapp_with_ip" score="INFINITY" rsc="rdqmapp" with-rsc="p_ip_rdqmapp"/>
+    ++ /cib/configuration/constraints:  <rsc_order id="rdqmapp_after_ip" kind="Mandatory" first="p_ip_rdqmapp" first-action="start" then="rdqmapp" then-action="start"/>
+Oct 19 19:41:43.288 cib_apply_diff 'all' by rdqm-a1/cibadmin
+    -- /cib/configuration/constraints/rsc_location[@id='p_rdqmx_rdqmapp_preferred_location']
+Oct 19 19:42:45.850 cib_modify crm_config by rdqm-a1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:42:45.916Z

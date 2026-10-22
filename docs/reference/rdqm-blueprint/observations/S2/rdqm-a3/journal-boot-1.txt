@@ -1,0 +1,2 @@
+# journal-boot-1.txt: exported for #1666; 1 lines kept; dropped lines by category: kit ssh/sudo/session: 512, lab observability agents and timers: 27. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:16:02.627774+00:00 rdqm-a3 systemd[1]: systemd-timedated.service: Deactivated successfully.

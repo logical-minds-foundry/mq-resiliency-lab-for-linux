@@ -1,0 +1,85 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: active (exited) since Mon 2026-10-19 19:47:18 UTC; 4min 50s ago
+ Invocation: 49e11896caea47149b44946404d4e29f
+    Process: 1212 ExecStart=/var/mqm/rdqm/rdqmd -s (code=exited, status=0/SUCCESS)
+   Main PID: 1212 (code=exited, status=0/SUCCESS)
+   Mem peak: 54.5M
+        CPU: 6.302s
+
+Oct 19 19:46:53 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+Oct 19 19:47:18 rdqm-a1 rdqmd[1212]: Replicated data systemd initialization complete.
+Oct 19 19:47:18 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:53 UTC; 5min ago
+ Invocation: 9b028dd45ba24cd083367dbb46d8a611
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1210 (pacemakerd)
+      Tasks: 144
+     Memory: 193.4M (peak: 199M)
+        CPU: 18.249s
+     CGroup: /system.slice/pacemaker.service
+             ├─1210 /usr/sbin/pacemakerd
+             ├─1254 /usr/libexec/pacemaker/pacemaker-based
+             ├─1259 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1260 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1262 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1267 /usr/libexec/pacemaker/pacemaker-schedulerd
+             ├─1274 /usr/libexec/pacemaker/pacemaker-controld
+             ├─4442 /opt/mqm/bin/amqzxma0 -m RDQMAPP -u mqm
+             ├─4511 /opt/mqm/bin/amqzfuma -m RDQMAPP
+             ├─4515 /opt/mqm/bin/amqzmgr0 -m RDQMAPP
+             ├─4518 /opt/mqm/bin/amqzmuc0 -m RDQMAPP
+             ├─4534 /opt/mqm/bin/amqzmur0 -m RDQMAPP
+             ├─4550 /opt/mqm/bin/amqzmuf0 -m RDQMAPP
+             ├─4553 /opt/mqm/bin/amqrrmfa -m RDQMAPP -t2332800 -s2592000 -p2592000 -g5184000 -c3600
+             ├─4559 /opt/mqm/bin/amqpcsea RDQMAPP
+             ├─4560 /opt/mqm/bin/runmqchi -m RDQMAPP -q SYSTEM.CHANNEL.INITQ -r
+             ├─4577 /opt/mqm/bin/amqzlaa0 -mRDQMAPP -fip0
+             ├─4578 /opt/mqm/bin/amqfqpub -mRDQMAPP
+             ├─4604 /opt/mqm/bin/runmqlsr -r -m RDQMAPP -t TCP -p 1414
+             ├─4605 /bin/bash /opt/mq-event-monitor/run.sh RDQMAPP
+             ├─4606 /opt/mqm/bin/amqfcxba -m RDQMAPP
+             ├─4631 /opt/mqm/samp/bin/amqsevt -m RDQMAPP -o json_compact
+             ├─4632 logger --size 32768 -t mq-events
+             ├─4724 /opt/mqm/bin/amqrmppa -m RDQMAPP
+             └─4808 /opt/mqm/bin/runmqchl -c "RDQMAPP.SVCQM       " -m "RDQMAPP                                         "
+
+Oct 19 19:52:01 rdqm-a1 ibm-mq[4534]: {"ibm_messageId":"AMQ8245W","ibm_arithInsert1":0,"ibm_arithInsert2":0,"ibm_commentInsert1":"mqmon","ibm_commentInsert2":"SYSTEM.DEF.SVRCONN [channel]","ibm_datetime":"2026-10-19T19:52:01.546Z","ibm_serverName":"RDQMAPP","type":"mq_log","host":"rdqm-a1","loglevel":"WARNING","module":"amqzfubx.c:1676","ibm_sequence":"1792439521_548044881","ibm_qmgrId":"RDQMAPP_2026-10-19_18.30.26","ibm_processId":"4577","ibm_threadId":"9","ibm_version":"10.0.1.0","ibm_processName":"amqzlaa0","ibm_userName":"mqm","ibm_installationName":"Installation1","ibm_installationDir":"/opt/mqm","message":"AMQ8245W: Entity 'mqmon' has insufficient authority to display object SYSTEM.DEF.SVRCONN [channel]."}
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+Oct 19 19:52:01 rdqm-a1 mq-events[4632]: { "eventSource" : { "objectName": "SYSTEM.ADMIN.QMGR.EVENT",                   "objectType" : "Queue",                   "queueMgr" : "RDQMAPP"}, "eventType" : {     "name" : "Queue Mgr Event",     "value" : 44   }, "eventReason" : {     "name" : "Not Authorized",     "value" : 2035   }, "eventCreation" : {     "timeStamp"  : "2026-10-19T19:52:01Z",     "epoch"      : 1792439521   }, "eventData" : {   "queueMgrName" : "RDQMAPP",   "reasonQualifier" : "Cmd Not Authorized",   "command" : "Inquire Channel",   "userIdentifier" : "mqmon" } }
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:53 UTC; 5min ago
+ Invocation: a5c11b9ac2804afcac2960d614b96511
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 1056 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 158M (peak: 169.6M)
+        CPU: 2.550s
+     CGroup: /system.slice/corosync.service
+             └─1056 /usr/sbin/corosync -f
+
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [KNET  ] link: Resetting MTU for link 0 because host 2 joined
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [KNET  ] host: host: 2 (passive) best link: 0 (pri: 1)
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [QUORUM] Sync joined[1]: 2
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [TOTEM ] A new membership (1.57) was formed. Members joined: 2
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [KNET  ] pmtud: PMTUD link change for host: 2 link: 0 from 522 to 1446
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a1 corosync[1056]:   [MAIN  ] Completed service synchronization, ready to provide service.

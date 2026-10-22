@@ -1,0 +1,88 @@
+# RDQM.0.LOG: exported for #1666; 87 lines kept; dropped lines by category: outside window: 1392.
+2026-10-19 19:01:14.728: 10786 rdqmhandler
+2026-10-19 19:01:14.728: 10786 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:01:14.737: 10786 >>STDOUT:
+active
+2026-10-19 19:01:14.737: 10786 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:01:14.737: 10786 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:01:14.754: 10786 >>STDOUT:
+active
+2026-10-19 19:01:14.755: 10786 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:01:14.755: 10786 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:01:14.780: 10786 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:20.790:  1077 rdqmd -s
+2026-10-19 19:05:20.790:  1077 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:05:24.016:  1077 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 19:05:23 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:05:23 2026 by hacluster via hacluster on rdqm-a2
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: online:
+    * Resources:
+  * Node rdqm-a2: online:
+    * Resources:
+      * p_drbd_rdqmapp	(ocf:linbit:drbd):	 Unpromoted
+  * Node rdqm-a3: online:
+    * Resources:
+      * p_rdqmx_rdqmapp	(ocf:ibm:rdqmx):	 Started
+      * rdqmapp	(ocf:ibm:rdqm):	 Started
+      * p_fs_rdqmapp	(ocf:heartbeat:Filesystem):	 Started
+      * p_drbd_rdqmapp	(ocf:linbit:drbd):	 Promoted
+      * p_drbd_dr_rdqmapp	(ocf:linbit:drbd):	 Promoted
+      * p_ip_rdqmapp	(ocf:heartbeat:IPaddr2):	 Started
+
+2026-10-19 19:05:24.016:  1077 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:05:24.016:  1077 ---{ /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+2026-10-19 19:05:24.048:  1077 >>STDOUT:
+name="rdqm-transient-attribute" host="rdqm-a1" value="1"
+2026-10-19 19:05:24.048:  1077 ---} rc=0 unixrc=0 /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+
+2026-10-19 19:05:24.049:  1077 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:05:24.086:  1077 >>STDOUT:
+active
+2026-10-19 19:05:24.086:  1077 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:05:24.086:  1077 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:24.119:  1077 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:27.250:  2997 rdqmhandler
+2026-10-19 19:05:27.250:  2997 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:05:27.277:  2997 >>STDOUT:
+active
+2026-10-19 19:05:27.277:  2997 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:05:27.277:  2997 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:05:27.300:  2997 >>STDOUT:
+active
+2026-10-19 19:05:27.301:  2997 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:05:27.301:  2997 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:27.332:  2997 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:32.585:  3746 rdqmx start
+2026-10-19 19:05:32.585:  3746 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:05:32.621:  3746 >>STDOUT:
+active
+2026-10-19 19:05:32.621:  3746 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:05:32.621:  3746 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:05:32.645:  3746 >>STDOUT:
+active
+2026-10-19 19:05:32.645:  3746 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:05:32.646:  3746 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:32.671:  3746 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:33.130:  3961 rdqm start
+2026-10-19 19:05:33.130:  3961 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:33.189:  3961 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+

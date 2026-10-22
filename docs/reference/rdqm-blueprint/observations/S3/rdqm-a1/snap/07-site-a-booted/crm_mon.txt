@@ -1,0 +1,23 @@
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:46:54 2026
+  * Last change:  Mon Oct 19 19:44:04 2026 by root via root on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * OFFLINE: [ rdqm-a1 rdqm-a2 rdqm-a3 ]
+
+Full List of Resources:
+  * p_fs_rdqmapp	(ocf:heartbeat:Filesystem):	 Stopped
+  * p_rdqmx_rdqmapp	(ocf:ibm:rdqmx):	 Stopped
+  * rdqmapp	(ocf:ibm:rdqm):	 Stopped
+  * Clone Set: ms_drbd_rdqmapp [p_drbd_rdqmapp] (promotable):
+    * Stopped: [ rdqm-a1 rdqm-a2 rdqm-a3 ]
+  * Clone Set: ms_drbd_dr_rdqmapp [p_drbd_dr_rdqmapp] (promotable):
+    * Stopped: [ rdqm-a1 rdqm-a2 rdqm-a3 ]
+  * p_ip_rdqmapp	(ocf:heartbeat:IPaddr2):	 Stopped
+
+Failed Fencing Actions:
+  * Failed to get fencing history: Not connected

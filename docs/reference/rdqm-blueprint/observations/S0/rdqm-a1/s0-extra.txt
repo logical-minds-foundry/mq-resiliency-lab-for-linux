@@ -1,0 +1,127 @@
+== systemctl cat rdqm.service
+# /usr/lib/systemd/system/rdqm.service
+# [IBM copyright comment block omitted at export (#1666)]
+
+[Unit]
+Description=IBM MQ Replicated Data
+After=network-online.target
+After=pacemaker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/var/mqm/rdqm/rdqmd -s
+
+[Install]
+WantedBy=multi-user.target
+== enablement
+rdqm: enabled active
+pacemaker: enabled active
+corosync: disabled active
+drbd: disabled inactive
+mqweb: enabled active
+tlshd: enabled active
+== systemctl show rdqm.service
+Type=oneshot
+RemainAfterExit=yes
+ExecMainStartTimestamp=Mon 2026-10-19 18:12:22 UTC
+ExecMainExitTimestamp=Mon 2026-10-19 18:12:23 UTC
+ExecMainStatus=0
+ExecStart={ path=/var/mqm/rdqm/rdqmd ; argv[]=/var/mqm/rdqm/rdqmd -s ; ignore_errors=no ; start_time=[n/a] ; stop_time=[n/a] ; pid=0 ; code=(null) ; status=0/0 }
+Wants=
+WantedBy=multi-user.target
+Before=shutdown.target multi-user.target
+After=network-online.target systemd-journald.socket pacemaker.service sysinit.target system.slice basic.target
+ActiveEnterTimestamp=Mon 2026-10-19 18:12:23 UTC
+== journal rdqm.service this boot
+2026-10-19T18:12:22.921515+00:00 rdqm-a1 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+2026-10-19T18:12:23.056270+00:00 rdqm-a1 rdqmd[7956]: Replicated data systemd initialization complete.
+2026-10-19T18:12:23.064483+00:00 rdqm-a1 systemd[1]: Finished rdqm.service - IBM MQ Replicated Data.
+== /var/mqm/rdqm.ini
+Node:
+  Name=rdqm-a1
+  HA_Replication=172.16.1.31
+Node:
+  Name=rdqm-a2
+  HA_Replication=172.16.1.32
+Node:
+  Name=rdqm-a3
+  HA_Replication=172.16.1.33
+== crm configure show
+node 1: rdqm-a1 \
+	attributes drbd-replication=172.16.1.31 mqm-uid=992 mqm-gid=1001 mqvrmf=10.0.1.0 standby=off rdqmapp-name=RDQMAPP
+node 2: rdqm-a2 \
+	attributes drbd-replication=172.16.1.32 mqm-uid=992 mqm-gid=1001 mqvrmf=10.0.1.0 standby=off rdqmapp-name=RDQMAPP rdqmapp-dr-replication=10.99.0.32
+node 3: rdqm-a3 \
+	attributes drbd-replication=172.16.1.33 mqm-uid=992 mqm-gid=1001 mqvrmf=10.0.1.0 standby=off rdqmapp-name=RDQMAPP rdqmapp-dr-replication=10.99.0.33
+primitive p_drbd_dr_rdqmapp ocf:linbit:drbd \
+	params drbd_resource=rdqmapp.dr wfc_timeout=false \
+	op monitor timeout=20 interval=20 role=Slave \
+	op monitor timeout=20 interval=10 role=Master \
+	op start timeout=240 interval=0s \
+	op stop timeout=100 interval=0s \
+	op promote timeout=90 interval=0s \
+	op demote timeout=90 interval=0s
+primitive p_drbd_rdqmapp ocf:linbit:drbd \
+	params drbd_resource=rdqmapp adjust_master_score="0 10 10000 10000" \
+	op monitor timeout=20 interval=20 role=Slave \
+	op monitor timeout=20 interval=10 role=Master \
+	op start timeout=240 interval=0s \
+	op stop timeout=100 interval=0s \
+	op promote timeout=90 interval=0s \
+	op demote timeout=90 interval=0s
+primitive p_fs_rdqmapp Filesystem \
+	params device="/dev/drbd/by-res/rdqmapp.dr/0" directory="/var/mqm/vols/rdqmapp" fstype=ext4 force_unmount=safe fast_stop=no \
+	op start timeout=60 interval=0s \
+	op stop timeout=60 interval=0s
+primitive p_ip_rdqmapp IPaddr2 \
+	params ip=10.10.1.100 cidr_netmask=24 nic=enp6s0 \
+	op monitor interval=30
+primitive p_rdqmx_rdqmapp ocf:ibm:rdqmx \
+	op start timeout=60 interval=0s \
+	op stop timeout=60 interval=0s
+primitive rdqmapp ocf:ibm:rdqm \
+	op monitor timeout=60 interval=30 \
+	op start timeout=43200 interval=0s \
+	op stop timeout=300 interval=0s \
+	meta maintenance=false
+clone ms_drbd_dr_rdqmapp p_drbd_dr_rdqmapp \
+	meta notify=true promotable=true clone-max=1 target-role=Promoted
+clone ms_drbd_rdqmapp p_drbd_rdqmapp \
+	meta notify=true promotable=true
+order rdqmapp_after_ip Mandatory: p_ip_rdqmapp:start rdqmapp:start
+order rdqmapp_drbd_dr_after_drbd Mandatory: ms_drbd_rdqmapp:promote ms_drbd_dr_rdqmapp:start
+colocation rdqmapp_drbd_dr_with_drbd inf: ms_drbd_dr_rdqmapp ms_drbd_rdqmapp:Master
+order rdqmapp_fs_after_drbd_dr Mandatory: ms_drbd_dr_rdqmapp:promote p_fs_rdqmapp:start
+order rdqmapp_fs_after_drbd_dr_start Mandatory: ms_drbd_dr_rdqmapp:start p_fs_rdqmapp:start
+colocation rdqmapp_fs_with_drbd_dr inf: p_fs_rdqmapp ms_drbd_dr_rdqmapp:Master
+order rdqmapp_ip_after_rdqmx Mandatory: p_rdqmx_rdqmapp p_ip_rdqmapp
+colocation rdqmapp_ip_with_rdqmx inf: p_ip_rdqmapp p_rdqmx_rdqmapp
+location rdqmapp_preferred_location rdqmapp 50: rdqm-a1
+order rdqmapp_rdqmx_after_fs Mandatory: p_fs_rdqmapp:start p_rdqmx_rdqmapp:start
+colocation rdqmapp_rdqmx_with_fs inf: p_rdqmx_rdqmapp p_fs_rdqmapp
+colocation rdqmapp_with_ip inf: rdqmapp p_ip_rdqmapp
+property cib-bootstrap-options: \
+	have-watchdog=false \
+	dc-version=3.0.1.linbit-1.el10-a6049fe \
+	cluster-infrastructure=corosync \
+	stonith-enabled=false \
+	maintenance-mode=false
+property rdqm: \
+	rdqmapp-size=3072 \
+	rdqmapp-dr-role=1 \
+	rdqmapp-dr-local-ip="10.99.0.31,10.99.0.32,10.99.0.33" \
+	rdqmapp-dr-remote-ip="10.99.0.41,10.99.0.42,10.99.0.43" \
+	rdqmapp-dr-port=7001 \
+	rdqmapp-qm-type=3 \
+	rdqmapp-ha-state=0 \
+	rdqmapp-local-san=encrypted.remote \
+	rdqmapp-remote-san=encrypted.remote \
+	rdqmapp-encrypt-dr=1 \
+	rdqmapp-encrypt-ha=1 \
+	rdqmapp-drbd-port=7000 \
+	rdqmapp-drbd-minor=100 \
+	rdqmapp-dr-before-resync-time="2026-10-19T18:30:42.337Z"
+rsc_defaults build-resource-defaults: \
+	resource-stickiness=1
+alert rdqm-alert "/var/mqm/rdqm/rdqmalert"

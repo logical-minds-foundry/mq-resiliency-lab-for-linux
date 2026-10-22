@@ -1,0 +1,309 @@
+# RDQM.0.LOG: exported for #1666; 308 lines kept; dropped lines by category: outside window: 281.
+2026-10-19 18:44:15.812:  1067 rdqmd -s
+2026-10-19 18:44:15.812:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:18.691:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:18 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:18.691:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:19.691:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:20.632:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:20 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:20.632:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:21.632:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:22.266:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:22 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:22.266:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:23.267:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:24.093:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:23 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:24.093:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:25.095:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:25.831:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:25 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:25.831:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:26.831:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:27.288:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:27 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:27.288:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:28.288:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:28.759:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:28 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:28.760:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:29.760:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:30.346:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:30 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:30.346:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:31.347:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:31.726:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:31 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:31.726:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:32.726:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:33.200:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:33 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:33.200:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:34.200:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:34.602:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:34 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:34.602:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:35.602:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:35.996:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:35 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:35.996:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:36.996:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:37.383:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 18:44:37 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 18:44:37.383:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:38.383:  1067 ---{ /usr/sbin/crm status bynode
+2026-10-19 18:44:38.974:  1067 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-a2 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 18:44:38 2026 on rdqm-a3
+  * Last change:  Mon Oct 19 18:32:10 2026 by mqm via mqm on rdqm-a1
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: online:
+    * Resources:
+  * Node rdqm-a2: online:
+    * Resources:
+  * Node rdqm-a3: online:
+    * Resources:
+
+2026-10-19 18:44:38.974:  1067 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 18:44:38.974:  1067 ---{ /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a3 --query
+2026-10-19 18:44:38.997:  1067 >>STDOUT:
+name="rdqm-transient-attribute" host="rdqm-a3" value="1"
+2026-10-19 18:44:38.997:  1067 ---} rc=0 unixrc=0 /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a3 --query
+
+2026-10-19 18:44:38.997:  1067 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:44:39.017:  1067 >>STDOUT:
+active
+2026-10-19 18:44:39.017:  1067 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:44:39.017:  1067 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:44:39.040:  1067 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:45:11.393:  4151 rdqmhandler
+2026-10-19 18:45:11.393:  4151 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:45:11.403:  4151 >>STDOUT:
+active
+2026-10-19 18:45:11.403:  4151 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:45:11.403:  4151 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:45:11.411:  4151 >>STDOUT:
+active
+2026-10-19 18:45:11.411:  4151 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:45:11.412:  4151 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:45:11.437:  4151 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+

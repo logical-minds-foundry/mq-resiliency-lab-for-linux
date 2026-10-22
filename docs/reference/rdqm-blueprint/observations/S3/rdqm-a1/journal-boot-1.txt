@@ -1,0 +1,30 @@
+# journal-boot-1.txt: exported for #1666; 29 lines kept; dropped lines by category: kit ssh/sudo/session: 535, lab observability agents and timers: 394, lab monitor authority warnings (AMQ8245W/AMQ8009W): 712. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:43:41.640672+00:00 rdqm-a1 rdqm[27597]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:43:41.640854+00:00 rdqm-a1 rdqm[27597]: rdqm: Calling real main function
+2026-10-19T19:43:52.564018+00:00 rdqm-a1 NetworkManager[835]: <info>  [1792439032.5638] device (enp10s0): state change: activated -> unavailable (reason 'carrier-changed', managed-type: 'full')
+2026-10-19T19:43:52.569141+00:00 rdqm-a1 NetworkManager[835]: <info>  [1792439032.5690] policy: set 'Wired connection 1' (enp5s0) as default for IPv4 routing and DNS
+2026-10-19T19:43:52.582757+00:00 rdqm-a1 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:43:52.599878+00:00 rdqm-a1 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:43:59.820800+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: [drbd_s_rdqmapp./25430] sending time expired, ko = 6
+2026-10-19T19:44:00.230265+00:00 rdqm-a1 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:44:02.633352+00:00 rdqm-a1 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:44:03.859271+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: PingAck did not arrive in time.
+2026-10-19T19:44:03.859881+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> NetworkFailure ) peer( Secondary -> Unknown )
+2026-10-19T19:44:03.859949+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T19:44:03.859990+00:00 rdqm-a1 kernel: drbd rdqmapp.dr tcp:encrypted.remote: dtt_send_page: size=24 len=24 sent=-4
+2026-10-19T19:44:03.865863+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T19:44:03.865975+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 1)
+2026-10-19T19:44:03.871822+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 2172534314: 0->all empty
+2026-10-19T19:44:03.871922+00:00 rdqm-a1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 2172534314 (3ms)
+2026-10-19T19:44:03.892350+00:00 rdqm-a1 kernel: drbd rdqmapp.dr/0 drbd7001: new current UUID: F2C51ADBCE8F9A7F weak: FFFFFFFFFFFFFFFE
+2026-10-19T19:44:03.897961+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T19:44:03.904133+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T19:44:03.905253+00:00 rdqm-a1 ibm-mq[23320]: AMQ6729W: Log I/O operation (W) exceeded threshold (1000000 microseconds).
+2026-10-19T19:44:03.936406+00:00 rdqm-a1 disconnected[28974]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T19:44:03.936875+00:00 rdqm-a1 disconnected[28974]: rdqmhandler(rdqmapp.dr) NetworkFailure
+2026-10-19T19:44:04.051437+00:00 rdqm-a1 disconnected[28974]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T19:44:04.059838+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T19:44:04.064399+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T19:44:04.064558+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Restarting receiver thread
+2026-10-19T19:44:04.071248+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T19:44:04.071403+00:00 rdqm-a1 kernel: drbd rdqmapp.dr encrypted.remote: Configured local address not found, retrying every 10 sec, err=-99

@@ -1,0 +1,15 @@
+# AMQERR01.LOG: exported for #1666; 14 lines kept; dropped lines by category: outside window (whole entries): 36.
+10/19/2026 07:16:42 PM - Process(92257.1) User(mqm) Program(strmqm)
+                    Host(rdqm-b1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:16:42.749Z)
+                    CommentInsert1(/opt/mqm/bin/strmqm)
+                    CommentInsert2(/opt/mqm/bin/strmqm RDQMAPP)
+
+AMQ6206I: Command /opt/mqm/bin/strmqm was issued.
+
+EXPLANATION:
+Control command '/opt/mqm/bin/strmqm RDQMAPP' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------

@@ -1,0 +1,4 @@
+Oct 19 19:02:14.198 cib_modify crm_config by rdqm-a3/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-before-resync-time']:  @value=2026-10-19T19:02:14.166Z
+Oct 19 19:05:31.027 cib_modify crm_config by rdqm-a3/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:05:31.013Z

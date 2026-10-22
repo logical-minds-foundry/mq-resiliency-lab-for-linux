@@ -1,0 +1,7 @@
+# journal-boot-1.txt: exported for #1666; 6 lines kept; dropped lines by category: kit ssh/sudo/session: 431, lab observability agents and timers: 27. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:43:52.529062+00:00 rdqm-a2 NetworkManager[829]: <info>  [1792439032.5287] device (enp10s0): state change: activated -> unavailable (reason 'carrier-changed', managed-type: 'full')
+2026-10-19T19:43:52.539352+00:00 rdqm-a2 NetworkManager[829]: <info>  [1792439032.5392] policy: set 'Wired connection 1' (enp5s0) as default for IPv4 routing and DNS
+2026-10-19T19:43:52.548554+00:00 rdqm-a2 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:43:52.566875+00:00 rdqm-a2 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:44:00.381289+00:00 rdqm-a2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:44:02.593238+00:00 rdqm-a2 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.

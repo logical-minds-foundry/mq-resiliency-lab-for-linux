@@ -1,0 +1,43 @@
+# journal.txt: exported for #1666; 42 lines kept; dropped lines by category: kit ssh/sudo/session: 6247, lab observability agents and timers: 1005. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:16:03.378681+00:00 rdqm-b3 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:16:08.804405+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:17:24.016677+00:00 rdqm-b3 NetworkManager[3650]: <info>  [1792437444.0165] dhcp4 (enp5s0): state changed new lease, address=192.168.121.215
+2026-10-19T19:17:24.027528+00:00 rdqm-b3 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:17:24.052283+00:00 rdqm-b3 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:17:34.086141+00:00 rdqm-b3 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:18:18.919000+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:18:18.919007+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:18:18.920116+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:26:33.340367+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:29:01.198564+00:00 rdqm-b3 anacron[62047]: Job `cron.daily' started
+2026-10-19T19:29:01.206100+00:00 rdqm-b3 anacron[62047]: Job `cron.daily' terminated
+2026-10-19T19:30:08.836488+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:31:38.764448+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: (unset) -> 1792438298
+2026-10-19T19:31:38.764640+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: (unset) -> 1
+2026-10-19T19:31:39.451176+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:31:59.796575+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:33:29.753191+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438298 -> 1792438409
+2026-10-19T19:33:29.753363+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1 -> 2
+2026-10-19T19:33:30.367030+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:33:50.792869+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:35:20.749780+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438409 -> 1792438520
+2026-10-19T19:35:20.749929+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 2 -> 3
+2026-10-19T19:35:21.345500+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:35:23.943273+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:35:41.798574+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:37:11.749236+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438520 -> 1792438631
+2026-10-19T19:37:11.749386+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 3 -> 4
+2026-10-19T19:37:12.320239+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:37:32.793828+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:39:02.748180+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438631 -> 1792438742
+2026-10-19T19:39:02.748349+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 4 -> 5
+2026-10-19T19:39:03.324151+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:39:23.818376+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:40:53.747169+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438742 -> 1792438853
+2026-10-19T19:40:53.747348+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 5 -> 6
+2026-10-19T19:40:54.316931+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:41:14.804066+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:42:44.747445+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting last-failure-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 1792438853 -> 1792438964
+2026-10-19T19:42:44.748557+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting fail-count-p_drbd_dr_rdqmapp#promote_0[rdqm-b1] in instance_attributes: 6 -> 7
+2026-10-19T19:42:45.289145+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:43:05.819345+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000

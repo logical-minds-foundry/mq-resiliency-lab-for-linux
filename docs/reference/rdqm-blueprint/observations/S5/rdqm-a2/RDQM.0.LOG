@@ -1,0 +1,15 @@
+# RDQM.0.LOG: exported for #1666; 14 lines kept; dropped lines by category: outside window: 665.
+2026-10-19 19:09:39.548: 31542 rdqmhandler
+2026-10-19 19:09:39.548: 31542 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:39.567: 31542 >>STDOUT:
+active
+2026-10-19 19:09:39.567: 31542 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:39.567: 31542 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:39.586: 31542 >>STDOUT:
+active
+2026-10-19 19:09:39.586: 31542 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:39.587: 31542 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:39.610: 31542 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+

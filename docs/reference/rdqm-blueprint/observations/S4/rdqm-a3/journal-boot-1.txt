@@ -1,0 +1,2 @@
+# journal-boot-1.txt: exported for #1666; 1 lines kept; dropped lines by category: none. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+No journal boot entry found for the specified boot (-1).

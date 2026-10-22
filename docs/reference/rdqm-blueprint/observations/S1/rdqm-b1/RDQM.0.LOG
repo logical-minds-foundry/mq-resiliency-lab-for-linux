@@ -1,0 +1,139 @@
+# RDQM.0.LOG: exported for #1666; 138 lines kept; dropped lines by category: outside window: 938.
+2026-10-19 18:52:56.490: 58446 rdqmhandler
+2026-10-19 18:52:56.490: 58446 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:52:56.501: 58446 >>STDOUT:
+active
+2026-10-19 18:52:56.501: 58446 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:52:56.501: 58446 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:52:56.524: 58446 >>STDOUT:
+active
+2026-10-19 18:52:56.524: 58446 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:52:56.525: 58446 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:52:56.545: 58446 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:52:56.546: 58446 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:52:56.546Z"
+2026-10-19 18:52:56.564: 58446 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:52:56.546Z"
+
+2026-10-19 18:56:34.837: 63277 rdqmhandler
+2026-10-19 18:56:34.837: 63277 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:56:34.851: 63277 >>STDOUT:
+active
+2026-10-19 18:56:34.851: 63277 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:56:34.851: 63277 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:56:34.861: 63277 >>STDOUT:
+active
+2026-10-19 18:56:34.861: 63277 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:56:34.861: 63277 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:56:34.893: 63277 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:56:34.894: 63277 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:34.933: 63277 >>STDOUT:
+  -wi-a-----,,<3.02g,2026-10-19 18:44:46 +0000
+2026-10-19 18:56:34.933: 63277 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:34.935: 63277 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:34.975: 63277 >>STDOUT:
+  -wi-a-----,,<3.02g,2026-10-19 18:44:46 +0000
+2026-10-19 18:56:34.975: 63277 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:34.976: 63277 ---{ /usr/sbin/lvremove -f drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:35.032: 63277 >>STDOUT:
+  Logical volume "rdqmapp_00-before-resync" successfully removed.
+2026-10-19 18:56:35.032: 63277 ---} rc=0 unixrc=0 /usr/sbin/lvremove -f drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:35.032: 63277 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --delete
+2026-10-19 18:56:35.069: 63277 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --delete
+
+2026-10-19 18:56:35.069: 63277 ---{ /usr/sbin/lvcreate -s -n rdqmapp_00-before-resync -L 3088M drbdpool/rdqmapp_00
+2026-10-19 18:56:35.190: 63277 >>STDOUT:
+  Logical volume "rdqmapp_00-before-resync" created.
+2026-10-19 18:56:35.190: 63277 ---} rc=0 unixrc=0 /usr/sbin/lvcreate -s -n rdqmapp_00-before-resync -L 3088M drbdpool/rdqmapp_00
+
+2026-10-19 18:56:35.190: 63277 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:35.227: 63277 >>STDOUT:
+  swi-a-s---,0.00,<3.02g,2026-10-19 18:56:35 +0000
+2026-10-19 18:56:35.227: 63277 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:35.227: 63277 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00
+2026-10-19 18:56:35.260: 63277 >>STDOUT:
+  owi-aos---,,3.00g,2026-10-19 18:30:39 +0000
+2026-10-19 18:56:35.260: 63277 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00
+
+2026-10-19 18:56:35.260: 63277 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --update 1
+2026-10-19 18:56:35.278: 63277 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --update 1
+
+2026-10-19 18:56:35.279: 63277 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T18:56:35.279Z"
+2026-10-19 18:56:35.304: 63366 rdqmd -m RDQMAPP -o
+2026-10-19 18:56:35.304: 63366 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:56:35.315: 63277 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T18:56:35.279Z"
+
+2026-10-19 18:56:35.351: 63366 >>STDOUT:
+active
+2026-10-19 18:56:35.351: 63366 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:56:35.351: 63366 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:56:35.390: 63366 >>STDOUT:
+active
+2026-10-19 18:56:35.390: 63366 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:56:35.390: 63366 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:56:35.449: 63366 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:56:36.019: 63376 rdqmhandler
+2026-10-19 18:56:36.019: 63376 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:56:36.038: 63376 >>STDOUT:
+active
+2026-10-19 18:56:36.038: 63376 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:56:36.038: 63376 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:56:36.057: 63376 >>STDOUT:
+active
+2026-10-19 18:56:36.057: 63376 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:56:36.057: 63376 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:56:36.081: 63376 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:56:36.082: 63376 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:36.114: 63376 >>STDOUT:
+  swi-a-s---,1.90,<3.02g,2026-10-19 18:56:35 +0000
+2026-10-19 18:56:36.114: 63376 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:36.114: 63376 ---{ /usr/sbin/lvremove -f drbdpool/rdqmapp_00-before-resync
+2026-10-19 18:56:36.235: 63376 >>STDOUT:
+  Logical volume "rdqmapp_00-before-resync" successfully removed.
+2026-10-19 18:56:36.235: 63376 ---} rc=0 unixrc=0 /usr/sbin/lvremove -f drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 18:56:36.235: 63376 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --delete
+2026-10-19 18:56:36.266: 63376 >>STDOUT:
+Deleted crm_config option: id=rdqm-rdqmapp-dr-snapshot-node set=rdqm name=rdqmapp-dr-snapshot-node
+2026-10-19 18:56:36.266: 63376 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-snapshot-node --delete
+
+2026-10-19 18:56:36.266: 63376 ---{ /usr/sbin/lvcreate --wipesignatures n -L 3088M -n rdqmapp_00-before-resync drbdpool
+2026-10-19 18:56:36.344: 63376 >>STDOUT:
+  Logical volume "rdqmapp_00-before-resync" created.
+2026-10-19 18:56:36.344: 63376 ---} rc=0 unixrc=0 /usr/sbin/lvcreate --wipesignatures n -L 3088M -n rdqmapp_00-before-resync drbdpool
+
+2026-10-19 18:56:40.450: 63366 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:56:40.472: 63366 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:57:31.912: 64657 rdqmhandler
+2026-10-19 18:57:31.912: 64657 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 18:57:31.944: 64657 >>STDOUT:
+active
+2026-10-19 18:57:31.944: 64657 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 18:57:31.944: 64657 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 18:57:31.980: 64657 >>STDOUT:
+active
+2026-10-19 18:57:31.980: 64657 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 18:57:31.980: 64657 ---{ /usr/sbin/cibadmin --query
+2026-10-19 18:57:32.012: 64657 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 18:57:32.013: 64657 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:57:32.012Z"
+2026-10-19 18:57:32.058: 64657 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T18:57:32.012Z"
+

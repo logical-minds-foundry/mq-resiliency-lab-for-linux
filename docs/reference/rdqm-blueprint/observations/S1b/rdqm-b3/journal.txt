@@ -1,0 +1,17 @@
+# journal.txt: exported for #1666; 16 lines kept; dropped lines by category: kit ssh/sudo/session: 1804, lab observability agents and timers: 282. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:01:01.168838+00:00 rdqm-b3 CROND[62036]: (root) CMD (run-parts /etc/cron.hourly)
+2026-10-19T19:01:01.182784+00:00 rdqm-b3 run-parts[62039]: (/etc/cron.hourly) starting 0anacron
+2026-10-19T19:01:01.195442+00:00 rdqm-b3 anacron[62047]: Anacron started on 2026-10-19
+2026-10-19T19:01:01.197058+00:00 rdqm-b3 anacron[62047]: Will run job `cron.daily' in 28 min.
+2026-10-19T19:01:01.197087+00:00 rdqm-b3 anacron[62047]: Will run job `cron.weekly' in 48 min.
+2026-10-19T19:01:01.197091+00:00 rdqm-b3 anacron[62047]: Will run job `cron.monthly' in 68 min.
+2026-10-19T19:01:01.197095+00:00 rdqm-b3 anacron[62047]: Jobs will be executed sequentially
+2026-10-19T19:01:01.199978+00:00 rdqm-b3 run-parts[62049]: (/etc/cron.hourly) finished 0anacron
+2026-10-19T19:01:01.200936+00:00 rdqm-b3 CROND[62035]: (root) CMDEND (run-parts /etc/cron.hourly)
+2026-10-19T19:01:27.833672+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:01:33.084489+00:00 rdqm-b3 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:02:27.843495+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:03:31.762241+00:00 rdqm-b3 irqbalance[792]: Cannot change IRQ 44 affinity: Permission denied
+2026-10-19T19:03:31.762272+00:00 rdqm-b3 irqbalance[792]: IRQ 44 affinity is now unmanaged
+2026-10-19T19:04:52.721249+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:04:52.723140+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]

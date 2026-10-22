@@ -1,0 +1,179 @@
+# RDQM.0.LOG: exported for #1666; 178 lines kept; dropped lines by category: outside window: 1479.
+2026-10-19 19:09:38.798: 11202 rdqmhandler
+2026-10-19 19:09:38.798: 11202 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:38.825: 11204 rdqmhandler
+2026-10-19 19:09:38.825: 11204 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:38.831: 11202 >>STDOUT:
+active
+2026-10-19 19:09:38.831: 11202 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:38.832: 11202 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:38.846: 11207 rdqmhandler
+2026-10-19 19:09:38.846: 11207 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:38.860: 11204 >>STDOUT:
+active
+2026-10-19 19:09:38.860: 11204 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:38.860: 11204 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:38.866: 11202 >>STDOUT:
+active
+2026-10-19 19:09:38.866: 11202 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:38.866: 11202 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:38.871: 11207 >>STDOUT:
+active
+2026-10-19 19:09:38.871: 11207 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:38.871: 11207 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:38.879: 11204 >>STDOUT:
+active
+2026-10-19 19:09:38.879: 11204 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:38.879: 11204 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:38.888: 11207 >>STDOUT:
+active
+2026-10-19 19:09:38.888: 11207 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:38.888: 11207 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:38.905: 11202 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:38.905: 11202 ---{ /usr/sbin/crm_attribute --type status --node rdqm-a1 --name master-p_drbd_rdqmapp --delete
+2026-10-19 19:09:38.906: 11207 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:38.910: 11204 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:38.943: 11202 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --type status --node rdqm-a1 --name master-p_drbd_rdqmapp --delete
+
+2026-10-19 19:09:38.964: 11224 rdqmd -m RDQMAPP -d
+2026-10-19 19:09:38.964: 11224 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:38.980: 11224 >>STDOUT:
+active
+2026-10-19 19:09:38.980: 11224 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:38.980: 11224 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:38.993: 11224 >>STDOUT:
+active
+2026-10-19 19:09:38.993: 11224 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:38.993: 11224 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:39.012: 11224 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:39.012: 11224 ---{ /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+2026-10-19 19:09:39.016: 11224 >>STDOUT:
+rdqmapp.dr node-id:0 role:Primary suspended:no force-io-failures:no
+  volume:0 minor:7001 disk:Diskless client:no backing_dev:none quorum:no open:yes
+      blocked:no
+  encrypted.remote node-id:1 connection:Connected role:Secondary tls:yes
+      congested:no ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+
+2026-10-19 19:09:39.016: 11224 ---} rc=0 unixrc=0 /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+
+2026-10-19 19:09:39.016: 11224 ---{ /usr/sbin/drbdsetup --verbose status rdqmapp
+2026-10-19 19:09:39.030: 11224 >>STDOUT:
+rdqmapp node-id:0 role:Primary suspended:no force-io-failures:no
+  volume:0 minor:100 disk:UpToDate backing_dev:/dev/drbdpool/rdqmapp_00 quorum:no
+      open:no blocked:no
+  rdqm-a2 node-id:1 connection:Connecting role:Unknown tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no
+  rdqm-a3 node-id:2 connection:Connecting role:Unknown tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no
+
+2026-10-19 19:09:39.030: 11224 ---} rc=0 unixrc=0 /usr/sbin/drbdsetup --verbose status rdqmapp
+
+2026-10-19 19:09:41.882: 11504 rdqm stop
+2026-10-19 19:09:41.882: 11504 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:41.965: 11504 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:44.030: 11224 ---{ /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+2026-10-19 19:09:44.045: 11224 >>STDOUT:
+rdqmapp.dr node-id:0 role:Primary suspended:no force-io-failures:no
+  volume:0 minor:7001 disk:Diskless client:no backing_dev:none quorum:no open:yes
+      blocked:no
+  encrypted.remote node-id:1 connection:Connected role:Secondary tls:yes
+      congested:no ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Established peer-disk:UpToDate resync-suspended:no
+
+2026-10-19 19:09:44.045: 11224 ---} rc=0 unixrc=0 /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+
+2026-10-19 19:09:44.045: 11224 ---{ /usr/sbin/drbdsetup --verbose status rdqmapp
+2026-10-19 19:09:44.057: 11224 >>STDOUT:
+rdqmapp node-id:0 role:Primary suspended:no force-io-failures:no
+  volume:0 minor:100 disk:UpToDate backing_dev:/dev/drbdpool/rdqmapp_00 quorum:no
+      open:no blocked:no
+  rdqm-a2 node-id:1 connection:Connecting role:Unknown tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no
+  rdqm-a3 node-id:2 connection:Connecting role:Unknown tls:yes congested:no
+      ap-in-flight:0 rs-in-flight:0
+    volume:0 replication:Off peer-disk:DUnknown resync-suspended:no
+
+2026-10-19 19:09:44.057: 11224 ---} rc=0 unixrc=0 /usr/sbin/drbdsetup --verbose status rdqmapp
+
+2026-10-19 19:09:44.791: 12216 rdqmhandler
+2026-10-19 19:09:44.791: 12216 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:44.810: 12216 >>STDOUT:
+active
+2026-10-19 19:09:44.810: 12216 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:44.810: 12216 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:44.829: 12216 >>STDOUT:
+active
+2026-10-19 19:09:44.829: 12216 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:44.829: 12216 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:44.853: 12216 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:49.058: 11224 ---{ /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+2026-10-19 19:09:49.071: 11224 >>STDERR:
+rdqmapp.dr: No such resource
+2026-10-19 19:09:49.071: 11224 ---} rc=0 unixrc=10 /usr/sbin/drbdsetup --verbose status rdqmapp.dr
+
+2026-10-19 19:09:49.883: 12465 rdqmhandler
+2026-10-19 19:09:49.883: 12465 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:49.903: 12465 >>STDOUT:
+active
+2026-10-19 19:09:49.903: 12465 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:49.903: 12465 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:49.922: 12465 >>STDOUT:
+active
+2026-10-19 19:09:49.922: 12465 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:49.922: 12465 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:49.946: 12465 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:09:50.016: 12473 rdqmhandler
+2026-10-19 19:09:50.016: 12473 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:09:50.034: 12473 >>STDOUT:
+active
+2026-10-19 19:09:50.034: 12473 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:09:50.034: 12473 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:09:50.053: 12473 >>STDOUT:
+active
+2026-10-19 19:09:50.053: 12473 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:09:50.053: 12473 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:09:50.075: 12473 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:10:09.455: 13407 rdqmx start
+2026-10-19 19:10:09.455: 13407 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:10:09.482: 13407 >>STDOUT:
+active
+2026-10-19 19:10:09.482: 13407 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:10:09.482: 13407 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:10:09.502: 13407 >>STDOUT:
+active
+2026-10-19 19:10:09.502: 13407 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:10:09.502: 13407 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:10:09.533: 13407 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:10:09.840: 13621 rdqm start
+2026-10-19 19:10:09.840: 13621 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:10:09.861: 13621 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+

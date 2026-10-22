@@ -1,0 +1,302 @@
+# RDQM.0.LOG: exported for #1666; 301 lines kept; dropped lines by category: outside window: 2294.
+2026-10-19 19:44:00.814: 135048 rdqmhandler
+2026-10-19 19:44:00.814: 135048 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:44:00.834: 135048 >>STDOUT:
+active
+2026-10-19 19:44:00.834: 135048 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:44:00.834: 135048 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:44:00.853: 135048 >>STDOUT:
+active
+2026-10-19 19:44:00.853: 135048 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:44:00.853: 135048 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:44:00.877: 135048 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:44:00.877: 135048 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:44:00.877Z"
+2026-10-19 19:44:00.895: 135048 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:44:00.877Z"
+
+2026-10-19 19:44:38.796: 136664 rdqmdr -m RDQMAPP -p
+2026-10-19 19:44:38.796: 136664 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:44:38.805: 136664 >>STDOUT:
+active
+2026-10-19 19:44:38.805: 136664 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:44:38.805: 136664 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:44:38.826: 136664 >>STDOUT:
+active
+2026-10-19 19:44:38.826: 136664 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:44:38.826: 136664 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:44:38.854: 136664 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:44:38.855: 136664 ---{ /usr/sbin/drbdadm cstate rdqmapp.dr
+2026-10-19 19:44:38.869: 136664 >>STDOUT:
+Connecting
+2026-10-19 19:44:38.869: 136664 ---} rc=0 unixrc=0 /usr/sbin/drbdadm cstate rdqmapp.dr
+
+2026-10-19 19:44:38.869: 136664 ---{ /usr/sbin/drbdadm dstate rdqmapp.dr
+2026-10-19 19:44:38.883: 136664 >>STDOUT:
+UpToDate/DUnknown
+2026-10-19 19:44:38.883: 136664 ---} rc=0 unixrc=0 /usr/sbin/drbdadm dstate rdqmapp.dr
+
+2026-10-19 19:44:38.883: 136664 ---{ /usr/sbin/crm resource meta ms_drbd_dr_rdqmapp set target-role Promoted
+2026-10-19 19:44:39.298: 136664 >>STDOUT:
+Set 'ms_drbd_dr_rdqmapp' option: id=ms_drbd_dr_rdqmapp-meta_attributes-target-role name=target-role value=Promoted
+2026-10-19 19:44:39.298: 136664 ---} rc=0 unixrc=0 /usr/sbin/crm resource meta ms_drbd_dr_rdqmapp set target-role Promoted
+
+2026-10-19 19:44:39.607: 136865 strmqm RDQMAPP
+2026-10-19 19:44:39.607: 136865 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:44:39.630: 136865 >>STDOUT:
+active
+2026-10-19 19:44:39.630: 136865 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:44:39.630: 136865 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:44:39.641: 136865 >>STDOUT:
+active
+2026-10-19 19:44:39.641: 136865 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:44:39.641: 136865 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:44:39.670: 136865 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:44:39.671: 136865 ---{ /usr/sbin/drbdadm role rdqmapp
+2026-10-19 19:44:39.686: 136865 >>STDOUT:
+Primary
+2026-10-19 19:44:39.686: 136865 >>STDERR:
+<1>tried to set SO_RCVBUF 1048576, got 212992; you may need to adjust sysctl net.core.rmem_max
+
+2026-10-19 19:44:39.686: 136865 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp
+
+2026-10-19 19:44:40.098: 137062 rdqmx start
+2026-10-19 19:44:40.098: 137062 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:44:40.110: 137062 >>STDOUT:
+active
+2026-10-19 19:44:40.110: 137062 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:44:40.110: 137062 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:44:40.128: 137062 >>STDOUT:
+active
+2026-10-19 19:44:40.128: 137062 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:44:40.129: 137062 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:44:40.153: 137062 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:44:40.440: 137279 rdqm start
+2026-10-19 19:44:40.440: 137279 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:44:40.455: 137279 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:52:18.190: 150243 rdqmhandler
+2026-10-19 19:52:18.190: 150243 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:52:18.213: 150243 >>STDOUT:
+active
+2026-10-19 19:52:18.213: 150243 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:52:18.213: 150243 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:52:18.225: 150243 >>STDOUT:
+active
+2026-10-19 19:52:18.225: 150243 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:52:18.225: 150243 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:52:18.249: 150243 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:03:03.852: 167248 endmqm RDQMAPP
+2026-10-19 20:03:03.852: 167248 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 20:03:03.876: 167248 >>STDOUT:
+active
+2026-10-19 20:03:03.876: 167248 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 20:03:03.876: 167248 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 20:03:03.890: 167248 >>STDOUT:
+active
+2026-10-19 20:03:03.890: 167248 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 20:03:03.890: 167248 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:03:03.913: 167248 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:03:03.914: 167248 ---{ /usr/sbin/drbdadm role rdqmapp
+2026-10-19 20:03:03.929: 167248 >>STDOUT:
+Primary
+2026-10-19 20:03:03.929: 167248 >>STDERR:
+<1>tried to set SO_RCVBUF 1048576, got 212992; you may need to adjust sysctl net.core.rmem_max
+
+2026-10-19 20:03:03.929: 167248 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp
+
+2026-10-19 20:03:03.932: 167248 ---{ /usr/sbin/crm resource meta rdqmapp show maintenance
+2026-10-19 20:03:04.485: 167248 >>STDOUT:
+false
+2026-10-19 20:03:04.485: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm resource meta rdqmapp show maintenance
+
+2026-10-19 20:03:04.485: 167248 ---{ /usr/sbin/crm resource status p_ip_rdqmapp
+2026-10-19 20:03:04.856: 167248 >>STDOUT:
+resource p_ip_rdqmapp is running on: rdqm-b1
+2026-10-19 20:03:04.856: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm resource status p_ip_rdqmapp
+
+2026-10-19 20:03:04.856: 167248 ---{ /usr/sbin/crm configure show rdqmapp_preferred_location
+2026-10-19 20:03:05.300: 167248 >>STDOUT:
+location rdqmapp_preferred_location rdqmapp 50: rdqm-b1
+2026-10-19 20:03:05.300: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm configure show rdqmapp_preferred_location
+
+2026-10-19 20:03:05.300: 167248 ---{ /usr/sbin/crm configure show rdqmapp_secondary_location
+2026-10-19 20:03:05.779: 167248 >>STDERR:
+ERROR: object rdqmapp_secondary_location does not exist
+2026-10-19 20:03:05.779: 167248 ---} rc=0 unixrc=1 /usr/sbin/crm configure show rdqmapp_secondary_location
+
+2026-10-19 20:03:05.779: 167248 ---{ /usr/sbin/crm resource maintenance rdqmapp on
+2026-10-19 20:03:06.410: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm resource maintenance rdqmapp on
+
+2026-10-19 20:03:06.411: 167248 ---{ /usr/sbin/crm configure delete rdqmapp_with_ip
+2026-10-19 20:03:07.065: 167248 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 20:03:07.065: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete rdqmapp_with_ip
+
+2026-10-19 20:03:07.065: 167248 ---{ /usr/sbin/crm configure delete rdqmapp_after_ip
+2026-10-19 20:03:07.711: 167248 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 20:03:07.711: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete rdqmapp_after_ip
+
+2026-10-19 20:03:07.711: 167248 ---{ /usr/sbin/crm configure location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-b1
+2026-10-19 20:03:08.340: 167248 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 20:03:08.340: 167248 ---} rc=0 unixrc=0 /usr/sbin/crm configure location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-b1
+
+2026-10-19 20:03:22.975: 168086 rdqmdr -m RDQMAPP -p
+2026-10-19 20:03:22.975: 168086 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 20:03:22.984: 168086 >>STDOUT:
+active
+2026-10-19 20:03:22.984: 168086 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 20:03:22.984: 168086 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 20:03:22.993: 168086 >>STDOUT:
+active
+2026-10-19 20:03:22.993: 168086 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 20:03:22.993: 168086 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:03:23.016: 168086 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:03:23.017: 168086 ---{ /usr/sbin/drbdadm cstate rdqmapp.dr
+2026-10-19 20:03:23.031: 168086 >>STDOUT:
+StandAlone
+2026-10-19 20:03:23.031: 168086 ---} rc=0 unixrc=0 /usr/sbin/drbdadm cstate rdqmapp.dr
+
+2026-10-19 20:03:23.031: 168086 ---{ /usr/sbin/drbdadm dstate rdqmapp.dr
+2026-10-19 20:03:23.045: 168086 >>STDOUT:
+UpToDate/DUnknown
+2026-10-19 20:03:23.045: 168086 ---} rc=0 unixrc=0 /usr/sbin/drbdadm dstate rdqmapp.dr
+
+2026-10-19 20:03:23.053: 168086 ---{ /usr/sbin/drbdadm connect rdqmapp.dr
+2026-10-19 20:03:23.073: 168086 ---} rc=0 unixrc=0 /usr/sbin/drbdadm connect rdqmapp.dr
+
+2026-10-19 20:03:50.934: 168920 strmqm RDQMAPP
+2026-10-19 20:03:50.934: 168920 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 20:03:50.953: 168920 >>STDOUT:
+active
+2026-10-19 20:03:50.953: 168920 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 20:03:50.953: 168920 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 20:03:50.971: 168920 >>STDOUT:
+active
+2026-10-19 20:03:50.971: 168920 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 20:03:50.971: 168920 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:03:50.996: 168920 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:03:50.996: 168920 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:03:51.019: 168920 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:03:51.360: 168920 ---{ /usr/sbin/crm resource status p_ip_rdqmapp
+2026-10-19 20:03:51.860: 168920 >>STDOUT:
+resource p_ip_rdqmapp is running on: rdqm-b1
+2026-10-19 20:03:51.860: 168920 ---} rc=0 unixrc=0 /usr/sbin/crm resource status p_ip_rdqmapp
+
+2026-10-19 20:03:51.860: 168920 >>FILE '/var/mqm/errors/rdqm.rdqmapp.168920.config':
+primitive rdqmapp ocf:ibm:rdqm \
+  op monitor timeout=60 interval=30 \
+  op start timeout=43200 \
+  op stop timeout=300 \
+  meta maintenance=false
+colocation rdqmapp_with_ip inf: rdqmapp p_ip_rdqmapp
+order rdqmapp_after_ip Mandatory: p_ip_rdqmapp:start rdqmapp:start
+
+2026-10-19 20:03:51.860: 168920 ---{ /usr/sbin/crm configure load update /var/mqm/errors/rdqm.rdqmapp.168920.config
+2026-10-19 20:03:52.744: 168920 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 20:03:52.744: 168920 ---} rc=0 unixrc=0 /usr/sbin/crm configure load update /var/mqm/errors/rdqm.rdqmapp.168920.config
+
+2026-10-19 20:03:52.744: 168920 ---{ /usr/sbin/crm configure show p_rdqmx_rdqmapp_secondary_location
+2026-10-19 20:03:53.201: 168920 >>STDERR:
+ERROR: object p_rdqmx_rdqmapp_secondary_location does not exist
+2026-10-19 20:03:53.201: 168920 ---} rc=0 unixrc=1 /usr/sbin/crm configure show p_rdqmx_rdqmapp_secondary_location
+
+2026-10-19 20:03:53.201: 168920 ---{ /usr/sbin/crm configure show p_rdqmx_rdqmapp_preferred_location
+2026-10-19 20:03:53.710: 168920 >>STDOUT:
+location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-b1
+2026-10-19 20:03:53.710: 168920 ---} rc=0 unixrc=0 /usr/sbin/crm configure show p_rdqmx_rdqmapp_preferred_location
+
+2026-10-19 20:03:53.710: 168920 ---{ /usr/sbin/crm configure delete p_rdqmx_rdqmapp_preferred_location
+2026-10-19 20:03:54.430: 168920 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 20:03:54.430: 168920 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete p_rdqmx_rdqmapp_preferred_location
+
+2026-10-19 20:04:04.675: 170370 rdqmdr -m RDQMAPP -s
+2026-10-19 20:04:04.675: 170370 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 20:04:04.696: 170370 >>STDOUT:
+active
+2026-10-19 20:04:04.696: 170370 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 20:04:04.696: 170370 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 20:04:04.707: 170370 >>STDOUT:
+active
+2026-10-19 20:04:04.707: 170370 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 20:04:04.707: 170370 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:04:04.743: 170370 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:04:04.743: 170370 ---{ /usr/sbin/drbdadm cstate rdqmapp.dr
+2026-10-19 20:04:04.748: 170370 >>STDOUT:
+Connected
+2026-10-19 20:04:04.748: 170370 ---} rc=0 unixrc=0 /usr/sbin/drbdadm cstate rdqmapp.dr
+
+2026-10-19 20:04:04.748: 170370 ---{ /usr/sbin/drbdadm dstate rdqmapp.dr
+2026-10-19 20:04:04.763: 170370 >>STDOUT:
+UpToDate/UpToDate
+2026-10-19 20:04:04.763: 170370 ---} rc=0 unixrc=0 /usr/sbin/drbdadm dstate rdqmapp.dr
+
+2026-10-19 20:04:04.764: 170370 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 20:04:04.803: 170370 >>STDOUT:
+  -wi-a-----,,<3.02g,2026-10-19 19:42:47 +0000
+2026-10-19 20:04:04.803: 170370 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 20:04:04.803: 170370 ---{ /usr/sbin/crm resource meta ms_drbd_dr_rdqmapp set target-role Unpromoted
+2026-10-19 20:04:05.288: 170433 rdqm stop
+2026-10-19 20:04:05.288: 170433 ---{ /usr/sbin/cibadmin --query
+2026-10-19 20:04:05.322: 170370 >>STDOUT:
+Set 'ms_drbd_dr_rdqmapp' option: id=ms_drbd_dr_rdqmapp-meta_attributes-target-role name=target-role value=Unpromoted
+2026-10-19 20:04:05.322: 170370 ---} rc=0 unixrc=0 /usr/sbin/crm resource meta ms_drbd_dr_rdqmapp set target-role Unpromoted
+
+2026-10-19 20:04:05.322: 170370 ---{ /usr/sbin/drbdadm role rdqmapp.dr
+2026-10-19 20:04:05.328: 170370 >>STDOUT:
+Primary
+2026-10-19 20:04:05.328: 170370 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp.dr
+
+2026-10-19 20:04:05.330: 170433 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 20:04:06.329: 170370 ---{ /usr/sbin/drbdadm role rdqmapp.dr
+2026-10-19 20:04:06.344: 170370 >>STDOUT:
+Primary
+2026-10-19 20:04:06.344: 170370 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp.dr
+
+2026-10-19 20:04:07.344: 170370 ---{ /usr/sbin/drbdadm role rdqmapp.dr
+2026-10-19 20:04:07.359: 170370 >>STDOUT:
+Secondary
+2026-10-19 20:04:07.359: 170370 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp.dr
+

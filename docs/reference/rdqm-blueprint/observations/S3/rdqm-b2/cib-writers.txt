@@ -1,0 +1,20 @@
+Oct 19 19:44:00.893 cib_modify crm_config by rdqm-b1/crm_attribute
+    +  /cib/configuration/crm_config/cluster_property_set[@id='rdqm']/nvpair[@id='rdqm-rdqmapp-dr-disconnect-time']:  @value=2026-10-19T19:44:00.877Z
+Oct 19 19:44:39.175 cib_modify resources by rdqm-b1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Promoted
+Oct 19 20:03:06.217 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=true
+Oct 19 20:03:06.896 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    -- /cib/configuration/constraints/rsc_colocation[@id='rdqmapp_with_ip']
+Oct 19 20:03:07.544 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    -- /cib/configuration/constraints/rsc_order[@id='rdqmapp_after_ip']
+Oct 19 20:03:08.161 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    ++ /cib/configuration/constraints:  <rsc_location id="p_rdqmx_rdqmapp_preferred_location" rsc="p_rdqmx_rdqmapp" score="50" node="rdqm-b1"/>
+Oct 19 20:03:52.563 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    +  /cib/configuration/resources/primitive[@id='rdqmapp']/meta_attributes[@id='rdqmapp-meta_attributes']/nvpair[@id='rdqmapp-meta_attributes-maintenance']:  @value=false
+    ++ /cib/configuration/constraints:  <rsc_colocation id="rdqmapp_with_ip" score="INFINITY" rsc="rdqmapp" with-rsc="p_ip_rdqmapp"/>
+    ++ /cib/configuration/constraints:  <rsc_order id="rdqmapp_after_ip" kind="Mandatory" first="p_ip_rdqmapp" first-action="start" then="rdqmapp" then-action="start"/>
+Oct 19 20:03:54.262 cib_apply_diff 'all' by rdqm-b1/cibadmin
+    -- /cib/configuration/constraints/rsc_location[@id='p_rdqmx_rdqmapp_preferred_location']
+Oct 19 20:04:05.185 cib_modify resources by rdqm-b1/crm_resource
+    +  /cib/configuration/resources/clone[@id='ms_drbd_dr_rdqmapp']/meta_attributes[@id='ms_drbd_dr_rdqmapp-meta_attributes']/nvpair[@id='ms_drbd_dr_rdqmapp-meta_attributes-target-role']:  @value=Unpromoted

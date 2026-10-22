@@ -1,0 +1,10 @@
+# journal.txt: exported for #1666; 9 lines kept; dropped lines by category: kit ssh/sudo/session: 1450, lab observability agents and timers: 210. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:09:14.216321+00:00 rdqm-b2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:09:14.744110+00:00 rdqm-b2 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T19:09:14.795816+00:00 rdqm-b2 systemd[1]: Started systemd-timedated.service - Time & Date Service.
+2026-10-19T19:09:44.814802+00:00 rdqm-b2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:10:01.241286+00:00 rdqm-b2 anacron[62151]: Job `cron.daily' started
+2026-10-19T19:10:01.251272+00:00 rdqm-b2 anacron[62151]: Job `cron.daily' terminated
+2026-10-19T19:10:08.814868+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T19:10:28.806223+00:00 rdqm-b2 pacemaker-attrd[23614]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+2026-10-19T19:12:39.530393+00:00 rdqm-b2 rsyslogd[7231]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]

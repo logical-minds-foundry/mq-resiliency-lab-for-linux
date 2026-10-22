@@ -1,0 +1,287 @@
+# journal.txt: exported for #1666; 286 lines kept; dropped lines by category: kit ssh/sudo/session: 1476, lab observability agents and timers: 207. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:09:30.622856+00:00 rdqm-a2 corosync[921]:   [KNET  ] link: host: 1 link: 0 is down
+2026-10-19T19:09:30.622877+00:00 rdqm-a2 corosync[921]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+2026-10-19T19:09:30.622880+00:00 rdqm-a2 corosync[921]:   [KNET  ] host: host: 1 has no active links
+2026-10-19T19:09:31.644271+00:00 rdqm-a2 corosync[921]:   [TOTEM ] Token has not been received in 7988 ms
+2026-10-19T19:09:34.307327+00:00 rdqm-a2 corosync[921]:   [TOTEM ] A processor failed, forming new configuration: token timed out (10650ms), waiting 12780ms for consensus.
+2026-10-19T19:09:39.501450+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: PingAck did not arrive in time.
+2026-10-19T19:09:39.501693+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: conn( Connected -> NetworkFailure ) peer( Primary -> Unknown )
+2026-10-19T19:09:39.501733+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100: disk( UpToDate -> Consistent )
+2026-10-19T19:09:39.501751+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T19:09:39.501771+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing cluster-wide state change 1297460558: 1->all empty
+2026-10-19T19:09:39.507845+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: Rejecting concurrent remote state change 1047378697 because of state change 1297460558
+2026-10-19T19:09:39.510073+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Terminating sender thread
+2026-10-19T19:09:39.510181+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Starting sender thread (peer-node-id 0)
+2026-10-19T19:09:39.515352+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a3: pdsk( UpToDate -> Consistent ) [peer-state]
+2026-10-19T19:09:39.527042+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Connection closed
+2026-10-19T19:09:39.527176+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: helper command: /sbin/drbdadm disconnected
+2026-10-19T19:09:39.527213+00:00 rdqm-a2 kernel: drbd rdqmapp: State change 1297460558: primary_nodes=0, weak_nodes=0
+2026-10-19T19:09:39.527247+00:00 rdqm-a2 kernel: drbd rdqmapp: Committing cluster-wide state change 1297460558 (25ms)
+2026-10-19T19:09:39.531679+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing cluster-wide state change 4012334148: 1->all empty
+2026-10-19T19:09:39.542436+00:00 rdqm-a2 kernel: drbd rdqmapp: State change 4012334148: primary_nodes=0, weak_nodes=0
+2026-10-19T19:09:39.542540+00:00 rdqm-a2 kernel: drbd rdqmapp: Committing cluster-wide state change 4012334148 (10ms)
+2026-10-19T19:09:39.547405+00:00 rdqm-a2 disconnected[31542]: rdqmhandler(rdqmapp) /var/mqm/rdqm/disconnected
+2026-10-19T19:09:39.548056+00:00 rdqm-a2 disconnected[31542]: rdqmhandler(rdqmapp) NetworkFailure
+2026-10-19T19:09:39.621165+00:00 rdqm-a2 disconnected[31542]: rdqmhandler(rdqmapp) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T19:09:39.627808+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T19:09:39.627932+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T19:09:39.630410+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Restarting receiver thread
+2026-10-19T19:09:39.633320+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T19:09:39.641604+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: No reconciliation resync even though 'rdqm-a1' disappeared. (o=0)
+2026-10-19T19:09:39.641728+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing cluster-wide state change 2296281704: 1->all empty
+2026-10-19T19:09:39.651993+00:00 rdqm-a2 kernel: drbd rdqmapp: State change 2296281704: primary_nodes=0, weak_nodes=0
+2026-10-19T19:09:39.652105+00:00 rdqm-a2 kernel: drbd rdqmapp: Committing cluster-wide state change 2296281704 (10ms)
+2026-10-19T19:09:39.652129+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100: disk( Consistent -> UpToDate ) [lost-peer]
+2026-10-19T19:09:39.662924+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a3: pdsk( Consistent -> UpToDate ) [peer-state]
+2026-10-19T19:09:39.678026+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 1293704448: 2->all empty
+2026-10-19T19:09:39.689282+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: Committing remote state change 1293704448 (primary_nodes=0)
+2026-10-19T19:09:39.689434+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 1717766628: 2->all empty
+2026-10-19T19:09:39.699066+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: Committing remote state change 1717766628 (primary_nodes=0)
+2026-10-19T19:09:42.433903+00:00 rdqm-a2 corosync[921]:   [KNET  ] rx: host: 1 link: 0 is up
+2026-10-19T19:09:42.433938+00:00 rdqm-a2 corosync[921]:   [KNET  ] link: Resetting MTU for link 0 because host 1 joined
+2026-10-19T19:09:42.434183+00:00 rdqm-a2 corosync[921]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+2026-10-19T19:09:42.574849+00:00 rdqm-a2 corosync[921]:   [QUORUM] Sync members[3]: 1 2 3
+2026-10-19T19:09:42.574871+00:00 rdqm-a2 corosync[921]:   [TOTEM ] A new membership (1.3d) was formed. Members
+2026-10-19T19:09:42.586169+00:00 rdqm-a2 corosync[921]:   [QUORUM] Members[3]: 1 2 3
+2026-10-19T19:09:42.586177+00:00 rdqm-a2 corosync[921]:   [MAIN  ] Completed service synchronization, ready to provide service.
+2026-10-19T19:09:42.587582+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_rdqmapp[rdqm-a1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:09:42.597492+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:09:42.615381+00:00 rdqm-a2 corosync[921]:   [KNET  ] pmtud: Global data MTU changed to: 1446
+2026-10-19T19:09:42.631738+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_fs_rdqmapp            (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:42.631753+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_rdqmx_rdqmapp         (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:42.631766+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       rdqmapp                 (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:42.631774+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_rdqmapp:0        (         Unpromoted -> Promoted rdqm-a3 )
+2026-10-19T19:09:42.631829+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Demote     p_drbd_rdqmapp:2        (         Promoted -> Unpromoted rdqm-a1 )
+2026-10-19T19:09:42.631843+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Move       p_drbd_dr_rdqmapp:0     ( Promoted rdqm-a1 -> Unpromoted rdqm-a3 )
+2026-10-19T19:09:42.631854+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_ip_rdqmapp            (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:42.637942+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 26, saving inputs in /var/lib/pacemaker/pengine/pe-input-24.bz2
+2026-10-19T19:09:42.654304+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute rdqmapp_stop_0 on rdqm-a1
+2026-10-19T19:09:42.654578+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_monitor_20000 on rdqm-a3
+2026-10-19T19:09:42.655264+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_monitor_10000 on rdqm-a1
+2026-10-19T19:09:42.655717+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a3
+2026-10-19T19:09:42.656071+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:09:42.657024+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:42.657261+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:42.719443+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:09:43.356211+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:09:43.372575+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 26 aborted by deletion of nvpair[@id='status-1-master-p_drbd_dr_rdqmapp']: Transient attribute change
+2026-10-19T19:09:43.972587+00:00 rdqm-a2 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:09:44.866676+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 26 (Complete=11, Pending=0, Fired=0, Skipped=1, Incomplete=49, Source=/var/lib/pacemaker/pengine/pe-input-24.bz2): Stopped
+2026-10-19T19:09:44.885514+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_fs_rdqmapp            (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:44.885581+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_rdqmx_rdqmapp         (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:44.885595+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_rdqmapp:0        (         Unpromoted -> Promoted rdqm-a3 )
+2026-10-19T19:09:44.885608+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Demote     p_drbd_rdqmapp:2        (         Promoted -> Unpromoted rdqm-a1 )
+2026-10-19T19:09:44.885617+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Move       p_drbd_dr_rdqmapp:0     ( Promoted rdqm-a1 -> Unpromoted rdqm-a3 )
+2026-10-19T19:09:44.885624+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_ip_rdqmapp            (                                rdqm-a1 )  due to node availability
+2026-10-19T19:09:44.889284+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 27, saving inputs in /var/lib/pacemaker/pengine/pe-input-25.bz2
+2026-10-19T19:09:44.905091+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_ip_rdqmapp_stop_0 on rdqm-a1
+2026-10-19T19:09:44.905306+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a3
+2026-10-19T19:09:44.905507+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:09:44.906110+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:44.906601+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:44.948356+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:09:45.084378+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_rdqmx_rdqmapp_stop_0 on rdqm-a1
+2026-10-19T19:09:45.121231+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_fs_rdqmapp_stop_0 on rdqm-a1
+2026-10-19T19:09:45.352592+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_demote_0 on rdqm-a1
+2026-10-19T19:09:45.429474+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_post_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:45.496563+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_pre_notify_stop_0 on rdqm-a1
+2026-10-19T19:09:45.541487+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_stop_0 on rdqm-a1
+2026-10-19T19:09:45.766620+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_demote_0 on rdqm-a1
+2026-10-19T19:09:45.848753+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_post_notify_demote_0 on rdqm-a3
+2026-10-19T19:09:45.849552+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:09:45.850929+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_post_notify_demote_0 on rdqm-a1
+2026-10-19T19:09:45.915075+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:09:45.921683+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_promote_0 on rdqm-a3
+2026-10-19T19:09:45.921918+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:09:45.923312+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_promote_0 on rdqm-a1
+2026-10-19T19:09:45.965619+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:09:45.972779+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_promote_0 on rdqm-a3
+2026-10-19T19:09:46.031090+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 3648186648: 2->all role( Primary )
+2026-10-19T19:09:46.049004+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: Committing remote state change 3648186648 (primary_nodes=4)
+2026-10-19T19:09:46.049131+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: peer( Secondary -> Primary ) [remote]
+2026-10-19T19:09:46.057506+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_post_notify_promote_0 on rdqm-a3
+2026-10-19T19:09:46.057726+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:09:46.059281+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_post_notify_promote_0 on rdqm-a1
+2026-10-19T19:09:46.131609+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:09:46.138719+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_monitor_10000 on rdqm-a3
+2026-10-19T19:09:46.139273+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_monitor_20000 on rdqm-a1
+2026-10-19T19:09:46.139611+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_start_0 on rdqm-a3
+2026-10-19T19:09:46.255027+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a3: received new current UUID: BEB05F7101F32D09 weak_nodes=FFFFFFFFFFFFFFF9
+2026-10-19T19:09:46.434827+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: (unset) -> 1000
+2026-10-19T19:09:46.444749+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 27 aborted by status-3-master-p_drbd_dr_rdqmapp doing create master-p_drbd_dr_rdqmapp=1000: Transient attribute change
+2026-10-19T19:09:46.447466+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_post_notify_start_0 on rdqm-a3
+2026-10-19T19:09:46.530419+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 27 (Complete=56, Pending=0, Fired=0, Skipped=1, Incomplete=1, Source=/var/lib/pacemaker/pengine/pe-input-25.bz2): Stopped
+2026-10-19T19:09:46.550063+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_fs_rdqmapp            (                                rdqm-a3 )
+2026-10-19T19:09:46.550105+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                                rdqm-a3 )
+2026-10-19T19:09:46.550112+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      rdqmapp                 (                                rdqm-a3 )
+2026-10-19T19:09:46.550142+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_dr_rdqmapp:0     (         Unpromoted -> Promoted rdqm-a3 )
+2026-10-19T19:09:46.550150+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_ip_rdqmapp            (                                rdqm-a3 )
+2026-10-19T19:09:46.551178+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 28, saving inputs in /var/lib/pacemaker/pengine/pe-input-26.bz2
+2026-10-19T19:09:46.563176+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_pre_notify_promote_0 on rdqm-a3
+2026-10-19T19:09:46.608354+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_promote_0 on rdqm-a3
+2026-10-19T19:09:46.683582+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_post_notify_promote_0 on rdqm-a3
+2026-10-19T19:09:46.750066+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: 1000 -> 10000
+2026-10-19T19:09:46.753093+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_fs_rdqmapp_start_0 on rdqm-a3
+2026-10-19T19:09:46.753642+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_monitor_10000 on rdqm-a3
+2026-10-19T19:09:46.757573+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 28 aborted by status-3-master-p_drbd_dr_rdqmapp doing modify master-p_drbd_dr_rdqmapp=10000: Transient attribute change
+2026-10-19T19:09:47.152728+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 28 (Complete=11, Pending=0, Fired=0, Skipped=1, Incomplete=5, Source=/var/lib/pacemaker/pengine/pe-input-26.bz2): Stopped
+2026-10-19T19:09:47.172480+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                                rdqm-a3 )
+2026-10-19T19:09:47.172675+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      rdqmapp                 (                                rdqm-a3 )
+2026-10-19T19:09:47.172717+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_ip_rdqmapp            (                                rdqm-a3 )
+2026-10-19T19:09:47.173285+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 29, saving inputs in /var/lib/pacemaker/pengine/pe-input-27.bz2
+2026-10-19T19:09:47.182588+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_rdqmx_rdqmapp_start_0 on rdqm-a3
+2026-10-19T19:09:47.268931+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_ip_rdqmapp_start_0 on rdqm-a3
+2026-10-19T19:09:47.631426+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute rdqmapp_start_0 on rdqm-a3
+2026-10-19T19:09:47.632236+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_ip_rdqmapp_monitor_30000 on rdqm-a3
+2026-10-19T19:09:48.759355+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute rdqmapp_monitor_30000 on rdqm-a3
+2026-10-19T19:09:48.855464+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 29 (Complete=5, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-27.bz2): Complete
+2026-10-19T19:09:48.855533+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:09:50.370766+00:00 rdqm-a2 tlshd[32171]: Querying the handshake service
+2026-10-19T19:09:50.370913+00:00 rdqm-a2 tlshd[32172]: Querying the handshake service
+2026-10-19T19:09:50.370928+00:00 rdqm-a2 tlshd[32171]: Parsing a valid netlink message
+2026-10-19T19:09:50.370994+00:00 rdqm-a2 tlshd[32171]: No peer identities found
+2026-10-19T19:09:50.370997+00:00 rdqm-a2 tlshd[32171]: No certificates found
+2026-10-19T19:09:50.371024+00:00 rdqm-a2 tlshd[32171]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T19:09:50.371113+00:00 rdqm-a2 tlshd[32171]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T19:09:50.371356+00:00 rdqm-a2 tlshd[32171]: System trust: Loaded 1 certificate(s).
+2026-10-19T19:09:50.371540+00:00 rdqm-a2 tlshd[32171]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-a2.crt
+2026-10-19T19:09:50.371710+00:00 rdqm-a2 tlshd[32171]: Retrieved private key from /etc/drbd.d/rdqm-a2.key
+2026-10-19T19:09:50.371923+00:00 rdqm-a2 tlshd[32172]: Parsing a valid netlink message
+2026-10-19T19:09:50.371950+00:00 rdqm-a2 tlshd[32172]: No peer identities found
+2026-10-19T19:09:50.371952+00:00 rdqm-a2 tlshd[32172]: No certificates found
+2026-10-19T19:09:50.372012+00:00 rdqm-a2 tlshd[32172]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T19:09:50.372038+00:00 rdqm-a2 tlshd[32172]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T19:09:50.372239+00:00 rdqm-a2 tlshd[32172]: System trust: Loaded 1 certificate(s).
+2026-10-19T19:09:50.372388+00:00 rdqm-a2 tlshd[32172]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-a2.crt
+2026-10-19T19:09:50.372532+00:00 rdqm-a2 tlshd[32172]: Retrieved private key from /etc/drbd.d/rdqm-a2.key
+2026-10-19T19:09:50.376063+00:00 rdqm-a2 tlshd[32171]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T19:09:50.408347+00:00 rdqm-a2 tlshd[32172]: Server's trusted authorities:
+2026-10-19T19:09:50.408395+00:00 rdqm-a2 tlshd[32172]:    [0]: CN=RDQM Replication CA
+2026-10-19T19:09:50.408398+00:00 rdqm-a2 tlshd[32172]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T19:09:50.409060+00:00 rdqm-a2 tlshd[32172]: The peer offered 1 certificate(s).
+2026-10-19T19:09:50.414641+00:00 rdqm-a2 tlshd[32171]: The peer offered 1 certificate(s).
+2026-10-19T19:09:50.414852+00:00 rdqm-a2 tlshd[32171]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T19:09:50.415067+00:00 rdqm-a2 tlshd[32171]: Peer certificate: subject `CN=rdqm-a1', issuer `CN=RDQM Replication CA', serial 0x3b9790cbf3c7ac616f8aa3fc92bdf52277ad29fa, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="5vS9caZUnmywbdY9f31Wd3ZpdP2DhhRa/RpOyg80iUY="
+2026-10-19T19:09:50.415185+00:00 rdqm-a2 tlshd[32171]: Handshake with 'rdqm-a1' (172.16.1.31) succeeded
+2026-10-19T19:09:50.422120+00:00 rdqm-a2 tlshd[32172]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T19:09:50.422291+00:00 rdqm-a2 tlshd[32172]: Handshake with 'rdqm-a1' (172.16.1.31) succeeded
+2026-10-19T19:09:50.430774+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T19:09:50.430930+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T19:09:50.446116+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 108425828: 0->1 role( Secondary ) conn( Connected )
+2026-10-19T19:09:50.464539+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: drbd_sync_handshake:
+2026-10-19T19:09:50.464663+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: self BEB05F7101F32D08:76220854F0E27346:E5D67006DD8B124C:646A1CEDCA1F9082 bits:395 flags:100
+2026-10-19T19:09:50.464688+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: peer 76220854F0E27346:0000000000000000:646A1CEDCA1F9082:21FAB043AC9AA6F6 bits:3 flags:520
+2026-10-19T19:09:50.464706+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: uuid_compare()=source-use-bitmap by rule=bitmap-self
+2026-10-19T19:09:50.482836+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 108425828 (primary_nodes=4)
+2026-10-19T19:09:50.482998+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: conn( Connecting -> Connected ) peer( Unknown -> Secondary ) [remote]
+2026-10-19T19:09:50.483029+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( DUnknown -> Consistent ) repl( Off -> WFBitMapS ) [remote]
+2026-10-19T19:09:50.491395+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: send bitmap stats [Bytes(packets)]: plain 0(0), RLE 96(1), total 96; compression: 100.0%
+2026-10-19T19:09:50.491537+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Consistent -> Outdated ) [peer-state]
+2026-10-19T19:09:50.503250+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: receive bitmap stats [Bytes(packets)]: plain 0(0), RLE 96(1), total 96; compression: 100.0%
+2026-10-19T19:09:50.503376+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: helper command: /sbin/drbdadm before-resync-source
+2026-10-19T19:09:50.510029+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: helper command: /sbin/drbdadm before-resync-source exit code 0
+2026-10-19T19:09:50.510158+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Outdated -> Inconsistent ) repl( WFBitMapS -> SyncSource ) [receive-bitmap]
+2026-10-19T19:09:50.520400+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Began resync as SyncSource (will sync 1580 KB [395 bits set]).
+2026-10-19T19:09:50.520537+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 4048591176: 0->2 role( Secondary ) conn( Connected )
+2026-10-19T19:09:50.535174+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 4048591176 (primary_nodes=4)
+2026-10-19T19:09:50.578762+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: repl( SyncSource -> PausedSyncS ) resync-susp( no -> peer ) [peer-state]
+2026-10-19T19:09:50.578941+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Resync suspended
+2026-10-19T19:09:50.706568+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: repl( PausedSyncS -> SyncSource ) resync-susp( peer -> no ) [peer-state]
+2026-10-19T19:09:50.706765+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Syncer continues.
+2026-10-19T19:09:50.712200+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: updated UUIDs BEB05F7101F32D08:0000000000000000:76220854F0E27346:E5D67006DD8B124C
+2026-10-19T19:09:50.938941+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: Resync done (total 1 sec; paused 0 sec; 1580 K/sec)
+2026-10-19T19:09:50.939081+00:00 rdqm-a2 kernel: drbd rdqmapp/0 drbd100 rdqm-a1: pdsk( Inconsistent -> UpToDate ) repl( SyncSource -> Established ) [resync-finished]
+2026-10-19T19:10:06.322052+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_rdqmapp[rdqm-a1] in instance_attributes: (unset) -> 10000
+2026-10-19T19:10:06.329606+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:10:06.352127+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_fs_rdqmapp            (                                rdqm-a3 )  due to node availability
+2026-10-19T19:10:06.352167+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_rdqmx_rdqmapp         (                                rdqm-a3 )  due to node availability
+2026-10-19T19:10:06.352175+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       rdqmapp                 (                                rdqm-a3 )  due to node availability
+2026-10-19T19:10:06.352183+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Demote     p_drbd_rdqmapp:0        (         Promoted -> Unpromoted rdqm-a3 )
+2026-10-19T19:10:06.352195+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_rdqmapp:2        (         Unpromoted -> Promoted rdqm-a1 )
+2026-10-19T19:10:06.352202+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Move       p_drbd_dr_rdqmapp:0     ( Promoted rdqm-a3 -> Unpromoted rdqm-a1 )
+2026-10-19T19:10:06.352210+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Stop       p_ip_rdqmapp            (                                rdqm-a3 )  due to node availability
+2026-10-19T19:10:06.355740+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 30, saving inputs in /var/lib/pacemaker/pengine/pe-input-28.bz2
+2026-10-19T19:10:06.368166+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute rdqmapp_stop_0 on rdqm-a3
+2026-10-19T19:10:06.368443+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_monitor_10000 on rdqm-a3
+2026-10-19T19:10:06.368708+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_monitor_20000 on rdqm-a1
+2026-10-19T19:10:06.368867+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a3
+2026-10-19T19:10:06.369013+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:10:06.369648+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:10:06.369744+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_pre_notify_demote_0 on rdqm-a3
+2026-10-19T19:10:06.416315+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:10:07.658919+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_ip_rdqmapp_stop_0 on rdqm-a3
+2026-10-19T19:10:07.807537+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_rdqmx_rdqmapp_stop_0 on rdqm-a3
+2026-10-19T19:10:07.840654+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_fs_rdqmapp_stop_0 on rdqm-a3
+2026-10-19T19:10:08.127555+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_demote_0 on rdqm-a3
+2026-10-19T19:10:08.209325+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_post_notify_demote_0 on rdqm-a3
+2026-10-19T19:10:08.279233+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_pre_notify_stop_0 on rdqm-a3
+2026-10-19T19:10:08.327343+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_dr_rdqmapp_stop_0 on rdqm-a3
+2026-10-19T19:10:08.500274+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 30 aborted by rdqm-rdqmapp-dr-disconnect-time doing modify rdqmapp-dr-disconnect-time=2026-10-19T19:10:08.482Z: Configuration change
+2026-10-19T19:10:08.583191+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a3] in instance_attributes: 10000 -> (unset)
+2026-10-19T19:10:08.598483+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 30 (Complete=31, Pending=0, Fired=0, Skipped=1, Incomplete=29, Source=/var/lib/pacemaker/pengine/pe-input-28.bz2): Stopped
+2026-10-19T19:10:08.613098+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Demote     p_drbd_rdqmapp:0        (         Promoted -> Unpromoted rdqm-a3 )
+2026-10-19T19:10:08.613119+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_rdqmapp:2        (         Unpromoted -> Promoted rdqm-a1 )
+2026-10-19T19:10:08.613127+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_drbd_dr_rdqmapp:0     (                                rdqm-a1 )
+2026-10-19T19:10:08.616299+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 31, saving inputs in /var/lib/pacemaker/pengine/pe-input-29.bz2
+2026-10-19T19:10:08.627396+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a3
+2026-10-19T19:10:08.627774+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:10:08.628323+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_demote_0 on rdqm-a1
+2026-10-19T19:10:08.667911+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:10:08.671401+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_demote_0 on rdqm-a3
+2026-10-19T19:10:08.729079+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 471908397: 2->all role( Secondary )
+2026-10-19T19:10:08.739631+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: Committing remote state change 471908397 (primary_nodes=0)
+2026-10-19T19:10:08.740061+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a3: peer( Primary -> Secondary ) [remote]
+2026-10-19T19:10:08.750342+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_post_notify_demote_0 on rdqm-a3
+2026-10-19T19:10:08.752841+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:10:08.755371+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_post_notify_demote_0 on rdqm-a1
+2026-10-19T19:10:08.846745+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:10:08.848646+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_pre_notify_promote_0 on rdqm-a3
+2026-10-19T19:10:08.849013+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:10:08.849841+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_pre_notify_promote_0 on rdqm-a1
+2026-10-19T19:10:08.902380+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:10:08.904933+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_promote_0 on rdqm-a1
+2026-10-19T19:10:08.974068+00:00 rdqm-a2 kernel: drbd rdqmapp: Preparing remote state change 1949281445: 0->all role( Primary )
+2026-10-19T19:10:08.992334+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: Committing remote state change 1949281445 (primary_nodes=1)
+2026-10-19T19:10:08.992522+00:00 rdqm-a2 kernel: drbd rdqmapp rdqm-a1: peer( Secondary -> Primary ) [remote]
+2026-10-19T19:10:08.999571+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_post_notify_promote_0 on rdqm-a3
+2026-10-19T19:10:09.000127+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Requesting local execution of notify operation for p_drbd_rdqmapp on rdqm-a2
+2026-10-19T19:10:09.001721+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_post_notify_promote_0 on rdqm-a1
+2026-10-19T19:10:09.111226+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Result of notify operation for p_drbd_rdqmapp on rdqm-a2: OK
+2026-10-19T19:10:09.113364+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a3 to execute p_drbd_rdqmapp_monitor_20000 on rdqm-a3
+2026-10-19T19:10:09.114087+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_rdqmapp_monitor_10000 on rdqm-a1
+2026-10-19T19:10:09.114254+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_start_0 on rdqm-a1
+2026-10-19T19:10:09.452837+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: (unset) -> 1000
+2026-10-19T19:10:09.461515+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 31 aborted by status-1-master-p_drbd_dr_rdqmapp doing create master-p_drbd_dr_rdqmapp=1000: Transient attribute change
+2026-10-19T19:10:09.462353+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_post_notify_start_0 on rdqm-a1
+2026-10-19T19:10:09.539841+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 31 (Complete=36, Pending=0, Fired=0, Skipped=1, Incomplete=1, Source=/var/lib/pacemaker/pengine/pe-input-29.bz2): Stopped
+2026-10-19T19:10:09.557080+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_fs_rdqmapp            (                                rdqm-a1 )
+2026-10-19T19:10:09.557554+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                                rdqm-a1 )
+2026-10-19T19:10:09.557571+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      rdqmapp                 (                                rdqm-a1 )
+2026-10-19T19:10:09.557603+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Promote    p_drbd_dr_rdqmapp:0     (         Unpromoted -> Promoted rdqm-a1 )
+2026-10-19T19:10:09.557610+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_ip_rdqmapp            (                                rdqm-a1 )
+2026-10-19T19:10:09.561284+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 32, saving inputs in /var/lib/pacemaker/pengine/pe-input-30.bz2
+2026-10-19T19:10:09.573102+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_pre_notify_promote_0 on rdqm-a1
+2026-10-19T19:10:09.618547+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_promote_0 on rdqm-a1
+2026-10-19T19:10:09.699367+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_post_notify_promote_0 on rdqm-a1
+2026-10-19T19:10:09.763092+00:00 rdqm-a2 pacemaker-attrd[1152]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-a1] in instance_attributes: 1000 -> 10000
+2026-10-19T19:10:09.765921+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_fs_rdqmapp_start_0 on rdqm-a1
+2026-10-19T19:10:09.766133+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_drbd_dr_rdqmapp_monitor_10000 on rdqm-a1
+2026-10-19T19:10:09.771173+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 32 aborted by status-1-master-p_drbd_dr_rdqmapp doing modify master-p_drbd_dr_rdqmapp=10000: Transient attribute change
+2026-10-19T19:10:10.234182+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 32 (Complete=11, Pending=0, Fired=0, Skipped=1, Incomplete=5, Source=/var/lib/pacemaker/pengine/pe-input-30.bz2): Stopped
+2026-10-19T19:10:10.260913+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                                rdqm-a1 )
+2026-10-19T19:10:10.261105+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      rdqmapp                 (                                rdqm-a1 )
+2026-10-19T19:10:10.261181+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Actions: Start      p_ip_rdqmapp            (                                rdqm-a1 )
+2026-10-19T19:10:10.261825+00:00 rdqm-a2 pacemaker-schedulerd[1157]:  notice: Calculated transition 33, saving inputs in /var/lib/pacemaker/pengine/pe-input-31.bz2
+2026-10-19T19:10:10.271167+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_rdqmx_rdqmapp_start_0 on rdqm-a1
+2026-10-19T19:10:10.393214+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_ip_rdqmapp_start_0 on rdqm-a1
+2026-10-19T19:10:10.659134+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute rdqmapp_start_0 on rdqm-a1
+2026-10-19T19:10:10.659270+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute p_ip_rdqmapp_monitor_30000 on rdqm-a1
+2026-10-19T19:10:11.218190+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Asking rdqm-a1 to execute rdqmapp_monitor_30000 on rdqm-a1
+2026-10-19T19:10:11.323153+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: Transition 33 (Complete=5, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-31.bz2): Complete
+2026-10-19T19:10:11.323324+00:00 rdqm-a2 pacemaker-controld[1160]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:14:14.847229+00:00 rdqm-a2 NetworkManager[829]: <info>  [1792437254.8469] dhcp4 (enp5s0): state changed new lease, address=192.168.121.159
+2026-10-19T19:14:14.856583+00:00 rdqm-a2 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:14:14.881454+00:00 rdqm-a2 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:14:24.914443+00:00 rdqm-a2 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:15:04.487277+00:00 rdqm-a2 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T19:15:04.551205+00:00 rdqm-a2 systemd[1]: Started systemd-timedated.service - Time & Date Service.

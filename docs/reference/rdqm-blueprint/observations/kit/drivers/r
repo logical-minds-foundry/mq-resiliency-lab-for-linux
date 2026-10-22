@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# r <scen> <node> <command...> — run one operator command on a node as root, marked in <scen>/actions.log
+# with its full output and rc (#1666 manual resolution steps).
+set -uo pipefail
+S="$1"; N="$2"; shift 2
+K="$(cd "$(dirname "$0")" && pwd)"/k
+case "$N" in rdqm-a1) IP=10.50.0.31;; rdqm-a2) IP=10.50.0.32;; rdqm-a3) IP=10.50.0.33;;
+             rdqm-b1) IP=10.50.0.41;; rdqm-b2) IP=10.50.0.42;; rdqm-b3) IP=10.50.0.43;; *) echo "bad node"; exit 2;; esac
+$K mark "$S" "on $N: $*"
+out=$(timeout 300 ssh -i ~/.vagrant.d/insecure_private_key -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR "vagrant@$IP" "sudo bash -c $(printf %q "$*")" 2>&1); rc=$?
+printf '%s\n' "$out" | sed 's/^/    | /' | tee -a "${OUT_ROOT:?}/$S/actions.log"
+$K mark "$S" "rc=$rc"

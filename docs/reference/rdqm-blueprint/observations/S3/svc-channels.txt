@@ -1,0 +1,25 @@
+# read-only capture after S3 (2026-10-19T20:27:57Z), svc-sim (10.50.0.50) SVCQM and RDQMAPP sender CONNAMEs; config unchanged by #1666
+5724-H72 (C) Copyright IBM Corp. 1994, 2026.
+Starting MQSC for queue manager SVCQM.
+
+
+     1 : DISPLAY CHANNEL(SVCQM.RDQMAPP) CONNAME XMITQ
+AMQ8414I: Display Channel details.
+   CHANNEL(SVCQM.RDQMAPP)                  CHLTYPE(SDR)
+   CONNAME(rdqm-a1-ext.client.com(1414),rdqm-a2-ext.client.com(1414),rdqm-a3-ext.client.com(1414))
+   XMITQ(RDQMAPP)                       
+One MQSC command read.
+No commands have a syntax error.
+All valid MQSC commands were processed.
+5724-H72 (C) Copyright IBM Corp. 1994, 2026.
+Starting MQSC for queue manager RDQMAPP.
+
+
+     1 : DISPLAY CHANNEL(RDQMAPP.SVCQM) CONNAME XMITQ
+AMQ8414I: Display Channel details.
+   CHANNEL(RDQMAPP.SVCQM)                  CHLTYPE(SDR)
+   CONNAME(svc-sim-ext.service.com(1414))
+   XMITQ(SVCQM)                         
+One MQSC command read.
+No commands have a syntax error.
+All valid MQSC commands were processed.

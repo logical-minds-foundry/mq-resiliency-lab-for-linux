@@ -1,0 +1,712 @@
+# RDQM.0.LOG: exported for #1666; 711 lines kept; dropped lines by category: outside window: 1657.
+2026-10-19 19:15:49.117: 24123 rdqmhandler
+2026-10-19 19:15:49.117: 24123 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:15:49.126: 24123 >>STDOUT:
+active
+2026-10-19 19:15:49.126: 24123 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:15:49.126: 24123 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:15:49.144: 24123 >>STDOUT:
+active
+2026-10-19 19:15:49.144: 24123 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:15:49.144: 24123 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:15:49.169: 24123 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:29:29.978:  1115 rdqmd -s
+2026-10-19 19:29:29.978:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:33.037:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:32 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:33.037:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:34.037:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:35.517:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:35 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:35.517:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:36.539:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:37.294:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:37 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:37.294:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:38.295:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:39.187:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:38 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:39.187:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:40.187:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:41.059:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:40 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:41.059:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:42.059:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:42.528:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:42 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:42.528:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:43.529:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:44.025:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:43 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:44.026:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:45.026:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:45.398:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:45 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:45.398:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:46.399:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:46.788:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:46 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:46.788:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:47.788:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:48.176:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:48 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:48.176:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:49.177:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:49.589:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:49 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:49.589:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:50.590:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:50.975:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:50 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:50.975:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:51.975:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:52.361:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: NONE
+  * Last updated: Mon Oct 19 19:29:52 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:08 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: OFFLINE:
+    * Resources:
+  * Node rdqm-a2: OFFLINE:
+    * Resources:
+  * Node rdqm-a3: OFFLINE:
+    * Resources:
+
+2026-10-19 19:29:52.361:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:53.361:  1115 ---{ /usr/sbin/crm status bynode
+2026-10-19 19:29:53.745:  1115 >>STDOUT:
+Cluster Summary:
+  * Stack: corosync (Pacemaker is running)
+  * Current DC: rdqm-a3 (version 3.0.1.linbit-1.el10-a6049fe) - partition with quorum
+  * Last updated: Mon Oct 19 19:29:53 2026 on rdqm-a1
+  * Last change:  Mon Oct 19 19:10:09 2026 by root via root on rdqm-a3
+  * 3 nodes configured
+  * 8 resource instances configured
+
+Node List:
+  * Node rdqm-a1: online:
+    * Resources:
+  * Node rdqm-a2: online:
+    * Resources:
+  * Node rdqm-a3: online:
+    * Resources:
+
+2026-10-19 19:29:53.745:  1115 ---} rc=0 unixrc=0 /usr/sbin/crm status bynode
+
+2026-10-19 19:29:53.745:  1115 ---{ /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+2026-10-19 19:29:53.776:  1115 >>STDOUT:
+name="rdqm-transient-attribute" host="rdqm-a1" value="1"
+2026-10-19 19:29:53.776:  1115 ---} rc=0 unixrc=0 /usr/sbin/attrd_updater --name rdqm-transient-attribute --node rdqm-a1 --query
+
+2026-10-19 19:29:53.777:  1115 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:29:53.803:  1115 >>STDOUT:
+active
+2026-10-19 19:29:53.803:  1115 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:29:53.803:  1115 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:29:53.839:  1115 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:30:01.237:  4203 rdqmhandler
+2026-10-19 19:30:01.237:  4203 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:30:01.266:  4203 >>STDOUT:
+active
+2026-10-19 19:30:01.266:  4203 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:30:01.266:  4203 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:30:01.288:  4203 >>STDOUT:
+active
+2026-10-19 19:30:01.288:  4203 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:30:01.289:  4203 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:30:01.304:  4203 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:30:01.305:  4203 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:30:01.305Z"
+2026-10-19 19:30:01.357:  4203 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:30:01.305Z"
+
+2026-10-19 19:30:01.527:  4225 rdqmx start
+2026-10-19 19:30:01.527:  4225 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:30:01.548:  4225 >>STDOUT:
+active
+2026-10-19 19:30:01.548:  4225 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:30:01.548:  4225 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:30:01.568:  4225 >>STDOUT:
+active
+2026-10-19 19:30:01.568:  4225 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:30:01.568:  4225 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:30:01.591:  4225 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:30:02.036:  4434 rdqm start
+2026-10-19 19:30:02.036:  4434 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:30:02.057:  4434 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:31:38.986:  7302 rdqmhandler
+2026-10-19 19:31:38.986:  7302 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:31:39.009:  7302 >>STDOUT:
+active
+2026-10-19 19:31:39.009:  7302 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:31:39.009:  7302 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:31:39.019:  7302 >>STDOUT:
+active
+2026-10-19 19:31:39.019:  7302 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:31:39.020:  7302 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:31:39.048:  7302 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:31:39.048:  7302 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:31:39.048Z"
+2026-10-19 19:31:39.076:  7302 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:31:39.048Z"
+
+2026-10-19 19:31:40.082:  7325 rdqmhandler
+2026-10-19 19:31:40.082:  7325 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:31:40.100:  7325 >>STDOUT:
+active
+2026-10-19 19:31:40.100:  7325 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:31:40.100:  7325 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:31:40.119:  7325 >>STDOUT:
+active
+2026-10-19 19:31:40.119:  7325 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:31:40.119:  7325 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:31:40.142:  7325 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:31:40.143:  7325 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:31:40.143Z"
+2026-10-19 19:31:40.162:  7325 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:31:40.143Z"
+
+2026-10-19 19:33:29.893: 10230 rdqmhandler
+2026-10-19 19:33:29.893: 10230 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:33:29.913: 10230 >>STDOUT:
+active
+2026-10-19 19:33:29.913: 10230 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:33:29.913: 10230 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:33:29.934: 10230 >>STDOUT:
+active
+2026-10-19 19:33:29.934: 10230 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:33:29.934: 10230 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:33:29.958: 10230 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:33:29.958: 10230 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:33:29.958Z"
+2026-10-19 19:33:29.981: 10230 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:33:29.958Z"
+
+2026-10-19 19:33:30.957: 10268 rdqmhandler
+2026-10-19 19:33:30.957: 10268 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:33:30.978: 10268 >>STDOUT:
+active
+2026-10-19 19:33:30.978: 10268 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:33:30.978: 10268 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:33:31.079: 10268 >>STDOUT:
+active
+2026-10-19 19:33:31.079: 10268 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:33:31.079: 10268 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:33:31.139: 10268 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:33:31.140: 10268 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:33:31.140Z"
+2026-10-19 19:33:31.184: 10268 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:33:31.140Z"
+
+2026-10-19 19:35:20.889: 12980 rdqmhandler
+2026-10-19 19:35:20.889: 12980 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:35:20.908: 12980 >>STDOUT:
+active
+2026-10-19 19:35:20.908: 12980 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:35:20.908: 12980 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:35:20.917: 12980 >>STDOUT:
+active
+2026-10-19 19:35:20.917: 12980 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:35:20.917: 12980 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:35:20.940: 12980 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:35:20.940: 12980 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:35:20.940Z"
+2026-10-19 19:35:20.970: 12980 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:35:20.940Z"
+
+2026-10-19 19:35:21.914: 13018 rdqmhandler
+2026-10-19 19:35:21.914: 13018 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:35:21.932: 13018 >>STDOUT:
+active
+2026-10-19 19:35:21.932: 13018 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:35:21.932: 13018 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:35:21.940: 13018 >>STDOUT:
+active
+2026-10-19 19:35:21.940: 13018 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:35:21.940: 13018 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:35:21.963: 13018 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:35:21.963: 13018 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:35:21.963Z"
+2026-10-19 19:35:21.979: 13018 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:35:21.963Z"
+
+2026-10-19 19:37:11.872: 16028 rdqmhandler
+2026-10-19 19:37:11.872: 16028 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:37:11.891: 16028 >>STDOUT:
+active
+2026-10-19 19:37:11.891: 16028 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:37:11.891: 16028 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:37:11.901: 16028 >>STDOUT:
+active
+2026-10-19 19:37:11.901: 16028 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:37:11.901: 16028 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:37:11.924: 16028 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:37:11.924: 16028 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:37:11.924Z"
+2026-10-19 19:37:11.942: 16028 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:37:11.924Z"
+
+2026-10-19 19:37:12.877: 16041 rdqmhandler
+2026-10-19 19:37:12.877: 16041 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:37:12.885: 16041 >>STDOUT:
+active
+2026-10-19 19:37:12.885: 16041 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:37:12.885: 16041 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:37:12.894: 16041 >>STDOUT:
+active
+2026-10-19 19:37:12.894: 16041 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:37:12.894: 16041 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:37:12.916: 16041 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:37:12.917: 16041 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:37:12.917Z"
+2026-10-19 19:37:12.944: 16041 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:37:12.917Z"
+
+2026-10-19 19:39:02.862: 18728 rdqmhandler
+2026-10-19 19:39:02.862: 18728 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:39:02.870: 18728 >>STDOUT:
+active
+2026-10-19 19:39:02.870: 18728 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:39:02.870: 18728 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:39:02.888: 18728 >>STDOUT:
+active
+2026-10-19 19:39:02.888: 18728 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:39:02.888: 18728 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:39:02.914: 18728 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:39:02.915: 18728 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:39:02.915Z"
+2026-10-19 19:39:02.944: 18728 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:39:02.915Z"
+
+2026-10-19 19:39:03.883: 18743 rdqmhandler
+2026-10-19 19:39:03.883: 18743 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:39:03.907: 18743 >>STDOUT:
+active
+2026-10-19 19:39:03.907: 18743 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:39:03.907: 18743 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:39:03.925: 18743 >>STDOUT:
+active
+2026-10-19 19:39:03.925: 18743 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:39:03.926: 18743 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:39:03.949: 18743 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:39:03.950: 18743 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:39:03.950Z"
+2026-10-19 19:39:03.976: 18743 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:39:03.950Z"
+
+2026-10-19 19:40:41.974: 21531 endmqm RDQMAPP
+2026-10-19 19:40:41.974: 21531 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:40:41.994: 21531 >>STDOUT:
+active
+2026-10-19 19:40:41.994: 21531 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:40:41.994: 21531 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:40:42.011: 21531 >>STDOUT:
+active
+2026-10-19 19:40:42.011: 21531 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:40:42.012: 21531 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:40:42.036: 21531 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:40:42.036: 21531 ---{ /usr/sbin/drbdadm role rdqmapp
+2026-10-19 19:40:42.041: 21531 >>STDOUT:
+Primary
+2026-10-19 19:40:42.041: 21531 >>STDERR:
+<1>tried to set SO_RCVBUF 1048576, got 212992; you may need to adjust sysctl net.core.rmem_max
+
+2026-10-19 19:40:42.041: 21531 ---} rc=0 unixrc=0 /usr/sbin/drbdadm role rdqmapp
+
+2026-10-19 19:40:42.044: 21531 ---{ /usr/sbin/crm resource meta rdqmapp show maintenance
+2026-10-19 19:40:42.424: 21531 >>STDOUT:
+false
+2026-10-19 19:40:42.424: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm resource meta rdqmapp show maintenance
+
+2026-10-19 19:40:42.424: 21531 ---{ /usr/sbin/crm resource status p_ip_rdqmapp
+2026-10-19 19:40:42.842: 21531 >>STDOUT:
+resource p_ip_rdqmapp is running on: rdqm-a1
+2026-10-19 19:40:42.842: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm resource status p_ip_rdqmapp
+
+2026-10-19 19:40:42.842: 21531 ---{ /usr/sbin/crm configure show rdqmapp_preferred_location
+2026-10-19 19:40:43.296: 21531 >>STDOUT:
+location rdqmapp_preferred_location rdqmapp 50: rdqm-a1
+2026-10-19 19:40:43.296: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm configure show rdqmapp_preferred_location
+
+2026-10-19 19:40:43.296: 21531 ---{ /usr/sbin/crm configure show rdqmapp_secondary_location
+2026-10-19 19:40:43.770: 21531 >>STDERR:
+ERROR: object rdqmapp_secondary_location does not exist
+2026-10-19 19:40:43.770: 21531 ---} rc=0 unixrc=1 /usr/sbin/crm configure show rdqmapp_secondary_location
+
+2026-10-19 19:40:43.770: 21531 ---{ /usr/sbin/crm resource maintenance rdqmapp on
+2026-10-19 19:40:44.352: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm resource maintenance rdqmapp on
+
+2026-10-19 19:40:44.352: 21531 ---{ /usr/sbin/crm configure delete rdqmapp_with_ip
+2026-10-19 19:40:45.138: 21531 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 19:40:45.138: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete rdqmapp_with_ip
+
+2026-10-19 19:40:45.138: 21531 ---{ /usr/sbin/crm configure delete rdqmapp_after_ip
+2026-10-19 19:40:45.802: 21531 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 19:40:45.802: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete rdqmapp_after_ip
+
+2026-10-19 19:40:45.802: 21531 ---{ /usr/sbin/crm configure location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-a1
+2026-10-19 19:40:46.446: 21531 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 19:40:46.446: 21531 ---} rc=0 unixrc=0 /usr/sbin/crm configure location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-a1
+
+2026-10-19 19:40:53.845: 21925 rdqmhandler
+2026-10-19 19:40:53.845: 21925 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:40:53.856: 21925 >>STDOUT:
+active
+2026-10-19 19:40:53.856: 21925 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:40:53.856: 21925 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:40:53.875: 21925 >>STDOUT:
+active
+2026-10-19 19:40:53.875: 21925 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:40:53.876: 21925 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:40:53.904: 21925 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:40:53.904: 21925 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:40:53.904Z"
+2026-10-19 19:40:53.937: 21925 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:40:53.904Z"
+
+2026-10-19 19:41:16.220: 22612 rdqmdr -m RDQMAPP -p
+2026-10-19 19:41:16.220: 22612 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:41:16.229: 22612 >>STDOUT:
+active
+2026-10-19 19:41:16.229: 22612 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:41:16.229: 22612 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:41:16.238: 22612 >>STDOUT:
+active
+2026-10-19 19:41:16.238: 22612 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:41:16.238: 22612 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:41:16.262: 22612 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:41:16.263: 22612 ---{ /usr/sbin/drbdadm cstate rdqmapp.dr
+2026-10-19 19:41:16.277: 22612 >>STDOUT:
+Connected
+2026-10-19 19:41:16.277: 22612 ---} rc=0 unixrc=0 /usr/sbin/drbdadm cstate rdqmapp.dr
+
+2026-10-19 19:41:16.277: 22612 ---{ /usr/sbin/drbdadm dstate rdqmapp.dr
+2026-10-19 19:41:16.292: 22612 >>STDOUT:
+UpToDate/UpToDate
+2026-10-19 19:41:16.292: 22612 ---} rc=0 unixrc=0 /usr/sbin/drbdadm dstate rdqmapp.dr
+
+2026-10-19 19:41:16.293: 22612 ---{ /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+2026-10-19 19:41:16.343: 22612 >>STDOUT:
+  -wi-a-----,,<3.02g,2026-10-19 18:30:23 +0000
+2026-10-19 19:41:16.343: 22612 ---} rc=0 unixrc=0 /sbin/lvs --noheadings --separator , -o lv_attr,snap_percent,lv_size,lv_time drbdpool/rdqmapp_00-before-resync
+
+2026-10-19 19:41:39.182: 23254 strmqm RDQMAPP
+2026-10-19 19:41:39.182: 23254 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:41:39.201: 23254 >>STDOUT:
+active
+2026-10-19 19:41:39.201: 23254 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:41:39.201: 23254 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:41:39.220: 23254 >>STDOUT:
+active
+2026-10-19 19:41:39.220: 23254 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:41:39.220: 23254 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:41:39.246: 23254 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:41:39.247: 23254 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:41:39.270: 23254 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:41:39.688: 23254 ---{ /usr/sbin/crm resource status p_ip_rdqmapp
+2026-10-19 19:41:40.298: 23254 >>STDOUT:
+resource p_ip_rdqmapp is running on: rdqm-a1
+2026-10-19 19:41:40.298: 23254 ---} rc=0 unixrc=0 /usr/sbin/crm resource status p_ip_rdqmapp
+
+2026-10-19 19:41:40.298: 23254 >>FILE '/var/mqm/errors/rdqm.rdqmapp.23254.config':
+primitive rdqmapp ocf:ibm:rdqm \
+  op monitor timeout=60 interval=30 \
+  op start timeout=43200 \
+  op stop timeout=300 \
+  meta maintenance=false
+colocation rdqmapp_with_ip inf: rdqmapp p_ip_rdqmapp
+order rdqmapp_after_ip Mandatory: p_ip_rdqmapp:start rdqmapp:start
+
+2026-10-19 19:41:40.298: 23254 ---{ /usr/sbin/crm configure load update /var/mqm/errors/rdqm.rdqmapp.23254.config
+2026-10-19 19:41:41.235: 23254 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 19:41:41.235: 23254 ---} rc=0 unixrc=0 /usr/sbin/crm configure load update /var/mqm/errors/rdqm.rdqmapp.23254.config
+
+2026-10-19 19:41:41.236: 23254 ---{ /usr/sbin/crm configure show p_rdqmx_rdqmapp_secondary_location
+2026-10-19 19:41:42.020: 23254 >>STDERR:
+ERROR: object p_rdqmx_rdqmapp_secondary_location does not exist
+2026-10-19 19:41:42.020: 23254 ---} rc=0 unixrc=1 /usr/sbin/crm configure show p_rdqmx_rdqmapp_secondary_location
+
+2026-10-19 19:41:42.020: 23254 ---{ /usr/sbin/crm configure show p_rdqmx_rdqmapp_preferred_location
+2026-10-19 19:41:42.620: 23254 >>STDOUT:
+location p_rdqmx_rdqmapp_preferred_location p_rdqmx_rdqmapp 50: rdqm-a1
+2026-10-19 19:41:42.620: 23254 ---} rc=0 unixrc=0 /usr/sbin/crm configure show p_rdqmx_rdqmapp_preferred_location
+
+2026-10-19 19:41:42.620: 23254 ---{ /usr/sbin/crm configure delete p_rdqmx_rdqmapp_preferred_location
+2026-10-19 19:41:43.685: 23254 >>STDOUT:
+(unpack_config) 	warning: Blind faith: not fencing unseen nodes
+warning: Support for the Master role is deprecated and will be removed in a future release. Use Promoted instead.
+Configuration invalid (with warnings)
+2026-10-19 19:41:43.685: 23254 ---} rc=0 unixrc=0 /usr/sbin/crm configure delete p_rdqmx_rdqmapp_preferred_location
+
+2026-10-19 19:42:44.861: 25432 rdqmhandler
+2026-10-19 19:42:44.861: 25432 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:42:44.869: 25432 >>STDOUT:
+active
+2026-10-19 19:42:44.869: 25432 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:42:44.869: 25432 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:42:44.877: 25432 >>STDOUT:
+active
+2026-10-19 19:42:44.877: 25432 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:42:44.877: 25432 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:42:44.900: 25432 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:42:45.865: 25442 rdqmhandler
+2026-10-19 19:42:45.865: 25442 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:42:45.873: 25442 >>STDOUT:
+active
+2026-10-19 19:42:45.874: 25442 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:42:45.874: 25442 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:42:45.891: 25442 >>STDOUT:
+active
+2026-10-19 19:42:45.891: 25442 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:42:45.891: 25442 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:42:45.915: 25442 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:42:45.916: 25442 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:42:45.916Z"
+2026-10-19 19:42:45.944: 25442 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:42:45.916Z"
+

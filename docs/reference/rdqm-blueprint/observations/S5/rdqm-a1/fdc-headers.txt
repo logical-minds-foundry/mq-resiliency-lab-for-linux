@@ -1,0 +1,124 @@
+=== /var/mqm/errors/AMQ4135.0.FDC
++-----------------------------------------------------------------------------+
+|                                                                             |
+| IBM MQ First Failure Symptom Report                                         | 
+| =========================================                                   | 
+|                                                                             |
+| Date/Time         :- Mon October 19 2026 19:09:38 UTC                       | 
+| UTC Time          :- 1792436978.783495                                      | 
+| UTC Time Offset   :- 0 (UTC)                                                | 
+| UTC Date/Time     :- 2026-10-19 19:09:38.783495 (1792436978783495)          | 
+| Host Name         :- rdqm-a1                                                | 
+| Operating System  :- Linux 6.12.0-211.7.3.el10_2.x86_64                     | 
+| OS Details        :- Red Hat Enterprise Linux 10.2 (Coughlan)               | 
+| PIDS              :- 5724H7251                                              | 
+| LVLS              :- 10.0.1.0                                               | 
+| Release Type      :- Continuous Delivery (CD)                               | 
+| Product Long Name :- IBM MQ for Linux (x86-64 platform)                     | 
+| Vendor            :- IBM                                                    | 
+| O/S Registered    :- 1 (libmqmcs_r.so) Installed                            | 
+| Data Path         :- /var/mqm                                               | 
+| Installation Path :- /opt/mqm                                               | 
+| Installation Name :- Installation1    (1)                                   | 
+| License Type      :- Developer                                              | 
+| Probe Id          :- HL206037                                               | 
+| Application Name  :- MQM                                                    | 
+| Component         :- mqloWritevFile                                         | 
+| Source filename   :- /build/jslot1/p1000_P/src/lib/logger/amqhsofx.c        | 
+| Line Number       :- 2599                                                   | 
+| Build Date        :- Sep 30 2026                                            | 
+| Build Level       :- p1001-L260930.DE                                       | 
+| Build Type        :- IKAP - (Production)                                    | 
+=== /var/mqm/errors/AMQ4204.0.FDC
++-----------------------------------------------------------------------------+
+|                                                                             |
+| IBM MQ First Failure Symptom Report                                         | 
+| =========================================                                   | 
+|                                                                             |
+| Date/Time         :- Mon October 19 2026 19:09:38 UTC                       | 
+| UTC Time          :- 1792436978.908387                                      | 
+| UTC Time Offset   :- 0 (UTC)                                                | 
+| UTC Date/Time     :- 2026-10-19 19:09:38.908387 (1792436978908387)          | 
+| Host Name         :- rdqm-a1                                                | 
+| Operating System  :- Linux 6.12.0-211.7.3.el10_2.x86_64                     | 
+| OS Details        :- Red Hat Enterprise Linux 10.2 (Coughlan)               | 
+| PIDS              :- 5724H7251                                              | 
+| LVLS              :- 10.0.1.0                                               | 
+| Release Type      :- Continuous Delivery (CD)                               | 
+| Product Long Name :- IBM MQ for Linux (x86-64 platform)                     | 
+| Vendor            :- IBM                                                    | 
+| O/S Registered    :- 1 (libmqmcs_r.so) Installed                            | 
+| Data Path         :- /var/mqm                                               | 
+| Installation Path :- /opt/mqm                                               | 
+| Installation Name :- Installation1    (1)                                   | 
+| License Type      :- Developer                                              | 
+| Probe Id          :- AL004008                                               | 
+| Application Name  :- MQM                                                    | 
+| Component         :- almLogIt                                               | 
+| Source filename   :- /build/jslot1/p1000_P/src/lib/lqm/amqalmw0.c           | 
+| Line Number       :- 565                                                    | 
+| Build Date        :- Sep 30 2026                                            | 
+| Build Level       :- p1001-L260930.DE                                       | 
+| Build Type        :- IKAP - (Production)                                    | 
+=== /var/mqm/errors/AMQ4162.0.FDC
++-----------------------------------------------------------------------------+
+|                                                                             |
+| IBM MQ First Failure Symptom Report                                         | 
+| =========================================                                   | 
+|                                                                             |
+| Date/Time         :- Mon October 19 2026 19:09:39 UTC                       | 
+| UTC Time          :- 1792436979.304086                                      | 
+| UTC Time Offset   :- 0 (UTC)                                                | 
+| UTC Date/Time     :- 2026-10-19 19:09:39.304086 (1792436979304086)          | 
+| Host Name         :- rdqm-a1                                                | 
+| Operating System  :- Linux 6.12.0-211.7.3.el10_2.x86_64                     | 
+| OS Details        :- Red Hat Enterprise Linux 10.2 (Coughlan)               | 
+| PIDS              :- 5724H7251                                              | 
+| LVLS              :- 10.0.1.0                                               | 
+| Release Type      :- Continuous Delivery (CD)                               | 
+| Product Long Name :- IBM MQ for Linux (x86-64 platform)                     | 
+| Vendor            :- IBM                                                    | 
+| O/S Registered    :- 1 (libmqmcs_r.so) Installed                            | 
+| Data Path         :- /var/mqm                                               | 
+| Installation Path :- /opt/mqm                                               | 
+| Installation Name :- Installation1    (1)                                   | 
+| License Type      :- Developer                                              | 
+| Probe Id          :- XC407051                                               | 
+| Application Name  :- MQM                                                    | 
+| Component         :- xeiWriteFn                                             | 
+| Source filename   :- /build/jslot1/p1000_P/src/lib/cs/amqxeida.c            | 
+| Line Number       :- 4495                                                   | 
+| Build Date        :- Sep 30 2026                                            | 
+| Build Level       :- p1001-L260930.DE                                       | 
+| Build Type        :- IKAP - (Production)                                    | 
+=== /var/mqm/errors/AMQ4129.0.FDC
++-----------------------------------------------------------------------------+
+|                                                                             |
+| IBM MQ First Failure Symptom Report                                         | 
+| =========================================                                   | 
+|                                                                             |
+| Date/Time         :- Mon October 19 2026 19:09:42 UTC                       | 
+| UTC Time          :- 1792436982.005863                                      | 
+| UTC Time Offset   :- 0 (UTC)                                                | 
+| UTC Date/Time     :- 2026-10-19 19:09:42.005863 (1792436982005863)          | 
+| Host Name         :- rdqm-a1                                                | 
+| Operating System  :- Linux 6.12.0-211.7.3.el10_2.x86_64                     | 
+| OS Details        :- Red Hat Enterprise Linux 10.2 (Coughlan)               | 
+| PIDS              :- 5724H7251                                              | 
+| LVLS              :- 10.0.1.0                                               | 
+| Release Type      :- Continuous Delivery (CD)                               | 
+| Product Long Name :- IBM MQ for Linux (x86-64 platform)                     | 
+| Vendor            :- IBM                                                    | 
+| O/S Registered    :- 1 (libmqmcs_r.so) Installed                            | 
+| Data Path         :- /var/mqm                                               | 
+| Installation Path :- /opt/mqm                                               | 
+| Installation Name :- Installation1    (1)                                   | 
+| License Type      :- Developer                                              | 
+| Probe Id          :- XC402011                                               | 
+| Application Name  :- MQM                                                    | 
+| Component         :- xeeOpenFiles                                           | 
+| Source filename   :- /build/jslot1/p1000_P/src/lib/cs/amqxeida.c            | 
+| Line Number       :- 2145                                                   | 
+| Build Date        :- Sep 30 2026                                            | 
+| Build Level       :- p1001-L260930.DE                                       | 
+| Build Type        :- IKAP - (Production)                                    | 

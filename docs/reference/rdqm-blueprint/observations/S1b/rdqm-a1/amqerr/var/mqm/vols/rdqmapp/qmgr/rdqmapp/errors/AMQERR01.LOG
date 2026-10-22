@@ -1,0 +1,2431 @@
+# AMQERR01.LOG: exported for #1666; 2430 lines kept; dropped lines by category: outside window (whole entries): 266672, lab monitor authority warnings (AMQ8245W/AMQ8009W): 91539.
+10/19/2026 07:02:14 PM - Process(26661.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:14.840Z)
+                    ArithInsert1(8.42)
+                    CommentInsert1(/var/mqm/vols/rdqmapp/qmgr/rdqmapp)
+                    CommentInsert2(2950)
+                    CommentInsert3(2702)
+
+AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/qmgr/rdqmapp' is 8.42%
+used, 2702MB free.
+
+EXPLANATION:
+A total of 2950MB has been allocated to the file system containing
+'/var/mqm/vols/rdqmapp/qmgr/rdqmapp', with 2702MB bytes free.
+ACTION:
+Please evaluate whether this is enough space for your needs and ensure that
+sufficient free space is available on the file system.
+----- amqzslqa.c : 3738 -------------------------------------------------------
+10/19/2026 07:02:14 PM - Process(26661.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:14.847Z)
+                    ArithInsert1(7.88)
+                    CommentInsert1(/var/mqm/vols/rdqmapp/log/rdqmapp)
+                    CommentInsert2(2950)
+                    CommentInsert3(2718)
+
+AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/log/rdqmapp' is 7.88%
+used, 2718MB free.
+
+EXPLANATION:
+A total of 2950MB has been allocated to the file system containing
+'/var/mqm/vols/rdqmapp/log/rdqmapp', with 2718MB bytes free.
+ACTION:
+Please evaluate whether this is enough space for your needs and ensure that
+sufficient free space is available on the file system.
+----- amqzslqa.c : 3738 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26661.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.080Z)
+                    ArithInsert1(1024) ArithInsert2(10240)
+                    CommentInsert1(RLIMIT_NOFILE)
+
+AMQ5657W: The system resource RLIMIT_NOFILE is set at an unusually low level
+for IBM MQ.
+
+EXPLANATION:
+The system resource RLIMIT_NOFILE is currently set to 1024 which is below the
+usual minimum level of 10240, recommended for IBM MQ. If IBM MQ exceeds the
+available system resource, it could suffer hangs or other unpredictable
+failures.
+ACTION:
+If possible, increase the current setting to at least 10240.
+----- amqzslqa.c : 1520 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.109Z)
+                    CommentInsert1(AMQ9001, AMQ9002)
+                    CommentInsert2(ClusterSyslog)
+                    CommentInsert3(/var/mqm/vols/rdqmapp/qmgr/rdqmapp/qm.ini)
+
+AMQ6258I: Message exclusion enabled for message numbers (AMQ9001, AMQ9002).
+
+EXPLANATION:
+The message contains a list of message numbers which have been excluded by
+service ClusterSyslog from the configuration file
+'/var/mqm/vols/rdqmapp/qmgr/rdqmapp/qm.ini'. Requests to write these messages
+to the error log will be discarded.
+ACTION:
+If you wish to see instances of these messages you should alter the definition
+of the ExcludeMessage attribute in the queue manager configuration.
+----- amqxloga.c : 7161 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.261Z)
+                    ArithInsert2(1)
+                    CommentInsert1(LOGGER-IO)
+
+AMQ5051I: The queue manager task 'LOGGER-IO' has started.
+
+EXPLANATION:
+The critical utility task manager has started the LOGGER-IO task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.280Z)
+                    ArithInsert1(2) ArithInsert2(6879336)
+                    CommentInsert1(<0:0:104:63592> 0x000000000068f868)
+                    CommentInsert2(2026-10-19T18:57:40.708699)
+                    CommentInsert3(S0000000.LOG)
+
+AMQ7374I: Log replay for the queue manager has started at Log Sequence Number
+(LSN) '<0:0:104:63592> 0x000000000068f868'.
+
+EXPLANATION:
+The queue manager has started replaying the log at LSN '<0:0:104:63592>
+0x000000000068f868' in log extent S0000000.LOG. The record at this LSN was
+written into the log at 2026-10-19T18:57:40.708699.
+ACTION:
+None.
+----- amqalms0.c : 797 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.297Z)
+                    ArithInsert1(2383)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7229I: 2383 log records accessed on queue manager 'RDQMAPP' during the log
+replay phase.
+
+EXPLANATION:
+2383 log records have been accessed so far on queue manager RDQMAPP during the
+log replay phase in order to bring the queue manager back to a previously known
+state.
+ACTION:
+None.
+----- amqalms0.c : 1711 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.298Z)
+                    ArithInsert1(2383)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(<0:0:104:63592> 0x000000000068f868)
+                    CommentInsert3(<0:0:123:21129> 0x00000000007b5289)
+
+AMQ7230I: Log replay for queue manager 'RDQMAPP' complete.
+
+EXPLANATION:
+The log replay phase of the queue manager restart process has been completed
+for queue manager RDQMAPP. The replay started at Log Sequence Number (LSN)
+'<0:0:104:63592> 0x000000000068f868'.
+ACTION:
+None.
+----- amqalms0.c : 1721 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.7) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.299Z)
+                    ArithInsert2(1)
+                    CommentInsert1(CHECKPOINT)
+
+AMQ5051I: The queue manager task 'CHECKPOINT' has started.
+
+EXPLANATION:
+The critical utility task manager has started the CHECKPOINT task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.304Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7231I: 0 log records accessed on queue manager 'RDQMAPP' during the recovery
+phase.
+
+EXPLANATION:
+0 log records have been accessed so far on queue manager RDQMAPP during the
+recovery phase of the transactions manager state.
+ACTION:
+None.
+----- amqatmra.c : 679 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.305Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7232I: Transaction manager state recovered for queue manager 'RDQMAPP'.
+
+EXPLANATION:
+The state of transactions at the time the queue manager ended has been
+recovered for queue manager RDQMAPP.
+ACTION:
+None.
+----- amqatmra.c : 1043 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.354Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7233I: 0 out of 0 in-flight transactions resolved for queue manager
+'RDQMAPP'.
+
+EXPLANATION:
+0 transactions out of 0 in-flight at the time queue manager RDQMAPP ended have
+been resolved.
+ACTION:
+None.
+----- amqatmra.c : 1619 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.5) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.387Z)
+                    ArithInsert2(1)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.6) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.387Z)
+                    ArithInsert2(2)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 2 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.4) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.386Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ERROR-LOG)
+
+AMQ5037I: The queue manager task 'ERROR-LOG' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the ERROR-LOG task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.7) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.389Z)
+                    ArithInsert2(3)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 3 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.11) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.391Z)
+                    ArithInsert2(4)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 4 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.12) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.392Z)
+                    ArithInsert2(5)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 5 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.9) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.394Z)
+                    ArithInsert2(6)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 6 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.397Z)
+                    ArithInsert2(7)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 7 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.8) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.397Z)
+                    ArithInsert2(8)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 8 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26827.1) User(mqm) Program(amqrrmfa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.437Z)
+
+AMQ9410I: Repository manager started.
+
+EXPLANATION:
+The repository manager started successfully.
+ACTION:
+None.
+----- amqrrmfa.c : 2498 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.446Z)
+                    CommentInsert1(10.0.1.0)
+                    CommentInsert3(RDQMAPP)
+
+AMQ8003I: IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+
+EXPLANATION:
+IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+ACTION:
+None.
+----- amqzxma0.c : 8597 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.16) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.447Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DUR-SUBS-MGR)
+
+AMQ5051I: The queue manager task 'DUR-SUBS-MGR' has started.
+
+EXPLANATION:
+The critical utility task manager has started the DUR-SUBS-MGR task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.17) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.450Z)
+                    ArithInsert2(1)
+                    CommentInsert1(TOPIC-TREE)
+
+AMQ5051I: The queue manager task 'TOPIC-TREE' has started.
+
+EXPLANATION:
+The critical utility task manager has started the TOPIC-TREE task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.451Z)
+                    ArithInsert1(26833)
+                    CommentInsert1(SYSTEM.CMDSERVER.1)
+
+AMQ5024I: The command server has started. ProcessId(26833).
+
+EXPLANATION:
+The command server process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3090 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.454Z)
+                    ArithInsert1(26834)
+                    CommentInsert1(SYSTEM.CHANNEL.INITQ)
+
+AMQ5022I: The channel initiator has started. ProcessId(26834).
+
+EXPLANATION:
+The channel initiator process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3081 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.16) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.459Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DEFERRED-MSG)
+
+AMQ5037I: The queue manager task 'DEFERRED-MSG' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the DEFERRED-MSG task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.15) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.460Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DEFERRED_DELIVERY)
+
+AMQ5037I: The queue manager task 'DEFERRED_DELIVERY' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the DEFERRED_DELIVERY task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.18) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.460Z)
+                    ArithInsert2(1)
+                    CommentInsert1(RESOURCE_MONITOR)
+
+AMQ5051I: The queue manager task 'RESOURCE_MONITOR' has started.
+
+EXPLANATION:
+The critical utility task manager has started the RESOURCE_MONITOR task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.19) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.460Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ACTVTRC)
+
+AMQ5051I: The queue manager task 'ACTVTRC' has started.
+
+EXPLANATION:
+The critical utility task manager has started the ACTVTRC task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.18) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.462Z)
+                    ArithInsert2(1)
+                    CommentInsert1(MARKINTSCAN)
+
+AMQ5037I: The queue manager task 'MARKINTSCAN' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the MARKINTSCAN task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.20) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.463Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ASYNCQ)
+
+AMQ5051I: The queue manager task 'ASYNCQ' has started.
+
+EXPLANATION:
+The critical utility task manager has started the ASYNCQ task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.22) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.463Z)
+                    ArithInsert2(1)
+                    CommentInsert1(Q-DELETION)
+
+AMQ5051I: The queue manager task 'Q-DELETION' has started.
+
+EXPLANATION:
+The critical utility task manager has started the Q-DELETION task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.4) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.464Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-CTRLR)
+
+AMQ5052I: The queue manager task 'QPUBSUB-CTRLR' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the QPUBSUB-CTRLR task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.6) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.465Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-SUBPT-NLCACHE)
+
+AMQ5052I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the
+QPUBSUB-SUBPT-NLCACHE task. This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.5) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.467Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-QUEUE-NLCACHE)
+
+AMQ5052I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the
+QPUBSUB-QUEUE-NLCACHE task. This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.24) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.468Z)
+                    ArithInsert2(1)
+                    CommentInsert1(MULTICAST)
+
+AMQ5051I: The queue manager task 'MULTICAST' has started.
+
+EXPLANATION:
+The critical utility task manager has started the MULTICAST task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.7) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.470Z)
+                    ArithInsert2(1)
+                    CommentInsert1(PUBSUB-DAEMON)
+
+AMQ5052I: The queue manager task 'PUBSUB-DAEMON' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the PUBSUB-DAEMON task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.7) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.470Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Controller)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Controller' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Controller' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 3998 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26808.17) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.471Z)
+                    ArithInsert2(1)
+                    CommentInsert1(STATISTICS)
+
+AMQ5037I: The queue manager task 'STATISTICS' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the STATISTICS task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.23) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.472Z)
+                    ArithInsert2(1)
+                    CommentInsert1(PRESERVED-Q)
+
+AMQ5051I: The queue manager task 'PRESERVED-Q' has started.
+
+EXPLANATION:
+The critical utility task manager has started the PRESERVED-Q task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.21) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.475Z)
+                    ArithInsert2(1)
+                    CommentInsert1(EXPIRER)
+
+AMQ5051I: The queue manager task 'EXPIRER' has started.
+
+EXPLANATION:
+The critical utility task manager has started the EXPIRER task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.8) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.498Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Fan Out Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.9) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.505Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Command Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Command Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Command Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26824.10) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.506Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Publish Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Publish Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Publish Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26661.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.522Z)
+
+AMQ9722W: Plain text communication is enabled.
+
+EXPLANATION:
+This queue manager has been configured to allow plain text communications.
+ACTION:
+To disable plain text communications set SecureCommsOnly=YES in the TCP stanza
+of the queue manager configuration file.
+----- amqzslqa.c : 2029 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.559Z)
+                    ArithInsert1(26873)
+                    CommentInsert1(L1414)
+
+AMQ5026I: The listener 'L1414' has started. ProcessId(26873).
+
+EXPLANATION:
+The listener process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3098 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26834.1) User(mqm) Program(runmqchi)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.583Z)
+                    CommentInsert3(SYSTEM.CHANNEL.INITQ)
+
+AMQ8024I: IBM MQ channel initiator started.
+
+EXPLANATION:
+The channel initiator for queue 'SYSTEM.CHANNEL.INITQ' has been started.
+ACTION:
+None.
+----- amqrimna.c : 886 --------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.578Z)
+                    ArithInsert1(26878)
+                    CommentInsert1(MQ.EVENT.MONITOR)
+
+AMQ5028I: The Server 'MQ.EVENT.MONITOR' has started. ProcessId(26878).
+
+EXPLANATION:
+The Server process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3106 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26793.25) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.615Z)
+                    ArithInsert2(1)
+                    CommentInsert1(IQM-COMMS-MANAGER)
+
+AMQ5051I: The queue manager task 'IQM-COMMS-MANAGER' has started.
+
+EXPLANATION:
+The critical utility task manager has started the IQM-COMMS-MANAGER task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:02:15 PM - Process(26854.1) User(mqm) Program(amqfqpub)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:15.654Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ5806I: Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+
+EXPLANATION:
+Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+ACTION:
+None.
+----- cmqxfcxc.c : 1409 -------------------------------------------------------
+10/19/2026 07:02:19 PM - Process(27004.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:19.513Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+
+AMQ9002I: Channel 'RDQMAPP.SVCQM' is starting.
+
+EXPLANATION:
+Channel 'RDQMAPP.SVCQM' is starting.
+ACTION:
+None.
+----- amqrccca.c : 493 --------------------------------------------------------
+10/19/2026 07:02:19 PM - Process(27004.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:19.912Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+
+AMQ9299I: Channel 'RDQMAPP.SVCQM' has started.
+
+EXPLANATION:
+The channel 'RDQMAPP.SVCQM' has finished starting.
+ACTION:
+No action required.
+----- amqrccca.c : 977 --------------------------------------------------------
+10/19/2026 07:02:43 PM - Process(26967.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:43.748Z)
+                    CommentInsert1(SVCQM.RDQMAPP)
+
+AMQ9002I: Channel 'SVCQM.RDQMAPP' is starting.
+
+EXPLANATION:
+Channel 'SVCQM.RDQMAPP' is starting.
+ACTION:
+None.
+----- amqrmrsa.c : 237 --------------------------------------------------------
+10/19/2026 07:02:43 PM - Process(26967.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:02:43.749Z)
+                    CommentInsert1(SVCQM.RDQMAPP)
+
+AMQ9299I: Channel 'SVCQM.RDQMAPP' has started.
+
+EXPLANATION:
+The channel 'SVCQM.RDQMAPP' has finished starting.
+ACTION:
+No action required.
+----- amqrmrsa.c : 441 --------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(26834.1) User(mqm) Program(runmqchi)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.985Z)
+
+AMQ9542W: Queue manager is ending.
+
+EXPLANATION:
+The program will end because the queue manager is quiescing.
+ACTION:
+None.
+----- amqrimna.c : 994 --------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.991Z)
+                    ArithInsert1(26833)
+                    CommentInsert1(SYSTEM.CMDSERVER.1)
+
+AMQ5025I: The command server has ended. ProcessId(26833).
+
+EXPLANATION:
+The command server process has ended.
+ACTION:
+None.
+----- amqzmgr0.c : 4756 -------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(27004.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.989Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+
+AMQ9542W: Queue manager is ending.
+
+EXPLANATION:
+The program will end because the queue manager is quiescing.
+ACTION:
+None.
+----- amqrmssa.c : 3823 -------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(27004.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.994Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+                    CommentInsert2(27004)
+                    CommentInsert3(svc-sim-ext.service.com(1414))
+
+AMQ9001I: Channel 'RDQMAPP.SVCQM' ended normally.
+
+EXPLANATION:
+Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended normally.
+ACTION:
+None.
+----- amqrccca.c : 1128 -------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.995Z)
+                    ArithInsert1(26873)
+                    CommentInsert1(L1414)
+
+AMQ5027I: The listener 'L1414' has ended. ProcessId(26873).
+
+EXPLANATION:
+The listener process has ended.
+ACTION:
+None.
+----- amqzmgr0.c : 4768 -------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(26827.1) User(mqm) Program(amqrrmfa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.997Z)
+
+AMQ9411I: Repository manager ended normally.
+
+EXPLANATION:
+The repository manager ended normally.
+ACTION:
+None.
+----- amqrrmfa.c : 2260 -------------------------------------------------------
+10/19/2026 07:05:28 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:28.999Z)
+                    ArithInsert1(26834)
+                    CommentInsert1(SYSTEM.CHANNEL.INITQ)
+
+AMQ5023I: The channel initiator has ended. ProcessId(26834).
+
+EXPLANATION:
+The channel initiator process has ended.
+ACTION:
+None.
+----- amqzmgr0.c : 4744 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26967.3) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.031Z)
+                    CommentInsert1(APP.SVRCONN)
+
+AMQ9542W: Queue manager is ending.
+
+EXPLANATION:
+The program will end because the queue manager is quiescing.
+ACTION:
+None.
+----- amqrmssa.c : 3823 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.032Z)
+                    CommentInsert1(IQM-COMMS-MANAGER)
+
+AMQ5041I: The queue manager task 'IQM-COMMS-MANAGER' has ended.
+
+EXPLANATION:
+The queue manager task IQM-COMMS-MANAGER has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.035Z)
+                    ArithInsert1(2162)
+                    CommentInsert1(DEFERRED_DELIVERY)
+
+AMQ5041I: The queue manager task 'DEFERRED_DELIVERY' has ended.
+
+EXPLANATION:
+The queue manager task DEFERRED_DELIVERY has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.035Z)
+                    CommentInsert1(STATISTICS)
+
+AMQ5041I: The queue manager task 'STATISTICS' has ended.
+
+EXPLANATION:
+The queue manager task STATISTICS has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26790.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.041Z)
+                    ArithInsert1(26878)
+                    CommentInsert1(MQ.EVENT.MONITOR)
+
+AMQ5029I: The Server 'MQ.EVENT.MONITOR' has ended. ProcessId(26878).
+
+EXPLANATION:
+The Server process has ended.
+ACTION:
+None.
+----- amqzmgr0.c : 4780 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26967.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.085Z)
+                    CommentInsert1(SVCQM.RDQMAPP)
+
+AMQ9542W: Queue manager is ending.
+
+EXPLANATION:
+The program will end because the queue manager is quiescing.
+ACTION:
+None.
+----- amqrmssa.c : 3823 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26967.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.085Z)
+                    ArithInsert1(536908307)
+                    CommentInsert1(SVCQM.RDQMAPP)
+                    CommentInsert2(26967)
+                    CommentInsert3(10.60.0.50)
+
+AMQ9999E: Channel 'SVCQM.RDQMAPP' to host '10.60.0.50' ended abnormally.
+
+EXPLANATION:
+The channel program running under process ID 26967 for channel 'SVCQM.RDQMAPP'
+ended abnormally. The host name is '10.60.0.50'; in some cases the host name
+cannot be determined and so is shown as '????'.
+ACTION:
+Look at previous error messages for the channel program in the error logs to
+determine the cause of the failure. Note that this message can be excluded
+completely or suppressed by tuning the "ExcludeMessage" or "SuppressMessage"
+attributes under the "QMErrorLog" stanza in qm.ini. Further information can be
+found in the System Administration Guide.
+----- amqrmrsa.c : 643 --------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26967.4) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.087Z)
+                    CommentInsert1(MON.SVRCONN)
+
+AMQ9542W: Queue manager is ending.
+
+EXPLANATION:
+The program will end because the queue manager is quiescing.
+ACTION:
+None.
+----- amqrmssa.c : 3823 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26967.4) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.087Z)
+                    ArithInsert1(536908307)
+                    CommentInsert1(MON.SVRCONN)
+                    CommentInsert2(26967)
+                    CommentInsert3(10.10.1.7)
+
+AMQ9999E: Channel 'MON.SVRCONN' to host '10.10.1.7' ended abnormally.
+
+EXPLANATION:
+The channel program running under process ID 26967 for channel 'MON.SVRCONN'
+ended abnormally. The host name is '10.10.1.7'; in some cases the host name
+cannot be determined and so is shown as '????'.
+ACTION:
+Look at previous error messages for the channel program in the error logs to
+determine the cause of the failure. Note that this message can be excluded
+completely or suppressed by tuning the "ExcludeMessage" or "SuppressMessage"
+attributes under the "QMErrorLog" stanza in qm.ini. Further information can be
+found in the System Administration Guide.
+----- amqrmrsa.c : 643 --------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.090Z)
+                    CommentInsert1(DUR-SUBS-MGR)
+
+AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+
+EXPLANATION:
+The queue manager task DUR-SUBS-MGR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.090Z)
+                    CommentInsert1(TOPIC-TREE)
+
+AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+
+EXPLANATION:
+The queue manager task TOPIC-TREE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.091Z)
+                    CommentInsert1(QPUBSUB-CTRLR)
+
+AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-CTRLR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.091Z)
+                    CommentInsert1(QPUBSUB-QUEUE-NLCACHE)
+
+AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-QUEUE-NLCACHE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.091Z)
+                    CommentInsert1(QPUBSUB-SUBPT-NLCACHE)
+
+AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-SUBPT-NLCACHE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.091Z)
+                    CommentInsert1(PUBSUB-DAEMON)
+
+AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+
+EXPLANATION:
+The queue manager task PUBSUB-DAEMON has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.9) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.092Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Command Task)
+
+AMQ5976I: 'IBM MQ Distributed Pub/Sub Command Task' has ended.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Command Task' has ended.
+ACTION:
+None.
+----- cmqxzmup.c : 392 --------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.10) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.092Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Publish Task)
+
+AMQ5976I: 'IBM MQ Distributed Pub/Sub Publish Task' has ended.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Publish Task' has ended.
+ACTION:
+None.
+----- cmqxzmup.c : 392 --------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.8) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.092Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Fan Out Task)
+
+AMQ5976I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has ended.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Fan Out Task' has ended.
+ACTION:
+None.
+----- cmqxzmup.c : 392 --------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.093Z)
+                    CommentInsert1(RESOURCE_MONITOR)
+
+AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+
+EXPLANATION:
+The queue manager task RESOURCE_MONITOR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.7) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.094Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Controller)
+
+AMQ5976I: 'IBM MQ Distributed Pub/Sub Controller' has ended.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Controller' has ended.
+ACTION:
+None.
+----- cmqxzmup.c : 4422 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.094Z)
+                    CommentInsert1(ACTVTRC)
+
+AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+
+EXPLANATION:
+The queue manager task ACTVTRC has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(ASYNCQ)
+
+AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+
+EXPLANATION:
+The queue manager task ASYNCQ has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(EXPIRER)
+
+AMQ5041I: The queue manager task 'EXPIRER' has ended.
+
+EXPLANATION:
+The queue manager task EXPIRER has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(Q-DELETION)
+
+AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+
+EXPLANATION:
+The queue manager task Q-DELETION has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(PRESERVED-Q)
+
+AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+
+EXPLANATION:
+The queue manager task PRESERVED-Q has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(MULTICAST)
+
+AMQ5041I: The queue manager task 'MULTICAST' has ended.
+
+EXPLANATION:
+The queue manager task MULTICAST has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(DUR-SUBS-MGR)
+
+AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+
+EXPLANATION:
+The queue manager task DUR-SUBS-MGR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(TOPIC-TREE)
+
+AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+
+EXPLANATION:
+The queue manager task TOPIC-TREE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(RESOURCE_MONITOR)
+
+AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+
+EXPLANATION:
+The queue manager task RESOURCE_MONITOR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.095Z)
+                    CommentInsert1(ACTVTRC)
+
+AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+
+EXPLANATION:
+The queue manager task ACTVTRC has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+
+EXPLANATION:
+The queue manager task APP-SIGNAL has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(DEFERRED-MSG)
+
+AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+
+EXPLANATION:
+The queue manager task DEFERRED-MSG has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(MARKINTSCAN)
+
+AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+
+EXPLANATION:
+The queue manager task MARKINTSCAN has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+
+EXPLANATION:
+The queue manager task APP-SIGNAL has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(QPUBSUB-QUEUE-NLCACHE)
+
+AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-QUEUE-NLCACHE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(QPUBSUB-SUBPT-NLCACHE)
+
+AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-SUBPT-NLCACHE has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.096Z)
+                    CommentInsert1(PUBSUB-DAEMON)
+
+AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+
+EXPLANATION:
+The queue manager task PUBSUB-DAEMON has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.107Z)
+                    CommentInsert1(ASYNCQ)
+
+AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+
+EXPLANATION:
+The queue manager task ASYNCQ has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.107Z)
+                    CommentInsert1(EXPIRER)
+
+AMQ5041I: The queue manager task 'EXPIRER' has ended.
+
+EXPLANATION:
+The queue manager task EXPIRER has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.108Z)
+                    CommentInsert1(Q-DELETION)
+
+AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+
+EXPLANATION:
+The queue manager task Q-DELETION has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.108Z)
+                    CommentInsert1(PRESERVED-Q)
+
+AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+
+EXPLANATION:
+The queue manager task PRESERVED-Q has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.108Z)
+                    CommentInsert1(MULTICAST)
+
+AMQ5041I: The queue manager task 'MULTICAST' has ended.
+
+EXPLANATION:
+The queue manager task MULTICAST has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.111Z)
+                    CommentInsert1(DEFERRED-MSG)
+
+AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+
+EXPLANATION:
+The queue manager task DEFERRED-MSG has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26854.1) User(mqm) Program(amqfqpub)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.112Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ5807I: Queued Publish/Subscribe Daemon for queue manager RDQMAPP ended.
+
+EXPLANATION:
+The Queued Publish/Subscribe Daemon on queue manager RDQMAPP has ended.
+ACTION:
+None.
+----- cmqxfcxc.c : 1623 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.112Z)
+                    CommentInsert1(MARKINTSCAN)
+
+AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+
+EXPLANATION:
+The queue manager task MARKINTSCAN has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26824.1) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.113Z)
+                    CommentInsert1(QPUBSUB-CTRLR)
+
+AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+
+EXPLANATION:
+The queue manager task QPUBSUB-CTRLR has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4389 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26808.1) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.221Z)
+                    CommentInsert1(ERROR-LOG)
+
+AMQ5041I: The queue manager task 'ERROR-LOG' has ended.
+
+EXPLANATION:
+The queue manager task ERROR-LOG has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.228Z)
+                    CommentInsert1(CHECKPOINT)
+
+AMQ5041I: The queue manager task 'CHECKPOINT' has ended.
+
+EXPLANATION:
+The queue manager task CHECKPOINT has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26793.1) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.447Z)
+                    CommentInsert1(LOGGER-IO)
+
+AMQ5041I: The queue manager task 'LOGGER-IO' has ended.
+
+EXPLANATION:
+The queue manager task LOGGER-IO has ended.
+ACTION:
+None.
+----- amqzmut0.c : 4182 -------------------------------------------------------
+10/19/2026 07:05:29 PM - Process(26776.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a3) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:29.452Z)
+                    CommentInsert3(RDQMAPP)
+
+AMQ8004I: IBM MQ queue manager 'RDQMAPP' ended.
+
+EXPLANATION:
+IBM MQ queue manager 'RDQMAPP' ended.
+ACTION:
+None.
+----- amqzxma0.c : 2961 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(3961.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.202Z)
+                    ArithInsert1(8.45)
+                    CommentInsert1(/var/mqm/vols/rdqmapp/qmgr/rdqmapp)
+                    CommentInsert2(2950)
+                    CommentInsert3(2701)
+
+AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/qmgr/rdqmapp' is 8.45%
+used, 2701MB free.
+
+EXPLANATION:
+A total of 2950MB has been allocated to the file system containing
+'/var/mqm/vols/rdqmapp/qmgr/rdqmapp', with 2701MB bytes free.
+ACTION:
+Please evaluate whether this is enough space for your needs and ensure that
+sufficient free space is available on the file system.
+----- amqzslqa.c : 3738 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(3961.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.215Z)
+                    ArithInsert1(7.91)
+                    CommentInsert1(/var/mqm/vols/rdqmapp/log/rdqmapp)
+                    CommentInsert2(2950)
+                    CommentInsert3(2717)
+
+AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/log/rdqmapp' is 7.91%
+used, 2717MB free.
+
+EXPLANATION:
+A total of 2950MB has been allocated to the file system containing
+'/var/mqm/vols/rdqmapp/log/rdqmapp', with 2717MB bytes free.
+ACTION:
+Please evaluate whether this is enough space for your needs and ensure that
+sufficient free space is available on the file system.
+----- amqzslqa.c : 3738 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(3961.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.275Z)
+                    ArithInsert1(1024) ArithInsert2(10240)
+                    CommentInsert1(RLIMIT_NOFILE)
+
+AMQ5657W: The system resource RLIMIT_NOFILE is set at an unusually low level
+for IBM MQ.
+
+EXPLANATION:
+The system resource RLIMIT_NOFILE is currently set to 1024 which is below the
+usual minimum level of 10240, recommended for IBM MQ. If IBM MQ exceeds the
+available system resource, it could suffer hangs or other unpredictable
+failures.
+ACTION:
+If possible, increase the current setting to at least 10240.
+----- amqzslqa.c : 1520 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.416Z)
+                    CommentInsert1(AMQ9001, AMQ9002)
+                    CommentInsert2(ClusterSyslog)
+                    CommentInsert3(/var/mqm/vols/rdqmapp/qmgr/rdqmapp/qm.ini)
+
+AMQ6258I: Message exclusion enabled for message numbers (AMQ9001, AMQ9002).
+
+EXPLANATION:
+The message contains a list of message numbers which have been excluded by
+service ClusterSyslog from the configuration file
+'/var/mqm/vols/rdqmapp/qmgr/rdqmapp/qm.ini'. Requests to write these messages
+to the error log will be discarded.
+ACTION:
+If you wish to see instances of these messages you should alter the definition
+of the ExcludeMessage attribute in the queue manager configuration.
+----- amqxloga.c : 7161 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4135.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.843Z)
+                    ArithInsert2(1)
+                    CommentInsert1(LOGGER-IO)
+
+AMQ5051I: The queue manager task 'LOGGER-IO' has started.
+
+EXPLANATION:
+The critical utility task manager has started the LOGGER-IO task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.905Z)
+                    ArithInsert1(2) ArithInsert2(8963236)
+                    CommentInsert1(<0:0:136:50340> 0x000000000088c4a4)
+                    CommentInsert2(2026-10-19T19:05:29.406573)
+                    CommentInsert3(S0000000.LOG)
+
+AMQ7374I: Log replay for the queue manager has started at Log Sequence Number
+(LSN) '<0:0:136:50340> 0x000000000088c4a4'.
+
+EXPLANATION:
+The queue manager has started replaying the log at LSN '<0:0:136:50340>
+0x000000000088c4a4' in log extent S0000000.LOG. The record at this LSN was
+written into the log at 2026-10-19T19:05:29.406573.
+ACTION:
+None.
+----- amqalms0.c : 797 --------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.913Z)
+                    ArithInsert1(6)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7229I: 6 log records accessed on queue manager 'RDQMAPP' during the log
+replay phase.
+
+EXPLANATION:
+6 log records have been accessed so far on queue manager RDQMAPP during the log
+replay phase in order to bring the queue manager back to a previously known
+state.
+ACTION:
+None.
+----- amqalms0.c : 1711 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.914Z)
+                    ArithInsert1(6)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(<0:0:136:50340> 0x000000000088c4a4)
+                    CommentInsert3(<0:0:136:51804> 0x000000000088ca5c)
+
+AMQ7230I: Log replay for queue manager 'RDQMAPP' complete.
+
+EXPLANATION:
+The log replay phase of the queue manager restart process has been completed
+for queue manager RDQMAPP. The replay started at Log Sequence Number (LSN)
+'<0:0:136:50340> 0x000000000088c4a4'.
+ACTION:
+None.
+----- amqalms0.c : 1721 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4135.7) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.915Z)
+                    ArithInsert2(1)
+                    CommentInsert1(CHECKPOINT)
+
+AMQ5051I: The queue manager task 'CHECKPOINT' has started.
+
+EXPLANATION:
+The critical utility task manager has started the CHECKPOINT task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.926Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7231I: 0 log records accessed on queue manager 'RDQMAPP' during the recovery
+phase.
+
+EXPLANATION:
+0 log records have been accessed so far on queue manager RDQMAPP during the
+recovery phase of the transactions manager state.
+ACTION:
+None.
+----- amqatmra.c : 679 --------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.927Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7232I: Transaction manager state recovered for queue manager 'RDQMAPP'.
+
+EXPLANATION:
+The state of transactions at the time the queue manager ended has been
+recovered for queue manager RDQMAPP.
+ACTION:
+None.
+----- amqatmra.c : 1043 -------------------------------------------------------
+10/19/2026 07:05:33 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:33.949Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ7233I: 0 out of 0 in-flight transactions resolved for queue manager
+'RDQMAPP'.
+
+EXPLANATION:
+0 transactions out of 0 in-flight at the time queue manager RDQMAPP ended have
+been resolved.
+ACTION:
+None.
+----- amqatmra.c : 1619 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.5) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.042Z)
+                    ArithInsert2(1)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.4) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.042Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ERROR-LOG)
+
+AMQ5037I: The queue manager task 'ERROR-LOG' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the ERROR-LOG task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.6) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.042Z)
+                    ArithInsert2(2)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 2 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.7) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.050Z)
+                    ArithInsert2(3)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 3 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.8) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.050Z)
+                    ArithInsert2(4)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 4 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.9) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.051Z)
+                    ArithInsert2(5)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 5 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.12) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.051Z)
+                    ArithInsert2(6)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 6 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.13) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.052Z)
+                    ArithInsert2(7)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 7 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.14) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.052Z)
+                    ArithInsert2(8)
+                    CommentInsert1(APP-SIGNAL)
+
+AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the APP-SIGNAL task. This task
+has now started 8 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4181.1) User(mqm) Program(amqrrmfa)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.142Z)
+
+AMQ9410I: Repository manager started.
+
+EXPLANATION:
+The repository manager started successfully.
+ACTION:
+None.
+----- amqrrmfa.c : 2498 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4027.1) User(mqm) Program(amqzxma0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.162Z)
+                    CommentInsert1(10.0.1.0)
+                    CommentInsert3(RDQMAPP)
+
+AMQ8003I: IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+
+EXPLANATION:
+IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+ACTION:
+None.
+----- amqzxma0.c : 8597 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.16) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.163Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DUR-SUBS-MGR)
+
+AMQ5051I: The queue manager task 'DUR-SUBS-MGR' has started.
+
+EXPLANATION:
+The critical utility task manager has started the DUR-SUBS-MGR task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.17) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.177Z)
+                    ArithInsert2(1)
+                    CommentInsert1(TOPIC-TREE)
+
+AMQ5051I: The queue manager task 'TOPIC-TREE' has started.
+
+EXPLANATION:
+The critical utility task manager has started the TOPIC-TREE task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4129.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.180Z)
+                    ArithInsert1(4187)
+                    CommentInsert1(SYSTEM.CMDSERVER.1)
+
+AMQ5024I: The command server has started. ProcessId(4187).
+
+EXPLANATION:
+The command server process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3090 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4129.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.186Z)
+                    ArithInsert1(4188)
+                    CommentInsert1(SYSTEM.CHANNEL.INITQ)
+
+AMQ5022I: The channel initiator has started. ProcessId(4188).
+
+EXPLANATION:
+The channel initiator process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3081 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.18) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.193Z)
+                    ArithInsert2(1)
+                    CommentInsert1(RESOURCE_MONITOR)
+
+AMQ5051I: The queue manager task 'RESOURCE_MONITOR' has started.
+
+EXPLANATION:
+The critical utility task manager has started the RESOURCE_MONITOR task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.20) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.193Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ASYNCQ)
+
+AMQ5051I: The queue manager task 'ASYNCQ' has started.
+
+EXPLANATION:
+The critical utility task manager has started the ASYNCQ task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.19) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.193Z)
+                    ArithInsert2(1)
+                    CommentInsert1(ACTVTRC)
+
+AMQ5051I: The queue manager task 'ACTVTRC' has started.
+
+EXPLANATION:
+The critical utility task manager has started the ACTVTRC task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.15) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.194Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DEFERRED_DELIVERY)
+
+AMQ5037I: The queue manager task 'DEFERRED_DELIVERY' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the DEFERRED_DELIVERY task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.24) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.199Z)
+                    ArithInsert2(1)
+                    CommentInsert1(MULTICAST)
+
+AMQ5051I: The queue manager task 'MULTICAST' has started.
+
+EXPLANATION:
+The critical utility task manager has started the MULTICAST task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.21) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.201Z)
+                    ArithInsert2(1)
+                    CommentInsert1(EXPIRER)
+
+AMQ5051I: The queue manager task 'EXPIRER' has started.
+
+EXPLANATION:
+The critical utility task manager has started the EXPIRER task. This task has
+now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.22) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.201Z)
+                    ArithInsert2(1)
+                    CommentInsert1(Q-DELETION)
+
+AMQ5051I: The queue manager task 'Q-DELETION' has started.
+
+EXPLANATION:
+The critical utility task manager has started the Q-DELETION task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.17) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.206Z)
+                    ArithInsert2(1)
+                    CommentInsert1(STATISTICS)
+
+AMQ5037I: The queue manager task 'STATISTICS' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the STATISTICS task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.4) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.206Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-CTRLR)
+
+AMQ5052I: The queue manager task 'QPUBSUB-CTRLR' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the QPUBSUB-CTRLR task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.23) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.206Z)
+                    ArithInsert2(1)
+                    CommentInsert1(PRESERVED-Q)
+
+AMQ5051I: The queue manager task 'PRESERVED-Q' has started.
+
+EXPLANATION:
+The critical utility task manager has started the PRESERVED-Q task. This task
+has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.16) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.209Z)
+                    ArithInsert2(1)
+                    CommentInsert1(DEFERRED-MSG)
+
+AMQ5037I: The queue manager task 'DEFERRED-MSG' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the DEFERRED-MSG task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.5) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.209Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-QUEUE-NLCACHE)
+
+AMQ5052I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the
+QPUBSUB-QUEUE-NLCACHE task. This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.7) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.210Z)
+                    ArithInsert2(1)
+                    CommentInsert1(PUBSUB-DAEMON)
+
+AMQ5052I: The queue manager task 'PUBSUB-DAEMON' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the PUBSUB-DAEMON task.
+This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.7) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.210Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Controller)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Controller' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Controller' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 3998 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4162.18) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.210Z)
+                    ArithInsert2(1)
+                    CommentInsert1(MARKINTSCAN)
+
+AMQ5037I: The queue manager task 'MARKINTSCAN' has started.
+
+EXPLANATION:
+The restartable utility task manager has started the MARKINTSCAN task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.6) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.211Z)
+                    ArithInsert2(1)
+                    CommentInsert1(QPUBSUB-SUBPT-NLCACHE)
+
+AMQ5052I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has started.
+
+EXPLANATION:
+The publish/subscribe utility task manager has started the
+QPUBSUB-SUBPT-NLCACHE task. This task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.8) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.266Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Fan Out Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.9) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.272Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Command Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Command Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Command Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4178.10) User(mqm) Program(amqzmuf0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.281Z)
+                    CommentInsert1(IBM MQ Distributed Pub/Sub Publish Task)
+
+AMQ5975I: 'IBM MQ Distributed Pub/Sub Publish Task' has started.
+
+EXPLANATION:
+'IBM MQ Distributed Pub/Sub Publish Task' has started.
+ACTION:
+None.
+----- cmqxzmup.c : 361 --------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(3961.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.300Z)
+
+AMQ9722W: Plain text communication is enabled.
+
+EXPLANATION:
+This queue manager has been configured to allow plain text communications.
+ACTION:
+To disable plain text communications set SecureCommsOnly=YES in the TCP stanza
+of the queue manager configuration file.
+----- amqzslqa.c : 2029 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4129.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.327Z)
+                    ArithInsert1(4215)
+                    CommentInsert1(L1414)
+
+AMQ5026I: The listener 'L1414' has started. ProcessId(4215).
+
+EXPLANATION:
+The listener process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3098 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4129.1) User(mqm) Program(amqzmgr0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.339Z)
+                    ArithInsert1(4217)
+                    CommentInsert1(MQ.EVENT.MONITOR)
+
+AMQ5028I: The Server 'MQ.EVENT.MONITOR' has started. ProcessId(4217).
+
+EXPLANATION:
+The Server process has started.
+ACTION:
+None.
+----- amqzmgr0.c : 3106 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4188.1) User(mqm) Program(runmqchi)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.385Z)
+                    CommentInsert3(SYSTEM.CHANNEL.INITQ)
+
+AMQ8024I: IBM MQ channel initiator started.
+
+EXPLANATION:
+The channel initiator for queue 'SYSTEM.CHANNEL.INITQ' has been started.
+ACTION:
+None.
+----- amqrimna.c : 886 --------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4135.25) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.430Z)
+                    ArithInsert2(1)
+                    CommentInsert1(IQM-COMMS-MANAGER)
+
+AMQ5051I: The queue manager task 'IQM-COMMS-MANAGER' has started.
+
+EXPLANATION:
+The critical utility task manager has started the IQM-COMMS-MANAGER task. This
+task has now started 1 times.
+ACTION:
+None.
+----- amqzmut0.c : 2040 -------------------------------------------------------
+10/19/2026 07:05:34 PM - Process(4206.1) User(mqm) Program(amqfqpub)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:34.469Z)
+                    CommentInsert1(RDQMAPP)
+
+AMQ5806I: Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+
+EXPLANATION:
+Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+ACTION:
+None.
+----- cmqxfcxc.c : 1409 -------------------------------------------------------
+10/19/2026 07:05:38 PM - Process(4313.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:38.420Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+
+AMQ9002I: Channel 'RDQMAPP.SVCQM' is starting.
+
+EXPLANATION:
+Channel 'RDQMAPP.SVCQM' is starting.
+ACTION:
+None.
+----- amqrccca.c : 493 --------------------------------------------------------
+10/19/2026 07:05:38 PM - Process(4313.1) User(mqm) Program(runmqchl)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:38.788Z)
+                    CommentInsert1(RDQMAPP.SVCQM)
+
+AMQ9299I: Channel 'RDQMAPP.SVCQM' has started.
+
+EXPLANATION:
+The channel 'RDQMAPP.SVCQM' has finished starting.
+ACTION:
+No action required.
+----- amqrccca.c : 977 --------------------------------------------------------
+10/19/2026 07:05:43 PM - Process(4309.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:43.199Z)
+                    CommentInsert1(SVCQM.RDQMAPP)
+
+AMQ9002I: Channel 'SVCQM.RDQMAPP' is starting.
+
+EXPLANATION:
+Channel 'SVCQM.RDQMAPP' is starting.
+ACTION:
+None.
+----- amqrmrsa.c : 237 --------------------------------------------------------
+10/19/2026 07:05:43 PM - Process(4309.7) User(mqm) Program(amqrmppa)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0) QMgr(RDQMAPP)
+                    Time(2026-10-19T19:05:43.199Z)
+                    CommentInsert1(SVCQM.RDQMAPP)
+
+AMQ9299I: Channel 'SVCQM.RDQMAPP' has started.
+
+EXPLANATION:
+The channel 'SVCQM.RDQMAPP' has finished starting.
+ACTION:
+No action required.
+----- amqrmrsa.c : 441 --------------------------------------------------------

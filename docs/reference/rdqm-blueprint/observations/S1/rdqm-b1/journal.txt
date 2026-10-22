@@ -1,0 +1,179 @@
+# journal.txt: exported for #1666; 178 lines kept; dropped lines by category: kit ssh/sudo/session: 1922, lab observability agents and timers: 300. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T18:52:31.292364+00:00 rdqm-b1 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T18:52:31.348866+00:00 rdqm-b1 systemd[1]: Started systemd-timedated.service - Time & Date Service.
+2026-10-19T18:52:56.452687+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: PingAck did not arrive in time.
+2026-10-19T18:52:56.452967+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> NetworkFailure ) peer( Primary -> Unknown )
+2026-10-19T18:52:56.453007+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( UpToDate -> Consistent )
+2026-10-19T18:52:56.453028+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T18:52:56.453049+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Enabling local AL-updates
+2026-10-19T18:52:56.455947+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 424451631: 1->all empty
+2026-10-19T18:52:56.460965+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 424451631 (3ms)
+2026-10-19T18:52:56.461046+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T18:52:56.461062+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 0)
+2026-10-19T18:52:56.466617+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Consistent -> UpToDate ) [lost-peer]
+2026-10-19T18:52:56.472594+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T18:52:56.472708+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T18:52:56.490139+00:00 rdqm-b1 disconnected[58446]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T18:52:56.490689+00:00 rdqm-b1 disconnected[58446]: rdqmhandler(rdqmapp.dr) NetworkFailure
+2026-10-19T18:52:56.562822+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:52:56.564657+00:00 rdqm-b1 disconnected[58446]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T18:52:56.572599+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T18:52:56.579173+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T18:52:56.579288+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Restarting receiver thread
+2026-10-19T18:52:56.585715+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T18:52:56.605867+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 43, saving inputs in /var/lib/pacemaker/pengine/pe-input-62.bz2
+2026-10-19T18:52:56.617871+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 43 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-62.bz2): Complete
+2026-10-19T18:52:56.618013+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:53:01.376286+00:00 rdqm-b1 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T18:53:05.803988+00:00 rdqm-b1 pacemaker-attrd[23840]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T18:53:05.811741+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:53:05.840826+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 44, saving inputs in /var/lib/pacemaker/pengine/pe-input-63.bz2
+2026-10-19T18:53:05.854381+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 44 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-63.bz2): Complete
+2026-10-19T18:53:05.854880+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:53:48.518045+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T18:53:48.519745+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T18:56:34.648120+00:00 rdqm-b1 tlshd[63261]: Querying the handshake service
+2026-10-19T18:56:34.648291+00:00 rdqm-b1 tlshd[63262]: Querying the handshake service
+2026-10-19T18:56:34.648388+00:00 rdqm-b1 tlshd[63262]: Parsing a valid netlink message
+2026-10-19T18:56:34.648420+00:00 rdqm-b1 tlshd[63262]: No peer identities found
+2026-10-19T18:56:34.648422+00:00 rdqm-b1 tlshd[63262]: No certificates found
+2026-10-19T18:56:34.648450+00:00 rdqm-b1 tlshd[63262]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:56:34.648661+00:00 rdqm-b1 tlshd[63262]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:56:34.648895+00:00 rdqm-b1 tlshd[63262]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:56:34.649037+00:00 rdqm-b1 tlshd[63262]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T18:56:34.649195+00:00 rdqm-b1 tlshd[63262]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T18:56:34.649298+00:00 rdqm-b1 tlshd[63261]: Parsing a valid netlink message
+2026-10-19T18:56:34.649339+00:00 rdqm-b1 tlshd[63261]: No peer identities found
+2026-10-19T18:56:34.649342+00:00 rdqm-b1 tlshd[63261]: No certificates found
+2026-10-19T18:56:34.649370+00:00 rdqm-b1 tlshd[63261]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:56:34.649403+00:00 rdqm-b1 tlshd[63261]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:56:34.650035+00:00 rdqm-b1 tlshd[63261]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:56:34.650319+00:00 rdqm-b1 tlshd[63261]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T18:56:34.651513+00:00 rdqm-b1 tlshd[63262]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:56:34.651611+00:00 rdqm-b1 tlshd[63261]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T18:56:34.684708+00:00 rdqm-b1 tlshd[63261]: Server's trusted authorities:
+2026-10-19T18:56:34.684754+00:00 rdqm-b1 tlshd[63261]:    [0]: CN=RDQM Replication CA
+2026-10-19T18:56:34.684758+00:00 rdqm-b1 tlshd[63261]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:56:34.686799+00:00 rdqm-b1 tlshd[63261]: The peer offered 1 certificate(s).
+2026-10-19T18:56:34.709045+00:00 rdqm-b1 tlshd[63262]: The peer offered 1 certificate(s).
+2026-10-19T18:56:34.709446+00:00 rdqm-b1 tlshd[63262]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:56:34.709920+00:00 rdqm-b1 tlshd[63262]: Peer certificate: subject `CN=rdqm-a3', issuer `CN=RDQM Replication CA', serial 0x6efc79c120436e3037922e48d5d65c307b752189, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="kjUZBcIelER5Pxn2lgAtN39zZvndOjyPlEgRPuHtSyU="
+2026-10-19T18:56:34.710064+00:00 rdqm-b1 tlshd[63262]: Handshake with 'encrypted.remote' (10.99.0.33) succeeded
+2026-10-19T18:56:34.717734+00:00 rdqm-b1 tlshd[63261]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:56:34.717921+00:00 rdqm-b1 tlshd[63261]: Handshake with 'encrypted.remote' (10.99.0.33) succeeded
+2026-10-19T18:56:34.727486+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T18:56:34.727610+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T18:56:34.737613+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 866440241: 0->1 role( Primary ) conn( Connected )
+2026-10-19T18:56:34.755233+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T18:56:34.755356+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 352ED29163B0A8DC:0000000000000000:A47086BDC65D9FB4:0000000000000000 bits:0 flags:120
+2026-10-19T18:56:34.755382+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer 2FE113A2525D9322:352ED29163B0A8DD:90617B8A5914216E:A47086BDC65D9FB4 bits:14931 flags:22
+2026-10-19T18:56:34.755418+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=target-use-bitmap by rule=bitmap-peer
+2026-10-19T18:56:34.785119+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 866440241 (primary_nodes=1)
+2026-10-19T18:56:34.785268+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connecting -> Connected ) peer( Unknown -> Primary ) [remote]
+2026-10-19T18:56:34.785297+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( UpToDate -> Outdated ) [remote]
+2026-10-19T18:56:34.785320+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( DUnknown -> UpToDate ) repl( Off -> WFBitMapT ) [remote]
+2026-10-19T18:56:34.785344+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Disabling local AL-updates (optimization)
+2026-10-19T18:56:34.804737+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: receive bitmap stats [Bytes(packets)]: plain 0(0), RLE 74(1), total 74; compression: 100.0%
+2026-10-19T18:56:34.804855+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: send bitmap stats [Bytes(packets)]: plain 0(0), RLE 74(1), total 74; compression: 100.0%
+2026-10-19T18:56:34.809393+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm before-resync-target
+2026-10-19T18:56:34.836978+00:00 rdqm-b1 before-resync-target[63277]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/before-resync-target
+2026-10-19T18:56:35.032521+00:00 rdqm-b1 before-resync-target[63277]: rdqmhandler(rdqmapp.dr) removed reserved snapshot
+2026-10-19T18:56:35.190295+00:00 rdqm-b1 before-resync-target[63277]: rdqmhandler(rdqmapp.dr) snapshot created
+2026-10-19T18:56:35.278989+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:56:35.315256+00:00 rdqm-b1 before-resync-target[63277]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/before-resync-target rc(0)
+2026-10-19T18:56:35.321741+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm before-resync-target exit code 0
+2026-10-19T18:56:35.342215+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Outdated -> Inconsistent ) [receive-bitmap]
+2026-10-19T18:56:35.342298+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: repl( WFBitMapT -> SyncTarget ) [receive-bitmap]
+2026-10-19T18:56:35.342313+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Began resync as SyncTarget (will sync 59724 KB [14931 bits set]).
+2026-10-19T18:56:35.378836+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 45, saving inputs in /var/lib/pacemaker/pengine/pe-input-64.bz2
+2026-10-19T18:56:35.418673+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 46, saving inputs in /var/lib/pacemaker/pengine/pe-input-65.bz2
+2026-10-19T18:56:35.453198+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 46 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-65.bz2): Complete
+2026-10-19T18:56:35.454862+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:56:35.992611+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Resync done (total 1 sec; paused 0 sec; 59736 K/sec)
+2026-10-19T18:56:35.992739+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: updated UUIDs 2FE113A2525D9322:0000000000000000:90617B8A5914216E:A47086BDC65D9FB4
+2026-10-19T18:56:35.992812+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Inconsistent -> UpToDate ) [resync-finished]
+2026-10-19T18:56:35.992959+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: repl( SyncTarget -> Established ) [resync-finished]
+2026-10-19T18:56:36.000607+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm after-resync-target
+2026-10-19T18:56:36.018517+00:00 rdqm-b1 after-resync-target[63376]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/after-resync-target
+2026-10-19T18:56:36.082587+00:00 rdqm-b1 after-resync-target[63376]: rdqmhandler(rdqmapp.dr) removing snapshot
+2026-10-19T18:56:36.235281+00:00 rdqm-b1 after-resync-target[63376]: rdqmhandler(rdqmapp.dr) removed snapshot
+2026-10-19T18:56:36.256222+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:56:36.290445+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 47, saving inputs in /var/lib/pacemaker/pengine/pe-input-66.bz2
+2026-10-19T18:56:36.307705+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 47 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-66.bz2): Complete
+2026-10-19T18:56:36.308197+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:56:36.344825+00:00 rdqm-b1 after-resync-target[63376]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/after-resync-target rc(0)
+2026-10-19T18:56:36.353639+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm after-resync-target exit code 0
+2026-10-19T18:56:45.848921+00:00 rdqm-b1 pacemaker-attrd[23840]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+2026-10-19T18:56:45.870057+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:56:45.905274+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 48, saving inputs in /var/lib/pacemaker/pengine/pe-input-67.bz2
+2026-10-19T18:56:45.924006+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 48 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-67.bz2): Complete
+2026-10-19T18:56:45.924038+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:57:31.346214+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 3343606153: 0->all role( Secondary )
+2026-10-19T18:57:31.371654+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 3343606153 (primary_nodes=0)
+2026-10-19T18:57:31.371756+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: peer( Primary -> Secondary ) [remote]
+2026-10-19T18:57:31.371779+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Enabling local AL-updates
+2026-10-19T18:57:31.777786+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 391620027: 0->1 conn( Disconnecting )
+2026-10-19T18:57:31.804651+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 391620027 (primary_nodes=0)
+2026-10-19T18:57:31.804833+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> TearDown ) peer( Secondary -> Unknown ) [remote]
+2026-10-19T18:57:31.804870+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off ) [remote]
+2026-10-19T18:57:31.809653+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T18:57:31.809789+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 0)
+2026-10-19T18:57:31.820695+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: meta connection shut down by peer.
+2026-10-19T18:57:31.881460+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T18:57:31.881653+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T18:57:31.912110+00:00 rdqm-b1 disconnected[64657]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T18:57:31.912118+00:00 rdqm-b1 disconnected[64657]: rdqmhandler(rdqmapp.dr) TearDown
+2026-10-19T18:57:32.053404+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T18:57:32.058792+00:00 rdqm-b1 disconnected[64657]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T18:57:32.081743+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T18:57:32.082099+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( TearDown -> Unconnected ) [disconnected]
+2026-10-19T18:57:32.082199+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Restarting receiver thread
+2026-10-19T18:57:32.092339+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T18:57:32.134338+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Calculated transition 49, saving inputs in /var/lib/pacemaker/pengine/pe-input-68.bz2
+2026-10-19T18:57:32.151686+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 49 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-input-68.bz2): Complete
+2026-10-19T18:57:32.151909+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T18:57:35.513499+00:00 rdqm-b1 tlshd[64743]: Querying the handshake service
+2026-10-19T18:57:35.514159+00:00 rdqm-b1 tlshd[64743]: Parsing a valid netlink message
+2026-10-19T18:57:35.514209+00:00 rdqm-b1 tlshd[64743]: No peer identities found
+2026-10-19T18:57:35.514212+00:00 rdqm-b1 tlshd[64743]: No certificates found
+2026-10-19T18:57:35.514245+00:00 rdqm-b1 tlshd[64743]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:57:35.514350+00:00 rdqm-b1 tlshd[64743]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:57:35.514740+00:00 rdqm-b1 tlshd[64742]: Querying the handshake service
+2026-10-19T18:57:35.514824+00:00 rdqm-b1 tlshd[64742]: Parsing a valid netlink message
+2026-10-19T18:57:35.514858+00:00 rdqm-b1 tlshd[64742]: No peer identities found
+2026-10-19T18:57:35.514862+00:00 rdqm-b1 tlshd[64742]: No certificates found
+2026-10-19T18:57:35.514886+00:00 rdqm-b1 tlshd[64742]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T18:57:35.514918+00:00 rdqm-b1 tlshd[64742]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T18:57:35.515155+00:00 rdqm-b1 tlshd[64742]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:57:35.515384+00:00 rdqm-b1 tlshd[64742]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T18:57:35.515806+00:00 rdqm-b1 tlshd[64742]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T18:57:35.518025+00:00 rdqm-b1 tlshd[64743]: System trust: Loaded 1 certificate(s).
+2026-10-19T18:57:35.518229+00:00 rdqm-b1 tlshd[64743]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T18:57:35.518946+00:00 rdqm-b1 tlshd[64743]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T18:57:35.551854+00:00 rdqm-b1 tlshd[64743]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:57:35.607419+00:00 rdqm-b1 tlshd[64742]: Server's trusted authorities:
+2026-10-19T18:57:35.609675+00:00 rdqm-b1 tlshd[64742]:    [0]: CN=RDQM Replication CA
+2026-10-19T18:57:35.612280+00:00 rdqm-b1 tlshd[64742]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T18:57:35.613906+00:00 rdqm-b1 tlshd[64742]: The peer offered 1 certificate(s).
+2026-10-19T18:57:35.641381+00:00 rdqm-b1 tlshd[64743]: The peer offered 1 certificate(s).
+2026-10-19T18:57:35.642894+00:00 rdqm-b1 tlshd[64743]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:57:35.643221+00:00 rdqm-b1 tlshd[64743]: Peer certificate: subject `CN=rdqm-a1', issuer `CN=RDQM Replication CA', serial 0x3b9790cbf3c7ac616f8aa3fc92bdf52277ad29fa, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="5vS9caZUnmywbdY9f31Wd3ZpdP2DhhRa/RpOyg80iUY="
+2026-10-19T18:57:35.643454+00:00 rdqm-b1 tlshd[64743]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T18:57:35.647930+00:00 rdqm-b1 tlshd[64742]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T18:57:35.648747+00:00 rdqm-b1 tlshd[64742]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T18:57:35.662998+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T18:57:35.663109+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T18:57:35.678362+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 2479927487: 0->1 role( Secondary ) conn( Connected )
+2026-10-19T18:57:35.695595+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T18:57:35.695703+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 2FE113A2525D9322:0000000000000000:90617B8A5914216E:A47086BDC65D9FB4 bits:0 flags:120
+2026-10-19T18:57:35.695726+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer 2FE113A2525D9322:0000000000000000:352ED29163B0A8DC:90617B8A5914216E bits:0 flags:20
+2026-10-19T18:57:35.695761+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=no-sync by rule=lost-quorum
+2026-10-19T18:57:35.731729+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 2479927487 (primary_nodes=0)
+2026-10-19T18:57:35.731817+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connecting -> Connected ) peer( Unknown -> Secondary ) [remote]
+2026-10-19T18:57:35.731845+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( DUnknown -> UpToDate ) repl( Off -> Established ) [remote]
+2026-10-19T18:57:35.731865+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: cleared bm UUID and bitmap 2FE113A2525D9322:0000000000000000:90617B8A5914216E:A47086BDC65D9FB4
+2026-10-19T18:57:35.836630+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 1204773961: 0->all role( Primary )
+2026-10-19T18:57:35.872817+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 1204773961 (primary_nodes=1)
+2026-10-19T18:57:35.872941+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: peer( Secondary -> Primary ) [remote]
+2026-10-19T18:57:35.872967+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Disabling local AL-updates (optimization)
+2026-10-19T18:58:38.878862+00:00 rdqm-b1 kernel: hrtimer: interrupt took 2053722 ns

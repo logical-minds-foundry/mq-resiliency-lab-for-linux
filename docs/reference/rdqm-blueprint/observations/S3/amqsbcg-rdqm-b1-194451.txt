@@ -1,0 +1,588 @@
+
+AMQSBCG0 - starts here
+**********************
+ 
+ MQOPEN - 'DR.FORCE.DRILL'
+ 
+ 
+ MQGET of message number 1, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A19A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19154365'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D31 2D53 3231 3931 3533 31             'HEAD-1-S2191531 '
+ 
+ 
+ MQGET of message number 2, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A1AA00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19154365'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D32 2D53 3231 3931 3533 31             'HEAD-2-S2191531 '
+ 
+ 
+ MQGET of message number 3, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A1BA00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19154365'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D33 2D53 3231 3931 3533 31             'HEAD-3-S2191531 '
+ 
+ 
+ MQGET of message number 4, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A1CA00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19154366'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D34 2D53 3231 3931 3533 31             'HEAD-4-S2191531 '
+ 
+ 
+ MQGET of message number 5, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A1DA00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19154366'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D35 2D53 3231 3931 3533 31             'HEAD-5-S2191531 '
+ 
+ 
+ MQGET of message number 6, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A31A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19160776'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  5441 494C 2D31 2D53 3231 3931 3533 31             'TAIL-1-S2191531 '
+ 
+ 
+ MQGET of message number 7, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A32A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19160776'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  5441 494C 2D32 2D53 3231 3931 3533 31             'TAIL-2-S2191531 '
+ 
+ 
+ MQGET of message number 8, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A33A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19160777'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  5441 494C 2D33 2D53 3231 3931 3533 31             'TAIL-3-S2191531 '
+ 
+ 
+ MQGET of message number 9, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A34A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19160777'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  5441 494C 2D34 2D53 3231 3931 3533 31             'TAIL-4-S2191531 '
+ 
+ 
+ MQGET of message number 10, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D4150502020202020126BD66A35A00040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19160777'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  5441 494C 2D35 2D53 3231 3931 3533 31             'TAIL-5-S2191531 '
+ 
+ 
+ MQGET of message number 11, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D41505020202020207472D66A1A5E0040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19434259'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D31 2D53 3331 3934 3333 30             'HEAD-1-S3194330 '
+ 
+ 
+ MQGET of message number 12, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D41505020202020207472D66A1B5E0040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19434259'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D32 2D53 3331 3934 3333 30             'HEAD-2-S3194330 '
+ 
+ 
+ MQGET of message number 13, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D41505020202020207472D66A1C5E0040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19434260'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D33 2D53 3331 3934 3333 30             'HEAD-3-S3194330 '
+ 
+ 
+ MQGET of message number 14, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D41505020202020207472D66A1D5E0040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19434260'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D34 2D53 3331 3934 3333 30             'HEAD-4-S3194330 '
+ 
+ 
+ MQGET of message number 15, CompCode:0 Reason:0
+****Message descriptor****
+
+  StrucId  : 'MD  '  Version : 2
+  Report   : 0  MsgType : 8
+  Expiry   : -1  Feedback : 0
+  Encoding : 546  CodedCharSetId : 1208
+  Format : 'MQSTR   '
+  Priority : 0  Persistence : 1
+  MsgId : X'414D51205244514D41505020202020207472D66A1E5E0040'
+  CorrelId : X'000000000000000000000000000000000000000000000000'
+  BackoutCount : 0
+  ReplyToQ       : '                                                '
+  ReplyToQMgr    : 'RDQMAPP                                         '
+  ** Identity Context
+  UserIdentifier : 'mqm         '
+  AccountingToken : 
+   X'0339393200000000000000000000000000000000000000000000000000000006'
+  ApplIdentityData : '                                '
+  ** Origin Context
+  PutApplType    : '6'
+  PutApplName    : 'amqsput                     '
+  PutDate  : '20261019'    PutTime  : '19434260'
+  ApplOriginData : '    '
+
+  GroupId : X'000000000000000000000000000000000000000000000000'
+  MsgSeqNumber   : '1'
+  Offset         : '0'
+  MsgFlags       : '0'
+  OriginalLength : '-1'
+ 
+****   Message      ****
+ 
+ length - 15 of 15 bytes
+ 
+00000000:  4845 4144 2D35 2D53 3331 3934 3333 30             'HEAD-5-S3194330 '
+ 
+ 
+ 
+ No more messages 
+
+****   Summary      ****
+ 15 messages browsed.
+ Smallest message 15 bytes.
+ Largest message 15 bytes.
+ Average message 15 bytes.
+
+ MQCLOSE
+ MQDISC

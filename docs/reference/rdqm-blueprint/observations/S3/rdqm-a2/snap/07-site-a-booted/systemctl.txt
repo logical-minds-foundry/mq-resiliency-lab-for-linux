@@ -1,0 +1,69 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: activating (start) since Mon 2026-10-19 19:46:54 UTC; 4s ago
+        Job: 317
+ Invocation: 77262c6e73da4509b35ee145dda71340
+   Main PID: 1268 (rdqmd)
+      Tasks: 2 (limit: 10565)
+     Memory: 23.2M (peak: 54.2M)
+        CPU: 862ms
+     CGroup: /system.slice/rdqm.service
+             ├─1268 /var/mqm/rdqm/rdqmd -s
+             └─2139 /usr/bin/python3 -sP /usr/sbin/crm status bynode
+
+Oct 19 19:46:54 rdqm-a2 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:54 UTC; 4s ago
+ Invocation: d1846768c2c54d04b385f99e6034c3b5
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1266 (pacemakerd)
+      Tasks: 7
+     Memory: 27.3M (peak: 32M)
+        CPU: 334ms
+     CGroup: /system.slice/pacemaker.service
+             ├─1266 /usr/sbin/pacemakerd
+             ├─1303 /usr/libexec/pacemaker/pacemaker-based
+             ├─1306 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1307 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1308 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1309 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1311 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 19:46:56 rdqm-a2 pacemaker-controld[1311]:  notice: Node rdqm-a3 state is now member
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Recorded new attribute writer: rdqm-a1 (was unset)
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Setting #attrd-protocol[rdqm-a1] in instance_attributes: (unset) -> 7
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Setting #attrd-protocol[rdqm-a2] in instance_attributes: (unset) -> 7
+Oct 19 19:46:56 rdqm-a2 pacemaker-controld[1311]:  notice: Pacemaker controller successfully started and accepting connections
+Oct 19 19:46:56 rdqm-a2 pacemaker-controld[1311]:  notice: Fencer successfully connected
+Oct 19 19:46:56 rdqm-a2 pacemaker-controld[1311]:  notice: State transition S_STARTING -> S_PENDING
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Node rdqm-a3 state is now member
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Setting #attrd-protocol[rdqm-a3] in instance_attributes: (unset) -> 7
+Oct 19 19:46:56 rdqm-a2 pacemaker-attrd[1308]:  notice: Setting rdqm-transient-attribute[rdqm-a1] in instance_attributes: (unset) -> 1
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 19:46:54 UTC; 4s ago
+ Invocation: 8973bcb8f7bf451d8d579fd6d0f7fbb0
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 1066 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 158M (peak: 165.5M)
+        CPU: 396ms
+     CGroup: /system.slice/corosync.service
+             └─1066 /usr/sbin/corosync -f
+
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [QUORUM] Sync joined[2]: 1 3
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [TOTEM ] A new membership (1.57) was formed. Members joined: 1 3
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [QUORUM] This node is within the primary component and will provide service.
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [KNET  ] pmtud: PMTUD link change for host: 3 link: 0 from 522 to 1446
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [KNET  ] pmtud: PMTUD link change for host: 1 link: 0 from 522 to 1446
+Oct 19 19:46:55 rdqm-a2 corosync[1066]:   [KNET  ] pmtud: Global data MTU changed to: 1446

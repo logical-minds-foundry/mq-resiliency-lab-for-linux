@@ -1,0 +1,33 @@
+Node:                                   rdqm-a3
+Queue manager status:                   Running
+CPU:                                    1.45%
+Memory:                                 152MB
+Queue manager file system:              245MB used, 2.9GB allocated [8%]
+HA role:                                Primary
+HA status:                              Mixed
+HA control:                             Enabled
+HA current location:                    This node
+HA preferred location:                  rdqm-a1
+HA blocked location:                    None
+HA floating IP interface:               enp6s0
+HA floating IP address:                 10.10.1.100
+DR role:                                Primary
+DR status:                              Remote unavailable
+DR port:                                7001
+DR local IP address:                    10.99.0.33
+DR remote IP address list:              10.99.0.41,10.99.0.42,10.99.0.43
+DR current remote IP address:           Unknown
+DR out of sync data:                    59700KB
+DR last in sync:                        2026-10-19 18:52:55
+DR TLS encryption:                      No
+
+Node:                                   rdqm-a1
+HA status:                              Remote unavailable
+HA out of sync data:                    6428KB
+HA last in sync:                        2026-10-19 18:53:28
+HA TLS encryption:                      No
+
+Node:                                   rdqm-a2
+HA status:                              Normal
+HA TLS encryption:                      Yes
+[rc=0]

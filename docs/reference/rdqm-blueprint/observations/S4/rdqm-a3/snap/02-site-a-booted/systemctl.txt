@@ -1,0 +1,68 @@
+● rdqm.service - IBM MQ Replicated Data
+     Loaded: loaded (/usr/lib/systemd/system/rdqm.service; enabled; preset: disabled)
+     Active: activating (start) since Mon 2026-10-19 18:44:15 UTC; 10s ago
+        Job: 288
+ Invocation: 21e0b157b7f74e60a884298dd4df0b90
+   Main PID: 1067 (rdqmd)
+      Tasks: 2 (limit: 10565)
+     Memory: 23.2M (peak: 54.3M)
+        CPU: 2.797s
+     CGroup: /system.slice/rdqm.service
+             └─1067 /var/mqm/rdqm/rdqmd -s
+
+Oct 19 18:44:15 rdqm-a3 systemd[1]: Starting rdqm.service - IBM MQ Replicated Data...
+
+● pacemaker.service - Pacemaker High Availability Cluster Manager
+     Loaded: loaded (/usr/lib/systemd/system/pacemaker.service; enabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:44:15 UTC; 10s ago
+ Invocation: 55f5ecb9bcc740c0b76eabaf4d8d5289
+       Docs: man:pacemakerd
+             https://clusterlabs.org/pacemaker/doc/
+   Main PID: 1066 (pacemakerd)
+      Tasks: 7
+     Memory: 27.9M (peak: 40.3M)
+        CPU: 597ms
+     CGroup: /system.slice/pacemaker.service
+             ├─1066 /usr/sbin/pacemakerd
+             ├─1152 /usr/libexec/pacemaker/pacemaker-based
+             ├─1153 /usr/libexec/pacemaker/pacemaker-fenced
+             ├─1156 /usr/libexec/pacemaker/pacemaker-execd
+             ├─1157 /usr/libexec/pacemaker/pacemaker-attrd
+             ├─1164 /usr/libexec/pacemaker/pacemaker-schedulerd
+             └─1167 /usr/libexec/pacemaker/pacemaker-controld
+
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1824]: rdqmalert: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1824]: rdqmalert: Calling real main function
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1825]: rdqmalert: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1825]: rdqmalert: Calling real main function
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1824]: 'node' 'member' 'rdqm-a2' '2'
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1825]: 'node' 'member' 'rdqm-a1' '1'
+Oct 19 18:44:18 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting rdqm-transient-attribute[rdqm-a3] in instance_attributes: (unset) -> 1
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1824]: transient attribute added rc(0)
+Oct 19 18:44:18 rdqm-a3 rdqmalert[1825]: transient attribute added rc(0)
+Oct 19 18:44:18 rdqm-a3 pacemaker-attrd[1157]:  notice: Setting rdqm-transient-attribute[rdqm-a2] in instance_attributes: (unset) -> 1
+
+● corosync.service - Corosync Cluster Engine
+     Loaded: loaded (/usr/lib/systemd/system/corosync.service; disabled; preset: disabled)
+     Active: active (running) since Mon 2026-10-19 18:44:15 UTC; 10s ago
+ Invocation: eaaea07e59644c6dafb3025469019be1
+       Docs: man:corosync
+             man:corosync.conf
+             man:corosync_overview
+   Main PID: 919 (corosync)
+      Tasks: 9 (limit: 10565)
+     Memory: 159M (peak: 170.5M)
+        CPU: 424ms
+     CGroup: /system.slice/corosync.service
+             └─919 /usr/sbin/corosync -f
+
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [KNET  ] link: Resetting MTU for link 0 because host 1 joined
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [KNET  ] host: host: 1 (passive) best link: 0 (pri: 1)
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [QUORUM] Sync members[3]: 1 2 3
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [QUORUM] Sync joined[1]: 1
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [TOTEM ] A new membership (1.27) was formed. Members joined: 1
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [QUORUM] Members[3]: 1 2 3
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [MAIN  ] Completed service synchronization, ready to provide service.
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [KNET  ] pmtud: PMTUD link change for host: 1 link: 0 from 522 to 1446
+Oct 19 18:44:17 rdqm-a3 corosync[919]:   [KNET  ] pmtud: Global data MTU changed to: 1446

@@ -1,0 +1,376 @@
+# AMQERR01.LOG: exported for #1666; 375 lines kept; dropped lines by category: outside window (whole entries): 133.
+10/19/2026 07:09:38 PM - Process(4135.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.793Z)
+                    ArithInsert1(1073766680) ArithInsert2(5)
+                    CommentInsert1(EIO (5) - Input/output error)
+                    CommentInsert2(/var/mqm/errors/AMQ4135.0.FDC)
+                    CommentInsert3(HL206037)
+
+AMQ6118S: An internal IBM MQ error has occurred (40006118)
+
+EXPLANATION:
+An error has been detected, and the MQ error recording routine has been called.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:38 PM - Process(4135.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.793Z)
+                    ArithInsert1(4135)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4135.0.FDC)
+                    CommentInsert3(HL206037)
+
+AMQ6184W: An internal IBM MQ error with probe 'HL206037' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4135. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4135.0.FDC' with probe 'HL206037'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:38 PM - Process(4135.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.863Z)
+                    ArithInsert1(545286182)
+                    CommentInsert2(/var/mqm/errors/AMQ4135.0.FDC)
+                    CommentInsert3(HL214091)
+
+AMQ6125E: An internal IBM MQ error has occurred.
+
+EXPLANATION:
+An internal error has occurred with identifier 20806826. An FFST containing
+diagnostic data has been written to '/var/mqm/errors/AMQ4135.0.FDC' with probe
+'HL214091'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:38 PM - Process(4135.4) User(mqm) Program(amqzmuc0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.863Z)
+                    ArithInsert1(4135)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4135.0.FDC)
+                    CommentInsert3(HL214091)
+
+AMQ6184W: An internal IBM MQ error with probe 'HL214091' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4135. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4135.0.FDC' with probe 'HL214091'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:38 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.910Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(1073766680)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AL004008)
+
+AMQ6118S: An internal IBM MQ error has occurred (40006118)
+
+EXPLANATION:
+An error has been detected, and the MQ error recording routine has been called.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:38 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:38.910Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(4204)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AL004008)
+
+AMQ6184W: An internal IBM MQ error with probe 'AL004008' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4204. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4204.0.FDC' with probe 'AL004008'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.032Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(1077960976)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AT049000)
+
+AMQ6110S: An internal IBM MQ error has occurred.
+
+EXPLANATION:
+An error has been detected, and the MQ error recording routine has been called.
+An FFST containing diagnostic data has been written to
+'/var/mqm/errors/AMQ4204.0.FDC' with probe 'AT049000'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.032Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(4204)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AT049000)
+
+AMQ6184W: An internal IBM MQ error with probe 'AT049000' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4204. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4204.0.FDC' with probe 'AT049000'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.122Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(1077960976)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AT048003)
+
+AMQ6110S: An internal IBM MQ error has occurred.
+
+EXPLANATION:
+An error has been detected, and the MQ error recording routine has been called.
+An FFST containing diagnostic data has been written to
+'/var/mqm/errors/AMQ4204.0.FDC' with probe 'AT048003'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4204.14) User(mqm) Program(amqzlaa0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.123Z)
+                    RemoteHost(10.10.1.60)
+                    ArithInsert1(4204)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4204.0.FDC)
+                    CommentInsert3(AT048003)
+
+AMQ6184W: An internal IBM MQ error with probe 'AT048003' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4204. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4204.0.FDC' with probe 'AT048003'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.316Z)
+                    ArithInsert1(1073766681)
+                    CommentInsert1('30 - EROFS (30) - Read-only file system' from write.)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC407051)
+
+AMQ6119S: An internal IBM MQ error has occurred ('30 - EROFS (30) - Read-only
+file system' from write.)
+
+EXPLANATION:
+MQ detected an unexpected error when calling the operating system. The MQ error
+recording routine has been called. An FFST containing diagnostic data has been
+written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC407051'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.317Z)
+                    ArithInsert1(4162)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC407051)
+
+AMQ6184W: An internal IBM MQ error with probe 'XC407051' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4162. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC407051'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.339Z)
+                    ArithInsert1(1073766681)
+                    CommentInsert1('30 - EROFS (30) - Read-only file system' from open.)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC402011)
+
+AMQ6119S: An internal IBM MQ error has occurred ('30 - EROFS (30) - Read-only
+file system' from open.)
+
+EXPLANATION:
+MQ detected an unexpected error when calling the operating system. The MQ error
+recording routine has been called. An FFST containing diagnostic data has been
+written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC402011'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.339Z)
+                    ArithInsert1(4162)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC402011)
+
+AMQ6184W: An internal IBM MQ error with probe 'XC402011' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4162. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC402011'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.354Z)
+                    ArithInsert1(1073766681)
+                    CommentInsert1(/var/mqm/vols/rdqmapp/qmgr/rdqmapp/errors)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC906005)
+
+AMQ6119S: An internal IBM MQ error has occurred
+(/var/mqm/vols/rdqmapp/qmgr/rdqmapp/errors)
+
+EXPLANATION:
+MQ detected an unexpected error when calling the operating system. The MQ error
+recording routine has been called. An FFST containing diagnostic data has been
+written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC906005'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1234 -------------------------------------------------------
+10/19/2026 07:09:39 PM - Process(4162.10) User(mqm) Program(amqzmur0)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:09:39.354Z)
+                    ArithInsert1(4162)
+                    CommentInsert1(RDQMAPP)
+                    CommentInsert2(/var/mqm/errors/AMQ4162.0.FDC)
+                    CommentInsert3(XC906005)
+
+AMQ6184W: An internal IBM MQ error with probe 'XC906005' has occurred on queue
+manager RDQMAPP.
+
+EXPLANATION:
+An error has been detected, and the IBM MQ error recording routine has been
+called. The failing process is process 4162. An FFST containing diagnostic data
+has been written to '/var/mqm/errors/AMQ4162.0.FDC' with probe 'XC906005'.
+ACTION:
+Use the standard facilities supplied with your system to record the problem
+identifier and to save any generated output files. Use the MQ Support site
+(https://ibm.biz/IBMMQSupport) to see whether a solution is already available.
+If you are unable to find a match, contact your IBM support center. Do not
+discard any files until the problem has been resolved.
+----- amqxfdcx.c : 1278 -------------------------------------------------------
+10/19/2026 07:10:09 PM - Process(13621.1) User(mqm) Program(rdqm)
+                    Host(rdqm-a1) Installation(Installation1)
+                    VRMF(10.0.1.0)
+                    Time(2026-10-19T19:10:09.865Z)
+                    CommentInsert1(/usr/lib/ocf/resource.d/ibm/rdqm)
+                    CommentInsert2(/usr/lib/ocf/resource.d/ibm/rdqm start)
+
+AMQ6206I: Command /usr/lib/ocf/resource.d/ibm/rdqm was issued.
+
+EXPLANATION:
+Control command '/usr/lib/ocf/resource.d/ibm/rdqm start' was issued.
+ACTION:
+None.
+----- amqxprma.c : 3172 -------------------------------------------------------

@@ -1,0 +1,7 @@
+2026-10-19T19:30:01.4984462640 1635 /var/log/cron
+2026-10-19T19:33:58.2535511070 713014 /var/mqm/web/installations/Installation1/servers/mqweb/logs/verbosegc.001.log
+2026-10-19T19:42:46.7146819910 83886080 /var/mqm/web/installations/Installation1/servers/.classCache/C290M25F1A64P_liberty-mqm_G45L00
+2026-10-19T19:43:05.8407103280 553963 /var/log/pacemaker/pacemaker.log
+2026-10-19T19:43:10.2201747760 2260236 /var/log/messages
+2026-10-19T19:43:10.2211748820 1227326 /var/log/secure
+2026-10-19T19:43:10.2251753060 7137239 /var/log/audit/audit.log

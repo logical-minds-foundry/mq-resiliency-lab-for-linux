@@ -1,0 +1,13 @@
+total 8
+dr-xr-xr-x.  2 mqm mqm 4096 2026-10-16 20:46:48.875494203 +0000 .
+drwxrwsr-x. 18 mqm mqm 4096 2026-10-19 18:30:37.139175493 +0000 ..
+lrwxrwxrwx.  1 mqm mqm   24 2026-10-16 20:46:48.852491812 +0000 after-resync-target -> /opt/mqm/bin/rdqmhandler
+lrwxrwxrwx.  1 mqm mqm   24 2026-10-16 20:46:48.844490980 +0000 before-resync-source -> /opt/mqm/bin/rdqmhandler
+lrwxrwxrwx.  1 mqm mqm   24 2026-10-16 20:46:48.848491396 +0000 before-resync-target -> /opt/mqm/bin/rdqmhandler
+lrwxrwxrwx.  1 mqm mqm   19 2026-10-16 20:46:48.863492956 +0000 crtmqm -> /opt/mqm/bin/crtmqm
+lrwxrwxrwx.  1 mqm mqm   24 2026-10-16 20:46:48.856492228 +0000 disconnected -> /opt/mqm/bin/rdqmhandler
+lrwxrwxrwx.  1 mqm mqm   19 2026-10-16 20:46:48.867493372 +0000 dltmqm -> /opt/mqm/bin/dltmqm
+lrwxrwxrwx.  1 mqm mqm   24 2026-10-16 20:46:48.840490564 +0000 quorum-lost -> /opt/mqm/bin/rdqmhandler
+lrwxrwxrwx.  1 mqm mqm   20 2026-10-16 20:46:48.871493788 +0000 rdqmadm -> /opt/mqm/bin/rdqmadm
+lrwxrwxrwx.  1 mqm mqm   22 2026-10-16 20:46:48.875494203 +0000 rdqmalert -> /opt/mqm/bin/rdqmalert
+lrwxrwxrwx.  1 mqm mqm   18 2026-10-16 20:46:48.860492644 +0000 rdqmd -> /opt/mqm/bin/rdqmd

@@ -1,0 +1,737 @@
+# journal.txt: exported for #1666; 736 lines kept; dropped lines by category: kit ssh/sudo/session: 6105, lab observability agents and timers: 975. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T19:44:00.772819+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: PingAck did not arrive in time.
+2026-10-19T19:44:00.772940+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connected -> NetworkFailure ) peer( Primary -> Unknown )
+2026-10-19T19:44:00.772962+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( UpToDate -> Consistent )
+2026-10-19T19:44:00.773112+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( UpToDate -> DUnknown ) repl( Established -> Off )
+2026-10-19T19:44:00.773129+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Enabling local AL-updates
+2026-10-19T19:44:00.778006+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T19:44:00.778093+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 0)
+2026-10-19T19:44:00.783832+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 2838778605: 1->all empty
+2026-10-19T19:44:00.783944+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 2838778605 (3ms)
+2026-10-19T19:44:00.791375+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: disk( Consistent -> UpToDate ) [lost-peer]
+2026-10-19T19:44:00.797605+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T19:44:00.800634+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T19:44:00.813975+00:00 rdqm-b1 disconnected[135048]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T19:44:00.814472+00:00 rdqm-b1 disconnected[135048]: rdqmhandler(rdqmapp.dr) NetworkFailure
+2026-10-19T19:44:00.895228+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:44:00.895409+00:00 rdqm-b1 disconnected[135048]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T19:44:00.901602+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T19:44:00.906343+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( NetworkFailure -> Unconnected ) [disconnected]
+2026-10-19T19:44:00.906450+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Restarting receiver thread
+2026-10-19T19:44:00.912089+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T19:44:00.922437+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T19:44:00.925698+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 107 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-43.bz2
+2026-10-19T19:44:00.933398+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 107 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-43.bz2): Complete
+2026-10-19T19:44:00.933618+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:44:01.291315+00:00 rdqm-b1 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T19:44:01.296242+00:00 rdqm-b1 anacron[69254]: Job `cron.daily' started
+2026-10-19T19:44:01.304118+00:00 rdqm-b1 anacron[69254]: Job `cron.daily' terminated
+2026-10-19T19:44:05.804867+00:00 rdqm-b1 pacemaker-attrd[23840]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T19:44:05.812506+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:44:05.833125+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T19:44:05.837585+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 108 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-44.bz2
+2026-10-19T19:44:05.844751+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 108 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-44.bz2): Complete
+2026-10-19T19:44:05.844793+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:44:39.176034+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:44:39.197238+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T19:44:39.201132+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_fs_rdqmapp            (                        rdqm-b1 )
+2026-10-19T19:44:39.201286+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                        rdqm-b1 )
+2026-10-19T19:44:39.201351+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      rdqmapp                 (                        rdqm-b1 )
+2026-10-19T19:44:39.201417+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Promote    p_drbd_dr_rdqmapp:0     ( Unpromoted -> Promoted rdqm-b1 )
+2026-10-19T19:44:39.201454+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_ip_rdqmapp            (                        rdqm-b1 )
+2026-10-19T19:44:39.202945+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 109 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-45.bz2
+2026-10-19T19:44:39.219245+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T19:44:39.275439+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:39.278630+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of promote operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T19:44:39.345591+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 636713085: 1->all role( Primary )
+2026-10-19T19:44:39.345673+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 636713085 (3ms)
+2026-10-19T19:44:39.350036+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: role( Secondary -> Primary ) [primary]
+2026-10-19T19:44:39.361243+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of promote operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:39.364299+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T19:44:39.441375+00:00 rdqm-b1 pacemaker-attrd[23840]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10000
+2026-10-19T19:44:39.455115+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 109 aborted by status-1-master-p_drbd_dr_rdqmapp doing modify master-p_drbd_dr_rdqmapp=10000: Transient attribute change
+2026-10-19T19:44:39.459334+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:39.462292+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 109 (Complete=10, Pending=0, Fired=0, Skipped=2, Incomplete=7, Source=/var/lib/pacemaker/pengine/pe-warn-45.bz2): Stopped
+2026-10-19T19:44:39.481912+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T19:44:39.484789+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_fs_rdqmapp            (                        rdqm-b1 )
+2026-10-19T19:44:39.484826+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_rdqmx_rdqmapp         (                        rdqm-b1 )
+2026-10-19T19:44:39.484835+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      rdqmapp                 (                        rdqm-b1 )
+2026-10-19T19:44:39.484860+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Start      p_ip_rdqmapp            (                        rdqm-b1 )
+2026-10-19T19:44:39.485521+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 110 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-46.bz2
+2026-10-19T19:44:39.493939+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of monitor operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T19:44:39.617262+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of start operation for p_fs_rdqmapp on rdqm-b1
+2026-10-19T19:44:39.618945+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of monitor operation for p_drbd_dr_rdqmapp on rdqm-b1: Promoted
+2026-10-19T19:44:39.749358+00:00 rdqm-b1 Filesystem(p_fs_rdqmapp)[136976]: INFO: Running start for /dev/drbd/by-res/rdqmapp.dr/0 on /var/mqm/vols/rdqmapp
+2026-10-19T19:44:39.954647+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: new current UUID: 68D15C6871003A91 weak: FFFFFFFFFFFFFFFD
+2026-10-19T19:44:40.055664+00:00 rdqm-b1 kernel: EXT4-fs (drbd7001): recovery complete
+2026-10-19T19:44:40.061635+00:00 rdqm-b1 kernel: EXT4-fs (drbd7001): mounted filesystem d7d9819e-91bf-4fd0-acdc-43230bf5dc93 r/w with ordered data mode. Quota mode: none.
+2026-10-19T19:44:40.065907+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of start operation for p_fs_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:40.077628+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of start operation for p_rdqmx_rdqmapp on rdqm-b1
+2026-10-19T19:44:40.089925+00:00 rdqm-b1 rdqmx[137062]: rdqmx: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:44:40.089953+00:00 rdqm-b1 rdqmx[137062]: rdqmx: Calling real main function
+2026-10-19T19:44:40.098615+00:00 rdqm-b1 rdqmx[137062]: start(rdqmapp)
+2026-10-19T19:44:40.153741+00:00 rdqm-b1 rdqmx[137062]: start(rdqmapp) rc(0)
+2026-10-19T19:44:40.157694+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of start operation for p_rdqmx_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:40.227656+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of start operation for p_ip_rdqmapp on rdqm-b1
+2026-10-19T19:44:40.370372+00:00 rdqm-b1 IPaddr2(p_ip_rdqmapp)[137244]: INFO: Adding inet address 10.10.2.100/24 with broadcast address 10.10.2.255 to device enp6s0
+2026-10-19T19:44:40.381156+00:00 rdqm-b1 IPaddr2(p_ip_rdqmapp)[137250]: INFO: Bringing device enp6s0 up
+2026-10-19T19:44:40.406793+00:00 rdqm-b1 IPaddr2(p_ip_rdqmapp)[137270]: INFO: /usr/libexec/heartbeat/send_arp  -i 200 -r 5 -p /run/resource-agents/send_arp-10.10.2.100 enp6s0 10.10.2.100 auto not_used not_used
+2026-10-19T19:44:40.411824+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of start operation for p_ip_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:40.417709+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of monitor operation for p_ip_rdqmapp on rdqm-b1
+2026-10-19T19:44:40.420817+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of start operation for rdqmapp on rdqm-b1
+2026-10-19T19:44:40.431037+00:00 rdqm-b1 rdqm[137279]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:44:40.431596+00:00 rdqm-b1 rdqm[137279]: rdqm: Calling real main function
+2026-10-19T19:44:40.457137+00:00 rdqm-b1 rdqm[137279]: start(rdqmapp)
+2026-10-19T19:44:40.461112+00:00 rdqm-b1 ibm-mq[137279]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/qmgr/rdqmapp' is 8.96% used, 2686MB free.
+2026-10-19T19:44:40.462237+00:00 rdqm-b1 ibm-mq[137279]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/log/rdqmapp' is 8.42% used, 2702MB free.
+2026-10-19T19:44:40.481298+00:00 rdqm-b1 ibm-mq[137279]: AMQ5657W: The system resource RLIMIT_NOFILE is set at an unusually low level for IBM MQ.
+2026-10-19T19:44:40.588770+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of monitor operation for p_ip_rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:40.706005+00:00 rdqm-b1 ibm-mq[137409]: AMQ5051I: The queue manager task 'LOGGER-IO' has started.
+2026-10-19T19:44:40.729381+00:00 rdqm-b1 ibm-mq[137327]: AMQ7374I: Log replay for the queue manager has started at Log Sequence Number (LSN) '<0:0:233:40478> 0x0000000000e99e1e'.
+2026-10-19T19:44:40.743607+00:00 rdqm-b1 ibm-mq[137327]: AMQ7229I: 1441 log records accessed on queue manager 'RDQMAPP' during the log replay phase.
+2026-10-19T19:44:40.746135+00:00 rdqm-b1 ibm-mq[137327]: AMQ7230I: Log replay for queue manager 'RDQMAPP' complete.
+2026-10-19T19:44:40.747419+00:00 rdqm-b1 ibm-mq[137409]: AMQ5051I: The queue manager task 'CHECKPOINT' has started.
+2026-10-19T19:44:40.754174+00:00 rdqm-b1 ibm-mq[137327]: AMQ7231I: 0 log records accessed on queue manager 'RDQMAPP' during the recovery phase.
+2026-10-19T19:44:40.754516+00:00 rdqm-b1 ibm-mq[137327]: AMQ7232I: Transaction manager state recovered for queue manager 'RDQMAPP'.
+2026-10-19T19:44:40.804471+00:00 rdqm-b1 ibm-mq[137327]: AMQ7233I: 0 out of 0 in-flight transactions resolved for queue manager 'RDQMAPP'.
+2026-10-19T19:44:40.838572+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'ERROR-LOG' has started.
+2026-10-19T19:44:40.839270+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.842656+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.842741+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.843359+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.843434+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.843486+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.844822+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.844910+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T19:44:40.896807+00:00 rdqm-b1 ibm-mq[137425]: AMQ9410I: Repository manager started.
+2026-10-19T19:44:40.906837+00:00 rdqm-b1 ibm-mq[137425]: AMQ8003I: IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+2026-10-19T19:44:40.908155+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'DUR-SUBS-MGR' has started.
+2026-10-19T19:44:40.913501+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'TOPIC-TREE' has started.
+2026-10-19T19:44:40.915716+00:00 rdqm-b1 ibm-mq[137406]: AMQ5024I: The command server has started. ProcessId(137451).
+2026-10-19T19:44:40.918013+00:00 rdqm-b1 ibm-mq[137406]: AMQ5022I: The channel initiator has started. ProcessId(137452).
+2026-10-19T19:44:40.928289+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'RESOURCE_MONITOR' has started.
+2026-10-19T19:44:40.929842+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'ASYNCQ' has started.
+2026-10-19T19:44:40.929942+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'ACTVTRC' has started.
+2026-10-19T19:44:40.930003+00:00 rdqm-b1 ibm-mq[137425]: AMQ5052I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has started.
+2026-10-19T19:44:40.930050+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'DEFERRED_DELIVERY' has started.
+2026-10-19T19:44:40.930154+00:00 rdqm-b1 ibm-mq[137425]: AMQ5052I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has started.
+2026-10-19T19:44:40.930208+00:00 rdqm-b1 ibm-mq[137425]: AMQ5052I: The queue manager task 'QPUBSUB-CTRLR' has started.
+2026-10-19T19:44:40.930252+00:00 rdqm-b1 ibm-mq[137425]: AMQ5052I: The queue manager task 'PUBSUB-DAEMON' has started.
+2026-10-19T19:44:40.930297+00:00 rdqm-b1 ibm-mq[137425]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Controller' has started.
+2026-10-19T19:44:40.930342+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'Q-DELETION' has started.
+2026-10-19T19:44:40.930389+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'EXPIRER' has started.
+2026-10-19T19:44:40.930435+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'DEFERRED-MSG' has started.
+2026-10-19T19:44:40.930486+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'MULTICAST' has started.
+2026-10-19T19:44:40.930565+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'PRESERVED-Q' has started.
+2026-10-19T19:44:40.938823+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'STATISTICS' has started.
+2026-10-19T19:44:40.940048+00:00 rdqm-b1 ibm-mq[137425]: AMQ5037I: The queue manager task 'MARKINTSCAN' has started.
+2026-10-19T19:44:40.947108+00:00 rdqm-b1 ibm-mq[137425]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Command Task' has started.
+2026-10-19T19:44:40.949177+00:00 rdqm-b1 ibm-mq[137425]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+2026-10-19T19:44:40.949655+00:00 rdqm-b1 ibm-mq[137425]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Publish Task' has started.
+2026-10-19T19:44:40.973119+00:00 rdqm-b1 ibm-mq[137279]: AMQ9722W: Plain text communication is enabled.
+2026-10-19T19:44:40.978916+00:00 rdqm-b1 rdqm[137279]: start(rdqmapp) rc(0)
+2026-10-19T19:44:40.982377+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of start operation for rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:40.992027+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of monitor operation for rdqmapp on rdqm-b1
+2026-10-19T19:44:40.994187+00:00 rdqm-b1 ibm-mq[137406]: AMQ5026I: The listener 'L1414' has started. ProcessId(137488).
+2026-10-19T19:44:41.007515+00:00 rdqm-b1 ibm-mq[137406]: AMQ5028I: The Server 'MQ.EVENT.MONITOR' has started. ProcessId(137493).
+2026-10-19T19:44:41.031295+00:00 rdqm-b1 ibm-mq[137406]: AMQ5029I: The Server 'MQ.EVENT.MONITOR' has ended. ProcessId(137493).
+2026-10-19T19:44:41.036244+00:00 rdqm-b1 rdqm[137491]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:44:41.036619+00:00 rdqm-b1 rdqm[137491]: rdqm: Calling real main function
+2026-10-19T19:44:41.041297+00:00 rdqm-b1 ibm-mq[137425]: AMQ8024I: IBM MQ channel initiator started.
+2026-10-19T19:44:41.046324+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of monitor operation for rdqmapp on rdqm-b1: OK
+2026-10-19T19:44:41.049993+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 110 (Complete=7, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-46.bz2): Complete
+2026-10-19T19:44:41.050282+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:44:41.065132+00:00 rdqm-b1 ibm-mq[137425]: AMQ5051I: The queue manager task 'IQM-COMMS-MANAGER' has started.
+2026-10-19T19:44:41.066641+00:00 rdqm-b1 ibm-mq[137425]: AMQ5806I: Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+2026-10-19T19:44:44.426228+00:00 rdqm-b1 IPaddr2(p_ip_rdqmapp)[137597]: INFO: ARPING 10.10.2.100 from 10.10.2.100 enp6s0
+                                                                        Sent 5 probes (5 broadcast(s))
+                                                                        Received 0 response(s)
+2026-10-19T19:44:46.085973+00:00 rdqm-b1 dmeventd[49603]: dmeventd was idle for 3600 second(s), exiting.
+2026-10-19T19:44:46.086018+00:00 rdqm-b1 dmeventd[49603]: dmeventd shutting down.
+2026-10-19T19:44:46.089023+00:00 rdqm-b1 systemd[1]: dm-event.service: Deactivated successfully.
+2026-10-19T19:44:54.572313+00:00 rdqm-b1 NetworkManager[3647]: <info>  [1792439094.5718] dhcp4 (enp5s0): state changed new lease, address=192.168.121.233
+2026-10-19T19:44:54.583793+00:00 rdqm-b1 systemd[1]: Starting NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service...
+2026-10-19T19:44:54.601117+00:00 rdqm-b1 systemd[1]: Started NetworkManager-dispatcher.service - Network Manager Script Dispatcher Service.
+2026-10-19T19:45:00.629078+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:00.630087+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:04.635927+00:00 rdqm-b1 systemd[1]: NetworkManager-dispatcher.service: Deactivated successfully.
+2026-10-19T19:45:05.978463+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:05.979423+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:11.323428+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:11.323685+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:11.746829+00:00 rdqm-b1 rdqm[138753]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:45:11.746841+00:00 rdqm-b1 rdqm[138753]: rdqm: Calling real main function
+2026-10-19T19:45:16.699797+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:16.700102+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:22.047398+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:22.048348+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:27.399284+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:27.399864+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:27.401794+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:45:32.780745+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:32.782759+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:38.140389+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:38.141849+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:41.747488+00:00 rdqm-b1 rdqm[139399]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:45:41.747521+00:00 rdqm-b1 rdqm[139399]: rdqm: Calling real main function
+2026-10-19T19:45:43.489821+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:43.491737+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:48.910289+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:48.910875+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:45:49.130648+00:00 rdqm-b1 auditd[754]: Audit daemon rotating log files
+2026-10-19T19:45:54.264464+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:45:54.265246+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:46:11.747358+00:00 rdqm-b1 rdqm[140015]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:46:11.747390+00:00 rdqm-b1 rdqm[140015]: rdqm: Calling real main function
+2026-10-19T19:46:13.632136+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:46:13.632293+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:46:33.986367+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:46:33.986610+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:46:41.748503+00:00 rdqm-b1 rdqm[140975]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:46:41.748569+00:00 rdqm-b1 rdqm[140975]: rdqm: Calling real main function
+2026-10-19T19:46:54.607258+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:46:54.608311+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:47:11.747256+00:00 rdqm-b1 rdqm[141997]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:47:11.747276+00:00 rdqm-b1 rdqm[141997]: rdqm: Calling real main function
+2026-10-19T19:47:14.970308+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:47:14.971325+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:47:35.319154+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:47:35.319664+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:47:41.746273+00:00 rdqm-b1 rdqm[142699]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:47:41.746287+00:00 rdqm-b1 rdqm[142699]: rdqm: Calling real main function
+2026-10-19T19:47:54.666368+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:47:54.666480+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:48:11.748276+00:00 rdqm-b1 rdqm[143714]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:48:11.748314+00:00 rdqm-b1 rdqm[143714]: rdqm: Calling real main function
+2026-10-19T19:48:14.994836+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:48:14.995745+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:48:35.404624+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:48:35.408770+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:48:41.749112+00:00 rdqm-b1 rdqm[144460]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:48:41.749949+00:00 rdqm-b1 rdqm[144460]: rdqm: Calling real main function
+2026-10-19T19:48:55.738157+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:48:55.739188+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:49:11.747233+00:00 rdqm-b1 rdqm[145483]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:49:11.747270+00:00 rdqm-b1 rdqm[145483]: rdqm: Calling real main function
+2026-10-19T19:49:16.106407+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:49:16.107733+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:49:35.456267+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:49:35.456995+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:49:41.748386+00:00 rdqm-b1 rdqm[146214]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:49:41.748987+00:00 rdqm-b1 rdqm[146214]: rdqm: Calling real main function
+2026-10-19T19:49:55.826622+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:49:55.827468+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:50:11.746907+00:00 rdqm-b1 rdqm[146933]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:50:11.746960+00:00 rdqm-b1 rdqm[146933]: rdqm: Calling real main function
+2026-10-19T19:50:16.173394+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:50:16.173521+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:50:35.515705+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:50:35.515826+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:50:41.746644+00:00 rdqm-b1 rdqm[147631]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:50:41.747298+00:00 rdqm-b1 rdqm[147631]: rdqm: Calling real main function
+2026-10-19T19:50:55.900405+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:50:55.901642+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:51:11.746792+00:00 rdqm-b1 rdqm[148374]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:51:11.746838+00:00 rdqm-b1 rdqm[148374]: rdqm: Calling real main function
+2026-10-19T19:51:16.252373+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:51:16.255487+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:51:35.602951+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:51:35.603501+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:51:41.746461+00:00 rdqm-b1 rdqm[149081]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:51:41.746492+00:00 rdqm-b1 rdqm[149081]: rdqm: Calling real main function
+2026-10-19T19:51:55.973982+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:51:55.974849+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:52:11.746207+00:00 rdqm-b1 rdqm[150145]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:52:11.746588+00:00 rdqm-b1 rdqm[150145]: rdqm: Calling real main function
+2026-10-19T19:52:16.324300+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:52:16.325729+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:52:18.040286+00:00 rdqm-b1 tlshd[150236]: Querying the handshake service
+2026-10-19T19:52:18.040400+00:00 rdqm-b1 tlshd[150236]: Parsing a valid netlink message
+2026-10-19T19:52:18.040434+00:00 rdqm-b1 tlshd[150236]: No peer identities found
+2026-10-19T19:52:18.040437+00:00 rdqm-b1 tlshd[150236]: No certificates found
+2026-10-19T19:52:18.040467+00:00 rdqm-b1 tlshd[150236]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T19:52:18.040584+00:00 rdqm-b1 tlshd[150236]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T19:52:18.040827+00:00 rdqm-b1 tlshd[150236]: System trust: Loaded 1 certificate(s).
+2026-10-19T19:52:18.040982+00:00 rdqm-b1 tlshd[150236]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T19:52:18.041179+00:00 rdqm-b1 tlshd[150236]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T19:52:18.041241+00:00 rdqm-b1 tlshd[150237]: Querying the handshake service
+2026-10-19T19:52:18.041315+00:00 rdqm-b1 tlshd[150237]: Parsing a valid netlink message
+2026-10-19T19:52:18.041343+00:00 rdqm-b1 tlshd[150237]: No peer identities found
+2026-10-19T19:52:18.041345+00:00 rdqm-b1 tlshd[150237]: No certificates found
+2026-10-19T19:52:18.041367+00:00 rdqm-b1 tlshd[150237]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T19:52:18.041394+00:00 rdqm-b1 tlshd[150237]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T19:52:18.041768+00:00 rdqm-b1 tlshd[150236]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T19:52:18.041783+00:00 rdqm-b1 tlshd[150237]: System trust: Loaded 1 certificate(s).
+2026-10-19T19:52:18.041946+00:00 rdqm-b1 tlshd[150237]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T19:52:18.042152+00:00 rdqm-b1 tlshd[150237]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T19:52:18.058266+00:00 rdqm-b1 tlshd[150237]: Server's trusted authorities:
+2026-10-19T19:52:18.058454+00:00 rdqm-b1 tlshd[150237]:    [0]: CN=RDQM Replication CA
+2026-10-19T19:52:18.058497+00:00 rdqm-b1 tlshd[150237]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T19:52:18.059232+00:00 rdqm-b1 tlshd[150237]: The peer offered 1 certificate(s).
+2026-10-19T19:52:18.070904+00:00 rdqm-b1 tlshd[150236]: The peer offered 1 certificate(s).
+2026-10-19T19:52:18.071174+00:00 rdqm-b1 tlshd[150236]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T19:52:18.071370+00:00 rdqm-b1 tlshd[150236]: Peer certificate: subject `CN=rdqm-a1', issuer `CN=RDQM Replication CA', serial 0x3b9790cbf3c7ac616f8aa3fc92bdf52277ad29fa, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="5vS9caZUnmywbdY9f31Wd3ZpdP2DhhRa/RpOyg80iUY="
+2026-10-19T19:52:18.071519+00:00 rdqm-b1 tlshd[150236]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T19:52:18.072178+00:00 rdqm-b1 tlshd[150237]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T19:52:18.072503+00:00 rdqm-b1 tlshd[150237]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T19:52:18.080397+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T19:52:18.080487+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T19:52:18.091795+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 326472991: 0->1 role( Primary ) conn( Connected )
+2026-10-19T19:52:18.091890+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: State change failed: Multiple primaries not allowed by config (-1)
+2026-10-19T19:52:18.111243+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T19:52:18.111339+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 68D15C6871003A91:F6221B2ADA4233A8:029C3D5D470B2B64:6AD1ED8807C3DD0A bits:960 flags:120
+2026-10-19T19:52:18.111355+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer F2C51ADBCE8F9A7E:F6221B2ADA4233A9:21A467E81144888E:029C3D5D470B2B64 bits:20908 flags:22
+2026-10-19T19:52:18.111369+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=split-brain-auto-recover by rule=bitmap-both
+2026-10-19T19:52:18.117521+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm initial-split-brain
+2026-10-19T19:52:18.126526+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm initial-split-brain exit code 0
+2026-10-19T19:52:18.126653+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Split-Brain detected but unresolved, dropping connection!
+2026-10-19T19:52:18.126671+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm split-brain
+2026-10-19T19:52:18.134617+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm split-brain exit code 0
+2026-10-19T19:52:18.140611+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Aborting remote state change 326472991
+2026-10-19T19:52:18.143883+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connecting -> Disconnecting ) [receive-disconnect]
+2026-10-19T19:52:18.143959+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating sender thread
+2026-10-19T19:52:18.146005+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Starting sender thread (peer-node-id 0)
+2026-10-19T19:52:18.162104+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Connection closed
+2026-10-19T19:52:18.162205+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected
+2026-10-19T19:52:18.190739+00:00 rdqm-b1 disconnected[150243]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected
+2026-10-19T19:52:18.190747+00:00 rdqm-b1 disconnected[150243]: rdqmhandler(rdqmapp.dr) Disconnecting
+2026-10-19T19:52:18.250038+00:00 rdqm-b1 disconnected[150243]: rdqmhandler(rdqmapp.dr) /var/mqm/rdqm/disconnected rc(0)
+2026-10-19T19:52:18.256816+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: helper command: /sbin/drbdadm disconnected exit code 0
+2026-10-19T19:52:18.256901+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Disconnecting -> StandAlone ) [disconnected]
+2026-10-19T19:52:18.256916+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Terminating receiver thread
+2026-10-19T19:52:35.682749+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:52:35.682868+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:52:41.747231+00:00 rdqm-b1 rdqm[150865]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:52:41.747260+00:00 rdqm-b1 rdqm[150865]: rdqm: Calling real main function
+2026-10-19T19:52:56.040427+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:52:56.040609+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:53:10.435724+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:53:10.441950+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T19:53:11.759349+00:00 rdqm-b1 rdqm[151836]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:53:11.761485+00:00 rdqm-b1 rdqm[151836]: rdqm: Calling real main function
+2026-10-19T19:53:15.350343+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:53:15.350486+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:53:35.734710+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:53:35.735653+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:53:41.748455+00:00 rdqm-b1 rdqm[152698]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:53:41.749131+00:00 rdqm-b1 rdqm[152698]: rdqm: Calling real main function
+2026-10-19T19:53:56.158029+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:53:56.164509+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:54:11.749149+00:00 rdqm-b1 rdqm[153392]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:54:11.749184+00:00 rdqm-b1 rdqm[153392]: rdqm: Calling real main function
+2026-10-19T19:54:15.512053+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:54:15.512726+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:54:35.860147+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:54:35.860265+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:54:41.746992+00:00 rdqm-b1 rdqm[154137]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:54:41.747437+00:00 rdqm-b1 rdqm[154137]: rdqm: Calling real main function
+2026-10-19T19:54:56.202328+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:54:56.202868+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:55:11.747443+00:00 rdqm-b1 rdqm[154844]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:55:11.748065+00:00 rdqm-b1 rdqm[154844]: rdqm: Calling real main function
+2026-10-19T19:55:15.577408+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:55:15.577890+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:55:35.990880+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:55:35.991012+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:55:41.746774+00:00 rdqm-b1 rdqm[155914]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:55:41.746804+00:00 rdqm-b1 rdqm[155914]: rdqm: Calling real main function
+2026-10-19T19:55:56.346394+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:55:56.348078+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:56:11.746086+00:00 rdqm-b1 rdqm[156618]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:56:11.746105+00:00 rdqm-b1 rdqm[156618]: rdqm: Calling real main function
+2026-10-19T19:56:16.678432+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:56:16.679817+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:56:37.053780+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:56:37.054638+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:56:41.747482+00:00 rdqm-b1 rdqm[157316]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:56:41.747516+00:00 rdqm-b1 rdqm[157316]: rdqm: Calling real main function
+2026-10-19T19:56:56.386374+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:56:56.387644+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:57:11.748667+00:00 rdqm-b1 rdqm[158058]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:57:11.749398+00:00 rdqm-b1 rdqm[158058]: rdqm: Calling real main function
+2026-10-19T19:57:16.740030+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:57:16.741854+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:57:37.067412+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:57:37.067527+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:57:41.746953+00:00 rdqm-b1 rdqm[158768]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:57:41.746966+00:00 rdqm-b1 rdqm[158768]: rdqm: Calling real main function
+2026-10-19T19:57:56.430358+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:57:56.431158+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:58:11.747371+00:00 rdqm-b1 rdqm[159517]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:58:11.747409+00:00 rdqm-b1 rdqm[159517]: rdqm: Calling real main function
+2026-10-19T19:58:16.869139+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:58:16.870590+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:58:37.222483+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:58:37.224436+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:58:41.746583+00:00 rdqm-b1 rdqm[160543]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:58:41.746607+00:00 rdqm-b1 rdqm[160543]: rdqm: Calling real main function
+2026-10-19T19:58:56.569494+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:58:56.571041+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:59:11.747800+00:00 rdqm-b1 rdqm[161291]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:59:11.748362+00:00 rdqm-b1 rdqm[161291]: rdqm: Calling real main function
+2026-10-19T19:59:16.943058+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:59:16.943225+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:59:37.278233+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:59:37.278991+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T19:59:41.739829+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T19:59:41.750352+00:00 rdqm-b1 rdqm[162007]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T19:59:41.750618+00:00 rdqm-b1 rdqm[162007]: rdqm: Calling real main function
+2026-10-19T19:59:41.755929+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T19:59:41.759679+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 111 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-47.bz2
+2026-10-19T19:59:41.775840+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 111 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-47.bz2): Complete
+2026-10-19T19:59:41.775884+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T19:59:56.627910+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T19:59:56.628524+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:00:11.748185+00:00 rdqm-b1 rdqm[162690]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:00:11.749059+00:00 rdqm-b1 rdqm[162690]: rdqm: Calling real main function
+2026-10-19T20:00:16.954482+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:00:16.954834+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:00:37.320110+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:00:37.320894+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:00:41.749167+00:00 rdqm-b1 rdqm[163448]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:00:41.749200+00:00 rdqm-b1 rdqm[163448]: rdqm: Calling real main function
+2026-10-19T20:00:56.730467+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:00:56.731410+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:01:01.332800+00:00 rdqm-b1 CROND[163825]: (root) CMD (run-parts /etc/cron.hourly)
+2026-10-19T20:01:01.343116+00:00 rdqm-b1 run-parts[163828]: (/etc/cron.hourly) starting 0anacron
+2026-10-19T20:01:01.352718+00:00 rdqm-b1 run-parts[163834]: (/etc/cron.hourly) finished 0anacron
+2026-10-19T20:01:01.353885+00:00 rdqm-b1 CROND[163824]: (root) CMDEND (run-parts /etc/cron.hourly)
+2026-10-19T20:01:11.747257+00:00 rdqm-b1 rdqm[164158]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:01:11.748068+00:00 rdqm-b1 rdqm[164158]: rdqm: Calling real main function
+2026-10-19T20:01:17.076437+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:01:17.076799+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:01:36.420841+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:01:36.421737+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:01:41.748692+00:00 rdqm-b1 rdqm[164907]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:01:41.748711+00:00 rdqm-b1 rdqm[164907]: rdqm: Calling real main function
+2026-10-19T20:01:56.782670+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:01:56.782814+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:02:11.746982+00:00 rdqm-b1 rdqm[165618]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:02:11.747002+00:00 rdqm-b1 rdqm[165618]: rdqm: Calling real main function
+2026-10-19T20:02:14.261024+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:02:14.263073+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:02:17.126312+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:02:17.126441+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:02:36.551258+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:02:36.551763+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:02:39.399718+00:00 rdqm-b1 su[166567]: (to mqm) root on none
+2026-10-19T20:02:39.423505+00:00 rdqm-b1 systemd[1]: Starting systemd-hostnamed.service - Hostname Service...
+2026-10-19T20:02:39.483162+00:00 rdqm-b1 systemd[1]: Started systemd-hostnamed.service - Hostname Service.
+2026-10-19T20:02:39.546060+00:00 rdqm-b1 su[166600]: (to mqm) root on none
+2026-10-19T20:02:41.749835+00:00 rdqm-b1 rdqm[166802]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:02:41.749857+00:00 rdqm-b1 rdqm[166802]: rdqm: Calling real main function
+2026-10-19T20:02:56.894821+00:00 rdqm-b1 ibm-mq[137425]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:02:56.894982+00:00 rdqm-b1 ibm-mq[137425]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:03:03.767905+00:00 rdqm-b1 su[167247]: (to mqm) root on none
+2026-10-19T20:03:06.225055+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:06.257254+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:06.262253+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 112 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-48.bz2
+2026-10-19T20:03:06.280780+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 112 (Complete=1, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-48.bz2): Complete
+2026-10-19T20:03:06.280837+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:06.896355+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:06.911001+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:06.914244+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 113 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-49.bz2
+2026-10-19T20:03:06.922974+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 113 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-49.bz2): Complete
+2026-10-19T20:03:06.923013+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:07.544044+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:07.563134+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:07.570015+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 114 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-50.bz2
+2026-10-19T20:03:07.582886+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 114 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-50.bz2): Complete
+2026-10-19T20:03:07.582924+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:08.163051+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:08.182745+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:08.186656+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 115 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-51.bz2
+2026-10-19T20:03:08.193886+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 115 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-51.bz2): Complete
+2026-10-19T20:03:08.193927+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:08.347183+00:00 rdqm-b1 ibm-mq[137425]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has ended.
+2026-10-19T20:03:08.347836+00:00 rdqm-b1 ibm-mq[137425]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Command Task' has ended.
+2026-10-19T20:03:08.348363+00:00 rdqm-b1 ibm-mq[137425]: AMQ7030I: Quiesce request accepted. The queue manager will stop when all outstanding work is complete.
+2026-10-19T20:03:08.349702+00:00 rdqm-b1 ibm-mq[137425]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Publish Task' has ended.
+2026-10-19T20:03:08.349795+00:00 rdqm-b1 ibm-mq[137406]: AMQ5025I: The command server has ended. ProcessId(137451).
+2026-10-19T20:03:08.351195+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'IQM-COMMS-MANAGER' has ended.
+2026-10-19T20:03:08.351404+00:00 rdqm-b1 ibm-mq[137425]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Controller' has ended.
+2026-10-19T20:03:08.351747+00:00 rdqm-b1 ibm-mq[137425]: AMQ9542W: Queue manager is ending.
+2026-10-19T20:03:08.352657+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+2026-10-19T20:03:08.354114+00:00 rdqm-b1 ibm-mq[137406]: AMQ5023I: The channel initiator has ended. ProcessId(137452).
+2026-10-19T20:03:08.354266+00:00 rdqm-b1 ibm-mq[137406]: AMQ5027I: The listener 'L1414' has ended. ProcessId(137488).
+2026-10-19T20:03:15.583885+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T20:03:15.584993+00:00 rdqm-b1 ibm-mq[137425]: AMQ5807I: Queued Publish/Subscribe Daemon for queue manager RDQMAPP ended.
+2026-10-19T20:03:15.585072+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T20:03:15.585122+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T20:03:15.585171+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T20:03:15.585216+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T20:03:15.586050+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T20:03:15.586173+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T20:03:15.586865+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T20:03:15.587221+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T20:03:15.587284+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T20:03:15.587329+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T20:03:15.587928+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T20:03:15.588268+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T20:03:15.588318+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T20:03:15.588361+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T20:03:15.590207+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T20:03:15.590488+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DEFERRED_DELIVERY' has ended.
+2026-10-19T20:03:15.590722+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T20:03:15.591321+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'STATISTICS' has ended.
+2026-10-19T20:03:15.591837+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T20:03:15.591889+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T20:03:15.591933+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T20:03:15.592031+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T20:03:15.592080+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T20:03:15.602007+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T20:03:15.602347+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T20:03:15.602621+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T20:03:15.603000+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T20:03:15.603105+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T20:03:15.603159+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T20:03:15.603231+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DEFERRED_DELIVERY' has ended.
+2026-10-19T20:03:15.603278+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T20:03:15.604820+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'STATISTICS' has ended.
+2026-10-19T20:03:15.604885+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T20:03:15.604931+00:00 rdqm-b1 ibm-mq[137425]: AMQ9411I: Repository manager ended normally.
+2026-10-19T20:03:15.608844+00:00 rdqm-b1 ibm-mq[137425]: AMQ5041I: The queue manager task 'ERROR-LOG' has ended.
+2026-10-19T20:03:15.614409+00:00 rdqm-b1 ibm-mq[137409]: AMQ5041I: The queue manager task 'CHECKPOINT' has ended.
+2026-10-19T20:03:15.853528+00:00 rdqm-b1 ibm-mq[137409]: AMQ5041I: The queue manager task 'LOGGER-IO' has ended.
+2026-10-19T20:03:15.864341+00:00 rdqm-b1 ibm-mq[137327]: AMQ8004I: IBM MQ queue manager 'RDQMAPP' ended.
+2026-10-19T20:03:23.046740+00:00 rdqm-b1 ibm-mq[168086]: AMQ3772I: Queue manager 'RDQMAPP' has been made the DR primary on this node.
+2026-10-19T20:03:23.060661+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( StandAlone -> Unconnected ) [connect]
+2026-10-19T20:03:23.060911+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Starting receiver thread (peer-node-id 0)
+2026-10-19T20:03:23.066732+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Unconnected -> Connecting ) [connecting]
+2026-10-19T20:03:23.576443+00:00 rdqm-b1 tlshd[168100]: Querying the handshake service
+2026-10-19T20:03:23.576579+00:00 rdqm-b1 tlshd[168100]: Parsing a valid netlink message
+2026-10-19T20:03:23.576628+00:00 rdqm-b1 tlshd[168100]: No peer identities found
+2026-10-19T20:03:23.576634+00:00 rdqm-b1 tlshd[168100]: No certificates found
+2026-10-19T20:03:23.576674+00:00 rdqm-b1 tlshd[168100]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T20:03:23.576758+00:00 rdqm-b1 tlshd[168101]: Querying the handshake service
+2026-10-19T20:03:23.576786+00:00 rdqm-b1 tlshd[168100]: Server x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T20:03:23.576852+00:00 rdqm-b1 tlshd[168101]: Parsing a valid netlink message
+2026-10-19T20:03:23.576891+00:00 rdqm-b1 tlshd[168101]: No peer identities found
+2026-10-19T20:03:23.576895+00:00 rdqm-b1 tlshd[168101]: No certificates found
+2026-10-19T20:03:23.576923+00:00 rdqm-b1 tlshd[168101]: System config file: /etc/crypto-policies/back-ends/gnutls.config
+2026-10-19T20:03:23.577011+00:00 rdqm-b1 tlshd[168101]: Client x.509 truststore is /etc/drbd.d/rdqm-repl-ca.crt
+2026-10-19T20:03:23.577126+00:00 rdqm-b1 tlshd[168100]: System trust: Loaded 1 certificate(s).
+2026-10-19T20:03:23.577278+00:00 rdqm-b1 tlshd[168100]: Retrieved 1 x.509 server certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T20:03:23.577319+00:00 rdqm-b1 tlshd[168101]: System trust: Loaded 1 certificate(s).
+2026-10-19T20:03:23.577473+00:00 rdqm-b1 tlshd[168100]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T20:03:23.577823+00:00 rdqm-b1 tlshd[168101]: Retrieved 1 x.509 client certificate(s) from /etc/drbd.d/rdqm-b1.crt
+2026-10-19T20:03:23.578042+00:00 rdqm-b1 tlshd[168101]: Retrieved private key from /etc/drbd.d/rdqm-b1.key
+2026-10-19T20:03:23.578745+00:00 rdqm-b1 tlshd[168100]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T20:03:23.593793+00:00 rdqm-b1 tlshd[168101]: Server's trusted authorities:
+2026-10-19T20:03:23.593860+00:00 rdqm-b1 tlshd[168101]:    [0]: CN=RDQM Replication CA
+2026-10-19T20:03:23.593865+00:00 rdqm-b1 tlshd[168101]: tlshd_x509_retrieve_key_cb: Selecting x509.certificate from conf file
+2026-10-19T20:03:23.594857+00:00 rdqm-b1 tlshd[168101]: The peer offered 1 certificate(s).
+2026-10-19T20:03:23.618153+00:00 rdqm-b1 tlshd[168100]: The peer offered 1 certificate(s).
+2026-10-19T20:03:23.618329+00:00 rdqm-b1 tlshd[168100]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T20:03:23.618462+00:00 rdqm-b1 tlshd[168100]: Peer certificate: subject `CN=rdqm-a1', issuer `CN=RDQM Replication CA', serial 0x3b9790cbf3c7ac616f8aa3fc92bdf52277ad29fa, RSA key 4096 bits, signed using RSA-SHA256, activated `2026-07-07 20:59:34 UTC', expires `2028-07-06 20:59:34 UTC', pin-sha256="5vS9caZUnmywbdY9f31Wd3ZpdP2DhhRa/RpOyg80iUY="
+2026-10-19T20:03:23.618674+00:00 rdqm-b1 tlshd[168100]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T20:03:23.618711+00:00 rdqm-b1 tlshd[168101]: Session description: (TLS1.3)-(HYBRID-X25519-MLKEM768)-(RSA-PSS-RSAE-SHA256)-(AES-256-GCM)
+2026-10-19T20:03:23.618845+00:00 rdqm-b1 tlshd[168101]: Handshake with 'encrypted.remote' (10.99.0.31) succeeded
+2026-10-19T20:03:23.627971+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Handshake to peer 0 successful: Agreed network protocol version 124
+2026-10-19T20:03:23.628177+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Feature flags enabled on protocol level: 0x3ff TRIM THIN_RESYNC WRITE_SAME WRITE_ZEROES RESYNC_DAGTAG
+2026-10-19T20:03:23.637633+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 4022886356: 0->1 role( Secondary ) conn( Connected )
+2026-10-19T20:03:23.648444+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T20:03:23.648628+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 68D15C6871003A91:F6221B2ADA4233A8:029C3D5D470B2B64:6AD1ED8807C3DD0A bits:2032 flags:120
+2026-10-19T20:03:23.648661+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer F2C51ADBCE8F9A7E:F6221B2ADA4233A9:21A467E81144888E:029C3D5D470B2B64 bits:23844 flags:23
+2026-10-19T20:03:23.648684+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=split-brain-auto-recover by rule=bitmap-both
+2026-10-19T20:03:23.654399+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm initial-split-brain
+2026-10-19T20:03:23.662404+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: helper command: /sbin/drbdadm initial-split-brain exit code 0
+2026-10-19T20:03:23.662632+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Split-Brain detected, manually solved. Sync from this node
+2026-10-19T20:03:23.685236+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 4022886356 (primary_nodes=2)
+2026-10-19T20:03:23.685362+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: conn( Connecting -> Connected ) peer( Unknown -> Secondary ) [remote]
+2026-10-19T20:03:23.685390+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( DUnknown -> Consistent ) repl( Off -> WFBitMapS ) [remote]
+2026-10-19T20:03:23.691844+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: send bitmap stats [Bytes(packets)]: plain 0(0), RLE 145(1), total 145; compression: 99.9%
+2026-10-19T20:03:23.691917+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: drbd_sync_handshake:
+2026-10-19T20:03:23.701220+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: self 68D15C6871003A91:F6221B2ADA4233A8:029C3D5D470B2B64:6AD1ED8807C3DD0A bits:2032 flags:120
+2026-10-19T20:03:23.701310+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: peer F2C51ADBCE8F9A7E:F6221B2ADA4233A9:21A467E81144888E:029C3D5D470B2B64 bits:23844 flags:2
+2026-10-19T20:03:23.701324+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: uuid_compare()=split-brain-auto-recover by rule=bitmap-both
+2026-10-19T20:03:23.707174+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: Ignore Split-Brain, for now, at least one side unstable
+2026-10-19T20:03:23.707260+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Consistent -> Outdated ) repl( WFBitMapS -> Established ) [peer-state]
+2026-10-19T20:03:23.722480+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: receive bitmap stats [Bytes(packets)]: plain 0(0), RLE 86(1), total 86; compression: 100.0%
+2026-10-19T20:03:23.722645+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: unexpected repl_state (Established) in receive_bitmap
+2026-10-19T20:03:24.262921+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Outdated -> Inconsistent ) [peer-state]
+2026-10-19T20:03:25.595929+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: updated UUIDs 68D15C6871003A91:0000000000000000:F6221B2ADA4233A8:029C3D5D470B2B64
+2026-10-19T20:03:25.603264+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001 encrypted.remote: pdsk( Inconsistent -> UpToDate ) [peer-state]
+2026-10-19T20:03:33.811900+00:00 rdqm-b1 systemd[1]: systemd-hostnamed.service: Deactivated successfully.
+2026-10-19T20:03:50.775443+00:00 rdqm-b1 su[168919]: (to mqm) root on none
+2026-10-19T20:03:50.798831+00:00 rdqm-b1 systemd[1]: Starting systemd-hostnamed.service - Hostname Service...
+2026-10-19T20:03:50.867682+00:00 rdqm-b1 systemd[1]: Started systemd-hostnamed.service - Hostname Service.
+2026-10-19T20:03:50.912220+00:00 rdqm-b1 ibm-mq[168920]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/qmgr/rdqmapp' is 8.94% used, 2687MB free.
+2026-10-19T20:03:50.918744+00:00 rdqm-b1 ibm-mq[168920]: AMQ5782I: File system containing '/var/mqm/vols/rdqmapp/log/rdqmapp' is 8.40% used, 2703MB free.
+2026-10-19T20:03:51.186644+00:00 rdqm-b1 ibm-mq[168971]: AMQ5051I: The queue manager task 'LOGGER-IO' has started.
+2026-10-19T20:03:51.197741+00:00 rdqm-b1 ibm-mq[168954]: AMQ7374I: Log replay for the queue manager has started at Log Sequence Number (LSN) '<0:0:249:7955> 0x0000000000f91f13'.
+2026-10-19T20:03:51.198235+00:00 rdqm-b1 ibm-mq[168954]: AMQ7229I: 6 log records accessed on queue manager 'RDQMAPP' during the log replay phase.
+2026-10-19T20:03:51.198360+00:00 rdqm-b1 ibm-mq[168954]: AMQ7230I: Log replay for queue manager 'RDQMAPP' complete.
+2026-10-19T20:03:51.198876+00:00 rdqm-b1 ibm-mq[168971]: AMQ5051I: The queue manager task 'CHECKPOINT' has started.
+2026-10-19T20:03:51.205075+00:00 rdqm-b1 ibm-mq[168954]: AMQ7231I: 0 log records accessed on queue manager 'RDQMAPP' during the recovery phase.
+2026-10-19T20:03:51.205302+00:00 rdqm-b1 ibm-mq[168954]: AMQ7232I: Transaction manager state recovered for queue manager 'RDQMAPP'.
+2026-10-19T20:03:51.216230+00:00 rdqm-b1 ibm-mq[168954]: AMQ7233I: 0 out of 0 in-flight transactions resolved for queue manager 'RDQMAPP'.
+2026-10-19T20:03:51.243818+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'ERROR-LOG' has started.
+2026-10-19T20:03:51.246699+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.249613+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.249779+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.249839+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.249893+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.249978+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.250040+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.250093+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'APP-SIGNAL' has started.
+2026-10-19T20:03:51.287826+00:00 rdqm-b1 ibm-mq[168986]: AMQ9410I: Repository manager started.
+2026-10-19T20:03:51.294322+00:00 rdqm-b1 ibm-mq[168986]: AMQ8003I: IBM MQ queue manager 'RDQMAPP' started using V10.0.1.0.
+2026-10-19T20:03:51.295679+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'DUR-SUBS-MGR' has started.
+2026-10-19T20:03:51.297335+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'TOPIC-TREE' has started.
+2026-10-19T20:03:51.298525+00:00 rdqm-b1 ibm-mq[168968]: AMQ5024I: The command server has started. ProcessId(169011).
+2026-10-19T20:03:51.300091+00:00 rdqm-b1 ibm-mq[168968]: AMQ5022I: The channel initiator has started. ProcessId(169012).
+2026-10-19T20:03:51.310690+00:00 rdqm-b1 ibm-mq[168986]: AMQ5052I: The queue manager task 'QPUBSUB-CTRLR' has started.
+2026-10-19T20:03:51.314507+00:00 rdqm-b1 ibm-mq[168986]: AMQ5052I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has started.
+2026-10-19T20:03:51.314692+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'RESOURCE_MONITOR' has started.
+2026-10-19T20:03:51.314782+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'ACTVTRC' has started.
+2026-10-19T20:03:51.318017+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'DEFERRED_DELIVERY' has started.
+2026-10-19T20:03:51.318487+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'EXPIRER' has started.
+2026-10-19T20:03:51.323440+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'MARKINTSCAN' has started.
+2026-10-19T20:03:51.323644+00:00 rdqm-b1 ibm-mq[168986]: AMQ5052I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has started.
+2026-10-19T20:03:51.323743+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'ASYNCQ' has started.
+2026-10-19T20:03:51.323843+00:00 rdqm-b1 ibm-mq[168986]: AMQ5052I: The queue manager task 'PUBSUB-DAEMON' has started.
+2026-10-19T20:03:51.326125+00:00 rdqm-b1 ibm-mq[168986]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Controller' has started.
+2026-10-19T20:03:51.326225+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'MULTICAST' has started.
+2026-10-19T20:03:51.326283+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'STATISTICS' has started.
+2026-10-19T20:03:51.326333+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'PRESERVED-Q' has started.
+2026-10-19T20:03:51.326383+00:00 rdqm-b1 ibm-mq[168986]: AMQ5037I: The queue manager task 'DEFERRED-MSG' has started.
+2026-10-19T20:03:51.326431+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'Q-DELETION' has started.
+2026-10-19T20:03:51.346320+00:00 rdqm-b1 ibm-mq[168986]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has started.
+2026-10-19T20:03:51.346455+00:00 rdqm-b1 ibm-mq[168986]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Command Task' has started.
+2026-10-19T20:03:51.349800+00:00 rdqm-b1 ibm-mq[168986]: AMQ5975I: 'IBM MQ Distributed Pub/Sub Publish Task' has started.
+2026-10-19T20:03:51.379090+00:00 rdqm-b1 ibm-mq[168968]: AMQ5026I: The listener 'L1414' has started. ProcessId(169045).
+2026-10-19T20:03:51.385125+00:00 rdqm-b1 ibm-mq[168968]: AMQ5028I: The Server 'MQ.EVENT.MONITOR' has started. ProcessId(169048).
+2026-10-19T20:03:51.397270+00:00 rdqm-b1 ibm-mq[168968]: AMQ5029I: The Server 'MQ.EVENT.MONITOR' has ended. ProcessId(169048).
+2026-10-19T20:03:51.399649+00:00 rdqm-b1 ibm-mq[168986]: AMQ8024I: IBM MQ channel initiator started.
+2026-10-19T20:03:51.413067+00:00 rdqm-b1 ibm-mq[168986]: AMQ5806I: Queued Publish/Subscribe Daemon started for queue manager RDQMAPP.
+2026-10-19T20:03:51.419811+00:00 rdqm-b1 ibm-mq[168986]: AMQ5051I: The queue manager task 'IQM-COMMS-MANAGER' has started.
+2026-10-19T20:03:51.839489+00:00 rdqm-b1 ibm-mq[168986]: AMQ9202E: Remote host not available, retry later.
+2026-10-19T20:03:51.840059+00:00 rdqm-b1 ibm-mq[168986]: AMQ9999E: Channel 'RDQMAPP.SVCQM' to host 'svc-sim-ext.service.com(1414)' ended abnormally.
+2026-10-19T20:03:52.566485+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:52.595415+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:52.602413+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 116 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-52.bz2
+2026-10-19T20:03:52.609970+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of monitor operation for rdqmapp on rdqm-b1
+2026-10-19T20:03:52.618688+00:00 rdqm-b1 rdqm[169208]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:03:52.619024+00:00 rdqm-b1 rdqm[169208]: rdqm: Calling real main function
+2026-10-19T20:03:52.648796+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of monitor operation for rdqmapp on rdqm-b1: OK
+2026-10-19T20:03:52.655103+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 116 (Complete=1, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-52.bz2): Complete
+2026-10-19T20:03:52.655126+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:54.264100+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:03:54.301125+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:03:54.305033+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 117 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-53.bz2
+2026-10-19T20:03:54.313304+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 117 (Complete=0, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-53.bz2): Complete
+2026-10-19T20:03:54.313438+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:03:54.432058+00:00 rdqm-b1 ibm-mq[168920]: AMQ9722W: Plain text communication is enabled.
+2026-10-19T20:03:54.683164+00:00 rdqm-b1 su[169356]: (to mqm) root on none
+2026-10-19T20:03:56.679015+00:00 rdqm-b1 python3[169525]: ansible-ansible.legacy.command Invoked with _raw_params=/opt/mqm/bin/rdqmstatus -m RDQMAPP _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T20:04:00.161168+00:00 rdqm-b1 python3[169835]: ansible-ansible.legacy.command Invoked with _raw_params=echo 'DEFINE QLOCAL(DR.RPO0.DRILL) DEFPSIST(YES) REPLACE' | /opt/mqm/bin/runmqsc RDQMAPP _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T20:04:01.297724+00:00 rdqm-b1 anacron[69254]: Job `cron.weekly' started
+2026-10-19T20:04:01.306869+00:00 rdqm-b1 anacron[69254]: Job `cron.weekly' terminated
+2026-10-19T20:04:01.624691+00:00 rdqm-b1 python3[170003]: ansible-ansible.legacy.command Invoked with _raw_params=printf '%s\n' 'RPO0-20261019T200358Z-28581' | /opt/mqm/samp/bin/amqsput DR.RPO0.DRILL RDQMAPP _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T20:04:03.021901+00:00 rdqm-b1 python3[170164]: ansible-ansible.legacy.command Invoked with _raw_params=/opt/mqm/bin/rdqmstatus -m RDQMAPP _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T20:04:04.659218+00:00 rdqm-b1 python3[170365]: ansible-ansible.legacy.command Invoked with _raw_params=/opt/mqm/bin/rdqmdr -m RDQMAPP -s _uses_shell=True expand_argument_vars=True stdin_add_newline=True strip_empty_ends=True cmd=None argv=None chdir=None executable=None creates=None removes=None stdin=None
+2026-10-19T20:04:05.187701+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_IDLE -> S_POLICY_ENGINE
+2026-10-19T20:04:05.227405+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Unexpected result (Error occurred: Resource agent did not complete within 1m30s) was recorded for promote of p_drbd_dr_rdqmapp:0 on rdqm-b1 at Oct 19 19:41:14 2026
+2026-10-19T20:04:05.231051+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Stop       p_fs_rdqmapp            (                        rdqm-b1 )  due to node availability
+2026-10-19T20:04:05.231088+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Stop       p_rdqmx_rdqmapp         (                        rdqm-b1 )  due to node availability
+2026-10-19T20:04:05.231096+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Stop       rdqmapp                 (                        rdqm-b1 )  due to node availability
+2026-10-19T20:04:05.231119+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Demote     p_drbd_dr_rdqmapp:0     ( Promoted -> Unpromoted rdqm-b1 )
+2026-10-19T20:04:05.231126+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  notice: Actions: Stop       p_ip_rdqmapp            (                        rdqm-b1 )  due to node availability
+2026-10-19T20:04:05.232148+00:00 rdqm-b1 pacemaker-schedulerd[23841]:  warning: Calculated transition 118 (with warnings), saving inputs in /var/lib/pacemaker/pengine/pe-warn-54.bz2
+2026-10-19T20:04:05.242128+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of stop operation for rdqmapp on rdqm-b1
+2026-10-19T20:04:05.254202+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T20:04:05.263841+00:00 rdqm-b1 rdqm[170433]: rdqm: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:04:05.263870+00:00 rdqm-b1 rdqm[170433]: rdqm: Calling real main function
+2026-10-19T20:04:05.332248+00:00 rdqm-b1 rdqm[170433]: stop(rdqmapp)
+2026-10-19T20:04:05.337149+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:05.342863+00:00 rdqm-b1 rdqm[170433]: stop(rdqmapp) requesting shutdown
+2026-10-19T20:04:05.347053+00:00 rdqm-b1 rdqm[170433]: stop(rdqmapp) stopped channels
+2026-10-19T20:04:05.348808+00:00 rdqm-b1 rdqm[170433]: stop(rdqmapp) waiting for shutdown (0)
+2026-10-19T20:04:05.350156+00:00 rdqm-b1 ibm-mq[168986]: AMQ9542W: Queue manager is ending.
+2026-10-19T20:04:05.351290+00:00 rdqm-b1 ibm-mq[168968]: AMQ5025I: The command server has ended. ProcessId(169011).
+2026-10-19T20:04:05.352086+00:00 rdqm-b1 ibm-mq[168986]: AMQ9411I: Repository manager ended normally.
+2026-10-19T20:04:05.355917+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'IQM-COMMS-MANAGER' has ended.
+2026-10-19T20:04:05.356214+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'DEFERRED_DELIVERY' has ended.
+2026-10-19T20:04:05.356471+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'STATISTICS' has ended.
+2026-10-19T20:04:05.357019+00:00 rdqm-b1 ibm-mq[168968]: AMQ5023I: The channel initiator has ended. ProcessId(169012).
+2026-10-19T20:04:05.357264+00:00 rdqm-b1 ibm-mq[168968]: AMQ5027I: The listener 'L1414' has ended. ProcessId(169045).
+2026-10-19T20:04:05.359297+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T20:04:05.359677+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T20:04:05.360358+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T20:04:05.361317+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T20:04:05.361412+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T20:04:05.361480+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T20:04:05.361927+00:00 rdqm-b1 ibm-mq[168986]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Fan Out Task' has ended.
+2026-10-19T20:04:05.362244+00:00 rdqm-b1 ibm-mq[168986]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Command Task' has ended.
+2026-10-19T20:04:05.362335+00:00 rdqm-b1 ibm-mq[168986]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Publish Task' has ended.
+2026-10-19T20:04:05.362389+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+2026-10-19T20:04:05.362437+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T20:04:05.362485+00:00 rdqm-b1 ibm-mq[168986]: AMQ5976I: 'IBM MQ Distributed Pub/Sub Controller' has ended.
+2026-10-19T20:04:05.362569+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T20:04:05.362628+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T20:04:05.362676+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T20:04:05.362724+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T20:04:05.362770+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T20:04:05.362824+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'DUR-SUBS-MGR' has ended.
+2026-10-19T20:04:05.362871+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'TOPIC-TREE' has ended.
+2026-10-19T20:04:05.362916+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'RESOURCE_MONITOR' has ended.
+2026-10-19T20:04:05.363001+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'ACTVTRC' has ended.
+2026-10-19T20:04:05.363052+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'ASYNCQ' has ended.
+2026-10-19T20:04:05.363097+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'EXPIRER' has ended.
+2026-10-19T20:04:05.363143+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'Q-DELETION' has ended.
+2026-10-19T20:04:05.363188+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'PRESERVED-Q' has ended.
+2026-10-19T20:04:05.363233+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'MULTICAST' has ended.
+2026-10-19T20:04:05.364418+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T20:04:05.364575+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T20:04:05.365110+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T20:04:05.365158+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'APP-SIGNAL' has ended.
+2026-10-19T20:04:05.365203+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'DEFERRED-MSG' has ended.
+2026-10-19T20:04:05.365248+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-QUEUE-NLCACHE' has ended.
+2026-10-19T20:04:05.365291+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-SUBPT-NLCACHE' has ended.
+2026-10-19T20:04:05.365342+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'PUBSUB-DAEMON' has ended.
+2026-10-19T20:04:05.370848+00:00 rdqm-b1 ibm-mq[168986]: AMQ5807I: Queued Publish/Subscribe Daemon for queue manager RDQMAPP ended.
+2026-10-19T20:04:05.375483+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'MARKINTSCAN' has ended.
+2026-10-19T20:04:05.375929+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'QPUBSUB-CTRLR' has ended.
+2026-10-19T20:04:05.479513+00:00 rdqm-b1 ibm-mq[168986]: AMQ5041I: The queue manager task 'ERROR-LOG' has ended.
+2026-10-19T20:04:05.486897+00:00 rdqm-b1 ibm-mq[168971]: AMQ5041I: The queue manager task 'CHECKPOINT' has ended.
+2026-10-19T20:04:05.700283+00:00 rdqm-b1 ibm-mq[168971]: AMQ5041I: The queue manager task 'LOGGER-IO' has ended.
+2026-10-19T20:04:05.703410+00:00 rdqm-b1 ibm-mq[168954]: AMQ8004I: IBM MQ queue manager 'RDQMAPP' ended.
+2026-10-19T20:04:06.359037+00:00 rdqm-b1 rdqm[170433]: stop(rdqmapp) rc(0)
+2026-10-19T20:04:06.361156+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of stop operation for rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:06.367056+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of stop operation for p_ip_rdqmapp on rdqm-b1
+2026-10-19T20:04:06.499404+00:00 rdqm-b1 IPaddr2(p_ip_rdqmapp)[170582]: INFO: IP status = ok, IP_CIP=
+2026-10-19T20:04:06.508736+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of stop operation for p_ip_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:06.513041+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of stop operation for p_rdqmx_rdqmapp on rdqm-b1
+2026-10-19T20:04:06.525394+00:00 rdqm-b1 rdqmx[170588]: rdqmx: Successfully loaded library: /opt/mqm/lib64/libmqml_r.so
+2026-10-19T20:04:06.526014+00:00 rdqm-b1 rdqmx[170588]: rdqmx: Calling real main function
+2026-10-19T20:04:06.535373+00:00 rdqm-b1 rdqmx[170588]: stop(rdqmapp)
+2026-10-19T20:04:06.546875+00:00 rdqm-b1 rdqmx[170588]: stop(rdqmapp) rc(0)
+2026-10-19T20:04:06.549065+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of stop operation for p_rdqmx_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:06.552029+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of stop operation for p_fs_rdqmapp on rdqm-b1
+2026-10-19T20:04:06.671986+00:00 rdqm-b1 Filesystem(p_fs_rdqmapp)[170680]: INFO: Running stop for /dev/drbd/by-res/rdqmapp.dr/0 on /var/mqm/vols/rdqmapp
+2026-10-19T20:04:06.758134+00:00 rdqm-b1 Filesystem(p_fs_rdqmapp)[170758]: INFO: Trying to unmount /var/mqm/vols/rdqmapp
+2026-10-19T20:04:06.772237+00:00 rdqm-b1 systemd[1]: var-mqm-vols-rdqmapp.mount: Deactivated successfully.
+2026-10-19T20:04:06.791624+00:00 rdqm-b1 kernel: EXT4-fs (drbd7001): unmounting filesystem d7d9819e-91bf-4fd0-acdc-43230bf5dc93.
+2026-10-19T20:04:06.829211+00:00 rdqm-b1 Filesystem(p_fs_rdqmapp)[170780]: INFO: unmounted /var/mqm/vols/rdqmapp successfully
+2026-10-19T20:04:06.842979+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of stop operation for p_fs_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:06.847182+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of demote operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T20:04:06.904284+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing cluster-wide state change 3229974531: 1->all role( Secondary )
+2026-10-19T20:04:06.915077+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: State change 3229974531: primary_nodes=0, weak_nodes=0
+2026-10-19T20:04:06.915191+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Committing cluster-wide state change 3229974531 (11ms)
+2026-10-19T20:04:06.915208+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: role( Primary -> Secondary ) [secondary]
+2026-10-19T20:04:06.928390+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of demote operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:06.938333+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of notify operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T20:04:07.010095+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of notify operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:07.011477+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Requesting local execution of monitor operation for p_drbd_dr_rdqmapp on rdqm-b1
+2026-10-19T20:04:07.074666+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Result of monitor operation for p_drbd_dr_rdqmapp on rdqm-b1: OK
+2026-10-19T20:04:07.078159+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: Transition 118 (Complete=15, Pending=0, Fired=0, Skipped=0, Incomplete=0, Source=/var/lib/pacemaker/pengine/pe-warn-54.bz2): Complete
+2026-10-19T20:04:07.078216+00:00 rdqm-b1 pacemaker-controld[23842]:  notice: State transition S_TRANSITION_ENGINE -> S_IDLE
+2026-10-19T20:04:09.340690+00:00 rdqm-b1 kernel: drbd rdqmapp.dr: Preparing remote state change 813413149: 0->all role( Primary )
+2026-10-19T20:04:09.359616+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: Committing remote state change 813413149 (primary_nodes=1)
+2026-10-19T20:04:09.359706+00:00 rdqm-b1 kernel: drbd rdqmapp.dr encrypted.remote: peer( Secondary -> Primary ) [remote]
+2026-10-19T20:04:09.359728+00:00 rdqm-b1 kernel: drbd rdqmapp.dr/0 drbd7001: Disabling local AL-updates (optimization)
+2026-10-19T20:04:24.721219+00:00 rdqm-b1 systemd[1]: systemd-hostnamed.service: Deactivated successfully.
+2026-10-19T20:10:00.405007+00:00 rdqm-b1 rsyslogd[7226]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T20:10:24.609498+00:00 rdqm-b1 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T20:10:24.657724+00:00 rdqm-b1 systemd[1]: Started systemd-timedated.service - Time & Date Service.

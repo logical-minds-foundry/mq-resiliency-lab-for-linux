@@ -1,0 +1,71 @@
+# RDQM.0.LOG: exported for #1666; 70 lines kept; dropped lines by category: outside window: 659.
+2026-10-19 19:02:02.843: 25782 rdqmhandler
+2026-10-19 19:02:02.843: 25782 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:02:02.862: 25782 >>STDOUT:
+active
+2026-10-19 19:02:02.862: 25782 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:02:02.862: 25782 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:02:02.881: 25782 >>STDOUT:
+active
+2026-10-19 19:02:02.881: 25782 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:02:02.881: 25782 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:02:02.906: 25782 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:02:14.097: 26408 rdqmhandler
+2026-10-19 19:02:14.097: 26408 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:02:14.118: 26408 >>STDOUT:
+active
+2026-10-19 19:02:14.118: 26408 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:02:14.118: 26408 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:02:14.138: 26408 >>STDOUT:
+active
+2026-10-19 19:02:14.138: 26408 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:02:14.139: 26408 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:02:14.165: 26408 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:02:14.166: 26408 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:02:14.166Z"
+2026-10-19 19:02:14.217: 26408 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-before-resync-time --update "2026-10-19T19:02:14.166Z"
+
+2026-10-19 19:02:14.319: 26436 rdqmx start
+2026-10-19 19:02:14.319: 26436 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:02:14.335: 26436 >>STDOUT:
+active
+2026-10-19 19:02:14.335: 26436 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:02:14.335: 26436 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:02:14.344: 26436 >>STDOUT:
+active
+2026-10-19 19:02:14.344: 26436 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:02:14.345: 26436 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:02:14.369: 26436 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:02:14.795: 26661 rdqm start
+2026-10-19 19:02:14.795: 26661 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:02:14.834: 26661 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:28.912: 32067 rdqm stop
+2026-10-19 19:05:28.912: 32067 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:28.945: 32067 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:30.959: 32548 rdqmhandler
+2026-10-19 19:05:30.959: 32548 ---{ /usr/bin/systemctl is-active pacemaker
+2026-10-19 19:05:30.968: 32548 >>STDOUT:
+active
+2026-10-19 19:05:30.968: 32548 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active pacemaker
+
+2026-10-19 19:05:30.968: 32548 ---{ /usr/bin/systemctl is-active rdqm
+2026-10-19 19:05:30.988: 32548 >>STDOUT:
+active
+2026-10-19 19:05:30.988: 32548 ---} rc=0 unixrc=0 /usr/bin/systemctl is-active rdqm
+
+2026-10-19 19:05:30.989: 32548 ---{ /usr/sbin/cibadmin --query
+2026-10-19 19:05:31.012: 32548 ---} rc=0 unixrc=0 /usr/sbin/cibadmin --query
+
+2026-10-19 19:05:31.013: 32548 ---{ /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:05:31.013Z"
+2026-10-19 19:05:31.042: 32548 ---} rc=0 unixrc=0 /usr/sbin/crm_attribute --set-name rdqm --name rdqmapp-dr-disconnect-time --update "2026-10-19T19:05:31.013Z"
+

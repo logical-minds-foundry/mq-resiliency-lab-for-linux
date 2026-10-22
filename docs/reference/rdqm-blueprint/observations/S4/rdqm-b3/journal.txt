@@ -1,0 +1,28 @@
+# journal.txt: exported for #1666; 27 lines kept; dropped lines by category: kit ssh/sudo/session: 1497, lab observability agents and timers: 261. ibm-mq JSON lines compacted to '<ibm_messageId> <message>'.
+2026-10-19T18:42:38.205278+00:00 rdqm-b3 systemd[1]: Created slice user-1000.slice - User Slice of UID 1000.
+2026-10-19T18:42:38.369277+00:00 rdqm-b3 systemd[42623]: Queued start job for default target default.target.
+2026-10-19T18:42:38.375363+00:00 rdqm-b3 systemd[42623]: Created slice app.slice - User Application Slice.
+2026-10-19T18:42:38.376091+00:00 rdqm-b3 systemd[42623]: Started grub-boot-success.timer - Mark boot as successful after the user session has run 2 minutes.
+2026-10-19T18:42:38.376149+00:00 rdqm-b3 systemd[42623]: Started systemd-tmpfiles-clean.timer - Daily Cleanup of User's Temporary Directories.
+2026-10-19T18:42:38.376171+00:00 rdqm-b3 systemd[42623]: Reached target paths.target - Paths.
+2026-10-19T18:42:38.376258+00:00 rdqm-b3 systemd[42623]: Reached target timers.target - Timers.
+2026-10-19T18:42:38.378949+00:00 rdqm-b3 systemd[42623]: Starting dbus.socket - D-Bus User Message Bus Socket...
+2026-10-19T18:42:38.381958+00:00 rdqm-b3 systemd[42623]: Starting systemd-tmpfiles-setup.service - Create User Files and Directories...
+2026-10-19T18:42:38.396437+00:00 rdqm-b3 systemd[42623]: Finished systemd-tmpfiles-setup.service - Create User Files and Directories.
+2026-10-19T18:42:38.399004+00:00 rdqm-b3 systemd[42623]: Listening on dbus.socket - D-Bus User Message Bus Socket.
+2026-10-19T18:42:38.399147+00:00 rdqm-b3 systemd[42623]: Reached target sockets.target - Sockets.
+2026-10-19T18:42:38.399228+00:00 rdqm-b3 systemd[42623]: Reached target basic.target - Basic System.
+2026-10-19T18:42:38.399267+00:00 rdqm-b3 systemd[42623]: Reached target default.target - Main User Target.
+2026-10-19T18:42:38.399318+00:00 rdqm-b3 systemd[42623]: Startup finished in 132ms.
+2026-10-19T18:42:38.546037+00:00 rdqm-b3 systemd[1]: Starting systemd-timedated.service - Time & Date Service...
+2026-10-19T18:42:38.597913+00:00 rdqm-b3 systemd[1]: Started systemd-timedated.service - Time & Date Service.
+2026-10-19T18:43:05.799598+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10000 -> 1000
+2026-10-19T18:43:08.635886+00:00 rdqm-b3 systemd[1]: systemd-timedated.service: Deactivated successfully.
+2026-10-19T18:44:45.881782+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 1000 -> 10
+2026-10-19T18:45:05.807786+00:00 rdqm-b3 pacemaker-attrd[23525]:  notice: Setting master-p_drbd_dr_rdqmapp[rdqm-b1] in instance_attributes: 10 -> 10000
+2026-10-19T18:45:27.416804+00:00 rdqm-b3 systemd[42623]: Starting grub-boot-success.service - Mark boot as successful...
+2026-10-19T18:45:27.432468+00:00 rdqm-b3 systemd[42623]: Finished grub-boot-success.service - Mark boot as successful.
+2026-10-19T18:47:03.586495+00:00 rdqm-b3 rsyslogd[7230]: imjournal: journal files changed, reloading...  [v8.2510.0-5.el10 try https://www.rsyslog.com/e/0 ]
+2026-10-19T18:48:27.414856+00:00 rdqm-b3 systemd[42623]: Created slice background.slice - User Background Tasks Slice.
+2026-10-19T18:48:27.417449+00:00 rdqm-b3 systemd[42623]: Starting systemd-tmpfiles-clean.service - Cleanup of User's Temporary Files and Directories...
+2026-10-19T18:48:27.435553+00:00 rdqm-b3 systemd[42623]: Finished systemd-tmpfiles-clean.service - Cleanup of User's Temporary Files and Directories.
