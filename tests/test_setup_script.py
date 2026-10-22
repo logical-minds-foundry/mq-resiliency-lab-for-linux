@@ -55,7 +55,10 @@ def _run_setup_with_fake_uv(tmp_path: Path, pyproject: str) -> tuple[int, str, l
     log = tmp_path / "uv.log"
     fake_uv = bindir / "uv"
     fake_uv.write_text(
-        '#!/usr/bin/env bash\necho "$*" >> "$UV_LOG"\n[ "$1 $2" = "python find" ] && exit 1\nexit 0\n'
+        "#!/usr/bin/env bash\n"
+        'echo "$*" >> "$UV_LOG"\n'
+        '[ "$1 $2" = "python find" ] && exit 1\n'
+        "exit 0\n"
     )
     fake_uv.chmod(0o755)
     env = {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", "UV_LOG": str(log)}
