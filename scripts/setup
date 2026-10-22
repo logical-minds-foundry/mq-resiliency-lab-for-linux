@@ -12,13 +12,21 @@ die() { echo "setup: $*" >&2; exit 1; }
 # 1. Prerequisite checks (fail loud, no silent fallback).
 command -v uv >/dev/null 2>&1 || die "uv not found — install it: https://docs.astral.sh/uv/getting-started/installation/"
 
-# The lab pins Python 3.14 (.python-version) and depends on a uv-MANAGED
-# interpreter, never the base OS Python (pyproject [tool.uv] only-managed, #1063).
-# If uv can't already find a managed 3.14, install one — don't die: uv downloads
-# and manages its own build, so this needs no host Python upgrade.
-if ! uv python find 3.14 >/dev/null 2>&1; then
-    echo "setup: uv-managed Python 3.14 not found — installing it (uv python install 3.14)…"
-    uv python install 3.14 || die "Python 3.14 install failed — install it by hand: 'uv python install 3.14'"
+# Run from the repo root, whatever the caller's cwd.
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# The lab depends on a uv-MANAGED interpreter, never the base OS Python
+# (pyproject [tool.uv] only-managed, #1063). There is no .python-version
+# (#1681); the version the lab runs, and CI tests (#1685), is the
+# `requires-python` lower bound in pyproject.toml, so read it from there rather
+# than repeating a version here. If uv can't already find a managed interpreter
+# at that version, install one — don't die: uv downloads and manages its own
+# build, so this needs no host Python upgrade.
+PYTHON_FLOOR=$(sed -n 's/^requires-python = ">=\([0-9][0-9.]*\)"$/\1/p' pyproject.toml)
+[ -n "${PYTHON_FLOOR}" ] || die "cannot read the Python floor from pyproject.toml (expected: requires-python = \">=X.Y\")"
+if ! uv python find "${PYTHON_FLOOR}" >/dev/null 2>&1; then
+    echo "setup: uv-managed Python ${PYTHON_FLOOR} not found — installing it (uv python install ${PYTHON_FLOOR})…"
+    uv python install "${PYTHON_FLOOR}" || die "Python ${PYTHON_FLOOR} install failed — install it by hand: 'uv python install ${PYTHON_FLOOR}'"
 fi
 
 # 2. Materialize the environment.

@@ -9,6 +9,10 @@ primary-language = "python"
 ghas = true
 
 [ci]
+# Kept pin (#1685): the lab is an unpackaged app, so unpinned it would follow
+# the window's newest version (3.15), but its real runtime is the uv venv that
+# scripts/setup builds on the VM at the requires-python floor. The pin keeps CI
+# on the version the lab actually runs (vergil-project/.github#407, #425).
 versions = ["3.14"]
 integration-tests = false
 

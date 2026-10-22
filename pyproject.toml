@@ -1,7 +1,7 @@
 [project]
 name = "mqlab"
 version = "1.0.0"
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.14"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = ["ansible-core>=2.16", "pyyaml>=6", "typer>=0.12", "rich>=13", "cryptography>=42"]
@@ -34,14 +34,24 @@ build-backend = "hatchling.build"
 packages = ["src/mqlab"]
 
 [tool.uv]
-# Never seed the venv from the base OS interpreter. `.python-version` (= 3.14)
-# already tells uv which feature version to use; `only-managed` forces that
-# interpreter to be a uv-downloaded, uv-managed build even when a matching
-# system 3.14 exists — so the lab's runtime can never silently depend on
-# whatever Python the host happens to ship. This closes the regression in #1063,
-# where a pre-bump venv was seeded from the OS's 3.12 and then could not parse
-# the 3.14 code. The base OS Python is left untouched. See `.python-version`.
+# Never seed the venv from the base OS interpreter. The Python VERSION is the
+# `requires-python` floor (no `.python-version`, no upper bound; CI pins the
+# same floor in vergil.toml until the lab follows Vergil's version window,
+# #1685). This setting picks the SOURCE:
+# `only-managed` forces a uv-downloaded, uv-managed build even when a matching
+# system Python exists — so the lab's runtime on the VM can never silently
+# depend on whatever Python the host happens to ship. This closes the
+# regression in #1063, where a pre-bump venv was seeded from the OS's 3.12 and
+# then could not parse the 3.14 code. The base OS Python is left untouched.
+# Vergil containers and CI override it with UV_PYTHON_PREFERENCE=only-system so
+# they run the image's interpreter (#1681, vergil-project/.github#407).
 python-preference = "only-managed"
+# With no `.python-version`, a bare `uv sync`/`uv venv`/`uv lock` on a host with
+# no managed Python would auto-download the NEWEST CPython (3.15 today), not the
+# floor CI tests. `manual` means uv only uses managed interpreters installed
+# explicitly (`scripts/setup` runs `uv python install <floor>`) and otherwise
+# fails loudly. Like the preference, this picks the source, not the version.
+python-downloads = "manual"
 
 [tool.ruff]
 target-version = "py314"
