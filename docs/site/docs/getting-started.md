@@ -92,7 +92,9 @@ that reason; build the stack on RHEL 9 instead, with `os: rhel:9` in a build fil
 
 !!! note "After a Python-version bump"
     The minimum Python version is the `requires-python` floor in
-    `pyproject.toml`; the version itself follows the Vergil version window.
+    `pyproject.toml`, and it is also the version the lab runs and CI tests
+    (pinned in `vergil.toml` until the lab follows the Vergil version window,
+    #1685).
     If the floor changes (or you are upgrading from an older checkout), re-run
     `./scripts/setup` (or `uv sync`) to rebuild the `.venv` against a
     uv-managed interpreter — an existing venv is **not** rebuilt automatically.

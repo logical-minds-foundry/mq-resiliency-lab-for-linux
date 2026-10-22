@@ -6,10 +6,11 @@ satisfied `requires-python` — the base OS 3.12. `python-preference =
 "only-managed"` closes that: the venv is always seeded from a uv-managed
 interpreter, never the host's.
 
-The Python VERSION is not pinned in the repo. It follows Vergil's version
-window (#1681, vergil-project/.github#407): no `.python-version`, no
-`[ci].versions`, and `requires-python` carries only a floor. These tests lock
-that shape in place and keep the floor agreeing with `launcher.MIN_PYTHON`.
+The Python VERSION has one source, the `requires-python` floor (#1681,
+vergil-project/.github#407): no `.python-version`, and `requires-python` carries
+only a floor. CI keeps a `[ci].versions` pin equal to that floor until the lab
+can follow the window (#1685). These tests lock that shape in place and keep the
+floor agreeing with `launcher.MIN_PYTHON`.
 """
 
 from __future__ import annotations
@@ -49,9 +50,12 @@ def test_no_python_version_file() -> None:
     assert not (REPO_ROOT / ".python-version").exists(), ".python-version pins the version"
 
 
-def test_no_ci_versions_pin() -> None:
+def test_ci_pin_is_the_floor_the_lab_runs() -> None:
+    # Kept pin (#1685): CI must test the interpreter scripts/setup installs on
+    # the VM — the requires-python floor — until the pin is removed.
     ci = tomllib.loads(VERGIL_TOML.read_text()).get("ci", {})
-    assert "versions" not in ci, "[ci].versions pins the CI matrix; the window owns it"
+    floor = _pyproject()["project"]["requires-python"].removeprefix(">=")
+    assert ci.get("versions") == [floor], "[ci].versions must pin exactly the floor"
 
 
 def test_requires_python_is_a_floor_only() -> None:

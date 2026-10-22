@@ -34,9 +34,10 @@ build-backend = "hatchling.build"
 packages = ["src/mqlab"]
 
 [tool.uv]
-# Never seed the venv from the base OS interpreter. The Python VERSION follows
-# Vergil's version window (no `.python-version`, no `requires-python` upper
-# bound; `requires-python` is only the floor). This setting picks the SOURCE:
+# Never seed the venv from the base OS interpreter. The Python VERSION is the
+# `requires-python` floor (no `.python-version`, no upper bound; CI pins the
+# same floor in vergil.toml until the lab follows Vergil's version window,
+# #1685). This setting picks the SOURCE:
 # `only-managed` forces a uv-downloaded, uv-managed build even when a matching
 # system Python exists — so the lab's runtime on the VM can never silently
 # depend on whatever Python the host happens to ship. This closes the

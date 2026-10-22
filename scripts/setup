@@ -16,8 +16,8 @@ command -v uv >/dev/null 2>&1 || die "uv not found — install it: https://docs.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # The lab depends on a uv-MANAGED interpreter, never the base OS Python
-# (pyproject [tool.uv] only-managed, #1063). The version is not pinned in the
-# repo (it follows Vergil's version window, #1681); the floor is the
+# (pyproject [tool.uv] only-managed, #1063). There is no .python-version
+# (#1681); the version the lab runs, and CI tests (#1685), is the
 # `requires-python` lower bound in pyproject.toml, so read it from there rather
 # than repeating a version here. If uv can't already find a managed interpreter
 # at that version, install one — don't die: uv downloads and manages its own
