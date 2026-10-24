@@ -32,7 +32,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 # offline with --no-build-isolation: ibmmq's sdist declares setuptools>=75 as its
 # build backend (needed on aarch64, where there is no wheel). Exported by
 # `mqlab component build` to build-requirements.txt.
-sdist-build = ["setuptools==84.0.0"]
+sdist-build = ["setuptools==84.2.1"]
 
 [build-system]
 requires = ["hatchling"]
