@@ -22,6 +22,9 @@ coverage.xml
 junit.xml
 licenses.json
 docs/site/site/
+docs/site/docs/changelog.md
+docs/site/docs/releases/
+mkdocs.staged.yml
 node_modules/
 __pycache__/
 *.pyc
@@ -68,5 +71,3 @@ htmlcov/
 # CHANGELOG.md/releases sources here and mkdocs builds into site/. The
 # sources (CHANGELOG.md, releases/) are committed; these copies are
 # regenerated on every build.
-docs/site/docs/changelog.md
-docs/site/docs/releases/
