@@ -142,6 +142,17 @@ vrg-vm create logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergi
 vrg-vm session logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
 ```
 
+The box is ephemeral and fully reproducible, so don't hand-customize it.
+Nothing in it outside the host-mounted `build/` directory is precious;
+re-provision it freely to stay fresh:
+
+```bash
+vrg-vm rebuild logical-minds-foundry/mq-resiliency-lab-for-linux --identity vergil-user
+```
+
+To change its tooling, edit the `[vm.vergil-user]` profile and rebuild; never
+`apt install` inside a live VM.
+
 From a dev checkout, run the CLI as `uv run mqlab …` rather than calling the
 venv's `mqlab` by its path: `uv run` puts the venv's `bin/` on `PATH`, so the
 tools `mqlab` calls by bare name resolve (see
