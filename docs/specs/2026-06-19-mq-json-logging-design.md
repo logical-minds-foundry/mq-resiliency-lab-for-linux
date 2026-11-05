@@ -6,7 +6,7 @@
 > [`docs/reports/2026-06-19-mq-json-logging-research.md`](../reports/2026-06-19-mq-json-logging-research.md).
 > **Diagram:** [`diagrams/mq-json-logging-flow.html`](diagrams/mq-json-logging-flow.html).
 > **Portable config recipe (MQ-only):**
-> [`../reference/mq-json-logging-config.md`](../reference/mq-json-logging-config.md).
+> [JSON logging guide §4, "How to configure it"](../site/docs/guides/mq-json-logging-guide.md#4-how-to-configure-it).
 
 ## 1. Purpose & scope
 
@@ -277,7 +277,7 @@ file-tailing `AMQERR0x.json`) before building the role.
 ## 10. References
 
 - Research study: [`docs/reports/2026-06-19-mq-json-logging-research.md`](../reports/2026-06-19-mq-json-logging-research.md)
-- Portable MQ-only config recipe: [`docs/reference/mq-json-logging-config.md`](../reference/mq-json-logging-config.md)
+- Portable MQ-only config recipe: [`docs/site/docs/guides/mq-json-logging-guide.md` §4](../site/docs/guides/mq-json-logging-guide.md#4-how-to-configure-it)
 - Flow diagram: [`diagrams/mq-json-logging-flow.html`](diagrams/mq-json-logging-flow.html)
 - Primary IBM 9.4 docs (cached under `build/cache/refs/ibm-docs/ibm-mq/9.4/`):
   Diagnostic message services (`q018795`), Diagnostic message service stanzas
