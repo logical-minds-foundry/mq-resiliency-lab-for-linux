@@ -45,6 +45,8 @@ while true; do
   # so the interval is the sampling window and no extra sleep is needed.
   vm=$(vmstat "$INTERVAL" 2 | tail -1)
   # vmstat columns: 1=r 2=b ... 9=bi 10=bo ... 13=us 14=sy 15=id 16=wa
+  # Word splitting is intended: split the vmstat line into positional fields.
+  # shellcheck disable=SC2086
   set -- $vm
   runq="${1:-?}"; blk="${2:-?}"; bi="${9:-?}"; bo="${10:-?}"
   us="${13:-?}"; sy="${14:-?}"; id="${15:-?}"; wa="${16:-?}"

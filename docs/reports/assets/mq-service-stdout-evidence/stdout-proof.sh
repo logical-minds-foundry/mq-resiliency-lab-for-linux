@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2012,SC2086 # Recorded evidence: the report quotes these commands as run; do not edit them.
 # =====================================================================
 # MQ SERVICE STDOUT open-mode proof — append vs truncate on (re)start.
 # Runs as mqm on a RHEL node. Throwaway QM. Minimal SERVER service whose

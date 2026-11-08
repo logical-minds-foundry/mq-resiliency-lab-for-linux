@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034,SC1010 # Recorded evidence: the report quotes these commands as run; do not edit them.
 # Verify amqsevt compact-JSON output is one JSON object per line (JSONL).
 # Runs as mqm on a RHEL node. Throwaway QM.
 set -u
