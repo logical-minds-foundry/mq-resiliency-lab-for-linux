@@ -82,8 +82,8 @@ rdqm_vip() {
 # misread as a headless group; fail loud if none settles.
 ha_primary() {  # $1..$N = candidate nodes of the site group -> prints the primary node name
   local nodes=("$@")
-  local n out loc i
-  for i in $(seq 1 30); do
+  local n out loc
+  for _ in $(seq 1 30); do
     for n in "${nodes[@]}"; do
       out="$(rdqmstatus_on "$n")"
       loc="$(rdqm_field "HA current location" "$out")"

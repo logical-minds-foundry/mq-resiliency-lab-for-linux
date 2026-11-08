@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2086 # Recorded evidence: the report quotes these commands as run; do not edit them.
 # =====================================================================
 # Proof that the LAUNCHER IS UNNECESSARY: define amqsevt directly as the
 # service STARTCMD with STDOUT -> the data file (no wrapper, no '>>').

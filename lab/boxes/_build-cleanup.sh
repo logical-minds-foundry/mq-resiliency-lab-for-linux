@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lab/boxes/_build-cleanup.sh - SOURCED (not executed) by the box builders (#1404).
 #
 # Both builders (build-fatbox.sh, rhel/build-box.sh) run under `set -euo pipefail` and

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC1010 # Recorded evidence: the report quotes these commands as run; do not edit them.
 # End-to-end proof of the EXACT how-to recipe: launcher-less service running
 # amqsevt -o json_compact with STDOUT = data file. Confirm the file is JSONL
 # (one JSON object per line) and appends across a restart. Run as mqm on RHEL.

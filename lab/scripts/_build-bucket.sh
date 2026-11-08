@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lab/scripts/_build-bucket.sh — sourced helper: resolve a build/ bucket through the one
 # authority (#1569). Never derive build/<bucket> from a script's own location: in a git
 # worktree whose shared-bucket symlinks are not wired yet, `$(dirname "$0")/../../build/

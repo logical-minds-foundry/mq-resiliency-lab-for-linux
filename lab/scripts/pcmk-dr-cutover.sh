@@ -55,7 +55,7 @@ run "$TO_PCMK" "iscsiadm -m discovery -t sendtargets -p ${TO_PORTAL}:3260 >/dev/
   sleep 3; ls -l /dev/disk/by-label/MQSHARED"
 
 echo "=== 6. START the QM resource group on the peer cluster ==="
-FIRST=$(echo $TO_NODES | awk '{print $1}')
+FIRST=$(echo "$TO_NODES" | awk '{print $1}')
 run "$FIRST" "pcs cluster unstandby --all 2>/dev/null || true
   if ! pcs resource status mq_group >/dev/null 2>&1; then
     pcs resource create mq_fs ocf:heartbeat:Filesystem device=/dev/disk/by-label/MQSHARED directory=/mqshared fstype=xfs op monitor interval=30s OCF_CHECK_LEVEL=20 on-fail=fence --group mq_group
