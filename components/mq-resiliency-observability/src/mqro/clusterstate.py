@@ -17,6 +17,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mqro.rdqmstate import parse_drbd
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -57,47 +59,6 @@ def parse_crm(xml_text: str) -> dict[str, Any]:
             "node": held.get("name") if held is not None else None,
         }
     return {"quorate": quorate, "nodes": nodes, "resources": resources}
-
-
-def parse_drbd(text: str) -> dict[str, Any]:
-    """Parse `drbdsetup status --verbose --statistics` into
-    {resource: {role,disk,conn,resync_pct,out_of_sync_bytes}}.
-
-    Output is whitespace-indented `key:value` tokens::
-
-        mqlun role:Primary suspended:no
-          volume:0 minor:0 disk:UpToDate
-          peer connection:Connected role:Secondary congested:no
-            volume:0 replication:Established peer-disk:UpToDate ... done:73.2
-                received:0 sent:65712 out-of-sync:0 ...
-
-    `--json` is NOT used: this image's drbdsetup rejects it (#272). A resource
-    block starts at column 0 (`<name> role:...`); indented lines refine it. The
-    connection state (Connected/StandAlone/...) drives the integrity light; an
-    in-sync resource has no `done:` token, so resync reads 100%.
-    """
-    out: dict[str, dict[str, Any]] = {}
-    cur: dict[str, Any] = {}
-    for raw in text.splitlines():
-        tokens = dict(t.split(":", 1) for t in raw.split() if ":" in t)
-        if raw[:1] not in ("", " ", "\t") and "role" in tokens:
-            cur = {
-                "role": tokens["role"],
-                "disk": "Unknown",
-                "conn": "Unknown",
-                "resync_pct": 100.0,
-                "out_of_sync_bytes": 0,
-            }
-            out[raw.split()[0]] = cur
-        if "disk" in tokens:  # local volume line (the peer line uses peer-disk:)
-            cur["disk"] = tokens["disk"]
-        if "connection" in tokens:  # peer line: Connected / StandAlone / ...
-            cur["conn"] = tokens["connection"]
-        if "done" in tokens:  # present only while resyncing
-            cur["resync_pct"] = float(tokens["done"])
-        if "out-of-sync" in tokens:
-            cur["out_of_sync_bytes"] = int(tokens["out-of-sync"])
-    return out
 
 
 def parse_stonith(text: str) -> dict[str, int]:

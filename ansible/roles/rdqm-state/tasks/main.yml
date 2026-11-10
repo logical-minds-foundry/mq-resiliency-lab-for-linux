@@ -2,7 +2,7 @@
 # Per-run half of the rdqm-state collector (#287; epic .github#294 T7). The collector is
 # the BAKED mq-resiliency-observability component (entry point lab-rdqm-state, static units
 # in /usr/lib/systemd/system, both laid down by component-install at bake); it reuses
-# clusterstate.parse_drbd inside the component, so the cut-down `mqlab` package this role
+# rdqmstate.parse_drbd inside the component, so the cut-down `mqlab` package this role
 # used to deploy under /usr/local/lib is gone. This role only: asserts the component is
 # baked -> retires the pre-#294 payload and the /etc/systemd/system unit copies (they
 # SHADOW the component units) -> renders the deployer-owned env file -> daemon-reload +

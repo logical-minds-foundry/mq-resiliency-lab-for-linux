@@ -42,43 +42,6 @@ def test_parse_crm_marks_offline_node_and_unplaced_resource():
     assert out["resources"]["mq_qm"] == {"state": "Stopped", "node": None}
 
 
-def test_parse_drbd_extracts_role_disk_conn_and_rpo_tail():
-    # the real `drbdsetup status --verbose --statistics` capture (healthy, in-sync)
-    out = clusterstate.parse_drbd((FIXTURES / "drbd_status.txt").read_text())
-    mqlun = out["mqlun"]
-    assert mqlun["role"] == "Primary"
-    assert mqlun["disk"] == "UpToDate"
-    assert mqlun["conn"] == "Connected"
-    assert mqlun["resync_pct"] == 100.0  # in-sync: no done: token
-    assert mqlun["out_of_sync_bytes"] == 0
-
-
-def test_parse_drbd_resync_tail_reads_done_and_out_of_sync():
-    text = (
-        "mqlun role:Primary suspended:no\n"
-        "  volume:0 minor:0 disk:UpToDate\n"
-        "  peer connection:Connected role:Secondary congested:no\n"
-        "    volume:0 replication:SyncSource peer-disk:Inconsistent done:42.20\n"
-        "        received:0 sent:99 out-of-sync:2202010 pending:0 unacked:0\n"
-    )
-    mqlun = clusterstate.parse_drbd(text)["mqlun"]
-    assert mqlun["resync_pct"] == 42.20
-    assert mqlun["out_of_sync_bytes"] == 2202010
-    assert mqlun["conn"] == "Connected"
-
-
-def test_parse_drbd_flags_standalone_split_brain():
-    text = (
-        "mqlun role:Secondary suspended:no\n"
-        "  volume:0 minor:0 disk:Outdated\n"
-        "  peer connection:StandAlone role:Unknown congested:no\n"
-    )
-    mqlun = clusterstate.parse_drbd(text)["mqlun"]
-    assert mqlun["conn"] == "StandAlone"  # the integrity-light trigger
-    assert mqlun["disk"] == "Outdated"
-    assert mqlun["resync_pct"] == 100.0  # no done: while disconnected
-
-
 def test_parse_stonith_counts_recent_fence_actions_per_node():
     text = (
         "Stonith history for cluster mqpcmk:\n"  # non-matching header -> skipped
