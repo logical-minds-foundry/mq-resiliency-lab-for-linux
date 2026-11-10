@@ -53,10 +53,6 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Releases:
-      - Changelog: changelog.md
-      - Release Notes:
-          - releases/index.md
   - Methodology: methodology.md
   - Getting Started: getting-started.md
   - Architecture: architecture/index.md

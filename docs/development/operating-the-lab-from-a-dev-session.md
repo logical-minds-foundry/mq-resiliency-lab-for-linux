@@ -62,13 +62,14 @@ mid-run with `ansible-playbook: command not found`.
 **The dev-vs-runtime boundary.** Keep three things distinct:
 
 - **`uv run mqlab <cmd>`** is how an *operator* invokes the CLI from a
-  development checkout. It is an invocation convention for the dev loop only.
+  checkout, in a dev session or on any other host. It is an invocation
+  convention, not part of the runtime.
 - **Runtime code and scripts never embed `uv run`.** `mqlab`, its playbooks and
   its helper scripts call companion tools by bare name and rely on `PATH`. They
   never shell out through `uv run` and never hard-code a venv path.
-- **Release-tarball users** follow `./scripts/setup` and the site docs
-  (`docs/site/docs/getting-started.md`). There, `scripts/setup` builds the venv
-  and prints the next commands.
+- **A fresh clone** runs `./scripts/setup` first, as the site's
+  [Getting Started](../site/docs/getting-started.md) describes: it builds the
+  venv and prints the next commands.
 
 ---
 

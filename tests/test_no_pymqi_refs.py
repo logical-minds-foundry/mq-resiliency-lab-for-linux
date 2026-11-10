@@ -5,7 +5,6 @@ for "pymqi". The allowlist is FIXED: dated, historical records only.
 
 - docs/plans/**, docs/specs/**: design history;
 - docs/reports/**: dated reports (e.g. the guest-runtime spike proved pymqi);
-- CHANGELOG.md, releases/**: generated from commit history;
 - this file.
 
 A hit is fixed at its source (reword it). Never widen the allowlist to silence one.
@@ -25,8 +24,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 NEEDLE = re.compile(r"pymqi", re.IGNORECASE)
-HISTORICAL_PREFIXES = ("docs/plans/", "docs/specs/", "docs/reports/", "releases/")
-HISTORICAL_FILES = frozenset({"CHANGELOG.md", "tests/test_no_pymqi_refs.py"})
+HISTORICAL_PREFIXES = ("docs/plans/", "docs/specs/", "docs/reports/")
+HISTORICAL_FILES = frozenset({"tests/test_no_pymqi_refs.py"})
 
 
 def _is_historical(rel: str) -> bool:
@@ -65,7 +64,7 @@ def hits(repo: Path) -> list[str]:
 def test_allowlist_is_history_only():
     assert _is_historical("docs/specs/x.md")
     assert _is_historical("docs/reports/assets/guest-runtime-spike/spike.yml")
-    assert _is_historical("CHANGELOG.md")
+    assert _is_historical("tests/test_no_pymqi_refs.py")
     assert not _is_historical("docs/site/docs/operate/guest-components.md")
     assert not _is_historical("docs/development/box-model.md")
     assert not _is_historical("components/mq-resiliency-clients/src/mqrc/selfcheck.py")

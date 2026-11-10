@@ -1,5 +1,7 @@
 [project]
 name = "mqlab"
+# A fixed placeholder: hatchling requires a version, but the lab is not released
+# or versioned (it runs from a checkout of develop) and nothing reads this value.
 version = "1.0.0"
 requires-python = ">=3.14"
 license = "MIT"
