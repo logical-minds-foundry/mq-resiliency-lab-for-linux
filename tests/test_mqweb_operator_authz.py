@@ -168,9 +168,6 @@ def test_svc_sim_accounts_precede_the_qm() -> None:
 
 def test_every_qm_play_applies_mqoperator_mqsc() -> None:
     files = [
-        ANSIBLE / "roles" / "mq-pcmk-qmgr" / "tasks" / "main.yml",
-        # pcmk-drbd-ubuntu (site-pdrbd.yml): the pdrbd-qm role applies it (#1427).
-        ANSIBLE / "roles" / "pdrbd-qm" / "tasks" / "main.yml",
         ANSIBLE / "site-rdqm.yml",
         ANSIBLE / "site-nativeha-ubuntu.yml",
         ANSIBLE / "site-nativeha.yml",

@@ -1,7 +1,24 @@
-# One mq_prometheus exporter instance (one QM). Split from main.yml (#423) so
-# site-obs.yml can loop it per stack after build.yml has run once. Caller sets the
-# per-instance vars: mq_exporter_qm / _instance / _conn / _channel / _port.
+# One mq_prometheus exporter instance (one QM). site-obs.yml loops it per stack after
+# build.yml has run once (#423). Caller sets the per-instance vars: mq_exporter_qm /
+# _instance / _conn / _channel / _port.
 #
+# The QM, its CONNAME and the exporter port have no role default: each names one
+# stack's QM, so a caller that omits one fails here, naming it, instead of silently
+# scraping some other stack's QM.
+- name: the caller set this instance's QM, CONNAME and port
+  ansible.builtin.assert:
+    that:
+      - mq_exporter_qm is defined
+      - mq_exporter_conn is defined
+      - mq_exporter_port is defined
+    fail_msg: >-
+      mq-exporter tasks_from instance needs mq_exporter_qm, mq_exporter_conn and
+      mq_exporter_port; undefined:
+      {{ [(mq_exporter_qm is defined) | ternary('', 'mq_exporter_qm'),
+          (mq_exporter_conn is defined) | ternary('', 'mq_exporter_conn'),
+          (mq_exporter_port is defined) | ternary('', 'mq_exporter_port')]
+         | select | join(', ') }}
+
 # Per-instance CCDT: the only way to give a mq-metric-samples client an SSLCIPH (no
 # CLI flag exists). Carries this instance's channel/conn(s)/QM + cipher + cert
 # label; the unit points MQCCDTURL/MQSSLKEYR at it. mq_exporter_conn may be a

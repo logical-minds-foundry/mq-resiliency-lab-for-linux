@@ -586,8 +586,8 @@ def _observe_build_steps(
     Two playbooks (#381): site-obs.yml stands up the obs box — prometheus/grafana +
     the log-search tier (OpenSearch/Dashboards/Data Prepper, consolidated onto obs in
     #1179) + the probe's MQ exporters; observability.yml instruments the cluster NODES
-    with node-exporter + the per-mechanism state collector (cluster-state /
-    nativeha-state / rdqm-state) whose textfiles feed the `cluster_*` cockpit
+    with node-exporter + the per-mechanism state collector (nativeha-state /
+    rdqm-state) whose textfiles feed the `cluster_*` cockpit
     metrics. observability.yml is `hosts: all`, so it is --limited to THIS stack's
     VMs (else it targets other, down stacks' nodes); net-reach needs reach-peers
     rendered first.

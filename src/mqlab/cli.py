@@ -1064,7 +1064,7 @@ def _obs_up_steps() -> list[CommandStep]:
 
     # Render all the artifacts eagerly when the steps are built: the Prometheus
     # scrape targets (node + per-stack ibmmq, #423), the Ansible inventory the
-    # provision step needs (mirrors dr-provision.sh), and the Grafana dashboard.
+    # provision step needs, and the Grafana dashboard.
     targets = scrape_targets_path()
     targets.parent.mkdir(parents=True, exist_ok=True)
     targets.write_text(lab_scrape_targets())
@@ -1122,7 +1122,7 @@ def _obs_up_steps() -> list[CommandStep]:
         CommandStep(
             "provision monitoring",
             # bare filename, run from ansible/ so ansible.cfg (inventory path) is
-            # picked up — matches dr-provision.sh. opensearch_snapshot_state_dir threads the
+            # picked up. opensearch_snapshot_state_dir threads the
             # host-durable snapshot bucket so the folded OpenSearch configure (#1179) restores
             # the last snapshot on bring-up; empty (role default) is a clean no-op.
             Command(
@@ -1790,9 +1790,9 @@ def _stack_provision_env(deps: Deps, stack: Stack) -> dict[str, str]:
     .github#341 spec §2.2, #1500): the mqweb role persists the server's AES key and each
     securityUtility-encoded password there, so a re-provision renders mqwebuser.xml
     byte-identically. mqweb runs on every QM node (#1502), so every path that runs a
-    stack's provision playbook — `bootstrap`, `qm create`, lab/scripts/dr-provision.sh
-    via `vm provision-env` — takes its env from here; the mqweb role fails loudly
-    without it.
+    stack's provision playbook — `bootstrap`, `qm create`, and an operator script via
+    `vm provision-env` — takes its env from here; the mqweb role fails loudly without
+    it.
     """
     env = {secret.upper(): _source_secret(deps, secret) for secret in stack.secrets}
     env["MQWEB_STATE_DIR"] = str(state("mqweb"))
@@ -1881,8 +1881,8 @@ def vm_provision_env(
 ) -> None:
     """Print a stack's provision env (its secrets + MQWEB_STATE_DIR) as shell exports.
 
-    For a script that runs a stack's provision playbook outside `mqlab bootstrap` (e.g.
-    lab/scripts/dr-provision.sh): capture the output, then `eval` it. Only the export
+    For a script that runs a stack's provision playbook outside `mqlab bootstrap`:
+    capture the output, then `eval` it. Only the export
     lines go to stdout; the sourcing trace goes to stderr and the transcript. Any
     failure exits non-zero with nothing on stdout (#1502).
     """

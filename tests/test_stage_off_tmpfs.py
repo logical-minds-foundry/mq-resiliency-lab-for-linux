@@ -71,18 +71,6 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("ansible/site-nativeha-spike-crr.yml", "/tmp/nhaspike-ks/keystore.{{"): (
         "controller-side hand-off of four small keystore files (throwaway spike)"
     ),
-    ("ansible/site-pcmk-authz-validate.yml", "/tmp/authz-mqmon-ks/"): (
-        "controller-side fetch of the two small mq_prometheus keystore files"
-    ),
-    ("ansible/site-pcmk-authz-validate.yml", "/tmp/authz-mqmon-ks/{{"): (
-        "controller-side source of the same two keystore files"
-    ),
-    ("ansible/site-pcmk-authz-validate.yml", "/tmp/authz-n2-rogue"): (
-        "the N2 probe's minted rogue keystore (a few KB), removed by the play's teardown"
-    ),
-    ("ansible/site-pcmk-authz-validate.yml", "/tmp/authz-n2-rogue/rogue.p12"): (
-        "the same rogue keystore file"
-    ),
     ("ansible/site-nativeha-ubuntu-authz-validate.yml", "/tmp/authz-nhau-mqmon-ks/"): (
         "controller-side fetch of the two small mq_prometheus keystore files"
     ),

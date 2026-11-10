@@ -35,10 +35,6 @@ STACK_PLAYS = {
     "_nativeha-dr-replication.yml",
     "_nativeha-ubuntu-cluster-ha.yml",
     "_nativeha-ubuntu-dr-replication.yml",
-    "_pcmk-cluster-ha.yml",
-    "_pcmk-dr-replication.yml",
-    "_pdrbd-cluster-ha.yml",  # pcmk-drbd-ubuntu site A (#1427)
-    "_pdrbd-dr-replication.yml",  # pcmk-drbd-ubuntu site B (#1428)
     "_rdqm-cluster-ha.yml",
     "_rdqm-dr-replication.yml",
 }

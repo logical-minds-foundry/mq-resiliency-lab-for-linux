@@ -1,6 +1,6 @@
 # One-time build of the mq_prometheus exporter on mon-probe + the shared ops
-# keystore. Split from main.yml (#423) so site-obs.yml can run this ONCE and then
-# loop the per-instance unit (instance.yml) per stack, instead of re-running the
+# keystore. site-obs.yml runs this ONCE (#423) and then loops the per-instance
+# unit (instance.yml) per stack, instead of re-running the
 # slow cgo build for every exporter. Every step here is idempotent (`creates:` /
 # idempotent modules), so a second run is a no-op.
 # The exporter binary links the MQ server binding libmqm_r dynamically at runtime
