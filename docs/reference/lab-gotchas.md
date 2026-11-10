@@ -193,13 +193,13 @@ script of the since-removed Pacemaker/SAN stack.
 
 **Cause.** Two compounding bugs: (1) the script masked every command with
 `|| true` and printed success unconditionally; (2) the worktree's
-`build/inventory.ini` was never generated, so ansible had **zero target hosts** —
+Ansible inventory was never generated, so ansible had **zero target hosts** —
 every `run <group> ...` was a no-op.
 
 **Fix.** Regenerate the inventory from the operating checkout, and make scripts
 fail loud:
 ```sh
-bash ansible/inventory.sh        # reads `vagrant status` from ../lab -> ../build/inventory.ini
+uv run mqlab vm inventory     # renders build/work/inventory.ini from lab/topology.yaml
 ```
 Verify an **end state** (e.g. `dspmq` shows `STATUS(Running)` on the peer) and
 exit non-zero otherwise — never trust per-step `|| true`.
