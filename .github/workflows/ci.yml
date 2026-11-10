@@ -51,15 +51,8 @@ jobs:
       language: python
       container-suffix: python
 
-  version:
-    uses: vergil-project/vergil-actions/.github/workflows/ci-version-bump.yml@v2.1
-    with:
-      language: python
-      container-suffix: python
-
   # Strict docs build, so a PR that breaks the site fails here instead of
   # only at cd-docs deploy after merge. ci-docs self-guards: a repo without
-  # docs/site/mkdocs.yml is a no-op pass. It stages the changelog/release
-  # sources and runs `mkdocs build --strict`.
+  # docs/site/mkdocs.yml is a no-op pass. It runs `mkdocs build --strict`.
   docs:
     uses: vergil-project/vergil-actions/.github/workflows/ci-docs.yml@v2.1
