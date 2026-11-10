@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-
 class _NoPause:
     def wait(self) -> None:
         return None
